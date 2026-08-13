@@ -2022,6 +2022,73 @@ function renderFullApiSettings(b) {
           "With this off, backdrops already generated still show — they're free — but no new ones are commissioned. Picking a model fills in a size it actually supports (they differ, and some take names like “landscape_16_9” rather than pixels); landscape is preferred because the picture sits behind a centred column in a browser window. Edit-only models are left out of the list — a backdrop is generated from text alone."));
     }
 
+    // How a mind spends a beat, and how a body's feeling settles over one.
+    // Both live HERE, beside the character models they govern, for the same
+    // reason the Director's orchestration toggle sits beside its specialist
+    // roles: a switch a host cannot find beside the thing it changes is a
+    // switch that becomes folklore. Both default off, and both were until
+    // now reachable only by editing the database.
+    {
+      const reflectBox = el("input", {
+        type: "checkbox",
+        ...(S.boot.character_reflection ? { checked: "" } : {})
+      });
+      reflectBox.onchange = async () => {
+        await api("PUT", "/api/character_reflection",
+                  { enabled: reflectBox.checked });
+        await boot();
+        toast(reflectBox.checked
+          ? "Characters will reflect after the beat resolves."
+          : "Characters will decide and reflect in one pass.", "ok");
+      };
+      const habitBox = el("input", {
+        type: "checkbox",
+        ...(S.boot.affect_habituation ? { checked: "" } : {})
+      });
+      habitBox.onchange = async () => {
+        await api("PUT", "/api/affect_habituation",
+                  { enabled: habitBox.checked });
+        await boot();
+        toast(habitBox.checked
+          ? "A held peak will wear off, so a new one can land."
+          : "Feeling will hold wherever the beat puts it.", "ok");
+      };
+      b.append(el("h4", {}, "How a mind spends a beat"),
+        el("div", { class: "small dim" },
+          "Off, a character decides what it does and records what it "
+          + "believes, remembers and now thinks of everyone in one pass — "
+          + "before the beat has resolved, so a memory is written from what "
+          + "it MEANT to do. On, it declares its conduct first and reflects "
+          + "afterwards, from its own view of what actually happened: what "
+          + "it now believes, what it will keep, what the beat did to its "
+          + "relationships, and whether it stands by the choice it made. It "
+          + "can also decline to revise a belief the outcome contradicted, "
+          + "which is a thing people do."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, reflectBox,
+            " Reflect after the beat resolves")),
+        el("div", { class: "small dim" },
+          "This buys thinking, not speed. The reflection runs alongside the "
+          + "narrator, but it is the longer of the two, so expect roughly "
+          + "15–25 seconds more per turn. Off by default for that reason."),
+        el("h4", { style: "margin-top:14px" }, "How feeling settles"),
+        el("div", { class: "small dim" },
+          "Off, a mood sits wherever the beat puts it and drifts home slowly "
+          + "when nothing reinforces it. On, sustained maximum feeling costs "
+          + "sensitivity the way a real body's does: a long plateau sags a "
+          + "little, so a genuine peak has somewhere to rise to. Measured on "
+          + "a played story, a character held the top of the scale for "
+          + "seventeen turns and the climax it was building to scored lower "
+          + "than the plateau before it."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, habitBox,
+            " Let a held peak wear off")),
+        el("div", { class: "small dim" },
+          "Sensitivity builds from nothing, so switching this on part-way "
+          + "through a story takes a few beats to show and will not reach "
+          + "back over a plateau already behind you."));
+    }
+
     // What a card authors beneath each clothing region. Its own small block
     // rather than a line inside another one: it governs explicit body
     // description, and a host looking for it should find it by looking.
