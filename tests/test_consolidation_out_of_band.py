@@ -217,14 +217,23 @@ def test_the_commit_tail_no_longer_blocks_on_consolidation():
     assert "_consolidate_committed_memories" not in tail
 
 
-def test_utility_role_inherits_the_mapping_model(monkeypatch):
+def test_utility_is_configured_not_inherited(monkeypatch):
     """`utility` is the background helper lane (memory consolidation above
-    all). Absent from ROLE_FALLBACKS it silently resolved to `default` --
-    the model hosts pick for their hardest work -- which is how a 27.4s
-    summarisation call landed inside a live commit. Left unset it now
-    follows `mapping`, the fast mechanical model the settings guidance has
-    always paired it with; explicit configuration still wins; and with no
-    mapping model either, default remains the floor."""
+    all), and unset it follows `default` -- the model hosts pick for their
+    hardest work.
+
+    That is the arrangement under which a 27.4s summarisation call once
+    landed inside a live commit, and it is deliberate again: `utility` spent
+    a while inheriting `mapping` to dodge that, which fixed the symptom by
+    means of an inheritance no host could see. The defect was the call being
+    INSIDE the turn, and that is fixed above -- consolidation is scheduled
+    out of band, so a slow default now costs money and background time
+    rather than the player's wall clock. A host who wants the helper lane on
+    a cheap model sets this row, where the choice is visible.
+
+    Load-bearing consequence: if a background lane is ever moved back onto
+    the turn's critical path, it needs its own role SET, not a fallback
+    re-added under it."""
     import providers
 
     monkeypatch.setattr(providers, "provider",
@@ -236,7 +245,7 @@ def test_utility_role_inherits_the_mapping_model(monkeypatch):
         "mapping": {"provider": "cheap", "model": "fast"},
     })
     prov, model, _cfg = providers.resolve_role("utility")
-    assert (prov["name"], model) == ("cheap", "fast")
+    assert (prov["name"], model) == ("frontier", "big")
 
     monkeypatch.setattr(providers, "agent_models", lambda: {
         "default": {"provider": "frontier", "model": "big"},

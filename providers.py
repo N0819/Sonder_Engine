@@ -805,7 +805,15 @@ def reasoning_efforts():
 
 def reasoning_effort_for(role):
     """The effort level for one role: its own entry, else the 'default' role's,
-    else the env override, else "" (unset). Mirrors agent-model role fallback."""
+    else the env override, else "" (unset).
+
+    This does NOT consult ROLE_FALLBACKS -- it goes straight to `default`,
+    which matches agent-model resolution only while that map is empty. It is
+    empty now, so a blank row's model, samplers and effort all come from the
+    same place. Add an entry there and they stop agreeing: the model would
+    follow the parent while the effort still followed `default`, which is a
+    thinking model running at a non-thinking role's level. Whoever adds one
+    resolves that here too."""
     efforts = reasoning_efforts()
     if role in efforts:
         return efforts[role]
@@ -912,9 +920,9 @@ ROLES = [
     "character_major",
     # The orchestrated Director's specialists (design note 19). Scoped
     # structural tasks that may not need a frontier model; when no model is
-    # configured for one, it inherits the director's (see ROLE_FALLBACKS),
-    # and either way its calls stay separable in _log_usage under its own
-    # role name.
+    # configured for one it follows `default` like every other role, and
+    # either way its calls stay separable in _log_usage under its own role
+    # name.
     "director_body",
     "director_social",
     "director_contact",
@@ -931,7 +939,8 @@ ROLES = [
     # fact. A fast cheap model is the right choice here, and it saves the
     # rung below, which re-authors the whole response on the stage's own
     # model (measured: 4.2s on the Director for one malformed field, 36.3s
-    # on a character decision review). Unset, it inherits `utility`.
+    # on a character decision review). Unset, it follows `default` -- so a
+    # host who wants the cheap patcher has to say so, on this row.
     "repair",
     "utility",
     "embeddings",
@@ -1232,38 +1241,41 @@ def provider(pid):
 def agent_models():
     return json.loads(get_setting("agent_models") or "{}")
 
-# A specialist role with no configured model inherits its parent role's model
-# before falling back to "default": the body specialist is a hand of the
-# Director, and routing it to a generic default the host never associated with
-# Director work would silently change what serves the most failure-prone stage.
-# The ROLE string handed to _log_usage stays the specialist's own either way,
-# which is what keeps per-specialist spend and served-model attribution
-# separable (design note 19, "How it gets judged").
-ROLE_FALLBACKS = {
-    "director_body": "director",
-    "director_social": "director",
-    "director_contact": "director",
-    "director_objects": "director",
-    "director_spatial": "director",
-    "director_offscreen": "director",
-    # Utility is the background helper lane: memory-consolidation summaries,
-    # artifact wording, offscreen tick prose, importer fills -- mechanical
-    # work the player never reads directly. Falling through to "default"
-    # meant every host who left it unset ran that lane on whatever model
-    # they chose for the hardest work in the engine; measured live, the
-    # first autobiographical consolidation spent 27.4s of one commit on a
-    # ~57 tok/s default. "mapping" is the role the settings guidance has
-    # always paired it with ("smaller/cheaper for mapping and utility"), so
-    # an unset utility inherits the fast mechanical model the host already
-    # picked -- and only then falls to default, exactly like the
-    # specialists above. The role string handed to _log_usage stays
-    # "utility" either way.
-    "utility": "mapping",
-    # The targeted field patch is the same lane as the other cheap
-    # mechanical work, so an unset repair rides utility (and through it
-    # mapping) rather than the frontier model whose output it is fixing.
-    "repair": "utility",
-}
+# Intermediate inheritance, keyed role -> parent role, consulted before
+# "default". IT IS DELIBERATELY EMPTY: every unset row follows `default`,
+# which is what the settings panel has always said and what a host who
+# leaves a row blank means.
+#
+# Eight rows used to live here -- the six Director specialists inheriting
+# `director`, `utility` inheriting `mapping`, `repair` inheriting `utility`.
+# Each had a real argument (a specialist is a hand of the Director; the
+# helper lane is mechanical work that should ride the cheap model). Both
+# arguments describe what a host would probably WANT, and neither survives
+# the thing a host actually DOES: leaving six rows blank to park them all on
+# one cheap model, and getting the frontier writing model instead the moment
+# `director` was set. An inheritance nobody can see is not a good default,
+# it is a trap -- and `f706da7` proved the label alone could not dig out of
+# it, because the panel then had to teach eight exceptions to a rule that
+# reads as universal.
+#
+# What the removal costs, stated so it is not rediscovered as a surprise:
+# an unset `utility` lands back on `default`, which is how a 27.4s
+# autobiographical consolidation once ate a live commit. That is survivable
+# now only because consolidation moved OUT OF BAND
+# (`commit.schedule_memory_consolidation` -> `jobs.py`), so it costs money
+# on a slow default rather than the player's wall clock. If a background
+# lane ever returns to the turn's critical path, it needs its own cheap
+# role SET, not a hidden inheritance.
+#
+# The map and its lookup stay because the bootstrap publishes it and the
+# panel renders "follow <parent>" from it (`app.py` bootstrap,
+# `static/js/settings.js`): a future role that genuinely needs a non-default
+# parent adds one row here and the label follows automatically, instead of
+# the client learning a second copy of the rule. The ROLE string handed to
+# _log_usage is the role's own regardless, which is what keeps per-role
+# spend and served-model attribution separable (design note 19, "How it
+# gets judged").
+ROLE_FALLBACKS = {}
 
 
 def resolve_role_candidates(role):

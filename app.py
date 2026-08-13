@@ -945,13 +945,13 @@ def bootstrap():
         "providers": [_provider_public(r["id"]) for r in q("SELECT id FROM providers")],
         "provider_presets": DEFAULT_BASES,
         "roles": ROLES,
-        # Which role an UNSET role actually inherits. Eight of them do not
-        # inherit `default`: the six Director specialists follow `director`,
-        # `utility` follows `mapping`, `repair` follows `utility`. The panel
-        # labelled every blank row "follow default", which is wrong for
-        # exactly the rows a host is most likely to leave blank on purpose --
-        # someone who sets `director` to a writing model and leaves the
-        # specialists alone gets six specialists on the writing model.
+        # Which role an UNSET role actually inherits. Empty today -- every
+        # blank row follows `default`, so the panel's label is true on every
+        # row without an exception to teach. It is still published rather
+        # than assumed away: the panel renders "follow <parent>" from this
+        # map, so a future role that needs a non-default parent is one entry
+        # in `providers.ROLE_FALLBACKS` and the label follows, instead of the
+        # client carrying a second copy of the rule that can drift from it.
         "role_fallbacks": dict(ROLE_FALLBACKS),
         "sampler_keys": list(SAMPLER_KEYS),
         "default_samplers": DEFAULT_SAMPLERS,
