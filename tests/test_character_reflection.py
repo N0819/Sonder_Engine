@@ -407,3 +407,35 @@ def test_conduct_payload_carries_the_last_choice_review(temp_db, monkeypatch):
     character_module.character_step(ctx, cid, nonce=0)
     review = captured["payload"].get("last_choice_review")
     assert review and review["verdict"] == "regret"
+
+
+class TestTheSwitchIsFindable:
+    """A switch a host can only reach by editing the database is a switch
+    that becomes folklore. Both of these shipped default-off and neither had
+    a way to see or change it -- and `affect_habituation` was live in a real
+    story with no visible off.
+    """
+
+    def test_both_flags_are_exposed_to_the_client(self):
+        import re
+
+        src = open("app.py", encoding="utf-8").read()
+        boot = src[src.index("def bootstrap"):]
+        for key in ("character_reflection", "affect_habituation"):
+            assert re.search(rf'"{key}":', boot), key
+
+    def test_both_flags_have_an_endpoint(self):
+        src = open("app.py", encoding="utf-8").read()
+        assert '@app.put("/api/character_reflection")' in src
+        assert '@app.put("/api/affect_habituation")' in src
+
+    def test_the_panel_offers_both_and_says_what_they_cost(self):
+        js = open("static/js/settings.js", encoding="utf-8").read()
+        assert "/api/character_reflection" in js
+        assert "/api/affect_habituation" in js
+        # The reflection toggle must state its price -- it buys thinking,
+        # not speed, and a host who is not told that will read the extra
+        # seconds as a regression.
+        assert "15–25 seconds more per turn" in js
+        # And habituation must say it is not retroactive.
+        assert "will not reach" in js

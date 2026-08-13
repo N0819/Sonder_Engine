@@ -979,6 +979,16 @@ def bootstrap():
         "director_orchestration": str(
             get_setting("director_orchestration") or "").strip().lower()
         in ("1", "on", "true", "yes"),
+        # The conduct/reflection split (design note 23) and affect
+        # habituation (design note 22). Both default OFF and both were
+        # otherwise reachable only by editing the database -- and a switch a
+        # host cannot find is a switch that becomes folklore.
+        "character_reflection": str(
+            get_setting("character_reflection") or "").strip().lower()
+        in ("1", "on", "true"),
+        "affect_habituation": str(
+            get_setting("affect_habituation") or "").strip().lower()
+        in ("1", "on", "true"),
         # Scene backdrops (backdrops.py). Off unless switched on: every new
         # room costs a real image generation, so this is opt-in per install
         # rather than something a first run starts spending money on.
@@ -1252,6 +1262,44 @@ def set_director_orchestration(body: dict = Body(...)):
     """
     enabled = bool(body.get("enabled"))
     set_setting("director_orchestration", "1" if enabled else "0")
+    return {"enabled": enabled}
+
+
+@app.put("/api/character_reflection")
+def set_character_reflection(body: dict = Body(...)):
+    """Whether a mind reflects AFTER the beat resolves (design note 23).
+
+    Off is the default and off is the single-call character stage this
+    engine shipped with, byte-identical. On, the beat is declared first and
+    reflected on second: what the mind now believes, will remember, and
+    thinks of the people in it are written from its own scrubbed view of
+    what actually happened rather than from what it meant to do.
+
+    It is a QUALITY change and it costs time -- measured, the reflection
+    call runs 18-41s beside a 4-14s narrator, so roughly 15-25s a turn
+    lands on the player's wait. UNBUILT 1.43 has the full accounting.
+    """
+    enabled = bool(body.get("enabled"))
+    set_setting("character_reflection", "on" if enabled else "")
+    return {"enabled": enabled}
+
+
+@app.put("/api/affect_habituation")
+def set_affect_habituation(body: dict = Body(...)):
+    """Whether a held emotional peak wears off (design note 22).
+
+    Off is the default and off is the shipped behaviour. On, sustained
+    maximum feeling costs sensitivity, so a plateau sags and a genuine peak
+    has somewhere to land -- measured on a live story, a character sat at
+    0.99 valence for seventeen turns and her climax scored LOWER than the
+    plateau it was meant to crown.
+
+    Sensitivity accumulates from zero, so switching it on mid-story takes
+    several beats to show and does not reach back over the plateau that
+    prompted it.
+    """
+    enabled = bool(body.get("enabled"))
+    set_setting("affect_habituation", "1" if enabled else "0")
     return {"enabled": enabled}
 
 
