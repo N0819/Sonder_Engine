@@ -229,3 +229,29 @@ def test_the_commit_seam_reads_the_setting(temp_db, monkeypatch):
     temp_db.set_setting("affect_habituation", "")
     commit.prepare_memory_commit(ctx)
     assert seen.get("habituate") is False
+
+
+class TestTheSwitchIsFindable:
+    """A switch a host can only reach by editing the database is a switch
+    that becomes folklore. This one shipped default-off with no way to see
+    or change it, and was then turned on in a live story -- so a host whose
+    character started feeling different had nowhere to look and no way to
+    put it back."""
+
+    def test_the_flag_is_exposed_to_the_client(self):
+        src = open("app.py", encoding="utf-8").read()
+        boot = src[src.index("def bootstrap"):]
+        assert '"affect_habituation":' in boot
+
+    def test_the_flag_has_an_endpoint(self):
+        src = open("app.py", encoding="utf-8").read()
+        assert '@app.put("/api/affect_habituation")' in src
+
+    def test_the_panel_says_it_is_not_retroactive(self):
+        """Sensitivity builds from nothing, so switching it on mid-story
+        does not reach back over the plateau that prompted it. A host not
+        told that reads the first few unchanged beats as it not working --
+        which is exactly what happened."""
+        js = open("static/js/settings.js", encoding="utf-8").read()
+        assert "/api/affect_habituation" in js
+        assert "will not reach" in js
