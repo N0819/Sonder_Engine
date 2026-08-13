@@ -150,9 +150,16 @@ class PipelineContext:
     narrator: Optional[dict] = None
     interaction_loop: Optional[dict] = None
     reaction_loop: Optional[dict] = None
+    reflection_loop: Optional[dict] = None
 
     character_results: dict[int, dict] = field(default_factory=dict)
     reaction_results: dict[int, dict] = field(default_factory=dict)
+    # Post-outcome reflections, keyed by character id (design note 23).
+    # commit's per-character overlay prefers these for the cognitive-update
+    # fields; empty on every story without the split, and on rehydration
+    # rebuilt from the persisted reflection_loop content exactly as the
+    # other loops' result maps are.
+    reflection_results: dict[int, dict] = field(default_factory=dict)
 
     # Additional human players declaring in the same beat as the primary
     # player (whose input/room/etc. remain the untouched top-level fields
