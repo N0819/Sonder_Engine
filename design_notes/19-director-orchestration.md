@@ -323,7 +323,12 @@ it reads the structured declaration.
 One call per dispatched specialist: role = step key (`director_body`,
 `director_social`, `director_contact`, `director_objects`; in
 `providers.ROLES`, inheriting the `director` model via `ROLE_FALLBACKS` when
-unconfigured, always separable in `_log_usage`). Schemas own exactly the
+unconfigured — **corrected 2026-08-13: an unconfigured specialist follows
+`default` like every other blank row; `ROLE_FALLBACKS` is now empty. A host
+who leaves the six blank is parking them somewhere cheap, and inheriting
+`director` moved all six onto the writing model the moment that row was set.
+Separability was never the reason for the inheritance and is unaffected** —
+always separable in `_log_usage`). Schemas own exactly the
 channels (`DirectorBodySpecialist` etc.); validation prunes a malformed
 channel rather than failing the call, and `preprocess_llm_output` unwraps
 the `state_diff`/`state_assertions` envelope a model sometimes adds. A

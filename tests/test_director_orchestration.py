@@ -517,13 +517,18 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     assert "secretly hate" not in flat  # the raw input never reaches it
 
 
-def test_specialist_role_is_separable_and_inherits_the_director_model(
+def test_specialist_role_is_separable_and_follows_default_when_unset(
         monkeypatch):
     """Measurement hook: `_log_usage` keys on the role string, so the
-    specialist must call under its OWN role name -- and a host that never
-    configured `director_body` must get the director's model serving it,
-    not a generic default that would silently change what serves the most
-    failure-prone stage."""
+    specialist must call under its OWN role name.
+
+    An unconfigured `director_body` follows `default`, like every other
+    blank row. It used to inherit `director` -- defensible on paper (a
+    specialist is a hand of the Director) and wrong in practice: a host who
+    leaves the six blank is parking them on something cheap, and setting
+    `director` to a writing model silently moved all six onto it. Separable
+    spend does not require a hidden parent; it comes from the role string,
+    which is unchanged either way. See `tests/test_provider_fallbacks.py`."""
     import providers
 
     monkeypatch.setattr(providers, "agent_models", lambda: {
@@ -535,15 +540,15 @@ def test_specialist_role_is_separable_and_inherits_the_director_model(
                                       "base_url": "http://x", "api_key": ""})
 
     prov, model, cfg = providers.resolve_role("director_body")
-    assert (prov["name"], model) == ("frontier", "big")
-    # Explicit configuration still wins over the inheritance.
+    assert (prov["name"], model) == ("cheap", "small")
+    # Explicit configuration still wins.
     monkeypatch.setattr(providers, "agent_models", lambda: {
         "default": {"provider": "cheap", "model": "small"},
         "director": {"provider": "frontier", "model": "big"},
-        "director_body": {"provider": "cheap", "model": "lean"},
+        "director_body": {"provider": "own", "model": "lean"},
     })
     prov, model, cfg = providers.resolve_role("director_body")
-    assert (prov["name"], model) == ("cheap", "lean")
+    assert (prov["name"], model) == ("own", "lean")
 
 
 def test_specialist_call_carries_its_own_role(temp_db, monkeypatch):

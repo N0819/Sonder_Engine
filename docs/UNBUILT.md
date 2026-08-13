@@ -2142,6 +2142,15 @@ side of any latency-relevant change.
   "mapping/utility" as the cheap mechanical lane, so an unset utility now
   lands on the fast model the host already picked instead of their most
   expensive one. The settings-panel role notes say so.
+  **Reverted 2026-08-13** (`providers.ROLE_FALLBACKS` is now empty; every
+  unset role follows `default`). It fixed the cost by means of an
+  inheritance no host could see, and the same mechanism was lying to hosts
+  on the six Director specialists. The defect this bullet was answering —
+  the call sitting inside the commit window — is fixed by the out-of-band
+  scheduling above and stays fixed; an unset `utility` on a slow default
+  now costs money and background time, not the player's wall clock. If a
+  background lane returns to the turn's critical path it needs its own role
+  **set**, not a fallback re-added under it.
 - **Reconciliation repair goes to the CHANNEL'S OWNER on the orchestrated
   path** (`agents/director.py` `_route_repair_omissions` /
   `_specialist_repairs`): an omission in a delegated channel is re-asked of

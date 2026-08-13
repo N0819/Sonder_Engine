@@ -97,11 +97,14 @@ def test_paths_reach_into_lists():
 def test_repair_is_its_own_configurable_role():
     """Separable from `utility`, which also carries autobiographical
     consolidation: a host may want a 3000 tok/s open model fixing shapes
-    and something else writing summaries. Unset, it rides utility (and
-    through it mapping) rather than the frontier model whose output it is
-    fixing."""
+    and something else writing summaries.
+
+    Unset it follows `default` like every other row -- it used to ride
+    `utility` and through it `mapping`, which put the cheap patcher one
+    hidden hop from a row the host never looked at. A host who wants a fast
+    patcher sets this row; the panel says so on its face. See
+    `tests/test_provider_fallbacks.py`."""
     import providers
 
     assert "repair" in providers.ROLES
-    assert providers.ROLE_FALLBACKS["repair"] == "utility"
-    assert providers.ROLE_FALLBACKS["utility"] == "mapping"
+    assert providers.ROLE_FALLBACKS == {}

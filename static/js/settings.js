@@ -2513,11 +2513,12 @@ function renderFullApiSettings(b) {
                 "label",
                 { class: "tgl small dim", style: "margin-right:8px;white-space:nowrap" },
                 followChk,
-                // Eight roles do not inherit `default`: the six Director
-                // specialists follow `director`, `utility` follows
-                // `mapping`, `repair` follows `utility`. Saying "follow
-                // default" on those rows is a lie in exactly the place a
-                // host is most likely to leave a row blank deliberately.
+                // Reads the inheritance from the bootstrap rather than
+                // hardcoding the parent's name, so the label cannot drift
+                // from `providers.ROLE_FALLBACKS`. That map is empty today,
+                // so every row truthfully renders default as its parent; it
+                // was not empty once, and the label lied on the eight rows
+                // a host is most likely to leave blank deliberately.
                 "follow " + ((S.boot.role_fallbacks || {})[role] || "default")
               )
             : null,

@@ -1,6 +1,39 @@
 # Changelog
 
-## Unreleased
+## alpha 8.2.4 — A blank row means what the label says
+
+- **Eight roles stop inheriting a parent nobody could see.** Reported live:
+  *"the director fanout seems to only be using the director role setting
+  instead of what i set for specialists"* — from a host who had deliberately
+  left the six Director specialists blank so they would all sit on one cheap
+  model. They followed `director`, so the moment that row was set to a
+  writing model six specialists silently moved onto it: the exact opposite of
+  the reason anyone leaves a row blank. `utility` followed `mapping` and
+  `repair` followed `utility` on the same terms. 8.2.3 made the panel name
+  each row's real parent, which fixed the lie and left the trap — the panel
+  then had to teach eight exceptions to a rule that reads as universal.
+  `providers.ROLE_FALLBACKS` is now **empty**: every unset role follows
+  `default`, on every row, which is what the label always said. The map and
+  its lookup stay, because the bootstrap publishes it and the panel renders
+  "follow *parent*" from it — a future role that genuinely needs a
+  non-default parent is one entry away and the label follows automatically,
+  instead of the client carrying a second copy of the rule that can drift
+  from it.
+
+  What it costs, recorded rather than left to be rediscovered: an unset
+  `utility` lands back on `default` — the arrangement under which a 27.4s
+  autobiographical consolidation once ate a live commit. That is survivable
+  only because consolidation now runs out of band, so it costs money and
+  background time rather than the player's wall clock. A background lane that
+  ever returns to the turn's critical path needs its own role **set**, not a
+  fallback re-added underneath it.
+
+  Found beside it and fixed in place: `reasoning_effort_for` never consulted
+  the fallback map, despite a docstring claiming it mirrored model
+  resolution. A blank specialist was being served the Director's model, the
+  Director's samplers, and the `default` role's reasoning effort — a thinking
+  model running at a non-thinking row's level. The three agree again now, and
+  the divergence is documented for whoever adds the next entry to the map.
 
 - **Saturation finally costs something.** A surface mood that reached the
   ceiling stayed there — decay handled fading, nothing handled saturation —
