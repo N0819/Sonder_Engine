@@ -2513,7 +2513,12 @@ function renderFullApiSettings(b) {
                 "label",
                 { class: "tgl small dim", style: "margin-right:8px;white-space:nowrap" },
                 followChk,
-                "follow default"
+                // Eight roles do not inherit `default`: the six Director
+                // specialists follow `director`, `utility` follows
+                // `mapping`, `repair` follows `utility`. Saying "follow
+                // default" on those rows is a lie in exactly the place a
+                // host is most likely to leave a row blank deliberately.
+                "follow " + ((S.boot.role_fallbacks || {})[role] || "default")
               )
             : null,
           primaryContainer,
