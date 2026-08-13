@@ -221,5 +221,15 @@ def test_character_prompt_does_not_launder_claim_origin_through_memory_form():
     assert "CLAIM ORIGIN IS NOT MEMORY FORM" in prompt
     assert "statement was RECEIVED" in prompt
     assert "still INFERRED" in prompt
-    assert "PONDER IS AN EXCEPTIONAL PRIVATE ACTION" in prompt
-    assert "never use it as a default turn action" in prompt
+    # Ponder must stay BOUNDED without being talked out of existence. The
+    # old wording carried eight discouragements, one permission and no
+    # occasion, and fired zero times in 3,083 stored character results --
+    # so the prohibitions were replaced by a bound plus a reason to reach
+    # for it. What this pins is the intent the old strings stood for, not
+    # the strings: it is capped at one per beat, it is private, and a beat
+    # the character understands does not call for it.
+    assert "At most one in a beat" in prompt
+    assert "a private thought nobody sees or hears" in prompt
+    assert "a beat you understand needs no pondering" in prompt
+    # And it now names an OCCASION, which is the thing it never had.
+    assert "WHEN TO PONDER" in prompt
