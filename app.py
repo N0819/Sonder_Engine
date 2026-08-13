@@ -979,13 +979,10 @@ def bootstrap():
         "director_orchestration": str(
             get_setting("director_orchestration") or "").strip().lower()
         in ("1", "on", "true", "yes"),
-        # The conduct/reflection split (design note 23) and affect
-        # habituation (design note 22). Both default OFF and both were
-        # otherwise reachable only by editing the database -- and a switch a
-        # host cannot find is a switch that becomes folklore.
-        "character_reflection": str(
-            get_setting("character_reflection") or "").strip().lower()
-        in ("1", "on", "true"),
+        # Affect habituation (design note 22). Default OFF, and otherwise
+        # reachable only by editing the database -- a switch a host cannot
+        # find is a switch that becomes folklore, and this one was live in a
+        # real story with no visible off.
         "affect_habituation": str(
             get_setting("affect_habituation") or "").strip().lower()
         in ("1", "on", "true"),
@@ -1262,25 +1259,6 @@ def set_director_orchestration(body: dict = Body(...)):
     """
     enabled = bool(body.get("enabled"))
     set_setting("director_orchestration", "1" if enabled else "0")
-    return {"enabled": enabled}
-
-
-@app.put("/api/character_reflection")
-def set_character_reflection(body: dict = Body(...)):
-    """Whether a mind reflects AFTER the beat resolves (design note 23).
-
-    Off is the default and off is the single-call character stage this
-    engine shipped with, byte-identical. On, the beat is declared first and
-    reflected on second: what the mind now believes, will remember, and
-    thinks of the people in it are written from its own scrubbed view of
-    what actually happened rather than from what it meant to do.
-
-    It is a QUALITY change and it costs time -- measured, the reflection
-    call runs 18-41s beside a 4-14s narrator, so roughly 15-25s a turn
-    lands on the player's wait. UNBUILT 1.43 has the full accounting.
-    """
-    enabled = bool(body.get("enabled"))
-    set_setting("character_reflection", "on" if enabled else "")
     return {"enabled": enabled}
 
 
