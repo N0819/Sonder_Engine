@@ -2863,6 +2863,77 @@ class CharacterOutput(LenientModel):
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
     )
 
+#: The cognitive-update fields that MOVE from conduct to reflection when
+#: the split (design note 23) is on. One definition, imported by the
+#: character stage (which sheds them from conduct) and by commit (whose
+#: per-character overlay prefers the reflection result for exactly these),
+#: so the two sides cannot drift.
+CHARACTER_REFLECTION_FIELDS = (
+    "belief_updates", "association_updates", "mind_model_updates",
+    "relationship_updates", "remember_lines", "memory_disputes",
+    "memory_effects",
+)
+
+
+class CharacterReflection(LenientModel):
+    """The post-outcome reflection call (design note 23).
+
+    The seven cognitive-update fields are CharacterOutput's own, same
+    sub-models, same coercions -- reflection MOVES them to the moment that
+    has the outcome, it does not redefine them. New here is only what
+    cannot exist before the outcome: the character's judgement of its own
+    choice, the explicit refusal to revise (a real act, recorded rather
+    than silent), and ponder as a typed field with an occasion -- the
+    mechanism that never once fired in 3,083 stored results while it lived
+    as a discouraged, schema-less sequence type.
+    """
+    belief_updates: list[BeliefUpdate] = Field(default_factory=list)
+    association_updates: list[AssociationUpdate] = Field(default_factory=list)
+    remember_lines: list[RememberLine] = Field(default_factory=list)
+    memory_disputes: list[MemoryDispute] = Field(default_factory=list)
+    memory_effects: list[MemoryEffect] = Field(default_factory=list)
+    mind_model_updates: list[MindHypothesis] = Field(default_factory=list)
+    relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
+    # {"verdict": "satisfied|regret|mixed|vindicated", "why": str} -- the
+    # character's stance toward its own CHOICE, distinct from liking the
+    # event. None when the beat gave the choice no answer.
+    choice_review: Optional[dict] = None
+    # [{"claim": str, "why_held": str}] -- contradictions SEEN and not
+    # revised. The engine changes nothing; the refusal itself is the record.
+    held_beliefs: list[dict] = Field(default_factory=list)
+    # {"query": str, "why": str} -- answered from this mind's own memories
+    # on its next decision, through the existing memory_ponder plumbing.
+    ponder: Optional[dict] = None
+
+    _coerce_remember_lines = validator(
+        "remember_lines", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if isinstance(item, dict) and str(item.get("quote") or "").strip()
+        ] if isinstance(v, (list, tuple)) else [])
+    _coerce_disputes = validator(
+        "memory_disputes", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if isinstance(item, dict) and (
+                str(item.get("memory_ref") or "").strip() or
+                str(item.get("gist") or "").strip())
+            and str(item.get("now_reads") or "").strip()
+        ] if isinstance(v, (list, tuple)) else [])
+    _drop_cueless = validator(
+        "association_updates", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if not isinstance(item, dict) or str(item.get("cue") or "").strip()
+        ] if isinstance(v, (list, tuple)) else v)
+    _drop_unheld = validator(
+        "held_beliefs", pre=True, allow_reuse=True)(
+        lambda cls, v: [
+            item for item in (v if isinstance(v, (list, tuple)) else [])
+            if isinstance(item, dict) and str(item.get("claim") or "").strip()
+        ] if isinstance(v, (list, tuple)) else [])
+
+
 # ---- Mapping ----
 
 class ScenePatch(LenientModel):
@@ -3036,6 +3107,7 @@ SCHEMA_MAP = {
     "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
     "character": CharacterOutput,
+    "character_reflection": CharacterReflection,
     "mapping_stage": MappingStageOutput,
     "perception": PerceptionOutput,
     "mapping_commit": MappingCommit,
@@ -3996,6 +4068,18 @@ OUTPUT_EXAMPLES = {
             "conversation_complete_for_me": False,
         },
         "salience": 0.5,
+    },
+    "character_reflection": {
+        "belief_updates": [],
+        "association_updates": [],
+        "mind_model_updates": [],
+        "relationship_updates": [],
+        "remember_lines": [],
+        "memory_disputes": [],
+        "memory_effects": [],
+        "choice_review": None,
+        "held_beliefs": [],
+        "ponder": None,
     },
     "perception": {
         "views": {},
