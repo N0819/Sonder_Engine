@@ -2069,6 +2069,66 @@ gates either — the residual already noted in
 One fix covers both: emit percepts.
 
 
+### 1.43 The conduct/reflection split sheds no conduct output
+
+**Measured 2026-08-12**, on the `character-cognition` branch, with two real
+conduct calls and a 3-beat A/B.
+
+The split (design note 23, `character_reflection`) moves seven fields to a
+post-outcome reflection call. The conduct sheet drops their instruction
+segments and their output skeleton entries, and states plainly: *"Leave
+belief_updates, association_updates, mind_model_updates,
+relationship_updates, remember_lines, memory_disputes and memory_effects out
+of this output entirely — every one of them belongs to the reflection."*
+
+**The conduct call emits them anyway.** Two independent real calls on chat 71
+turn 31, reflection on:
+
+```
+belief_updates 1   mind_model_updates 2   relationship_updates 1
+remember_lines 1   memory_effects 1
+```
+
+Tried and failed: moving that instruction from 78% depth to 99% — beside the
+output contract it governs, on the theory that killed `ponder`'s zero-fire
+diagnosis. Identical result, so the change was reverted rather than shipped.
+A prompt rule alone does not hold here, which is the same finding as the
+Director's lean sheet needing ownership-at-assembly as a backstop.
+
+So the split's economics are currently:
+
+```
+conduct sheet   60,530 → 57,864 chars   −4.4%
+reflection sheet          7,499 chars
+total prompt              +8%, not less
+conduct output  unchanged (the fields are authored twice)
+plus a whole reflection call
+```
+
+The cognition is real and measured — a `ponder` fired on the first test after
+zero in 3,083 stored results, `choice_review` fires every beat, reflection
+produces 3–5 grounded updates from a 1,874-token sheet. **The split is a
+quality change, not an optimisation, and should be argued for on that
+ground.**
+
+What is NOT the fix: stripping the fields at the conduct seam. The tokens are
+spent at generation, so a post-hoc strip saves nothing, and commit already
+resolves precedence correctly (reflection replaces conduct, conduct is the
+fail-open fallback when reflection fails). Removing the fallback to save
+nothing is a bad trade.
+
+Open: whether any generation-side lever exists short of rejecting the keys in
+validation and paying for a retry.
+
+### 1.44 The prediction-error measure does not discriminate
+
+`gap_mean` read 0.786, 0.900 and 0.909 across three consecutive beats — near
+the top of its range every time, on beats whose expectations were largely
+met. A signal that never moves cannot tell a fulfilled expectation from a
+violated one. Nothing consumes it yet, which is why this is cheap to fix now;
+it is the same saturation shape as the affect ceiling (§1.41) in a
+brand-new measure.
+
 ### 1.40 The slow turn was model-call multiplicity, and the harness plays too few beats to see it
 
 Measured 2026-08-12, on chat 71 turn 10 (played live 07:01:32–07:05:09,
