@@ -400,6 +400,25 @@ Every agent runs on a reduction, never a log — and the reduction is both cheap
 should not have are largely the same context. Statelessness is the default;
 persistence is a privilege earned only by agents modelling a continuous self.
 
+**The contract is reduced the same way the context is.** The character prompt
+explains every key the payload *may* carry, while the payload carries most of
+them rarely — so `prompts.character_prompt` subtracts the paragraphs whose whole
+subject is a key this beat does not have, leaving a contract about the beat that
+actually happened. Measured on live banks: 61.2 KB down to 52.9 KB and 50.5 KB,
+13–17%. Three rules keep it from costing anything. It is gated on **the key
+being in the payload**, never on a mechanism's fire rate — `PROJECTS`,
+`WANTS AND GOALS` and `ASSOCIATIVE LEARNING` are the invitation that would
+create the thing, and gating those would nail their rate at zero forever. It
+reads **the finished payload**, not a second derivation of the same conditions,
+so it cannot explain away a field the model is actually being handed. And it
+fails **open**: an unmatched heading keeps its paragraph, so a preset that
+rewrites one loses the saving and never the instruction. The gate table was
+audited paragraph by paragraph rather than by heading, which is how three
+paragraphs that carry rules beyond their own key — how to take a bearingless
+doorway *at a walk*, why a walking stride is out of character for a body whose
+drive is getting there, and what `active_state.goal` is at all — were found and
+left ungated.
+
 ---
 
 ## Player authority

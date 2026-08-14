@@ -3,6 +3,7 @@
 player-authority-contract additions."""
 
 import json
+import re
 from db import get_setting, set_setting
 
 CATEGORY_NOTE = (
@@ -5485,6 +5486,153 @@ def active_preset():
 
 def nsfw_enabled():
     return get_setting("nsfw_enabled") == "1"
+
+# Paragraphs of the character contract whose whole subject is ONE payload key,
+# paired with the key. When the engine did not put that key in this beat's
+# payload, the paragraph is instructions for a field the model will not find --
+# so it is removed, and what is left is a contract about the beat that actually
+# happened.
+#
+# THE RULE THAT KEEPS THIS HONEST: gate on THE KEY BEING IN THE PAYLOAD, never
+# on a mechanism's fire rate. `project_ops` and `association_updates` fire
+# rarely, but their paragraphs are the invitation that would create the thing --
+# drop those and the rate is nailed at zero forever, which is the trap
+# tools/fire_rates.py exists to warn about. Every key below is one the ENGINE
+# emits and the model cannot ask for, so removing its paragraph removes an
+# explanation, never an opportunity. `PROJECTS`, `WANTS AND GOALS`,
+# `SELF/WORLD BELIEF LEARNING` and `ASSOCIATIVE LEARNING` are deliberately NOT
+# here for exactly that reason.
+#
+# A block passes if ANY of its keys is present and truthy. Unknown markers and
+# unmatched text are always KEPT: a preset that rewrites a heading loses the
+# saving, never the instruction.
+CHARACTER_BLOCK_KEYS = (
+    ("WHEN THEY SAY NOTHING:", ("decision.player_said_nothing",)),
+    ("SOMEONE IS WAITING ON YOU:", ("decision.awaiting_your_answer",)),
+    ("AUTHORIAL OFFERS:", ("decision.authorial_offers",)),
+    ("SUMMARY WINDOWS ARE PAST TOO:", ("memory.summary_citations",)),
+    ("EARLIER IN YOUR LIFE:", ("memory.earlier_in_my_life",)),
+    ("UNBIDDEN MEMORY:", ("memory.surfaces_unbidden",)),
+    ("PLACES AND WHAT THEY ARE FOR:", ("perception.here_affords",
+                                       "memory.recalled_places")),
+    ("ENDING CONTACT:", ("self.standing_contacts",)),
+    ("SPEAKING WITH YOUR MOUTH ENGAGED:", ("self.speaking_now",)),
+    ("MATERIAL EFFECTS YOU COMPLETE:", ("self.embodiment_capabilities",)),
+    ("WHAT YOU ARE WEARING:", ("self.attire",)),
+    ("ACTIVE HYPOTHESES:", ("self.active_hypotheses",)),
+    ("FOLLOWING:", ("self.following",)),
+    ("self.project_review appears", ("self.project_review",)),
+    ("An intention carrying `fading`", ("self.intentions[].fading",)),
+    ("EN ROUTE:", ("self.en_route",)),
+    # The run offer and the gait rule. `sprint_reach` is empty on the large
+    # majority of beats -- it averages 10 bytes across the live scenes -- while
+    # the paragraphs teaching how to read it are over 1.5 KB.
+    #
+    # Its other two paragraphs are deliberately NOT gated, and they are why
+    # this table was audited paragraph by paragraph rather than by heading.
+    # `stops` ends on how to take a BEARINGLESS DOORWAY AT A WALK, and
+    # "Running is an offer" ends on the rule that for a body whose drive is
+    # getting there, walking open ground is the departure from character.
+    # Both are rules about a beat with no run offer in it at all, sitting
+    # inside paragraphs whose headings promised otherwise.
+    ("RUNNING:", ("perception.sprint_reach",)),
+    ("Running is a GAIT,", ("perception.sprint_reach",)),
+    # The spatial markers, each gated on the engine having actually stamped it
+    # on an exit this beat. `_annotate_known_exits` decides every one of these
+    # deterministically, so the paragraph teaching how to read a marker travels
+    # only with the marker -- the same bargain as the run offer above, applied
+    # to the rest of the biggest block in the contract.
+    ("An exit may carry `onward_exits_visible`",
+     ("perception.spatial_frame{}.onward_exits_visible",)),
+    ("`visibly_no_way_through` (equivalently",
+     ("perception.spatial_frame{}.visibly_no_way_through",
+      "perception.corridor_sight")),
+    # Every marker this paragraph explains, not just the two it opens with:
+    # its tail teaches `no_new_ground_that_way` and `worked_before`, and an
+    # exit can carry either without ever carrying `been_there`.
+    ("Your own route is marked too.",
+     ("perception.spatial_frame{}.been_there",
+      "perception.spatial_frame{}.times_entered",
+      "perception.spatial_frame{}.entered_recently",
+      "perception.spatial_frame{}.circling_here",
+      "perception.spatial_frame{}.no_new_ground_that_way",
+      "perception.spatial_frame{}.worked_before")),
+    ("`ground_fully_known`, on the frame itself",
+     ("perception.spatial_frame.ground_fully_known",)),
+)
+
+
+def _payload_has(payload, path):
+    """Is this dotted payload path present AND non-empty.
+
+    Two wildcards, for the two shapes an engine-added annotation actually takes:
+
+      ``a.b[].c``   any element of the LIST at ``a.b`` carries a truthy ``c``
+      ``a.b{}.c``   any value of the DICT at ``a.b`` -- the spatial frame's
+                    buckets, whose values are lists of exits -- carries one
+    """
+    for sep in ("[].", "{}."):
+        head, found, tail = path.partition(sep)
+        if not found:
+            continue
+        node = _payload_node(payload, head)
+        rows = ((node or {}).values() if sep == "{}." else [node or []])
+        for row in rows:
+            group = row if isinstance(row, list) else [row]
+            if any(isinstance(item, dict) and tail in item
+                   and _is_stamped(item[tail]) for item in group):
+                return True
+        return False
+    return _is_stamped(_payload_node(payload, path))
+
+
+def _is_stamped(value):
+    """Did the engine actually put something here.
+
+    Emptiness, not falsiness. `onward_exits_visible: 0` is the whole point of
+    that marker -- nought other ways out is what a visible dead end IS -- and a
+    truthiness test read the one case the paragraph exists for as an absence.
+    """
+    return value is not None and value not in ("", [], {})
+
+
+def _payload_node(payload, path):
+    node = payload
+    for part in path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(part)
+    return node
+
+
+def character_prompt(payload, base=None):
+    """The character contract with the inapplicable paragraphs subtracted.
+
+    Same shape of move as every other guard in this engine: the prompt is not
+    rewritten per beat, it is a fixed document with the paragraphs whose subject
+    is absent taken out. Order is preserved exactly, so the surviving text reads
+    in the sequence it was authored in, and a beat carrying every key gets the
+    whole document byte for byte.
+    """
+    text = get_prompt("character") if base is None else base
+    if not isinstance(payload, dict):
+        return text
+    lines = text.split("\n")
+    keep = []
+    for line in lines:
+        stripped = line.strip()
+        entry = next((item for item in CHARACTER_BLOCK_KEYS
+                      if stripped.startswith(item[0])), None)
+        if entry and not any(_payload_has(payload, key) for key in entry[1]):
+            continue
+        keep.append(line)
+    if not keep:
+        # Never collapse the document into nothing on a malformed payload.
+        return text
+    # A removed paragraph leaves its own blank separator behind; the gap it
+    # opens is not a paragraph break the author wrote.
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(keep))
+
 
 def get_prompt(pid):
     name = active_preset()
