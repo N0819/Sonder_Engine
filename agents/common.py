@@ -4516,6 +4516,28 @@ def _protected_view_quotes(view, player_lines=None):
         quotes.append(body)
     return quotes
 
+# Punctuation and case are not variation. `_strip_player_echo` matched the
+# player's declared line as a literal substring, and a narrator that lightly
+# TIDIES what the player typed defeats that completely: declared
+# `Anyways your plan doctor?` was rendered `"Anyways, your plan, Doctor?"` --
+# two inserted commas and a capitalised Doctor -- and sailed through the guard
+# into the page as an unattributed quote (chat 72, turn 35). Correcting the
+# player's grammar is the one thing a narrator reliably does, so the guard's
+# failure rate was proportional to how well the narrator wrote.
+_ECHO_FOLD_RE = re.compile(r"[^\w\s]+")
+
+
+def _echo_fold(text):
+    """One spoken line, folded so only its WORDS remain."""
+    return " ".join(_ECHO_FOLD_RE.sub(" ", str(text or "")).casefold().split())
+
+
+# Below this, a folded match is not evidence of an echo -- "no", "wait", "why"
+# recur in anyone's mouth, and the literal pass above already handles a short
+# line that arrived unedited.
+_ECHO_FOLD_MIN_WORDS = 3
+
+
 def _strip_player_echo(prose, lines, protect_quotes=None):
     if not prose:
         return prose
@@ -4559,6 +4581,22 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         if len(body) >= 8 and body in prose:
             matched = True
         if not matched:
+            # The narrator tidied it. Fall back to a WORDS-ONLY comparison
+            # against each quoted span still in reach -- NPC quotes were
+            # masked out above, so anything left is fair game -- and drop the
+            # span whose words are the player's, whatever punctuation and
+            # capitalisation the narrator gave them.
+            folded = _echo_fold(body)
+            if len(folded.split()) < _ECHO_FOLD_MIN_WORDS:
+                continue
+            hit = next((m for m in _QUOTE_SPAN_RE.finditer(prose)
+                        if _echo_fold(m.group(2)) == folded), None)
+            if hit is None:
+                continue
+            prose = prose[:hit.start()] + prose[hit.end():]
+            prose = _DANGLING_SPEECH_VERB_RE.sub(
+                lambda m: f"{m.group(1)} it.", prose)
+            prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
             continue
         for quoted in quoted_forms:
             prose = prose.replace(quoted, "")
