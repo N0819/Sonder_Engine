@@ -3257,6 +3257,10 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
     """
     warnings = []
     seen = set()
+    # Words only, for the same reason the player-echo strip needs it: the
+    # Director RE-PUNCTUATES a line it is quoting, and an exact membership
+    # test then reads its own faithful rendering as an invention.
+    folded_allowed = [_echo_fold(a) for a in (allowed_bodies or ()) if _echo_fold(a)]
     for pattern in _PROSE_QUOTE_RES:
         for span in pattern.findall(resolved_event or ""):
             body = _quote_body(span)
@@ -3266,6 +3270,25 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
             if len(re.findall(r"[A-Za-z']+", body)) < _PROSE_QUOTE_MIN_WORDS:
                 continue
             if body in allowed_bodies:
+                continue
+            # A quote NESTED inside a declared line is not a new utterance --
+            # it is somebody quoting what was already said. The four patterns
+            # above each sweep the whole prose independently, so a declared
+            # line carrying inner quotes ('And I said "ask me again" -- not
+            # "yes, absolutely, show you the stars."') yields the outer span
+            # AND both inner ones, and only the outer could ever match.
+            #
+            # Measured across the live corpus: 14 flags, 13 of them cleared by
+            # this test -- a 93% false-positive rate on a guard whose every
+            # firing costs a full second Director call, the most expensive
+            # ONE DIRECTION ONLY: the flagged span must sit INSIDE something
+            # that was declared. The reverse -- a declared line sitting inside
+            # the flagged span -- is prose that EXPANDED on what somebody said,
+            # which is the invention this guard exists to catch, and allowing
+            # it cleared the one genuine case in the corpus along with the
+            # thirteen false ones.
+            folded = _echo_fold(body)
+            if folded and any(folded in a for a in folded_allowed):
                 continue
             warnings.append(
                 "Spoken line in resolved_event that nobody declared "
