@@ -220,22 +220,43 @@ def _text_of(parsed):
 
 
 def _post(prov, model, system, user, timeout, max_tokens):
+    """One scored call, with transport failures retried rather than fatal.
+
+    A long unattended arm meets a dropped connection eventually -- this one
+    died on `RemoteDisconnected` two scenarios in, losing the whole arm and,
+    worse, losing the COMPARISON, since the surviving arm has nothing to be
+    compared against. A transport error is not a result: it says nothing about
+    the model or the contract, so it is retried, and only a persistent one is
+    reported as `err` and counted as bad.
+    """
     import providers
-    t0 = time.perf_counter()
-    r = providers._session().post(
-        prov["base_url"].rstrip("/") + "/chat/completions",
-        headers=providers._headers(prov),
-        json={"model": model,
-              "messages": [{"role": "system", "content": system},
-                           {"role": "user", "content": user}],
-              "temperature": 0.3, "max_tokens": max_tokens},
-        timeout=timeout)
-    dt = time.perf_counter() - t0
-    if r.status_code >= 400:
-        return None, dt, f"HTTP {r.status_code}"
-    data = r.json()
-    return ((((data.get("choices") or [{}])[0].get("message") or {})
-             .get("content") or "")), dt, None
+    last = None
+    for attempt in range(3):
+        t0 = time.perf_counter()
+        try:
+            r = providers._session().post(
+                prov["base_url"].rstrip("/") + "/chat/completions",
+                headers=providers._headers(prov),
+                json={"model": model,
+                      "messages": [{"role": "system", "content": system},
+                                   {"role": "user", "content": user}],
+                      "temperature": 0.7, "max_tokens": max_tokens},
+                timeout=timeout)
+        except Exception as exc:                      # transport, not verdict
+            last = (time.perf_counter() - t0, f"{type(exc).__name__}: {exc}")
+            time.sleep(2 * (attempt + 1))
+            continue
+        dt = time.perf_counter() - t0
+        if r.status_code >= 400:
+            last = (dt, f"HTTP {r.status_code}")
+            if r.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+                time.sleep(2 * (attempt + 1))
+                continue
+            return None, dt, last[1]
+        data = r.json()
+        return ((((data.get("choices") or [{}])[0].get("message") or {})
+                 .get("content") or "")), dt, None
+    return None, (last[0] if last else 0.0), (last[1] if last else "unknown")
 
 
 def main(argv=None):
@@ -257,7 +278,12 @@ def main(argv=None):
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
-    system = prompts.DEFAULT_PROMPTS["character"]
+    # Production sends the contract with the paragraphs whose subject this
+    # beat does not carry removed (prompts.character_prompt). Sending the
+    # whole document here measured a configuration that does not ship --
+    # and these payloads are deliberately sparse, so the gap is widest
+    # exactly where this harness is pointed.
+    system = None  # built per scenario, from that scenario's own payload
 
     print(f"{len(PUZZLES)} puzzles x {args.trials} trials, "
           f"through the real character contract\n")
@@ -268,6 +294,8 @@ def main(argv=None):
         verdicts = {"declined": 0, "hedged": 0, "asserted": 0}
         for puz in PUZZLES:
             payload = _payload(puz["view"], puz["observations"])
+            system = prompts.character_prompt(
+                payload if isinstance(payload, dict) else {})
             hits, detail = 0, []
             reasoning = puz["correct"] is not None
             for _ in range(args.trials):

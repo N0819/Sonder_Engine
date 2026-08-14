@@ -2084,6 +2084,36 @@ class DirectorResolve(LenientModel):
     orchestration: dict[str, Any] = Field(default_factory=dict)
 
 
+def _manifest_event_number(value):
+    """The integer a specialist MEANT when it echoed a manifest event number.
+
+    `resolved_events[].event_id` is assigned by the engine -- 1..N in the order
+    the resolve narrated the beat -- and echoed back by each specialist so
+    composition is an id lookup rather than a comparison of two spellings. The
+    echo is where it goes wrong: models return the number as "1", "#1", "E1",
+    "event 1" or "1.", and only the bare digits validate. That rejection is not
+    cheap. It fails the whole call and buys a repair round trip, and across the
+    live corpus this ONE field accounts for 8 of 17 validation failures -- 47%
+    of every repair call the engine has made.
+
+    Nothing is invented. A value carrying exactly ONE run of digits resolves to
+    that run; anything else -- no digits, or two of them ("1,2"), where the
+    model's intent is genuinely unclear -- is passed through untouched and
+    fails exactly as it did before.
+    """
+    if isinstance(value, bool) or isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        return value
+    runs = re.findall(r"\d+", value)
+    if len(runs) != 1:
+        return value
+    try:
+        return int(runs[0])
+    except ValueError:
+        return value
+
+
 class ResolvedEvent(LenientModel):
     """One specialist's verdict on ONE numbered beat event (design note 21).
 
@@ -2105,6 +2135,8 @@ class ResolvedEvent(LenientModel):
     re-encode.
     """
     event_id: int = 0
+    _coerce_event_id = validator("event_id", pre=True, allow_reuse=True)(
+        _manifest_event_number)
     # encoded      -- I put this in my channels this beat
     # already_true -- standing state carries it; no delta is correct
     # not_mine     -- it needs a channel I was not granted
