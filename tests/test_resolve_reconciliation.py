@@ -1353,3 +1353,128 @@ class TestProseQuoteAuthorityDoesNotFlagQuotation:
             'He says, "Mind the step, and mind the man behind you."',
             {"Mind the step"})
         assert len(warnings) == 1
+
+
+# --- a subject nobody can point at is not a claim anyone can check --------
+
+def _meta_claim_interp(player_input):
+    interp = _action_interp()
+    interp["flow"]["authority_claims"] = [{
+        "claim_id": "claim:1:event", "scope": "effect",
+        # A schema placeholder, not a referent. The model reached for it
+        # when the "subject" slot did not fit what it was reading.
+        "subject_id": "narrative_assertion",
+        "predicate": "even at late hour someone should be staffing it",
+        "value": None, "commitment": "asserted",
+        "source_text": "even at late hour someone should be staffing it",
+    }]
+    return interp
+
+
+def test_an_unreferrable_claim_subject_degrades_to_a_note(temp_db,
+                                                          monkeypatch):
+    """Live, chat 72 turn 45. The player added an out-of-fiction aside to
+    the engine -- "(it is a hotel. even at late hour someone should be
+    staffing it, use logic and reasoning instead of assuming no one is
+    there)" -- and interpret turned it into TWO asserted completed effects
+    on a subject called `narrative_assertion`, split at a comma.
+
+    Player claims are non-rejectable by design, so each one warned every
+    beat and could never be satisfied: `narrative_assertion` names nothing
+    in the world and nothing the player typed, so `_omission_subject_
+    encoded` can only ever answer False. Between them they bought one
+    full-core repair call -- the most expensive retry the engine has -- to
+    encode a remark addressed to the engine rather than to the fiction, and
+    the repair's own 'already_encoded' answer could not stop the warnings.
+
+    The floor is the same shape as the null-subject one already here: a
+    claim whose subject is neither resolvable in the world NOR present in
+    the player's own words is not coverage-checkable, so it becomes a
+    metadata note. Nothing about player authority is weakened -- see the
+    two tests below for the cases that must stay hard.
+    """
+    ctx = _make_ctx(
+        temp_db,
+        "I ring the bell. (it is a hotel, someone should be staffing it)",
+        _meta_claim_interp("I ring the bell."))
+    calls = []
+    resolved = {
+        "resolved_event": "The bell rings out across the empty lobby.",
+        "summary": "Bell rung.", "dialogue_log": [],
+        "changes_asserted": [], "state_diff": {},
+    }
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": resolved, **_owned_channels(resolved),
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert "resolve_repair" not in [k for k, _ in calls], (
+        "an unreferrable claim bought a full-core repair call")
+    assert not [w for w in ctx.warnings if "PLAYER AUTHORITY" in w]
+    assert any(n.get("predicate") ==
+               "even at late hour someone should be staffing it"
+               for n in out["reconciliation"]["claim_notes"])
+
+
+def test_a_claim_the_player_named_in_their_own_words_stays_hard(
+        temp_db, monkeypatch):
+    """The case that must NOT soften. `vault_door` is in no scene here --
+    the player is asserting it into existence, which is exactly what player
+    authority is for -- but they typed the words, so the subject has a
+    referent and the coverage check is real."""
+    claims = [{
+        "claim_id": "claim:0:effect:0", "scope": "effect",
+        "subject_id": "vault_door", "predicate": "shattered",
+        "value": {}, "commitment": "asserted",
+        "source_text": "I shatter the vault door",
+    }]
+    ctx = _make_ctx(temp_db, "I shatter the vault door.",
+                    _action_interp(authority_claims=claims))
+    calls = []
+    resolved = {
+        "resolved_event": "The vault door shatters into fragments.",
+        "summary": "Vault door destroyed.", "dialogue_log": [],
+        "changes_asserted": [], "state_diff": {},
+    }
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": resolved,
+        "resolve_repair": {"state_diff": {}, "dispositions": []},
+        **_owned_channels(resolved),
+    }, calls))
+
+    director.director_resolve(ctx, nonce=0)
+
+    assert [k for k, _ in calls].count("resolve_repair") == 1
+    assert any("PLAYER AUTHORITY" in w for w in ctx.warnings)
+
+
+def test_a_claim_on_a_standing_scene_subject_stays_hard(temp_db, monkeypatch):
+    """The other case that must not soften: the player says "I snuff the
+    lamp" and the claim's subject is the scene's own `elevator_control_panel`
+    id, which they never typed. Resolvable in the WORLD is enough on its
+    own -- either channel qualifies, and only failing both is unreferrable.
+    """
+    claims = [{
+        "claim_id": "claim:0:effect:0", "scope": "effect",
+        "subject_id": "elevator_control_panel", "predicate": "smashed",
+        "value": {}, "commitment": "asserted",
+        "source_text": "I smash the panel",
+    }]
+    ctx = _make_ctx(temp_db, "I smash the panel.",
+                    _action_interp(authority_claims=claims))
+    calls = []
+    resolved = {
+        "resolved_event": "The panel cracks under the blow.",
+        "summary": "Panel smashed.", "dialogue_log": [],
+        "changes_asserted": [], "state_diff": {},
+    }
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": resolved,
+        "resolve_repair": {"state_diff": {}, "dispositions": []},
+        **_owned_channels(resolved),
+    }, calls))
+
+    director.director_resolve(ctx, nonce=0)
+
+    assert any("PLAYER AUTHORITY" in w for w in ctx.warnings)

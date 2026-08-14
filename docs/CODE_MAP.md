@@ -12,7 +12,7 @@
 | `agents/character.py` | 3386 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6156 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 7354 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 7419 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1045 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1145 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7503 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7539 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1675 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -144,14 +144,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5894 | 1306 lines |
+| `director_resolve()` | 5959 | 1306 lines |
 | `director_interpret()` | 771 | 471 lines |
-| `_reconcile_resolution()` | 3957 | 445 lines |
-| `_evidence_present()` | 3062 | 232 lines |
-| `_run_specialists()` | 5539 | 202 lines |
+| `_reconcile_resolution()` | 4022 | 445 lines |
+| `_evidence_present()` | 3097 | 232 lines |
+| `_run_specialists()` | 5604 | 202 lines |
 | `_reconcile_near_group_positions()` | 2348 | 201 lines |
-| `_specialist_payload()` | 5320 | 133 lines |
-| `_orchestration_scope_backstop()` | 5761 | 131 lines |
+| `_specialist_payload()` | 5385 | 133 lines |
+| `_orchestration_scope_backstop()` | 5826 | 131 lines |
 
 ### `agents/loops.py`
 
@@ -400,14 +400,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5627 | 1215 lines |
+| `prepare_memory_commit()` | 5663 | 1215 lines |
 | `prepare_scene_commit()` | 2266 | 425 lines |
 | `commit_world_entities()` | 3189 | 287 lines |
 | `apply_attire_diff()` | 1971 | 253 lines |
 | `track_background_presences()` | 3993 | 231 lines |
-| `_commit_all_locked()` | 7250 | 195 lines |
+| `_commit_all_locked()` | 7286 | 195 lines |
 | `commit_transit_sweep()` | 2740 | 169 lines |
-| `_prepare_destruction()` | 701 | 158 lines |
+| `pick_background_reactors()` | 4313 | 159 lines |
 
 ### `couriers.py`
 

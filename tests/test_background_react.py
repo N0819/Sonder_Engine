@@ -236,3 +236,95 @@ def test_background_react_stage_handles_reacts_false(temp_db, monkeypatch):
     result = background.background_react(ctx, nonce=0)
     assert result["fired"] is False
     assert result["dialogue_log_entry"] is None
+
+
+# --- a presence minted THIS beat can still be handed the line -------------
+#
+# Live, chat 72 turn 45 (turn_id 2426). The player rang a hotel service bell
+# and said so in as many words: "it is a hotel. even at late hour someone
+# should be staffing it, use logic and reasoning instead of assuming no one
+# is there". The Director agreed and resolved it correctly -- a night clerk
+# comes out of the back office, mutters "I'm coming, I'm coming... Keep your
+# shirt on," and takes his place behind the desk.
+#
+# The engine deleted him. `director_may_voice` routed his lines to this
+# stage (correct: he is person-shaped and deserves his own call), and the
+# hand-off silently failed, because `pick_background_reactors` iterates
+# `background_presences` -- and a presence MINTED THIS BEAT is not in that
+# store yet. `track_background_presences` writes it at commit, after this
+# gate has already run. So the one presence the Director actively chose to
+# speak for was the one class of presence the forced pick could never see.
+#
+# The result was not a warning. It was a story that would not resolve: the
+# narrator's last line was "Somewhere beyond the desk, a door might shift.
+# Or not." -- against a player who had explicitly asked for the opposite.
+
+def test_a_presence_minted_this_beat_is_forced_into_the_picks(temp_db):
+    """The routed name has no record yet, by construction. Requiring one is
+    requiring the presence to have existed before the beat that created it.
+    """
+    from commit import pick_background_reactors
+
+    ctx = _make_ctx(temp_db, background_presences={},
+                    player_input="I ring the bell until someone comes.")
+    dr_output = {
+        "resolved_event": (
+            "A disheveled man in a wrinkled uniform steps into the lobby, "
+            "rubbing his eyes, and moves behind the desk."),
+        # The line was stripped by the ownership guard; this list is the
+        # hand-off it wrote in its place.
+        "dialogue_log": [],
+        "routed_to_background": ["Night Clerk"],
+        # The live shape: the Director MINTED him in the same beat, as a
+        # `character` entity with a position. That is the Director doing
+        # exactly its job -- it owns what exists -- and it must not be read
+        # as evidence the line is already handled, or the two halves of the
+        # ownership split race and the mint silences the hand-off.
+        "state_diff": {
+            "cast_changes": [
+                {"who": "Night Clerk", "status": "arrived",
+                 "reason": "Comes out after the bell."}],
+            "entities": {"night_clerk": {
+                "name": "Night Clerk", "kind": "character",
+                "description": "A disheveled man in a wrinkled uniform."}},
+            "positions": {"Night Clerk": "hotel_lobby"},
+        },
+    }
+
+    assert pick_background_reactors(ctx, dr_output, cap=1) == ["Night Clerk"]
+
+
+def test_a_routed_presence_forces_past_the_cap_like_an_address(temp_db):
+    """Same rule the flow-addressed presence gets: the Director already
+    judged them worth speaking for, so they do not compete for a slot."""
+    from commit import pick_background_reactors
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 2, 3],
+                 "mention_turns": [4]},
+    })
+    dr_output = {
+        "resolved_event": "Reya looks up as a porter arrives.",
+        "dialogue_log": [],
+        "routed_to_background": ["Porter"],
+    }
+
+    picks = pick_background_reactors(ctx, dr_output, cap=1)
+    assert "Porter" in picks
+
+
+def test_a_routed_name_that_is_registered_cast_is_not_minted(temp_db):
+    """The forced list is already filtered against the roster upstream, and
+    this is the floor under that: a sheeted character's dropped line is a
+    different failure (director-invented dialogue) and must never arrive
+    here as a background presence with the same name."""
+    from commit import pick_background_reactors
+
+    ctx = _make_ctx(temp_db, background_presences={}, cast_names=["Mara"])
+    dr_output = {
+        "resolved_event": "Mara says nothing.",
+        "dialogue_log": [],
+        "routed_to_background": ["Mara"],
+    }
+
+    assert pick_background_reactors(ctx, dr_output, cap=1) == []

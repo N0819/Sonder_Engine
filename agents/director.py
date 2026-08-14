@@ -2899,6 +2899,41 @@ def _merge_repair_into_diff(sd, patch):
 def _norm_subject(value):
     return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
 
+def _claim_subject_is_referrable(subject, forms, sc, player_input):
+    """Can anyone point at what this claim is about?
+
+    Two independent channels, either of which qualifies (see the block
+    comment at the call site for the live case that made this necessary):
+
+      * THE WORLD KNOWS IT -- `_subject_match_forms` found more than the
+        bare string it was handed, meaning the subject matched a cast
+        member's scene keys or an entity's ids and aliases, or the subject
+        names a room in the scene.
+      * THE PLAYER SAID IT -- the subject's words appear in what the player
+        typed. This is the channel that keeps "I shatter the vault door" a
+        real claim about a door no scene contains yet, which is exactly
+        what player authority exists to do.
+
+    Normalized to letters and digits on both sides, so `vault_door` matches
+    "the vault door" and casing and punctuation cannot decide it. Fails
+    open: anything this cannot evaluate is referrable, because refusing a
+    claim is the direction that costs the player their authority.
+    """
+    normalized = _norm_subject(subject)
+    if not normalized:
+        return False
+    if len(forms or []) > 1:
+        return True
+    rooms = ((sc or {}).get("rooms") or {})
+    room_forms = set(rooms)
+    for rid, room in rooms.items():
+        if isinstance(room, dict) and room.get("name"):
+            room_forms.add(str(room["name"]))
+    if any(_norm_subject(r) == normalized for r in room_forms):
+        return True
+    return normalized in _norm_subject(player_input)
+
+
 def _subject_match_forms(subject, cast, sc):
     """Every identity form an omission subject may legitimately appear under
     in the diff: the subject itself, plus -- when it names a registered cast
@@ -3436,7 +3471,7 @@ def _fold_derived_manifest_events(items):
         item["event_id"] = index + 1
     return folded
 
-def _player_claim_findings(out, sd, interp, cast, sc):
+def _player_claim_findings(out, sd, interp, cast, sc, player_input=""):
     """Tier 0 player-authority coverage: every asserted scope='effect'
     authority claim with a resolvable subject must be encoded SOMEWHERE in
     the diff (shallow containment -- the claim's free-text predicate cannot
@@ -3476,6 +3511,36 @@ def _player_claim_findings(out, sd, interp, cast, sc):
             })
             continue
         forms = _subject_match_forms(subject, cast, sc)
+        # A SUBJECT NOBODY CAN POINT AT is the null-subject case wearing a
+        # word, and it has to degrade the same way -- because a player claim
+        # is NON-REJECTABLE, so an unsatisfiable one warns every beat
+        # forever and buys the full-core repair every beat forever.
+        #
+        # Live, chat 72 turn 45: the player added an aside addressed to the
+        # ENGINE -- "(it is a hotel. even at late hour someone should be
+        # staffing it, use logic and reasoning instead of assuming no one is
+        # there)" -- and interpret minted two asserted completed effects on a
+        # subject called `narrative_assertion`, split at a comma. Neither
+        # could ever be encoded, so they bought the most expensive retry the
+        # engine has and warned anyway; the repair answered 'already_encoded'
+        # for both and non-rejectability correctly refused to hear it.
+        #
+        # Two channels qualify a subject and only failing BOTH disqualifies:
+        #   * the WORLD knows it -- `_subject_match_forms` found cast keys or
+        #     entity aliases beyond the bare string, or it names a room;
+        #   * the PLAYER SAID IT -- the words are in their own input, which
+        #     is what makes "I shatter the vault door" a real claim about a
+        #     door no scene contains yet. Asserting a thing into existence is
+        #     precisely what player authority is for.
+        # Folded to words so punctuation and case cannot decide it.
+        if not _claim_subject_is_referrable(subject, forms, sc, player_input):
+            notes.append({
+                "claim_id": claim.get("claim_id"),
+                "predicate": claim.get("predicate"),
+                "note": ("subject names nothing in the world and nothing the "
+                         "player typed; coverage not checkable"),
+            })
+            continue
         if not _omission_subject_encoded(sd, subject, forms):
             omissions.append({
                 "category": "other", "subject": subject,
@@ -4090,7 +4155,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         })
 
     claim_omissions, claim_notes, contract_warnings = _player_claim_findings(
-        out, sd, interp, ctx.cast, sc)
+        out, sd, interp, ctx.cast, sc, ctx.input or "")
     for warning in contract_warnings:
         ctx.add_warning(warning)
 
