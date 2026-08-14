@@ -1207,3 +1207,16 @@ def test_a_comma_inside_a_location_is_not_split_into_two():
     got = _validate(LoreOp, {"op": "create",
                              "knowledge_locations": "Vault, Lower"})
     assert got.knowledge_locations == ["Vault, Lower"]
+
+
+def test_an_empty_narration_says_which_keys_did_arrive():
+    """"prose is empty" is 18% of the corpus's repair calls and, unlike its two
+    larger siblings, the message never carried the shape that failed -- so
+    nothing distinguished a model that returned NOTHING from one that returned
+    a page of narration under a key this contract does not read. The first is
+    worth a repair call; the second is worth a one-line alias."""
+    from schemas import semantic_output_errors
+    assert semantic_output_errors("narrator", {}) == ["prose is empty"]
+    assert semantic_output_errors("narrator", {"prose": "She turned."}) == []
+    said = semantic_output_errors("narrator", {"narration": "a page", "beat": 1})
+    assert said == ["prose is empty (keys present: beat, narration)"]
