@@ -4466,7 +4466,21 @@ def semantic_output_errors(
 
     elif step_key == "narrator":
         if not str(output.get("prose") or "").strip():
-            errors.append("prose is empty")
+            # SAY WHERE IT WENT. "prose is empty" is 3 of 17 validation
+            # failures across the live corpus -- 18% of every repair call --
+            # and unlike its two larger siblings the message does not carry
+            # the shape that failed, so nothing in the record distinguishes a
+            # model that returned nothing from one that returned a page of
+            # narration under a key this contract does not read. The first is
+            # worth a repair call; the second is worth a one-line alias, and
+            # for the whole life of the corpus there has been no way to tell
+            # which. Name the keys that DID arrive, and the next occurrence
+            # answers it.
+            present = sorted(str(k) for k in output) if isinstance(
+                output, dict) else []
+            errors.append(
+                "prose is empty" if not present
+                else "prose is empty (keys present: %s)" % ", ".join(present[:12]))
 
     return errors
 
