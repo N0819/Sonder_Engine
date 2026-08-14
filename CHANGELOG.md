@@ -1,5 +1,50 @@
 # Changelog
 
+## alpha 8.3.1 — A glamour that covers all of you
+
+- **A disguise now hides authored extra parts, not just the appearance
+  summary.** `disguised_visible_appearance` rewrites one string; extra parts
+  are a separate typed ledger the composer renders straight from structured
+  data, so a glamoured kitsune kept six tails and two fox ears in every
+  observer's view while her summary read "ordinary human ears". Gated at
+  `_composer_extra_parts`, the one cached seam every orchestrator reads
+  through — and gated there rather than at the percept build, because those
+  keys are true body names while percept rows carry observer-facing labels and
+  two bodies can both be "someone".
+
+- **Prose may only conceal; only a typed field may grant.** The first cut kept
+  a part whose name appeared in `presented_appearance`. One turn later the
+  Director wrote *"…; no tails are visible"*, the word `tails` was present, and
+  six tails came back. A negation reads as a mention, and so does every other
+  way a sentence says absence. A part now shows through a disguise only via
+  `visible_parts` — typed, with nothing to parse and nothing to negate.
+
+- **One body, one outward form.** A story had accumulated *three* active
+  disguises on one subject, the Director minting a fresh `condition_id` per
+  reroll; one of them silently decided what everybody saw, and which one could
+  change between turns. Newest wins on read, a new one supersedes on write,
+  and an **ending clears every row on that body** rather than the single id it
+  names — which is what makes "you allow your glamour to come undone" work,
+  since the Director cannot name ids it was never shown.
+
+- **Bodies can actually change now** (`physical_transformation`). A disguise is
+  a lie with a truth behind it; a transformation has none — the body *is* the
+  new thing, nobody sees through it, and someone who knew you yesterday does
+  not perceive your old shape today. So it REPLACES where a disguise conceals,
+  which is also what lets it ADD rather than only subtract. Truth resolves
+  first and concealment on top, so a glamoured fox has its own tail hidden
+  rather than the six its card remembers. Crucially the transformed mind gets
+  the transformed body: character payloads are built from the card, so without
+  that the fox would still believe it had hands. Reversible is the default and
+  a one-way door has to be chosen deliberately.
+
+- **The narration preview is the turn, not a slab beside it.** It appended to
+  the bottom of the transcript even when the turn it previewed was already on
+  screen, so every reroll showed the beat twice — the real turn, and an
+  uncoloured copy that vanished when commit re-rendered. A re-run now repaints
+  in place; a genuinely new turn still previews, but as a whole turn with the
+  player's line above the prose.
+
 ## alpha 8.3 — The narrator was paragraphing all along
 
 - **The engine was deleting the paragraph breaks the narrator wrote.**
