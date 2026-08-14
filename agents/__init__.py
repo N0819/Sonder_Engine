@@ -62,7 +62,8 @@ from .common import (
     _llm_resolve_player_room,
     _resolve_player_room,
 )
-from .director import director_establish, director_interpret, director_resolve
+from .director import (director_establish, director_interpret,
+                       director_resolve, fanout_is_parallel)
 from .loops import deterministic_micro_perception, interaction_loop, reaction_loop
 from .mapping import mapping_quick, mapping_stage
 from .narration import narrator

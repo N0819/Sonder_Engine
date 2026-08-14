@@ -460,7 +460,7 @@ class TestTheDirectorCanActuallySayIt:
         drift is checked here on the field this feature depends on."""
         import prompts
 
-        text = prompts.DEFAULT_PROMPTS["director_resolve"]
+        text = prompts.DEFAULT_PROMPTS["director_offscreen"]
         assert "crowd_ops" in text
         assert "state_diff.crowd_ops" in text
 

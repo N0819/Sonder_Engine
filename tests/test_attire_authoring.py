@@ -723,7 +723,7 @@ def test_the_director_is_told_damage_lands_on_both_and_heals_differently():
     Neither may be written into the body's stable appearance."""
     from prompts import DEFAULT_PROMPTS
 
-    prompt = DEFAULT_PROMPTS["director_resolve"]
+    prompt = DEFAULT_PROMPTS["director_body"]
     assert "A BLOW LANDS ON BOTH" in prompt
     assert "conditions" in prompt
     assert "STAYS cut until" in prompt
@@ -735,7 +735,7 @@ def test_the_director_is_told_damage_lands_on_both_and_heals_differently():
 def test_the_director_is_told_a_garments_condition_belongs_to_the_garment():
     from prompts import DEFAULT_PROMPTS
 
-    prompt = DEFAULT_PROMPTS["director_resolve"]
+    prompt = DEFAULT_PROMPTS["director_body"]
     assert "WHAT HAPPENS TO A GARMENT BELONGS TO THE GARMENT" in prompt
     assert "conditions:{garment_name:" in prompt
     assert "Being damaged is not being removed" in prompt
@@ -757,7 +757,7 @@ def test_the_middle_states_are_offered_without_being_urged():
     """
     from prompts import DEFAULT_PROMPTS
 
-    prompt = DEFAULT_PROMPTS["director_resolve"]
+    prompt = DEFAULT_PROMPTS["director_body"]
     assert "`remove` IS YOUR RESOLUTION AND THE ENGINE HONOURS IT" in prompt
     assert "worn -> loosened -> open -> removed" in prompt
     assert "STILL BEING WORN" in prompt

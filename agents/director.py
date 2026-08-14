@@ -3299,6 +3299,28 @@ _RECONCILE_MAX_MANIFEST_ITEMS = 8
 _RECONCILE_MAX_AUDIT_OMISSIONS = 6
 _RECONCILE_MIN_CONFIDENCE = 0.4
 
+def fanout_is_parallel():
+    """Whether the Director's specialists run at once (default) or in turn.
+
+    PARALLEL IS THE DEFAULT and is what the fan-out is for: the specialists
+    are handed disjoint channels of the same finished beat, so they have
+    nothing to say to each other and the beat's cost is its slowest hand
+    rather than the sum of them.
+
+    Sequential exists because concurrency is not free everywhere -- a
+    provider with a one-request-at-a-time key, a rate limit measured in
+    concurrent connections, a local runtime serving one model on one GPU.
+    Under those, parallel dispatch does not go faster and can fail. It is
+    NOT a fallback to the monolith: the same specialists run with the same
+    scopes, assembled in the same canonical order, and a beat still
+    dispatches a mean 1.75 of 6 hands carrying 1-4k sheets. Sequential
+    fan-out is expected to beat the single ~21k-token sheet it replaced;
+    parallel simply beats it by more.
+    """
+    value = str(get_setting("director_fanout_mode") or "").strip().casefold()
+    return value not in ("sequential", "serial", "one_at_a_time")
+
+
 def _deep_audit_mode():
     """The default-off standalone resolve_reconcile audit: 'off' (default),
     'always' (every physical beat -- the pre-manifest behavior, kept as a
@@ -5596,7 +5618,22 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             if item.get("event_id")
         ]
     results = {}
-    if len(jobs) == 1:
+    if len(jobs) > 1 and not fanout_is_parallel():
+        # SEQUENTIAL, by host choice. Same context copy per job, same
+        # canonical assembly below, same fail-open -- the only difference is
+        # that the calls do not overlap. Still cheaper than the monolith
+        # was: a beat dispatches a mean 1.75 of 6 specialists and each
+        # carries a 1-4k sheet against the single sheet's ~21k, so the work
+        # is smaller even when none of it runs at once.
+        for name, state in jobs:
+            try:
+                results[name] = _call_isolated(name, state,
+                                               contextvars.copy_context())
+            except Aborted:
+                raise
+            except Exception as exc:
+                results[name] = exc
+    elif len(jobs) == 1:
         name, state = jobs[0]
         try:
             results[name] = _call_isolated(name, state,

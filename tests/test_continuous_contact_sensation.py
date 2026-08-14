@@ -91,7 +91,7 @@ class TestTheMannerReading:
         assert contact_motion(contact) == "moving"
 
     def test_resolve_prompt_requires_both_contact_axes(self):
-        prompt = DEFAULT_PROMPTS["director_resolve"]
+        prompt = DEFAULT_PROMPTS["director_contact"]
 
         assert "relation is surface|interior and motion is settled|moving" in prompt
         assert "ALWAYS emit both" in prompt

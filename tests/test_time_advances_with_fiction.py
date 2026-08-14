@@ -38,7 +38,7 @@ CLAUSE_END = "WEATHER:"
 
 
 def _time_clause():
-    text = DEFAULT_PROMPTS["director_resolve"]
+    text = DEFAULT_PROMPTS["director_resolve_lean"]
     start = text.find(CLAUSE_START)
     assert start >= 0, "the resolve prompt lost its TIME clause"
     end = text.find(CLAUSE_END, start)

@@ -137,60 +137,84 @@ def _steps(calls):
     return [c["step_key"] for c in calls]
 
 
-def _orch_on(temp_db):
-    temp_db.set_setting("director_orchestration", "1")
-
-
 # ---------------------------------------------------------------------------
 # The flag, and the monolithic default.
 # ---------------------------------------------------------------------------
 
-def test_flag_off_is_the_monolithic_path_unchanged(temp_db, monkeypatch):
-    """Requirement 7: feature-flagged and reversible, monolith the DEFAULT.
-    With the setting absent, exactly one resolve call is made, with the full
-    (unsplit) instruction sheet, and the output carries no orchestration
-    record -- so stored turns and payload shapes are byte-compatible with
-    every pre-orchestration variant."""
+def test_the_fanout_is_the_only_path_and_has_no_off_switch(temp_db,
+                                                           monkeypatch):
+    """The monolithic Director is GONE, not defaulted-off.
+
+    It shipped behind `director_orchestration`, default off, and stayed
+    there while the fan-out was measured against it. The measurement
+    finished: the fan-out is more stable, costs fewer tokens and less wall
+    clock, so keeping a switch for the losing path would only preserve a way
+    to make the engine worse. Every resolve now dispatches, carries an
+    orchestration record, and loads the lean prose-author sheet -- with no
+    setting, in any spelling, that returns the old one.
+    """
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
-    ctx = _make_ctx(temp_db, interp=_action_interp())
-    out = director.director_resolve(ctx, nonce=0)
+    for value in ("", "0", "off", "false"):
+        temp_db.set_setting("director_orchestration", value)
+        ctx = _make_ctx(temp_db, interp=_action_interp())
+        out = director.director_resolve(ctx, nonce=0)
+        assert out["orchestration"]["enabled"] is True, value
 
-    assert _steps(calls) == ["director_resolve"]
-    assert "CLOTHING TRACKING" in calls[0]["system"]
-    assert "BODY CHANNELS ARE DELEGATED" not in calls[0]["system"]
-    # The schema dump supplies the declared default (the routed_to_background
-    # pattern); a monolithic resolve must never claim an orchestrated one.
-    assert not out.get("orchestration")
+    sheet = calls[0]["system"]
+    assert "DELEGATED CHANNELS -- SPECIALISTS ENCODE, YOU NARRATE" in sheet
+    assert "CLOTHING TRACKING" not in sheet, (
+        "the prose author loaded a delegated channel's machinery")
+    assert any(c["step_key"].startswith("director_")
+               and c["step_key"] != "director_resolve" for c in calls)
 
 
-def test_monolithic_prompt_is_intact_and_lean_sheet_is_carved():
-    """The prompt split must be a recomposition, not a rewrite: the full
-    resolve sheet keeps every delegated block, and the lean sheet drops
-    exactly the delegated machinery (delegation note in their place) while
-    keeping everything the prose author still owns."""
+def test_every_delegated_block_has_exactly_one_owner():
+    """The split was a recomposition, not a rewrite, and the way to keep it
+    one is to check that nothing was lost and nothing is taught twice.
+
+    Each block below was a section of the single sheet the Director used to
+    carry. Every one must now live in exactly ONE specialist -- lost means a
+    rule nobody applies, duplicated means two hands authoring the same
+    channel from two spellings that can drift. And none may appear in the
+    prose author's own sheet, which is what "delegated" means.
+    """
     from prompts import DEFAULT_PROMPTS
 
-    full = DEFAULT_PROMPTS["director_resolve"]
-    lean = DEFAULT_PROMPTS["director_resolve_lean"]
+    owners = {
+        "CLOTHING TRACKING": "director_body",
+        "BODILY CONDITION": "director_body",
+        "CAST CHANGES": "director_social",
+        "INTRODUCTIONS": "director_social",
+        "BODY POSITION — WHO IS IN CONTACT WITH WHOM": "director_contact",
+        "MATERIAL TRANSFER": "director_contact",
+        "BEING CARRIED — CONTAINMENT": "director_contact",
+        "INVENTORY:": "director_objects",
+        "NOTICES:": "director_objects",
+        "DESTRUCTION — MANDATORY": "director_objects",
+        "WITHIN-ROOM POSITION": "director_spatial",
+        "BODY POSE": "director_spatial",
+        "ROOM CREATION": "director_spatial",
+        "RUNNING COVERS GROUND": "director_spatial",
+        "CROWDS:": "director_offscreen",
+        "COURIERS:": "director_offscreen",
+        "PASSING ON WHAT": "director_offscreen",
+        "OFF-SCREEN REACTIVE PLANS": "director_offscreen",
+        "UNRATIFIED CLAIMS": "director_offscreen",
+    }
+    sheets = {pid: DEFAULT_PROMPTS[pid]
+              for pid in ("director_body", "director_social",
+                          "director_contact", "director_objects",
+                          "director_spatial", "director_offscreen")}
+    for marker, owner in owners.items():
+        carrying = [pid for pid, text in sheets.items() if marker in text]
+        assert carrying == [owner], (marker, carrying)
 
-    delegated_markers = (
-        "CLOTHING TRACKING", "BODILY CONDITION",          # body
-        "CAST CHANGES", "INTRODUCTIONS",                  # social
-        "BODY POSITION — WHO IS IN CONTACT WITH WHOM",    # contact
-        "MATERIAL TRANSFER", "BEING CARRIED — CONTAINMENT",
-        "INVENTORY:", "NOTICES:", "DESTRUCTION — MANDATORY",  # objects
-        "WITHIN-ROOM POSITION", "BODY POSE",              # spatial
-        "ROOM CREATION", "RUNNING COVERS GROUND",
-        "CROWDS:", "COURIERS:", "PASSING ON WHAT",        # offscreen
-        "OFF-SCREEN REACTIVE PLANS", "UNRATIFIED CLAIMS",
-    )
-    for marker in delegated_markers:
-        assert marker in full, marker
+    lean = DEFAULT_PROMPTS["director_resolve_lean"]
+    for marker in owners:
         assert marker not in lean, marker
     assert "DELEGATED CHANNELS" in lean
-    assert "DELEGATED CHANNELS" not in full
     # The lean sheet still owns everything outside the delegated channels.
     for marker in ("WORLD PRESSURE", "APPROACHING IS NOT ARRIVING",
                    "SIZE CHANGES WHAT IS POSSIBLE",
@@ -198,6 +222,32 @@ def test_monolithic_prompt_is_intact_and_lean_sheet_is_carved():
                    "AUTHORITY APPRAISAL", "CONSEQUENCES ON THE CLOCK",
                    "CHANGES MANIFEST"):
         assert marker in lean, marker
+
+
+def test_a_preset_can_actually_replace_a_chunked_sheet(temp_db):
+    """A registry key nothing reads is folklore.
+
+    The chunked sheets are assembled per beat rather than fetched through
+    `get_prompt`, so for two releases a host could rewrite the body
+    specialist's sheet, save the preset, and the engine would send the stock
+    one -- silently. An override now replaces the sheet entirely, scope and
+    all, which is the only honest reading of replacing a sheet: a host's
+    text carries no chunk boundaries for scope to select between.
+    """
+    import prompts
+
+    temp_db.set_setting("prompt_presets", json.dumps({
+        "Mine": {"director_body": "BODY SHEET, REWRITTEN.",
+                 "director_resolve_lean": "PROSE SHEET, REWRITTEN."}}))
+    temp_db.set_setting("active_preset", "Mine")
+    assert prompts.specialist_prompt("body", ["attire"]) \
+        == "BODY SHEET, REWRITTEN."
+    assert prompts.prose_author_prompt(None) == "PROSE SHEET, REWRITTEN."
+    # An untouched sheet still assembles from its chunks.
+    assert "CROWDS:" in prompts.specialist_prompt("offscreen", ["crowd_ops"])
+
+    temp_db.set_setting("active_preset", "Default")
+    assert "CLOTHING TRACKING" in prompts.specialist_prompt("body", ["attire"])
 
 
 def test_specialist_sheets_are_assembled_from_scope():
@@ -265,7 +315,6 @@ def test_gate_fails_open_on_any_physical_beat(temp_db, monkeypatch):
     body that wears nothing. Where structure cannot decide, the specialist
     runs -- the saving comes from beats whose subjects cannot change, not
     from predicting cleverly."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -284,7 +333,6 @@ def test_gate_skips_a_pure_dialogue_beat_over_clean_bodies(temp_db,
     govern can change, so the specialist is never called and costs nothing
     at all. Note the scene HAS attire: a worn coat is a fact, but a beat
     with no physical act cannot move it, so wearing alone must not fire."""
-    _orch_on(temp_db)
     scene = json.loads(json.dumps(BASE_SCENE))
     scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
     calls = []
@@ -306,7 +354,6 @@ def test_gate_keys_on_scene_state_at_resolve_time(temp_db, monkeypatch):
     RESOLVE time, not from any plan fixed earlier: this row is inserted
     after the interpretation already exists, the way a mid-turn character
     declaration brings channels into play nothing earlier predicted."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -333,7 +380,6 @@ def test_backstop_reports_a_wrongly_skipped_specialist(temp_db, monkeypatch):
     measurements. The backstop must (a) say so via tell_director, and (b)
     drop NOTHING: the prose author's own encoding stands, because the gate
     fails open rather than enforcing its own prediction."""
-    _orch_on(temp_db)
     calls = []
     resolve_out = {
         "resolved_event": "Mara shrugs the wool coat off her shoulders "
@@ -375,7 +421,6 @@ def test_dispatched_specialist_owns_its_channels(temp_db, monkeypatch):
     channel despite the delegation, the specialist -- which read the
     finished prose -- wins. Everything outside the four channels stays the
     author's untouched."""
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_resolve": {
@@ -427,7 +472,6 @@ def test_specialist_failure_never_takes_the_beat_down(temp_db, monkeypatch):
     (fail-open), and the failure is reported through the same gate backstop
     that reports a wrong skip -- an absent owner is never silent, whatever
     made it absent."""
-    _orch_on(temp_db)
     calls = []
 
     def failing(payload):
@@ -476,7 +520,6 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     and the finished beat -- and none of the world machinery, no room graph,
     and never the player's raw input (which can carry a private thought the
     Director alone is entitled to read)."""
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_resolve": {
@@ -555,7 +598,6 @@ def test_specialist_call_carries_its_own_role(temp_db, monkeypatch):
     """The other half of the measurement hook: the resolve stage must hand
     `_agent_json` the specialist's role string, or every specialist call is
     logged as director spend and the experiment cannot be judged."""
-    _orch_on(temp_db)
     calls = []
     responses = {"director_body": {"attire": {}, "conditions": {},
                                    "vitals": {}, "overlays": {}, "notes": []}}
@@ -592,57 +634,40 @@ def _manifest_omissions(out):
             if o.get("source") == "manifest"]
 
 
-def test_orchestrated_path_emits_the_same_detector_signals(temp_db,
-                                                           monkeypatch):
-    """Measurement hook: success is judged by the EXISTING deterministic
-    detectors, so the orchestrated path must trip them identically or the
-    comparison is meaningless. Here the beat asserts an attire change that
-    nobody encodes (monolith leaves the diff empty; specialist answers
-    empty): both paths must surface the same manifest omission through the
-    same reconciliation record."""
-    calls_mono = []
+def test_the_detectors_fire_on_an_omission_no_hand_encoded(temp_db,
+                                                          monkeypatch):
+    """The measurement hook. This used to run the beat twice -- once
+    monolithic, once orchestrated -- and assert the two reconciliation
+    records were equal, which is how the fan-out earned its way to being the
+    only path. There is nothing left to compare it against, so what remains
+    is the property that comparison was protecting: a change the manifest
+    asserts and NO hand encoded is detected, routed to its owner, and
+    warned about when the owner cannot encode it either.
+    """
+    calls = []
     monkeypatch.setattr(
         director, "_agent_json",
-        _fake_agent(calls_mono, {
-            "director_resolve": _asserting_resolve_output(),
-            "resolve_repair": {"state_diff": {}, "dispositions": []},
-        }))
-    scene = json.loads(json.dumps(BASE_SCENE))
-    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
-    ctx_mono = _make_ctx(temp_db, scene=scene, interp=_action_interp())
-    out_mono = director.director_resolve(ctx_mono, nonce=0)
-
-    _orch_on(temp_db)
-    calls_orch = []
-    monkeypatch.setattr(
-        director, "_agent_json",
-        _fake_agent(calls_orch, {
+        _fake_agent(calls, {
             "director_resolve": _asserting_resolve_output(),
             "director_body": {"attire": {}, "conditions": {}, "vitals": {},
                               "overlays": {}, "notes": []},
             "resolve_repair": {"state_diff": {}, "dispositions": []},
         }))
-    ctx_orch = _make_ctx(temp_db, scene=scene, interp=_action_interp())
-    out_orch = director.director_resolve(ctx_orch, nonce=0)
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
 
-    mono = _manifest_omissions(out_mono)
-    orch = _manifest_omissions(out_orch)
-    assert mono and orch and mono == orch
-    # Both paths escalated to a bounded repair -- but to DIFFERENT
-    # repairers, which is the ownership model applied to repair (measured
-    # on chat 71 turn 10: the full-core repair call was the single largest
-    # avoidable spend of a 105.5s orchestrated resolve). The monolith
-    # re-asks the Director; the orchestrated path re-asks the channel's
-    # OWNER, so the body specialist is called twice (fan-out + repair) and
+    assert _manifest_omissions(out)
+    # Repaired by the channel's OWNER, at specialist cost -- measured on
+    # chat 71 turn 10, where re-running the prose author with the full-core
+    # repair sheet was the single largest avoidable spend of a 105.5s
+    # resolve. The body specialist is called twice (fan-out + repair) and
     # the full-core repair sheet is never loaded.
-    assert "resolve_repair" in _steps(calls_mono)
-    assert "resolve_repair" not in _steps(calls_orch)
-    assert _steps(calls_orch).count("director_body") == 2
-    # And both left the same unresolved warning trail.
+    assert "resolve_repair" not in _steps(calls)
+    assert _steps(calls).count("director_body") == 2
     assert any("Resolve reconciliation" in w and "wool coat" in w
-               for w in ctx_mono.warnings)
-    assert any("Resolve reconciliation" in w and "wool coat" in w
-               for w in ctx_orch.warnings)
+               for w in ctx.warnings)
 
 
 # ---------------------------------------------------------------------------
@@ -656,7 +681,6 @@ def test_scope_selects_the_sheet_and_is_persisted(temp_db, monkeypatch):
     never disagree. The granted/served/produced report persists on the
     step, because over-grant is the number that says how well scoping
     works and under-grant is the direction the backstop catches."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -689,7 +713,6 @@ def test_scope_gates_out_channels_whose_subject_does_not_exist(temp_db,
     gates out the destruction chunk, no notice and nothing carried gate
     out the notices chunk -- while the undecidable channels stay in scope
     (fail open) on the same physical beat."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -713,7 +736,6 @@ def test_specialist_notes_reach_tell_director(temp_db, monkeypatch):
     that found a change it had no channel for says so, and the engine
     carries the flag to the next beat's Director rather than letting the
     under-grant vanish into a log nobody reads."""
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_body": {"attire": {}, "conditions": {}, "vitals": {},
@@ -746,7 +768,6 @@ def test_interpret_dispatches_the_same_specialists(temp_db, monkeypatch):
     interpret it is called with source 'player_declaration', reads the
     declaration rather than resolved prose, and its channels merge into
     state_assertions BEFORE the deterministic validators."""
-    _orch_on(temp_db)
     calls = []
     interpret_out = {
         "kind": "action",
@@ -797,7 +818,6 @@ def test_interpret_specialist_never_sees_the_raw_input(temp_db, monkeypatch):
     carry a private thought only the interpreting Director is entitled to
     read. The specialist gets the STRUCTURED declaration -- never
     `ctx.input`, never `private_thought`."""
-    _orch_on(temp_db)
     calls = []
     interpret_out = {
         "kind": "action",
@@ -832,7 +852,6 @@ def test_interpret_specialist_never_sees_the_raw_input(temp_db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_social_specialist_owns_the_roster_channels(temp_db, monkeypatch):
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_resolve": {
@@ -867,7 +886,6 @@ def test_social_specialist_owns_the_roster_channels(temp_db, monkeypatch):
 
 
 def test_contact_specialist_owns_the_relation_channels(temp_db, monkeypatch):
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_resolve": {
@@ -908,7 +926,6 @@ def test_contact_specialist_owns_the_relation_channels(temp_db, monkeypatch):
 
 
 def test_objects_specialist_owns_the_object_channels(temp_db, monkeypatch):
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_resolve": {
@@ -956,7 +973,6 @@ def test_spatial_specialist_proposes_and_the_backstop_disposes(temp_db,
     with no passable route is STRIPPED by the same deterministic check
     that strips a monolithic Director's, with the same warning. The
     specialist proposes; physics disposes."""
-    _orch_on(temp_db)
     scene = json.loads(json.dumps(BASE_SCENE))
     scene["rooms"]["cliff_path"] = {"name": "Cliff Path", "adjacent": []}
     calls = []
@@ -1012,7 +1028,6 @@ def test_offscreen_is_genuinely_dispatchable(temp_db, monkeypatch):
     reports or hearsay. With a crowd standing in a scene room it must
     dispatch, and its ops must survive assembly into state_diff, or
     "accessible" is a claim nothing checks."""
-    _orch_on(temp_db)
     scene = json.loads(json.dumps(BASE_SCENE))
     calls = []
     responses = {
@@ -1061,7 +1076,6 @@ def test_offscreen_is_cold_when_its_subjects_are_absent(temp_db,
     no crowds, no couriers, nothing carried, no hearsay and the planning
     floor off never dispatches the traffic specialist -- which is the
     entire saving of the coldest carve (0 fires in 2,243 beats)."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -1107,7 +1121,6 @@ def test_parallel_specialists_assemble_in_canonical_order(temp_db,
     order -- the merged diff and the per-specialist records must come out
     identical to a sequential run, or reroll and replay stop being
     reproducible and every later comparison is noise."""
-    _orch_on(temp_db)
     scene = json.loads(json.dumps(BASE_SCENE))
     scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
     responses = {
@@ -1160,7 +1173,6 @@ def test_parallel_failures_are_isolated_even_two_at_once(temp_db,
     failing at once must cost exactly their own channels: the survivors'
     completed work merges, each failure is recorded on its own specialist,
     and the beat completes."""
-    _orch_on(temp_db)
     scene = json.loads(json.dumps(BASE_SCENE))
     scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
     responses = {
@@ -1201,7 +1213,6 @@ def test_parallel_cancellation_aborts_the_beat(temp_db, monkeypatch):
     half-cancelled resolve."""
     from providers import Aborted
 
-    _orch_on(temp_db)
     responses = {
         "director_resolve": {"resolved_event": "x", "summary": "x",
                              "state_diff": {}},
@@ -1229,7 +1240,6 @@ def test_specialists_never_stream(temp_db, monkeypatch):
     precedent)."""
     import providers
 
-    _orch_on(temp_db)
     observed = {}
 
     real_fake = _fake_agent([], {})
@@ -1343,7 +1353,6 @@ def test_prose_scope_gates_out_duties_whose_subject_is_absent(temp_db,
     proposal. Every conditional duty whose subject provably does not exist
     is out of the sheet; every contract block is still in it; and the
     granted/gated_out split is persisted for the measurement."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -1373,7 +1382,6 @@ def test_prose_scope_loads_a_block_when_its_subject_exists(temp_db,
     its duty back in: a dim room, a bodiless ship AI, a docked elevator, an
     open world-pressure ledger, a standing obligation, and speech itself
     (a new debt is a speech act, so obligations ride any spoken beat)."""
-    _orch_on(temp_db)
     scene = json.loads(json.dumps(BASE_SCENE))
     scene["rooms"]["lamp_room"]["light"] = "dim"
     scene["entities"] = {
@@ -1413,7 +1421,6 @@ def test_prose_scope_comm_loads_when_minds_are_apart(temp_db, monkeypatch):
     gains the MEDIUM block the moment a tracked mind stands in another room
     -- and an UNKNOWN position is undecidable, which is the fail-open
     direction (asserted with Mara's position removed)."""
-    _orch_on(temp_db)
     for mutate in (
         lambda s: s["positions"].__setitem__("Mara", "lamp_room"),
         lambda s: s["positions"].pop("Mara"),
@@ -1433,7 +1440,6 @@ def test_prose_scope_fails_open_when_the_facts_cannot_be_read(temp_db,
     """Undecidable means loaded, at every level: if the prose facts cannot
     be computed at all, the WHOLE sheet loads -- the fail-open ceiling,
     byte-identical to the registered lean sheet -- and the beat proceeds."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -1456,7 +1462,6 @@ def test_prose_scope_fails_open_per_fact(temp_db, monkeypatch):
     block on a beat whose every other absent subject stays gated out."""
     import scene as scene_mod
 
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
@@ -1481,7 +1486,6 @@ def test_prose_backstop_reports_a_duty_shipped_without_its_block(temp_db,
     real). The SAME backstop that audits specialist scopes must (a) say so
     via tell_director, and (b) drop nothing: the ops stand, because the
     gate fails open rather than enforcing its own prediction."""
-    _orch_on(temp_db)
     calls = []
     resolve_out = {
         "resolved_event": "Mara holds out an open palm until the coin is "
@@ -1539,21 +1543,14 @@ def test_prose_author_shape_carries_no_delegated_fields():
     the spatial channels, the ones spelled out most concretely). Every such
     emission is discarded at assembly, so it was pure output-token latency.
     The fix is structural, not rhetorical: the delegated channels have NO
-    field in the prose author's stated shape, so there is nothing to fill.
-    The monolithic shape keeps every channel -- it has no specialists."""
+    field in the prose author's stated shape, so there is nothing to fill."""
     import re
 
-    from prompts import _PROSE_AUTHOR_OUTPUT_SHAPE, _RESOLVE_OUTPUT_SHAPE
+    from prompts import _PROSE_AUTHOR_OUTPUT_SHAPE
 
     for channel in director._DELEGATED_CHANNELS:
         assert not re.search(r"\b%s\b" % re.escape(channel),
                              _PROSE_AUTHOR_OUTPUT_SHAPE), channel
-        # artifact_ops has never been in the resolve shape line (notices are
-        # taught in their own block); every other delegated channel must
-        # still be in the monolith's.
-        if channel != "artifact_ops":
-            assert re.search(r"\b%s\b" % re.escape(channel),
-                             _RESOLVE_OUTPUT_SHAPE), channel
     # What stays the prose author's own is still all there.
     for kept in ("resolved_event", "summary", "dialogue_order",
                  "dialogue_log", "changes_asserted", "state_diff", "time",
@@ -1562,21 +1559,25 @@ def test_prose_author_shape_carries_no_delegated_fields():
         assert kept in _PROSE_AUTHOR_OUTPUT_SHAPE, kept
     # And the sheet actually ships the lean shape, not the monolithic one.
     from prompts import DEFAULT_PROMPTS
-    lean = DEFAULT_PROMPTS["director_resolve_lean"]
-    assert _PROSE_AUTHOR_OUTPUT_SHAPE in lean
-    assert _RESOLVE_OUTPUT_SHAPE not in lean
-    assert _RESOLVE_OUTPUT_SHAPE in DEFAULT_PROMPTS["director_resolve"]
+    assert _PROSE_AUTHOR_OUTPUT_SHAPE in DEFAULT_PROMPTS[
+        "director_resolve_lean"]
 
 
-def test_interpret_gets_the_delegation_note_only_when_orchestrated(
+def test_interpret_always_gets_the_delegation_note_as_a_suffix(
         temp_db, monkeypatch):
     """The interpret sheet's own PASS 1 block instructs "the FULL state_diff
-    structure ... no subset", so on the orchestrated path the stage model was
+    structure ... no subset", so without an override the stage model is
     GUARANTEED to duplicate every dispatched specialist's work and have it
     replaced at assembly (run 20: 8 interpret-side replaced-channel warnings
-    in 14 beats). The delegation note overrides that instruction -- appended
-    as a suffix at the call site, so the monolithic sheet stays
-    byte-identical and cache-prefix-stable."""
+    in 14 beats, all pure wasted output tokens, and output tokens are the
+    wall clock). The note overrides that instruction.
+
+    It is appended AT THE CALL SITE rather than folded into the registered
+    prompt, and that is worth pinning: the registered sheet stays a stable
+    cache prefix, so the note landing after it costs no cache write. A
+    future edit that moves the note into the sheet would be a silent
+    per-beat cache miss on the largest prefix the interpret stage has.
+    """
     interpret_out = {
         "kind": "dialogue",
         "sequence": [{"type": "speech", "text": "Quiet night."}],
@@ -1584,8 +1585,6 @@ def test_interpret_gets_the_delegation_note_only_when_orchestrated(
         "flow": {"reactors": [], "authority_claims": [], "dice": [],
                  "resolution_flags": {}, "fiction_frame": {}},
     }
-
-    # Flag off: the sheet is the registered prompt, note-free.
     calls = []
     monkeypatch.setattr(director, "_agent_json",
                         _fake_agent(calls, {"director_interpret":
@@ -1593,35 +1592,25 @@ def test_interpret_gets_the_delegation_note_only_when_orchestrated(
     ctx = _make_ctx(temp_db, player_input="Quiet night.")
     ctx.director_interpret = None
     director.director_interpret(ctx, nonce=0)
+
     sheet = [c for c in calls if c["step_key"] == "director_interpret"
              ][0]["system"]
-    assert "SPECIALISTS ENCODE, YOU DECOMPOSE" not in sheet
-
-    # Flag on: the same sheet as a PREFIX (caching), the note appended.
-    _orch_on(temp_db)
-    calls_on = []
-    monkeypatch.setattr(director, "_agent_json",
-                        _fake_agent(calls_on, {"director_interpret":
-                                               interpret_out}))
-    ctx = _make_ctx(temp_db, player_input="Quiet night.")
-    ctx.director_interpret = None
-    director.director_interpret(ctx, nonce=0)
-    sheet_on = [c for c in calls_on if c["step_key"] == "director_interpret"
-                ][0]["system"]
-    assert sheet_on.startswith(sheet)
-    assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet_on
+    from prompts import get_prompt
+    assert sheet.startswith(get_prompt("director_interpret"))
+    assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet
     # The note must name the interpret spelling of the contact channel --
     # that is the one whose name differs between the stages.
-    assert "contact_assertions" in sheet_on
+    assert "contact_assertions" in sheet
 
 
 class TestTheHostCanFindTheSwitch:
     """A capability nobody can turn on is a capability nobody has.
 
-    The orchestrated Director shipped behind `director_orchestration`, and
-    until this it was reachable only by writing the settings row by hand. The
-    six `director_*` roles were meanwhile listed among the model pickers with
-    no way to make them run -- which is how a setting becomes folklore.
+    The fan-out itself no longer has a switch and should not: it is the only
+    Director path. What it does have is a CONCURRENCY choice, because
+    concurrency is not free everywhere -- a provider key that takes one
+    request at a time, a limit measured in connections, a local runtime
+    serving one model on one GPU. Parallel is the default and the point.
     """
 
     def test_the_route_writes_what_the_engine_reads(self, temp_db):
@@ -1631,23 +1620,23 @@ class TestTheHostCanFindTheSwitch:
         import app as app_module
         import agents.director as director
 
-        assert director.orchestration_enabled() is False
-        assert app_module.set_director_orchestration({"enabled": True}) == {
-            "enabled": True}
-        assert director.orchestration_enabled() is True
-        assert app_module.set_director_orchestration({"enabled": False}) == {
-            "enabled": False}
-        assert director.orchestration_enabled() is False
+        assert director.fanout_is_parallel() is True   # the default
+        assert app_module.set_director_fanout_mode({"parallel": False}) == {
+            "parallel": False}
+        assert director.fanout_is_parallel() is False
+        assert app_module.set_director_fanout_mode({"parallel": True}) == {
+            "parallel": True}
+        assert director.fanout_is_parallel() is True
 
     def test_boot_reports_it_so_the_checkbox_can_show_its_state(self, temp_db):
         """A toggle that always renders unchecked is worse than none: it
-        invites a host to switch on something already on."""
+        invites a host to switch off something already off."""
         import app as app_module
 
-        app_module.set_director_orchestration({"enabled": True})
-        assert app_module.bootstrap()["director_orchestration"] is True
-        app_module.set_director_orchestration({"enabled": False})
-        assert app_module.bootstrap()["director_orchestration"] is False
+        app_module.set_director_fanout_mode({"parallel": False})
+        assert app_module.bootstrap()["director_fanout_parallel"] is False
+        app_module.set_director_fanout_mode({"parallel": True})
+        assert app_module.bootstrap()["director_fanout_parallel"] is True
 
     def test_every_specialist_role_is_offered_to_the_host(self, temp_db):
         """The switch and the roles it governs have to arrive together."""
@@ -1658,6 +1647,28 @@ class TestTheHostCanFindTheSwitch:
                      "director_objects", "director_spatial",
                      "director_offscreen"):
             assert name in roles, f"{name} has no settings row"
+
+    def test_sequential_runs_the_same_specialists_in_the_same_order(
+            self, temp_db, monkeypatch):
+        """Sequential is not a fallback to the monolith. The same hands run
+        with the same scopes and assemble in canonical order -- the only
+        difference is that the calls do not overlap."""
+        import agents.director as director
+
+        scene = json.loads(json.dumps(BASE_SCENE))
+        scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+        runs = {}
+        for mode, parallel in (("parallel", True), ("sequential", False)):
+            temp_db.set_setting("director_fanout_mode", mode)
+            calls = []
+            monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+                "director_resolve": _asserting_resolve_output()}))
+            ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
+            out = director.director_resolve(ctx, nonce=0)
+            runs[mode] = (out["orchestration"]["specialists"],
+                          out["state_diff"])
+        assert runs["parallel"][0] == runs["sequential"][0]
+        assert runs["parallel"][1] == runs["sequential"][1]
 
 
 # ---------------------------------------------------------------------------
@@ -1682,7 +1693,6 @@ def test_routed_repair_is_answered_by_the_owning_specialist(temp_db,
     specialist -- called a second time, scoped to the omitted channel, with
     the omission and what currently stands in its payload -- and the
     full-core resolve_repair sheet is never loaded."""
-    _orch_on(temp_db)
     calls = []
 
     def body(payload):
@@ -1739,7 +1749,6 @@ def test_unroutable_omissions_still_reach_the_full_core_repair(temp_db,
     attire omission and an unencoded player claim, the attire goes to the
     body specialist and the full-core repair is asked about the claim
     alone. Only the repairer is split; nothing is dropped."""
-    _orch_on(temp_db)
     calls = []
     resolve_out = _asserting_resolve_output()
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
@@ -1787,7 +1796,6 @@ def test_failed_specialist_repair_stops_and_reports_the_residual(
     still-unencoded omission lands in the reconciliation record's
     unresolved list -- the existing manifest channel -- instead of buying
     another attempt."""
-    _orch_on(temp_db)
     calls = []
 
     def body(payload):
@@ -1815,31 +1823,6 @@ def test_failed_specialist_repair_stops_and_reports_the_residual(
     assert any("specialist repair failed" in w for w in ctx.warnings)
     assert any("Resolve reconciliation" in w and "wool coat" in w
                for w in ctx.warnings)
-
-
-def test_monolithic_repair_path_is_untouched(temp_db, monkeypatch):
-    """With orchestration off, the same omission buys exactly the one
-    full-core repair call it always did -- no specialist is consulted,
-    because on the monolithic path none exists."""
-    calls = []
-    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
-        "director_resolve": _asserting_resolve_output(),
-        "resolve_repair": {
-            "state_diff": {"attire": {"Mara": {"remove": ["wool coat"]}}},
-            "dispositions": [{"subject": "Mara", "status": "encoded",
-                              "reason": ""}],
-        },
-    }))
-    scene = json.loads(json.dumps(BASE_SCENE))
-    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
-    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
-    out = director.director_resolve(ctx, nonce=0)
-
-    steps = _steps(calls)
-    assert steps == ["director_resolve", "resolve_repair"]
-    assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
-    assert out["reconciliation"]["repaired"] is True
-    assert "specialist_repairs" not in out["reconciliation"]
 
 
 def test_category_channel_map_reads_normalized_categories():
@@ -1875,7 +1858,6 @@ def test_a_specialist_encoded_beat_buys_no_repair_and_no_warning(
     stale' warnings -- three rerolls running. A beat the specialists encoded
     correctly must reconcile deterministically: no repair call of any kind,
     no reconciliation warnings."""
-    _orch_on(temp_db)
     calls = []
     responses = {
         "director_resolve": {
@@ -2026,7 +2008,6 @@ def test_an_answered_event_buys_no_second_call(temp_db, monkeypatch):
     declined to re-encode, whose 'already encoded' answer was then discarded
     on a subject-text mismatch. An event its owner answered is settled --
     detection still fires, no one is asked twice."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2063,7 +2044,6 @@ def test_an_unanswered_event_still_buys_its_repair(temp_db, monkeypatch):
     """The acquittal is bookkeeping, not belief. A specialist that stays
     silent on an id it was handed has not addressed it, and the repair tier
     is exactly what an unaddressed gap is for."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2086,7 +2066,6 @@ def test_not_mine_reports_a_gap_rather_than_closing_one(temp_db, monkeypatch):
     """'not_mine' is a specialist saying the change needs a channel it was
     not granted. That is scope under-grant -- a gap REPORTED, and the repair
     tier is what a reported gap is for."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2116,26 +2095,6 @@ def test_a_failed_specialist_acquits_nothing(temp_db, monkeypatch):
     assert director._index_addressed_events(dispatch) == {}
 
 
-def test_the_monolithic_path_numbers_but_never_acquits(temp_db, monkeypatch):
-    """No specialist ran, so the index is empty and every omission falls
-    through unchanged -- which is what keeps the monolithic repair path
-    byte-identical while the manifest still carries ids."""
-    calls = []
-    monkeypatch.setattr(
-        director, "_agent_json",
-        _fake_agent(calls, {
-            "director_resolve": _asserting_resolve_output(),
-            "resolve_repair": {"state_diff": {}, "dispositions": []},
-        }))
-    scene = json.loads(json.dumps(BASE_SCENE))
-    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
-    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp())
-    out = director.director_resolve(ctx, nonce=0)
-    assert "resolve_repair" in _steps(calls)
-    assert not (out["reconciliation"].get("acquitted") or [])
-    assert [m["event_id"] for m in out["reconciliation"]["manifest"]] == [1]
-
-
 def test_the_stage_variant_carries_every_call_made_under_its_fanout(
         temp_db, monkeypatch):
     """The ledger defect found on the first live turn under the per-call
@@ -2159,7 +2118,6 @@ def test_the_stage_variant_carries_every_call_made_under_its_fanout(
     from pipeline_context import current_step_key, current_warning_sink
     from pipeline_context import note_step_warning
 
-    _orch_on(temp_db)
     calls = []
     seen_cancel_events = []
 
@@ -2250,7 +2208,6 @@ def test_already_true_is_refused_on_the_removed_resident_corruption(
     already_true; standing attire still seats the garment in regions marked
     'removed'. The acquittal is refused, the omission still buys its owner
     repair, and the ledger defect is named on the step and to the Director."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2726,7 +2683,6 @@ def test_a_declined_event_goes_to_the_hand_that_was_named(temp_db,
                                                           monkeypatch):
     """Routing by category re-asks the hand that just declined it. The
     address is what turns a complaint into a forwarding note."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2754,7 +2710,6 @@ def test_an_address_naming_nobody_falls_back_to_the_category(temp_db,
                                                              monkeypatch):
     """The address is a PROPOSAL, checked against the roster. An unknown
     hand is dropped rather than carried into routing as a half-fact."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2781,7 +2736,6 @@ def test_an_address_on_anything_but_a_decline_is_ignored(temp_db):
 
 def test_a_specialist_cannot_forward_to_itself(temp_db, monkeypatch):
     """Otherwise the note is a loop with extra steps."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
@@ -2810,7 +2764,6 @@ def test_a_ledger_this_story_does_not_keep_is_not_a_gate_mispredict(temp_db,
     was wrong. "This story has no such ledger" is not a prediction. A
     warning that fires when nothing is wrong is how a reader learns to skip
     warnings."""
-    _orch_on(temp_db)
     calls = []
     monkeypatch.setattr(
         director, "_agent_json",
