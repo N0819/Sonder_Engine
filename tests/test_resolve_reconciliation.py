@@ -1056,3 +1056,54 @@ def test_disposition_subjects_match_with_the_same_tolerance_as_evidence(
     # (manifest/audit, model-vs-model) yield to a rejection.
     assert [w for w in ctx.warnings
             if "still does not encode" in w and "empty placeholder" in w]
+
+
+# --- a quote inside a declared line is not a new utterance -----------------
+
+class TestProseQuoteAuthorityDoesNotFlagQuotation:
+    """Measured across the live corpus: 14 flags, 13 false. Every firing costs
+    a full second Director call -- the most expensive retry the engine has --
+    so a 93% false-positive rate here was the single largest source of the
+    6s-to-60s spread in director_resolve latency.
+
+    Two causes, one shape. `_PROSE_QUOTE_RES` sweeps the prose with four
+    independent patterns, so a declared line carrying inner quotes yields the
+    outer span AND each inner one; and the membership test was exact, so a
+    Director that re-punctuated a line it was faithfully quoting failed to
+    match its own source.
+    """
+
+    def test_a_nested_quote_is_not_an_invention(self):
+        from agents.common import _check_prose_quote_authority
+        declared = ['And I said "ask me again" — not "yes, absolutely, show '
+                    'you the stars." Though I\'ll grant you it\'s closer to '
+                    'yes than no.']
+        prose = ("He adds, 'And I said \"ask me again\" — not \"yes, "
+                 "absolutely, show you the stars.\" Though I'll grant you "
+                 "it's closer to yes than no.'")
+        assert _check_prose_quote_authority(prose, set(declared)) == []
+
+    def test_a_repunctuated_declared_line_is_not_an_invention(self):
+        from agents.common import _check_prose_quote_authority
+        declared = ["Only a mere ten minute walk"]
+        prose = "She says, 'Only a mere ten-minute walk,' and sets off."
+        assert _check_prose_quote_authority(prose, set(declared)) == []
+
+    def test_a_line_nobody_declared_is_still_caught(self):
+        from agents.common import _check_prose_quote_authority
+        warnings = _check_prose_quote_authority(
+            'The ferryman says, "Not too full. Spills make mud."',
+            {"Mind the step", "I will take the oars"})
+        assert len(warnings) == 1
+        assert "Spills make mud" in warnings[0]
+
+    def test_prose_that_expands_on_a_declared_line_is_still_caught(self):
+        """Containment is ONE direction. A declared line sitting inside the
+        flagged span is prose that added words to what somebody said, which is
+        the invention this guard exists for -- allowing that direction cleared
+        the corpus's one genuine case along with the thirteen false ones."""
+        from agents.common import _check_prose_quote_authority
+        warnings = _check_prose_quote_authority(
+            'He says, "Mind the step, and mind the man behind you."',
+            {"Mind the step"})
+        assert len(warnings) == 1
