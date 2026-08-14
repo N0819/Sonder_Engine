@@ -690,6 +690,25 @@ Not defects yet. Each is a measured shape that will become one silently.
   against `tools/benchmark_memory_temporal.py --case anomaly_now --case boundary`
   before it ships. ~464 B per character per beat; the smallest item in the
   payload and the only one with a proven mechanism of harm.
+- **A gist reads like a conclusion — the fidelity ladder is BUILT, MEASURED and
+  NOT SHIPPED.** Delivering the far half of the recall slate as its gist alone
+  is psychologically right and costs nothing in content: gists of the target
+  memories carry 100% of the scored term groups the details do, and the
+  benchmark's content checks were 20/20 in both arms. It still regressed, and
+  not where anyone was watching. With half the slate condensed, the character
+  stopped consulting the PRESENT: asked "the anomaly is flaring right now,
+  isn't it?", the arm with the ladder cited a present observation 14/30 against
+  25/30 without it (Fisher p≈0.006), answering a question about now entirely
+  from memory. The mechanism is that a full episode is discursive and obviously
+  past, while a one-line gist is answer-shaped — so condensed memory
+  out-competes a prose view for a question the view should have owned. Worth
+  ~3.3 KB per character per beat (−11% of the memory context). Any retry must
+  restore the present lane's weight FIRST and prove it on `--case anomaly_now
+  --repeats 20`; keying the ladder better will not help, because the ladder's
+  key is not what fails. Two keys were tested and both are unusable anyway:
+  retrieval rank puts the row a question actually needed at rank ≥10 a third of
+  the time (88 scored retrievals), and `importance` does not separate at all
+  (median 0.69 on needed rows against 0.68 on the rest of the bank).
 
 ### 1.13 `ActionStage` is classified and never read
 
