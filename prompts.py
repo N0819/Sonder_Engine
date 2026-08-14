@@ -3,6 +3,7 @@
 player-authority-contract additions."""
 
 import json
+import os
 import re
 from db import get_setting, set_setting
 
@@ -3653,8 +3654,8 @@ DEFAULT_PROMPTS = {
  "MEMORY IS PAST: every row in memory.recent_episodes, "
  "memory.recent_received_information, memory.recent_conclusions and "
  "memory.recalled_old_memories is REMEMBERED PAST -- without exception and "
- "whatever it describes. Each has a stable memory_ref of the form "
- "'event:<hash>', "
+ "whatever it describes -- and says so on its own row, temporal_status "
+ "'remembered_past'. Each has a stable memory_ref of the form 'event:<hash>', "
  "and says "
  "when it happened. It is something you REMEMBER, not something occurring "
  "in perception.view now. Use a memory to recognize, compare, or answer a "
@@ -5487,6 +5488,36 @@ def active_preset():
 def nsfw_enabled():
     return get_setting("nsfw_enabled") == "1"
 
+# Restore part of the pre-compaction character call, for A/B measurement.
+#
+# NOT a supported runtime mode and not a kill-switch for a defect: everything it
+# brings back was removed because nothing on the deciding side read it. It exists
+# so both arms of a comparison run against the SAME code, the same bank and the
+# same script -- an ablation whose two arms are separate commits is not an
+# ablation, it is two experiments.
+#
+# Lives here rather than in memory.py because prompts.py is imported by memory.py
+# and by the agents, so this is the one place all three can read it from without
+# a cycle. SONDER_PAYLOAD_LEGACY takes a comma-separated list, so one removal can
+# be put back on its own and blamed on its own:
+#
+#   all           every restoration below (the true baseline arm)
+#   fields        key_phrases + category + memory_form on each memory
+#   gist          the gist that merely repeats its own details
+#   temporal      the per-row temporal_status constant
+#   self          the sheet copies of beliefs/associations the interior repeats
+#   prompt        the contract paragraphs whose subject this beat does not carry
+_PAYLOAD_LEGACY_ARMS = frozenset(
+    part for part in re.split(
+        r"[,\s]+", str(os.environ.get("SONDER_PAYLOAD_LEGACY", "")).casefold())
+    if part)
+
+
+def payload_legacy(part):
+    """True when this removal is ablated back in for the current process."""
+    return "all" in _PAYLOAD_LEGACY_ARMS or part in _PAYLOAD_LEGACY_ARMS
+
+
 # Paragraphs of the character contract whose whole subject is ONE payload key,
 # paired with the key. When the engine did not put that key in this beat's
 # payload, the paragraph is instructions for a field the model will not find --
@@ -5510,7 +5541,14 @@ CHARACTER_BLOCK_KEYS = (
     ("WHEN THEY SAY NOTHING:", ("decision.player_said_nothing",)),
     ("SOMEONE IS WAITING ON YOU:", ("decision.awaiting_your_answer",)),
     ("AUTHORIAL OFFERS:", ("decision.authorial_offers",)),
-    ("SUMMARY WINDOWS ARE PAST TOO:", ("memory.summary_citations",)),
+    # This paragraph carries the rule for citing a summary_id, and three fields
+    # deliver one. They happen to co-occur on every bank in the live corpus --
+    # checked, not assumed -- but nothing CONSTRUCTS them together, and a mind
+    # handed a summary_id with no rule for citing it is exactly how an
+    # ungrounded citation gets minted.
+    ("SUMMARY WINDOWS ARE PAST TOO:", ("memory.summary_citations",
+                                       "memory.earlier_in_my_life",
+                                       "memory.where_i_came_from")),
     ("EARLIER IN YOUR LIFE:", ("memory.earlier_in_my_life",)),
     ("UNBIDDEN MEMORY:", ("memory.surfaces_unbidden",)),
     ("PLACES AND WHAT THEY ARE FOR:", ("perception.here_affords",
@@ -5615,7 +5653,7 @@ def character_prompt(payload, base=None):
     whole document byte for byte.
     """
     text = get_prompt("character") if base is None else base
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or payload_legacy("prompt"):
         return text
     lines = text.split("\n")
     keep = []

@@ -251,6 +251,9 @@ def test_an_undisputed_memory_is_projected_without_mutating_storage():
                    "disputed": None}
     assert projected["memory_ref"] == "event:stable"
     assert projected["when"] == "before this story's recorded turns"
+    # The lane marker, restored after live measurement: removing it put past
+    # evidence in the present lane, where grounding drops it.
+    assert projected["temporal_status"] == "remembered_past"
     # The retrieval-only fields do not travel to the deciding mind at all.
     assert not {"key_phrases", "category", "memory_form"} & set(projected)
 

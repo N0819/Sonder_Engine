@@ -83,26 +83,30 @@ def test_every_real_event_id_is_older_than_this_turn(temp_db):
 
     episodes = ctx["recent_episodes"] + ctx["recalled_old_memories"]
     assert episodes, "bank must be non-empty or this test is vacuous"
-    # Pastness is carried per row by `when` -- a relative age computed from
-    # turn_idx -- not by the constant label that used to sit beside it. The
-    # label said "remembered_past" on every row of every list, so it could
-    # only ever restate what the list already meant; `when` is the field that
-    # varies, and therefore the one a row can be wrong about.
+    # Pastness is carried per row TWICE, and both are load-bearing. `when` is
+    # the relative age, the field that VARIES and so the one a row can be
+    # wrong about. `temporal_status` never varies and orders nothing -- what it
+    # does is mark the LANE at the point of use, and removing it was measured
+    # putting past evidence into the present lane, where grounding drops it.
     assert all(str(episode.get("when") or "").strip() for episode in episodes)
+    assert all(e["temporal_status"] == "remembered_past" for e in episodes)
     contents = " ".join(str(e.get("details") or "") for e in episodes)
     assert "shot me" not in contents
     assert "somewhere later" not in contents
     assert "onto the ward" in contents
 
 
-def test_the_prompt_states_the_past_rule_the_payload_stopped_repeating():
-    """The per-row `temporal_status` label was the same string on every row of
-    every past list, so it could not distinguish anything; what it did was
-    restate a rule. The rule now has to be stated where a rule belongs, or
-    removing the label would have removed the guarantee with it."""
+def test_the_prompt_states_the_past_rule_and_names_the_row_marker():
+    """Removing the per-row label was tried and reversed: it orders nothing,
+    but it marks the lane where the model is reading, and without it
+    `appraisal.goal_impacts[].evidence` -- grounded namespace="present" --
+    started collecting memory_refs that grounding then dropped. The rule is
+    stated in the contract AND the marker names itself on the row; the two are
+    not alternatives."""
     source = open("prompts.py", encoding="utf-8").read()
     assert "MEMORY IS PAST" in source
     assert "is REMEMBERED PAST -- without exception" in source
+    assert "temporal_status" in source
     # The consequence, not just the label: the failure this guards against is
     # a remembered event narrated as though it were happening now.
     assert "not something occurring " in source

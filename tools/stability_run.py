@@ -162,6 +162,12 @@ def run_chat(chat_id, turns):
                 fam["other"] += 1
         rows.append({"chat": chat_id, "turn": idx, "seconds": round(total, 1),
                      "warnings": len(warns), "families": dict(fam),
+                     # The TEXTS, not just the tally. A family count says a rise
+                     # happened and cannot say what rose -- `other` is a third
+                     # of every run and is by definition unclassified, so the
+                     # docstring's promise that "a rise can be attributed"
+                     # was only ever half true. Attribution needs the sentence.
+                     "texts": warns,
                      "failed": failed})
         flag = "  FAILED" if failed else ""
         print(f"    chat {chat_id} turn {idx:>4}  {total:>7.1f}s  "
