@@ -1,5 +1,55 @@
 # Changelog
 
+## alpha 8.3 — The narrator was paragraphing all along
+
+- **The engine was deleting the paragraph breaks the narrator wrote.**
+  `_strip_player_echo` ended on `re.sub(r"\s{2,}", " ", prose)`, and `\s` is
+  newlines — so every break in the story was removed immediately after the
+  model produced it. That line is there to clean up the double space a
+  stripped quote leaves behind; it never distinguished that from a paragraph.
+  Measured across four different narrator models: `paragraph_count` came back
+  3, 4, 8, 3 and 10 while the stored prose held no blank line at all. Two
+  latent bugs surfaced with it, both of which needed a paragraph boundary to
+  exist before they could be seen — a dangling speech verb stranded at the end
+  of a paragraph (`$` without `MULTILINE`), and the healer for it welding two
+  paragraphs together by eating the break it stood in front of.
+
+- **Paragraphs are marked with `<p>`, not escaped.** Three contracts, and the
+  third is the one that asks for something other than a change of SHAPE. A
+  blank line inside a JSON string ran a week at ~1%; a `paragraphs` array did
+  worse, with the field never emitted at all. `<p>` is characters inside a
+  string the model is already writing — benched at 10/10 with every tag
+  balanced (`tools/paragraph_bench.py`, real calls). `<p>` specifically:
+  `[[P]]` came back with the prose field empty, and `[[BREAK]]` silently
+  dropped two speakers' lines — an unfamiliar marker damages output rather
+  than being ignored. Five blocks of formatting guidance came out in exchange
+  for one mechanical instruction and four one-line novel conventions; where
+  the breaks fall is the model's judgement now. The renderer splits on tag
+  boundaries rather than extracting matches, so a stray tag costs a break in
+  an odd place and never a sentence.
+
+- **Each character's dialogue takes their own colour.** Store the speaker,
+  never the colour: `dialogue_log` already records who said what, and DIALOGUE
+  FIDELITY requires each line to appear in the prose verbatim, so the
+  transcript colours by finding a quote in the text it was required to be in.
+  Change a colour and the whole backlog repaints; edit a turn's prose and
+  nothing desyncs, because no offset was ever stored. A colour is derived from
+  the authored psychology (so a rename cannot repaint anyone), hue chosen
+  freely while lightness stays clamped, and spread across the cast so two
+  people in a room never land on neighbouring hues — all overridable per story
+  from the Cast tab. The tinted unit is the quoted region, so a merged
+  utterance colours whole; two speakers inside one pair of quotes leaves it
+  uncoloured rather than guessing.
+
+- **The story column grew, and the page it sits on is a page.** The transcript
+  widens into whatever the sidebar, pipeline drawer, vitals tracker and
+  ambience cluster leave it, reserving room for the two that float rather than
+  running under them. The prose panel went near-opaque to roughly 60%
+  transparent with a mild blur and a thin glyph outline, both of which are now
+  load-bearing for legibility rather than decoration. Geometry lives on one
+  rule for both states — a backdrop appearing used to rewrap every line of the
+  story.
+
 ## alpha 8.2.4 — A blank row means what the label says
 
 - **Eight roles stop inheriting a parent nobody could see.** Reported live:
