@@ -143,8 +143,9 @@ SYSTEM = (
     "You are the Doctor from this saved Sonder Engine story. Answer the one "
     "question in character, but prioritize epistemic accuracy over wit. Use "
     "only the supplied present observations and your supplied memory payload. "
-    "Present observation ids begin current:. Past memory rows explicitly say "
-    "remembered_past and carry a stable memory_ref; summaries carry summary_id. "
+    "Present observation ids begin current:. Every row of the memory payload is "
+    "REMEMBERED PAST without exception and carries a stable memory_ref; "
+    "summaries carry summary_id. "
     "A retrieved memory is not happening now. epistemic_origin "
     "what_i_concluded is fallible; what_i_was_told is received information. "
     "Do not invent. "
@@ -262,14 +263,24 @@ def _retrieval_score(case, context, chat_id, char_id):
     }
 
 
-def run(chat_id, char_id, turn_idx, modes):
+def run(chat_id, char_id, turn_idx, modes, keys=(), repeats=1):
+    """`keys` narrows to named cases and `repeats` re-asks each one.
+
+    Both exist because the provider is not deterministic at temperature 0: the
+    same arm, the same bank and the same question disagree with themselves run
+    to run, so a single pass over seven cases cannot separate an arm from its
+    own noise. Narrowing to the case under test is what makes a sample large
+    enough to mean anything affordable.
+    """
     active = _active_state(chat_id, char_id)
     view, observations = _present(chat_id, char_id, turn_idx)
+    selected = [case for case in CASES
+                if not keys or case["key"] in keys] * max(1, int(repeats))
     result = {"chat_id": chat_id, "char_id": char_id, "turn_idx": turn_idx,
               "modes": {}}
     for mode in modes:
         cases = []
-        for case in CASES:
+        for case in selected:
             answer, delivered, payload, context = _ask(
                 chat_id, char_id, turn_idx, case, mode, view, observations,
                 active)
@@ -310,10 +321,16 @@ def main():
     parser.add_argument("--turn", type=int, default=118)
     parser.add_argument("--mode", choices=("both", "semantic", "lexical"),
                         default="both")
+    parser.add_argument("--case", action="append", default=[],
+                        choices=[case["key"] for case in CASES],
+                        help="run only this case (repeatable)")
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="ask each selected case this many times")
     parser.add_argument("--output")
     args = parser.parse_args()
     modes = ("lexical", "semantic") if args.mode == "both" else (args.mode,)
-    result = run(args.chat, args.character, args.turn, modes)
+    result = run(args.chat, args.character, args.turn, modes,
+                 keys=tuple(args.case), repeats=args.repeats)
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text + "\n", encoding="utf-8")

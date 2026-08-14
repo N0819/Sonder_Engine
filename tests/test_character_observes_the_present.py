@@ -83,12 +83,29 @@ def test_every_real_event_id_is_older_than_this_turn(temp_db):
 
     episodes = ctx["recent_episodes"] + ctx["recalled_old_memories"]
     assert episodes, "bank must be non-empty or this test is vacuous"
-    assert all(episode["temporal_status"] == "remembered_past"
-               for episode in episodes)
+    # Pastness is carried per row by `when` -- a relative age computed from
+    # turn_idx -- not by the constant label that used to sit beside it. The
+    # label said "remembered_past" on every row of every list, so it could
+    # only ever restate what the list already meant; `when` is the field that
+    # varies, and therefore the one a row can be wrong about.
+    assert all(str(episode.get("when") or "").strip() for episode in episodes)
     contents = " ".join(str(e.get("details") or "") for e in episodes)
     assert "shot me" not in contents
     assert "somewhere later" not in contents
     assert "onto the ward" in contents
+
+
+def test_the_prompt_states_the_past_rule_the_payload_stopped_repeating():
+    """The per-row `temporal_status` label was the same string on every row of
+    every past list, so it could not distinguish anything; what it did was
+    restate a rule. The rule now has to be stated where a rule belongs, or
+    removing the label would have removed the guarantee with it."""
+    source = open("prompts.py", encoding="utf-8").read()
+    assert "MEMORY IS PAST" in source
+    assert "is REMEMBERED PAST -- without exception" in source
+    # The consequence, not just the label: the failure this guards against is
+    # a remembered event narrated as though it were happening now.
+    assert "not something occurring " in source
 
 
 def test_the_prompt_says_which_one_to_cite():
@@ -118,10 +135,12 @@ def test_memory_rows_and_present_observations_use_disjoint_namespaces(temp_db):
         chat_id, char_id, current_turn_idx=5,
         current_view="The brass door is shut now.", active_state={})
     rows = ctx["recent_episodes"] + ctx["recalled_old_memories"]
+    # Found by details, not by gist: a gist that merely repeats the opening of
+    # its own details is no longer projected (see memory._with_reading), and
+    # this fixture's is exactly that.
     projected = next(row for row in rows
-                     if "brass door" in row.get("gist", ""))
+                     if "brass door" in row.get("details", ""))
     assert projected["memory_ref"].startswith("event:")
-    assert projected["temporal_status"] == "remembered_past"
     assert projected["when"] == "about 3 beats ago"
     assert projected["epistemic_origin"] == "what_i_experienced"
     assert "id" not in projected and "event_key" not in projected

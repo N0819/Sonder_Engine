@@ -676,6 +676,20 @@ Not defects yet. Each is a measured shape that will become one silently.
   exist — but two representations of one fact is the shape that produced
   `rekey_place_claims` and `reconcile_inference_confidence`. **If a third
   consumer appears, collapse them.**
+- **The observation text repeats the view and cannot be trimmed away.** Each
+  atom's `observed.text` is a span of the same scrubbed prose the character
+  already has in `perception.view` — measured on chat 72, 737 B of atom text
+  against a 757 B view, 97% byte-identical. Shortening it to an opening-words
+  locator was built, measured and **reverted**: a rendered atom is front-loaded
+  with its attribution, so an eight-word window spends itself on
+  `Hinami says in a nostalgic voice:` and cuts the clause that carried the beat
+  (`"He never saw my ears or tails."` arrived as `"He never ..."`). The
+  duplication is the price of the atom being *addressable* — `present_evidence_used`
+  cites it, and the model paraphrases it into `fact`. Any future attempt must
+  keep the content and drop the frame, not the reverse, and must be measured
+  against `tools/benchmark_memory_temporal.py --case anomaly_now --case boundary`
+  before it ships. ~464 B per character per beat; the smallest item in the
+  payload and the only one with a proven mechanism of harm.
 
 ### 1.13 `ActionStage` is classified and never read
 

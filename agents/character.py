@@ -38,6 +38,7 @@ from memory import (
     build_character_memory_context,
     contrast_memory,
     knowledge_for_character,
+    payload_legacy,
     provenance_context_label,
     relationships_for_payload,
 )
@@ -2344,6 +2345,42 @@ def sprint_offers(scene, room_id, stored_state, destination=None):
     return out
 
 
+def _fold_claim(value):
+    """One belief/association claim, folded for identity comparison."""
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _prune_seeded_psychology(psych, interior):
+    """Drop the card copies of beliefs/associations the interior already holds.
+
+    Row by row, and only where the live ledger genuinely carries the same claim.
+    Before the first commit the ledger is empty and the card is the only copy
+    there is, so nothing is dropped then -- which is exactly the beat where a
+    character with an authored self-model must still arrive holding it.
+    """
+    if payload_legacy("self") or not isinstance(interior, dict):
+        return
+    held_beliefs = {
+        _fold_claim(row.get("belief")) for row in (interior.get("beliefs") or [])
+        if isinstance(row, dict) and str(row.get("belief") or "").strip()}
+    held_cues = {
+        _fold_claim(row.get("cue")) for row in (interior.get("associations") or [])
+        if isinstance(row, dict) and str(row.get("cue") or "").strip()}
+    for section, key, held in (("self_model", "beliefs", held_beliefs),
+                               ("learning", "associations", held_cues)):
+        block = psych.get(section)
+        if not isinstance(block, dict) or not held:
+            continue
+        field = "belief" if key == "beliefs" else "cue"
+        kept = [row for row in (block.get(key) or [])
+                if not (isinstance(row, dict)
+                        and _fold_claim(row.get(field)) in held)]
+        if kept:
+            block[key] = kept
+        else:
+            block.pop(key, None)
+
+
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
     row = next((c for c in ctx.cast if c["id"] == cid), None)
@@ -2600,6 +2637,20 @@ def character_step(ctx, cid, nonce):
     _psych = character_psychology(sh)
     # Tier-1: show the EFFECTIVE (possibly rupture-shifted) drive, read-only.
     _psych["drive"] = effective_drive(_psych, _interior)
+    # The authored beliefs and associations are SEEDED into the interior ledger
+    # at commit, so once that has happened the payload was carrying each of them
+    # twice -- `psychology.self_model.beliefs` beside `learned_beliefs`, and
+    # `psychology.learning.associations` beside `learned_associations`. Measured
+    # on chat 72's live bank: 4/4 beliefs and 3/3 associations byte-identical
+    # across the pair, 1.8 KB of a 22.7 KB self block.
+    #
+    # The interior copy is the one that stays, for three reasons: it is what the
+    # prompt names (`self_model` and `learning` appear in it zero times), it is a
+    # strict superset (it carries `authored: true`, so nothing about provenance
+    # is lost), and it is the live one -- credence moves there, not on the card.
+    # Dropped ROW BY ROW rather than wholesale, because before the first commit
+    # the ledger is empty and the card is then the only copy there is.
+    _prune_seeded_psychology(_psych, _interior)
     # A drive rupture is proposable ONLY inside its open window (see commit's
     # detect_drive_rupture) -- the base contract never documents drive_shift, so
     # the model cannot flip-flop it; it appears here only when the engine opened
