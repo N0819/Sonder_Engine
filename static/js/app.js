@@ -747,7 +747,7 @@ $("#send").onclick = () => {
   runStream(
     `/api/chats/${S.chatId}/turns`,
     { input: text, frame_id: S.currentFrameId },
-    { chatId: S.chatId, frameId: S.currentFrameId }
+    { chatId: S.chatId, frameId: S.currentFrameId, playerInput: text }
   ).then(ok => {
     // The turn never started (e.g. immediate POST failure) -- give the
     // player their typed input back instead of silently eating it.
