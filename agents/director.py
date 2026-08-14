@@ -3836,9 +3836,21 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
     channels, never deleting what the diff already asserts. A failed call
     is fail-open exactly like the fan-out: warn, keep the beat, let the
     re-check below file the omission as unresolved.
+
+    Returns (repaired, verdicts). `verdicts` maps event_id -> the settling
+    answer its owner gave ON THE REPAIR CALL, which is the fan-out's
+    analogue of the core repair's `dispositions` and closes the same hole
+    the monolith closed: a hand asked to encode something it can see is
+    ALREADY carried could otherwise only mend or stay silent, and silence
+    ships a `still does not encode it` warning against a change the owner
+    just certified (v26625, on the core path). Believing it costs nothing:
+    an `encoded` claim is still checked against the merged diff by
+    `_evidence_present` downstream, and an `already_true` against standing
+    state by `_verify_already_true`, exactly as a dispatch verdict is.
     """
     repaired = False
     reports = {}
+    verdicts = {}
     for name in SPECIALISTS:          # canonical order, like the fan-out
         entries = routed.get(name)
         if not entries:
@@ -3864,7 +3876,13 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             "currently stands. Your answer is merged ADDITIVELY over "
             "previous_channels (it cannot delete existing entries), so "
             "emit ONLY your channels, encoding each detected omission; "
-            "leave a channel empty when its omission is already covered.")
+            "leave a channel empty when its omission is already covered. "
+            "Echo every listed event in resolved_events with its verdict -- "
+            "'encoded' when you are adding it here, 'already_true' when "
+            "standing state carries it and no delta is correct. Silence on "
+            "an event reads as unencoded and ships a staleness warning "
+            "against the beat, so say already_true rather than nothing when "
+            "that is the answer.")
         try:
             result = _agent_json(
                 spec["role"], spec["step_key"],
@@ -3881,6 +3899,18 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
                 f"will be warned, never fabricated (fail-open): {exc}")
             continue
         report["ok"] = True
+        # The owner's verdict on the events it was handed AGAIN. Same
+        # filter as the dispatch echo: an id this call was not given is
+        # discarded, so a repairer cannot acquit a sibling's omission.
+        granted_ids = [om.get("event_id") for _ch, om in entries
+                       if om.get("event_id")]
+        settled = _resolved_event_verdicts(result, granted_ids)
+        if settled:
+            report["events_resolved"] = settled
+            for entry in settled:
+                if entry["status"] in _SETTLING_VERDICTS:
+                    verdicts[entry["event_id"]] = {
+                        "status": entry["status"], "owner": name}
         patch = {}
         for channel in scope:
             value = _normalized_channel_value(channel, result.get(channel))
@@ -3899,7 +3929,7 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
         _merge_repair_into_diff(sd, patch)
         repaired = True
     recon["specialist_repairs"] = reports
-    return repaired
+    return repaired, verdicts
 
 
 def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
@@ -4195,6 +4225,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     # full-core call. Detection above is identical on both paths; only the
     # repairer changes (see _specialist_repairs).
     core_omissions = omissions
+    repair_verdicts = {}
     orch_repair = None
     _orch_record = out.get("orchestration")
     if isinstance(_orch_record, dict) and _orch_record.get("enabled"):
@@ -4204,11 +4235,13 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         routed, core_omissions = _route_repair_omissions(
             omissions,
             (_orch_record or {}).get('events_addressed'))
-        if routed and _specialist_repairs(
+        if routed:
+            _mended, repair_verdicts = _specialist_repairs(
                 ctx, sc, sd, routed,
                 orch_repair["view"], orch_repair.get("extras") or {},
-                recon):
-            recon["repaired"] = True
+                recon)
+            if _mended:
+                recon["repaired"] = True
 
     dispositions = []
     if core_omissions:
@@ -4297,6 +4330,17 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         if encoded:
             continue
         status = _disposition_for(om.get("subject"))
+        if not status:
+            # No core repair ran for this one (its channel has an owner), so
+            # its verdict is the owner's own echo. `already_true` is the
+            # specialist spelling of the core repair's `already_encoded` --
+            # the same claim about the same beat, and it earns the same
+            # conservatism: believed only where standing state can carry it.
+            _repair_said = (repair_verdicts.get(om.get("event_id")) or {}
+                            ).get("status")
+            if _repair_said == "already_true" \
+                    and _verify_already_true(om, sc or {})[0]:
+                status = "already_encoded"
         if source == "player_claim":
             # NON-REJECTABLE: the player authority contract makes the effect
             # true; a disposition cannot argue it away -- only actual

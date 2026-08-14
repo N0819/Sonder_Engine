@@ -67,23 +67,39 @@ def _specialist_stubs(repair_output):
 
 
 
-def _owned_channels(resolve_output, *, omit=(), repair=None):
-    """Per-specialist dispatch stubs derived from a resolve fixture.
+def _owned_channels(resolve_output, *, omit=(), repair=None, verdicts=None):
+    """Per-specialist canned outputs derived from a resolve fixture.
 
-    On the fan-out path the prose author owns no delegated channel, so
-    anything a resolve fixture puts in one is stripped before the diff is
-    judged -- the owner has to emit it. `omit` names step keys that should
-    withhold their channels on dispatch and supply them from `repair`
-    instead, which is how a test makes an omission actually happen.
+    A specialist's answer OWNS its granted channels: whatever the prose
+    author emitted there is replaced by what the owner said, so a fixture
+    that puts the whole beat in the resolve output has those channels
+    replaced with nothing. Each owner has to emit its own share.
+
+    `repair` is the MEND -- the channels a repair pass would add. By default
+    an owner emits base and mend together on dispatch, which is a beat
+    encoded correctly the first time. `omit` names the step keys that
+    withhold the mend on dispatch and supply it on their SECOND call
+    instead; that is how a test makes an omission actually happen, because a
+    specialist's dispatch and its repair share one step key and the two
+    answers have to be sequenced rather than named.
+
+    `verdicts` maps a step key to the `resolved_events` echo that owner
+    returns on its repair call -- the fan-out's analogue of the core
+    repair's `dispositions`.
     """
     base = _specialist_stubs(resolve_output)
-    mended = _specialist_stubs(repair) if repair else {}
+    mend = _specialist_stubs(repair) if repair else {}
+    said = dict(verdicts or {})
     out = {}
-    for key, patch in base.items():
-        out[key] = [{}, mended.get(key, patch)] if key in omit else patch
-    for key, patch in mended.items():
-        if key not in out:
-            out[key] = [{}, patch] if key in omit else patch
+    for key in list(base) + [k for k in mend if k not in base]:
+        first, second = base.get(key, {}), mend.get(key)
+        echo = {"resolved_events": said[key]} if key in said else {}
+        if second is None and not echo:
+            out[key] = first
+        elif key in omit:
+            out[key] = [first, {**(second or {}), **echo}]
+        else:
+            out[key] = {**first, **(second or {}), **echo}
     return out
 
 
@@ -298,42 +314,50 @@ def test_live_two_contact_omission_fires_bounded_repair(temp_db, monkeypatch):
     call instead of being hidden by their shared actor."""
     ctx = _make_ctx(temp_db, "I squirm at the depth.", _action_interp())
     calls = []
+    resolved = {
+        "resolved_event": (
+            "Elyra's left hand tightens on Hinami's hip as her cock "
+            "presses deeper against Hinami's cervix."
+        ),
+        "summary": "Both contacts deepen.",
+        "dialogue_log": [],
+        "changes_asserted": [
+            {"category": "contact_ops", "subject": "Elyra Voss",
+             "change": "Left hand tightens grip on Hinami's hip."},
+            {"category": "contact_ops", "subject": "Elyra Voss",
+             "change": "Cock presses deeper against Hinami's cervix."},
+        ],
+        "state_diff": {"contact_ops": [{
+            "op": "add", "actor": "Elyra Voss",
+            "actor_part": "left hand", "target": "Hinami",
+            "target_part": "hip", "manner": "hold",
+            "detail": "firm grip",
+        }]},
+    }
+    mend = {
+        "state_diff": {"contact_ops": [{
+            "op": "add", "actor": "Elyra Voss", "actor_part": "cock",
+            "target": "Hinami", "target_interior": "vaginal canal",
+            "target_part": "cervix",
+            "manner": "insert", "detail": "fully inserted",
+        }]},
+        "dispositions": [{"subject": "Elyra Voss", "status": "encoded",
+                          "reason": "Added the omitted relation."}],
+    }
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": {
-            "resolved_event": (
-                "Elyra's left hand tightens on Hinami's hip as her cock "
-                "presses deeper against Hinami's cervix."
-            ),
-            "summary": "Both contacts deepen.",
-            "dialogue_log": [],
-            "changes_asserted": [
-                {"category": "contact_ops", "subject": "Elyra Voss",
-                 "change": "Left hand tightens grip on Hinami's hip."},
-                {"category": "contact_ops", "subject": "Elyra Voss",
-                 "change": "Cock presses deeper against Hinami's cervix."},
-            ],
-            "state_diff": {"contact_ops": [{
-                "op": "add", "actor": "Elyra Voss",
-                "actor_part": "left hand", "target": "Hinami",
-                "target_part": "hip", "manner": "hold",
-                "detail": "firm grip",
-            }]},
-        },
-        "resolve_repair": {
-            "state_diff": {"contact_ops": [{
-                "op": "add", "actor": "Elyra Voss", "actor_part": "cock",
-                "target": "Hinami", "target_interior": "vaginal canal",
-                "target_part": "cervix",
-                "manner": "insert", "detail": "fully inserted",
-            }]},
-            "dispositions": [{"subject": "Elyra Voss", "status": "encoded",
-                              "reason": "Added the omitted relation."}],
-        },
+        "director_resolve": resolved,
+        "resolve_repair": mend,
+        # `contact_ops` is the contact specialist's channel, so it is the
+        # hand that encodes the hip relation and the hand asked again for
+        # the interior one -- one scoped call, not a second full resolve.
+        **_owned_channels(resolved, omit={"director_contact"}, repair=mend),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert _core([key for key, _ in calls]) == ["director_resolve", "resolve_repair"]
+    step_keys = [key for key, _ in calls]
+    assert _core(step_keys) == ["director_resolve"]
+    assert step_keys.count("director_contact") == 2
     assert {(op["actor_part"], op["target_part"])
             for op in out["state_diff"]["contact_ops"]} == {
                 ("left hand", "hip"), ("cock", "cervix")}
@@ -446,10 +470,13 @@ def test_elevator_omission_is_repaired(temp_db, monkeypatch):
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
         "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
         "resolve_repair": ELEVATOR_REPAIR_OUTPUT,
-        # The prose author owns none of these channels on the fan-out path, so
-        # whatever the resolve fixture puts in them is stripped -- each owner
-        # has to supply its own. SPATIAL then omits `rooms` on dispatch and
-        # mends it on the repair call, which is the omission under test.
+        # The prose author owns none of these channels, so whatever the
+        # resolve fixture puts in them is replaced by what the OWNER said --
+        # each owner has to emit its own share. `spatial` emits the blank
+        # room placeholder the live Director emitted and withholds the mend
+        # until its repair call, which is the omission under test; `body`
+        # carries the descent condition, which is its channel and was never
+        # the omitted thing.
         **_owned_channels(ELEVATOR_RESOLVE_OUTPUT,
                           omit={"director_spatial"},
                           repair=ELEVATOR_REPAIR_OUTPUT),
@@ -462,11 +489,13 @@ def test_elevator_omission_is_repaired(temp_db, monkeypatch):
     step_keys = [k for k, _ in calls]
     assert "resolve_reconcile" not in step_keys
     # ONE bounded repair, by whichever tier owns the omitted channel. The
-    # spatial specialist appears twice on the fan-out path -- once for its
-    # ordinary dispatch and once to repair `rooms` -- so the bound is on the
-    # REPAIR, which is what "bounded" was always about: the beat is resolved
-    # once and mended once, never resolved twice.
+    # spatial specialist appears twice -- once for its ordinary dispatch and
+    # once to repair `rooms` -- so the bound is on the REPAIR, which is what
+    # "bounded" was always about: the beat is resolved once and mended once,
+    # never resolved twice. Mending at the owner is also the cheap shape: a
+    # ~1-4k specialist sheet instead of the full core.
     assert out["reconciliation"]["repaired"] is True
+    assert step_keys.count("director_spatial") == 2
     assert step_keys.count("resolve_repair") == 0, (
         "an omission the spatial specialist owns must not also re-run the "
         "full-core prose author")
@@ -474,15 +503,9 @@ def test_elevator_omission_is_repaired(temp_db, monkeypatch):
     # The blank placeholder was caught deterministically and flagged, and
     # the manifest item registered as an omission.
     recon = out["reconciliation"]
-    # NO structural signal on this path, and that is the design rather than a
-    # regression: `rooms` belongs to the spatial specialist, so the prose
-    # author never emits it and a blank room placeholder is not a shape it can
-    # produce. The manifest gap is what catches the omission now -- detection
-    # moved from the diff's shape to the beat's own manifest, which is the
-    # point of delegating the channel.
-    assert not any(s["source"] == "structural"
-                   and s["subject"] == "elevator_interior"
-                   for s in recon["signals"])
+    assert any(s["source"] == "structural"
+               and s["subject"] == "elevator_interior"
+               for s in recon["signals"])
     assert any(o["source"] == "manifest"
                and o["subject"] == "elevator_interior"
                for o in recon["omissions"])
@@ -519,6 +542,10 @@ def test_elevator_omission_is_flagged_when_repair_fails(temp_db, monkeypatch):
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
         "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
         "resolve_repair": {},  # repair came back empty
+        # Same owners as the repaired case, but nobody mends: the spatial
+        # specialist emits the blank placeholder and its repair call answers
+        # with nothing.
+        **_owned_channels(ELEVATOR_RESOLVE_OUTPUT),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
@@ -567,23 +594,31 @@ def test_manifest_covered_beat_costs_zero_extra_calls(temp_db, monkeypatch):
     interp = _action_interp()
     ctx = _make_ctx(temp_db, "I close the elevator doors.", interp)
     calls = []
+    covered = {
+        "resolved_event": ELEVATOR_PROSE,
+        "summary": "Doors sealed.",
+        "dialogue_log": [],
+        "changes_asserted": [
+            {"category": "adjacency", "subject": "elevator_interior",
+             "change": "The elevator doors are sealed shut."},
+        ],
+        "state_diff": ELEVATOR_REPAIR_OUTPUT["state_diff"],
+    }
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": {
-            "resolved_event": ELEVATOR_PROSE,
-            "summary": "Doors sealed.",
-            "dialogue_log": [],
-            "changes_asserted": [
-                {"category": "adjacency", "subject": "elevator_interior",
-                 "change": "The elevator doors are sealed shut."},
-            ],
-            "state_diff": ELEVATOR_REPAIR_OUTPUT["state_diff"],
-        },
+        "director_resolve": covered,
+        # Encoded by the channel's OWNER, which is where the encoding lives
+        # on this path -- the assertion is that a beat encoded correctly the
+        # first time buys no second pass over it.
+        **_owned_channels(covered),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    step_keys = _core([k for k, _ in calls])
-    assert step_keys == ["director_resolve"]
+    step_keys = [k for k, _ in calls]
+    assert _core(step_keys) == ["director_resolve"]
+    # ...and no owner was asked twice either: a repair pass is a repair pass
+    # whoever pays for it.
+    assert len(step_keys) == len(set(step_keys))
     assert out["reconciliation"]["audited"] is False
     assert out["reconciliation"]["omissions"] == []
     assert not ctx.warnings
@@ -600,30 +635,38 @@ def test_partial_encoding_is_caught_by_adjacency_evidence_class(
     ctx = _make_ctx(temp_db, "I slam the door-close button.",
                     _action_interp())
     calls = []
-    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": {
-            "resolved_event": ELEVATOR_PROSE,
-            "summary": "Doors sealed.",
-            "dialogue_log": [],
-            "changes_asserted": [
-                {"category": "adjacency", "subject": "elevator_interior",
-                 "change": "The elevator doors are sealed shut."},
-            ],
-            "state_diff": {
-                # desc-only redeclaration: no adjacent, no remove_adjacent,
-                # no transit state -- the narrated sealing is NOT encoded.
-                "rooms": {"elevator_interior": {
-                    "name": "Service Elevator",
-                    "desc": "The doors gleam dully.", "adjacent": [],
-                    "notes": ""}},
-            },
+    partial = {
+        "resolved_event": ELEVATOR_PROSE,
+        "summary": "Doors sealed.",
+        "dialogue_log": [],
+        "changes_asserted": [
+            {"category": "adjacency", "subject": "elevator_interior",
+             "change": "The elevator doors are sealed shut."},
+        ],
+        "state_diff": {
+            # desc-only redeclaration: no adjacent, no remove_adjacent,
+            # no transit state -- the narrated sealing is NOT encoded.
+            "rooms": {"elevator_interior": {
+                "name": "Service Elevator",
+                "desc": "The doors gleam dully.", "adjacent": [],
+                "notes": ""}},
         },
+    }
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": partial,
         "resolve_repair": ELEVATOR_REPAIR_OUTPUT,
+        # The desc-only entry is the SPATIAL specialist's, and so is the
+        # mend: subject-present-but-wrong-dimension has to survive routing
+        # to the owner, or the category classes never get consulted at all.
+        **_owned_channels(partial, omit={"director_spatial"},
+                          repair=ELEVATOR_REPAIR_OUTPUT),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert [k for k, _ in calls].count("resolve_repair") == 1
+    step_keys = [k for k, _ in calls]
+    assert step_keys.count("director_spatial") == 2
+    assert step_keys.count("resolve_repair") == 0
     edges = {e["to"]: e["barrier"]
              for e in out["state_diff"]["rooms"]["elevator_interior"]["adjacent"]}
     assert edges["smoke_hallway"] == "closed_door"
@@ -723,13 +766,18 @@ def test_encoded_player_claim_is_silent(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, "I shatter the vault door.",
                     _action_interp(authority_claims=claims))
     calls = []
+    encoded = {
+        "resolved_event": "The vault door shatters into fragments.",
+        "summary": "Vault door destroyed.",
+        "dialogue_log": [], "changes_asserted": [],
+        "state_diff": {"remove_entities": ["vault_door"]},
+    }
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": {
-            "resolved_event": "The vault door shatters into fragments.",
-            "summary": "Vault door destroyed.",
-            "dialogue_log": [], "changes_asserted": [],
-            "state_diff": {"remove_entities": ["vault_door"]},
-        },
+        "director_resolve": encoded,
+        # `remove_entities` belongs to the objects specialist; the claim's
+        # coverage check reads the MERGED diff, so the claim is covered by
+        # whichever hand encoded it.
+        **_owned_channels(encoded),
     }, calls))
 
     director.director_resolve(ctx, nonce=0)
@@ -801,30 +849,43 @@ def test_restraint_omission_repaired_through_seam(temp_db, monkeypatch):
     audit call), and an encoded condition silences the legacy warning."""
     ctx = _make_ctx(temp_db, "I keep talking.", _dialogue_interp())
     calls = []
+    standoff = {
+        "resolved_event": "The guard keeps Mara pinned at gunpoint "
+                          "against the wall.",
+        "summary": "Standoff.",
+        "dialogue_log": [], "changes_asserted": [],
+        "state_diff": {},
+    }
+    mend = {
+        "state_diff": {"conditions": {"mara_restrained": [{
+            "condition_id": "mara_restrained", "subject_id": "Mara",
+            "kind": "restrained", "severity": 0.6,
+            "started_at_seconds": 0.0, "state": {},
+        }]}},
+        "dispositions": [{"subject": "Mara", "status": "encoded",
+                          "reason": ""}],
+    }
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
-        "director_resolve": {
-            "resolved_event": "The guard keeps Mara pinned at gunpoint "
-                              "against the wall.",
-            "summary": "Standoff.",
-            "dialogue_log": [], "changes_asserted": [],
-            "state_diff": {},
-        },
-        "resolve_repair": {
-            "state_diff": {"conditions": {"mara_restrained": [{
-                "condition_id": "mara_restrained", "subject_id": "Mara",
-                "kind": "restrained", "severity": 0.6,
-                "started_at_seconds": 0.0, "state": {},
-            }]}},
-            "dispositions": [{"subject": "Mara", "status": "encoded",
-                              "reason": ""}],
-        },
+        "director_resolve": standoff,
+        "resolve_repair": mend,
+        # The scan files the finding under `conditions`, which the BODY
+        # specialist owns -- so the legacy detector's repair is a scoped
+        # body call, not a second full resolve.
+        **_owned_channels(standoff, repair=mend),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
 
-    step_keys = _core([k for k, _ in calls])
+    step_keys = [k for k, _ in calls]
     assert "resolve_reconcile" not in step_keys
-    assert "resolve_repair" in step_keys
+    assert _core(step_keys) == ["director_resolve"]
+    # A channel GATED OUT of the fan-out is still repairable by its owner.
+    # The gates read standing state and this beat is pure dialogue, so body
+    # never ran; the restraint scan reads PROSE, so it finds the hold
+    # anyway and the repair reaches the hand that owns `conditions`.
+    assert out["orchestration"]["specialists"]["body"]["run"] is False
+    assert step_keys.count("director_body") == 1
+    assert out["reconciliation"]["specialist_repairs"]["body"]["ok"] is True
     assert "mara_restrained" in out["state_diff"]["conditions"]
     assert not any("untracked physical restraint" in w for w in ctx.warnings)
 
@@ -910,14 +971,24 @@ def test_tripwire_escalates_to_deep_audit_when_opted_in(
                                        "state": {"broken": True}}}},
                 "dispositions": [{"subject": "hatch", "status": "encoded",
                                   "reason": ""}]},
+            # The audit's finding is an `entities` omission, which the
+            # objects specialist owns -- an audit finding routes to a
+            # repairer by exactly the same rule a manifest one does. Objects
+            # emits NOTHING on dispatch (an empty physical diff is half of
+            # what arms the tripwire) and encodes the hatch when asked again.
+            "director_objects": [{}, {
+                "entities": {"hatch": {"name": "Torn Hatch", "kind": "object",
+                                       "state": {"broken": True}}}}],
         }, calls))
         monkeypatch.setattr(director, "_ability_mod", lambda *a, **k: 30)
 
         out = director.director_resolve(ctx, nonce=0)
 
-        step_keys = _core([k for k, _ in calls])
+        step_keys = [k for k, _ in calls]
         assert "resolve_reconcile" in step_keys
-        assert "resolve_repair" in step_keys
+        assert _core(step_keys) == ["director_resolve", "resolve_reconcile"]
+        assert out["reconciliation"]["specialist_repairs"]["objects"]["ok"] \
+            is True
         assert out["reconciliation"]["audited"] is True
         assert "hatch" in out["state_diff"]["entities"]
     finally:
@@ -1111,28 +1182,35 @@ def test_positions_evidence_accepts_a_station_for_a_within_room_drop():
         "change": "left the room"})
 
 
-def test_disposition_subjects_match_with_the_same_tolerance_as_evidence(
-        temp_db, monkeypatch):
-    """v26625: the repair answered every omission 'already_encoded' -- and
-    the warning shipped anyway, because disp_by_subject matched dispositions
-    to omissions by EXACT normalized subject and the repair had written
-    descriptive subjects ('lightweight travel jacket — fully removed from
-    shoulder, falls onto velvet'). The verdict existed and was discarded.
-    Matching now carries the same substring tolerance _make_subject_hit
-    uses everywhere else in this seam."""
+def test_owner_verdict_on_a_repair_call_is_believed(temp_db, monkeypatch):
+    """v26625, carried onto the path that now owns the repair.
+
+    Original defect: the core repair answered every omission
+    'already_encoded' and the staleness warning shipped anyway, because
+    dispositions were matched to omissions by EXACT normalized subject
+    against a repair that writes descriptive ones ('lightweight travel
+    jacket — fully removed from shoulder, falls onto velvet'). The verdict
+    existed and was discarded.
+
+    An omission in a delegated channel no longer reaches the core repair at
+    all -- its OWNER is asked -- so the hole reopens in a new place unless
+    the owner's echo is read back off the repair call. It answers by
+    event_id rather than by subject text, which is the mechanism that made
+    the original mismatch impossible rather than merely tolerant."""
     ctx = _make_ctx(temp_db, "I slam the door-close button.",
                     _action_interp())
     calls = []
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
         "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
-        "resolve_repair": {
-            "state_diff": {},
-            "dispositions": [{
-                "subject": "elevator_interior — doors sealed shut against "
-                           "the smoke-filled hallway",
-                "status": "already_encoded",
-                "reason": "the panel state already carries it"}],
-        },
+        # Spatial emits the placeholder, is asked again for `rooms`, and
+        # answers that standing state already carries the sealing rather
+        # than emitting a delta.
+        **_owned_channels(
+            ELEVATOR_RESOLVE_OUTPUT,
+            omit={"director_spatial"},
+            repair={"state_diff": {}},
+            verdicts={"director_spatial": [
+                {"event_id": 1, "status": "already_true"}]}),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
@@ -1151,6 +1229,79 @@ def test_disposition_subjects_match_with_the_same_tolerance_as_evidence(
     # (manifest/audit, model-vs-model) yield to a rejection.
     assert [w for w in ctx.warnings
             if "still does not encode" in w and "empty placeholder" in w]
+
+
+def test_a_repair_verdict_cannot_acquit_an_event_it_was_not_handed(
+        temp_db, monkeypatch):
+    """The same filter the dispatch echo carries: a repairer that echoes an
+    id outside the omissions it was given acquits nothing. Without it, one
+    owner answering `already_true` for the whole manifest would silence
+    every sibling's omission in the beat -- the acquittal has to be
+    ownership-scoped or it is a way for a model to switch the seam off."""
+    ctx = _make_ctx(temp_db, "I slam the door-close button.",
+                    _action_interp())
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
+        **_owned_channels(
+            ELEVATOR_RESOLVE_OUTPUT,
+            omit={"director_spatial"},
+            repair={"state_diff": {}},
+            # Event 99 is nobody's; event 1 is the one actually routed here,
+            # and it is deliberately NOT answered.
+            verdicts={"director_spatial": [
+                {"event_id": 99, "status": "already_true"}]}),
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    entry = next(o for o in out["reconciliation"]["unresolved"]
+                 if o["subject"] == "elevator_interior"
+                 and o.get("source") == "manifest")
+    assert entry["disposition"] == "none"
+    assert [w for w in ctx.warnings
+            if "still does not encode" in w and "sealed shut" in w]
+
+
+def test_disposition_subjects_match_with_the_same_tolerance_as_evidence(
+        temp_db, monkeypatch):
+    """The core repair still owns every omission no specialist can answer --
+    player claims and undelegated categories -- and its dispositions are
+    still matched by subject TEXT, so v26625's own tolerance still has to
+    hold there. `transit` reaches no delegated channel, so it routes to the
+    core exactly as it always did."""
+    ctx = _make_ctx(temp_db, "I slam the door-close button.",
+                    _action_interp())
+    calls = []
+    resolved = {
+        **ELEVATOR_RESOLVE_OUTPUT,
+        "changes_asserted": [
+            {"category": "transit", "subject": "elevator_interior",
+             "change": "The elevator is now in transit between floors."},
+        ],
+    }
+    monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
+        "director_resolve": resolved,
+        "resolve_repair": {
+            "state_diff": {},
+            "dispositions": [{
+                "subject": "elevator_interior — now in transit between "
+                           "floors, doors sealed",
+                "status": "already_encoded",
+                "reason": "the panel state already carries it"}],
+        },
+        **_owned_channels(resolved),
+    }, calls))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert [k for k, _ in calls].count("resolve_repair") == 1
+    entry = next(o for o in out["reconciliation"]["unresolved"]
+                 if o["subject"] == "elevator_interior"
+                 and o.get("source") == "manifest")
+    assert entry["disposition"] == "already_encoded"
+    assert not [w for w in ctx.warnings
+                if "still does not encode" in w and "in transit" in w]
 
 
 # --- a quote inside a declared line is not a new utterance -----------------
