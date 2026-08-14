@@ -77,7 +77,7 @@ class TestSchemaAndPromptContract:
             material_effects=[effect]).dict()["material_effects"] == [effect]
 
     def test_contract_is_material_generic_and_keeps_it_out_of_contact(self):
-        resolve = DEFAULT_PROMPTS["director_resolve"]
+        resolve = DEFAULT_PROMPTS["director_contact"]
         perception = DEFAULT_PROMPTS["perception"]
         assert "MATERIAL TRANSFER — MATTER HAS ITS OWN LEDGER" in resolve
         assert "A material is NOT a body part" in resolve
@@ -476,7 +476,7 @@ class TestOneReleaseIsOneRecord:
         """Live (turn 63 of the same story): matter recorded on the TARGET
         with the SOURCE's own part in target_part -- a part the target's body
         does not have."""
-        resolve = DEFAULT_PROMPTS["director_resolve"]
+        resolve = DEFAULT_PROMPTS["director_contact"]
         assert "places on the TARGET's own body" in resolve
         assert "One release is ONE op" in resolve
 

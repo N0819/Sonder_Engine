@@ -3029,8 +3029,30 @@ Aborted propagation — measured: five specialists at 0.5s collapse from
 produced} persists on each step; the single scope backstop reports through
 `tell_director`; per-specialist roles are separable in `_log_usage`;
 detector parity and every joint pinned by
-`tests/test_director_orchestration.py`. The monolithic sheet remains a
-byte-identical recomposition. The prose author's OWN sheet is scoped the
+`tests/test_director_orchestration.py`.
+
+**LANDED 2026-08-14. The flag and the monolithic sheet are both gone**, which
+closes the "flag on vs. off before it may default on" measurement condition
+by answering it: the fan-out is the only Director path. It is more stable,
+costs fewer tokens and less wall clock, so a switch preserving the losing
+path only preserved a way to make the engine worse. The registry entry for
+the unsplit sheet went with it — nothing sent it, so a preset key for it was
+folklore — and every `RESOLVE_*` segment it was assembled from now belongs
+to exactly one specialist or to the prose author's sheet, held there by
+`test_every_delegated_block_has_exactly_one_owner`. What replaced the switch
+is a CONCURRENCY choice, `director_fanout_mode`, parallel by default:
+sequential exists for a provider that will not take concurrent requests, and
+is not a fallback to the monolith (same hands, same scopes, same canonical
+assembly). Two defects surfaced in the same pass and are fixed: the chunked
+sheets were assembled per beat rather than read from the registry, so their
+preset entries were editable and UNREAD — a host could rewrite the body
+specialist's sheet, save, and the engine would send the stock one (all six
+are registered now and an override replaces the sheet whole); and a
+specialist repair could only mend or stay silent, so a hand asked to encode
+something already carried shipped a staleness warning against a change it
+had just certified — its `resolved_events` echo is read back off the repair
+call now, with `already_true` verified against standing state exactly as a
+dispatch verdict is. The prose author's OWN sheet is scoped the
 same way (second carve, same mechanism): 14 prose-duty chunks
 (`prompts.PROSE_AUTHOR_SHEET`/`prose_author_prompt`) gated on scene state
 by `_PROSE_DUTY_GATES` from the same `_gate_facts` call, fail-open at
@@ -3063,9 +3085,7 @@ from run 20's own beats); provider cache affinity (run 20 diagnosed the
 hits were constant sheet-sized prefixes, misses all-or-nothing; honest
 ceiling ~57% with the per-beat payload inherently uncacheable; a
 pinned/dedicated instance is configuration, not code, and is recorded
-rather than chased); and the measurement — flag on vs. off on a pinned
-model, judged by the detectors above plus the persisted scope_report,
-before the flag may default on. Two shape traps the same run surfaced are
+rather than chased). Two shape traps the same run surfaced are
 closed in `schemas.py` rather than the prompts: a single value under a
 `dict[str, list]` channel (`overlays`/`conditions`, StateDiff and the body
 specialist) now wraps to the list of one, and a bare-string

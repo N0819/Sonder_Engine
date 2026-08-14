@@ -175,7 +175,7 @@ def test_the_resolve_prompt_does_not_authorise_the_failure(temp_db):
     """
     from prompts import DEFAULT_PROMPTS
 
-    body = DEFAULT_PROMPTS["director_resolve"]
+    body = DEFAULT_PROMPTS["director_body"]
     assert "they declare sleeping" not in body, \
         "an announced plan is licensed again"
     assert "ANNOUNCED PLAN IS DIALOGUE" in body

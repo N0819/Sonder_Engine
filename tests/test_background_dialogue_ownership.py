@@ -99,7 +99,7 @@ def test_the_prompt_names_the_occasion_rather_than_only_forbidding(temp_db):
     gets read as a suggestion of the thing it forbids. Name concrete occasions
     instead." So the clause has to say what the Director DOES voice."""
     from prompts import DEFAULT_PROMPTS
-    text = DEFAULT_PROMPTS["director_resolve"]
+    text = DEFAULT_PROMPTS["director_resolve_lean"]
     assert "SIMPLE CREATURES" in text
     assert "write the action and omit the line" in text
     # And it says where the words come from instead, so the omission reads as

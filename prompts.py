@@ -122,13 +122,16 @@ NSFW_OVERLAY = "\n\n" + (
 )
 
 NSFW_PROMPT_IDS = frozenset([
-    "director_interpret", "director_establish", "director_resolve",
-    # The orchestrated Director's prose author carries the same
-    # content-policy overlay as the monolithic resolve it replaces. The
-    # specialists are not get_prompt ids -- `specialist_prompt` assembles
-    # their sheets per beat and applies the overlay itself for the
-    # specialists whose channels encode intimate or violent bodily state.
+    "director_interpret", "director_establish",
+    # The prose author carries the same content-policy overlay the single
+    # unsplit resolve sheet used to. It is not fetched through `get_prompt`
+    # -- `prose_author_prompt` assembles it per beat and applies the overlay
+    # itself -- and neither are the specialists, whose sheets
+    # `specialist_prompt` overlays for the ones whose channels encode
+    # intimate or violent bodily state. Both ids are listed anyway so this
+    # set stays the single answer to "which sheets carry the overlay".
     "director_resolve_lean",
+    "director_body", "director_contact", "director_spatial",
     "perception", "character", "narrator", "background_react", "scene_life",
     "generator_character", "generator_persona", "generator_greeting",
     "fill_character_psychology", "fill_appearance",
@@ -2072,23 +2075,53 @@ SPECIALIST_PROMPT_SPECS = {
 }
 
 
+def _preset_override(pid):
+    """A preset's whole-sheet replacement for a CHUNKED prompt, or None.
+
+    The chunked sheets (each specialist, the prose author) are assembled per
+    beat rather than read from the registry, so for two releases their
+    registry entries were editable and unread: a host could rewrite the body
+    specialist's sheet, save the preset, and the engine would send the
+    stock one. A key nothing reads is the failure the orchestration switch
+    itself was written up for.
+
+    An override replaces the sheet ENTIRELY, scope and all. That is what
+    replacing a sheet means, and it is the only honest reading -- a host's
+    text carries no chunk boundaries for scope to select between.
+    """
+    name = active_preset()
+    if name == "Default":
+        return None
+    return (presets().get(name, {}) or {}).get(pid) or None
+
+
 def specialist_prompt(name, scope):
     """One specialist's sheet for THIS beat: core + the granted channels'
     chunks, in canonical order (cache-stable per scope combination), and
     nothing else. Scope selects chunks; there is no other selection logic
     and no prose is consulted anywhere on this path (design note 19,
-    hierarchical gating). The NSFW overlay rides the same host setting the
-    monolithic sheet honours, for the specialists whose channels encode
+    hierarchical gating). The NSFW overlay rides the same host setting every
+    other authored sheet honours, for the specialists whose channels encode
     intimate or violent bodily state."""
     spec = SPECIALIST_PROMPT_SPECS[name]
-    granted = set(scope or ())
-    parts = [spec["core"]]
-    parts.extend(spec["chunks"][channel]
-                 for channel in spec["order"] if channel in granted)
-    sheet = "".join(parts)
+    override = _preset_override(SPECIALISTS_BY_NAME[name])
+    if override is not None:
+        sheet = override
+    else:
+        granted = set(scope or ())
+        parts = [spec["core"]]
+        parts.extend(spec["chunks"][channel]
+                     for channel in spec["order"] if channel in granted)
+        sheet = "".join(parts)
     if spec.get("nsfw") and nsfw_enabled():
         sheet += NSFW_OVERLAY
     return sheet
+
+
+#: specialist name -> its prompt id, which is also its step key and its
+#: model-settings row. One spelling for all three.
+SPECIALISTS_BY_NAME = {name: "director_%s" % name
+                       for name in SPECIALIST_PROMPT_SPECS}
 
 
 # --- The orchestrated prose author's own sheet, chunked ---------------------
@@ -2166,9 +2199,13 @@ def prose_author_prompt(scope):
     overlay rides the same host setting `get_prompt` honours for
     director_resolve_lean, which this sheet replaces on the orchestrated
     path."""
-    granted = set(PROSE_DUTY_CHUNKS if scope is None else scope)
-    sheet = "".join(text for name, text in PROSE_AUTHOR_SHEET
-                    if name is None or name in granted)
+    override = _preset_override("director_resolve_lean")
+    if override is not None:
+        sheet = override
+    else:
+        granted = set(PROSE_DUTY_CHUNKS if scope is None else scope)
+        sheet = "".join(text for name, text in PROSE_AUTHOR_SHEET
+                        if name is None or name in granted)
     if nsfw_enabled():
         sheet += NSFW_OVERLAY
     return sheet
@@ -4131,26 +4168,16 @@ DEFAULT_PROMPTS = {
  "who actually do something. Use names EXACTLY as given."
 ),
 
-"director_resolve": (
- _RESOLVE_PRELUDE_A1 + RESOLVE_OFFSCREEN_CLAIMS + _RESOLVE_PRELUDE_A2
- + RESOLVE_SPATIAL_EXITS + RESOLVE_SPATIAL_RUNNING + _RESOLVE_PRELUDE_B
- + RESOLVE_BODY_ATTIRE
- + RESOLVE_SOCIAL_CAST + _RESOLVE_MID_A1a + RESOLVE_SPATIAL_ROOMS
- + RESOLVE_SPATIAL_REDECLARE + RESOLVE_SOCIAL_INTRODUCTIONS
- + RESOLVE_BODY_CONDITIONS
- + _RESOLVE_MID_B1a + RESOLVE_OFFSCREEN_PLANS + RESOLVE_OFFSCREEN_TELLING
- + RESOLVE_OFFSCREEN_COURIERS + RESOLVE_OBJECTS_NOTICES
- + RESOLVE_OFFSCREEN_CROWDS + _RESOLVE_MID_B2a
- + RESOLVE_OBJECTS_INVENTORY + RESOLVE_CONTACT_OPS
- + RESOLVE_CONTACT_MATERIAL + RESOLVE_SPATIAL_STATIONS
- + RESOLVE_SPATIAL_POSES + RESOLVE_OBJECTS_STATE
- + RESOLVE_BODY_VITALS
- + RESOLVE_SPATIAL_LIGHT + RESOLVE_OBJECTS_LIGHT + _RESOLVE_TAIL1c
- + RESOLVE_CONTACT_SCALES + _RESOLVE_TAIL2
- + RESOLVE_CONTACT_SCALES_CANCEL + RESOLVE_CONTACT_CONTAINMENT
- + RESOLVE_OBJECTS_ENCLOSURE + RESOLVE_OBJECTS_DESTRUCTION
- + _RESOLVE_OUTPUT_SHAPE
-),
+# THE MONOLITHIC RESOLVE SHEET IS GONE, and its absence here is the point.
+# The Director fans out on every beat: a prose author that owns the beat's
+# account plus specialists that own the channels the beat actually touches.
+# Nothing sends a single unsplit sheet, so a registry entry for one would be
+# a preset key a host could edit and never see take effect -- exactly the
+# folklore this file's other switches were written up to avoid. The named
+# RESOLVE_* segments it was assembled from are all still here: each now
+# belongs to the specialist that owns its channel (SPECIALIST_PROMPT_SPECS)
+# or to the prose author's own sheet (PROSE_AUTHOR_SHEET), and
+# tools/project_check.py holds those two level with the runtime.
 
 # The orchestrated prose author (design note 19): the same sheet with every
 # specialist-owned channel's machinery cold-stored in the specialists. Same
@@ -4160,6 +4187,31 @@ DEFAULT_PROMPTS = {
 # the orchestrated path assembles per beat via `prose_author_prompt`.
 "director_resolve_lean": "".join(
     text for _name, text in PROSE_AUTHOR_SHEET),
+
+# The six specialists, each registered as its FULL-scope assembly -- every
+# chunk it can ever load, in canonical order. That is what a host needs to
+# read to edit one, and `specialist_prompt` honours an edit here as a
+# whole-sheet replacement (see `_preset_override`). Registering them also
+# puts them under the prompt/schema _ops drift check, which for two releases
+# saw a prompt id that did not exist.
+"director_body": (SPECIALIST_PROMPT_SPECS["body"]["core"] + "".join(
+    SPECIALIST_PROMPT_SPECS["body"]["chunks"][_c]
+    for _c in SPECIALIST_PROMPT_SPECS["body"]["order"])),
+"director_social": (SPECIALIST_PROMPT_SPECS["social"]["core"] + "".join(
+    SPECIALIST_PROMPT_SPECS["social"]["chunks"][_c]
+    for _c in SPECIALIST_PROMPT_SPECS["social"]["order"])),
+"director_contact": (SPECIALIST_PROMPT_SPECS["contact"]["core"] + "".join(
+    SPECIALIST_PROMPT_SPECS["contact"]["chunks"][_c]
+    for _c in SPECIALIST_PROMPT_SPECS["contact"]["order"])),
+"director_objects": (SPECIALIST_PROMPT_SPECS["objects"]["core"] + "".join(
+    SPECIALIST_PROMPT_SPECS["objects"]["chunks"][_c]
+    for _c in SPECIALIST_PROMPT_SPECS["objects"]["order"])),
+"director_spatial": (SPECIALIST_PROMPT_SPECS["spatial"]["core"] + "".join(
+    SPECIALIST_PROMPT_SPECS["spatial"]["chunks"][_c]
+    for _c in SPECIALIST_PROMPT_SPECS["spatial"]["order"])),
+"director_offscreen": (SPECIALIST_PROMPT_SPECS["offscreen"]["core"] + "".join(
+    SPECIALIST_PROMPT_SPECS["offscreen"]["chunks"][_c]
+    for _c in SPECIALIST_PROMPT_SPECS["offscreen"]["order"])),
 
 "resolve_reconcile": (
  "You are the RESOLUTION AUDITOR of a simulation-first fiction engine. One beat was just "
@@ -5670,6 +5722,31 @@ def character_prompt(payload, base=None):
     # A removed paragraph leaves its own blank separator behind; the gap it
     # opens is not a paragraph break the author wrote.
     return re.sub(r"\n{3,}", "\n\n", "\n".join(keep))
+
+
+#: Every instruction sheet the Director sends to resolve one beat, in the
+#: order the fan-out uses. There is no single "the resolve prompt" any more:
+#: the prose author owns the beat's account and each specialist owns the
+#: channels it was granted, so a rule the Director works under lives in
+#: exactly one of these seven.
+DIRECTOR_RESOLVE_SHEET_IDS = (
+    "director_resolve_lean",
+    "director_body", "director_social", "director_contact",
+    "director_objects", "director_spatial", "director_offscreen",
+)
+
+
+def director_resolve_sheets():
+    """The seven sheets above as {prompt id: text}, at full scope.
+
+    For asking "do the Director's instructions state this rule". Prefer
+    naming the ONE sheet that must carry a rule -- a contract about writing
+    dialogue belongs to the prose author and a rule about clothing belongs
+    to the body specialist, and a check against the union cannot tell a
+    correctly-placed rule from one that drifted to a hand that never reads
+    it. Use the union only where a rule genuinely has no single owner.
+    """
+    return {pid: DEFAULT_PROMPTS[pid] for pid in DIRECTOR_RESOLVE_SHEET_IDS}
 
 
 def get_prompt(pid):

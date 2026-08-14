@@ -635,7 +635,9 @@ def test_director_must_not_write_one_body_s_act_into_another_s_state():
     ELSE" rule does not cover it: that governs contact RELATIONS, so a
     free-text act attributed to another body walks straight past.
     """
-    for prompt_id in ("director_resolve", "director_establish"):
+    # `entities` is the objects specialist's channel now; establish still
+    # writes the opening scene from one sheet.
+    for prompt_id in ("director_objects", "director_establish"):
         text = DEFAULT_PROMPTS[prompt_id]
         assert "STATE DESCRIBES ONE BODY'S OWN DOING" in text, prompt_id
         assert "never what a" in text and "body is doing to it" in text, prompt_id

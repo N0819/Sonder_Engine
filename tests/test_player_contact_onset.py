@@ -67,7 +67,7 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
     assert not warnings
     assert character["contact_ops"][0]["contact_ref"] == "contact:0"
     assert "self.standing_contacts" in DEFAULT_PROMPTS["character"]
-    assert "character_contact_endings" in DEFAULT_PROMPTS["director_resolve"]
+    assert "character_contact_endings" in DEFAULT_PROMPTS["director_contact"]
 
 
 def test_character_contact_endings_remove_only_selected_contacts():
