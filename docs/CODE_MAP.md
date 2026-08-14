@@ -9,7 +9,7 @@
 | `affect.py` | 2148 |  | `theory_of_mind` |
 | `agents/__init__.py` | 88 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3365 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 3369 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6087 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
 | `agents/director.py` | 7291 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
@@ -58,7 +58,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5498 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 5646 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2809 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -105,7 +105,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2384 | 982 lines |
+| `character_step()` | 2384 | 986 lines |
 | `_annotate_known_exits()` | 1769 | 445 lines |
 | `_ground_observation_citations()` | 829 | 263 lines |
 | `_unanswered_question_note()` | 282 | 117 lines |
@@ -692,12 +692,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `specialist_prompt()` | 2073 | 17 lines |
-| `prose_author_prompt()` | 2158 | 15 lines |
-| `get_prompt()` | 5489 | 10 lines |
-| `presets()` | 5480 | 2 lines |
-| `active_preset()` | 5483 | 2 lines |
-| `nsfw_enabled()` | 5486 | 2 lines |
+| `character_prompt()` | 5608 | 27 lines |
+| `_payload_has()` | 5565 | 22 lines |
+| `specialist_prompt()` | 2074 | 17 lines |
+| `prose_author_prompt()` | 2159 | 15 lines |
+| `get_prompt()` | 5637 | 10 lines |
+| `_is_stamped()` | 5589 | 8 lines |
+| `_payload_node()` | 5599 | 7 lines |
+| `presets()` | 5481 | 2 lines |
 
 ### `providers.py`
 

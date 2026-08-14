@@ -42,7 +42,7 @@ from memory import (
     provenance_context_label,
     relationships_for_payload,
 )
-from prompts import get_prompt
+from prompts import character_prompt, get_prompt
 from scene import (
     NON_AWAKE_GATED,
     active_transformations,
@@ -3096,7 +3096,11 @@ def character_step(ctx, cid, nonce):
     role = {"bg": "character_bg", "mid": "character_mid",
             "major": "character_major"}.get(character_tier(sh), "character_mid")
 
-    _cprompt = get_prompt("character").replace("{name}", character_name(sh))
+    # The contract, minus the paragraphs whose subject this beat's payload does
+    # not carry. Built from the finished payload on purpose: the gate must read
+    # what the model will actually receive, not re-derive the conditions a
+    # second time and drift from them.
+    _cprompt = character_prompt(payload).replace("{name}", character_name(sh))
     if _carried_reports:
         _cprompt += (
             "\n\nCARRIED REPORTS: carried_reports contains what you know about "
