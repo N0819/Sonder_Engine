@@ -250,8 +250,9 @@ def test_an_undisputed_memory_is_projected_without_mutating_storage():
     assert mem == {"id": 1, "event_key": "event:stable", "gist": "g",
                    "disputed": None}
     assert projected["memory_ref"] == "event:stable"
-    assert projected["temporal_status"] == "remembered_past"
     assert projected["when"] == "before this story's recorded turns"
+    # The retrieval-only fields do not travel to the deciding mind at all.
+    assert not {"key_phrases", "category", "memory_form"} & set(projected)
 
 
 # --- both survive the round-trips -----------------------------------------

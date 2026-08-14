@@ -9,7 +9,7 @@
 | `affect.py` | 2148 |  | `theory_of_mind` |
 | `agents/__init__.py` | 88 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3314 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 3365 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6087 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
 | `agents/director.py` | 7291 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
@@ -50,7 +50,7 @@
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 5433 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `memory.py` | 5500 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
 | `offscreen.py` | 2158 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
@@ -58,7 +58,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5497 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 5498 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2809 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -105,14 +105,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2347 | 968 lines |
-| `_annotate_known_exits()` | 1768 | 445 lines |
-| `_ground_observation_citations()` | 828 | 263 lines |
-| `_unanswered_question_note()` | 281 | 117 lines |
-| `_destination_from_goals()` | 1346 | 109 lines |
-| `sprint_offers()` | 2248 | 97 lines |
-| `_recent_self_moves()` | 150 | 90 lines |
-| `_verdict()` | 1190 | 72 lines |
+| `character_step()` | 2384 | 982 lines |
+| `_annotate_known_exits()` | 1769 | 445 lines |
+| `_ground_observation_citations()` | 829 | 263 lines |
+| `_unanswered_question_note()` | 282 | 117 lines |
+| `_destination_from_goals()` | 1347 | 109 lines |
+| `sprint_offers()` | 2249 | 97 lines |
+| `_recent_self_moves()` | 151 | 90 lines |
+| `_verdict()` | 1191 | 72 lines |
 
 ### `agents/common.py`
 
@@ -607,14 +607,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 2860 | 274 lines |
+| `build_character_memory_context()` | 2927 | 274 lines |
 | `search_memories()` | 1911 | 228 lines |
-| `rebuild_embeddings()` | 4805 | 213 lines |
-| `embedding_bank_status()` | 4655 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 5057 | 124 lines |
+| `rebuild_embeddings()` | 4872 | 213 lines |
+| `embedding_bank_status()` | 4722 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 5124 | 124 lines |
 | `contrast_memory()` | 2174 | 117 lines |
-| `_origin_on_drift()` | 2761 | 97 lines |
-| `backfill_memory_summary_windows()` | 3265 | 89 lines |
+| `_origin_on_drift()` | 2828 | 97 lines |
+| `_with_reading()` | 2706 | 92 lines |
 
 ### `offscreen.py`
 
@@ -694,10 +694,10 @@
 |---|---:|---:|
 | `specialist_prompt()` | 2073 | 17 lines |
 | `prose_author_prompt()` | 2158 | 15 lines |
-| `get_prompt()` | 5488 | 10 lines |
-| `presets()` | 5479 | 2 lines |
-| `active_preset()` | 5482 | 2 lines |
-| `nsfw_enabled()` | 5485 | 2 lines |
+| `get_prompt()` | 5489 | 10 lines |
+| `presets()` | 5480 | 2 lines |
+| `active_preset()` | 5483 | 2 lines |
+| `nsfw_enabled()` | 5486 | 2 lines |
 
 ### `providers.py`
 

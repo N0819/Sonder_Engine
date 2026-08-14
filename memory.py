@@ -2,7 +2,7 @@
 
 import base64
 import hashlib
-import json, re, threading, time, math
+import json, os, re, threading, time, math
 import numpy as np
 from collections import defaultdict
 from db import q, qi, wget, wset, transaction
@@ -2667,6 +2667,42 @@ def backfill_missing_memory_event_keys(chat_id, char_id=None):
             repaired += 1
     return repaired
 
+# Restore part of the pre-compaction character payload, for A/B measurement.
+#
+# NOT a supported runtime mode and not a kill-switch for a defect: everything it
+# brings back was removed because nothing on the deciding side read it. It exists
+# so the arms of tools/benchmark_memory_temporal.py can run against the SAME code
+# and the SAME bank with only the projection differing -- an ablation whose two
+# arms are separate commits is not an ablation, it is two experiments.
+#
+# SONDER_PAYLOAD_LEGACY takes a comma-separated list, so one removal can be put
+# back on its own and blamed on its own:
+#
+#   all           every restoration below (the true baseline arm)
+#   fields        key_phrases + category + memory_form on each memory
+#   gist          the gist that merely repeats its own details
+#   temporal      the per-row temporal_status constant
+#   self          the sheet copies of beliefs/associations the interior repeats
+#
+# There is deliberately no `observations` arm. The observation text repeats the
+# view almost byte for byte (737 B against a 757 B view, 97%) and shortening it
+# to a locator was tried and REVERTED: a rendered atom is front-loaded with its
+# attribution, so the first eight words are "Hinami says in a nostalgic voice:"
+# and the clause that mattered -- "He never saw my ears or tails." -- was what
+# got cut. The duplication is real and is not free to remove; the atom is the
+# addressable copy, and an addressable copy with its content trimmed off is
+# worse than the duplication it saves. See docs/UNBUILT.md.
+_PAYLOAD_LEGACY_ARMS = frozenset(
+    part for part in re.split(
+        r"[,\s]+", str(os.environ.get("SONDER_PAYLOAD_LEGACY", "")).casefold())
+    if part)
+
+
+def payload_legacy(part):
+    """True when this removal is ablated back in for the current process."""
+    return "all" in _PAYLOAD_LEGACY_ARMS or part in _PAYLOAD_LEGACY_ARMS
+
+
 def _with_reading(mem, current_turn_idx=None):
     """Project one stored row as an explicitly PAST character memory.
 
@@ -2683,19 +2719,33 @@ def _with_reading(mem, current_turn_idx=None):
     The key is phrased as the character's own voice, matching the
     `it_comes_back_to_me` / `i_suspect` precedent -- epistemic status carried
     by the key rather than by prose a model can drop.
+
+    WHAT THIS DELIBERATELY DOES NOT PROJECT. Three fields were carried here for
+    no reader on the deciding side, measured across the live banks:
+
+      * ``key_phrases`` -- 12 short cues per row, 80% of them already verbatim
+        in the gist/details beside them, and never once named in the 61 KB
+        character prompt. Its consumers are ``memory_retrieval_fts`` and
+        ``_retrieval_text`` -- retrieval machinery, not the mind deciding.
+      * ``category`` -- one host-side reader (``promise_memories``' SQL), and
+        across 900 corpus rows only four (category, epistemic_origin) pairs
+        occur, so it restates a label the row already carries.
+      * ``memory_form`` -- the constant ``"episode"`` on every row this
+        function projects. Summaries set their own, so ABSENCE now means
+        episode and the distinction survives.
+
+    The columns stay written and stay indexed; only the projection narrows, so
+    recall quality cannot move by construction. Together with the gist rule
+    below this is 5.8 KB of a 26.8 KB delivered block (chat 72, 24 rows).
     """
     # Model projection only.  ``dict(mem)`` used to leak database ids,
     # access counters, archive state, embedding metadata and retrieval scores
     # into the character's mind.  Those are host diagnostics, not memories.
     out = {
         "memory_ref": str(mem.get("event_key") or ""),
-        "temporal_status": "remembered_past",
-        "memory_form": "episode",
         "epistemic_origin": provenance_context_label(mem.get("provenance")),
-        "category": mem.get("category") or "episode",
         "gist": mem.get("gist") or "",
         "details": mem.get("content") or "",
-        "key_phrases": list(mem.get("key_phrases") or []),
         "entities": list(mem.get("entities") or []),
         "location": mem.get("location") or "",
         "confidence": float(mem.get("confidence") or 0.0),
@@ -2711,6 +2761,23 @@ def _with_reading(mem, current_turn_idx=None):
             "arousal": float(mem.get("encoding_arousal") or 0.0),
         },
     }
+    if payload_legacy("fields"):
+        out["memory_form"] = "episode"
+        out["category"] = mem.get("category") or "episode"
+        out["key_phrases"] = list(mem.get("key_phrases") or [])
+    if not payload_legacy("gist"):
+        # A gist that is a PREFIX of its own details is not a low-resolution
+        # recall, it is the first sentence twice. Measured on chat 72's live
+        # bank: 4% byte-identical, 77% a substring, median length ratio 0.52 --
+        # so the consolidator does compress, and the rows where it did not are
+        # the ones that carry nothing the details below do not already say.
+        # Dropped only in that case; a genuinely condensed gist survives.
+        gist = str(out.get("gist") or "").strip()
+        details = str(out.get("details") or "").strip()
+        if gist and details and gist.casefold() in details.casefold():
+            out.pop("gist", None)
+    if payload_legacy("temporal"):
+        out["temporal_status"] = "remembered_past"
     out = {k: v for k, v in out.items()
            if v not in ("", [], {}) or k in {
                "memory_ref", "temporal_status", "memory_form",
