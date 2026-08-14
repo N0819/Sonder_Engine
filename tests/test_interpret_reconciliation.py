@@ -273,8 +273,12 @@ def test_covered_interpretation_makes_no_repair_call(temp_db, monkeypatch):
     ]
     ctx, out, calls = _run_interpret(temp_db, monkeypatch, covered)
 
-    assert calls == ["director_interpret"], \
+    # The interpret-side fan-out is baseline, not extra: the assertion is
+    # that no REPAIR was bought, which is what "zero extra spend" was always
+    # about on a beat with nothing uncovered.
+    assert "interpret_repair" not in calls, \
         "no omission -> zero extra LLM spend on the common path"
+    assert calls[0] == "director_interpret"
     assert out["interpret_reconciliation"]["uncovered"] == []
 
 

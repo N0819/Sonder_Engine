@@ -264,7 +264,11 @@ class TestDirectorResolveMergesUncoveredCharacterResults:
         seen = {}
 
         def fake_agent_json(role, step_key, system, payload, **kw):
-            seen["payload"] = payload
+            # The declaration merge under test is the PROSE AUTHOR's payload;
+            # a specialist's payload is a different, narrower slice and would
+            # overwrite it here.
+            if step_key == "director_resolve":
+                seen["payload"] = payload
             return {"resolved_event": "Voices overlap.", "summary": "beat",
                     "dialogue_log": [], "state_diff": {}}
 

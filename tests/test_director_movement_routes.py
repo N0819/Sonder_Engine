@@ -26,6 +26,7 @@ import time
 
 from character_schema import default_character_data
 from pipeline_context import ChatData, PipelineContext, TurnData
+from tests.conftest import fanout_resolve_agent
 
 
 def _make_ctx(temp_db, scene, to_room, mover="self"):
@@ -144,8 +145,8 @@ def test_multi_hop_route_through_closed_door_stays_blocked(
     )
     monkeypatch.setattr(
         director, "_agent_json",
-        lambda *a, **k: {"state_diff": {
-            "positions": {"The Stranger": "engine_room"}}},
+        fanout_resolve_agent({"state_diff": {
+            "positions": {"The Stranger": "engine_room"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
@@ -166,12 +167,12 @@ def test_multi_hop_route_opened_this_beat_is_committed(temp_db, monkeypatch):
     )
     monkeypatch.setattr(
         director, "_agent_json",
-        lambda *a, **k: {"state_diff": {"rooms": {"corridor": {
+        fanout_resolve_agent({"state_diff": {"rooms": {"corridor": {
             "name": "Corridor",
             "adjacent": [
                 {"to": "lobby", "barrier": "open_door", "distance": "near"},
             ],
-        }}}},
+        }}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
@@ -190,8 +191,8 @@ def test_unreachable_target_is_still_blocked_and_stripped(
     ctx = _make_ctx(temp_db, _station_scene(), "isolated_vault")
     monkeypatch.setattr(
         director, "_agent_json",
-        lambda *a, **k: {"state_diff": {
-            "positions": {"The Stranger": "isolated_vault"}}},
+        fanout_resolve_agent({"state_diff": {
+            "positions": {"The Stranger": "isolated_vault"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
@@ -267,7 +268,7 @@ def test_same_beat_vehicle_arrival_allows_occupant_deboard(
     ctx = _make_ctx(temp_db, _elevator_scene(), "generator_room")
     monkeypatch.setattr(
         director, "_agent_json",
-        lambda *a, **k: {"state_diff": {
+        fanout_resolve_agent({"state_diff": {
             "positions": {"elevator": "generator_room",
                           "The Stranger": "generator_room"},
             "entities": {"elevator": {
@@ -276,7 +277,7 @@ def test_same_beat_vehicle_arrival_allows_occupant_deboard(
                 "interior_rooms": ["elevator_interior"],
                 "state": {"transit": {"phase": "docked", "hatch": "open"}},
             }},
-        }},
+        }}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
@@ -296,8 +297,8 @@ def test_sealed_vehicle_still_blocks_occupant_exit(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, _elevator_scene(), "generator_room")
     monkeypatch.setattr(
         director, "_agent_json",
-        lambda *a, **k: {"state_diff": {
-            "positions": {"The Stranger": "generator_room"}}},
+        fanout_resolve_agent({"state_diff": {
+            "positions": {"The Stranger": "generator_room"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)

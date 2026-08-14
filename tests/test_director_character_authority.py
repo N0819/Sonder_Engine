@@ -324,6 +324,11 @@ def test_resolve_retries_on_invented_character_conduct(temp_db, monkeypatch):
               {"resolved_event": CLEAN_REWRITE, "dialogue_log": []}]
 
     def fake_agent_json(role, key, prompt, payload, **kw):
+        # PROSE AUTHOR ONLY. The retry under test is a second pass over the
+        # prose, so the specialists the beat also fans out to are not what
+        # "another call" means here.
+        if key != "director_resolve":
+            return {}
         payloads.append(payload)
         return drafts[min(len(payloads) - 1, len(drafts) - 1)]
 
@@ -349,6 +354,9 @@ def test_a_declared_act_alone_fires_no_retry(temp_db, monkeypatch):
     calls = []
 
     def fake_agent_json(role, key, prompt, payload, **kw):
+        # PROSE AUTHOR ONLY -- see the note on the retry test above.
+        if key != "director_resolve":
+            return {}
         calls.append(payload)
         return {"resolved_event": CLEAN_REWRITE, "dialogue_log": []}
 
@@ -415,6 +423,9 @@ def test_actions_declared_in_the_sequence_reach_char_actions(temp_db, monkeypatc
     calls = []
 
     def fake_agent_json(role, key, prompt, payload, **kw):
+        # PROSE AUTHOR ONLY -- see the note on the retry test above.
+        if key != "director_resolve":
+            return {}
         calls.append(payload)
         return {"resolved_event": CLEAN_REWRITE, "dialogue_log": []}
 

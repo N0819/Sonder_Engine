@@ -14,6 +14,7 @@ import time
 
 from character_schema import default_character_data
 from pipeline_context import ChatData, PipelineContext, TurnData
+from tests.conftest import fanout_resolve_agent
 from spatial import merge_scene_with_diff
 
 
@@ -172,8 +173,8 @@ def test_vehicle_move_strips_conflated_player_position(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, {"to_room": "ferry_deck", "mover": "van"})
     monkeypatch.setattr(
         director, "_agent_json",
-        lambda *a, **k: {"state_diff": {"positions": {
-            "van": "ferry_deck", "The Stranger": "ferry_deck"}}},
+        fanout_resolve_agent({"state_diff": {"positions": {
+            "van": "ferry_deck", "The Stranger": "ferry_deck"}}}),
     )
 
     out = director.director_resolve(ctx, nonce=0)
