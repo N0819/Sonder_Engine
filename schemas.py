@@ -2267,6 +2267,12 @@ class NarratorOutput(LenientModel):
     prose: str = ""
     new_specifics: list[str] = Field(default_factory=list)
     text: str = ""
+    #: Engine-written, never asked of the model: how many elements arrived in
+    #: `paragraphs` before preprocess joined and dropped them. Declared so it
+    #: survives validation into the stored variant, where it is the only way
+    #: to tell "the model ignored the array" (0) from "the model used the
+    #: array and wrote one element" (1). See preprocess_llm_output.
+    paragraph_count: int = 0
 
 # ---- Character Output ----
 
@@ -3502,6 +3508,55 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             }
 
     if step_key == "narrator":
+        # PARAGRAPHS ARE MARKED WITH <p>...</p> AND RENDERED HERE.
+        #
+        # Two earlier contracts failed, both measured. Asking for a blank line
+        # -- a literal `\n\n` inside the JSON string -- ran for a week and
+        # reached 6 of 600 stored narrations (1%). Asking for a `paragraphs`
+        # ARRAY did worse: `paragraph_count` was 0 on every live variant,
+        # because the model never emitted the field at all.
+        #
+        # What both had in common is that they asked the model to change the
+        # SHAPE of its reply. A delimiter does not: it is characters inside a
+        # string it was already writing, needing no JSON escape and no new
+        # key. Benched against the live narrator model on a three-speaker beat
+        # (`tools/paragraph_bench.py`): the array contract produced multiple
+        # paragraphs 2 times in 5, `<p>` produced them 10 times in 10 with
+        # every tag balanced.
+        #
+        # <p> SPECIFICALLY, not a private token. `[[P]]` came back with the
+        # prose field EMPTY and `[[BREAK]]` silently dropped two speakers'
+        # lines -- an unfamiliar marker does not get politely ignored, it
+        # damages the output. The model has seen a billion <p> tags.
+        #
+        # Everything downstream still receives exactly one `prose` string with
+        # blank lines in it, so the semantic check, the fidelity checks, the
+        # correction-notes retry, commit, the archive and the frontend are
+        # untouched by this.
+        raw_prose = result.get("prose")
+        if isinstance(raw_prose, str) and "<p" in raw_prose.lower():
+            # EVERY TAG IS A BOUNDARY, AND NO TEXT IS EVER DROPPED. The first
+            # version of this extracted <p>...</p> matches and rebuilt the
+            # prose from them, which silently deleted anything the model wrote
+            # OUTSIDE a pair -- and a model that half-marks its output is
+            # exactly the case this has to survive. Splitting on the tags
+            # instead keeps every word: a stray or unbalanced tag costs a
+            # paragraph break in an odd place, never a sentence.
+            marked = re.sub(r"</?p\b[^>]*>", "\x00", raw_prose, flags=re.I)
+            blocks = [b.strip() for b in marked.split("\x00")]
+            blocks = [b for b in blocks if b]
+            if blocks:
+                result["prose"] = "\n\n".join(blocks)
+                result["paragraph_count"] = len(blocks)
+
+        # HOW MANY PARAGRAPHS THE MODEL ACTUALLY MARKED, engine-written and
+        # never asked for. Without it, "the model ignored the markers" and
+        # "the model marked the whole beat as one paragraph" are the same
+        # single unbroken string in storage, and the next report of flat prose
+        # is unanswerable without another live turn. 0 means no markers came
+        # back at all.
+        result.setdefault("paragraph_count", 0)
+
         # new_specifics is list[str] -- proper nouns/hard facts the
         # narrator coined this turn. Same over-structuring failure mode as
         # perception's views: a model occasionally reports one as a nested
@@ -4017,7 +4072,11 @@ OUTPUT_EXAMPLES = {
         "notes": "",
     },
     "narrator": {
-        "prose": "",
+        # Handed to the model on every repair and fallback call, so it must
+        # match the live contract exactly -- an example carrying a stale shape
+        # teaches the old one back to the model that has just failed, and the
+        # repair then "succeeds" into the wrong format.
+        "prose": "<p>One paragraph per pair of markers.</p>",
         "new_specifics": [],
     },
     "mapping_commit": {
