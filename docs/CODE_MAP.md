@@ -50,7 +50,7 @@
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
-| `memory.py` | 5500 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
+| `memory.py` | 5473 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `db`, `frames`, `logging_utils`, `prompts`, `providers`, `theory_of_mind` |
 | `offscreen.py` | 2158 |  | `logging_utils` |
 | `outofband.py` | 276 |  | `logging_utils` |
 | `paradox.py` | 489 |  | `character_schema`, `db`, `frames` |
@@ -58,7 +58,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5646 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 5684 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2809 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -607,14 +607,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 2927 | 274 lines |
+| `build_character_memory_context()` | 2900 | 274 lines |
 | `search_memories()` | 1911 | 228 lines |
-| `rebuild_embeddings()` | 4872 | 213 lines |
-| `embedding_bank_status()` | 4722 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 5124 | 124 lines |
+| `rebuild_embeddings()` | 4845 | 213 lines |
+| `embedding_bank_status()` | 4695 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 5097 | 124 lines |
 | `contrast_memory()` | 2174 | 117 lines |
-| `_origin_on_drift()` | 2828 | 97 lines |
-| `_with_reading()` | 2706 | 92 lines |
+| `_with_reading()` | 2670 | 101 lines |
+| `_origin_on_drift()` | 2801 | 97 lines |
 
 ### `offscreen.py`
 
@@ -692,14 +692,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_prompt()` | 5608 | 27 lines |
-| `_payload_has()` | 5565 | 22 lines |
-| `specialist_prompt()` | 2074 | 17 lines |
-| `prose_author_prompt()` | 2159 | 15 lines |
-| `get_prompt()` | 5637 | 10 lines |
-| `_is_stamped()` | 5589 | 8 lines |
-| `_payload_node()` | 5599 | 7 lines |
-| `presets()` | 5481 | 2 lines |
+| `character_prompt()` | 5646 | 27 lines |
+| `_payload_has()` | 5603 | 22 lines |
+| `specialist_prompt()` | 2075 | 17 lines |
+| `prose_author_prompt()` | 2160 | 15 lines |
+| `get_prompt()` | 5675 | 10 lines |
+| `_is_stamped()` | 5627 | 8 lines |
+| `_payload_node()` | 5637 | 7 lines |
+| `payload_legacy()` | 5516 | 3 lines |
 
 ### `providers.py`
 

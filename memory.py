@@ -8,7 +8,7 @@ from collections import defaultdict
 from db import q, qi, wget, wset, transaction
 from providers import (embed_texts, embed_texts_meta, chat_complete,
                        embedding_model_key)
-from prompts import get_prompt
+from prompts import get_prompt, payload_legacy
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 import frames as _frames
@@ -2667,42 +2667,6 @@ def backfill_missing_memory_event_keys(chat_id, char_id=None):
             repaired += 1
     return repaired
 
-# Restore part of the pre-compaction character payload, for A/B measurement.
-#
-# NOT a supported runtime mode and not a kill-switch for a defect: everything it
-# brings back was removed because nothing on the deciding side read it. It exists
-# so the arms of tools/benchmark_memory_temporal.py can run against the SAME code
-# and the SAME bank with only the projection differing -- an ablation whose two
-# arms are separate commits is not an ablation, it is two experiments.
-#
-# SONDER_PAYLOAD_LEGACY takes a comma-separated list, so one removal can be put
-# back on its own and blamed on its own:
-#
-#   all           every restoration below (the true baseline arm)
-#   fields        key_phrases + category + memory_form on each memory
-#   gist          the gist that merely repeats its own details
-#   temporal      the per-row temporal_status constant
-#   self          the sheet copies of beliefs/associations the interior repeats
-#
-# There is deliberately no `observations` arm. The observation text repeats the
-# view almost byte for byte (737 B against a 757 B view, 97%) and shortening it
-# to a locator was tried and REVERTED: a rendered atom is front-loaded with its
-# attribution, so the first eight words are "Hinami says in a nostalgic voice:"
-# and the clause that mattered -- "He never saw my ears or tails." -- was what
-# got cut. The duplication is real and is not free to remove; the atom is the
-# addressable copy, and an addressable copy with its content trimmed off is
-# worse than the duplication it saves. See docs/UNBUILT.md.
-_PAYLOAD_LEGACY_ARMS = frozenset(
-    part for part in re.split(
-        r"[,\s]+", str(os.environ.get("SONDER_PAYLOAD_LEGACY", "")).casefold())
-    if part)
-
-
-def payload_legacy(part):
-    """True when this removal is ablated back in for the current process."""
-    return "all" in _PAYLOAD_LEGACY_ARMS or part in _PAYLOAD_LEGACY_ARMS
-
-
 def _with_reading(mem, current_turn_idx=None):
     """Project one stored row as an explicitly PAST character memory.
 
@@ -2743,6 +2707,17 @@ def _with_reading(mem, current_turn_idx=None):
     # into the character's mind.  Those are host diagnostics, not memories.
     out = {
         "memory_ref": str(mem.get("event_key") or ""),
+        # RESTORED after measurement. Removing this per-row constant was the one
+        # compaction that cost something: `appraisal.goal_impacts[].evidence` is
+        # grounded namespace="present", so a memory_ref cited there is dropped as
+        # ungrounded and the impact zeroed -- past evidence mis-laned as present,
+        # 0 occurrences before and 2 after across three live turns, alongside the
+        # same lane failure in tools/benchmark_memory_temporal.py's anomaly_now.
+        # The label never varies, so it cannot ORDER anything (`when` does that);
+        # what it does is mark the lane, per row, at the point of use. 0.9 KB of
+        # a 26 KB block is a cheap price for a discrimination the engine cannot
+        # re-impose downstream -- a dropped citation is evidence already lost.
+        "temporal_status": "remembered_past",
         "epistemic_origin": provenance_context_label(mem.get("provenance")),
         "gist": mem.get("gist") or "",
         "details": mem.get("content") or "",
@@ -2776,8 +2751,6 @@ def _with_reading(mem, current_turn_idx=None):
         details = str(out.get("details") or "").strip()
         if gist and details and gist.casefold() in details.casefold():
             out.pop("gist", None)
-    if payload_legacy("temporal"):
-        out["temporal_status"] = "remembered_past"
     out = {k: v for k, v in out.items()
            if v not in ("", [], {}) or k in {
                "memory_ref", "temporal_status", "memory_form",
