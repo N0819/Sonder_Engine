@@ -368,11 +368,22 @@ def active_disguises(chat_id):
     `description`; newer ones (see the director prompt) also carry a positive
     `presented_appearance` (what an unaware observer sees), `concealed_terms`
     (feature words to keep out of unaware views / to tripwire on), and
-    `known_to` (observers who legitimately know the real form)."""
+    `known_to` (observers who legitimately know the real form).
+
+    ONE SUBJECT, ONE DISGUISE, AND THE NEWEST WINS. Several active rows for
+    the same body is not hypothetical -- measured live, chat 72 carried three,
+    the Director having minted a fresh condition_id per reroll instead of
+    superseding. Keying by subject means one of them silently decides what
+    every observer sees, and with no ORDER BY that was whichever the scan
+    happened to reach last: the glamour appeared to work for a turn and then
+    stop, because a different row won. Ordering makes the winner the most
+    recently started one, which is the only answer that matches what a reader
+    just watched happen."""
     out = {}
     for row in q(
         "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
-        "AND kind='physical_disguise' AND active=1", (chat_id,),
+        "AND kind='physical_disguise' AND active=1 "
+        "ORDER BY started_at ASC, rowid ASC", (chat_id,),
     ):
         try:
             payload = json.loads(row["payload"])
@@ -390,8 +401,146 @@ def active_disguises(chat_id):
             "concealed_terms": [str(t).strip() for t in (pick("concealed_terms") or [])
                                 if str(t).strip()],
             "known_to": [str(n).strip() for n in (pick("known_to") or []) if str(n).strip()],
+            # The one channel that may SHOW an authored extra part through a
+            # disguise, and the seam an additive transformation would use to
+            # grant a part no card declares. Typed on purpose: the prose
+            # fields can only conceal, because a sentence saying "no tails
+            # are visible" mentions tails and a text match cannot tell the
+            # difference (measured live -- it put six of them back).
+            "visible_parts": [
+                str((e or {}).get("kind") if isinstance(e, dict) else e).strip()
+                for e in (pick("visible_parts") or [])
+                if str((e or {}).get("kind") if isinstance(e, dict) else e).strip()
+            ],
         }
     return out
+
+
+#: Conditions of which a body may have exactly one. A disguise is one outward
+#: form; a transformation is one body. Enforced at the write (`commit.py`
+#: `_supersede_singular_conditions`) rather than requested of the Director,
+#: which minted a fresh condition_id per reroll and left three live at once.
+SINGULAR_BODY_CONDITIONS = ("physical_disguise", "physical_transformation")
+
+
+def active_transformations(chat_id):
+    """Active `physical_transformation` conditions, keyed by casefolded subject.
+
+    A TRANSFORMATION IS NOT A DISGUISE, and the difference is not cosmetic. A
+    disguise is a lie with a truth behind it -- hence `concealed_truth`,
+    `known_to`, and a fallback that fails toward concealment. A transformation
+    has no truth behind it: the body IS the new thing, nobody sees through it,
+    and someone who knew you yesterday does not perceive your old shape today.
+    Modelling one as the other would invent a hidden fact where none exists
+    and hand other minds a `known_to` slot to be granted access to it.
+
+    So this replaces rather than conceals. `appearance` becomes the body's
+    true visible description; `parts` becomes its authored extra parts
+    outright, which is what lets a transformation ADD (grow wings) where a
+    disguise can only subtract.
+
+    Each value: {subject, form, appearance, parts, reversible, reversal,
+    caused_by}. `reversible` defaults TRUE -- the ordinary case is a shape you
+    can drop -- and a fiction that wants a one-way door has to say so, because
+    trapping somebody by omission is the failure nobody can undo.
+    """
+    out = {}
+    for row in q(
+        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
+        "AND kind='physical_transformation' AND active=1 "
+        "ORDER BY started_at ASC, rowid ASC", (chat_id,),
+    ):
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError):
+            payload = {}
+        subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
+        if not subject:
+            continue
+        state = _condition_state(payload)
+        pick = lambda k: state.get(k) if state.get(k) is not None else payload.get(k)
+        parts = [p for p in (pick("parts") or []) if isinstance(p, dict)]
+        out[subject.casefold()] = {
+            "subject": subject,
+            "form": str(pick("form") or "").strip(),
+            "appearance": str(pick("appearance") or "").strip(),
+            "parts": parts,
+            # Absent means reversible. Only an explicit false is a one-way
+            # door, so a Director that forgets the field cannot strand anyone.
+            "reversible": pick("reversible") is not False,
+            "reversal": str(pick("reversal") or "").strip(),
+            "caused_by": str(pick("caused_by") or "").strip(),
+        }
+    return out
+
+
+def transformed_sheet(sheet, transformation):
+    """The card as the body currently IS, for the mind that lives in it.
+
+    A MIND MUST NOT KEEP THE BODY IT NO LONGER HAS. Every character payload is
+    built from the card -- senses, abilities, embodiment capabilities, extra
+    parts -- and the card is authored and immutable. So without this, turning
+    somebody into a fox changes what observers see and leaves the fox
+    convinced it still has hands, declaring accordingly, and the Director
+    refusing it every beat.
+
+    This is the same shape `scene.attire` already has against `initial_outfit`:
+    the card is what was authored, the overlay is what is true now, and the
+    mind learns its new shape through its own interoception rather than by
+    reading world state. The gap stays intact -- nothing here tells the body
+    who transformed it or that a transformation is what happened.
+
+    Returns the sheet unchanged when there is no transformation, and a shallow
+    copy otherwise: the caller's card is a cached read shared with other
+    stages, so mutating it in place would transform everybody's view of it.
+    """
+    if not transformation:
+        return sheet
+    if not isinstance(sheet, dict):
+        return sheet
+    out = dict(sheet)
+    body = dict(out.get("embodiment") or {})
+
+    appearance = (transformation.get("appearance")
+                  or transformation.get("form"))
+    if appearance:
+        visible = dict(body.get("visible") or {})
+        visible["summary"] = appearance
+        body["visible"] = visible
+
+    if transformation.get("parts") is not None:
+        body["extra_parts"] = transformation.get("parts") or []
+
+    out["embodiment"] = body
+    return out
+
+
+def transformed_true_appearance(true_appearance, transformation):
+    """The body's REAL visible description, after any transformation.
+
+    Replaces rather than edits: a body that is now a fox is not a woman with
+    fox words removed. Falls back to `form` when no appearance prose was
+    written, and to the card when neither is -- an empty transformation must
+    not blank a body out of the world."""
+    if not transformation:
+        return true_appearance
+    return (transformation.get("appearance")
+            or transformation.get("form")
+            or true_appearance)
+
+
+def transformed_parts(authored_parts, transformation):
+    """The extra parts this body HAS, after any transformation.
+
+    The transformation's list is authoritative and total, which is what makes
+    it additive AND subtractive in one field: a fox has one tail and no hands
+    whatever the card said. An empty list is a body with no extra parts, and
+    that is a real answer -- so `parts` absent (None) means "unchanged",
+    `parts: []` means "none". Those are different, and collapsing them would
+    make it impossible to transform INTO something plain."""
+    if not transformation or transformation.get("parts") is None:
+        return authored_parts
+    return transformation.get("parts") or []
 
 
 def disguised_visible_appearance(true_appearance, disguise):
@@ -422,6 +571,72 @@ def disguised_visible_appearance(true_appearance, disguise):
         if matched and scrubbed:
             return scrubbed
     return "a person whose appearance is unremarkable"
+
+
+def _part_tokens(text):
+    """Lowercased word set folded to ONE canonical form each, so "tails" and
+    "tail" produce the same token and either can be compared against either.
+
+    Canonical rather than "both forms": adding the singular beside the plural
+    made the fold one-directional -- {tails, tail} is not a subset of {tail},
+    so a part named "tails" failed to match a grant written "tail" while the
+    reverse matched. Whether a stripped word is a real singular does not
+    matter ("glass" -> "glas") as long as both sides are stripped the same
+    way, which is the whole trick."""
+    out = set()
+    for word in re.findall(r"[a-z]+", str(text or "").casefold()):
+        out.add(word[:-1] if len(word) > 3 and word.endswith("s") else word)
+    return out
+
+
+def conceal_disguised_parts(parts_by_name, disguises):
+    """Drop authored extra parts a disguise hides, per body.
+
+    THE APPEARANCE SUMMARY WAS NEVER THE ONLY PLACE A BODY IS DESCRIBED.
+    `disguised_visible_appearance` rewrites one string, but authored extra
+    parts are a separate typed ledger rendered straight from structured data
+    by the composer -- so a glamoured kitsune kept six tails and two fox ears
+    in every observer's view while her summary said "ordinary human ears".
+    Reported live (chat 72).
+
+    PROSE MAY ONLY CONCEAL; ONLY A TYPED FIELD MAY GRANT. The first version
+    kept a part whose name appeared in `presented_appearance`, on the theory
+    that a disguise naming wings is a disguise showing wings. Measured live
+    one turn later: the Director wrote "...; no tails are visible", the word
+    `tails` was present, and six tails came back. A negation reads as a
+    mention, and so do "without", "hidden", "no longer" and every other way a
+    sentence can say absence -- the Director's own instruction forbids
+    mentioning the concealed feature at all (prompts.py) and it mentioned it
+    anyway, which is exactly the cooperation a deterministic floor may not
+    depend on.
+
+    So under a disguise every authored part is concealed, and a part is shown
+    only when the condition carries it in `visible_parts` -- a typed list, no
+    parsing, nothing to negate. That is also the seam an ADDITIVE
+    transformation wants: a body that grows wings it was never authored with
+    is the same mechanism read the other way.
+
+    Over-concealing costs a detail. Leaking costs the disguise.
+    """
+    if not parts_by_name or not disguises:
+        return parts_by_name
+    out = {}
+    for name, parts in (parts_by_name or {}).items():
+        disguise = disguises.get(str(name or "").casefold())
+        if not disguise:
+            out[name] = parts
+            continue
+        granted = set()
+        for entry in (disguise.get("visible_parts") or []):
+            granted |= _part_tokens(
+                entry.get("kind") if isinstance(entry, dict) else entry)
+        kept = [
+            part for part in (parts or [])
+            if granted and _part_tokens((part or {}).get("kind")) <= granted
+        ]
+        if kept:
+            out[name] = kept
+    return out
 
 
 def disguise_known_to(disguise, subject_name, known_map):
