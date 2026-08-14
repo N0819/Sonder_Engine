@@ -36,7 +36,7 @@
   --chip-bg: #1a2433;
   --chip-fg: #b7c5dc;
   --badge-bg: #1d2635;
-  --reading-panel-bg: rgba(9, 12, 19, var(--bd-panel, .89));
+  --reading-panel-bg: rgba(9, 12, 19, var(--bd-panel, .42));
   --reading-panel-fg: #f4f6fb;
   --control-radius: 6px;
   --card-radius: 8px;
@@ -185,7 +185,7 @@
   --chip-fg: #f0d3a6;
   --badge-bg: #432915;
   --prose-fg: #f7e9d0;
-  --reading-panel-bg: rgba(28, 17, 9, var(--bd-panel, .88));
+  --reading-panel-bg: rgba(28, 17, 9, var(--bd-panel, .41));
   --reading-panel-fg: #f8ead1;
   /* Turned wood and worn edges, not machined ones. */
   --control-radius: 7px;
@@ -298,7 +298,7 @@
   --chip-bg: #c9c;
   --chip-fg: #000;
   --badge-bg: #f90;
-  --reading-panel-bg: rgba(0, 0, 0, var(--bd-panel, .92));
+  --reading-panel-bg: rgba(0, 0, 0, var(--bd-panel, .45));
   --reading-panel-fg: #ffcc99;
   /* Pills, not opposite-corner wedges. */
   --control-radius: 999px;
@@ -364,7 +364,7 @@
   --chip-fg: #e2e0da;
   --badge-bg: #3b4245;
   --prose-fg: #edebe5;
-  --reading-panel-bg: rgba(22, 26, 28, var(--bd-panel, .9));
+  --reading-panel-bg: rgba(22, 26, 28, var(--bd-panel, .43));
   --reading-panel-fg: #efede7;
   /* Cut, not moulded. */
   --control-radius: 2px;

@@ -83,7 +83,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -286,6 +286,15 @@ CREATE TABLE IF NOT EXISTS chat_chars(
     -- Optional per-story authored card. Runtime state remains separate in
     -- state; NULL follows the reusable characters.sheet resource.
     sheet TEXT,
+    -- The colour this character's spoken lines are tinted in the transcript.
+    -- PRESENTATION, not story state, and deliberately not part of `sheet`:
+    -- the sheet is sent to the model, and a mind has no business knowing what
+    -- colour it is rendered in. Empty means "derive it" -- `dialogue_colors`
+    -- computes a stable hue from the authored psychology, so the common case
+    -- stores nothing at all and only a host's explicit pick is persisted.
+    -- Restored like `sheet` rather than like `state`: a checkpoint rolls back
+    -- what happened in the story, never how the host configured it.
+    dialogue_color TEXT NOT NULL DEFAULT '',
     PRIMARY KEY(chat_id, char_id)
 );
 CREATE INDEX IF NOT EXISTS idx_chat_chars_status ON chat_chars(status);
@@ -1361,6 +1370,15 @@ MIGRATIONS = [
         "created REAL NOT NULL)",
         "CREATE INDEX IF NOT EXISTS idx_relationship_events_pair "
         "ON relationship_events(chat_id, char_id, target)",
+    ],
+    # v28 -> v29
+    [
+        # Per-story dialogue colour. No backfill and none possible: '' is the
+        # live default and means "derive from the card", which is what every
+        # existing row wants. A stored value only ever comes from a host
+        # picking one.
+        "ALTER TABLE chat_chars ADD COLUMN "
+        "dialogue_color TEXT NOT NULL DEFAULT ''",
     ],
 ]
 

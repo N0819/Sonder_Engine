@@ -46,14 +46,22 @@ const BD_SETTLE_MS = 220, BD_DWELL_MS = 2000;
 // which protected readability but meant the same room could look markedly
 // different depending on how bright its render came out.
 const BD_VEIL = 0.62;
-// The per-turn prose panel: near-opaque, so the words sit on a solid surface
-// and only a faint impression of the room comes through. Below ~0.85 the
-// picture starts competing with the text; above ~0.94 it reads as a plain box
-// and the backdrop may as well not be there.
-// Still luminance-driven, but over a deliberately narrow band -- at this
-// strength the measurement is a refinement (a bright render gets the top of
-// the range) rather than the difference between readable and not.
-const BD_PANEL_MIN = 0.86, BD_PANEL_MAX = 0.92;
+// The per-turn prose panel. It ran 0.86-0.92 -- near-opaque, the room only a
+// faint impression behind a solid surface. It is now roughly 60% transparent,
+// so the picture genuinely reads through the column and the panel is a tint
+// over the room rather than a box in front of it.
+//
+// What carries the readability that the missing opacity used to: a mild
+// backdrop-filter blur on the panel, and a thin four-way outline on the glyphs
+// themselves (both in styles.css, `body.has-backdrop .prose`). Those two are
+// load-bearing at this alpha, not decoration -- drop either one and bright
+// detail in the render starts eating letterforms.
+//
+// The band is wider than the old one because the measurement now matters. At
+// 0.86-0.92 luminance was a refinement; here it is the difference between a
+// dark room the words sit on comfortably and a bright one that needs real
+// help, so a bright render pulls a materially heavier tint.
+const BD_PANEL_MIN = 0.34, BD_PANEL_MAX = 0.50;
 
 function backdropLayers() {
   if (BD.layers) return BD.layers;
