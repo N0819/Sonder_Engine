@@ -391,7 +391,11 @@ function renderChat() {
   for (const t of frameTurns) {
     const isLast = last && t.id === last.id;
     const d = el("div", {
-      class: "turn" + (t.stale ? " stale" : "")
+      class: "turn" + (t.stale ? " stale" : ""),
+      // Findable by id from outside this render. The narration preview needs
+      // it to repaint a turn that is ALREADY on screen instead of appending a
+      // second copy of the same beat below it.
+      "data-turn": t.id,
     });
 
     if (t.player_input) {
@@ -760,18 +764,41 @@ function showNarrationEarly(ev) {
   if (typeof prose !== "string" || !prose.trim()) return;
   const M = document.getElementById("msgs");
   if (!M) return;
+  const colors = S.chat && S.chat.dialogue_colors;
+  const turnId = _activeRun && _activeRun.turnId;
 
-  // Reused rather than appended, because the narrator runs again on a
-  // fidelity or craft rewrite -- measured at about a quarter of turns. A
-  // second element per rewrite would show the reader the same beat twice and
-  // let the superseded one stand.
+  // RE-RUNNING A TURN THAT IS ALREADY ON SCREEN: repaint it where it sits.
+  // Appending a preview instead put the same beat on screen twice -- the real
+  // turn, and an uncoloured copy below it that vanished when commit
+  // re-rendered. Rerolling narration is exactly what someone does while
+  // tuning it, so that was the common path, not the rare one.
+  if (turnId != null && S.chat) {
+    const live = M.querySelector(`.turn[data-turn="${turnId}"] .prose`);
+    if (live) {
+      const known = (S.chat.turns || []).find((t) => t.id === turnId);
+      paintProse(live, prose, known && known.speech, colors);
+      return;
+    }
+  }
+
+  // A TURN NOBODY HAS SEEN YET: show the whole thing, not a bare slab of
+  // prose. The player's own line belongs above it exactly as it will once the
+  // turn commits, so the preview reads as the finished beat rather than as a
+  // stray message. Reused rather than appended, because the narrator runs
+  // again on a fidelity or craft rewrite -- measured at about a quarter of
+  // turns -- and a second element per rewrite would show the same beat twice
+  // and let the superseded one stand.
   let d = document.getElementById(EARLY_TURN_ID);
   if (!d) {
     d = el("div", { class: "turn", id: EARLY_TURN_ID });
     M.append(d);
   }
   d.textContent = "";
-  d.append(el("div", { class: "prose" }, prose));
+  const said = _activeRun && _activeRun.playerInput;
+  if (said) d.append(el("div", { class: "pin" }, said));
+  // Uncoloured, and honestly so: dialogue_log for a turn that has not
+  // committed does not exist yet, so there is nothing to attribute from.
+  d.append(paintProse(el("div", { class: "prose" }), prose, null, colors));
   M.scrollTop = M.scrollHeight;
 }
 
@@ -921,6 +948,17 @@ async function runStream(url, body, context = {}) {
   const run = {
     chatId: context.chatId !== undefined ? context.chatId : S.chatId,
     frameId: context.frameId !== undefined ? context.frameId : S.currentFrameId,
+    // WHICH turn this run is re-running, when it is re-running one. The
+    // narration preview needs it to paint in colour: a reroll's turn is
+    // already on screen, so its committed speaker index is in hand and the
+    // preview can look like the beat it is previewing instead of dropping to
+    // flat text. A composer run has no id here and no index to find -- the
+    // dialogue_log for a turn that has not committed does not exist yet, and
+    // the preview is honestly uncoloured until it does.
+    turnId: context.turnId !== undefined ? context.turnId : null,
+    // What the player typed, so a preview of a turn that does not exist yet
+    // can show it above the prose and look like the finished beat.
+    playerInput: context.playerInput || "",
   };
   _activeRun = run;
   S.busy = true;
@@ -983,7 +1021,7 @@ function confirmCheckpointRestore() {
 }
 
 function runReroll(tid) {
-  return runStream(`/api/turns/${tid}/reroll`, {});
+  return runStream(`/api/turns/${tid}/reroll`, {}, { turnId: tid });
 }
 
 async function rerollTurn(tid) {
@@ -1331,7 +1369,8 @@ async function openPipeline(tid) {
                 async () => {
                   await runStream(
                     `/api/turns/${tid}/resume`,
-                    {}
+                    {},
+                    { turnId: tid }
                   );
                   await openPipeline(tid);
                 }
@@ -1506,7 +1545,8 @@ async function openPipeline(tid) {
               if (s.key === "commit" && !await confirmCheckpointRestore()) return;
               await runStream(
                 `/api/steps/${s.id}/reroll`,
-                {}
+                {},
+                { turnId: tid }
               );
               await openPipeline(tid);
             }
@@ -1522,7 +1562,8 @@ async function openPipeline(tid) {
               if (!await confirmCheckpointRestore()) return;
               await runStream(
                 `/api/turns/${tid}/rerun`,
-                { from_key: s.key }
+                { from_key: s.key },
+                { turnId: tid }
               );
               await openPipeline(tid);
             }

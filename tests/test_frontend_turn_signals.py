@@ -148,3 +148,54 @@ class TestBrowsingTheRerollsOfTheNewestBeat:
 
         assert "if (!turnEl.isConnected) return;" in body
         assert "if (variants.length < 2) return;" in body
+
+
+class TestTheNarrationPreviewLooksLikeAFinishedTurn:
+    """Reported live: two boxes with the same prose, the extra one uncoloured,
+    vanishing when commit finished and leaving the correct turn behind.
+
+    The preview is wanted -- it spares a reader the whole commit tail for
+    words that already exist. Two things were wrong with it. It appended a
+    bare slab of prose even when the turn it was previewing was ALREADY on
+    screen, which is the common path (rerolling narration is what someone
+    does while tuning it). And it built that prose the raw way while every
+    other render went through the speaker-colouring path, so the copy was
+    flat.
+
+    Now: a re-run repaints the turn where it sits, and a turn nobody has seen
+    yet gets the player's own line above the prose, so the preview reads as
+    the finished beat rather than as a stray message.
+    """
+
+    def test_a_rendered_turn_can_be_found_by_id(self):
+        """Without this the preview cannot reach the element it should be
+        repainting, and appending is the only option left."""
+        assert '"data-turn": t.id,' in CHAT
+
+    def test_a_re_run_repaints_in_place_and_appends_nothing(self):
+        body = CHAT[CHAT.index("function showNarrationEarly"):]
+        body = body[:body.index("\n}\n")]
+        repaint = body[:body.index("let d = document.getElementById")]
+        assert '.turn[data-turn="${turnId}"] .prose' in repaint
+        assert "paintProse(live" in repaint
+        # Returns before it can reach the append path below.
+        assert "return;" in repaint
+
+    def test_a_new_turn_previews_the_players_line_with_it(self):
+        body = CHAT[CHAT.index("function showNarrationEarly"):]
+        body = body[:body.index("\n}\n")]
+        assert '_activeRun.playerInput' in body
+        assert 'el("div", { class: "pin" }, said)' in body
+
+    def test_the_preview_goes_through_the_colouring_path(self):
+        body = CHAT[CHAT.index("function showNarrationEarly"):]
+        body = body[:body.index("\n}\n")]
+        assert "paintProse(" in body
+        assert 'el("div", { class: "prose" }, prose)' not in body
+
+    def test_every_re_run_caller_says_which_turn_it_is_re_running(self):
+        """reroll, rerun-from-step, step reroll and resume all know the id; a
+        caller that forgets it silently falls back to appending a duplicate
+        rather than failing, which is why this is pinned."""
+        assert CHAT.count("{ turnId: tid }") == 4
+        assert "turnId: context.turnId !== undefined" in CHAT
