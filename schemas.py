@@ -2937,6 +2937,25 @@ class BookOp(LenientModel):
     scope_location_id: Optional[str] = None
     anchor_entity_id: Optional[str] = None
 
+def _one_or_many_locations(value):
+    """One named place where a lore entry is known, or several.
+
+    `LenientModel` already reads `""` as "nothing to report" for a declared
+    list. It does not reach the mirror case: a NON-empty scalar, where the
+    model named a single location instead of a list holding one. Measured
+    across the live corpus that is 4 of 17 validation failures -- 24% of every
+    repair call -- and the whole mapping commit was thrown away over the
+    difference between `"the vault"` and `["the vault"]`.
+
+    Wrapped, never split. A comma inside the string might be two places or one
+    place with a comma in its name, and this module's charter is to READ a
+    near-miss shape, not to invent structure that was never sent.
+    """
+    if isinstance(value, str) and value.strip():
+        return [value]
+    return value
+
+
 class LoreOp(LenientModel):
     op: str = "create"
     id: Optional[int] = None
@@ -2948,6 +2967,9 @@ class LoreOp(LenientModel):
     knowledge_tag: Optional[str] = None
     knowledge_range: Optional[str] = None
     knowledge_locations: list[str] = Field(default_factory=list)
+    _coerce_locations = validator("knowledge_locations", pre=True,
+                                  allow_reuse=True)(
+        lambda cls, v: _one_or_many_locations(v))
     importance: Optional[float] = None
     aliases: Optional[list[str]] = None
     scope: Optional[dict[str, Any]] = None

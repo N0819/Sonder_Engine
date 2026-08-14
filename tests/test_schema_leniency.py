@@ -1186,3 +1186,24 @@ def test_an_ambiguous_event_number_still_fails():
     for sent in ("1,2", "none", "first"):
         with pytest.raises(Exception):
             _validate(ResolvedEvent, {"event_id": sent, "status": "encoded"})
+
+
+def test_one_named_location_is_read_as_a_list_of_one():
+    """4 of 17 validation failures across the live corpus -- 24% of every
+    repair call -- were the whole mapping commit thrown away over the
+    difference between "the vault" and ["the vault"]. LenientModel already
+    reads "" as an empty list; this is the mirror case it did not reach."""
+    from schemas import LoreOp, _validate
+    assert _validate(LoreOp, {"op": "create",
+                              "knowledge_locations": "the vault"}
+                     ).knowledge_locations == ["the vault"]
+
+
+def test_a_comma_inside_a_location_is_not_split_into_two():
+    """Wrapped, never split. A comma might be two places or one place with a
+    comma in its name, and reading a near-miss shape is not licence to invent
+    structure that was never sent."""
+    from schemas import LoreOp, _validate
+    got = _validate(LoreOp, {"op": "create",
+                             "knowledge_locations": "Vault, Lower"})
+    assert got.knowledge_locations == ["Vault, Lower"]
