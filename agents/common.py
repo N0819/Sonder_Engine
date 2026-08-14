@@ -4454,8 +4454,17 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
 _DANGLING_SPEECH_VERB_RE = re.compile(
     r"\b(say|says|said|ask|asks|asked|tell|tells|told|call|calls|called|"
     r"shout|shouts|shouted|murmur|murmurs|murmured|whisper|whispers|whispered|"
-    r"reply|replies|replied|answer|answers|answered)\b,?\s*(?=[.!?]|$)",
-    re.IGNORECASE,
+    # `[^\S\n]*` rather than `\s*`: the trailing whitespace this consumes must
+    # not include the paragraph break it is standing in front of, or healing a
+    # dangling verb silently welds two paragraphs together.
+    r"reply|replies|replied|answer|answers|answered)\b,?[^\S\n]*(?=[.!?]|$)",
+    # MULTILINE so `$` reaches the end of a PARAGRAPH, not just the end of the
+    # string. Stripping a player quote off the end of a paragraph leaves the
+    # verb dangling there exactly as it does at the end of the prose, and
+    # before paragraph breaks survived this far there was no such position to
+    # catch: everything collapsed onto one line, where the dangling verb ran
+    # into the next sentence instead ("You say, The guard does not move.").
+    re.IGNORECASE | re.MULTILINE,
 )
 
 # A quote can also be introduced by an attributive CLAUSE ending in a colon
@@ -4564,7 +4573,19 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
     for token, form in masks:
         prose = prose.replace(token, form)
     prose = _collapse_empty_quote_debris(prose)
-    return re.sub(r"\s{2,}", " ", prose).strip()
+    # HORIZONTAL WHITESPACE ONLY. This was `\s{2,}` -> " ", which cleans the
+    # double space a removed quote leaves behind and ALSO ate every paragraph
+    # break in the story, because `\s` is newlines too.
+    #
+    # That is the whole reason narrator prose was arriving unbroken. Three
+    # contracts were built and measured against a model that was often doing
+    # its part -- the blank-line instruction's 1% and the marker contract's
+    # live `paragraph_count` of 3, 4, 8, 10 both passed through here and came
+    # out flat. The engine was deleting the breaks after the model wrote them.
+    prose = re.sub(r"[^\S\n]{2,}", " ", prose)      # the spacing debris
+    prose = re.sub(r"[^\S\n]*\n[^\S\n]*", "\n", prose)  # tidy around breaks
+    prose = re.sub(r"\n{3,}", "\n\n", prose)        # never a blank run
+    return prose.strip()
 
 
 # An empty quote pair -- '' "" “” -- left where a stripped player line used to
