@@ -118,8 +118,46 @@ from auth_routes import (
 # drive-by. Add a specific allow_origins list back only if a real
 # cross-origin caller (a separate dev server on another port, say) is
 # ever actually needed.
+def _reconcile_embedding_bank():
+    """Hand the memory bank back to the reconciler, off the startup path.
+
+    `memory.start_rebuild_if_needed` documents itself as "safe to call on every
+    startup and every settings write", and startup never called it. The
+    invitation was written into the function and never taken up, so the only
+    things that reconciled a bank were a checkpoint restore and the host
+    clicking the button.
+
+    That matters because a degraded WRITE is permanent. Measured across the
+    live corpus: 39 embedding fallbacks, every one of them an HTTP 429 from the
+    provider, and each leaves its rows stamped `cheap:crc32:256` -- reachable
+    by keyword and invisible to semantic recall until somebody pays for a
+    rebuild. A rate limit is a transient condition writing a permanent defect,
+    and the repair for it already existed one call away.
+
+    On its OWN thread because the decision costs a provider round trip
+    (`embedding_bank_status` asks what the live model is), and startup must not
+    wait on the network to serve its first request. Failures are logged and
+    swallowed on the same rule the checkpoint path follows: a maintenance task
+    must never be able to break the thing it was maintaining.
+    """
+    def _go():
+        try:
+            from memory import start_rebuild_if_needed
+            decision = start_rebuild_if_needed()
+            if decision.get("started"):
+                print("Sonder Engine: reconciling %d memory rows onto the "
+                      "live embedding model in the background."
+                      % decision.get("stranded", 0), flush=True)
+        except Exception as exc:                     # never fail startup
+            print("Sonder Engine: embedding reconcile skipped (%s)." % exc,
+                  flush=True)
+    threading.Thread(target=_go, name="startup-embedding-reconcile",
+                     daemon=True).start()
+
+
 def _startup_engine():
     db.init()
+    _reconcile_embedding_bank()
     port = os.environ.get("FICTION_ENGINE_PORT", "8008")
     # FICTION_ENGINE_RESET_HOST is the forgot-password escape hatch: wipe
     # the account (and every session) so /login shows first-run setup again.

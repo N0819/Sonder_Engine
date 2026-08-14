@@ -318,3 +318,35 @@ class TestCarryingARebuildBackThroughSavedStates:
         src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
         assert "check = json.loads(text)" in src
         assert "!= len(blob.get(\"memories\")" in src
+
+
+class TestStartupHandsTheBankBackToo:
+    """A degraded WRITE is permanent, so the reconciler has to run without
+    being asked. Measured across the live corpus: 39 embedding fallbacks,
+    every one an HTTP 429, each leaving its rows stamped `cheap:crc32:256` --
+    keyword-reachable and invisible to semantic recall. `start_rebuild_if_needed`
+    documents itself as "safe to call on every startup"; startup did not call
+    it, so the only reconcilers were a checkpoint restore and the host clicking
+    the button.
+    """
+
+    def test_startup_reconciles_the_embedding_bank(self):
+        import inspect
+
+        import app
+        src = inspect.getsource(app._startup_engine)
+        assert "_reconcile_embedding_bank" in src
+
+    def test_it_never_waits_on_the_network_or_breaks_startup(self):
+        """The decision costs a provider round trip, so it runs on its own
+        thread; and a maintenance task must never break the thing it maintains
+        -- the same rule the checkpoint path follows."""
+        import inspect
+
+        import app
+        src = inspect.getsource(app._reconcile_embedding_bank)
+        assert "Thread(" in src and "daemon=True" in src
+        # The CALL, not the docstring's mention of it.
+        i = src.index("start_rebuild_if_needed()")
+        assert "try:" in src[max(0, i - 400):i]
+        assert "except Exception" in src[i:i + 400]
