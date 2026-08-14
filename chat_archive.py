@@ -702,14 +702,19 @@ class ChatArchiveService:
                             f"Invalid story card for character {old_char_id}",
                         ) from exc
                 qtx(
-                    "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
-                    "VALUES(?,?,?,?,?)",
+                    "INSERT INTO chat_chars"
+                    "(chat_id,char_id,status,state,sheet,dialogue_color) "
+                    "VALUES(?,?,?,?,?,?)",
                     (
                         new_chat_id,
                         new_char_id,
                         participant.get("status", "active"),
                         participant.get("state", "{}"),
                         override_sheet,
+                        # Absent in archives written before v29; '' is the
+                        # live default and means "derive from the card", so an
+                        # older story imports looking exactly as it did.
+                        participant.get("dialogue_color") or "",
                     ),
                 )
 

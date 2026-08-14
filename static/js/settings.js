@@ -434,6 +434,53 @@ $("#b-cast").onclick = async () => {
   }, { wide: true });
 };
 
+// The colour this character's spoken lines are tinted in the transcript.
+// `p.dialogue_color` is the host's PICK ("" when they have not made one);
+// `d.dialogue_colors[name]` is what they actually see, which for an unpicked
+// character is derived from the authored psychology. The swatch shows the
+// second and edits the first, and "auto" clears the pick rather than storing
+// the derived value -- store it and the colour stops following the card.
+//
+// The server returns the whole re-resolved cast because colours are spread
+// against each other: pinning one can legitimately move another, and
+// repainting only this row would leave a stale palette on screen.
+function dialogueColorControl(p, d, chatId) {
+  const colors = d.dialogue_colors || {};
+  const swatch = el("input", {
+    type: "color",
+    class: "dialogue-swatch",
+    title: p.dialogue_color
+      ? `Dialogue colour for ${p.name} (chosen)`
+      : `Dialogue colour for ${p.name} (from their card)`,
+    value: colors[p.name] || "#cccccc",
+  });
+  const auto = el("button", {
+    class: "small",
+    title: "Go back to the colour derived from this character's card",
+    onclick: async () => { await save(""); },
+  }, "auto");
+
+  async function save(color) {
+    const r = await api(
+      "PUT", `/api/chats/${chatId}/characters/${p.id}/dialogue_color`,
+      { color });
+    p.dialogue_color = r.color || "";
+    d.dialogue_colors = r.dialogue_colors || {};
+    if (S.chat && S.chatId === chatId) {
+      S.chat.dialogue_colors = d.dialogue_colors;
+      renderChat();
+    }
+    swatch.value = d.dialogue_colors[p.name] || "#cccccc";
+    auto.style.visibility = p.dialogue_color ? "visible" : "hidden";
+  }
+
+  // `change` rather than `input`: a colour picker fires continuously while
+  // the user drags, and each one is a write plus a full transcript repaint.
+  swatch.addEventListener("change", () => save(swatch.value));
+  auto.style.visibility = p.dialogue_color ? "visible" : "hidden";
+  return el("span", { class: "dialogue-color" }, swatch, auto);
+}
+
 function renderCastTab(d, b, chatId) {
   const ps = el("select", {}, [
     el("option", { value: "" }, "(no persona)"),
@@ -476,6 +523,7 @@ function renderCastTab(d, b, chatId) {
         ? el("span", { class: "badge" }, "story card") : null,
       locationSlot,
       el("span", { class: "spacer" }),
+      dialogueColorControl(p, d, chatId),
       el("button", {
         title: "Edit this character card for this story only",
         onclick: () => charEditor(p, { chatId })
@@ -642,6 +690,30 @@ function vitalMeter(value, invert) {
 const VITALS_MIN_GUTTER = 186;
 const VITALS_MAX_WIDTH = 232;
 
+// The story column's width. It used to be a flat 720px, which left a wide
+// window mostly empty either side of the transcript; it now grows into
+// whatever space the furniture around it is not using, and stops there.
+//
+// STOPS THERE is the whole point. The vitals tracker and the ambience buttons
+// float OVER #main (see "positions #vitals-npcs over the story" in
+// styles.css); the sidebar and the pipeline drawer are in flow, so they
+// already shrink #main and need no reservation here. Growing past the two
+// floats would put prose underneath them.
+//
+// The TEXT does not widen with the panel -- .prose keeps its reading measure
+// and gains margins instead, the way a book page gets wider. Past roughly
+// 75-80 characters a line the eye loses the return sweep, so a wider column
+// would undo the measure the prose face was chosen for.
+//
+// The reserve is symmetric because the column is centred: whichever side needs
+// more room sets both. It keys on `hidden` (the panel holds nothing) rather
+// than `fits` (the panel has no room), which is what stops this feeding back
+// into itself -- `fits` is an OUTPUT of the width chosen here, so keying on it
+// would let the column widen, evict the tracker, and widen again.
+const STORY_MIN_WIDTH = 720;
+const STORY_MAX_WIDTH = 1080;
+const STORY_EDGE = 24;
+
 function syncVitalsGutterNow() {
   const composer = $("#composer");
   const inner = $("#composer-inner");
@@ -672,6 +744,12 @@ function syncVitalsGutterNow() {
   const band = composer.offsetHeight;
   const playerHost = $("#vitals");
   const npcHost = $("#vitals-npcs");
+  // Read with the other measurements, ahead of every write. The ambience
+  // cluster is measured rather than assumed: it is a variable number of icon
+  // buttons and it grows when a track is playing.
+  const shellWidth = composer.getBoundingClientRect().width;
+  const ambBar = $("#ambience-bar");
+  const ambWidth = ambBar ? Math.ceil(ambBar.getBoundingClientRect().width) : 0;
 
   const playerVisible = playerHost && !playerHost.classList.contains("hidden");
   // Read up here with the other measurements: the panel's own height does not
@@ -685,6 +763,25 @@ function syncVitalsGutterNow() {
     const above = playerVisible ? playerHeight + 10 : 0;
     npcHost.style.setProperty("--vitals-bottom", (band + 12 + above) + "px");
   }
+  // Widest the story column may be without running under either float. The
+  // tracker sits on the left and the ambience cluster on the right; the column
+  // is centred, so the larger of the two claims both margins.
+  const npcVisible = npcHost && !npcHost.classList.contains("hidden");
+  const trackerPresent = Boolean(playerVisible || npcVisible);
+  const reserve = Math.max(
+    STORY_EDGE,
+    trackerPresent ? VITALS_MIN_GUTTER + 12 : 0,
+    ambWidth ? ambWidth + 20 : 0,
+  );
+  const storyWidth = Math.round(Math.min(
+    STORY_MAX_WIDTH,
+    Math.max(STORY_MIN_WIDTH, shellWidth - reserve * 2),
+  ));
+  // On the root, beside --bd-panel: the transcript and the composer both read
+  // it, and they must not disagree -- #composer-inner shares the column so the
+  // input box keeps the same left and right edge as the prose above it.
+  document.documentElement.style.setProperty("--story-width", storyWidth + "px");
+
   const fits = usable >= VITALS_MIN_GUTTER;
   const width = Math.min(Math.max(usable, 0), VITALS_MAX_WIDTH) + "px";
 

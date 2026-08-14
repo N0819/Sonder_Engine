@@ -23,6 +23,7 @@ from providers import (
     DEFAULT_BASES, ROLES, ROLE_FALLBACKS, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
 )
 from pipeline_context import PipelineContext, ChatData, TurnData
+from dialogue_colors import normalize_color, resolve_cast_colors
 from checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
                          refresh_checkpoint, insert_world_tables,
                          checkpoint_storage_status, compaction_progress,
@@ -2347,23 +2348,66 @@ def chat_get(cid: int):
         raise HTTPException(404)
 
     parts = []
+    color_cast = []
     for row in q(
         "SELECT ch.id,COALESCE(cc.sheet,ch.sheet) AS sheet,cc.sheet AS override_sheet,"
-        "cc.state,cc.status FROM chat_chars cc "
-        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        "cc.state,cc.status,cc.dialogue_color FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=? "
+        "ORDER BY cc.char_id",
         (cid,),
     ):
         sheet = normalize_character_data(json.loads(row["sheet"] or "{}"))
         state = json.loads(row["state"] or "{}")
         if state.get("private_history") is not None:
             sheet["knowledge"]["private_history"] = state["private_history"]
+        name = character_name(sheet)
         parts.append({
             "id": row["id"],
-            "name": character_name(sheet),
+            "name": name,
             "sheet": json.dumps(sheet, ensure_ascii=False),
             "status": row["status"],
             "card_source": "chat" if row["override_sheet"] is not None else "library",
+            # "" means the host has not chosen one; the resolved colour they
+            # will actually see is in `dialogue_colors` below. Both are sent:
+            # the picker needs to show whether a colour is chosen or derived.
+            "dialogue_color": row["dialogue_color"] or "",
         })
+        color_cast.append({
+            "uid": name,
+            "sheet": sheet,
+            "color": row["dialogue_color"] or "",
+        })
+
+    # Keyed by DISPLAY NAME, because that is what a dialogue_log entry records
+    # as its speaker. ORDER BY char_id above is what makes collision spreading
+    # deterministic -- the same cast must resolve to the same colours on every
+    # read, or a reload would repaint the story.
+    dialogue_colors = resolve_cast_colors(color_cast)
+
+    # Who said which line, per turn -- the index the transcript colours from.
+    # NOT a new persisted thing: `dialogue_log` has always been committed here,
+    # and DIALOGUE FIDELITY requires every one of these lines to appear in the
+    # narrator's prose verbatim, so the renderer can find each quote and tint
+    # it without storing an offset that a prose edit would invalidate. A quote
+    # that no longer matches simply goes uncoloured; nothing is coloured by
+    # guess.
+    speech_by_turn = {}
+    for row in q("SELECT turn_id, content FROM events WHERE chat_id=? "
+                 "AND turn_id IS NOT NULL", (cid,)):
+        try:
+            entries = (json.loads(row["content"]) or {}).get("dialogue_log")
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+        lines = []
+        for entry in (entries or []):
+            if not isinstance(entry, dict):
+                continue
+            speaker = str(entry.get("speaker") or "").strip()
+            quote = str(entry.get("exact_quote") or "").strip()
+            if speaker and quote:
+                lines.append({"speaker": speaker, "quote": quote})
+        if lines:
+            speech_by_turn[row["turn_id"]] = lines
 
     # One query for the whole chat, replacing the per-turn COUNT this used to
     # run: the widened payload is CHEAPER than the boolean it replaces.
@@ -2405,6 +2449,7 @@ def chat_get(cid: int):
                 ),
                 "prose_stale": any(r["key"] == "narrator" for r in rows),
                 "frame_id": t["frame_id"],
+                "speech": speech_by_turn.get(t["id"]) or [],
             }
         )
 
@@ -2523,6 +2568,7 @@ def chat_get(cid: int):
         "chat": dict(chat),
         "participants": parts,
         "turns": turns,
+        "dialogue_colors": dialogue_colors,
         "lorebook": lbc,
         "lorebooks": books,
         "frames": list_frames(cid),
@@ -3185,6 +3231,58 @@ def ph_put(cid: int, ch: int, body: dict = Body(...)):
     qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?", (json.dumps(st), cid, ch))
     return {"ok": True}
 
+@app.put("/api/chats/{cid}/characters/{ch}/dialogue_color")
+def dialogue_color_put(cid: int, ch: int, body: dict = Body(...)):
+    """Pin this character's dialogue colour for this story, or clear the pin.
+
+    An empty/absent `color` stores "" and hands the character back to the
+    derivation -- which is the difference between "no colour" (impossible;
+    everyone gets one) and "no CHOICE" (the default). A value this cannot read
+    is refused rather than stored, because a stored unreadable colour would
+    look identical to an unset one while being much harder to explain.
+
+    The response returns the whole resolved cast, not just this character:
+    colours are spread against each other, so pinning one can legitimately
+    move another, and the client would otherwise paint a stale palette until
+    the next full chat load.
+    """
+    cc = q("SELECT 1 FROM chat_chars WHERE chat_id=? AND char_id=?",
+           (cid, ch), one=True)
+    if not cc:
+        raise HTTPException(404)
+
+    raw = str(body.get("color") or "").strip()
+    color = normalize_color(raw)
+    if raw and not color:
+        raise HTTPException(400, "color must be #rgb or #rrggbb")
+
+    qi("UPDATE chat_chars SET dialogue_color=? WHERE chat_id=? AND char_id=?",
+       (color, cid, ch))
+    return {"ok": True, "color": color,
+            "dialogue_colors": _resolved_dialogue_colors(cid)}
+
+
+def _resolved_dialogue_colors(cid: int):
+    """{display name: "#rrggbb"} for one story's cast.
+
+    Keyed by display name because that is what `dialogue_log` records as its
+    speaker. ORDER BY char_id is load-bearing: collision spreading walks the
+    cast in order, so a different row order would resolve to a different
+    palette and the story would repaint itself on reload.
+    """
+    cast = []
+    for row in q(
+        "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet,cc.dialogue_color "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        "WHERE cc.chat_id=? ORDER BY cc.char_id",
+        (cid,),
+    ):
+        sheet = normalize_character_data(json.loads(row["sheet"] or "{}"))
+        cast.append({"uid": character_name(sheet), "sheet": sheet,
+                     "color": row["dialogue_color"] or ""})
+    return resolve_cast_colors(cast)
+
+
 @app.get("/api/chats/{cid}/persona_private_history")
 def pph_get(cid: int):
     ents = wget(cid, "persona_private_history", None)
@@ -3840,12 +3938,17 @@ def turn_branch(tid: int):
                     (frame_idmap[f["parent_frame_id"]], frame_idmap[f["id"]]),
                 )
 
-        # Copy chat characters
+        # Copy chat characters. dialogue_color rides along with sheet for the
+        # same reason: a branch inherits how the story was CONFIGURED, and a
+        # cast that changed colour the moment you branched would read as a
+        # rendering fault rather than a new timeline.
         for cc in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,)):
             qtx(
-                "INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
-                "VALUES(?,?,?,?,?)",
-                (ncid, cc["char_id"], cc["status"], cc["state"], cc["sheet"])
+                "INSERT INTO chat_chars"
+                "(chat_id,char_id,status,state,sheet,dialogue_color) "
+                "VALUES(?,?,?,?,?,?)",
+                (ncid, cc["char_id"], cc["status"], cc["state"], cc["sheet"],
+                 cc["dialogue_color"] or "")
             )
 
         # Copy per-frame character overrides (state/status divergence between

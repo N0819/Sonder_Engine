@@ -169,6 +169,147 @@ async function openChat(id) {
 // definition in utils.js. Two browser tabs (or two different users) can
 // independently pick different frames; the backend has no single
 // "current" to keep in sync with.
+// ---- Colouring who spoke ----
+// The transcript tints each character's spoken lines. What makes that possible
+// without any new stored data is that the engine already records WHO said WHAT
+// -- `dialogue_log` is committed per turn and arrives as `turn.speech` -- and
+// DIALOGUE FIDELITY requires every one of those lines to appear in the prose
+// verbatim. So this finds each quote in the text it was required to be in and
+// wraps it. Nothing stores an offset, so editing a turn's prose cannot desync
+// anything: a quote that no longer matches simply goes uncoloured.
+//
+// NEVER innerHTML. Every node here is createTextNode/createElement, the same
+// as the rest of the transcript -- the prose is model output, and the moment
+// it reaches an HTML parser it is an injection surface.
+
+// Typographic variants folded before matching, mirroring
+// `agents/common._TYPOGRAPHY_FOLD` -- a model renders the same line twice with
+// different punctuation and a byte-wise search would miss the second one.
+// STRICTLY ONE CHARACTER FOR ONE, so positions in the folded string are
+// positions in the original. That is why `…` is left alone: folding it to
+// "..." would shift every index after it and the wrap would land crooked.
+const _FOLD_PAIRS = { "‐": "-", "‑": "-", "‒": "-",
+  "–": "-", "—": "-", "‘": "'", "’": "'",
+  "“": '"', "”": '"' };
+
+function foldTypography(text) {
+  return String(text || "").replace(/[‐-—‘’“”]/g,
+    (ch) => _FOLD_PAIRS[ch] || ch);
+}
+
+// A DIALOGUE TAG CHANGES TERMINAL PUNCTUATION, MECHANICALLY. The logged line
+// is `Right then.` and the narrator renders `"Right then," The Doctor
+// answers` -- same delivered line, different last character, and a literal
+// search finds nothing. Measured on chat 70 turn 16: this was the whole
+// reason a Doctor line came out uncoloured while three others matched.
+// `agents/common._contains_quote` has stripped terminal punctuation for the
+// same reason since long before this existed; the comment there is the
+// authority. Stripping it here means the span covers the WORDS and stops
+// before the tag's comma, which is also what you want to see tinted.
+function quoteBody(quote) {
+  return String(quote || "").trim()
+    .replace(/^["'“”‘’]+/, "")
+    .replace(/["'“”‘’]+$/, "")
+    .trim()
+    .replace(/[.,!?…;:]+$/, "")
+    .trim();
+}
+
+// The quoted regions of the prose, as [{start, end}] INCLUDING both marks.
+// Scanned on the folded text so curly and straight pairs are one case; the
+// fold is one-for-one, so these indices are indices into the original.
+function quotedRegions(hay) {
+  const out = [];
+  let open = -1;
+  for (let i = 0; i < hay.length; i++) {
+    if (hay[i] !== '"') continue;
+    if (open < 0) open = i;
+    else { out.push({ start: open, end: i + 1 }); open = -1; }
+  }
+  return out;  // an unclosed final quote is dropped, not guessed at
+}
+
+// [{start, end, speaker}], non-overlapping, in document order.
+//
+// THE UNIT IS THE QUOTED REGION, NOT THE MATCHED SUBSTRING. Two things make
+// the substring wrong, both seen on chat 70 turn 16. The stored quote has its
+// marks stripped to survive matching, so tinting the match leaves the `"` at
+// each end bare. And the narrator legitimately merges several dialogue_log
+// entries into one utterance -- "Right." and "Stars. After Kyoto..." came back
+// inside a single pair of quotes -- so matching per entry tints two islands
+// and leaves the punctuation between them uncoloured. Colouring the region a
+// match FALLS IN fixes both: whole line, marks included, however many logged
+// entries it turns out to contain.
+function speechSpans(prose, speech) {
+  const hay = foldTypography(prose);
+  const regions = quotedRegions(hay);
+  const claimed = new Map();   // region index -> speaker, or null if disputed
+  const loose = [];            // matches that fell outside every region
+
+  for (const line of speech || []) {
+    const body = foldTypography(quoteBody(line && line.quote));
+    if (body.length < 2) continue;
+    // Two characters can legitimately say "No." in one beat, so each line
+    // takes the first occurrence not already claimed by someone else.
+    let from = 0;
+    for (;;) {
+      const at = hay.indexOf(body, from);
+      if (at < 0) break;
+      const end = at + body.length;
+      const idx = regions.findIndex((r) => r.start <= at && end <= r.end);
+      if (idx >= 0) {
+        const held = claimed.get(idx);
+        if (held === undefined) { claimed.set(idx, line.speaker); break; }
+        // Two speakers matching inside one pair of quotes means the match is
+        // not trustworthy. Uncoloured beats coloured-as-the-wrong-person.
+        if (held !== line.speaker) { claimed.set(idx, null); break; }
+        break;  // same speaker again: already covered by the region
+      }
+      if (!loose.some((s) => at < s.end && s.start < end)) {
+        loose.push({ start: at, end, speaker: line.speaker });
+        break;
+      }
+      from = at + 1;
+    }
+  }
+
+  const spans = loose.slice();
+  for (const [idx, speaker] of claimed) {
+    if (!speaker) continue;
+    spans.push({ ...regions[idx], speaker });
+  }
+  return spans.sort((a, b) => a.start - b.start)
+    .filter((s, i, all) => i === 0 || s.start >= all[i - 1].end);
+}
+
+// Fills `host` with the prose, quoted lines wrapped in a tinted span.
+function paintProse(host, prose, speech, colors) {
+  host.textContent = "";
+  const text = String(prose || "");
+  const spans = (colors && speech && speech.length)
+    ? speechSpans(text, speech) : [];
+  let cursor = 0;
+  for (const span of spans) {
+    const color = colors[span.speaker];
+    if (!color) continue;
+    if (span.start > cursor) {
+      host.append(document.createTextNode(text.slice(cursor, span.start)));
+    }
+    const mark = el("span", { class: "said", title: span.speaker },
+      text.slice(span.start, span.end));
+    mark.style.color = color;
+    host.append(mark);
+    cursor = span.end;
+  }
+  host.append(document.createTextNode(text.slice(cursor)));
+  return host;
+}
+
+function proseEl(prose, speech) {
+  return paintProse(el("div", { class: "prose" }), prose, speech,
+                    S.chat && S.chat.dialogue_colors);
+}
+
 function renderFrameBar() {
   const bar = $("#framebar");
   bar.innerHTML = "";
@@ -257,7 +398,7 @@ function renderChat() {
       d.append(el("div", { class: "pin" }, t.player_input));
     }
 
-    d.append(el("div", { class: "prose" }, t.prose || "…"));
+    d.append(proseEl(t.prose || "…", t.speech));
 
     // A dim tells a reader something is off but not what. stale_from names
     // the earliest step that was re-run without the rest being recomputed.
@@ -730,7 +871,12 @@ async function showRerollVariant(next) {
   // instant and the request rides behind it; a round trip per arrow press
   // would make browsing feel like loading.
   if (RR.proseEl && RR.proseEl.isConnected) {
-    RR.proseEl.textContent = variant.prose || "…";
+    // Same speech index across every variant of a turn: rerolling narration
+    // re-renders the beat, it does not re-decide who spoke -- dialogue_log
+    // comes from director_resolve, upstream of the narrator.
+    const turn = (S.chat.turns || []).find((t) => t.id === RR.turnId);
+    paintProse(RR.proseEl, variant.prose || "…", turn && turn.speech,
+               S.chat.dialogue_colors);
   }
   RR.index = index;
   _paintRerollCount();

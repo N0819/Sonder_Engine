@@ -67,18 +67,51 @@ radial-gradient(ellipse 70% 65% at 50% 45%,transparent,rgba(6,8,13,.55) 100%)}
 /* The transcript's own surfaces, only while a backdrop is up: prose needs a
    panel to sit on once there is a picture behind it, and must NOT grow one
    when there isn't (an empty panel behind every turn is just noise). */
-/* No backdrop-filter here, deliberately. Each blurred element is its own
-   composited layer whose backdrop must be snapshotted and blurred again on
-   every frame it moves -- i.e. continuously, while scrolling, per panel. What
-   it bought was a blur seen through the 8-14% of these panels that is not
-   already opaque (--bd-panel runs .86-.92, set from the picture's luminance in
-   backdrops.js), which is close to nothing. If you want it back, one
-   `backdrop-filter:blur(3px)` on this rule and one blur(6px) on .pin below
-   restores it exactly. */
-body.has-backdrop .prose{background:rgba(9,12,19,var(--bd-panel,.89));
+/* The blur is BACK, and the reason it left no longer holds. It was removed
+   because each blurred element is its own composited layer whose backdrop must
+   be re-snapshotted and re-blurred every frame it moves -- continuously, while
+   scrolling, per panel -- and what it bought was a blur seen through the 8-14%
+   of the panel that was not already opaque. That was true at --bd-panel .86-.92.
+   The panel now runs ~.40 (backdrops.js), so better than half of it is picture
+   and the blur is the thing keeping the words legible rather than a refinement
+   nobody could see. Kept mild (3px): enough to stop detail behind the column
+   competing with the text, not enough to turn the room to soup. The same
+   weather gate as the vitals plates applies below.
+   THIS RULE ADDS THE PANEL, NEVER A SIZE. The width and the 10px inset live
+   on the base `.prose` rule below so both states share them exactly -- a
+   backdrop appearing must not reflow a single line. Anything size-related
+   added here reintroduces that bug.
+   The text fills the panel rather than holding a reading measure inside it,
+   so the panel width IS the line length and STORY_MAX_WIDTH in settings.js is
+   what controls how long a line gets. Two earlier attempts held the words at
+   68ch instead -- `padding-inline:max(18px,(100% - 68ch)/2)`, then a
+   `minmax(0,68ch)` grid track. Owner's call, twice reported and then decided
+   explicitly: a fixed inset, not a measure. Do not reintroduce a measure
+   without asking; it is a deliberate choice, not an oversight. */
+body.has-backdrop .prose{background:rgba(9,12,19,var(--bd-panel,.42));
 border:1px solid rgba(255,255,255,.055);border-radius:12px;
-padding:13px 18px 15px;max-width:68ch;
-box-shadow:0 12px 34px rgba(0,0,0,.26);text-shadow:0 1px 2px rgba(0,0,0,.5)}
+backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+box-shadow:0 12px 34px rgba(0,0,0,.26);
+/* A thin dark outline, not a drop shadow. At .42 the panel no longer
+   guarantees contrast on its own, and a single offset shadow only protects
+   the glyph from one direction -- a light edge in the picture above a
+   letterform still eats it. Four cardinal offsets at sub-pixel radius read as
+   an outline at this size without the letterform damage -webkit-text-stroke
+   does to a 17px serif (it grows INWARD, so stems thin). Kept as a variable so
+   a themed or luminance-driven strength has one place to land. */
+text-shadow:
+  0 1px 2px rgba(0,0,0,var(--prose-shadow,.55)),
+  0 .5px 0 rgba(0,0,0,var(--prose-outline,.5)),
+  0 -.5px 0 rgba(0,0,0,var(--prose-outline,.5)),
+  .5px 0 0 rgba(0,0,0,var(--prose-outline,.5)),
+  -.5px 0 0 rgba(0,0,0,var(--prose-outline,.5))}
+/* Same unconditional performance gate the vitals plates get: a backdrop-filter
+   re-blurs its backdrop on every frame anything behind it changes, and behind
+   these panels during weather is exactly the thing changing every frame. The
+   translucent plate alone keeps the words readable; a 3px blur of moving
+   streaks is not a legible difference. */
+body.has-weather-fx .prose{backdrop-filter:none!important;
+-webkit-backdrop-filter:none!important}
 @media(prefers-reduced-motion:reduce){
   #scene-backdrop,.bd-layer,.bd-veil{transition:none}
 }
@@ -193,7 +226,13 @@ flex-direction:column;gap:12px;scroll-behavior:smooth;
    `auto` in contain-intrinsic-size means a turn that has been rendered once
    remembers its real height, so the scrollbar and scroll anchoring stay honest
    (the 320px is only the guess for one never yet seen). */
-.turn{max-width:720px;margin:0 auto;width:100%;animation:fade-slide .2s ease both;
+/* --story-width is written by syncVitalsGutter (settings.js) once per painted
+   frame: the widest this column may be without running under the vitals
+   tracker or the ambience cluster, both of which float over #main. 720px is
+   the floor it falls back to before that first frame and on any page with no
+   composer. The prose INSIDE stays measured -- see .prose below. */
+.turn{max-width:var(--story-width,720px);margin:0 auto;width:100%;
+animation:fade-slide .2s ease both;
 content-visibility:auto;contain-intrinsic-size:auto 320px}
 /* ...except the newest few, which are exempt. That is where every render lands
    the reader and where a new beat arrives, and a landing zone measured from
@@ -205,8 +244,11 @@ content-visibility:auto;contain-intrinsic-size:auto 320px}
    staying pinned at 13px system-ui while the story around it scales. Held a
    step below the narration so the turn still reads as narration-with-an-echo
    rather than two competing voices. */
+/* The same fixed 10px inset .prose uses, so the player's echo starts and ends
+   on the same pixels as the narration above it regardless of how wide the
+   column gets. These two insets are one decision; move one and move both. */
 .pin{background:linear-gradient(110deg,rgba(60,91,141,.17),rgba(31,40,57,.78));
-border:1px solid var(--bd);border-radius:8px;padding:8px 12px;
+border:1px solid var(--bd);border-radius:8px;padding:8px 10px;
 white-space:pre-wrap;color:#bcd3ff;box-shadow:var(--soft-shadow);
 font-family:var(--prose-font,Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif);
 font-size:calc(var(--prose-size,17px) * .88);line-height:1.55;opacity:.92}
@@ -215,10 +257,32 @@ font-size:calc(var(--prose-size,17px) * .88);line-height:1.55;opacity:.92}
    face, a real paragraph measure, and more line-height are the highest-
    impact, lowest-risk change available: nothing else in the app matters
    if the prose itself doesn't look considered. */
-.prose{padding:8px 2px 10px;white-space:pre-wrap;
+/* GEOMETRY LIVES HERE, FOR BOTH STATES. The width and the inset are on the
+   base rule so they are identical with and without a scene backdrop; the
+   has-backdrop rule above adds only the PANEL (surface, border, blur,
+   shadow), never a size. Getting this wrong is visible: the base rule used to
+   carry `max-width:65ch` and `padding:8px 2px` while the backdrop rule
+   overrode both, so turning a backdrop on or off reflowed every line of the
+   story and left narrow text stranded in a wide column. A picture appearing
+   behind the words is not a reason for the words to move. */
+.prose{padding:15px 10px 17px;white-space:pre-wrap;max-width:none;
 font-family:var(--prose-font,Charter,"Iowan Old Style","Palatino Linotype",Georgia,serif);
-font-size:var(--prose-size,17px);line-height:1.7;max-width:65ch}
+font-size:var(--prose-size,17px);line-height:1.7}
 .turn.stale .prose{opacity:.55}
+/* A character's spoken line. The colour is set inline per speaker (chat.js
+   paintProse) because it is data, not a theme; everything else about the span
+   is inherited so the glyph outline and the reading face still apply -- a
+   tinted line is the same prose in a different ink, not a different element.
+   No font-weight or background: over a translucent panel those read as
+   highlighting rather than as a voice. */
+.said{color:inherit}
+/* The picker beside each cast member. `auto` only appears once a colour has
+   actually been pinned -- there is nothing to revert to otherwise, and a
+   permanently-visible button that usually does nothing trains people to
+   ignore it. */
+.dialogue-color{display:inline-flex;align-items:center;gap:4px}
+.dialogue-swatch{width:26px;height:22px;padding:0;border:1px solid var(--bd);
+border-radius:5px;background:none;cursor:pointer}
 /* Why the prose above is dimmed. A dim says something is off; it cannot say
    which step was re-run, so chat.js writes a sentence naming it. .small and
    .dim already carry the size and colour -- all this adds is the spacing that
@@ -264,12 +328,14 @@ box-shadow:0 -10px 30px rgba(0,0,0,.13);
 /* Named container so the ambience cluster can respond to how much room is
    actually left beside the 720px column -- see #ambience-bar. */
 container:composer / inline-size}
-/* Same column as .turn: max-width 720px, centred. Matching THAT (rather than
-   .prose's 65ch) is what makes the two line up on screen, because the prose
-   is itself left-aligned inside this centred column -- so both share a left
-   edge and a right edge regardless of prose size. */
-#composer-inner{display:flex;gap:8px;width:100%;max-width:720px;
-margin-inline:auto}
+/* Same column as .turn, including when that column grows: both read
+   --story-width. Matching THAT (rather than .prose's reading measure) is what
+   makes the two line up on screen, because the prose is centred INSIDE this
+   column -- so both share a left edge and a right edge regardless of prose
+   size. If these two ever stop reading the same variable, the input box stops
+   lining up with the story above it. */
+#composer-inner{display:flex;gap:8px;width:100%;
+max-width:var(--story-width,720px);margin-inline:auto}
 /* Grows with what you type, up to a share of the window rather than a fixed
    220px -- at 21px story text that flat cap was barely four lines, and a long
    turn is exactly when seeing what you wrote matters. resizeComposer() reads

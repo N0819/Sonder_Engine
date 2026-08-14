@@ -108,10 +108,15 @@ class TestBrowsingTheRerollsOfTheNewestBeat:
 
     def test_the_flip_paints_before_it_persists(self):
         """The prose is already in hand, so a round trip per arrow press would
-        make comparing two versions feel like loading."""
+        make comparing two versions feel like loading.
+
+        Pinned on `paintProse` rather than a raw `.textContent` write: the
+        variant is painted through the speaker-colouring path now, so the flip
+        keeps each character's dialogue tinted instead of dropping to flat
+        text until the next full chat load."""
         body = CHAT[CHAT.index("async function showRerollVariant"):]
         body = body[:body.index("document.addEventListener")]
-        assert body.index("RR.proseEl.textContent") < body.index(
+        assert body.index("paintProse(RR.proseEl") < body.index(
             'api("POST"')
 
     def test_arrow_keys_yield_to_anything_with_a_caret(self):

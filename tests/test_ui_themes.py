@@ -69,18 +69,28 @@ def test_a_long_row_title_drops_the_action_group_instead_of_truncating():
 
 
 def test_composer_shares_the_story_measure_and_text_size():
-    """The transcript is capped at 65ch while the composer ran full width, so
-    what you typed and what you read were different column widths stacked on
-    each other -- and story text sizing did not reach the input at all."""
+    """The transcript is capped at a reading measure while the composer ran
+    full width, so what you typed and what you read were different column
+    widths stacked on each other -- and story text sizing did not reach the
+    input at all.
+
+    Pinned on the SHARED VARIABLE rather than a literal width. The column is no
+    longer a constant: syncVitalsGutter (settings.js) publishes --story-width
+    per frame from the room the flanking floats leave. What must stay true is
+    that both rules read the same one -- if they ever diverge, the input box
+    stops lining up with the story above it at every width but the fallback."""
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     styles = (STATIC / "styles.css").read_text(encoding="utf-8")
+    settings = (STATIC / "js" / "settings.js").read_text(encoding="utf-8")
 
     # A measure wrapper inside the full-bleed composer chrome, sharing the
     # story column's own max-width so the two line up on screen.
     assert 'id="composer-inner"' in index
     assert '#composer-inner{display:flex;' in styles
-    assert '.turn{max-width:720px;margin:0 auto;' in styles
-    assert 'max-width:720px;\nmargin-inline:auto}' in styles
+    assert '.turn{max-width:var(--story-width,720px);' in styles
+    assert 'max-width:var(--story-width,720px);margin-inline:auto}' in styles
+    # ...and somebody has to actually write it, or both fall to the literal.
+    assert '"--story-width"' in settings
 
     # Story text sizing drives the input, in the prose face.
     input_rule = styles[styles.index("#input{"):]
