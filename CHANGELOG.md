@@ -1,5 +1,86 @@
 # Changelog
 
+## alpha 8.4 — Someone comes when you ring the bell
+
+- **The clerk came, and the engine deleted him.** A player rang a hotel
+  service bell and said so in as many words: *"it is a hotel. even at late
+  hour someone should be staffing it, use logic and reasoning instead of
+  assuming no one is there"*. The Director agreed, minted a night clerk and
+  wrote him coming out of the back office muttering *"I'm coming, I'm
+  coming... Keep your shirt on."* The narrator's last sentence was
+  *"Somewhere beyond the desk, a door might shift. Or not."* Three
+  deterministic guards did it, each individually reasonable. The line was
+  correctly routed to the background stage — a person-shaped presence
+  deserves its own call with its own perception rather than a filler line
+  from a Director adjudicating physics. That hand-off is a forced pick
+  precisely so it cannot become silence, and the forced pick iterated the
+  tracked-presence store, which a presence minted THIS beat is not in yet:
+  it is written at commit, after the gate. So the one class of presence that
+  most needs the hand-off — the one who just arrived because the beat called
+  for someone to arrive — was the one class it could never see. And even
+  seeded, the Director minting him as a scene entity re-excluded him, because
+  that check ran after the hand-off subtraction. Owning what EXISTS and
+  giving up what it SAYS are two halves of one design; they were racing and
+  the mint won.
+
+- **An aside to the engine is not a claim about the world.** The same turn's
+  parenthetical became two player-asserted completed effects on a subject
+  called `narrative_assertion`, split at a comma. Player claims are
+  non-rejectable by design, so each warned on every beat and could never be
+  satisfied — and between them they bought a full-core repair call, the most
+  expensive retry the engine has, to encode a remark addressed to the engine
+  rather than to the fiction. A claim whose subject is neither resolvable in
+  the world NOR present in the player's own words now degrades to a metadata
+  note, the same as a claim with no subject at all. Either channel qualifies,
+  so *"I shatter the vault door"* stays a hard claim about a door no scene
+  contains yet — because you typed the words.
+
+- **The monolithic Director is gone, not defaulted-off.** It shipped behind
+  `director_orchestration` while the fan-out was measured against it. The
+  measurement finished: the fan-out is more stable, costs fewer tokens and
+  less wall clock. A switch preserving the losing path only preserved a way
+  to make the engine worse. Each Director stage is now, always, one step that
+  works inside itself as a prose author who owns the beat's account plus
+  specialists who own the state_diff channels the beat actually touches — a
+  scene with no clothing change never loads the clothing rules at all, and a
+  typical beat asks about two of the six.
+
+- **What replaced the switch is a concurrency choice.** The specialists hold
+  disjoint channels of the same finished beat and have nothing to say to each
+  other, so by default they run at once and the beat costs its slowest hand
+  rather than all of them added up. **Settings → Director specialists** turns
+  that off for a provider that takes one request at a time — a key limited by
+  concurrent connections, or a local runtime serving one model on one GPU.
+  Sequential is not a fallback to the old single sheet: the same hands run
+  with the same scopes and assemble in the same order.
+
+- **The prompt editor shows what the engine actually sends.** The six
+  specialist sheets were assembled per beat rather than read from the prompt
+  registry, so their preset entries were editable and unread — you could
+  rewrite the body specialist's sheet, save the preset, and the engine would
+  send the stock one, silently. All six are registered now, an edit replaces
+  that sheet outright, and the entry for the single unsplit sheet is gone
+  because nothing sent it.
+
+- **The Director's specialists are tabs of the Director's own window.** In the
+  pipeline drawer, a Director step was one blob with six hands nested inside
+  it, so reading what one hand did meant scrolling a merged diff and matching
+  channel names by eye — on the one stage where *which hand wrote this* is the
+  first question anyone asks. The prose author takes the first tab and shows
+  only what it owns. Each specialist that ran takes a tab saying what it was
+  granted, what it filled, which numbered events it answered for, and whether
+  the reconciliation seam asked it again. Granted-and-left-empty reads
+  differently from gated-out, because those are two different answers.
+
+- **A hand asked to repair a channel can now say it is already correct.** A
+  specialist repair could only mend or stay silent, and silence reads as
+  unencoded — so a hand asked to encode something it could see was already
+  carried shipped a *"state_diff still does not encode it"* warning against a
+  change it had just certified. Its verdict is read back off the repair call
+  now, answering by event number rather than by matching subject text, and an
+  *already true* claim is still checked against standing state exactly as it
+  is on the ordinary pass.
+
 ## alpha 8.3.1 — A glamour that covers all of you
 
 - **A disguise now hides authored extra parts, not just the appearance
