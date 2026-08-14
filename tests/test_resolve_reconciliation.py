@@ -43,6 +43,66 @@ from agents.director import (
     _subject_match_forms,
 )
 
+
+def _specialist_stubs(repair_output):
+    """The same repair delta, re-addressed to each channel's OWNER.
+
+    The core repair emits ``{"state_diff": {channel: ...}}``; a specialist
+    emits its own channels at the top level. Omissions now route to the owning
+    specialist before anything reaches the core `resolve_repair` call, so a
+    fixture supplying only the core shape leaves the repair with nothing to
+    apply and the seam reports `repaired: False`.
+
+    Derived from `SPECIALISTS` rather than hardcoded, so a channel that
+    changes owner does not quietly stop being covered here.
+    """
+    from agents.director import SPECIALISTS
+    sd = (repair_output or {}).get("state_diff") or {}
+    stubs = {}
+    for spec in SPECIALISTS.values():
+        patch = {ch: sd[ch] for ch in spec["channels"] if ch in sd}
+        if patch:
+            stubs[spec["step_key"]] = patch
+    return stubs
+
+
+
+def _owned_channels(resolve_output, *, omit=(), repair=None):
+    """Per-specialist dispatch stubs derived from a resolve fixture.
+
+    On the fan-out path the prose author owns no delegated channel, so
+    anything a resolve fixture puts in one is stripped before the diff is
+    judged -- the owner has to emit it. `omit` names step keys that should
+    withhold their channels on dispatch and supply them from `repair`
+    instead, which is how a test makes an omission actually happen.
+    """
+    base = _specialist_stubs(resolve_output)
+    mended = _specialist_stubs(repair) if repair else {}
+    out = {}
+    for key, patch in base.items():
+        out[key] = [{}, mended.get(key, patch)] if key in omit else patch
+    for key, patch in mended.items():
+        if key not in out:
+            out[key] = [{}, patch] if key in omit else patch
+    return out
+
+
+def _core(calls):
+    """Call step keys with the specialist fan-out filtered out.
+
+    These tests assert that a beat spends no EXTRA calls -- no repair, no
+    audit. They were written when the monolithic Director was the default and
+    "extra" and "any call beyond the resolve" meant the same thing. The
+    fan-out is now the only path, so a specialist call is baseline rather than
+    extra, and the assertions are about what they were always about: whether
+    the beat had to be resolved twice.
+    """
+    from agents.director import SPECIALISTS
+    return [k for k in calls if k == "director_resolve"
+            or not any(k == "director_%s" % name for name in SPECIALISTS)]
+
+
+
 ELEVATOR_PROSE = (
     "Mara slams her palm against the control panel and the heavy metal "
     "doors slide shut, sealing the two of you inside and blocking out the "
@@ -273,7 +333,7 @@ def test_live_two_contact_omission_fires_bounded_repair(temp_db, monkeypatch):
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert [key for key, _ in calls] == ["director_resolve", "resolve_repair"]
+    assert _core([key for key, _ in calls]) == ["director_resolve", "resolve_repair"]
     assert {(op["actor_part"], op["target_part"])
             for op in out["state_diff"]["contact_ops"]} == {
                 ("left hand", "hip"), ("cock", "cervix")}
@@ -307,10 +367,24 @@ def _dialogue_interp():
 
 def _dispatching_agent_json(outputs, calls):
     """Fake _agent_json returning per-step canned outputs and recording the
-    step keys invoked (director_resolve, resolve_reconcile, resolve_repair)."""
+    step keys invoked (director_resolve, resolve_reconcile, resolve_repair).
+
+    A LIST value is consumed one entry per call, which the fan-out made
+    necessary: a specialist's ordinary dispatch and its repair share one step
+    key, so a single canned output cannot say "omitted it, then mended it" --
+    handing the patch to the dispatch call encodes the change up front and
+    the omission under test never happens. The last entry repeats once the
+    list runs out.
+    """
+    pending = {k: list(v) for k, v in outputs.items() if isinstance(v, list)}
+
     def fake(role, step_key, system, payload, **kw):
         calls.append((step_key, payload))
-        result = outputs.get(step_key, {})
+        if step_key in pending:
+            queue = pending[step_key]
+            result = queue.pop(0) if len(queue) > 1 else (queue[0] if queue else {})
+        else:
+            result = outputs.get(step_key, {})
         return json.loads(json.dumps(result))
     return fake
 
@@ -372,6 +446,13 @@ def test_elevator_omission_is_repaired(temp_db, monkeypatch):
     monkeypatch.setattr(director, "_agent_json", _dispatching_agent_json({
         "director_resolve": ELEVATOR_RESOLVE_OUTPUT,
         "resolve_repair": ELEVATOR_REPAIR_OUTPUT,
+        # The prose author owns none of these channels on the fan-out path, so
+        # whatever the resolve fixture puts in them is stripped -- each owner
+        # has to supply its own. SPATIAL then omits `rooms` on dispatch and
+        # mends it on the repair call, which is the omission under test.
+        **_owned_channels(ELEVATOR_RESOLVE_OUTPUT,
+                          omit={"director_spatial"},
+                          repair=ELEVATOR_REPAIR_OUTPUT),
     }, calls))
 
     out = director.director_resolve(ctx, nonce=0)
@@ -380,14 +461,28 @@ def test_elevator_omission_is_repaired(temp_db, monkeypatch):
     # Manifest fold: no standalone audit call; exactly one bounded repair.
     step_keys = [k for k, _ in calls]
     assert "resolve_reconcile" not in step_keys
-    assert step_keys.count("resolve_repair") == 1
+    # ONE bounded repair, by whichever tier owns the omitted channel. The
+    # spatial specialist appears twice on the fan-out path -- once for its
+    # ordinary dispatch and once to repair `rooms` -- so the bound is on the
+    # REPAIR, which is what "bounded" was always about: the beat is resolved
+    # once and mended once, never resolved twice.
+    assert out["reconciliation"]["repaired"] is True
+    assert step_keys.count("resolve_repair") == 0, (
+        "an omission the spatial specialist owns must not also re-run the "
+        "full-core prose author")
 
     # The blank placeholder was caught deterministically and flagged, and
     # the manifest item registered as an omission.
     recon = out["reconciliation"]
-    assert any(s["source"] == "structural"
-               and s["subject"] == "elevator_interior"
-               for s in recon["signals"])
+    # NO structural signal on this path, and that is the design rather than a
+    # regression: `rooms` belongs to the spatial specialist, so the prose
+    # author never emits it and a blank room placeholder is not a shape it can
+    # produce. The manifest gap is what catches the omission now -- detection
+    # moved from the diff's shape to the beat's own manifest, which is the
+    # point of delegating the channel.
+    assert not any(s["source"] == "structural"
+                   and s["subject"] == "elevator_interior"
+                   for s in recon["signals"])
     assert any(o["source"] == "manifest"
                and o["subject"] == "elevator_interior"
                for o in recon["omissions"])
@@ -457,7 +552,7 @@ def test_pure_dialogue_turn_triggers_nothing(temp_db, monkeypatch):
 
     out = director.director_resolve(ctx, nonce=0)
 
-    step_keys = [k for k, _ in calls]
+    step_keys = _core([k for k, _ in calls])
     assert step_keys == ["director_resolve"]
     assert out["reconciliation"]["audited"] is False
     assert out["reconciliation"]["signals"] == []
@@ -487,7 +582,7 @@ def test_manifest_covered_beat_costs_zero_extra_calls(temp_db, monkeypatch):
 
     out = director.director_resolve(ctx, nonce=0)
 
-    step_keys = [k for k, _ in calls]
+    step_keys = _core([k for k, _ in calls])
     assert step_keys == ["director_resolve"]
     assert out["reconciliation"]["audited"] is False
     assert out["reconciliation"]["omissions"] == []
@@ -639,7 +734,7 @@ def test_encoded_player_claim_is_silent(temp_db, monkeypatch):
 
     director.director_resolve(ctx, nonce=0)
 
-    assert [k for k, _ in calls] == ["director_resolve"]
+    assert _core([k for k, _ in calls]) == ["director_resolve"]
     assert not ctx.warnings
 
 
@@ -664,7 +759,7 @@ def test_null_subject_claim_degrades_to_metadata_note(temp_db, monkeypatch):
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert [k for k, _ in calls] == ["director_resolve"]
+    assert _core([k for k, _ in calls]) == ["director_resolve"]
     assert out["reconciliation"]["claim_notes"]
     assert not ctx.warnings
 
@@ -727,7 +822,7 @@ def test_restraint_omission_repaired_through_seam(temp_db, monkeypatch):
 
     out = director.director_resolve(ctx, nonce=0)
 
-    step_keys = [k for k, _ in calls]
+    step_keys = _core([k for k, _ in calls])
     assert "resolve_reconcile" not in step_keys
     assert "resolve_repair" in step_keys
     assert "mara_restrained" in out["state_diff"]["conditions"]
@@ -780,7 +875,7 @@ def test_tripwire_flags_eventful_beat_with_empty_manifest(
 
     out = director.director_resolve(ctx, nonce=0)
 
-    assert [k for k, _ in calls] == ["director_resolve"]
+    assert _core([k for k, _ in calls]) == ["director_resolve"]
     assert out["reconciliation"]["tripwire"] is True
     assert not ctx.warnings
 
@@ -820,7 +915,7 @@ def test_tripwire_escalates_to_deep_audit_when_opted_in(
 
         out = director.director_resolve(ctx, nonce=0)
 
-        step_keys = [k for k, _ in calls]
+        step_keys = _core([k for k, _ in calls])
         assert "resolve_reconcile" in step_keys
         assert "resolve_repair" in step_keys
         assert out["reconciliation"]["audited"] is True

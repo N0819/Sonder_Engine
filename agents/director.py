@@ -891,12 +891,10 @@ def director_interpret(ctx, nonce):
     # assembly, pure output-token latency). One read of the setting serves
     # the prompt and the dispatch below, so they cannot disagree about
     # which path this beat is on.
-    _orch = orchestration_enabled()
     out = _agent_json(
         "director",
         "director_interpret",
-        get_prompt("director_interpret")
-        + (INTERPRET_DELEGATION_NOTE if _orch else ""),
+        get_prompt("director_interpret") + INTERPRET_DELEGATION_NOTE,
         payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
@@ -998,51 +996,49 @@ def director_interpret(ctx, nonce):
     # merges into `state_assertions` (contact into `contact_assertions`,
     # the interpret spelling of the same channel) BEFORE the deterministic
     # validators below, so the merged result crosses the exact floor a
-    # model-authored copy crosses. `_orch` was read once, above the LLM
-    # call, where it also selected the delegation-note suffix.
-    if _orch:
-        _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
-            ctx, sc,
-            physical=_beat_has_physical_activity(out, {}, []),
-            speech=bool(player_speech_lines(out)),
-        ))
-        _iparts = scene_extra_parts(ctx.cast, pers, p_name)
-        try:
-            from living_world import living_world_allows, living_world_config
-            _iplanning = {
-                "enabled": bool(living_world_allows(
-                    living_world_config(chat["id"]),
-                    "antagonist_ladder", "floor")),
-            }
-            if _iplanning["enabled"]:
-                _iplanning["plans"] = (
-                    wget(chat["id"], "offscreen_plans", []) or [])[:8]
-        except Exception:
-            _iplanning = {"enabled": False, "plans": []}
-        _run_specialists(
-            ctx, out, sc, _idispatch,
-            _interpret_beat_view(ctx, out, p_name),
-            {
-                "nonce": nonce,
-                "clock": clock,
-                "active_awareness": _awareness_view(
-                    chat["id"], clock, out, {}),
-                "body_parts": ({name: extra_parts_lines(parts)
-                                for name, parts in _iparts.items()}
-                               if _iparts else None),
-                "contacts": sc.get("contacts") or [],
-                "notices": _artifacts_view(chat["id"], sc),
-                "movement": out.get("movement"),
-                "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
-                "proposal": None,
-                "crowds": _crowds_view(chat["id"], sc),
-                "couriers": _couriers_view(chat["id"], sc),
-                "carried_reports": _carried_reports_view(ctx),
-                "unratified_claims": _unratified_background_claims(
-                    chat["id"], ctx.turn["idx"]),
-                "offscreen_planning": _iplanning,
-            },
-            "interpret")
+    # model-authored copy crosses.
+    _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
+        ctx, sc,
+        physical=_beat_has_physical_activity(out, {}, []),
+        speech=bool(player_speech_lines(out)),
+    ))
+    _iparts = scene_extra_parts(ctx.cast, pers, p_name)
+    try:
+        from living_world import living_world_allows, living_world_config
+        _iplanning = {
+            "enabled": bool(living_world_allows(
+                living_world_config(chat["id"]),
+                "antagonist_ladder", "floor")),
+        }
+        if _iplanning["enabled"]:
+            _iplanning["plans"] = (
+                wget(chat["id"], "offscreen_plans", []) or [])[:8]
+    except Exception:
+        _iplanning = {"enabled": False, "plans": []}
+    _run_specialists(
+        ctx, out, sc, _idispatch,
+        _interpret_beat_view(ctx, out, p_name),
+        {
+            "nonce": nonce,
+            "clock": clock,
+            "active_awareness": _awareness_view(
+                chat["id"], clock, out, {}),
+            "body_parts": ({name: extra_parts_lines(parts)
+                            for name, parts in _iparts.items()}
+                           if _iparts else None),
+            "contacts": sc.get("contacts") or [],
+            "notices": _artifacts_view(chat["id"], sc),
+            "movement": out.get("movement"),
+            "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
+            "proposal": None,
+            "crowds": _crowds_view(chat["id"], sc),
+            "couriers": _couriers_view(chat["id"], sc),
+            "carried_reports": _carried_reports_view(ctx),
+            "unratified_claims": _unratified_background_claims(
+                chat["id"], ctx.turn["idx"]),
+            "offscreen_planning": _iplanning,
+        },
+        "interpret")
 
     out["contact_assertions"] = _validated_player_contact_assertions(
         sc, out.get("contact_assertions"), p_name,
@@ -1240,8 +1236,7 @@ def director_interpret(ctx, nonce):
 
     # Interpret's own scope backstop, on the FINAL interpretation -- the
     # same single check resolve runs, pointed at this stage's containers.
-    if _orch:
-        _orchestration_scope_backstop(ctx, out, "interpret")
+    _orchestration_scope_backstop(ctx, out, "interpret")
 
     return out
 
@@ -5078,15 +5073,6 @@ _PROSE_DUTY_SHIPPED = {
 }
 
 
-def orchestration_enabled():
-    """The `director_orchestration` setting, default OFF. The monolithic
-    Director stays the default until measurement says otherwise -- this is a
-    setting, not a rewrite, and turning it off restores the old path
-    byte-for-byte (the monolithic prompt is byte-identical)."""
-    value = str(get_setting("director_orchestration") or "").strip().casefold()
-    return value in ("1", "on", "true", "body")
-
-
 def _gate_facts(ctx, sc, *, physical, speech, material_effects=False):
     """The scene facts every channel gate reads, computed once per stage,
     at that stage's own time. Standing scene state (ledgers, settings) plus
@@ -6245,10 +6231,9 @@ def director_resolve(ctx, nonce):
     # inherited from interpret. The prose author keeps the same role, step
     # key, schema and payload either way; only the instruction sheet is
     # lean when the delegated machinery is cold-stored in the specialists.
-    _orch = orchestration_enabled()
     _orch_dispatch = None
     _prose_scope = None
-    if _orch:
+    if True:
         _orch_facts = _gate_facts(
             ctx, sc,
             physical=_beat_has_physical_activity(interp, char_actions, dice),
@@ -6263,8 +6248,7 @@ def director_resolve(ctx, nonce):
         # persisted below and audited by the same backstop.
         _prose_scope = _prose_author_scope(
             ctx, sc, payload, _orch_facts, p_name)
-    _resolve_prompt = (prose_author_prompt(_prose_scope) if _orch
-                       else get_prompt("director_resolve"))
+    _resolve_prompt = prose_author_prompt(_prose_scope)
 
     out = _agent_json(
         "director",
@@ -6545,52 +6529,51 @@ def director_resolve(ctx, nonce):
     # settled it -- and before every deterministic seam below, so the
     # movement backstop, the restraint floor and the reconciliation manifest
     # all judge the MERGED diff exactly as they judge a monolithic one.
-    if _orch:
-        _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
-                                        p_name, interp)
-        _orch_extras = {
-            "nonce": nonce,
-            "clock": clock,
-            "active_awareness": payload.get("active_awareness"),
-            "body_parts": (payload.get("scene") or {}).get("body_parts"),
-            "contacts": resolve_sc.get("contacts") or [],
-            "contact_endings": character_contact_endings,
-            "material_effects": character_material_effects,
-            "notices": payload.get("notices") or [],
-            "movement": interp.get("movement"),
-            "movers": {
-                str(d.get("name")): {
-                    "exits": d.get("exits"),
-                    "sprint_reach": d.get("sprint_reach"),
-                }
-                for d in decls if d.get("name")
-            },
-            "proposal": payload.get("mapping_scene_proposal"),
-            "crowds": payload.get("crowds") or [],
-            "couriers": payload.get("couriers") or [],
-            "carried_reports": payload.get("carried_reports") or [],
-            "unratified_claims": payload.get("unratified_claims") or [],
-            "offscreen_planning": payload.get("offscreen_planning")
-                                  or {"enabled": False, "plans": []},
-        }
-        _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
-                         _orch_extras, "resolve")
-        # Kept for the reconciliation seam below: when it detects an
-        # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
-        # with the same beat view and entitlement slice, never the prose
-        # author with the full core (see _specialist_repairs). In-memory
-        # only -- never persisted with the step.
-        ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras}
-        # The prose author's granted scope, persisted beside the
-        # specialists' -- what the scope backstop audits shipped prose
-        # duties against, and the per-beat measurement the sheet scoping
-        # is judged by (gated_out is the saving; a prose gate_flag below
-        # is the misprediction).
-        out["orchestration"]["prose_scope"] = {
-            "granted": sorted(_prose_scope or ()),
-            "gated_out": sorted(
-                set(PROSE_DUTY_CHUNKS) - set(_prose_scope or ())),
-        }
+    _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
+                                    p_name, interp)
+    _orch_extras = {
+        "nonce": nonce,
+        "clock": clock,
+        "active_awareness": payload.get("active_awareness"),
+        "body_parts": (payload.get("scene") or {}).get("body_parts"),
+        "contacts": resolve_sc.get("contacts") or [],
+        "contact_endings": character_contact_endings,
+        "material_effects": character_material_effects,
+        "notices": payload.get("notices") or [],
+        "movement": interp.get("movement"),
+        "movers": {
+            str(d.get("name")): {
+                "exits": d.get("exits"),
+                "sprint_reach": d.get("sprint_reach"),
+            }
+            for d in decls if d.get("name")
+        },
+        "proposal": payload.get("mapping_scene_proposal"),
+        "crowds": payload.get("crowds") or [],
+        "couriers": payload.get("couriers") or [],
+        "carried_reports": payload.get("carried_reports") or [],
+        "unratified_claims": payload.get("unratified_claims") or [],
+        "offscreen_planning": payload.get("offscreen_planning")
+                              or {"enabled": False, "plans": []},
+    }
+    _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
+                     _orch_extras, "resolve")
+    # Kept for the reconciliation seam below: when it detects an
+    # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
+    # with the same beat view and entitlement slice, never the prose
+    # author with the full core (see _specialist_repairs). In-memory
+    # only -- never persisted with the step.
+    ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras}
+    # The prose author's granted scope, persisted beside the
+    # specialists' -- what the scope backstop audits shipped prose
+    # duties against, and the per-beat measurement the sheet scoping
+    # is judged by (gated_out is the saving; a prose gate_flag below
+    # is the misprediction).
+    out["orchestration"]["prose_scope"] = {
+        "granted": sorted(_prose_scope or ()),
+        "gated_out": sorted(
+            set(PROSE_DUTY_CHUNKS) - set(_prose_scope or ())),
+    }
 
     # Safety net: LLM sometimes returns a string/list where an object belongs.
     sd = _normalize_diff_shape(out.get("state_diff"))
@@ -7130,8 +7113,7 @@ def director_resolve(ctx, nonce):
     # change the prose asserted -- so a wrongly-skipped specialist or a
     # wrongly-omitted chunk is reported against what actually ships, never
     # against a draft.
-    if _orch:
-        _orchestration_scope_backstop(ctx, out, "resolve")
+    _orchestration_scope_backstop(ctx, out, "resolve")
 
     return out
 
