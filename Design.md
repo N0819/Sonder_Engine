@@ -419,6 +419,23 @@ doorway *at a walk*, why a walking stride is out of character for a body whose
 drive is getting there, and what `active_state.goal` is at all — were found and
 left ungated.
 
+**The most expensive token is the one spent twice.** A validation failure costs
+a whole repair round trip, and a character's decision-review retry costs a
+second ~30k-token call. Censusing every warning the live corpus has stored
+(19,474 active variants, 1,357 warnings) found most of that spend concentrated
+in three places, none of which was a model reasoning badly. `resolved_events[].
+event_id` — a number the *engine* assigns and the specialist merely echoes —
+was 47% of every repair call, failed over `"#1"` instead of `1`.
+`lore_ops[].knowledge_locations` was another 24%, the whole mapping commit
+discarded over `"the vault"` instead of `["the vault"]`. Both are now read
+rather than rejected, on `LenientModel`'s standing charter that a near-miss
+shape should be READ; a genuinely ambiguous value (`"1,2"`, no digits at all)
+still fails, because inventing one there would hide a real error. And
+`_first_verbatim_repeat` had no length floor while its sibling
+`_first_repeated_move` has had one at five tokens all along — so a character
+saying "Mm." twice bought the full retry, and 9.2% of the corpus's 14,365
+spoken lines are three words or fewer. An interjection is not a reissued line.
+
 ---
 
 ## Player authority
