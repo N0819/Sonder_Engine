@@ -82,3 +82,38 @@ def test_unquoted_object_after_a_speech_verb_is_never_eaten():
     prose = 'I say, "Go." He tells Karen the truth. She nods.'
     out = _strip_player_echo(prose, ["Go."])
     assert "tells Karen the truth" in out
+
+
+def test_the_verb_healer_and_the_colon_healer_share_one_vocabulary():
+    """They drifted, and the drift reached the page. The colon healer knew
+    `add`, `speak`, `voice`, `continue` and `offer`; the verb healer knew none
+    of them -- so a player quote stripped after "as you add," left
+
+        You let the wry amusement show as you add,
+
+    standing on the page with nothing after it (live, chat 72). A dangling
+    verb and a dangling colon are the same wound from the same cut; there is
+    no reason for them to disagree about what counts as speech."""
+    from agents.common import _DANGLING_SPEECH_VERB_RE, _SPEECH_CUE
+    for verb in ("add", "adds", "added", "speak", "spoke", "voiced",
+                 "continue", "continued", "offer", "offered"):
+        assert verb in _SPEECH_CUE
+        assert _DANGLING_SPEECH_VERB_RE.search("as you %s," % verb), verb
+
+
+def test_the_verbs_the_colon_healer_never_had_are_kept():
+    """`call` and `shout` were only ever in the verb healer. Merging the two
+    lists must not quietly drop them."""
+    from agents.common import _DANGLING_SPEECH_VERB_RE
+    for verb in ("call", "called", "shout", "shouted", "says", "asked"):
+        assert _DANGLING_SPEECH_VERB_RE.search("she %s," % verb), verb
+
+
+def test_healing_never_welds_two_paragraphs():
+    """The trailing-whitespace class is `[^\\S\\n]*` for a reason: a dangling
+    verb at the end of a paragraph must heal in place, not swallow the break
+    after it."""
+    from agents.common import _DANGLING_SPEECH_VERB_RE
+    healed = _DANGLING_SPEECH_VERB_RE.sub(
+        lambda m: "%s it." % m.group(1), "you add,\n\nThe next paragraph.")
+    assert "\n\n" in healed
