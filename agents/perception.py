@@ -19,6 +19,10 @@ from db import q, wget
 from scene import (
     NON_AWAKE_GATED,
     active_disguises,
+    active_transformations,
+    conceal_disguised_parts,
+    transformed_parts,
+    transformed_true_appearance,
     appearance_of,
     apply_awareness_diff,
     awareness_map,
@@ -2136,7 +2140,16 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
     never handed the concealed features, so it cannot render them. The payload
     and tripwire are the knowledge layer and QA around that.
     """
-    disguise = active_disguises(chat_id).get(str(subject_name or "").casefold())
+    # A TRANSFORMATION RESOLVES FIRST, AND IS NOT A DISGUISE. It changes the
+    # body's TRUE appearance -- there is no concealed truth, nobody sees
+    # through it, and no observer is granted knowledge of an older shape. So
+    # it lands here, before the concealment layer, and a body that is merely
+    # transformed returns with no disguise payload and no known_to at all.
+    key = str(subject_name or "").casefold()
+    true_appearance = transformed_true_appearance(
+        true_appearance, active_transformations(chat_id).get(key))
+
+    disguise = active_disguises(chat_id).get(key)
     if not disguise:
         return true_appearance, None, None
     known_to = disguise_known_to(disguise, subject_name, known_map)
@@ -3381,6 +3394,36 @@ def _composer_extra_parts(ctx, p_name):
     cached = ctx.get("_composer_extra_parts_cache")
     if cached is None:
         cached = scene_extra_parts(ctx.cast, persona_of(ctx.chat), p_name)
+        # A DISGUISE HIDES THE PARTS TOO, and this is the only place that can
+        # make it so. `disguised_visible_appearance` rewrites the appearance
+        # SUMMARY; authored extra parts are a separate typed ledger the
+        # composer renders straight from structured data, so a glamoured
+        # kitsune kept six tails and two fox ears in every view while her
+        # summary read "ordinary human ears" (reported live, chat 72).
+        # Filtering at this seam rather than at the percept build keeps it
+        # ahead of every consumer and out of reach of display-label
+        # ambiguity -- these keys are true body names, the percept rows are
+        # observer-facing labels and two bodies can share one.
+        # TRUTH FIRST, THEN CONCEALMENT. A transformation changes what the
+        # body IS -- its list replaces the card's outright, which is what
+        # lets it ADD a part no card declares. A disguise then hides what
+        # that body currently has. The order is the whole model: you can
+        # glamour a transformed body, and the glamour hides the fox's tail
+        # rather than the woman's.
+        chat_id = ctx.chat["id"]
+        shifted = active_transformations(chat_id)
+        if shifted:
+            cached = {
+                name: transformed_parts(
+                    parts, shifted.get(str(name or "").casefold()))
+                for name, parts in (cached or {}).items()
+            }
+            # A body the card never gave parts to can be given them here.
+            for key, form in shifted.items():
+                if form.get("parts") and not any(
+                        str(n).casefold() == key for n in cached):
+                    cached[form.get("subject") or key] = form["parts"]
+        cached = conceal_disguised_parts(cached, active_disguises(chat_id))
         ctx["_composer_extra_parts_cache"] = cached
     return cached
 

@@ -44,11 +44,13 @@ from memory import (
 from prompts import get_prompt
 from scene import (
     NON_AWAKE_GATED,
+    active_transformations,
     all_cast_name_to_id,
     awareness_of,
     dialogue_budget,
     get_scene,
     persona_of,
+    transformed_sheet,
     private_knowledge_for,
     sheet_state,
 )
@@ -2351,6 +2353,14 @@ def character_step(ctx, cid, nonce):
         # StopIteration.
         return None
     sh, active, stance = sheet_state(row)
+    # The body as it IS, not as it was authored. Everything below reads the
+    # card -- senses, abilities, embodiment capabilities, extra parts -- so a
+    # transformation that stopped at the observer's view would leave this mind
+    # certain it still had the shape it started with. See scene.transformed_sheet.
+    sh = transformed_sheet(
+        sh,
+        active_transformations(chat["id"]).get(
+            str(character_name(sh) or "").casefold()))
     sc = get_scene(chat["id"], chat)
 
     # Consciousness gate (choke point): an unconscious/asleep/sedated mind does

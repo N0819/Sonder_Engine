@@ -9,14 +9,14 @@
 | `affect.py` | 2148 |  | `theory_of_mind` |
 | `agents/__init__.py` | 88 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3304 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 3314 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6087 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
 | `agents/director.py` | 7291 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1045 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/perception.py` | 4234 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
+| `agents/perception.py` | 4277 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/runtime.py` | 1038 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2082 |  | `backdrops`, `db`, `outofband`, `weather` |
@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1145 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7457 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7503 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1675 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -58,11 +58,11 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5479 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 5497 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2809 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
-| `scene.py` | 1436 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1651 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 4624 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 7950 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1022 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -105,14 +105,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2345 | 960 lines |
-| `_annotate_known_exits()` | 1766 | 445 lines |
-| `_ground_observation_citations()` | 826 | 263 lines |
-| `_unanswered_question_note()` | 279 | 117 lines |
-| `_destination_from_goals()` | 1344 | 109 lines |
-| `sprint_offers()` | 2246 | 97 lines |
-| `_recent_self_moves()` | 148 | 90 lines |
-| `_verdict()` | 1188 | 72 lines |
+| `character_step()` | 2347 | 968 lines |
+| `_annotate_known_exits()` | 1768 | 445 lines |
+| `_ground_observation_citations()` | 828 | 263 lines |
+| `_unanswered_question_note()` | 281 | 117 lines |
+| `_destination_from_goals()` | 1346 | 109 lines |
+| `sprint_offers()` | 2248 | 97 lines |
+| `_recent_self_moves()` | 150 | 90 lines |
+| `_verdict()` | 1190 | 72 lines |
 
 ### `agents/common.py`
 
@@ -192,14 +192,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 3917 | 318 lines |
-| `perception_outcome()` | 2823 | 298 lines |
-| `perception_act()` | 2383 | 251 lines |
-| `_observer_scene_payload()` | 864 | 212 lines |
-| `_composer_act()` | 3796 | 119 lines |
-| `_previous_open_group_continuity()` | 153 | 117 lines |
-| `_strip_self_narration()` | 1662 | 107 lines |
-| `perception_establish()` | 2275 | 107 lines |
+| `_composer_outcome()` | 3960 | 318 lines |
+| `perception_outcome()` | 2836 | 298 lines |
+| `perception_act()` | 2396 | 251 lines |
+| `_observer_scene_payload()` | 868 | 212 lines |
+| `_composer_act()` | 3839 | 119 lines |
+| `_previous_open_group_continuity()` | 157 | 117 lines |
+| `_strip_self_narration()` | 1666 | 107 lines |
+| `perception_establish()` | 2288 | 107 lines |
 
 ### `agents/runtime.py`
 
@@ -400,14 +400,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5581 | 1215 lines |
-| `prepare_scene_commit()` | 2265 | 425 lines |
-| `commit_world_entities()` | 3147 | 283 lines |
-| `apply_attire_diff()` | 1970 | 253 lines |
-| `track_background_presences()` | 3947 | 231 lines |
-| `_commit_all_locked()` | 7204 | 195 lines |
-| `commit_transit_sweep()` | 2739 | 169 lines |
-| `_prepare_destruction()` | 700 | 158 lines |
+| `prepare_memory_commit()` | 5627 | 1215 lines |
+| `prepare_scene_commit()` | 2266 | 425 lines |
+| `commit_world_entities()` | 3189 | 287 lines |
+| `apply_attire_diff()` | 1971 | 253 lines |
+| `track_background_presences()` | 3993 | 231 lines |
+| `_commit_all_locked()` | 7250 | 195 lines |
+| `commit_transit_sweep()` | 2740 | 169 lines |
+| `_prepare_destruction()` | 701 | 158 lines |
 
 ### `couriers.py`
 
@@ -692,12 +692,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `specialist_prompt()` | 2055 | 17 lines |
-| `prose_author_prompt()` | 2140 | 15 lines |
-| `get_prompt()` | 5470 | 10 lines |
-| `presets()` | 5461 | 2 lines |
-| `active_preset()` | 5464 | 2 lines |
-| `nsfw_enabled()` | 5467 | 2 lines |
+| `specialist_prompt()` | 2073 | 17 lines |
+| `prose_author_prompt()` | 2158 | 15 lines |
+| `get_prompt()` | 5488 | 10 lines |
+| `presets()` | 5479 | 2 lines |
+| `active_preset()` | 5482 | 2 lines |
+| `nsfw_enabled()` | 5485 | 2 lines |
 
 ### `providers.py`
 
@@ -739,14 +739,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `recent_events_for_observer()` | 751 | 59 lines |
-| `director_context()` | 811 | 53 lines |
-| `awareness_conditions()` | 472 | 47 lines |
-| `private_knowledge_for()` | 1393 | 44 lines |
-| `_seed_scene_initial_attire()` | 86 | 31 lines |
-| `active_cast()` | 162 | 31 lines |
-| `active_disguises()` | 364 | 31 lines |
-| `normalize_style_guide()` | 1297 | 31 lines |
+| `recent_events_for_observer()` | 966 | 59 lines |
+| `active_disguises()` | 364 | 53 lines |
+| `director_context()` | 1026 | 53 lines |
+| `active_transformations()` | 426 | 49 lines |
+| `conceal_disguised_parts()` | 592 | 48 lines |
+| `awareness_conditions()` | 687 | 47 lines |
+| `private_knowledge_for()` | 1608 | 44 lines |
+| `transformed_sheet()` | 477 | 39 lines |
 
 ### `schemas.py`
 
@@ -1109,9 +1109,9 @@ Sections: Scene backdrops (`:2`).
 
 Declared functions: `backdropLayers()`, `backdropLuminance()`, `applyBackdropContrast()`, `releaseBackdropLayer()`, `clearBackdrop()`, `showBackdrop()`, `backdropWorking()`, `awaitBackdrop()`, `generateBackdrop()`, `backdropForTurn()`, `backdropOnVisibleTurn()`, `backdropResetForRender()`, `updateBackdropBtn()`, `toggleBackdrops()`, `syncBackdrops()`.
 
-### `static/js/chat.js` (2546 lines)
+### `static/js/chat.js` (2587 lines)
 
-Sections: The turn being read (`:1`); Colouring who spoke (`:172`); `dialogue_log` is committed per turn and arrives as `turn.speech` -- and (`:175`); Flipping between rerolls of the newest beat (`:783`); Pipeline drawer: reading a step through a lens (`:1086`); Pipeline drawer (`:1292`); Relationship viewer (`:1628`); Memory browser (`:1700`); Private history (`:2488`).
+Sections: The turn being read (`:1`); Colouring who spoke (`:172`); `dialogue_log` is committed per turn and arrives as `turn.speech` -- and (`:175`); Flipping between rerolls of the newest beat (`:810`); Pipeline drawer: reading a step through a lens (`:1124`); Pipeline drawer (`:1330`); Relationship viewer (`:1669`); Memory browser (`:1741`); Private history (`:2529`).
 
 Declared functions: `observeVisibleTurn()`, `openChat()`, `foldTypography()`, `quoteBody()`, `quotedRegions()`, `speechSpans()`, `paintProse()`, `proseEl()`, `renderFrameBar()`, `switchFrame()`, `updateChatScopedButtons()`, `renderChat()`, `branchTurn()`, `editTurnInput()`, `editTurnProse()`, `liveReset()`, `friendlyPhase()`, `turnStatusStart()`, `turnStatusSet()`, `turnStatusStop()`, `_streamOn()`, `liveFlush()`, `liveAppend()`, `liveStep()`, `handleEvt()`, `showNarrationEarly()`, `clearNarrationEarly()`, `_mountRerollNav()`, `_paintRerollCount()`, `showRerollVariant()`, `abortActiveRun()`, `runStream()`, `confirmCheckpointRestore()`, `runReroll()`, `rerollTurn()`, `exportChat()`, `importChatModal()`, `perceiverViews()`, `loopMindIds()`, `stepLenses()`, `perceiverLabel()`, `facetBadge()`, `lensLabel()`, `renderLensBar()`, `lensSlice()`, `perceiverSlice()`, `mindSlice()`, `keySlice()`, `renderEngineNotes()`, `openPipeline()`, `relMeter()`, `relationshipModal()`, `memModal()`, `exportCharacterMemories()`, `importCharacterMemoriesModal()`, `memQS()`, `memCharId()`, `loadMemoryBrowse()`, `getMemUI()`, `renderMemorySummary()`, `sortedMems()`, `renderMemoryList()`, `memoryCard()`, `fieldWrap()`, `reloadMemView()`, `runMemorySearch()`, `showNewMemoryForm()`, `checkMemoryCoverage()`, `backfillMemoryEras()`, `consolidateMemories()`, `previewMemoryContext()`, `chatPH()`, `personaPH()`.
 

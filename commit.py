@@ -33,7 +33,8 @@ from character_schema import (character_name, character_name_from_text,
 from frames import is_recognized_in_frame
 import attire as attire_model
 from scene import (set_char_state, set_char_status, seed_initial_attire,
-                   get_scene)
+                   get_scene, SINGULAR_BODY_CONDITIONS,
+)
 from mechanics import mechanics_sweep, news_latency_seconds, stable_event_key
 from weather import advance_weather, normalize_weather
 from spatial import (merge_scene_with_diff, _merge_entity, room_of,
@@ -3144,6 +3145,47 @@ def _subjects_targeted_by_an_action(ctx):
     return targeted
 
 
+def _supersede_disguises(cursor, chat_id, cond, written_id):
+    """One active disguise OR transformation per body, enforced at the write.
+
+    Both are singular by nature -- a body presents one outward form and IS one
+    thing -- but
+    nothing made that true, and the Director minted a fresh `condition_id` per
+    reroll instead of reusing one. Measured live (chat 72): three active rows
+    on one subject, each with different `presented_appearance` prose, and
+    whichever the scan reached decided what every observer saw. The glamour
+    appeared to work and then stop between turns.
+
+    Two rules, and the second is the one that matters for play:
+
+      * a NEW disguise supersedes every other active one on that body, so the
+        most recent declaration is the only one in force;
+      * an ENDING ends them ALL, not just the id it names. "You allow your
+        glamour to come undone" is a statement about the body, and the
+        Director cannot name ids it has never been shown -- so ending one row
+        would silently promote the next and leave the glamour half-standing.
+
+    Case-insensitive on subject because `subject_id` is a model-written name.
+    """
+    kind = str(cond.get("kind") or "")
+    if kind not in SINGULAR_BODY_CONDITIONS:
+        return
+    subject = str(cond.get("subject_id") or "").strip()
+    if not subject:
+        return
+    if int(cond.get("active", 1)):
+        cursor.execute(
+            "UPDATE world_conditions SET active=0 WHERE chat_id=? "
+            "AND kind=? AND active=1 "
+            "AND condition_id<>? AND lower(subject_id)=lower(?)",
+            (chat_id, kind, written_id, subject))
+    else:
+        cursor.execute(
+            "UPDATE world_conditions SET active=0 WHERE chat_id=? "
+            "AND kind=? AND lower(subject_id)=lower(?)",
+            (chat_id, kind, subject))
+
+
 def commit_world_entities(ctx, nonce, *, prepared=None):
     """Commit world entities, conditions (and legacy placement cleanup).
 
@@ -3424,6 +3466,10 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                          # act of waking someone put them under.
                          payload, int(cond.get("active", 1))),
                     )
+                # One body presents one outward form. Enforced here
+                # rather than requested, because the Director cannot name
+                # condition ids it has never been shown -- see the helper.
+                _supersede_disguises(c, cid, cond, cid_val)
 
     return {"entities_committed": len(diff.get("entities") or {}),
             "entities_removed": len(diff.get("remove_entities") or [])}
