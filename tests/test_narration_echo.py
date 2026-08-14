@@ -90,3 +90,52 @@ def test_fidelity_allows_similar_scene_with_new_content():
     )
 
     assert not any("reuse a previous turn" in w for w in warnings)
+
+
+# --- the narrator tidies what the player typed -----------------------------
+
+def test_a_repunctuated_player_line_is_still_stripped():
+    """Chat 72, turn 35, live. The player typed
+
+        "He was kind of annoying, but harmless." You look around.
+        "Anyways your plan doctor?"
+
+    and the narrator rendered the second line as `"Anyways, your plan,
+    Doctor?"` -- two inserted commas and a capitalised Doctor. The strip
+    matched declared speech as a LITERAL substring, so the tidy-up defeated it
+    and the player's own line reached the page as an unattributed quote.
+
+    Correcting the player's grammar is the one thing a narrator reliably does,
+    which made the guard's failure rate proportional to how well it wrote.
+    """
+    from agents.common import _strip_player_echo
+    prose = ('You glance around the dim forecourt.\n\n'
+             '"Anyways, your plan, Doctor?"\n\n'
+             'The Doctor answers. "Plan? Right."')
+    out = _strip_player_echo(
+        prose,
+        ["He was kind of annoying, but harmless.", "Anyways your plan doctor?"],
+        protect_quotes=['"Plan? Right."'])
+    assert "Anyways" not in out
+    assert "Plan? Right." in out, "an NPC quote must survive the strip"
+
+
+def test_a_short_folded_match_is_not_treated_as_an_echo():
+    """Below three words the fold is not evidence: "no", "wait", "why" recur in
+    anyone's mouth, and the literal pass already catches a short line that
+    arrived unedited. Over-stripping would eat an NPC's line."""
+    from agents.common import _strip_player_echo
+    prose = 'She stops. "Wait!" he calls after her.'
+    out = _strip_player_echo(prose, ["wait"], protect_quotes=[])
+    assert '"Wait!"' in out
+
+
+def test_the_fold_does_not_reach_a_protected_npc_quote():
+    """Masking runs first, so a protected NPC span is out of reach even when
+    its words match the player's exactly -- the case blind stripping would
+    corrupt."""
+    from agents.common import _strip_player_echo
+    prose = 'You nod. The Doctor repeats it back: "So, what is the plan?"'
+    out = _strip_player_echo(prose, ["So what is the plan"],
+                             protect_quotes=['"So, what is the plan?"'])
+    assert "So, what is the plan?" in out
