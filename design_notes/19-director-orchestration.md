@@ -208,13 +208,33 @@ read of the prose.
 
 # Design detail — as built (body, social, contact, objects; both stages)
 
-Behind the `director_orchestration` setting (`orchestration_enabled()` in
-`agents/director.py`): default OFF, any of `1|on|true|body` turns it on, and
-OFF is byte-for-byte the old path — the monolithic sheet is a byte-identical
-recomposition of named segments in `prompts.py`, verified against the
-pre-split sha256 on every change. Everything below lives inside the two
-Director steps; `agents/runtime.py` learned nothing, and
-`tests/test_director_orchestration.py` pins each joint.
+**Update, 2026-08-14: this is the only Director path.** It shipped behind
+`director_orchestration`, default OFF, and stayed there while it was measured
+against the monolith it replaced. The measurement finished — the fan-out is
+more stable, costs fewer tokens and less wall clock — so the flag, the route,
+the checkbox and the unsplit sheet are all gone. Keeping a switch for the
+losing path would only have preserved a way to make the engine worse.
+
+`DEFAULT_PROMPTS['director_resolve']` went with it: nothing sent it, so a
+preset key for it was folklore. Every `RESOLVE_*` segment it was assembled
+from is still in `prompts.py`, owned now by exactly one specialist
+(`SPECIALIST_PROMPT_SPECS`) or by the prose author's own sheet
+(`PROSE_AUTHOR_SHEET`), with `test_every_delegated_block_has_exactly_one_
+owner` holding each block to a single owner — lost means a rule nobody
+applies, duplicated means two hands authoring one channel from two spellings
+that can drift.
+
+What replaced the flag is a CONCURRENCY choice, `director_fanout_mode`,
+parallel by default. Concurrency is not free everywhere: a provider key that
+takes one request at a time, a limit measured in connections, a local runtime
+serving one model on one GPU. Sequential is not a fallback to the monolith —
+the same hands run with the same scopes and assemble in the same canonical
+order, and a beat still dispatches a mean 1.75 of 6 sheets of 1-4k against
+the single sheet's ~21k, so it is expected to beat the monolith on its own.
+Parallel beats it by more.
+
+Everything below lives inside the two Director steps; `agents/runtime.py`
+learned nothing, and `tests/test_director_orchestration.py` pins each joint.
 
 ## One correction to the note above, from the owner, and it closes a fork
 

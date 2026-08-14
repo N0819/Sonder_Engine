@@ -891,12 +891,10 @@ def director_interpret(ctx, nonce):
     # assembly, pure output-token latency). One read of the setting serves
     # the prompt and the dispatch below, so they cannot disagree about
     # which path this beat is on.
-    _orch = orchestration_enabled()
     out = _agent_json(
         "director",
         "director_interpret",
-        get_prompt("director_interpret")
-        + (INTERPRET_DELEGATION_NOTE if _orch else ""),
+        get_prompt("director_interpret") + INTERPRET_DELEGATION_NOTE,
         payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
@@ -998,51 +996,49 @@ def director_interpret(ctx, nonce):
     # merges into `state_assertions` (contact into `contact_assertions`,
     # the interpret spelling of the same channel) BEFORE the deterministic
     # validators below, so the merged result crosses the exact floor a
-    # model-authored copy crosses. `_orch` was read once, above the LLM
-    # call, where it also selected the delegation-note suffix.
-    if _orch:
-        _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
-            ctx, sc,
-            physical=_beat_has_physical_activity(out, {}, []),
-            speech=bool(player_speech_lines(out)),
-        ))
-        _iparts = scene_extra_parts(ctx.cast, pers, p_name)
-        try:
-            from living_world import living_world_allows, living_world_config
-            _iplanning = {
-                "enabled": bool(living_world_allows(
-                    living_world_config(chat["id"]),
-                    "antagonist_ladder", "floor")),
-            }
-            if _iplanning["enabled"]:
-                _iplanning["plans"] = (
-                    wget(chat["id"], "offscreen_plans", []) or [])[:8]
-        except Exception:
-            _iplanning = {"enabled": False, "plans": []}
-        _run_specialists(
-            ctx, out, sc, _idispatch,
-            _interpret_beat_view(ctx, out, p_name),
-            {
-                "nonce": nonce,
-                "clock": clock,
-                "active_awareness": _awareness_view(
-                    chat["id"], clock, out, {}),
-                "body_parts": ({name: extra_parts_lines(parts)
-                                for name, parts in _iparts.items()}
-                               if _iparts else None),
-                "contacts": sc.get("contacts") or [],
-                "notices": _artifacts_view(chat["id"], sc),
-                "movement": out.get("movement"),
-                "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
-                "proposal": None,
-                "crowds": _crowds_view(chat["id"], sc),
-                "couriers": _couriers_view(chat["id"], sc),
-                "carried_reports": _carried_reports_view(ctx),
-                "unratified_claims": _unratified_background_claims(
-                    chat["id"], ctx.turn["idx"]),
-                "offscreen_planning": _iplanning,
-            },
-            "interpret")
+    # model-authored copy crosses.
+    _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
+        ctx, sc,
+        physical=_beat_has_physical_activity(out, {}, []),
+        speech=bool(player_speech_lines(out)),
+    ))
+    _iparts = scene_extra_parts(ctx.cast, pers, p_name)
+    try:
+        from living_world import living_world_allows, living_world_config
+        _iplanning = {
+            "enabled": bool(living_world_allows(
+                living_world_config(chat["id"]),
+                "antagonist_ladder", "floor")),
+        }
+        if _iplanning["enabled"]:
+            _iplanning["plans"] = (
+                wget(chat["id"], "offscreen_plans", []) or [])[:8]
+    except Exception:
+        _iplanning = {"enabled": False, "plans": []}
+    _run_specialists(
+        ctx, out, sc, _idispatch,
+        _interpret_beat_view(ctx, out, p_name),
+        {
+            "nonce": nonce,
+            "clock": clock,
+            "active_awareness": _awareness_view(
+                chat["id"], clock, out, {}),
+            "body_parts": ({name: extra_parts_lines(parts)
+                            for name, parts in _iparts.items()}
+                           if _iparts else None),
+            "contacts": sc.get("contacts") or [],
+            "notices": _artifacts_view(chat["id"], sc),
+            "movement": out.get("movement"),
+            "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
+            "proposal": None,
+            "crowds": _crowds_view(chat["id"], sc),
+            "couriers": _couriers_view(chat["id"], sc),
+            "carried_reports": _carried_reports_view(ctx),
+            "unratified_claims": _unratified_background_claims(
+                chat["id"], ctx.turn["idx"]),
+            "offscreen_planning": _iplanning,
+        },
+        "interpret")
 
     out["contact_assertions"] = _validated_player_contact_assertions(
         sc, out.get("contact_assertions"), p_name,
@@ -1240,8 +1236,7 @@ def director_interpret(ctx, nonce):
 
     # Interpret's own scope backstop, on the FINAL interpretation -- the
     # same single check resolve runs, pointed at this stage's containers.
-    if _orch:
-        _orchestration_scope_backstop(ctx, out, "interpret")
+    _orchestration_scope_backstop(ctx, out, "interpret")
 
     return out
 
@@ -2904,6 +2899,41 @@ def _merge_repair_into_diff(sd, patch):
 def _norm_subject(value):
     return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
 
+def _claim_subject_is_referrable(subject, forms, sc, player_input):
+    """Can anyone point at what this claim is about?
+
+    Two independent channels, either of which qualifies (see the block
+    comment at the call site for the live case that made this necessary):
+
+      * THE WORLD KNOWS IT -- `_subject_match_forms` found more than the
+        bare string it was handed, meaning the subject matched a cast
+        member's scene keys or an entity's ids and aliases, or the subject
+        names a room in the scene.
+      * THE PLAYER SAID IT -- the subject's words appear in what the player
+        typed. This is the channel that keeps "I shatter the vault door" a
+        real claim about a door no scene contains yet, which is exactly
+        what player authority exists to do.
+
+    Normalized to letters and digits on both sides, so `vault_door` matches
+    "the vault door" and casing and punctuation cannot decide it. Fails
+    open: anything this cannot evaluate is referrable, because refusing a
+    claim is the direction that costs the player their authority.
+    """
+    normalized = _norm_subject(subject)
+    if not normalized:
+        return False
+    if len(forms or []) > 1:
+        return True
+    rooms = ((sc or {}).get("rooms") or {})
+    room_forms = set(rooms)
+    for rid, room in rooms.items():
+        if isinstance(room, dict) and room.get("name"):
+            room_forms.add(str(room["name"]))
+    if any(_norm_subject(r) == normalized for r in room_forms):
+        return True
+    return normalized in _norm_subject(player_input)
+
+
 def _subject_match_forms(subject, cast, sc):
     """Every identity form an omission subject may legitimately appear under
     in the diff: the subject itself, plus -- when it names a registered cast
@@ -3304,6 +3334,28 @@ _RECONCILE_MAX_MANIFEST_ITEMS = 8
 _RECONCILE_MAX_AUDIT_OMISSIONS = 6
 _RECONCILE_MIN_CONFIDENCE = 0.4
 
+def fanout_is_parallel():
+    """Whether the Director's specialists run at once (default) or in turn.
+
+    PARALLEL IS THE DEFAULT and is what the fan-out is for: the specialists
+    are handed disjoint channels of the same finished beat, so they have
+    nothing to say to each other and the beat's cost is its slowest hand
+    rather than the sum of them.
+
+    Sequential exists because concurrency is not free everywhere -- a
+    provider with a one-request-at-a-time key, a rate limit measured in
+    concurrent connections, a local runtime serving one model on one GPU.
+    Under those, parallel dispatch does not go faster and can fail. It is
+    NOT a fallback to the monolith: the same specialists run with the same
+    scopes, assembled in the same canonical order, and a beat still
+    dispatches a mean 1.75 of 6 hands carrying 1-4k sheets. Sequential
+    fan-out is expected to beat the single ~21k-token sheet it replaced;
+    parallel simply beats it by more.
+    """
+    value = str(get_setting("director_fanout_mode") or "").strip().casefold()
+    return value not in ("sequential", "serial", "one_at_a_time")
+
+
 def _deep_audit_mode():
     """The default-off standalone resolve_reconcile audit: 'off' (default),
     'always' (every physical beat -- the pre-manifest behavior, kept as a
@@ -3419,7 +3471,7 @@ def _fold_derived_manifest_events(items):
         item["event_id"] = index + 1
     return folded
 
-def _player_claim_findings(out, sd, interp, cast, sc):
+def _player_claim_findings(out, sd, interp, cast, sc, player_input=""):
     """Tier 0 player-authority coverage: every asserted scope='effect'
     authority claim with a resolvable subject must be encoded SOMEWHERE in
     the diff (shallow containment -- the claim's free-text predicate cannot
@@ -3459,6 +3511,36 @@ def _player_claim_findings(out, sd, interp, cast, sc):
             })
             continue
         forms = _subject_match_forms(subject, cast, sc)
+        # A SUBJECT NOBODY CAN POINT AT is the null-subject case wearing a
+        # word, and it has to degrade the same way -- because a player claim
+        # is NON-REJECTABLE, so an unsatisfiable one warns every beat
+        # forever and buys the full-core repair every beat forever.
+        #
+        # Live, chat 72 turn 45: the player added an aside addressed to the
+        # ENGINE -- "(it is a hotel. even at late hour someone should be
+        # staffing it, use logic and reasoning instead of assuming no one is
+        # there)" -- and interpret minted two asserted completed effects on a
+        # subject called `narrative_assertion`, split at a comma. Neither
+        # could ever be encoded, so they bought the most expensive retry the
+        # engine has and warned anyway; the repair answered 'already_encoded'
+        # for both and non-rejectability correctly refused to hear it.
+        #
+        # Two channels qualify a subject and only failing BOTH disqualifies:
+        #   * the WORLD knows it -- `_subject_match_forms` found cast keys or
+        #     entity aliases beyond the bare string, or it names a room;
+        #   * the PLAYER SAID IT -- the words are in their own input, which
+        #     is what makes "I shatter the vault door" a real claim about a
+        #     door no scene contains yet. Asserting a thing into existence is
+        #     precisely what player authority is for.
+        # Folded to words so punctuation and case cannot decide it.
+        if not _claim_subject_is_referrable(subject, forms, sc, player_input):
+            notes.append({
+                "claim_id": claim.get("claim_id"),
+                "predicate": claim.get("predicate"),
+                "note": ("subject names nothing in the world and nothing the "
+                         "player typed; coverage not checkable"),
+            })
+            continue
         if not _omission_subject_encoded(sd, subject, forms):
             omissions.append({
                 "category": "other", "subject": subject,
@@ -3841,9 +3923,21 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
     channels, never deleting what the diff already asserts. A failed call
     is fail-open exactly like the fan-out: warn, keep the beat, let the
     re-check below file the omission as unresolved.
+
+    Returns (repaired, verdicts). `verdicts` maps event_id -> the settling
+    answer its owner gave ON THE REPAIR CALL, which is the fan-out's
+    analogue of the core repair's `dispositions` and closes the same hole
+    the monolith closed: a hand asked to encode something it can see is
+    ALREADY carried could otherwise only mend or stay silent, and silence
+    ships a `still does not encode it` warning against a change the owner
+    just certified (v26625, on the core path). Believing it costs nothing:
+    an `encoded` claim is still checked against the merged diff by
+    `_evidence_present` downstream, and an `already_true` against standing
+    state by `_verify_already_true`, exactly as a dispatch verdict is.
     """
     repaired = False
     reports = {}
+    verdicts = {}
     for name in SPECIALISTS:          # canonical order, like the fan-out
         entries = routed.get(name)
         if not entries:
@@ -3869,7 +3963,13 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             "currently stands. Your answer is merged ADDITIVELY over "
             "previous_channels (it cannot delete existing entries), so "
             "emit ONLY your channels, encoding each detected omission; "
-            "leave a channel empty when its omission is already covered.")
+            "leave a channel empty when its omission is already covered. "
+            "Echo every listed event in resolved_events with its verdict -- "
+            "'encoded' when you are adding it here, 'already_true' when "
+            "standing state carries it and no delta is correct. Silence on "
+            "an event reads as unencoded and ships a staleness warning "
+            "against the beat, so say already_true rather than nothing when "
+            "that is the answer.")
         try:
             result = _agent_json(
                 spec["role"], spec["step_key"],
@@ -3886,6 +3986,18 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
                 f"will be warned, never fabricated (fail-open): {exc}")
             continue
         report["ok"] = True
+        # The owner's verdict on the events it was handed AGAIN. Same
+        # filter as the dispatch echo: an id this call was not given is
+        # discarded, so a repairer cannot acquit a sibling's omission.
+        granted_ids = [om.get("event_id") for _ch, om in entries
+                       if om.get("event_id")]
+        settled = _resolved_event_verdicts(result, granted_ids)
+        if settled:
+            report["events_resolved"] = settled
+            for entry in settled:
+                if entry["status"] in _SETTLING_VERDICTS:
+                    verdicts[entry["event_id"]] = {
+                        "status": entry["status"], "owner": name}
         patch = {}
         for channel in scope:
             value = _normalized_channel_value(channel, result.get(channel))
@@ -3904,7 +4016,7 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
         _merge_repair_into_diff(sd, patch)
         repaired = True
     recon["specialist_repairs"] = reports
-    return repaired
+    return repaired, verdicts
 
 
 def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
@@ -4043,7 +4155,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         })
 
     claim_omissions, claim_notes, contract_warnings = _player_claim_findings(
-        out, sd, interp, ctx.cast, sc)
+        out, sd, interp, ctx.cast, sc, ctx.input or "")
     for warning in contract_warnings:
         ctx.add_warning(warning)
 
@@ -4200,6 +4312,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     # full-core call. Detection above is identical on both paths; only the
     # repairer changes (see _specialist_repairs).
     core_omissions = omissions
+    repair_verdicts = {}
     orch_repair = None
     _orch_record = out.get("orchestration")
     if isinstance(_orch_record, dict) and _orch_record.get("enabled"):
@@ -4209,11 +4322,13 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         routed, core_omissions = _route_repair_omissions(
             omissions,
             (_orch_record or {}).get('events_addressed'))
-        if routed and _specialist_repairs(
+        if routed:
+            _mended, repair_verdicts = _specialist_repairs(
                 ctx, sc, sd, routed,
                 orch_repair["view"], orch_repair.get("extras") or {},
-                recon):
-            recon["repaired"] = True
+                recon)
+            if _mended:
+                recon["repaired"] = True
 
     dispositions = []
     if core_omissions:
@@ -4302,6 +4417,17 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         if encoded:
             continue
         status = _disposition_for(om.get("subject"))
+        if not status:
+            # No core repair ran for this one (its channel has an owner), so
+            # its verdict is the owner's own echo. `already_true` is the
+            # specialist spelling of the core repair's `already_encoded` --
+            # the same claim about the same beat, and it earns the same
+            # conservatism: believed only where standing state can carry it.
+            _repair_said = (repair_verdicts.get(om.get("event_id")) or {}
+                            ).get("status")
+            if _repair_said == "already_true" \
+                    and _verify_already_true(om, sc or {})[0]:
+                status = "already_encoded"
         if source == "player_claim":
             # NON-REJECTABLE: the player authority contract makes the effect
             # true; a disposition cannot argue it away -- only actual
@@ -5078,15 +5204,6 @@ _PROSE_DUTY_SHIPPED = {
 }
 
 
-def orchestration_enabled():
-    """The `director_orchestration` setting, default OFF. The monolithic
-    Director stays the default until measurement says otherwise -- this is a
-    setting, not a rewrite, and turning it off restores the old path
-    byte-for-byte (the monolithic prompt is byte-identical)."""
-    value = str(get_setting("director_orchestration") or "").strip().casefold()
-    return value in ("1", "on", "true", "body")
-
-
 def _gate_facts(ctx, sc, *, physical, speech, material_effects=False):
     """The scene facts every channel gate reads, computed once per stage,
     at that stage's own time. Standing scene state (ledgers, settings) plus
@@ -5566,7 +5683,22 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             if item.get("event_id")
         ]
     results = {}
-    if len(jobs) == 1:
+    if len(jobs) > 1 and not fanout_is_parallel():
+        # SEQUENTIAL, by host choice. Same context copy per job, same
+        # canonical assembly below, same fail-open -- the only difference is
+        # that the calls do not overlap. Still cheaper than the monolith
+        # was: a beat dispatches a mean 1.75 of 6 specialists and each
+        # carries a 1-4k sheet against the single sheet's ~21k, so the work
+        # is smaller even when none of it runs at once.
+        for name, state in jobs:
+            try:
+                results[name] = _call_isolated(name, state,
+                                               contextvars.copy_context())
+            except Aborted:
+                raise
+            except Exception as exc:
+                results[name] = exc
+    elif len(jobs) == 1:
         name, state = jobs[0]
         try:
             results[name] = _call_isolated(name, state,
@@ -6245,10 +6377,9 @@ def director_resolve(ctx, nonce):
     # inherited from interpret. The prose author keeps the same role, step
     # key, schema and payload either way; only the instruction sheet is
     # lean when the delegated machinery is cold-stored in the specialists.
-    _orch = orchestration_enabled()
     _orch_dispatch = None
     _prose_scope = None
-    if _orch:
+    if True:
         _orch_facts = _gate_facts(
             ctx, sc,
             physical=_beat_has_physical_activity(interp, char_actions, dice),
@@ -6263,8 +6394,7 @@ def director_resolve(ctx, nonce):
         # persisted below and audited by the same backstop.
         _prose_scope = _prose_author_scope(
             ctx, sc, payload, _orch_facts, p_name)
-    _resolve_prompt = (prose_author_prompt(_prose_scope) if _orch
-                       else get_prompt("director_resolve"))
+    _resolve_prompt = prose_author_prompt(_prose_scope)
 
     out = _agent_json(
         "director",
@@ -6545,52 +6675,51 @@ def director_resolve(ctx, nonce):
     # settled it -- and before every deterministic seam below, so the
     # movement backstop, the restraint floor and the reconciliation manifest
     # all judge the MERGED diff exactly as they judge a monolithic one.
-    if _orch:
-        _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
-                                        p_name, interp)
-        _orch_extras = {
-            "nonce": nonce,
-            "clock": clock,
-            "active_awareness": payload.get("active_awareness"),
-            "body_parts": (payload.get("scene") or {}).get("body_parts"),
-            "contacts": resolve_sc.get("contacts") or [],
-            "contact_endings": character_contact_endings,
-            "material_effects": character_material_effects,
-            "notices": payload.get("notices") or [],
-            "movement": interp.get("movement"),
-            "movers": {
-                str(d.get("name")): {
-                    "exits": d.get("exits"),
-                    "sprint_reach": d.get("sprint_reach"),
-                }
-                for d in decls if d.get("name")
-            },
-            "proposal": payload.get("mapping_scene_proposal"),
-            "crowds": payload.get("crowds") or [],
-            "couriers": payload.get("couriers") or [],
-            "carried_reports": payload.get("carried_reports") or [],
-            "unratified_claims": payload.get("unratified_claims") or [],
-            "offscreen_planning": payload.get("offscreen_planning")
-                                  or {"enabled": False, "plans": []},
-        }
-        _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
-                         _orch_extras, "resolve")
-        # Kept for the reconciliation seam below: when it detects an
-        # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
-        # with the same beat view and entitlement slice, never the prose
-        # author with the full core (see _specialist_repairs). In-memory
-        # only -- never persisted with the step.
-        ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras}
-        # The prose author's granted scope, persisted beside the
-        # specialists' -- what the scope backstop audits shipped prose
-        # duties against, and the per-beat measurement the sheet scoping
-        # is judged by (gated_out is the saving; a prose gate_flag below
-        # is the misprediction).
-        out["orchestration"]["prose_scope"] = {
-            "granted": sorted(_prose_scope or ()),
-            "gated_out": sorted(
-                set(PROSE_DUTY_CHUNKS) - set(_prose_scope or ())),
-        }
+    _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
+                                    p_name, interp)
+    _orch_extras = {
+        "nonce": nonce,
+        "clock": clock,
+        "active_awareness": payload.get("active_awareness"),
+        "body_parts": (payload.get("scene") or {}).get("body_parts"),
+        "contacts": resolve_sc.get("contacts") or [],
+        "contact_endings": character_contact_endings,
+        "material_effects": character_material_effects,
+        "notices": payload.get("notices") or [],
+        "movement": interp.get("movement"),
+        "movers": {
+            str(d.get("name")): {
+                "exits": d.get("exits"),
+                "sprint_reach": d.get("sprint_reach"),
+            }
+            for d in decls if d.get("name")
+        },
+        "proposal": payload.get("mapping_scene_proposal"),
+        "crowds": payload.get("crowds") or [],
+        "couriers": payload.get("couriers") or [],
+        "carried_reports": payload.get("carried_reports") or [],
+        "unratified_claims": payload.get("unratified_claims") or [],
+        "offscreen_planning": payload.get("offscreen_planning")
+                              or {"enabled": False, "plans": []},
+    }
+    _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
+                     _orch_extras, "resolve")
+    # Kept for the reconciliation seam below: when it detects an
+    # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
+    # with the same beat view and entitlement slice, never the prose
+    # author with the full core (see _specialist_repairs). In-memory
+    # only -- never persisted with the step.
+    ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras}
+    # The prose author's granted scope, persisted beside the
+    # specialists' -- what the scope backstop audits shipped prose
+    # duties against, and the per-beat measurement the sheet scoping
+    # is judged by (gated_out is the saving; a prose gate_flag below
+    # is the misprediction).
+    out["orchestration"]["prose_scope"] = {
+        "granted": sorted(_prose_scope or ()),
+        "gated_out": sorted(
+            set(PROSE_DUTY_CHUNKS) - set(_prose_scope or ())),
+    }
 
     # Safety net: LLM sometimes returns a string/list where an object belongs.
     sd = _normalize_diff_shape(out.get("state_diff"))
@@ -7130,8 +7259,7 @@ def director_resolve(ctx, nonce):
     # change the prose asserted -- so a wrongly-skipped specialist or a
     # wrongly-omitted chunk is reported against what actually ships, never
     # against a draft.
-    if _orch:
-        _orchestration_scope_backstop(ctx, out, "resolve")
+    _orchestration_scope_backstop(ctx, out, "resolve")
 
     return out
 

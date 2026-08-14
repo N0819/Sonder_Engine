@@ -182,6 +182,6 @@ class TestTheFloorIsWiredIn:
         it keys off."""
         from prompts import DEFAULT_PROMPTS
 
-        text = DEFAULT_PROMPTS["director_resolve"]
+        text = DEFAULT_PROMPTS["director_resolve_lean"]
         assert "background_presence_knowledge" in text
         assert "copper and silver" in text

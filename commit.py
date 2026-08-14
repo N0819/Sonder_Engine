@@ -4356,11 +4356,20 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         str(n).strip() for n in (dr_output.get("routed_to_background") or [])
         if str(n).strip() and str(n).strip().casefold() not in roster
     ]
-    voiced_this_beat -= {n.casefold() for n in forced_routed}
     diff = dr_output.get("state_diff") or {}
     for entity_def in (diff.get("entities") or {}).values():
         if isinstance(entity_def, dict) and entity_def.get("name"):
             voiced_this_beat.add(str(entity_def["name"]).casefold())
+    # LAST, so the hand-off outranks the entity-mint exclusion. Minting the
+    # presence and giving up its words are the two halves of one design --
+    # the Director owns what EXISTS and the background stage owns what it
+    # SAYS -- so a routed name appearing in `state_diff.entities` is the
+    # Director doing its job, never evidence the line is already handled.
+    # Subtracting before the loop above put the two halves in a race the
+    # mint won: chat 72 turn 45 minted `night_clerk` as a `character`
+    # entity in the same beat its line was routed here, and the mint
+    # re-excluded the presence its own routing had just handed over.
+    voiced_this_beat -= {n.casefold() for n in forced_routed}
 
     resolved_event = str(dr_output.get("resolved_event") or "")
     player_input = str(ctx.get("input") or "")
@@ -4373,9 +4382,36 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     # Where the player is standing, for the at-post test below.
     _pname = _player_name_or_none(ctx)
     player_room = room_of(sc, _pname) if _pname else ""
+    # A presence the Director MINTED THIS BEAT has no record yet -- and
+    # never can at this point, because `track_background_presences` writes
+    # it at commit, after this gate. Iterating `presences` alone therefore
+    # made the forced hand-off unreachable for the one class of presence
+    # that most needs it: the one who just arrived because the beat called
+    # for someone to arrive.
+    #
+    # Live, chat 72 turn 45. The player rang a hotel bell and said outright
+    # "someone should be staffing it, use logic and reasoning instead of
+    # assuming no one is there". The Director agreed, minted a night clerk
+    # and wrote him muttering "I'm coming, I'm coming". The ownership guard
+    # correctly routed his line here -- he is person-shaped and deserves
+    # his own call with his own perception object -- and this loop could
+    # not see him, so the line was deleted and nothing replaced it. The
+    # narrator's last sentence was "Somewhere beyond the desk, a door might
+    # shift. Or not."
+    #
+    # A routed name with no record is seeded EMPTY, so nothing is invented:
+    # every salience test below reads absent history as absent, and the
+    # presence qualifies on `routed` alone -- which is the correct and only
+    # claim, since the Director choosing to speak for someone IS the
+    # salience finding.
+    ranked = dict(presences)
+    for name in forced_routed:
+        if name.casefold() not in {n.casefold() for n in ranked}:
+            ranked[name] = {}
+
     candidates = []
     forced = 0
-    for name, record in presences.items():
+    for name, record in ranked.items():
         cf = name.casefold()
         if cf in roster or cf in voiced_this_beat:
             continue

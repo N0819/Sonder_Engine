@@ -205,7 +205,7 @@ def test_the_prompt_states_the_rule_the_guard_enforces():
     already walked her through the door is the worse failure of the two."""
     from prompts import DEFAULT_PROMPTS
 
-    prompt = DEFAULT_PROMPTS["director_resolve"]
+    prompt = DEFAULT_PROMPTS["director_resolve_lean"]
     assert "APPROACHING IS NOT ARRIVING, AND ARRIVING IS NOT ENTERING" in prompt
     assert "`approach` has by definition not landed yet" in prompt
     assert "Crossing a threshold is its own act" in prompt

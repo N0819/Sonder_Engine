@@ -1168,9 +1168,31 @@ function loopMindIds(content) {
 // What this step can be read one-of-at-a-time. Per mind where the step IS
 // per-mind; otherwise per top-level key, which is the generic fallback and the
 // reason an unfamiliar step still gets a usable bar.
+// The Director's six specialists, in the order the fan-out dispatches them.
+// Sourced from the step's own record rather than hardcoded, so a specialist
+// added or renamed in agents/director.py needs nothing here.
+function specialistIds(content) {
+  const record = content && content.orchestration;
+  if (!record || typeof record !== "object") return [];
+  const table = record.specialists;
+  if (!table || typeof table !== "object") return [];
+  return Object.keys(table).filter(name => table[name] && table[name].run);
+}
+
 function stepLenses(content) {
   if (!content || typeof content !== "object" || Array.isArray(content)) {
     return null;
+  }
+  // A Director stage is ONE step made of several calls: a prose author that
+  // owns the beat's account and the specialists that own its channels. They
+  // were only legible as a nested blob under `orchestration`, so reading
+  // what one hand actually did meant scrolling a merged diff and matching
+  // channel names by eye. They are tabs of the Director's own window now,
+  // which is what they are.
+  const specialists = specialistIds(content);
+  if (specialists.length) {
+    return { kind: "specialist", label: "Written by",
+             ids: ["prose"].concat(specialists) };
   }
   if (perceiverViews(content)) {
     return { kind: "perceiver", label: "Seen by",
@@ -1202,6 +1224,13 @@ function facetBadge(value) {
 }
 
 function lensLabel(lenses, id, content, names) {
+  if (lenses.kind === "specialist") {
+    if (id === "prose") return "prose author";
+    const state = (((content.orchestration || {}).specialists) || {})[id];
+    if (state && state.ran === false) return `${id} ·failed`;
+    const filled = (state && state.channels_filled) || [];
+    return filled.length ? `${id} ·${filled.length}` : id;
+  }
   if (lenses.kind === "key") {
     const badge = facetBadge(content[id]);
     return badge ? `${id} ·${badge}` : id;
@@ -1237,9 +1266,98 @@ function renderLensBar(bar, lenses, lens, content, names, onPick) {
 }
 
 function lensSlice(lenses, content, id, names) {
+  if (lenses.kind === "specialist") return specialistSlice(content, id);
   if (lenses.kind === "perceiver") return perceiverSlice(content, id, names);
   if (lenses.kind === "mind") return mindSlice(content, id, names);
   return keySlice(content, id);
+}
+
+//: The channels this hand was granted, and what stands in each. The values
+//: come from the MERGED diff, so a channel a later repair mended shows its
+//: mended content -- which is the truth about the channel, and is labelled
+//: as the merged value rather than as this specialist's raw reply.
+function specialistSlice(content, id) {
+  if (id === "prose") {
+    const own = {};
+    const delegated = new Set();
+    const table = ((content.orchestration || {}).specialists) || {};
+    for (const state of Object.values(table)) {
+      for (const channel of (state && state.channels) || []) {
+        delegated.add(channel);
+      }
+    }
+    for (const [key, value] of Object.entries(content)) {
+      if (key === "orchestration" || key === "_engine_notes") continue;
+      if (key !== "state_diff") { own[key] = value; continue; }
+      const kept = {};
+      for (const [channel, entry] of Object.entries(value || {})) {
+        if (!delegated.has(channel)) kept[channel] = entry;
+      }
+      own[key] = kept;
+    }
+    return [
+      "The beat's account, and the state_diff channels no specialist owns.",
+      "",
+      JSON.stringify(own, null, 2)
+    ].join("\n");
+  }
+
+  const state = (((content.orchestration || {}).specialists) || {})[id];
+  if (!state) return "(this specialist has no record on this step)";
+  const out = [];
+  if (state.ran === false) {
+    out.push("DID NOT RUN — the beat kept the author's channels (fail-open).");
+    if (state.error) out.push(`error: ${state.error}`);
+    out.push("");
+  }
+  const scope = state.scope || [];
+  out.push(`granted (${scope.length} of ${(state.channels || []).length}): `
+           + (scope.join(", ") || "nothing"));
+  if ((state.channels_filled || []).length) {
+    out.push(`filled: ${state.channels_filled.join(", ")}`);
+  }
+  if ((state.channels_replaced || []).length) {
+    out.push(`replaced the author's: ${state.channels_replaced.join(", ")}`);
+  }
+  if ((state.event_ids || []).length) {
+    out.push(`answerable for events: ${state.event_ids.join(", ")}`);
+  }
+  for (const verdict of state.events_resolved || []) {
+    out.push(`  event ${verdict.event_id}: ${verdict.status}`
+             + (verdict.reroute_to ? ` → ${verdict.reroute_to}` : ""));
+  }
+  const repair = ((content.reconciliation || {}).specialist_repairs || {})[id];
+  if (repair) {
+    out.push("", `— asked again to repair ${(repair.scope || []).join(", ")} `
+             + `— ${repair.ok ? "answered" : "FAILED"} —`);
+    if (repair.error) out.push(`  ${repair.error}`);
+  }
+
+  const diff = content.state_diff || {};
+  const empty = value => value === null || value === undefined
+    || (Array.isArray(value) ? !value.length
+        : typeof value === "object" ? !Object.keys(value).length
+        : value === "");
+  const written = scope.filter(channel => !empty(diff[channel]));
+  const silent = scope.filter(channel => empty(diff[channel]));
+  if (written.length) {
+    out.push("", "— its channels in the merged diff —", "");
+    for (const channel of written) {
+      out.push(`${channel}: ${JSON.stringify(diff[channel], null, 2)}`);
+    }
+  }
+  // Granted and left empty is an ANSWER -- "this beat had no work of mine
+  // in that channel" -- and a different one from gated out below, which is
+  // "nobody even asked". Both are worth a line and neither is worth the
+  // twenty of an empty object printed in full.
+  if (silent.length) {
+    out.push("", `granted and left empty: ${silent.join(", ")}`);
+  }
+  const ungranted = (state.channels || []).filter(c => !scope.includes(c));
+  if (ungranted.length) {
+    out.push("", `gated out this beat: ${ungranted.join(", ")}`);
+  }
+  return out.join("\n");
 }
 
 // One perceiver's slice: the prose they received, then the structured

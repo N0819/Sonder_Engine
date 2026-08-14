@@ -251,3 +251,89 @@ class TestTheRepairsAreShown:
 
     def test_a_warning_is_styled_as_one(self):
         assert ".engine-notes .engine-warning" in STYLES
+
+
+class TestTheDirectorsSpecialistsAreTabsOfItsOwnWindow:
+    """A Director stage is ONE step made of several calls.
+
+    The prose author owns the beat's account; the specialists own the
+    state_diff channels the beat touches. Rendered flat, all six were a
+    nested blob under `orchestration`, so reading what one hand actually
+    did meant scrolling a merged diff and matching channel names by eye --
+    on the very stage where "which hand wrote this" is the first question
+    anyone asks. They are facets of the Director's own step, which is what
+    they are.
+    """
+
+    def test_the_specialists_are_a_lens_of_their_own(self):
+        block = _between(CHAT_JS, "function stepLenses(",
+                         "function perceiverLabel(")
+        assert 'kind: "specialist"' in block
+
+    def test_the_roster_is_read_off_the_step_not_hardcoded(self):
+        """A specialist added or renamed in agents/director.py must need
+        nothing here -- a hardcoded list is a second roster to drift."""
+        block = _between(CHAT_JS, "function specialistIds(",
+                         "function stepLenses(")
+        assert "record.specialists" in block
+        for name in ("body", "social", "contact", "objects", "spatial",
+                     "offscreen"):
+            assert f'"{name}"' not in block, name
+
+    def test_a_specialist_that_never_ran_gets_no_tab(self):
+        """Most beats dispatch about two of the six. A tab per specialist
+        regardless would make every Director step look like it did six
+        things, which is the opposite of what the lens is for."""
+        block = _between(CHAT_JS, "function specialistIds(",
+                         "function stepLenses(")
+        assert "].run" in block or ".run)" in block
+
+    def test_the_prose_author_gets_the_first_tab(self):
+        """The beat's account is what a reader opens a Director step for;
+        the channels are the follow-up question."""
+        block = _between(CHAT_JS, "function stepLenses(",
+                         "function perceiverLabel(")
+        assert '["prose"].concat(specialists)' in block
+
+    def test_the_prose_tab_subtracts_what_it_does_not_own(self):
+        """Showing the merged diff under the prose author would credit it
+        with every channel a specialist wrote -- the exact confusion the
+        lens exists to end."""
+        block = _between(CHAT_JS, "function specialistSlice(",
+                         "// What the deterministic layer did")
+        assert "delegated.has(channel)" in block
+
+    def test_granted_and_empty_reads_differently_from_gated_out(self):
+        """Two different answers. "I was asked and had nothing" is the
+        specialist reporting; "nobody asked" is the scope gate deciding.
+        Collapsing them hides which of the two a missing encoding was."""
+        block = _between(CHAT_JS, "function specialistSlice(",
+                         "// What the deterministic layer did")
+        assert "granted and left empty" in block
+        assert "gated out this beat" in block
+
+    def test_a_failed_specialist_says_so_on_its_tab_and_its_label(self):
+        """Fail-open means the beat survives a specialist dying, which is
+        correct and is exactly why it must not be silent in the drawer."""
+        slice_block = _between(CHAT_JS, "function specialistSlice(",
+                               "// What the deterministic layer did")
+        assert "DID NOT RUN" in slice_block
+        label_block = _between(CHAT_JS, "function lensLabel(",
+                               "function renderLensBar(")
+        assert "·failed" in label_block
+
+    def test_the_repair_pass_shows_on_the_hand_that_was_asked_again(self):
+        """The seam routes an omission to the channel's owner, so "was this
+        hand asked twice" is answerable from its own tab rather than from
+        the reconciliation blob."""
+        block = _between(CHAT_JS, "function specialistSlice(",
+                         "// What the deterministic layer did")
+        assert "specialist_repairs" in block
+
+    def test_the_merged_value_is_labelled_as_merged(self):
+        """A channel a later repair mended shows its mended content. That
+        is the truth about the channel and not the specialist's raw reply,
+        and the difference matters when reading a beat that went wrong."""
+        block = _between(CHAT_JS, "function specialistSlice(",
+                         "// What the deterministic layer did")
+        assert "merged diff" in block

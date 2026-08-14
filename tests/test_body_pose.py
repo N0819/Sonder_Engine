@@ -196,7 +196,7 @@ class TestObserverProjection:
 
     def test_prompts_forbid_default_standing_and_appearance_roll_calls(self):
         perception = DEFAULT_PROMPTS["perception"]
-        resolve = DEFAULT_PROMPTS["director_resolve"]
+        resolve = DEFAULT_PROMPTS["director_spatial"]
         assert "Presence and visibility do not imply standing" in perception
         assert "scene.pose_unknown" in perception
         assert "fresh roll-call of age, beauty, species traits" in perception

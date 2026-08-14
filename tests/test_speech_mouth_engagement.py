@@ -247,10 +247,10 @@ class TestTheRendering:
 class TestThePromptNamesTheOccasion:
 
     def test_the_dialogue_contract_names_the_filled_mouth(self):
-        resolve = DEFAULT_PROMPTS["director_resolve"]
+        resolve = DEFAULT_PROMPTS["director_resolve_lean"]
         assert "A FILLED MOUTH SPEAKS LAST OR BARELY" in resolve
         assert "end that contact in contact_ops" in resolve
 
     def test_the_dialogue_contract_names_the_engaged_tongue(self):
-        resolve = DEFAULT_PROMPTS["director_resolve"]
+        resolve = DEFAULT_PROMPTS["director_resolve_lean"]
         assert "A TONGUE MID-ACT SLURS" in resolve

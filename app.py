@@ -36,6 +36,7 @@ import greetings
 from agents import (
     run_pipeline, request_abort, begin_pipeline,
     active_content, ABORTS, PipelineBusyError,
+    fanout_is_parallel as director_fanout_is_parallel,
 )
 from character_schema import (
     character_export_document,
@@ -1023,9 +1024,10 @@ def bootstrap():
         # always reported, but spelling out the body under the garment is a
         # choice the host makes rather than one a first run makes for them.
         "attire_beneath": get_setting("attire_beneath") == "1",
-        "director_orchestration": str(
-            get_setting("director_orchestration") or "").strip().lower()
-        in ("1", "on", "true", "yes"),
+        # Whether the Director's specialists run at once. Parallel is the
+        # default and the point; sequential is for a provider that cannot
+        # take concurrent requests (see director.fanout_is_parallel).
+        "director_fanout_parallel": director_fanout_is_parallel(),
         # Affect habituation (design note 22). Default OFF, and otherwise
         # reachable only by editing the database -- a switch a host cannot
         # find is a switch that becomes folklore, and this one was live in a
@@ -1289,24 +1291,28 @@ def set_nsfw(body: dict = Body(...)):
     set_setting("nsfw_enabled", "1" if body.get("enabled") else "0")
     return {"enabled": body.get("enabled", False)}
 
-@app.put("/api/director_orchestration")
-def set_director_orchestration(body: dict = Body(...)):
-    """Whether the Director fans out to its scoped specialists.
+@app.put("/api/director_fanout_mode")
+def set_director_fanout_mode(body: dict = Body(...)):
+    """Whether the Director's specialists run at once or in turn.
 
-    Off is the default and off is the monolithic path this engine shipped
-    with -- the single sheet is a byte-identical recomposition of the same
-    segments, so turning this off is not a fallback, it is the same prompt.
+    The fan-out itself is not optional and has no switch: each Director
+    stage keeps ONE step and works inside it as a prose author that owns
+    the beat's account plus specialists that own the state_diff channels
+    the beat actually touches. That is the only path.
 
-    On, each Director stage keeps ONE step and fans out inside it: a prose
-    author that owns the beat's account, and specialists that own the
-    state_diff channels the beat actually touches. Nothing else about the
-    turn changes -- commit is still the only writer, reroll and replay still
-    work on the same step keys, and a specialist that fails costs its own
-    channels rather than the beat.
+    What IS a choice is concurrency, because concurrency is not free
+    everywhere -- a provider key that takes one request at a time, a limit
+    measured in connections, a local runtime serving one model on one GPU.
+    Sequential is not a fallback to the old monolithic sheet: the same
+    specialists run with the same scopes and assemble in the same canonical
+    order, and a beat dispatches a mean 1.75 of 6 hands carrying 1-4k
+    sheets rather than one ~21k sheet. It is expected to beat the monolith
+    on its own; parallel beats it by more.
     """
-    enabled = bool(body.get("enabled"))
-    set_setting("director_orchestration", "1" if enabled else "0")
-    return {"enabled": enabled}
+    parallel = bool(body.get("parallel", True))
+    set_setting("director_fanout_mode",
+                "parallel" if parallel else "sequential")
+    return {"parallel": parallel}
 
 
 @app.put("/api/affect_habituation")
