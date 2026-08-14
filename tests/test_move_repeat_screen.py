@@ -75,3 +75,27 @@ def test_the_screen_sees_nothing_the_character_did_not_already_hold(monkeypatch)
     assert "her own view" in blob
     assert seen[0]["user"]["already_did"] == _MOVE["move"]
     assert seen[0]["user"]["draft_does"] == _MOVE["current"]
+
+
+# --- an interjection is not a reissued line -------------------------------
+
+def test_a_repeated_interjection_does_not_buy_a_second_model_call():
+    """9.2% of the corpus's 14,365 spoken lines are three words or fewer.
+    Saying "Mm." twice in a story is how people talk, and it was triggering the
+    full decision-review retry: ~30k tokens and 38-55s, measured live. The
+    sibling check `_first_repeated_move` already declines to judge anything
+    under five tokens; this floor is that asymmetry corrected."""
+    from agents.character import _first_verbatim_repeat
+    for line in ("Mm.", "Right.", "I see.", "No."):
+        assert _first_verbatim_repeat([line], [line]) is None, line
+
+
+def test_a_real_reissued_line_is_still_caught():
+    """The guard exists because a character was handed its own previous line in
+    `recent_self_lines` and emitted it back word for word. That must still
+    fire, and so must a four-word repeat -- the floor is deliberately below
+    the sibling's five."""
+    from agents.character import _first_verbatim_repeat
+    line = "You have never once told me the truth about the vault."
+    assert _first_verbatim_repeat([line], [line]) == line
+    assert _first_verbatim_repeat(["I do not know."], ["I do not know."])

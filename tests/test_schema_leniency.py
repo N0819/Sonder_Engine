@@ -1160,3 +1160,29 @@ def test_an_unclaimed_entry_is_rejected_rather_than_attributed():
 
     with pytest.raises(ValidationError):
         StateDiff(**{"overlays": ["a mark with no owner"]})
+
+
+# --- the manifest event number a specialist echoes back -------------------
+
+def test_an_echoed_event_number_survives_the_shapes_models_actually_send():
+    """`resolved_events[].event_id` was 8 of 17 validation failures across the
+    live corpus -- 47% of every repair call the engine has made. The number is
+    assigned by the ENGINE and merely echoed, so a model writing "#1" has not
+    misunderstood anything; it has punctuated. Failing the whole call over that
+    buys a repair round trip to recover a value that was never in doubt."""
+    from schemas import ResolvedEvent, _validate
+    for sent in ("1", "#1", "E1", "event 1", "1.", " 1 ", 1):
+        got = _validate(ResolvedEvent, {"event_id": sent, "status": "encoded"})
+        assert got.event_id == 1, sent
+
+
+def test_an_ambiguous_event_number_still_fails():
+    """Coercion is not repair. Two runs of digits, or none, means the model's
+    intent is genuinely unclear -- and inventing one there would hide a real
+    error, which is the whole reason LenientModel leaves required fields
+    alone."""
+    import pytest
+    from schemas import ResolvedEvent, _validate
+    for sent in ("1,2", "none", "first"):
+        with pytest.raises(Exception):
+            _validate(ResolvedEvent, {"event_id": sent, "status": "encoded"})

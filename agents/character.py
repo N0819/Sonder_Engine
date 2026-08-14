@@ -518,6 +518,10 @@ def _normalized_line(text):
     return " ".join(_REFRAIN_WORD_RE.findall(str(text or "").lower()))
 
 
+# Spoken lines this short are interjections; see _first_verbatim_repeat.
+_INTERJECTION_WORDS = 3
+
+
 def _first_verbatim_repeat(new_texts, recent_texts):
     """A line this beat reissues from the character's own recent speech, or None.
 
@@ -543,6 +547,19 @@ def _first_verbatim_repeat(new_texts, recent_texts):
     for text in (new_texts or []):
         norm = _normalized_line(text)
         if not norm:
+            continue
+        # An INTERJECTION is not a reissued line. "Mm.", "Right.", "I see." --
+        # 9.2% of the corpus's 14,365 spoken lines are three words or fewer,
+        # and saying one of them twice in a story is how people talk, not the
+        # failure this guard was built for (a character handed its own previous
+        # line and emitting it back word for word). Without a floor, one
+        # repeated monosyllable bought a full second character call: ~30k
+        # tokens and 38-55s, measured. Its sibling `_first_repeated_move`
+        # already declines to judge anything under five tokens; this is the
+        # same floor, and the omission here was an asymmetry rather than a
+        # decision. The shingle branch below is unaffected either way -- two
+        # shared SIX-word runs cannot occur in a three-word line.
+        if len(_self_line_tokens(text)) <= _INTERJECTION_WORDS:
             continue
         shingles = _word_shingles(text)
         for original, prev_norm, prev_shingles in previous:
