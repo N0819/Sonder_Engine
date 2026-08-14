@@ -420,18 +420,24 @@ relative arrangement, and physical constraint. A touched pose is a complete
 snapshot rather than a partial merge, so obsolete `beneath`/`pinned` fields do
 not survive a later rise. Pose changes have their own manifest/audit category.
 
-When the experimental `director_orchestration` setting is on (default off;
-design note 19), both Director stages stay ONE step each and fan out inside
-themselves. A deterministic, scene-state-keyed dispatch computes each
+Both Director stages stay ONE step each and fan out inside themselves
+(design note 19). This is the only Director path; there is no monolithic
+sheet and no setting that returns one. A deterministic, scene-state-keyed dispatch computes each
 specialist's per-beat channel SCOPE (dispatch is `bool(scope)`), the stage
 model runs with a lean instruction sheet (same role, step key, schema, and
 payload), and each dispatched specialist — `body`, `social`, `contact`,
 `objects`, `spatial`, `offscreen`, with sheets assembled per beat from its
 granted channels' chunks (`prompts.specialist_prompt`) — reads the finished
-beat and owns its channels. The specialist calls run in PARALLEL and never
-stream (structured output only; results merge in canonical order, never
-completion order; a failed call costs exactly its own channels; Aborted
-propagates). The SAME specialist definitions serve both stages: resolve's
+beat and owns its channels. The specialist calls never stream (structured
+output only; results merge in canonical order, never completion order; a
+failed call costs exactly its own channels; Aborted propagates). They run in
+PARALLEL by default — they hold disjoint channels of the same finished beat
+and have nothing to say to each other, so the beat costs its slowest hand
+rather than their sum. `director_fanout_mode: sequential` runs them one at a
+time for a provider that will not take concurrent requests; it is not a
+fallback to the removed monolith, since the same hands run with the same
+scopes and assemble in the same order, and a beat still dispatches a mean
+1.75 of 6 sheets of 1-4k against the single sheet's ~21k. The SAME specialist definitions serve both stages: resolve's
 instances read the resolved prose and own `state_diff` channels;
 interpret's read the player's structured declaration (never the raw input)
 and own the same channels of `state_assertions` (contact under
