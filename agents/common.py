@@ -4451,13 +4451,27 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
 # gentle, 'Ellie'") is a normal attribution around a quote that survived, not a
 # dangling verb -- healing it produced "he says it., quiet and gentle," in live
 # NPC dialogue whenever the same beat also stripped a player echo (v4).
+_SPEECH_CUE = (
+    r"say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|"
+    r"tell|tells|told|reply|replies|replied|answer|answers|answered|voice|"
+    r"voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|"
+    r"continue|continues|continued|offer|offers|offered"
+)
+
+
+# ONE vocabulary, shared with the colon healer below. These two lists drifted:
+# the colon healer knew `add`, `speak`, `voice`, `continue` and `offer` and this
+# one did not, so a quote stripped after "as you add," left the fragment
+# "You let the wry amusement show as you add," standing on the page with
+# nothing after it (live, chat 72). A dangling verb and a dangling colon are
+# the same wound from the same cut, and there is no reason for them to disagree
+# about what counts as speech. `_SPEECH_CUE` is defined below and reused here.
 _DANGLING_SPEECH_VERB_RE = re.compile(
-    r"\b(say|says|said|ask|asks|asked|tell|tells|told|call|calls|called|"
-    r"shout|shouts|shouted|murmur|murmurs|murmured|whisper|whispers|whispered|"
+    r"\b(" + _SPEECH_CUE + r"|call|calls|called|shout|shouts|shouted"
     # `[^\S\n]*` rather than `\s*`: the trailing whitespace this consumes must
     # not include the paragraph break it is standing in front of, or healing a
     # dangling verb silently welds two paragraphs together.
-    r"reply|replies|replied|answer|answers|answered)\b,?[^\S\n]*(?=[.!?]|$)",
+    r")\b,?[^\S\n]*(?=[.!?]|$)",
     # MULTILINE so `$` reaches the end of a PARAGRAPH, not just the end of the
     # string. Stripping a player quote off the end of a paragraph leaves the
     # verb dangling there exactly as it does at the end of the prose, and
@@ -4475,12 +4489,6 @@ _DANGLING_SPEECH_VERB_RE = re.compile(
 # that actually carries a speech cue, so a legitimate non-speech colon (a
 # list, a ratio, a time) is never eaten. The colon match also consumes an
 # orphaned period the strip may have left ("gentle: .").
-_SPEECH_CUE = (
-    r"say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|"
-    r"tell|tells|told|reply|replies|replied|answer|answers|answered|voice|"
-    r"voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|"
-    r"continue|continues|continued|offer|offers|offered"
-)
 # The lead-in TEXT is kept -- only the dangling colon (and any orphaned period
 # the strip left) is converted to a full stop, so nothing legitimate can be
 # eaten. Requiring a speech cue in the same clause keeps this off a real
