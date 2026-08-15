@@ -416,3 +416,97 @@ def test_a_presence_with_no_station_is_still_not_picked_on_post(temp_db):
     dr = {"resolved_event": "The bell rings out.", "dialogue_log": []}
 
     assert pick_background_reactors(ctx, dr, cap=1) == []
+
+
+# --- a routed line must survive whichever path runs -----------------------
+#
+# Live, chat 72, turns 45 through 50: SIX beats in which the Director wrote a
+# night clerk speaking and the player never heard one word of it.
+#
+# The Director does not author a background presence's dialogue -- it mints
+# them and moves them, and the words belong to this stage. Dropping the line
+# is what makes the speaker eligible again, so `routed_to_background` is a
+# FORCED pick: the Director already judged them worth speaking for, and the
+# hand-off exists precisely so removing a line cannot become silence.
+#
+# `pick_background_reactors` honours that. The scene MANAGER does not, and at
+# `scene_life: "full"` the manager is the only path that runs -- when it
+# declines to speak, `background_react` returns its empty result and the gate
+# holding the forced pick is never consulted. `managed_presences` says in as
+# many words that it is "deliberately NOT pick_background_reactors", which is
+# right for salience and wrong for a hand-off: the manager is handed the
+# room's populace and decides for itself, and it cannot decide about a debt
+# it was never told about.
+#
+# So the line was deleted by a guard whose whole justification is that
+# another stage will do it better, and handed to a stage that could not see
+# it had been handed anything.
+
+def test_a_routed_line_survives_a_silent_scene_manager(temp_db, monkeypatch):
+    """`scene_life: full` + a manager that stays quiet must still let the
+    routed presence speak. The `ambient` level already falls through for
+    exactly this reason -- a directed line is withheld from the manager --
+    and a ROUTED line is directed by construction."""
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "night clerk": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                        "mention_turns": [],
+                        "sketch": {"role_hint": "The hotel's night clerk."}},
+    }, player_input="Hello? Is anyone there?")
+    temp_db.wset(ctx.chat.id, "background_config",
+                 {"scene_life": "full", "max_reactors": 1})
+    ctx.director_resolve = {
+        "resolved_event": "Hinami calls into the dim back office.",
+        "dialogue_log": [],
+        "routed_to_background": ["night clerk"],
+    }
+
+    monkeypatch.setattr(background, "scene_life",
+                        lambda *a, **k: background._result([], []))
+    monkeypatch.setattr(background, "_agent_json", lambda *a, **k: {
+        "reacts": True, "action": "straightens from the cot",
+        "dialogue_log_entry": {"speaker": "night clerk",
+                               "exact_quote": '"All right, all right..."',
+                               "volume": "normal"}})
+
+    out = background.background_react(ctx, nonce=0)
+
+    assert out["selected"] == ["night clerk"], (
+        "the routed hand-off never reached the gate that honours it")
+    assert out["fired"] is True
+
+
+def test_a_manager_that_did_speak_for_them_is_not_second_guessed(temp_db,
+                                                                 monkeypatch):
+    """The fall-through is for a DEBT, not a quota. A presence the manager
+    already voiced has been spoken for, and asking again would give them two
+    lines in one beat."""
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "night clerk": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                        "mention_turns": []},
+    }, player_input="Hello?")
+    temp_db.wset(ctx.chat.id, "background_config",
+                 {"scene_life": "full", "max_reactors": 1})
+    ctx.director_resolve = {
+        "resolved_event": "Hinami calls out.", "dialogue_log": [],
+        "routed_to_background": ["night clerk"],
+    }
+    voiced = background._result(
+        ["night clerk"],
+        [{"name": "night clerk", "action": "",
+          "dialogue_log_entry": {"speaker": "night clerk",
+                                 "exact_quote": '"Coming."'}}],
+        mode="scene_life")
+    monkeypatch.setattr(background, "scene_life", lambda *a, **k: voiced)
+
+    calls = []
+    monkeypatch.setattr(background, "_agent_json",
+                        lambda *a, **k: calls.append(1) or {"reacts": False})
+
+    out = background.background_react(ctx, nonce=0)
+
+    assert out is voiced
+    assert calls == [], "the manager spoke for them and was asked again anyway"
