@@ -1,5 +1,64 @@
 # Changelog
 
+## alpha 8.4.3 — A disguise conceals features, not who you are
+
+- **Someone who knows your face still knows your face.** Any disguise used to
+  sever your name for everyone who had not been told, however well they knew
+  you — which treats a glamour over one feature as though it were a mask. It
+  produced pages that contradicted themselves in a single paragraph: your name
+  three times from one part of the view and a stranger's description once from
+  another. A disguise now says whether it covers what a person is *recognised*
+  by — face, build, bearing, voice — and only then does it cost you your name.
+  A mask still works. A pair of hidden ears leaves the face it never touched.
+
+- **A dropped glamour stays dropped.** Letting a disguise come undone recorded
+  the new form *beside* the old one instead of ending it, so a body that had
+  just revealed itself went on presenting the false shape to everyone —
+  including someone who had just watched the change happen. A body presents one
+  outward form now, and the two ways of saying so can no longer disagree.
+
+- **And being told stays told.** Who knows the truth is a fact about people, not
+  about a record: a disguise being adjusted, superseded, or carried into a new
+  branch of the story no longer quietly un-tells the person who was let in on
+  it. This was live — the one character who *had* been told was the only one
+  still fooled.
+
+- **A disguise no longer announces what it is hiding.** *"…and no tails are
+  visible"* is not a description, it is a confession: someone who has never seen
+  such a thing does not notice their absence, and saying so tells them the
+  thing exists. Denials are removed before anyone receives them, while the
+  half of the sentence that says what you *do* look like survives.
+
+- **A door named as a door is a door.** A room could be minted with an entry
+  described as "the lobby doors" and recorded as solid wall, leaving it
+  reachable from one side and sealed from the other. Such an edge becomes a
+  closed door — still shut, still needing opening, but no longer a permanent
+  seal.
+
+- **A step you cannot take no longer strands your companion.** When the engine
+  refuses to walk you through a wall, it stops everyone the same moment was
+  taking with you. Previously it stopped only you: the party split, neither
+  half could hear the other, and everything that happened next was invisible to
+  someone standing one room away.
+
+- **A whisper reaches the person you whispered to.** A line could be marked
+  private *from its own listener* — so they felt your lips at their ear, saw
+  you lean in, and received no words. They answered the act of being whispered
+  at, twice, and never the question.
+
+- **The narrator's emphasis reaches the page.** It had begun marking italics
+  unprompted — a thought the prose voices rather than quotes, a sound word —
+  and they arrived as literal angle brackets. Emphasis now renders, colour is
+  named rather than picked so it reads on every theme, and **colour never
+  touches speech**, which already carries its speaker's own. Anything outside
+  that small set is removed with its words kept.
+
+- **LCARS finally looks like LCARS.** The theme had always asked for a
+  condensed face and shipped none, so it fell back to whatever the machine
+  had — usually a plain interface font under a console frame. It now carries
+  its own, along with a rebuilt sidebar, segmented frame bars and window
+  chrome.
+
 ## alpha 8.4.2 — A reacting mind is still a mind
 
 - **Everything a character worked out while reacting was thrown away.** A
