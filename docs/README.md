@@ -83,6 +83,11 @@ World and body:
 - [`DESIGN_SURFACE_COMFORT.md`](design/DESIGN_SURFACE_COMFORT.md) — ambient
   comfort from surfaces, and the two rules that stop it becoming an attractor.
   Built.
+- [`DESIGN_DISGUISE_AND_RECOGNITION.md`](design/DESIGN_DISGUISE_AND_RECOGNITION.md)
+  — what an observer SEES of a disguised body versus whether they know WHO it
+  is. Floors built; the graded half designed and registered in `UNBUILT.md`
+  §1.43, including why it is a deterministic ladder and not a seventh
+  Director specialist.
 - [`DESIGN_REGION_VISIBILITY.md`](design/DESIGN_REGION_VISIBILITY.md) —
   concealment applied to bodies, over a four-state coverage ladder. Partly built.
 - [`DESIGN_0c_subject_identity.md`](design/DESIGN_0c_subject_identity.md) —
