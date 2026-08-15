@@ -2097,6 +2097,56 @@ the drive-feed loop working; a `drive_shift` there would have been WRONG
 (a peak inside one's own drive confirms it — the hard drive lesson is about
 strain never moving a drive, not success moving it).
 
+### 1.42 The story column's clearance for the ambience cluster cannot be honoured
+
+**Found:** rebuilding the `lcars` theme (2026-08-14), by an automated geometry
+check rather than by eye — the overlap is small enough to read as a design
+choice.
+
+`settings.js:syncVitalsGutterNow` computes a `reserve` explicitly meant to keep
+the centred story column clear of the two things floating over it: the
+condition tracker on the left, the ambience cluster on the right. For the
+cluster it reserves `ambWidth + 20`. Then:
+
+```js
+const storyWidth = Math.round(Math.min(
+  STORY_MAX_WIDTH,                                       // 1080
+  Math.max(STORY_MIN_WIDTH, shellWidth - reserve * 2),   // 720 floor
+));
+```
+
+**The 720px floor silently outranks the reserve.** When the shell is narrower
+than `720 + 2 * (ambWidth + 20)`, the column keeps its 720 and the clearance is
+simply not taken. At a 1440px window with the stock 286px sidebar the shell is
+1154 and the cluster measures 212, so the requirement is 1184 — 30px short. The
+send button therefore ends 7px past the cluster's left edge and sits under the
+mute control.
+
+`[measured]` at 1440x900, one browser: `send right 1223 | ambience left 1216 |
+gap -7px`. Identical in `sonder`, `tavern`, `stone`, `ink` and `lcars`, because
+the arithmetic is shared — this is not a themed defect. It worsens in either
+direction the layout can move: a theme that widens the sidebar takes it
+straight off the shell (a 24px spine took the gap to -19px, which is how it was
+found), and the cluster grows again whenever a track is playing.
+
+Two honest resolutions, neither taken here because both change shared layout
+and this was found inside a theme change:
+
+1. **Let the column shrink.** Lower `STORY_MIN_WIDTH` when the alternative is
+   an overlap. Costs reading measure at narrow widths, which is exactly what
+   the floor was defending.
+2. **Un-float the cluster earlier.** `styles.css` already un-floats it at
+   `@container composer (max-width:900px)`; the threshold should be the
+   computed `720 + 2 * (ambWidth + 20)` rather than a guessed 900. This is the
+   better fix — it preserves the measure and gives up only the float, which is
+   the cheaper of the two things.
+
+Related and already landed: a `ResizeObserver` on `#ambience-bar`
+(`settings.js`), because the cluster is absolutely positioned and so cannot
+report its own growth by resizing `#composer` — the reserve was *additionally*
+going stale whenever the bar changed width after first paint. That fixes the
+staleness. It does not fix the floor, which is this entry.
+
 
 ## 2. Roadmap
 

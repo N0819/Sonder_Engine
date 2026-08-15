@@ -142,11 +142,41 @@ def test_lcars_uses_the_real_design_language():
     # Black ink on every colour block.
     assert "--accent-ink: #000;" in block
 
-    # The elbow frame, and colour-cycled control banks.
+    # The elbow frame, and colour-cycled control banks. The spine is asserted
+    # through its TOKEN rather than a literal width: five rules have to agree
+    # on that measurement, so it lives in one place, and pinning the px here
+    # made the test fail on a change that moved the number without touching
+    # the design language it exists to protect.
     assert ':root[data-theme="lcars"] #side {' in styles
-    assert "border-right: 18px solid var(--acc);" in styles
+    assert "--lcars-spine:" in block
+    assert "border-right: var(--lcars-spine) solid var(--acc);" in styles
     assert '#topactions button:nth-child(4n + 1) { background: var(--acc); }' \
         in styles
+
+    # The active tab restates its ink. The base sets `#tabs button.on{color:
+    # var(--acc)}` at ID specificity, which outranks this theme's blanket
+    # `button{color:#000}` however late it loads -- so without this the one
+    # navigation control you most need to find renders orange on orange.
+    on_tab = styles[styles.index(':root[data-theme="lcars"] #tabs button.on'):]
+    assert "color: #000;" in on_tab[:on_tab.index("}")]
+
+
+def test_lcars_ships_its_own_condensed_face():
+    """LCARS is a typographic system first. The theme has always ASKED for
+    Antonio/Oswald/Roboto Condensed, and on a machine with none of them
+    installed it fell through to generic sans-serif -- the whole frame doing
+    LCARS work under a face that reads as a settings panel. The font is
+    bundled rather than linked because the engine runs local and offline."""
+    styles = (STATIC / "themes.css").read_text(encoding="utf-8")
+    assert '@font-face' in styles
+    assert 'font-family: "Antonio";' in styles
+    assert 'url("/static/fonts/antonio-latin.woff2")' in styles
+    # No CDN: a font fetched over the network is missing exactly when there is
+    # no network, which is the condition this app is built to run in.
+    assert "fonts.googleapis.com" not in styles
+    assert "fonts.gstatic.com" not in styles
+    for name in ("antonio-latin.woff2", "antonio-latin-ext.woff2", "OFL.txt"):
+        assert (STATIC / "fonts" / name).exists(), name
 
 
 def _tavern_rule(styles, selector):
