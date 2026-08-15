@@ -5074,15 +5074,18 @@ def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
 #
 # The resolve stage stays ONE pipeline step -- one steps/variants row, the
 # same step key, nothing new in agents/runtime.py -- and fans out INSIDE
-# itself when the `director_orchestration` setting is on: a deterministic
+# itself, on every beat: a deterministic
 # dispatch decides which scoped specialists this beat needs, one prose author
 # owns resolved_event (with the delegated instruction blocks cold-stored out
 # of its sheet), each dispatched specialist reads the finished prose and owns
 # its state_diff channels, and deterministic assembly merges the channels
 # back before the existing cross-channel seams (movement backstop,
 # reconciliation, restraint floor) run on the merged diff exactly as they do
-# on a monolithic one. The monolithic path remains the default and is
-# byte-identical to what it always was.
+# on an unsplit one. There is no unsplit path any more: it shipped behind
+# a flag while the two were measured against each other, the fan-out won on
+# stability, tokens and wall clock, and keeping the loser would only have
+# preserved a way to make the engine worse. What remains a choice is
+# CONCURRENCY -- see `fanout_is_parallel`.
 #
 # THE GATE FAILS OPEN AND KEYS ON SCENE STATE, never on the beat's prose --
 # prose matching as a boundary is the silent-drop surface `docs/UNBUILT.md`
