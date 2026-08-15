@@ -2097,6 +2097,54 @@ the drive-feed loop working; a `drive_shift` there would have been WRONG
 (a peak inside one's own drive confirms it — the hard drive lesson is about
 strain never moving a drive, not success moving it).
 
+### 1.43 Recognition under a disguise is a boolean where the question is graded
+
+**Found:** the disguise floors (2026-08-15). Design in
+[`design/DESIGN_DISGUISE_AND_RECOGNITION.md`](design/DESIGN_DISGUISE_AND_RECOGNITION.md) §5.
+
+`conceals_identity` now separates a disguise that covers what a body is
+recognised BY from one that covers something else, which was the collapse
+worth fixing first. Three things it still cannot express:
+
+1. **Coverage vs familiarity.** A stranger and a spouse are not equally fooled
+   by the same hood. The comparison wants what the disguise covers against
+   what *this* observer knows the subject by, and there is currently only one
+   answer for everybody.
+2. **Circumstantial defeat.** A hood blows back; an illusion falters; someone
+   takes hold of the concealed feature. `contact` and `spatial` both hold
+   facts bearing on this and neither is consulted.
+3. **Witnessing grants knowledge** — watching a disguise go on or come off
+   should add the witness to `known_to` with nobody declaring it. **This is
+   the highest-value item of the three and is purely deterministic**:
+   perception already knows exactly who received the beat.
+
+Deliberately NOT a seventh Director specialist: recognition is a per-observer
+question and the Director emits one diff for everybody, so a specialist could
+only ever produce the single room-wide verdict `known_to` already is. Every
+other per-observer perceptual question here (`hear_level`,
+`region_visibility`, `visual_level_between`, scent, containment, darkness) is
+a deterministic ladder over typed data, and perception calls no model at all.
+
+### 1.44 A concealed feature can leak through an attire description
+
+**Found:** the same investigation, by reading a live wardrobe rather than by a
+failure — it has not fired yet.
+
+A garment's authored `description` is free prose and is delivered through
+`observer_body_regions`, which gates by region visibility and knows nothing
+about disguises. A live hair clip is described as *"pinned into her
+copper-gold hair near the left fox ear"* while a `physical_disguise` on that
+body lists `fox ears` in `concealed_terms`. The moment that region renders to
+an unaware observer, the disguise is undone by an accessory.
+
+`disguised_visible_appearance` scrubs the body summary and
+`conceal_disguised_parts` drops authored parts; the attire ledger is the third
+surface a body is described through and nothing scrubs it. The fix is the
+existing rule applied to one more surface — a garment description reaching an
+observer who is not in `known_to` should have concealed terms removed, and a
+description that is *only* the concealed feature should fall back to the
+garment name.
+
 ### 1.42 The story column's clearance for the ambience cluster cannot be honoured
 
 **Found:** rebuilding the `lcars` theme (2026-08-14), by an automated geometry
