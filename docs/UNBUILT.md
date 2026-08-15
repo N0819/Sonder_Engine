@@ -20,14 +20,21 @@ without them. Their reasoning is in git history and in `CHANGELOG.md`.
 
 **Partially re-verified 2026-07-31** against alpha 6.3. Entries confirmed still
 true against source this pass: §1.1, §1.3, §1.6, §1.11, §1.13, §2.3, §2.5,
-§2.14 (`fStrList`), §3.2 B1-residual. Entries **corrected** this pass: §2.1 (its
-premise was stale — the ids it asks for already exist and already reach the
-payload; only the prompt never learned), §1.13 (the enum is real, but the
-validation seam the pipeline uses does not enforce it). §1.4 (`sqlite-vec`) was
+§2.14 (`fStrList`), §3.2 B1-residual. Entries **corrected** this pass: §1.13
+(the enum is real, but the validation seam the pipeline uses does not enforce
+it), and the present-beat citation entry, whose premise was stale — the ids it
+asked for already existed and already reached the payload; only the prompt
+never learned. That one has since landed and is deleted per rule 1; the record
+is `Design.md` § Structural debt #1. §1.4 (`sqlite-vec`) was
 re-decided and **landed** — its either/or was wrong, since wiring the vector
 index would have regressed the information firewall — and is deleted per rule 1;
-`docs/guides/RESEARCH.md` §1.4 carries the reasoning, and §1.15 below is the memory
-question that actually remains. Everything else below
+`docs/guides/RESEARCH.md` §1.4 carries the reasoning. The embedding-model
+cliff that entry pointed at (§1.15, "changing the embedding model silently
+erases semantic recall") is also gone: a provider is configured, the bank is
+migrated, and the mismatch guard and the resumable rebuild it prescribed both
+exist — `memory.embedding_bank_status`, `rebuild_embeddings`,
+`rebuild_checkpoint_embeddings`, `repair_pending_embeddings`. See `Design.md`
+§ Changing the embedding model is safe. Everything else below
 still carries its 2026-07-29 verification date and should be re-checked before
 being acted on — rule 2 exists because this file's claims go stale faster than
 the code does, and two of the ten checked this pass had.
@@ -67,15 +74,27 @@ they fix is closed; these are the edges they deliberately do not cover.
   Blast radius is bounded the same way — one retry, kept only if it lowers the
   count — so a spurious flag costs a call and cannot corrupt the beat.
 
-- **Perception has no player-ACTION scrub.** `_scrub_undeclared_player_speech`
-  protects the player's mouth in their own view; nothing examines their hands.
-  Chat 56 t10's fabricated lever grip reached the player's view as "I grip the
-  console edge" with nothing between the Director and the narrator. The
-  Director-side guard is now the only thing standing there, so a fabrication
-  that survives its one retry still propagates. A deterministic scrub in
-  perception would be a second, independent floor; it needs the beat's declared
-  player actions threaded into `_per_observer_model_views`, which is why it is
-  not here.
+- **Perception has no player-ACTION scrub, and its player-SPEECH scrub no
+  longer runs either.** Chat 56 t10's fabricated lever grip reached the
+  player's view as "I grip the console edge" with nothing between the Director
+  and the narrator, and the Director-side guard is still the only thing
+  standing there, so a fabrication that survives its one retry propagates.
+  What has changed is the shape of the gap, not its size. The scrub this entry
+  used to name as the mouth's protection,
+  `agents.common._scrub_undeclared_player_speech`, has **no production caller**
+  — it is imported by `agents/perception.py` and called nowhere, kept alive
+  only by tests and `tools/perception_quality.py`. Perception stopped needing
+  it when it stopped asking a model to write views: `_per_observer_model_views`
+  is gone (`tests/test_perception_has_no_model.py` pins its absence), the view
+  is realised from percepts, and undeclared player speech has no seam to enter
+  through. What survives is `_scrub_invented_dialogue` inside
+  `_composer_tripwires`, deliberately **warn-only** and correctly so — a line
+  in a composed view that does not match the delivered-line ground truth is an
+  ENGINE defect, and scrubbing it would hide the bug rather than the leak. So
+  the second independent floor this bullet used to ask for cannot be built the
+  way it described; a player-action check would have to sit where the
+  tripwires do, on the composed view, and it would be a defect detector rather
+  than a scrubber.
 
 - **A character who declared a non-locomotive act is guarded only against
   MOVEMENT.** Handing something over, drawing a weapon, striking — additions
@@ -237,24 +256,6 @@ staged lore entry whose `content` was an object (`_room_notes_from_lore` did
 its own description, `{"generator_fuel": ["The generator is running low..."]}`
 against `dict[str, list[dict]]`. Neither is exotic; both are what a model
 does when the field name reads like an invitation to prose.
-
-### 1.7a A map key lands in the wrong column on `goal_impacts`
-
-`_lenient_coerce`'s map expansion carries a name-keyed map's key into the
-item's first required field, or failing that into its first non-optional
-prose field with an empty default. That is right for every item model in the
-engine except `GoalImpact`, whose subject is `serves` — and `serves` carries
-a non-empty default (`"situational"`), so the key lands in `why` instead.
-`{"reach the tower": {"impact": 0.6}}` therefore records the goal as the
-explanation and leaves `serves` generic, which `commit.py`'s goal matching
-cannot use. The information survives (it used to be dropped entirely) but it
-is filed where nothing reads it.
-
-Fixing it needs the item model to say which field its subject is, rather
-than the shape rules guessing — a name list was tried once and missed
-`belief` and `cue`, which is the whole reason the rule is structural. A
-one-line class attribute (`_subject_field = "serves"`) consulted before the
-positional fallback would close it without reintroducing guesswork.
 
 ### 1.8 Promotion seeds are minted from the objective event (P5)
 
@@ -667,6 +668,13 @@ Not defects yet. Each is a measured shape that will become one silently.
   `fading`, `project_review`. Each is something a model must notice and act on,
   and attention is finite — at some point adding the tenth marker makes the ninth
   less likely to be read.
+- **`logging_utils.TurnMetrics` and `measure_step` have no callers and now
+  never will.** Per-stage timing landed as a per-call ledger instead
+  (`_engine_notes.llm_calls`, `Design.md` § Turn shape), because what the slow-turn
+  investigations needed was WHICH CALLS a stage paid for, not stage totals the
+  `steps`/`variants` timestamps already yield. The two survivors are dead code
+  wearing a plausible name, which is how a reader spends an hour deciding
+  whether to wire them. Delete them.
 - **The place graph's distinct contribution is narrower than proposed.** With
   pruning gone, unpruned `known_exits` + `known_dead_ends` carry most of the
   routing information by themselves; the graph's remaining unique contributions
@@ -710,7 +718,7 @@ Not defects yet. Each is a measured shape that will become one silently.
   the time (88 scored retrievals), and `importance` does not separate at all
   (median 0.69 on needed rows against 0.68 on the rest of the bank).
 
-### 1.13 `ActionStage` is classified and never read
+### 1.13 `ActionStage` is classified and the resolve path never reads it
 
 `schemas.ActionStage` (`immediate|preparation|approach|contact|sustained`) is
 filled in by `director_interpret` on every action element and read, on the
@@ -763,188 +771,6 @@ The wider point: `movement` is the channel through which the player says where
 they are going, and a stage that can relocate the player without it is
 authoring player conduct — the same boundary `_check_player_act_authority`
 defends for speech and action, unguarded for position.
-
-### 1.15 Changing the embedding model silently erases semantic recall of everything already remembered
-
-**Found 2026-07-31**, while re-deciding the (now deleted) `sqlite-vec` entry.
-This is the actual long-term durability defect in memory retrieval; the vector
-index was never it.
-
-> **SUPERSEDED as of 2026-08-01, for the premise below.** A real provider is
-> now configured and the bank is fully migrated: `embedding_model_key()`
-> returns `openrouter:3:perplexity/pplx-embed-v1-4b`, and all **5,236** rows in
-> `memories` carry that key at 2560 dimensions — none on the crc32 fallback.
-> The measurements in "One" describe the state before that and are kept because
-> they are what justified the design decisions still standing (no ANN index,
-> the mismatch guard, the rebuild path), NOT because they describe the engine
-> today. **Semantic recall is live**, so anything below that reasons from "the
-> vectors are lexical in disguise" no longer holds — in particular, the
-> conclusion that mood/goal aspect ranking is limited by a hash. The cliff in
-> "Two" is unchanged and is exactly what a further model change would still do.
-
-Two facts that only bite together.
-
-**One: nothing in this database had ever been semantically embedded** (as of
-2026-07-31; see the note above). All
-4,894 memory rows carried `embedding_model: "cheap:crc32:256"` — the FALLBACK
-`providers.cheap_embed`, a hashed character trigram/4-gram signature. It is a
-fuzzy *lexical* signature, not a semantic vector. So two of `search_memories`'s
-four fused lists — "semantic match" (weight 1.0) and "cue-vector match" (weight
-1.15, the highest of the four) — are lexical in disguise. `embeddings` IS a real
-configurable provider role (`providers.py`), so this is a configuration state,
-not a design limit.
-
-**Measured twice, and the second measurement overturns the first.** The easy
-test: a memory's `gist` is the model's own paraphrase of its `content`, so
-gist→content is a paraphrase-retrieval test. Over 200 queries against a
-600-memory corpus, crc32 scores **recall@1 85%, recall@5 94%**. That looked
-reassuring and it was the wrong conclusion to draw, because a gist shares its
-content's proper nouns — the test rewards lexical overlap.
-
-The hard test, on the same engine's real data: eight memories from a
-441-memory story, queried by paraphrases written to preserve meaning while
-AVOIDING the memory's own vocabulary — which is what recalling something
-worded differently three hundred turns ago actually is. crc32 scores
-**recall@1, @5 and @20 all 0%, median rank 228 of 441.** That is
-indistinguishable from random.
-
-So the accurate statement is not "better than it sounds". It is a strong
-lexical retriever and a **non-existent semantic one**, and the whole of
-semantic recall — every case where a character should remember something
-relevant that nobody re-worded for them — is headroom a real embeddings
-provider would open. The engine's episodic recall works today because
-`character_memory_context`'s query is dominated by `current_view`, concrete
-prose thick with the recurring proper nouns hashing is good at. Nothing else
-does.
-
-So the upside of real embeddings is **real but narrow**: it would help the
-conceptual/affective band, and it is not the only lever on that band — two
-cheaper ones sit in front of it, neither needing a provider.
-
-**Both were built in alpha 6.3, and measuring (a) afterwards corrected the
-claim that it was a CHEAPER lever than the provider. It is not an alternative
-to one — it is a multiplier that only pays once the vectors are semantic.**
-Measured against 442 real memories with a real perception view, giving the
-mood its own rank list changed **1 of 10** results. A control aspect chosen to
-share words with the corpus changed 2 and actually fired, so the mechanism
-works; the limiter is that a crc32 hash gives an affective phrase almost no
-discriminative signal — "afraid of being alone again" scored a best match of
-0.293 against a median of 0.127 across the whole bank, where a lexically
-overlapping phrase reached 0.490. Separate rank lists cannot rank on a signal
-that is not there. Build order therefore matters: the provider first, then
-(a) and (b) are worth what they promise.
-
-**(a) The affective query is swamped, and that is a concatenation bug rather
-than an embedding one.** `character_memory_context` builds one query string
-from `current_view + goal + mood + unresolved_threads`. Measured over 725 real
-stored perception views, the median view is **1,015 characters**; a mood or
-goal fragment is 10–60. The result is that
-`cosine(query_with_mood, view_alone) = 0.994` — the mood fragment moves the
-query vector by essentially nothing, and influences recall only lexically
-(the word "anxious" matching the word "anxious"), diluted about 20:1. Querying
-the fragments SEPARATELY and fusing their rankings — RRF is already the
-mechanism, and already fuses four lists — would give mood and goal a rank list
-of their own instead of a rounding error inside someone else's. Free, and it
-would make a real embedding provider worth more when one is configured.
-
-**(b) Emotional congruence is unbuilt and the data is already there.**
-`memories.valence` and `memories.arousal` are populated on every row and feed
-the fused score **not at all**. Their only consumer anywhere is
-`contrast_memory`, at `0.5 * abs(valence) + 0.3 * arousal` — note the `abs`:
-that is emotional INTENSITY ("this memory is charged"), not congruence ("this
-memory matches how you feel now"). Mood-congruent recall is a real effect, the
-engine already tracks current affect, and a signed congruence term in the
-rerank is a defensible addition. Two cautions if it is built: keep it in the
-same band as the salience term (0.08) rather than larger, for the reason the
-belief-credence comment beside it already gives — it should break a tie, not
-outrank an actual match; and note that congruence is a FEEDBACK loop, since a
-character in despair retrieving only despairing memories deepens the despair.
-That may well be correct for fiction — it is what rumination is — but it
-should be a chosen behaviour rather than an emergent one.
-
-None of this touches the cliff below.
-
-**Two: there is no re-embedding path.** `search_memories` gates both vector
-signals on
-`row["embedding_model"] == embedded.model_key and row["embedding_dim"] == embedded.dimensions`.
-Configure a real embeddings provider and every pre-existing row fails that test
-on BOTH halves — and scores **0.0 forever**. New memories get true vectors, old
-ones fall back to lexical-only, and the memory bank splits into two eras at the
-moment of the upgrade. Verified absent: no backfill, re-embed or migration
-symbol exists anywhere in the tree.
-
-So the engine currently punishes improving its own embeddings, and punishes it
-hardest on the oldest memories — the ones a long campaign most depends on. The
-codebase already knows this hazard in a narrower place: `memory.py`'s snapshot
-comment keeps raw vectors in dumps precisely so a restore cannot "silently
-downgrade every vector to the crc32 fallback, which then scores 0.0 forever."
-That reasoning was never extended to a model CHANGE.
-
-**Why a model change really does mean a full rebuild.** Two embedding models
-produce vectors in unrelated spaces: there is no correspondence between one
-model's dimension 37 and another's, so a cosine between them is not "slightly
-worse", it is arbitrary. Different dimensions cannot be compared at all. Even
-one family at two sizes (`text-embedding-3-small` vs `-large`) are different
-spaces. Scoring 0.0 for a mismatch is therefore the CORRECT behaviour — a
-garbage ranking would be worse than falling back to keyword — and re-embedding
-is the only way to compare old memories with new queries. What it does NOT
-mean: re-selecting the same provider and model is a no-op (the check is on
-model key plus dimensions), and changing any other role — narrator, director,
-mapping — has nothing to do with stored vectors. Only the `embeddings` role
-matters, which is why `put_agent_models` compares that role before and after
-rather than firing on every settings write.
-
-**This is a trap, not a live defect — which decides how much to spend on it.**
-Nothing is wrong today: the crc32 signature is self-consistent, every row
-matches every query, and retrieval works exactly as measured. The cliff fires
-only on one specific future action — configuring an `embeddings` provider. So
-the proportionate fix is NOT the migration:
-
-1. **A mismatch guard (~10 lines, do this).** `search_memories` already
-   computes `compatible` per row. When rows are incompatible with the live
-   model, say so once — a warning, an engine notice, a refusal to start,
-   whatever fits — instead of silently scoring 0.0. That converts an invisible
-   cliff into a visible one and buys the right to defer everything else
-   indefinitely.
-2. **The re-embed migration (only when you actually want to switch).** Walk
-   rows whose model_key differs from the live one, re-embed in batches,
-   resumable, never on the turn path.
-
-Doing (1) without (2) is the correct stopping point for as long as no
-embeddings provider is configured.
-
-**Not a fix:** an ANN index. One was declared here once and deleted unwired in
-alpha 6.3 — it could not carry the two pre-ranking filters (turn cutoff, frame
-visibility), so it would have regressed the firewall; `docs/guides/RESEARCH.md` §1.4
-keeps the reasoning. Benchmarked with `memory._cos` verbatim,
-both vectors per row, growing at the measured ~3.5 rows per turn per character:
-
-| rows | ≈ turns for ONE character | cost |
-|---|---|---|
-| 442 (today's worst) | 126 | 16 ms |
-| 3,500 | 1,000 | 126 ms |
-| 35,000 | 10,000 | 709 ms |
-| 200,000 | 57,000 — a novel series in one chat | 2.2 s |
-
-Beside an LLM call measured in seconds, none of that is a cost worth an index.
-And two trivial optimisations sat in front of one anyway, because `_cos`
-recomputed `norm(a) * norm(b)` on every call although every stored vector is
-already normalised (`providers.cheap_embed` and `embed_texts_meta` both
-normalise before returning).
-
-**The first landed in alpha 6.6: `_cos` is a plain dot product, measured 4.4x
-(4.99 ms → 1.13 ms over 442 real rows), matching the prediction.** Verified
-equivalent rather than assumed: across 8,000 stored vectors the norms are unit
-to 9.2e-06, scores agree to 8.7e-06, and the only ranking differences are three
-adjacent-pair swaps at ranks 743, 1289 and 1808 — float32 noise on effective
-ties, all far past the `[:60]` cut. Top-8, top-20 and top-60 are identical.
-
-Stacking the rows into a matrix for a single matmul is a few lines more and
-~20x total — 35 ms at 10,000 turns, 350 ms at 285,000 — and is **not queued**:
-the scan after the first fix is already far below the LLM call beside it, and
-the reason to record the number is that there is no story length at which the
-scan becomes the reason to add an ANN index. That question is settled
-permanently, not provisionally.
 
 ### 1.16 A greeting's knowledge seeds outrank everything the story then lives
 
@@ -1426,8 +1252,9 @@ population that can be lifted once, never the amount. Tests:
 written twice: `affect.project_boundary` opened `if not projects: return None`,
 and the payload guarded `if isinstance(_preview, dict) and
 _self.get("projects")`. The prompt names the review beat as the occasion to
-emit `project_ops` — and the review beat required a project. §2.1's rule from a
-new direction: there the payload made the asked-for thing harder to reach, here
+emit `project_ops` — and the review beat required a project. The
+payload-affordance rule (`Design.md` § Structural debt #1) from a new
+direction: there the payload made the asked-for thing harder to reach, here
 it withholds the occasion entirely, and no prompt argues with a key that is
 never present. Arrival still needs a project to arrive at; a task closing and
 the scene or frame changing no longer do. Tests:
@@ -1951,31 +1778,6 @@ so the existing same-call repair fixes it before `_reconcile_interpretation`
 runs; and make `recon["repaired"]` require the re-check to actually pass, so
 the metric stops reporting 100% success on a 0% success rate.
 
-### 1.34 Nothing on the live path records how long a stage took — FIXED (per-call ledger)
-
-`logging_utils.measure_step` and `TurnMetrics` have no callers outside their
-own module. Every per-stage timing figure this project has comes from
-`tools/turn_bench.py` runs on a retired model configuration, so the
-percentages are usable and the absolute seconds are not — and §1.40 records
-the cost: three slow-stage investigations in one day each began with a wrong
-guess, because per-call timing lived in stderr and died with the process.
-
-Fixed with a ledger rather than by wiring `measure_step`: what the
-investigations needed was not stage totals (the `steps`/`variants` timestamps
-already yield those) but WHICH CALLS a stage paid for. `providers._log_usage`
-now offers every finished call — chat, stream, and the embeddings batch path
-— to `providers.call_ledger_sink`; `agents.runtime.compute_step` points the
-sink at the running `PipelineContext` (the `current_warning_sink` pattern,
-so the specialist fan-out and the parallel groups attribute by contextvar);
-`_with_engine_notes` persists each step's slice as
-`_engine_notes.llm_calls` — `{step_key, role, requested, served, in, out,
-cached, duration, kind}` per call, no content — on the saved variant, riding
-archives, branches and traces like every other engine note, rendered per
-step in the pipeline drawer. `tests/test_llm_call_ledger.py`.
-`measure_step`/`TurnMetrics` remain uncalled and could now simply be
-deleted.
-
-
 ### 1.35 `memories_fts` is dead, and has been for some time
 
 9,545 rows in the live database and **zero readers anywhere in the repo** —
@@ -2291,57 +2093,8 @@ strain never moving a drive, not success moving it).
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
-of risk; items 2.1–2.3 repay the structural debt in
+of risk; items 2.2–2.3 repay the structural debt in
 [`../Design.md`](../Design.md) § Structural debt.
-
-### 2.1 Let a character cite the present beat by its real id
-
-**Closes debt #1.** **Landed 2026-08-02.** Re-verified against source and the
-whole database 2026-07-31; the original entry's premise was stale and its
-remaining work is much smaller than it claimed.
-
-**What is built.**
-
-- `agents/perception.py` mints a real id for every observation of the present
-  beat — `current:<perceiver>:<n>` — and those ids reach the character payload
-  intact at `perception.observations[].observation_id`.
-- `prompts.py`'s OBSERVATIONS block now points at the real observation_id
-  rather than asking for the magic string `"current"`.
-- `schemas.py`'s `EvidenceRef` normalizes legacy event_id spellings
-  (`current_perception`, `perception`, `perception:view`, etc.) back to
-  `"current"` via `_normalize_event_id`, so no existing citation is lost.
-  A real `current:<perceiver>:<n>` id is left untouched.
-
-`agents.character._ground_observation_citations` completes the boundary:
-present ids and only stable `event_key`/summary ids actually delivered to this
-mind survive across every `EvidenceRef` field; invented or stale ids are
-dropped. A current citation the model supplied is moved first. If it omitted
-one, the engine warns rather than forging audit evidence. Retrieved rows carry
-`temporal_status: remembered_past`, relative `when`, and provenance, so the
-distinction is data rather than list position or prompt discipline.
-
-The original measurement is preserved for context:
-
-Measured across all 1,254 stored character variants, 6,404 citations:
-
-| citations | `event_id` written |
-|---|---|
-| 4,939 | an invented label — `view` (1,532), `current_perception` (505), `perception` (338), `perception_current` (131), `perception:view`, `perception:current`, `event:current_perception`, … |
-| 1,172 | the magic string `"current"` the prompt asks for |
-| 255 | blank |
-| **38** | **a real `current:<perceiver>:<n>` id** |
-
-So the original diagnosis — "a character reliably answering the previous line" —
-is **superseded**: characters overwhelmingly do cite the present beat now. They
-just cite it under about fifteen spellings of a thing that has a real name,
-which is unusable as evidence and unverifiable as a claim. The prompt update
-and normalization close that gap.
-
-**Rule this generalises:** whenever a prompt asks a model to prefer X over Y,
-check whether the payload makes X *harder to reach* than Y. If it does, the
-prompt will lose. The corollary this entry adds: when the payload is later
-fixed, **the prompt does not update itself** — a patch written for the old
-payload goes on suppressing the new one.
 
 ### 2.2 Make stance auditable
 
@@ -2591,9 +2344,6 @@ Not built:
   the overlay costs almost nothing — but it is a loop, where particles never
   repeated. Watching one layer alone would show it; watching all three
   together, so far, does not.
-- **the flash is a whole-screen brighten, not a bolt.** A drawn bolt has to
-  land somewhere, and the somewhere is a photograph of a room this code knows
-  nothing about.
 - **snow does not settle** and rain does not streak a window. Both want a
   second, slower buffer that the current single-pass loop has no place for.
 
@@ -3369,9 +3119,10 @@ event/signal IDs.** Track whether evidence was witnessed, reported, inferred, or
 copied from another belief, so revision can discount circular reports and
 preserve explicit competing hypotheses.
 
-The same primitive is what §3.1 needs to stop matching on prose, and what §2.1
-mints for the present beat. **Three of this file's largest items are one missing
-structure.** The adversarial-test half of this priority has shipped.
+The same primitive is what §3.1 needs to stop matching on prose, and what
+`current:<perceiver>:<n>` already mints for the present beat. **Two of this
+file's largest items are one missing structure.** The adversarial-test half of
+this priority has shipped.
 
 ### 4.3 Gap 5 — canon validation needs provenance tiers
 
@@ -3612,10 +3363,17 @@ Most of §3 shipped in alpha 4.0. What did not:
 - **The digest lifecycle (§3.5)** — the largest piece. Only the raw `recent` ring
   buffer exists (`BACKGROUND_RECENT_TAIL = 4`). No `digest`, no compaction, no
   freeze-while-unobserved, no prune, no `last_seen_clock`.
-- **Promotion conversion (§3.6)** — `importers.draft_promoted_character` never
-  reads `blurb` or `recent`, so a promoted presence loses everything it was. No
-  `ambient_turns` counter guards `AUTO_PROMOTE_DIALOGUE_THRESHOLD = 3`, which
-  still counts manager conduct. **An active defect, not just backlog.**
+- **Promotion conversion (§3.6)** — `importers.draft_promoted_character` reads
+  the `events` table's `dialogue_log` and event text through
+  `_promotion_evidence`, never `blurb` or `recent`, so a promoted presence
+  loses the ledger the engine had been keeping about it and is rebuilt from
+  the objective record instead (which is also §1.8's leak). The threshold half
+  of this is closed by a different counter than the one proposed: promotion is
+  gated on `addressed_turns` (`commit._promote_after_addressed`), which counts
+  only DELIBERATE interaction — the Director marking a presence as the
+  player's addressee, or the player naming them. `AUTO_PROMOTE_DIALOGUE_THRESHOLD
+  = 3` still counts manager conduct, but it no longer decides, so an
+  `ambient_turns` counter is no longer the thing wanted.
 - **Interim filler on return (§3.9)** — no `interim` field, no `last_seen_clock`.
 - **Canon-referenced blurbs (§3.8.1)** — no `canon_ref` field; substituted by a
   style-guide-level canon licence.
@@ -3647,9 +3405,15 @@ than the design's pre-baked variants plus resume. Still unbuilt and still wanted
 - **Ingest-time extraction caching.** `importers.py` always writes
   `"extraction": None`; extraction runs lazily at launch and is discarded, not
   persisted. No `extractor_version` stamping.
-- **Idempotent knowledge routing.** Seeds route to character memory with plain
-  `add_memory` — no `private_history` write and no stable
-  `greeting:{cid}:{char}:{gid}:{i}` event keys, so re-launch is not idempotent.
+- **The `private_history` write.** Seeds route to character memory only.
+  Idempotency itself is closed and by a better key than the design named: each
+  seed carries `greeting_seed:<sha1(content)[:16]>` and the batch upserts on
+  `(chat, character, event_key)`, so a retried or partially-failed launch
+  updates one row rather than writing a second, and editing or reordering the
+  greeting cannot orphan the old row the way a positional key would. It
+  deliberately does not dedupe ACROSS launches — `start_story` creates a fresh
+  chat each time, so a second launch is a different story entitled to its own
+  copy.
 - **`player_slot` and escalation.** `GreetingInterpret` has only a flat
   `player_room`; no `hard_attributes`, no `pronoun_tokens`, no conflict detection.
 - **Turn-0 greeting swipe** (`greeting_swipe`, `refresh_checkpoint(cid, 0)`).
@@ -3660,7 +3424,10 @@ than the design's pre-baked variants plus resume. Still unbuilt and still wanted
 
 v1 is built. Deliberately not built, each for a stated reason: witnessed
 drink/water/warmth (no thirst or cold vital, so no deterministic signal),
-told-basis node minting, negative entries, and the `repair`/`social` affordances
+told-basis node MINTING (told-basis affordances on a node the mind already
+holds are built — `place_purpose` mirrors them from reconciled `stated_fact`
+hypotheses; what testimony may not do is bring a place into existence),
+negative entries, and the `repair`/`social` affordances
 (no consumer — dead weight becomes a to-do list). The own-memory-row heuristic
 (signal 2) is deferred as the doc allows.
 
@@ -3668,7 +3435,11 @@ told-basis node minting, negative entries, and the `repair`/`social` affordances
 
 The walkable-edge defect is §1.6; the redundancy watch is §1.12.
 
-- **`basis: "told"` has no writer**, deliberately. The approved design derived
+- **`basis: "told"` has no PLACE-GRAPH writer**, deliberately — and the
+  distinction matters, because the affordance ledger one layer over does write
+  it: `place_purpose` mirrors `stated_fact` hypotheses onto nodes resolved
+  `by_name` as `{basis: "told", sureness, about, claim}`. Testimony can say
+  what a place you already know is FOR; it cannot mint the place. The approved design derived
   hearsay edges from `stated_fact` place claims, and implementing it revealed
   that deriving *connectivity* from free text means text-mining it — the
   non-deterministic derivation this engine refuses everywhere else. `told`
@@ -3766,7 +3537,9 @@ asks only for what commit reads" and "A second model call says it happened");
 still open:
 
 - **`considered_responses`** — schema-documented viewer-only scratch
-  (`schemas.py:2836-2843`), duplicates the consumed `response_candidates` in
+  (`schemas.CharacterOutput`, beside `_coerce_considered_responses`, and still
+  required by the prompt's own JSON shape), duplicates the consumed
+  `response_candidates` in
   137/404 calls (re-measured 130/401). Engine-unread is NOT the bar: a
   freeform pre-list is plausibly chain-of-thought that seeds better
   candidates, so the gate is a cheap `contract_bench`-style A/B on stored
@@ -3798,7 +3571,7 @@ still open:
   consistently stopping near the system-prompt boundary rather than deeper —
   only that pattern makes the reorder worth a quality A/B.
 
-### 6.9 Extra body parts — [`../design_notes/11-extra-body-parts.md`](../design_notes/11-extra-body-parts.md)
+### 6.10 Extra body parts — [`../design_notes/11-extra-body-parts.md`](../design_notes/11-extra-body-parts.md)
 
 The card field (`embodiment.extra_parts`, closed attachment/aspect menus),
 the region_visibility-gated perception delivery, the Director payloads and
@@ -3811,10 +3584,15 @@ the editor menus are built. Deliberately not built:
   part-keyed coverage, i.e. the attire model learning slots outside its
   closed `REGIONS`. `through_clothing: false` covers the tucked case.
 - **An import warning for a part described twice** — a declared `kind` whose
-  word also lives in `visible.summary` prose double-describes the body;
-  `importers.character_import_warnings` does not yet flag it.
+  word also lives in `visible.summary` prose double-describes the body.
+  `importers.character_import_warnings` is part-aware in the OTHER direction
+  only: it fires when body prose names a part the sheet does not declare
+  (`_prose_names_a_part` against `_PART_WORDS`, and only when
+  `embodiment.extra_parts` is empty), which is the failure that costs a
+  kitsune nine invisible tails. The double-describe case is the mirror and is
+  cheaper to be wrong about, so it is unflagged.
 
-### 6.10 Garment displacement — [`../design_notes/17-garment-displacement.md`](../design_notes/17-garment-displacement.md)
+### 6.11 Garment displacement — [`../design_notes/17-garment-displacement.md`](../design_notes/17-garment-displacement.md)
 
 Region-grain displacement (the third clothing axis) is built; deliberately
 left open:

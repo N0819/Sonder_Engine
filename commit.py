@@ -4372,6 +4372,60 @@ def _presence_in_addressed_refs(name, refs):
     )
 
 
+def _at_post_within_earshot(sc, station_room, player_room):
+    """Is a presence standing where they work, close enough to answer?
+
+    AT POST USED TO MEAN `station_room == player_room`, and that one `==` is
+    the whole of what the owner called a hole in the architecture: "they
+    should be able to respond from adjacent rooms".
+
+    Perception already models this properly -- `hear_level` is barrier- and
+    material-aware, an open doorway carries a voice and a shut one does not,
+    and `agents/background._beat_for_presence` runs exactly that check before
+    handing a presence a single word of the beat. So the engine granted the
+    clerk in the back office the hearing and withheld the agency: he could
+    hear the bell and could never be chosen to answer it.
+
+    The models kept trying to route around it, which is how it was found.
+    Chat 72 turn 45: the Director walked a night clerk INTO the lobby so he
+    could speak. Turn 47: the spatial specialist put another at the doorway
+    "near" the guests, and that teleported the player into the back office.
+    Both are a mind reaching for a thing the engine had no representation of.
+
+    AUDIBILITY IS THE TEST, NOT ADJACENCY, and the bar is a line heard in
+    FULL. That bar is the engine's own, already set: `_character_address_of`
+    requires `full` to count a line as addressed to somebody, and
+    `_beat_for_presence` was fixed to match it after a half-heard line let a
+    presence quote back verbatim what it had only caught a fragment of --
+    two paths reading the same level differently IS the bug there.
+    Consistency matters more here than physics, and it lands the right way
+    round anyway: at-post is the WEAKEST claim any presence has on a beat
+    (the standing invitation of working where you stand), so a muffled
+    thump through a shut door must not summon a body. Where the beat
+    genuinely warrants one, the stronger signals -- named in the prose,
+    addressed by the player, owed a reply -- fire regardless of the room.
+
+    Same room still qualifies trivially, and an unknown station qualifies
+    for nothing: not knowing where somebody stands is a reason to deliver
+    nothing, which is the rule the perception side already follows.
+    """
+    player_room = str(player_room or "")
+    if not station_room or not player_room:
+        return False
+    if str(station_room) == player_room:
+        return True
+    try:
+        return hear_level(
+            spatial_rel(sc, str(station_room), player_room), "normal"
+        ) == "full"
+    except Exception:
+        # Fail CLOSED. Everywhere else in this engine an unreadable fact
+        # grants the block; here granting means putting words in a mouth
+        # that may have no channel to the beat, so silence is the safe
+        # direction and the presence simply waits for a clearer signal.
+        return False
+
+
 def pick_background_reactor(ctx, dr_output):
     """Single-winner convenience wrapper over pick_background_reactors: the
     top-ranked qualifying background presence, or None. Preserves the original
@@ -4521,7 +4575,8 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # work is the weakest possible claim on a beat -- far weaker than being
         # addressed -- and `cap` still bounds how many are picked, so a busy
         # room does not become a chorus.
-        at_post = bool(station_room) and str(station_room) == str(player_room or "")
+        at_post = bool(station_room) and _at_post_within_earshot(
+            sc, station_room, player_room)
         if not (flow_addressed or routed or addressed or char_addr or owed
                 or mentioned or dialogue_turns or at_post):
             continue
