@@ -1,6 +1,6 @@
 """The gap generator: what changed about a subject while nobody was looking.
 
-Item 1 of ``docs/PROPOSAL_2026-08-06.md`` section 1.2, steps 1 and 2. One
+Item 1 of ``docs/archive/PROPOSAL_2026-08-06.md`` section 1.2, steps 1 and 2. One
 question, answered structurally: *what changed about X between turn N and
 now*. The answer is a RECORD, never prose -- prose is what produced the one
 ``offscreen_log`` row ever written, which placed its actor in "a quiet

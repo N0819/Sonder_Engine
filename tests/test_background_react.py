@@ -328,3 +328,91 @@ def test_a_routed_name_that_is_registered_cast_is_not_minted(temp_db):
     }
 
     assert pick_background_reactors(ctx, dr_output, cap=1) == []
+
+
+# --- at their post, one open doorway away ---------------------------------
+#
+# The architectural hole, named by the owner: "they should be able to respond
+# from adjacent rooms."
+#
+# Perception already models this correctly. `hear_level` is barrier- and
+# distance-aware, an open doorway carries a voice, and `_beat_for_presence`
+# runs exactly that check before handing a presence anything -- a body in the
+# back office hears the lobby and is told so. What did not exist was any way
+# for that body to be CHOSEN to answer: the salience gate's at-post signal
+# compared rooms with `==`, so a clerk stationed one open doorway from a
+# ringing bell was structurally mute. The engine granted him the perception
+# and withheld the agency.
+#
+# Live evidence that the models kept trying to work around it, chat 72: the
+# Director walked a night clerk INTO the lobby so he could speak (turn 45),
+# and the spatial specialist put another at the doorway "near" the guests
+# (turn 47) -- which teleported the player into the back office.
+
+HOTEL = {
+    "location": "Hotel", "time": "night",
+    "rooms": {
+        "lobby": {"name": "Lobby", "adjacent": [
+            {"to": "office", "barrier": "open", "distance": "adjacent"},
+            {"to": "vault", "barrier": "closed_door", "distance": "adjacent"}]},
+        "office": {"name": "Back Office", "adjacent": [
+            {"to": "lobby", "barrier": "open", "distance": "adjacent"}]},
+        "vault": {"name": "Vault", "adjacent": [
+            {"to": "lobby", "barrier": "closed_door", "distance": "adjacent"}]},
+    },
+    "positions": {"The Stranger": "lobby"},
+    "entities": {}, "attire": {}, "overlays": {},
+}
+
+
+def _hotel_ctx(temp_db, station, player_input="I ring the bell."):
+    ctx = _make_ctx(temp_db, background_presences={
+        "Night Clerk": {
+            "first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+            "mention_turns": [], "sketch": {"station_room": station,
+                                            "role_hint": "The night clerk."}},
+    }, player_input=player_input)
+    temp_db.wset(ctx.chat.id, "scene", json.loads(json.dumps(HOTEL)))
+    return ctx
+
+
+def test_a_presence_at_their_post_next_door_can_be_picked(temp_db):
+    """One open doorway. He can hear the bell, so he can answer it."""
+    from commit import pick_background_reactors
+
+    ctx = _hotel_ctx(temp_db, "office")
+    dr = {"resolved_event": "The bell rings out across the empty lobby.",
+          "dialogue_log": []}
+
+    assert pick_background_reactors(ctx, dr, cap=1) == ["Night Clerk"]
+
+
+def test_a_shut_door_still_means_nobody_comes(temp_db):
+    """The floor this must not break. The bar is a line heard in FULL, which
+    is the bar `_character_address_of` already sets -- a closed door yields
+    `fragment`, and at-post is the weakest claim any presence has on a beat.
+    A muffled thump through a shut door must not summon a body; where the
+    beat warrants one, the stronger signals fire regardless of room."""
+    from commit import pick_background_reactors
+
+    ctx = _hotel_ctx(temp_db, "vault")
+    dr = {"resolved_event": "The bell rings out across the empty lobby.",
+          "dialogue_log": []}
+
+    assert pick_background_reactors(ctx, dr, cap=1) == []
+
+
+def test_a_presence_with_no_station_is_still_not_picked_on_post(temp_db):
+    """Not knowing where somebody stands is a reason to deliver nothing --
+    the rule `_beat_for_presence` already follows. An unplaced presence has
+    no post to be at."""
+    from commit import pick_background_reactors
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "Someone": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                    "mention_turns": []},
+    }, player_input="I ring the bell.")
+    temp_db.wset(ctx.chat.id, "scene", json.loads(json.dumps(HOTEL)))
+    dr = {"resolved_event": "The bell rings out.", "dialogue_log": []}
+
+    assert pick_background_reactors(ctx, dr, cap=1) == []

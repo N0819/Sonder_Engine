@@ -9,7 +9,7 @@ make test-browser  # optional real Chromium behavior tests
 make check         # compile, regenerate/verify code map, structure, full suite
 ```
 
-`make test` is an alias for `make test-full`. See `docs/TESTING.md` for
+`make test` is an alias for `make test-full`. See `docs/guides/TESTING.md` for
 dependency installation, constraints, and CI policy.
 
 The shared `temp_db` fixture creates a fresh SQLite database, calls

@@ -3,7 +3,7 @@
 **Status:** designed, not built — re-verified at alpha 6.1 (one maze SVG in
 `tools/mazes/`, no `--expand` flag). Depends on nothing that is not already in
 the engine; the work is in the harness and in one deterministic guard.
-Registered as [`UNBUILT.md`](UNBUILT.md) §7.
+Registered as [`UNBUILT.md`](../UNBUILT.md) §7.
 
 Every arm so far has asked the same question: *can a character learn a space
 from nothing?* Vesk has now answered it several times over, and the answer is
@@ -69,7 +69,7 @@ keep walking the old optimal path to a shrine that has moved.
 
 That first half is also the only clean chance to see running work. The known
 wing is exactly the terrain a run is for: no decisions left in it, so under the
-decision bound ([`DESIGN_RUNNING.md`](DESIGN_RUNNING.md) §3) it should be
+decision bound ([`DESIGN_RUNNING.md`](../design/DESIGN_RUNNING.md) §3) it should be
 crossed in a fraction of the beats it took to learn. **Beats to reach the seam,
 against beats to reach the same room in the previous run, is the cheapest
 measurement of running we will ever get** — same character, same rooms, same

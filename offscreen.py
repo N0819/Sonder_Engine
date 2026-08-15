@@ -1,7 +1,7 @@
 """Offscreen resolution: what one absent subject's tick may spend, and the
 two rungs that spend it.
 
-Steps 3, 3a and 4 of ``docs/PROPOSAL_2026-08-06.md`` section 1.2, plus the
+Steps 3, 3a and 4 of ``docs/archive/PROPOSAL_2026-08-06.md`` section 1.2, plus the
 out-of-band producer of section 1.0.2. The goal is the proposal's section
 1.0 verbatim: a high-fidelity, low-cost ILLUSION of a world that moves --
 never a simulation of one -- and the cost model is the architecture's own

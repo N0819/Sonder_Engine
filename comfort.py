@@ -6,7 +6,7 @@ and pain has a deterministic world-side floor -- injury and bad air propose
 pain whether or not the model mentions them. Pleasure had no symmetric
 counterpart: a character on a featherbed felt exactly what a character on
 flagstones felt unless the model happened to say so. This module is that
-counterpart (docs/DESIGN_SURFACE_COMFORT.md): a small, bounded, read-only fact
+counterpart (docs/design/DESIGN_SURFACE_COMFORT.md): a small, bounded, read-only fact
 about what a body is VERIFIABLY doing right now -- stationed at, near, or in
 contact with something in a closed comfort vocabulary -- fed into
 resolve_hedonic as a pleasure-LEVEL floor and never anything else. The two

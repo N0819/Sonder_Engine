@@ -58,6 +58,7 @@ from scene import (
     style_guide,
 )
 from providers import Aborted, generation_event_sink, token_sink
+import schemas
 from schemas import validate_llm_output
 from survival import survival_enabled, vitals_of
 from spatial import (
@@ -71,7 +72,9 @@ from spatial import (
     merge_scene_with_diff,
     normalize_bearing,
     passable_route_exists,
+    passable_route_next_step,
     resolve_substance_ops,
+    normalize_edge_distance,
     room_of,
     same_subject,
     spatial_rel,
@@ -2305,6 +2308,33 @@ def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
             resolved_event, dialogue_log, conditions, tracked_names)
     ]
 
+def _output_field_names():
+    """Every top-level key the Director's own output shapes declare.
+
+    SOURCED FROM THE SCHEMAS, never hand-listed: the whole failure being
+    guarded is a model nesting one of these keys inside `rooms`, so a list
+    that can drift out of step with the real shape would go stale exactly
+    when a new field started leaking.
+    """
+    models = [getattr(schemas, "StateDiff", None)]
+    # Every Director-side stage, INCLUDING the specialists -- `resolved_events`
+    # is a specialist echo field and was one of the two that actually leaked.
+    models += [cls for key, cls in (getattr(schemas, "SCHEMA_MAP", {}) or {}
+                                    ).items() if key.startswith("director_")]
+    names = set()
+    for cls in models:
+        fields = getattr(cls, "model_fields", None) or getattr(
+            cls, "__fields__", None) or {}
+        names.update(str(f).casefold() for f in fields)
+    # Container names that ARE legitimate diff keys are not room ids either,
+    # but they are already handled above; what matters here is that a room
+    # can never be called one of these.
+    return frozenset(names)
+
+
+_OUTPUT_FIELD_NAMES = _output_field_names()
+
+
 def _normalize_diff_shape(sd):
     """Coerce a state_diff (from the main resolve output or a repair delta)
     to the canonical container shapes every downstream reader assumes.
@@ -2322,6 +2352,23 @@ def _normalize_diff_shape(sd):
               "telling_ops"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
+    # A SCHEMA FIELD NAME IS NOT A ROOM. Live, chat 72 turn 44: `rooms` came
+    # back carrying `resolved_events` and `notes` alongside two real rooms,
+    # and the coercion above dutifully made each a room dict. That story's
+    # map now has a blank-named room called `resolved_events` adjacent to
+    # the hotel lobby, and every route query walks through it.
+    #
+    # These are not typos, they are keys from the output shape the model was
+    # just asked to produce -- an ordinary nesting slip, and one the engine
+    # can recognise for certain: no fiction names a room after a JSON key.
+    # Whole-id match only, so a genuine `notes_office` survives. Rooms are
+    # the only container this applies to; elsewhere the key is a body or an
+    # object name where a collision means nothing.
+    rooms = sd.get("rooms")
+    if isinstance(rooms, dict):
+        for _key in [k for k in rooms if str(k).strip().casefold()
+                     in _OUTPUT_FIELD_NAMES]:
+            rooms.pop(_key, None)
     sd.setdefault("time", None)
     return sd
 
@@ -2410,6 +2457,20 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
 
     route_scene = merge_scene_with_diff(scene, state_diff)
     rooms = route_scene.get("rooms") or {}
+    # Is the player going anywhere this beat -- by their own declaration, or
+    # by a walk already under way that nothing has interrupted? Read once.
+    _interp = ctx.get("director_interpret") or {}
+    _mv = _interp.get("movement") if isinstance(_interp, dict) else None
+    _approach = scene.get("approach") or {}
+    if "who" in _approach:
+        _approach = {_approach.get("who"): _approach} if _approach.get("who") \
+            else {}
+    _player_key = _ci_mapping_key(all_positions, player_name)
+    _player_room = all_positions.get(_player_key or "")
+    _player_is_travelling = bool(
+        (isinstance(_mv, dict) and _mv.get("to_room"))
+        or (_player_key and isinstance(_approach, dict)
+            and _approach.get(_player_key)))
     changed = False
     seen = set()
     for start in list(graph):
@@ -2453,9 +2514,70 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
                 )
             continue
 
+        # A STATION SAYS WHERE YOU STAND, NOT WHICH ROOM YOU ARE IN.
+        #
+        # Live, chat 72 turn 47. The spatial specialist wrote one station --
+        # the night clerk `at: "lobby_doorway"`, `near: [Hinami, The
+        # Doctor]` -- a correct description of a man in the threshold.
+        # `lobby_doorway` is an anchor owned by the BACK OFFICE (its name for
+        # the door through to the lobby), so this resolved him into the back
+        # office and then used `near` to drag both guests in after him. Its
+        # own warning read "contradictory positions were {all three: lobby}":
+        # every body was in the lobby and it relocated them anyway.
+        #
+        # Two rules, both subtractive:
+        #
+        # AGREEMENT IS NOT CONTRADICTION. This repair exists to settle a
+        # disagreement between `positions` and `stations`. Where the bodies
+        # already agree there is nothing to settle, and an anchor claim must
+        # never outrank the ledger it decorates.
+        #
+        # AN ANCHOR MAY POSITION, NEVER RELOCATE. A threshold anchor names
+        # the room it leads TO, so anchor ownership is not evidence of which
+        # side of a door a body stands on -- and moving a body across rooms
+        # is movement, which has to survive the movement guards (or the
+        # travel continuation) rather than arriving through a decoration.
+        # The anchor still settles WHICH of the group's already-occupied
+        # rooms wins, which is the disagreement it was built for.
+        occupied = {all_positions.get(body) for body in component}
+        occupied.discard(None)
+        if len(occupied) < 2:
+            continue
+        # AND THE PLAYER IS NEVER MOVED BY SOMEBODY ELSE'S ANCHOR. Where
+        # the group disagrees and nobody is going anywhere, the group
+        # resolves to the PLAYER's room: their position is the most
+        # authoritative thing in the scene, it is where the story is told
+        # from, and a station decoration does not outrank it. Turn 47 is the
+        # case exactly -- the pair were in the lobby and a newcomer's doorway
+        # anchor took them out of it. Honouring the near-claim by pulling the
+        # OTHERS to the player keeps the feature this repair exists for and
+        # drops the half that moved the protagonist without anyone saying so.
         target_reason = "fresh anchor"
         if anchor_rooms:
             target_room = next(iter(anchor_rooms))
+            # NOBODY GOING ANYWHERE IS NOT A JOURNEY. Both guards apply only
+            # when the player has declared no movement and no walk is under
+            # way. When they ARE travelling the anchor is the party's
+            # destination, and naming a room nobody stands in yet is exactly
+            # what this repair was built for (chat 38 t136: two walkers
+            # explicitly near at the torii beam, committed into separate
+            # rooms, and hearing dropped three lines of four).
+            if not _player_is_travelling:
+                if _player_room and _player_room in occupied:
+                    target_room = _player_room
+                    target_reason = (
+                        "the player's own room, nobody being under way")
+                elif target_room not in occupied:
+                    ctx.warnings.append(
+                        f"Near-group position conflict for {names}: the "
+                        f"fresh station anchor names room '{target_room}', "
+                        "which nobody in the group stands in and nobody is "
+                        "travelling to -- a station says where a body "
+                        "stands, not which room it is in, and a threshold "
+                        "anchor names the room it leads to. Positions left "
+                        "unchanged."
+                    )
+                    continue
         else:
             # No anchor: only repair the narrow ordinary-travel shape.  A
             # one-sided model-authored near claim is not enough; both bodies
@@ -4670,6 +4792,201 @@ def _report_observer_epithets(ctx, out, sc, p_name):
         ctx.add_warning(note)
 
 
+#: Edge distances that take more than one beat to cross. A corridor and a
+#: mountain path are both one edge and are nothing alike to walk, and a walk
+#: that crosses either in a breath is the reason "realistic" was asked for.
+#: Coarse on purpose -- fiction needs the difference between a doorway and a
+#: hike, not a stride model.
+_LONG_EDGE_DISTANCES = frozenset({"far", "remote"})
+_LONG_EDGE_BEATS = 2
+
+
+def _travel_in_flight_view(sc, interp, p_name):
+    """What the Director is told about walks already under way.
+
+    The engine works out the leg BEFORE the prose is written, not after.
+    Computing it afterwards would move bodies the resolve had just described
+    standing still -- the scenery has to change ON the page, in the same
+    breath as everything else the beat does, or the position and the story
+    are two accounts of one turn again.
+
+    So this is a fact with an out: here is where they are going, here is the
+    room this beat puts them in, narrate it -- unless the beat itself stops
+    them, in which case say so in `travel_interrupted` and they stay put.
+    """
+    pending = sc.get("approach") or {}
+    if "who" in pending:
+        pending = ({pending["who"]: {"to_room": pending.get("to_room")}}
+                   if pending.get("who") else {})
+    if not isinstance(pending, dict) or not pending:
+        return []
+    mv = interp.get("movement")
+    declared = set()
+    if isinstance(mv, dict) and mv.get("to_room"):
+        who = str(mv.get("mover") or "self")
+        declared.add(p_name if who in ("self", "player") else who)
+
+    rooms = sc.get("rooms") or {}
+    view = []
+    for subject, leg in sorted(pending.items()):
+        if not isinstance(leg, dict) or subject in declared:
+            continue
+        destination = str(leg.get("to_room") or "").strip()
+        here = room_of(sc, subject)
+        if not destination or not here or here == destination:
+            continue
+        step = passable_route_next_step(sc, here, destination)
+        if not step:
+            continue
+        edge = next(
+            (e for e in ((rooms.get(here) or {}).get("adjacent") or [])
+             if isinstance(e, dict) and e.get("to") == step), {})
+        entry = {
+            "subject": subject,
+            "destination": destination,
+            "destination_name": str(
+                (rooms.get(destination) or {}).get("name") or destination),
+            "from_room": here,
+            "reaches_this_beat": step,
+            "reaches_name": str((rooms.get(step) or {}).get("name") or step),
+            "distance": normalize_edge_distance(edge.get("distance")),
+            "final_leg": step == destination,
+        }
+        if entry["distance"] in _LONG_EDGE_DISTANCES \
+                and int(leg.get("edge_beats") or 0) + 1 < _LONG_EDGE_BEATS:
+            entry["reaches_this_beat"] = None
+            entry["reaches_name"] = ""
+            entry["still_crossing"] = True
+        view.append(entry)
+    return view
+
+
+def _travel_continues(ctx, out, sc, sd, interp, p_name):
+    """Advance a declared walk that this beat did not mention.
+
+    THE BURDEN IS INVERTED HERE, deliberately. `commit.py` used to read a
+    beat that declared no movement as ABANDONING the walk -- "the walker
+    stopped to do something else, and picking the thread back up is a fresh
+    declaration". That makes travel survive only by being re-declared every
+    beat, which is exactly the sentence nobody wants to keep writing, and it
+    is wrong about the commonest thing in fiction: people talk while they
+    walk.
+
+    Live, chat 72. The player declared the hotel and was correctly refused
+    entry on the beat she was only heading there. Next beat she wrote "You
+    grab the doctors shoulders and stare him directly in the eyes" -- no
+    movement -- and the engine did two contradictory things at once: it
+    recorded that she had abandoned the walk, AND a station anchor moved her
+    the exact two rooms the approach guard had just refused, through a
+    channel no movement guard inspects. The accident gave the narratively
+    right answer; the designed path said she stopped walking while she was
+    plainly still walking.
+
+    So silence CONTINUES. Which is also the only reading consistent with
+    player authority: the player declared this walk, once, and carrying it
+    on executes their declaration -- stopping them without being told is
+    what overrides it. An interruption is therefore the thing that has to be
+    established, never the default, and it is established two ways:
+
+      * THE DIRECTOR SAYS SO (`travel_interrupted`). "Did what just happened
+        stop you walking" is objective causality, it is nuanced beyond
+        anything worth enumerating here, and the resolve is the one stage
+        that reads the whole beat -- the declaration, every character's act,
+        the dice and the room. It is a structured field rather than a prose
+        inference for the usual reason: prose matching is the boundary this
+        engine exists to stay on the right side of.
+      * A DETERMINISTIC FLOOR the Director cannot argue with: no passable
+        route left, being carried, or already there. Restraint needs nothing
+        here -- writing into `state_diff.positions` puts this through the
+        same immobilisation block a declared move goes through, which is the
+        point of advancing the walk HERE, before every movement backstop,
+        rather than teleporting after them.
+
+    Records what it did on `out['travel']`; `commit.py` reads that to retire
+    or keep each standing record, so the ledger and the position can never
+    disagree about whether somebody is still under way.
+    """
+    pending = sc.get("approach") or {}
+    # The scene-global shape ({"who": ...}) predates per-mover records and is
+    # still read so a save written before that does not lose a walker.
+    if "who" in pending:
+        pending = ({pending["who"]: {"to_room": pending.get("to_room")}}
+                   if pending.get("who") else {})
+    if not isinstance(pending, dict) or not pending:
+        return
+
+    # A mover who declared their own movement this beat goes through the
+    # ordinary machinery untouched: continuation fills a SILENCE and never
+    # competes with a live declaration.
+    mv = interp.get("movement")
+    declared = set()
+    if isinstance(mv, dict) and mv.get("to_room"):
+        who = str(mv.get("mover") or "self")
+        declared.add(p_name if who in ("self", "player") else who)
+
+    stopped = {
+        str(entry.get("subject") or "").strip().casefold(): str(
+            entry.get("reason") or "")
+        for entry in (out.get("travel_interrupted") or [])
+        if isinstance(entry, dict) and str(entry.get("subject") or "").strip()
+    }
+
+    route_scene = merge_scene_with_diff(sc, sd)
+    rooms = route_scene.get("rooms") or {}
+    record = {"advanced": [], "arrived": [], "interrupted": [], "held": []}
+
+    for subject, leg in sorted(pending.items()):
+        if not isinstance(leg, dict) or subject in declared:
+            continue
+        destination = str(leg.get("to_room") or "").strip()
+        if not destination:
+            continue
+        here = room_of(route_scene, subject)
+        if here and here == destination:
+            record["arrived"].append(subject)
+            continue
+        reason = stopped.get(str(subject).casefold())
+        if reason is not None:
+            record["interrupted"].append(
+                {"subject": subject, "reason": reason, "source": "director"})
+            continue
+        # Being carried is somebody else's doing; their walk resumes when
+        # they are put down, and until then their position is not theirs.
+        if (route_scene.get("contained") or {}).get(subject):
+            record["held"].append({"subject": subject, "reason": "carried"})
+            continue
+        step = passable_route_next_step(route_scene, here, destination)
+        if not step:
+            record["held"].append(
+                {"subject": subject, "reason": "no passable route"})
+            continue
+        # A long edge is not crossed in a breath. Counted on the standing
+        # record so the beats already spent on this leg survive a reroll.
+        edge = next(
+            (e for e in ((rooms.get(here) or {}).get("adjacent") or [])
+             if isinstance(e, dict) and e.get("to") == step), {})
+        spent = int(leg.get("edge_beats") or 0) + 1
+        if normalize_edge_distance(edge.get("distance")) in \
+                _LONG_EDGE_DISTANCES and spent < _LONG_EDGE_BEATS:
+            record["held"].append(
+                {"subject": subject, "reason": "still crossing",
+                 "edge_beats": spent})
+            continue
+        sd.setdefault("positions", {})[subject] = step
+        record["advanced"].append({"subject": subject, "from": here,
+                                   "to": step, "destination": destination})
+        if step == destination:
+            record["arrived"].append(subject)
+        ctx.add_warning(
+            f"Travel continues: {subject} declared a walk to "
+            f"{destination!r} and this beat did not stop it, so they move "
+            f"{here!r} -> {step!r}. Silence continues a declared walk; an "
+            "interruption is the Director's to assert.")
+
+    if any(record.values()):
+        out["travel"] = record
+
+
 def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
     """A declaration that only reaches TOWARD somewhere does not end inside it.
 
@@ -4757,15 +5074,18 @@ def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
 #
 # The resolve stage stays ONE pipeline step -- one steps/variants row, the
 # same step key, nothing new in agents/runtime.py -- and fans out INSIDE
-# itself when the `director_orchestration` setting is on: a deterministic
+# itself, on every beat: a deterministic
 # dispatch decides which scoped specialists this beat needs, one prose author
 # owns resolved_event (with the delegated instruction blocks cold-stored out
 # of its sheet), each dispatched specialist reads the finished prose and owns
 # its state_diff channels, and deterministic assembly merges the channels
 # back before the existing cross-channel seams (movement backstop,
 # reconciliation, restraint floor) run on the merged diff exactly as they do
-# on a monolithic one. The monolithic path remains the default and is
-# byte-identical to what it always was.
+# on an unsplit one. There is no unsplit path any more: it shipped behind
+# a flag while the two were measured against each other, the fan-out won on
+# stability, tokens and wall clock, and keeping the loser would only have
+# preserved a way to make the engine worse. What remains a choice is
+# CONCURRENCY -- see `fanout_is_parallel`.
 #
 # THE GATE FAILS OPEN AND KEYS ON SCENE STATE, never on the beat's prose --
 # prose matching as a boundary is the silent-drop surface `docs/UNBUILT.md`
@@ -5007,6 +5327,11 @@ _PROSE_DUTY_GATES = {
     "other_players": lambda f: f["other_players_declared"],
     "comm": lambda f: f["minds_apart"] or f["physical_beat"],
     "transit": lambda f: f["transit_capable"],
+    # Exact presence, not a prediction: the payload either lists somebody
+    # under way or it does not, and it is empty on the great majority of
+    # beats -- so this is one of the few duties that genuinely costs nothing
+    # when it is not needed.
+    "travel": lambda f: f["travel_in_flight"],
     "mapping_proposal": lambda f: f["proposal_present"],
     "hearsay": lambda f: f["unratified_claims_present"],
     "road": lambda f: f["road_subjects_present"],
@@ -5109,6 +5434,8 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
             lambda: payload.get("other_players_declarations")),
         "minds_apart": _true_on_error(minds_apart),
         "transit_capable": _true_on_error(transit_capable),
+        "travel_in_flight": _true_on_error(
+            lambda: payload.get("travel_in_flight")),
         "proposal_present": _true_on_error(proposal_content),
         "due_events_present": _true_on_error(
             lambda: payload.get("due_authored_events")),
@@ -6258,6 +6585,12 @@ def director_resolve(ctx, nonce):
         "fiction_model": fm,
         "fiction_frame": _dict(flow.get("fiction_frame")),
         "mapping_scene_proposal": _normalize_scene_patch(mapping.get("scene_patch")),
+        # Walks already under way that this beat did not mention. Handed to
+        # the author BEFORE the prose is written so the scenery changes on
+        # the page, in the same breath as everything else the beat does --
+        # computing the leg afterwards would move bodies the resolve had
+        # just described standing still.
+        "travel_in_flight": _travel_in_flight_view(sc, interp, p_name),
         "player_declaration": {
             "ABSOLUTE": True,
             "sequence": interp.get("sequence") or [],
@@ -6750,6 +7083,13 @@ def director_resolve(ctx, nonce):
         ))
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
+
+    # A walk the player declared once and this beat did not mention carries
+    # on. Written HERE, before every movement backstop, so a continued leg
+    # is judged by exactly the machinery a declared move is judged by --
+    # restraint, passable route, near-group, approach semantics -- rather
+    # than arriving after them as an unexamined teleport.
+    _travel_continues(ctx, out, sc, sd, interp, p_name)
 
     staged = ((ctx.get("mapping_stage") or {}).get("staged_lore") or []) + \
              ((ctx.get("mapping_quick") or {}).get("staged_lore") or [])

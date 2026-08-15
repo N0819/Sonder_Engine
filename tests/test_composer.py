@@ -423,7 +423,7 @@ def test_observations_text_is_the_rendered_span():
 
 def test_observation_wrapper_omits_only_resting_defaults():
     """The advisory axes are context for the model's appraisal, and nothing
-    deterministic consumes them (docs/PIPELINE.md) -- so a resting default
+    deterministic consumes them (docs/guides/PIPELINE.md) -- so a resting default
     (intensity 0.35 / suddenness 0.1 / ambiguity 0.15 / fidelity "rendered" /
     source_atom_id "current" / directed_at_self false, near-constant across
     99%/99%/89%/99%/100% of 1,692 stored observations) carries no information

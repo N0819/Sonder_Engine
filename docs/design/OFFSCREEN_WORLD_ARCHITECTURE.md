@@ -1,9 +1,14 @@
-# Architectural completion proposal
+# Off-screen world — the architecture
 
-Status: **accepted direction; implementation in progress**
+Status: **accepted direction; implementation in progress.** This document is
+the durable half: the invariants, the seven parts of the architecture, and the
+shapes deliberately rejected. Its status half — what is built, what is next,
+and the completion gate — lives in
+[`OFFSCREEN_WORLD_COMPLETION.md`](OFFSCREEN_WORLD_COMPLETION.md), and is not
+repeated here.
 Scope: living world, off-screen life, crowds, durable social continuity, and
 the remaining ideas worth carrying forward from the original architecture.
-Authority: `Design.md`, `docs/PIPELINE.md`, and `docs/DATABASE.md` remain the
+Authority: `Design.md`, `docs/guides/PIPELINE.md`, and `docs/guides/DATABASE.md` remain the
 maintained specifications. This proposal orders work and defines completion;
 it does not override those documents.
 
@@ -206,63 +211,16 @@ belong in retrieval/ranking once the underlying evidence is durable.
 
 ## 4. Build order and gates
 
-### Phase 0 — measurement and epoch
-
-- replace `director_establish` and raw turn cadence with the frame-scoped epoch;
-- record opportunity/fire metrics in stored commit results;
-- extend `tools/fire_rates.py` with explicit denominators;
-- prove reroll, rollback, frame, and job idempotence.
-
-**Gate:** an instrumented story shows eligible epochs and real fires. A mechanism
-with no opportunities reports “no chances.”
-
-### Phase 1 — deterministic continuity
-
-- [built] route stochastic/profile producers through the epoch;
-- [built] add typed reactive plan stages and consequence landing;
-- [built] activate `world_events` as the common fired-event spine;
-- integrate crowds/fixtures and routine residue at contact.
-
-**Gate:** a plan and a place can advance across an absence with zero model calls,
-then be encountered through ordinary perception.
-
-`world_events` activation landed with checkpoint snapshot/restore,
-archive/import, branch remapping, schema migration, deletion, and fidelity
-tests. The first writer promotes only mechanically fired queue rows; no second
-causality path was introduced.
-
-### Phase 2 — carriers and social durability
-
-- [physical floor built] build witnessed carrier movement and rumor belief
-  ingestion; registered first-person holders work, while crowd/message copying
-  and subtractive degradation remain;
-- add relationship events and projected current relationship state;
-- add repeated-reference canon locking with independent provenance.
-
-**Gate:** an NPC can learn true, false, or stale news through a route, while an
-unreached NPC remains ignorant.
-
-### Phase 3 — full off-screen character
-
-- [built] add per-character opt-in and deterministic private-reason selection
-  beneath the chat ceiling;
-- run the reduced character/Director job only for due selected actors;
-- commit consequences, plan revisions, and stable autobiographical memories;
-- expose spoiler-gated diagnostics outside the diegesis.
-
-**Gate:** an opted-in antagonist can pursue a plan, react only after legitimate
-news reaches it, be wrong for coherent reasons, and replay identically after a
-reroll.
-
-### Phase 4 — re-contact settlement and polish
-
-- derive bounded gap proposals;
-- add measured dispute/settlement only where proposals prove unreliable;
-- add event-triggered coherence checks, resume digest, and causal inspector;
-- tune salience from stored opportunities rather than intuition.
-
-**Gate:** a long absence produces consistent observable aftermath and durable
-character memory without omniscient exposition or unbounded standing cost.
+The phase list that stood here duplicated
+[`OFFSCREEN_WORLD_COMPLETION.md`](OFFSCREEN_WORLD_COMPLETION.md), which carries
+the same work as numbered items with per-item BUILT/PARTLY tags and dated
+measurements. Two copies of a build order drift, and this one drifted first.
+**Read the completion document for what is done and what is next.** The phase
+gates it inherits are unchanged in substance: an instrumented story showing
+eligible epochs and real fires before continuity work counts as landed; a
+mechanism with no opportunities reporting "no chances" rather than 0%; and a
+long absence producing consistent observable aftermath without omniscient
+exposition or unbounded standing cost.
 
 ## 5. Cost budget
 
@@ -292,10 +250,9 @@ size, map size, or story length.
 
 ## 7. Definition of architectural completion
 
-This proposal is complete when all five living-world mechanisms have a working
-floor and measured ceiling; the off-screen ladder's five rungs are honest in the
-UI; world epoch, events, plans, carriers, relationships, re-contact, and memory
-all survive checkpoint/branch/archive; every mind remains epistemically bounded;
-and the full isolated suite plus browser/CI checks pass. “Code exists” is not
-completion: at least one real-story denominator and one observed fire are
-required for every model-assisted mechanism.
+The gate is stated once, in
+[`OFFSCREEN_WORLD_COMPLETION.md`](OFFSCREEN_WORLD_COMPLETION.md) §"Architectural
+completion gate", together with the measurement that says how far off it is.
+The one clause worth repeating here, because it is the clause most often
+skipped: **"code exists" is not completion.** Every model-assisted mechanism
+needs at least one real-story denominator and one observed fire.

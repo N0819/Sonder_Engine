@@ -1,7 +1,7 @@
 # place_purpose.py
 """What a place is FOR: purpose a character can know about rooms.
 
-Built to docs/DESIGN_PLACE_PURPOSE.md, on top of machinery the doc predates:
+Built to docs/design/DESIGN_PLACE_PURPOSE.md, on top of machinery the doc predates:
 the durable place graph (`chat_chars.state.place_graph`, written only by
 `commit.record_spatial_experience` from the character's own standing and
 sight), routing over walked doorways (`_destination_from_goals`/`en_route`),
@@ -92,7 +92,7 @@ Persistence: everything here rides `chat_chars.state` (`place_graph` node
 `affords` + the two-float `last_vitals` snapshot), the place-graph
 precedent — checkpoints, chat_archive and branching carry the blob
 verbatim, so no schema, remap, or archive change is needed
-(docs/DATABASE.md decision recorded at `record_spatial_experience`).
+(docs/guides/DATABASE.md decision recorded at `record_spatial_experience`).
 """
 
 from __future__ import annotations

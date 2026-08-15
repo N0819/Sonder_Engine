@@ -39,7 +39,7 @@ jobs:
     # side of the declared `pydantic>=1.10.13,<3` range. `schemas.py` carries a
     # branch per major (`_declared`), and the 1.x branch had no coverage here at
     # all -- which is how a 1.x-only internal reached import scope and stopped
-    # the engine starting for anyone who resolved to 2.x. See docs/TESTING.md.
+    # the engine starting for anyone who resolved to 2.x. See docs/guides/TESTING.md.
     #
     # The failure runs the other way too, and this job could not see it. It ran
     # `make test-fast`, which deselects every database-backed test -- so a

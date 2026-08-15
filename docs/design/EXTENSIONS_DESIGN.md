@@ -1,7 +1,7 @@
 # Extension System — Design Notes (exploratory, not yet built)
 
 Status: **design exploration for a future feature.** Nothing here is implemented
-— re-verified at alpha 6.1; registered as [`UNBUILT.md`](UNBUILT.md) §6.2.
+— re-verified at alpha 6.1; registered as [`UNBUILT.md`](../UNBUILT.md) §6.2.
 Captures how user-authored extensions (UI changes + pipeline interaction) could be
 added to Sonder Engine, grounded in the existing seams. Verify file:line anchors
 against current code before acting — they drift, and all three §0 anchors already

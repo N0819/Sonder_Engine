@@ -5,7 +5,7 @@ run before any ranking: the turn cutoff (a mind deciding turn N must never read
 a memory of how turn N turned out -- audit F1) and frame visibility (another
 era's memories are not this mind's to have yet).
 
-They used to be written out again at every read path, and `docs/MEMORY.md`
+They used to be written out again at every read path, and `docs/guides/MEMORY.md`
 claimed that repetition was what stopped a new path forgetting them. That is
 backwards -- repetition is exactly how a sixth path forgets, because nothing
 makes it reproduce five filters it may not know exist. The rules now live in

@@ -4,7 +4,7 @@ Reads the --out JSONL a run wrote and emits, per run, the maze with each room
 labelled by the beat it was first entered plus a move-by-move table annotated
 with what each move was (on route, revisit, reversal, dead end, stayed put).
 
-    python tools/render_maze_runs.py <runs.jsonl> [-o docs/MAZE_RUNS.md]
+    python tools/render_maze_runs.py <runs.jsonl> [-o docs/experiments/MAZE_RUNS.md]
 
 Generated rather than written by hand so it cannot drift from what happened.
 
@@ -126,7 +126,7 @@ def main():
     ap.add_argument("runs_jsonl")
     ap.add_argument("-o", "--out", help=(
         "write here instead of stdout. ONE FILE PER ARM -- name it for the "
-        "arm (docs/maze/A8-9x9-grok.md), never a shared name. Refuses to "
+        "arm (docs/experiments/maze/A8-9x9-grok.md), never a shared name. Refuses to "
         "overwrite; pass --force only to correct a file you just wrote."))
     ap.add_argument("--force", action="store_true", help=(
         "overwrite an existing document. Almost never right: a rendered arm "
@@ -144,7 +144,7 @@ def main():
     if a.out and os.path.exists(a.out) and not a.force:
         raise SystemExit(
             f"{a.out} already exists. Each arm gets its OWN document -- name "
-            f"this one for its arm (e.g. docs/maze/A9-9x9-trinity.md) rather "
+            f"this one for its arm (e.g. docs/experiments/maze/A9-9x9-trinity.md) rather "
             f"than replacing another arm's record. Use --force only to "
             f"correct a file you just wrote yourself.")
 

@@ -202,7 +202,7 @@ _INTENT_DORMANT_AFTER = 30
 # Public: agents/character.py surfaces an active intention as `fading` once
 # it has gone two-thirds of the dormancy fuse without progress, so the
 # giving-up can happen BY the character instead of TO them (see
-# docs/DESIGN_LONG_TERM_GOALS.md, "Decay should be reasoned, not silent").
+# docs/design/DESIGN_LONG_TERM_GOALS.md, "Decay should be reasoned, not silent").
 INTENT_DORMANT_AFTER = _INTENT_DORMANT_AFTER
 _INTENT_PROGRESS_STEP = 0.2
 # Consecutive attempts at FULL progress -- the beat spent on a goal that has
@@ -1318,7 +1318,7 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
 # The tier between the eternal drive and the completable intention: durable
 # but not eternal, able to name a room, and structurally immune to every
 # mechanism above that correctly spends intentions. Four measured failures
-# motivate it (docs/DESIGN_LONG_TERM_GOALS.md): a life's-work aim marked
+# motivate it (docs/design/DESIGN_LONG_TERM_GOALS.md): a life's-work aim marked
 # satisfied the beat after its first success; a commission decayed dormant by
 # 150 barren beats the world had not withdrawn; aims abandoned along with the
 # tactic that served them; and a standing purpose out-competed every beat by

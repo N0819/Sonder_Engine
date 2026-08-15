@@ -7,13 +7,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This repo already maintains detailed docs for coding agents. Read them before making non-trivial changes:
 
 1. [`AGENTS.md`](AGENTS.md) — edit routing table (which files to touch for which change), core invariants, source-of-truth order, and safe change workflow. **Read this first for any behavioral change.**
-2. [`docs/PIPELINE.md`](docs/PIPELINE.md) — exact opening-turn and normal-turn execution flow, stage-by-stage.
+2. [`docs/guides/PIPELINE.md`](docs/guides/PIPELINE.md) — exact opening-turn and normal-turn execution flow, stage-by-stage.
 3. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules, functions, routes, DB tables, and frontend sections. Regenerate with `make map`; do not hand-edit.
-4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers (`q`/`qi`/`qtx`/`transaction`/`wget`/`wset`), and the schema-change checklist.
-5. [`docs/TESTING.md`](docs/TESTING.md) — fast/full/browser tiers, dependency constraints, and CI policy.
+4. [`docs/guides/DATABASE.md`](docs/guides/DATABASE.md) — schema, write helpers (`q`/`qi`/`qtx`/`transaction`/`wget`/`wset`), and the schema-change checklist.
+5. [`docs/guides/TESTING.md`](docs/guides/TESTING.md) — fast/full/browser tiers, dependency constraints, and CI policy.
 6. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), and structural debt. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
-7. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of unfinished work: known defects, the roadmap, deferred audit findings, and every design-note residual. No other document keeps its own status list. Delete an entry in the commit that lands it; add the corresponding row to `Design.md`.
-8. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
+7. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the register of unfinished work: known defects, the roadmap, deferred audit findings, and every design-note residual. It is *meant* to be the only status list and is not: `Design.md`'s conformance table, each design note's `Status:` header, `docs/guides/FEATURES.md`'s `(partial)` markers and `docs/design/OFFSCREEN_WORLD_COMPLETION.md`'s per-item tags are four more. When they disagree, fix `UNBUILT.md` first. Delete an entry in the commit that lands it; add the corresponding row to `Design.md`.
+8. [`docs/README.md`](docs/README.md) — the documentation index. `docs/guides/` is authority, `docs/design/` is argument, `docs/experiments/` is evidence, `docs/archive/` is superseded.
+9. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
 
 Do not duplicate content from these files in explanations; point to them instead.
 
@@ -22,13 +23,15 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-full  # every Python regression test (~36s — run this freely)
+make test-full  # every Python regression test (6329 tests, ~74s — run this freely)
 make test       # alias for test-full
 make test-lf    # last-failed first, then the rest — the fix-verify loop
-make test-fast  # CI matrix-breadth ONLY; skips 159 of 252 files (see docs/TESTING.md)
+make test-fast  # NOT a tier to check your own work with; deselects 119 of 391 files,
+                #   including the persistence and firewall suites (see docs/guides/TESTING.md)
 make test-browser # optional real Chromium behavior tests
 make map        # regenerate docs/CODE_MAP.md
-make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test, stale-map checks)
+make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test,
+                #   prompt/schema-op drift, specialist + prose-author chunk ownership, stale map)
 make compile    # python -m compileall on all source
 make check-fast # compile + structure/map freshness + full suite
 make check      # compile + map + structure + full suite — run this before considering a change done
@@ -54,33 +57,35 @@ A turn runs through a `PipelineContext` (`pipeline_context.py`) and is executed 
 
 **Opening turn** (`turn.idx == 0`): `mapping_stage → director_establish → perception_establish → narrator → commit`
 
-**Normal turn** (plan built dynamically from `director_interpret.flow`):
+**Normal turn** (`agents/runtime.py`'s `build_plan`, built dynamically from `director_interpret.flow` plus the chat's `autonomy` and the awareness gate):
 ```
 director_interpret → mapping_stage|mapping_quick → perception_act
     → [reaction_loop if contested physical reactions] → [interaction_loop | parallel character:<id> steps]
-    → director_resolve → background_react → perception_outcome → narrator → commit
+    → director_resolve → background_react → perception_outcome → narrator
+    → [narrator_extra if the chat has extra players] → commit
 ```
+A plan step is one `steps`/`variants` row; the Director's six specialist calls are sub-calls *inside* `director_interpret`/`director_resolve`, not steps of their own.
 
 Key ownership boundaries (see `AGENTS.md` for the full table):
-- The **Director** (`agents/director.py`) owns objective causality — interprets player input and resolves outcomes — but not character psychology or narration, and must not silently replace the player's declared speech/action.
-- **Perception** (`agents/perception.py`) is a stateless filter deciding what each observer legitimately receives; its structured observations are re-derived from the final scrubbed prose view, not trusted from model output, so the second representation cannot expand the information budget.
+- The **Director** (`agents/director.py`) owns objective causality — interprets player input and resolves outcomes — but not character psychology or narration, and must not silently replace the player's declared speech/action. It is no longer one mind: each Director stage fans out to a prose author plus six scoped specialists (`SPECIALISTS` — `body`, `social`, `contact`, `objects`, `spatial`, `offscreen`), each owning a subset of `state_diff` channels, and the deterministic orchestrator keeps every cross-channel judgment on the MERGED diff. The monolith is GONE: there is no `DEFAULT_PROMPTS["director_resolve"]`. `director_fanout_mode` chooses only CONCURRENCY (parallel default), never a different set of hands. Full contract in `AGENTS.md` § Director orchestration and design note 19.
+- **Perception** (`agents/perception.py`) is **deterministic** — there is no `perception` model role in `providers.ROLES` and the module imports no model seam at all. It filters what each observer legitimately receives, and `agents/composer.py` composes every view from a typed IR; the structured observations are re-derived from the rendered view (`composer.observations_from_render`), so the second representation cannot expand the information budget.
 - **Character agents** (`agents/character.py`, `agents/loops.py`) declare behavior from private perception/memory/relationships only; they never decide their own success. `psychology_runtime.py` deterministically persists bounded stress, current-event pain/pleasure, beliefs, and learned associations from those permitted inputs.
-- **`agents/background.py`** gives at most one named, unregistered background presence a single stateless reaction per beat — no persistent memory or psychology (that requires promotion to a real character). Deterministically gated by `commit.py`'s `pick_background_reactor`, which returns `None` (no LLM call) for the large majority of turns.
+- **`agents/background.py`** gives named, unregistered background presences a stateless reaction per beat — no persistent memory or psychology (that requires promotion to a real character). Deterministically gated by `commit.py`'s `pick_background_reactors`, which returns `[]` (no LLM call) for the large majority of turns; the cap is the chat's `background_config.max_reactors` (default 1, hard ceiling 3), and `pick_background_reactor` is only a single-winner wrapper. Above `scene_life: ambient`/`full` the stage instead runs the scene-manager path (`scene_life`, `docs/design/BACKGROUND_LIFE_DESIGN.md`), which returns the same shape.
 - The **Narrator** (`agents/narration.py`) renders only the player-facing slice and cannot originate new player conduct or reveal unperceived facts.
 - **`commit.py`** is the sole persistence boundary — model output is provisional until deterministic commit code validates it. Slow lore/memory preparation happens before the write lock, then all primary turn mutations commit inside one outer transaction. Any domain failure rolls the entire turn back; reconstructible autobiographical-summary consolidation is scheduled afterward as an out-of-band job (`schedule_memory_consolidation` → `jobs.py`), never inside the turn's wall clock.
 
-`agents/__init__.py` is a compatibility facade; role modules (`director.py`, `perception.py`, `character.py`, etc.) may import `agents/common.py` but never each other, and `runtime.py` is the only module aware of every built-in stage.
+`agents/__init__.py` is a compatibility facade. The enforced direction is one-way: role modules import `agents/common.py`, and `common.py` imports no role module. Role modules importing *each other* is discouraged but real and untested — `loops.py → character.py` and `background.py → perception.py` both do it — so do not assume that graph is clean. `runtime.py` owns the plan and the `STEP_HANDLERS` registry, but it is not the only place a stage is named: `schemas.SCHEMA_MAP` and `pipeline_context.py`'s fields enumerate them too. Adding a stage is a checklist, in `agents/README.md`.
 
-Physical-world authority (consolidated in movement/space Phase 3a): the frame-scoped `world.scene` JSON blob is the single runtime source of truth for live rooms/positions/entity state; `room_registry` is the single cross-frame ledger of room identity/retirement; the normalized `world_entities` table is a derived projection of the scene commit. `world_placements` is decommissioned; `fiction_worlds`, `fiction_locations`, and `transit_edges` are deprecated import-compatibility tables. Every scene writer must keep the registry projection in sync — check both the commit path and restore path before adding one (see `docs/DATABASE.md`).
+Physical-world authority (consolidated in movement/space Phase 3a): the frame-scoped `world.scene` JSON blob is the single runtime source of truth for live rooms/positions/entity state; `room_registry` is the single cross-frame ledger of room identity/retirement; the normalized `world_entities` table is a derived projection of the scene commit. `world_placements` is decommissioned; `fiction_worlds`, `fiction_locations`, and `transit_edges` are deprecated import-compatibility tables. Every scene writer must keep the registry projection in sync — check both the commit path and restore path before adding one (see `docs/guides/DATABASE.md`).
 
 Supporting service seams are explicit: `auth_routes.py` owns typed host-auth routes and cookie transport; `chat_archive.py` owns portable chat import/export; `pipeline_trace.py` owns privacy-conscious persisted-history export/replay; `spatial_orientation.py` owns bearing math and is re-exported through `spatial.py`.
 
-Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` loads in the document head; the remaining order is `utils.js → components.js → editors.js → lorebooks.js → backdrops.js → chat.js → settings.js → themes.js → app.js`. Never rename a shared JS function without grepping every file.
+Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` loads in the document head; the remaining order is `utils.js → components.js → editors.js → lorebooks.js → backdrops.js → ambience.js → weather-fx.js → chime.js → chat.js → settings.js → themes.js → app.js` (`static/index.html`). Never rename a shared JS function without grepping every file.
 
 ## Working in this repo
 
 - Reproduce a bug with a focused test before fixing; fix the earliest stage where data first becomes wrong rather than compensating downstream (e.g., in the Narrator).
-- New persistent fields need: schema/migration in `db.py`, read/commit code, portable archive handling in `chat_archive.py`, checkpoint snapshot+restore, branch/clone ID remapping in `app.py` if applicable, and a regression test (full checklist in `docs/DATABASE.md`).
+- New persistent fields need: schema/migration in `db.py`, read/commit code, portable archive handling in `chat_archive.py`, checkpoint snapshot+restore, branch/clone ID remapping in `app.py` if applicable, and a regression test (full checklist in `docs/guides/DATABASE.md`).
 - Attached characters may have a per-story authored card in
   `chat_chars.sheet`; `scene.active_cast` resolves it over the reusable
   `characters.sheet`. Keep that configuration separate from `chat_chars.state`,
@@ -102,8 +107,8 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
   do not show up in any test; they show up as a character who behaves wrongly
   fifty beats later, by which time the cause looks like a model problem.
   Measured cases, all from the maze arms
-  ([`docs/MAZE_ARMS.md`](docs/MAZE_ARMS.md),
-  [`docs/DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](docs/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)):
+  ([`docs/experiments/MAZE_ARMS.md`](docs/experiments/MAZE_ARMS.md),
+  [`docs/design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](docs/design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)):
   - **`psychology.drive` empty is the worst of them.** A sheet with rich
     traits, values and goals but `{"essence": "", "expression": "", "taboo":
     ""}` reads as complete and is not. Every motivation then lives in
@@ -113,6 +118,22 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     turned away, because nothing underneath the spent goals wanted it. A drive
     survives goal decay; author one that cannot be satisfied, or it becomes a
     goal wearing the word.
+  - **A drive is not the only remedy and often not the right one — author
+    `psychology.projects` as well** (`docs/design/DESIGN_LONG_TERM_GOALS.md`, built:
+    `affect.apply_project_ops`, `character_schema.character_projects`,
+    `tests/test_projects.py`). A drive is eternal and PLACELESS: it cannot
+    name a room, so it cannot be walked to. An intention names a room and is
+    built to be completable, abandonable and swept when dormant. A project is
+    the tier between — durable but not eternal, able to name a place, and
+    explicitly immune to the three ways the courier's aims died: satisfied by
+    one instance, decayed by a barren stretch, abandoned along with the tactic
+    that served it. It BIASES appraisal rather than competing in the beat
+    auction, which is how the shrine kept losing — intention weight 0.8
+    against drive-serving wants at 1.0, nine beats running. Cap of two by
+    design, because scarcity is what makes "what is this person about right
+    now" have an answer at all. Author `satisfied_when` explicitly or the
+    project re-arms per occasion: "every run ends at the shrine" is a
+    project, "reach the shrine" is a task wearing the word.
   - **It fails invisibly because `serves: "drive"` stays valid against an
     empty drive.** The character emitted drive-serving wants for 150 beats
     against three empty strings, and nothing anywhere objected.

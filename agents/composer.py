@@ -1381,7 +1381,7 @@ _MAX_OBSERVATION_ATOMS = 8
 # `perceiver_id` matched the perceiver already named by `observation_id` in
 # 100% -- six near-constant fields beside every percept, ~356 tokens of
 # wrapper per payload against ~188 tokens of text. The axes are advisory
-# context for the model's appraisal (docs/PIPELINE.md: no deterministic code
+# context for the model's appraisal (docs/guides/PIPELINE.md: no deterministic code
 # consumes the numbers), so a resting default carries no information and is
 # OMITTED: absent means the default, the same convention the character
 # payload uses everywhere else ("absent means cannot tell", never "none").

@@ -1265,7 +1265,7 @@ def delete_turn_memories(turn_id):
 #
 # They used to be written out again at every read path -- search_memories,
 # contrast_memory, recent_memory_buffer, list_memories,
-# consolidate_character_memory -- and docs/MEMORY.md claimed that repetition
+# consolidate_character_memory -- and docs/guides/MEMORY.md claimed that repetition
 # was what stopped a new path forgetting them. That reasoning is backwards:
 # repetition is precisely how a sixth path forgets, because nothing makes it
 # reproduce five filters it may not know exist.

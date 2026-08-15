@@ -35,6 +35,6 @@ rather than half-parsed.
 |---|---|---|---|
 | `maze7x7-a11.svg` | 7×7 | 28 moves | corridor maze — 4 junctions, 6 dead ends, 57% of rooms on route |
 
-Arms are registered in [`docs/MAZE_ARMS.md`](../../docs/MAZE_ARMS.md), which
+Arms are registered in [`docs/experiments/MAZE_ARMS.md`](../../docs/experiments/MAZE_ARMS.md), which
 also explains what each maze's shape does and does not measure. The parse of
 each file here is pinned by `tests/test_maze_svg.py`.

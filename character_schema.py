@@ -1432,7 +1432,7 @@ def character_projects(sheet: dict) -> list[dict]:
     between the drive (eternal, placeless) and intentions (completable,
     abandonable, swept when dormant): a project can name a room and survives
     barren stretches, single successes, and the death of the tactics that
-    serve it. See docs/DESIGN_LONG_TERM_GOALS.md.
+    serve it. See docs/design/DESIGN_LONG_TERM_GOALS.md.
 
     At most two, because scarcity is what makes the tier mean anything --
     the runtime cap (affect.PROJECT_CAP) holds the same line. Ids are

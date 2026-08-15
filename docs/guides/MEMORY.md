@@ -10,9 +10,9 @@ read from. `memories.char_id` is on every row and every read path filters on it
 before ranking, which is what makes the firewall a property of the query rather
 than a rule the retrieval code is asked to respect.
 
-Related: [`docs/DATABASE.md`](DATABASE.md) for the schema-change checklist,
-[`docs/PIPELINE.md`](PIPELINE.md) for where in a turn this runs,
-[`docs/RESEARCH.md`](RESEARCH.md) §1.3–1.5 for the retrieval literature and why
+Related: [`docs/guides/DATABASE.md`](DATABASE.md) for the schema-change checklist,
+[`docs/guides/PIPELINE.md`](PIPELINE.md) for where in a turn this runs,
+[`docs/guides/RESEARCH.md`](RESEARCH.md) §1.3–1.5 for the retrieval literature and why
 there is no vector index.
 
 ---
@@ -508,7 +508,7 @@ still read `effective_importance` directly.
 **Belief weighting** is signed around 0.5 so a held belief is promoted and an
 abandoned one demoted, and it is in the same band as salience rather than
 larger — it should break a tie between competing inferences, not outrank an
-actual semantic match. It carries a `retrieval_reason` either way: *"belief the
+actual semantic match. It carries a `retrieval_reasons` list either way: *"belief the
 character still holds"* (≥0.6) or *"belief the character has since revised"*
 (≤0.25).
 
@@ -574,7 +574,7 @@ attention budget is real.
 Ordinary recall asks *what is most like this beat*. A character measurably
 stuck needs the opposite question answered once: *what that mattered is least
 like this beat*. Adapted from SIGMA SRIP-14 §XXII, *Retrieval as Perturbation
-Source* — see [`docs/RESEARCH.md`](RESEARCH.md) §1.5 for what carries over and
+Source* — see [`docs/guides/RESEARCH.md`](RESEARCH.md) §1.5 for what carries over and
 what deliberately does not.
 
 **The trigger is fully deterministic — no model call.**
@@ -985,7 +985,7 @@ blob restores field-for-field to what the original held before the rewrite
 commits. `memory_vectors` is **append-only and never garbage-collected** — a
 checkpoint predating a deletion still references the vector, and a rollback
 that cannot resolve one is a worse failure than some orphaned rows. Schema and
-operational detail in [`docs/DATABASE.md`](DATABASE.md).
+operational detail in [`docs/guides/DATABASE.md`](DATABASE.md).
 
 **`start_rebuild_if_needed`** is the standing reconciler. It is deliberately
 *not* a one-time migration: a mismatch appears whenever the embedding model
@@ -1088,7 +1088,7 @@ before this pass, each correct on the day it was written. Treat a number as
 evidence for the SHAPE of a claim (dialogue is rare relative to episodes) and
 re-count before quoting it as a fact.
 
-Open, and tracked in [`docs/UNBUILT.md`](UNBUILT.md):
+Open, and tracked in [`docs/UNBUILT.md`](../UNBUILT.md):
 
 - **§1.15** the rebuild story above, now marked SUPERSEDED for its premise: a
   real provider is configured and the whole bank is on it, so the split-era

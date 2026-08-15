@@ -207,7 +207,7 @@ def _first_sentences(text, n=2):
 # authored against whoever will eventually play them, and inventing a persona
 # name here would fabricate identity the card never stated. A stable, readable
 # token is enough to stop a literal "{{user}}" from rendering to the player;
-# see docs/GREETING_IMPORT_DESIGN.md's PLAYER token.
+# see docs/design/GREETING_IMPORT_DESIGN.md's PLAYER token.
 PLAYER_TOKEN = "{{PLAYER}}"
 
 # SillyTavern / chub / JanitorAI card macros. {{char}}/<BOT> resolve to the

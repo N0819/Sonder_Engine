@@ -6,7 +6,7 @@ deliberately different verification levels.
 ## Test commands
 
 ```bash
-make test-full     # every Python regression test (~36s)
+make test-full     # every Python regression test (6329 tests, ~74s)
 make test-lf       # last-failed first, then the rest -- the fix-verify loop
 make test-browser  # optional Chromium behavior tests
 make check-fast    # compile, structure/map freshness, then the full suite
@@ -23,11 +23,13 @@ current.
 
 Tests requesting the shared `temp_db` fixture are still marked `slow` during
 collection, and `make test-fast` still deselects them. Do not reach for it to
-check your own work: it skips **159 of 252 test files**, including the
-persistence and information-firewall suites — the invariants this repo exists
-to keep honest. It is kept for one job, the CI matrix-breadth run, which proves
-the pure-contract tests pass on a second interpreter without paying for the
-database tier twice.
+check your own work: it deselects **1841 of 6329 tests, emptying 119 of 391
+test files**, including the persistence and information-firewall suites — the
+invariants this repo exists to keep honest. **Nothing runs it any more.** It
+was kept for the CI matrix-breadth run, but that job now runs `make check-fast`
+— the whole suite — on both interpreters, so `test-fast` has no consumer left
+in `.github/workflows/ci.yml`. It survives only as a manual escape hatch for a
+machine with no usable `/dev/shm`.
 
 That split was a real trade when it was written. `db.init()` is fsync-bound —
 `executescript(SCHEMA)` auto-commits ~117 DDL statements against a brand-new
@@ -35,7 +37,9 @@ file — and a `temp_db` setup measured 1.2–1.6s on a loaded checkout against
 test bodies of 0.02–0.10s. That one call was ~90% of the suite's wall clock.
 
 Moving the fixture's temp directory to tmpfs (`tests/conftest.py`,
-`_fast_tmp_dir`) removed it: **15m35s → 36s for all 3799 tests**, measured.
+`_fast_tmp_dir`) removed it: **15m35s → 36s for all 3799 tests**, measured at
+the time. The suite has since grown to 6329 tests and ~74s, which is the same
+per-test cost.
 Nothing about the database changed — same schema, same WAL, same isolation,
 same per-test file; only the storage backing moved, so no test can tell the
 difference. `ENGINE_TEST_TMPDIR` overrides the location, and platforms without
@@ -47,13 +51,13 @@ a test slow because it is inconvenient or intermittently failing.
 
 ### On running only the tests near what you changed
 
-Investigated and deliberately **not** built. A subsystem partition of the 252
-test files was designed and simulated against 300 real commits: it would run a
+Investigated and deliberately **not** built. A subsystem partition of the test
+files was designed and simulated against 300 real commits: it would run a
 median 42% of the suite, ~2x, at the cost of a mapping table that must be
 maintained forever and that leaks in ways nothing detects — most sharply for
 tests that couple by `monkeypatch.setattr("agents.director._foo", ...)`, a
-string path no import graph can see. Against a 36-second full suite that is not
-a trade worth making. Use `make test-lf` while iterating and run everything
+string path no import graph can see. Against a full suite in the tens of
+seconds that is not a trade worth making. Use `make test-lf` while iterating and run everything
 before you are done.
 
 A fast-tier test must also be order-independent on a clean checkout. Do not let
@@ -201,14 +205,20 @@ do not exist on 1.x; those are what to migrate first if the ceiling moves.
 
 ## CI layout
 
-GitHub Actions runs:
+GitHub Actions (`.github/workflows/ci.yml`) runs three jobs:
 
-1. fast checks on Python 3.11 and 3.12;
-2. the full Python suite once on Python 3.12;
-3. the fast tier once on Pydantic 1.x, the half of the declared range the
-   constraints pin does not cover;
-4. the optional Chromium behavior suite once on Python 3.12.
+1. `fast` — `make check-fast` on Python 3.11 and 3.12. Named `fast` for
+   history, because it is a required check elsewhere; it has not been the
+   reduced tier since the databases moved to tmpfs, and compiles, runs the
+   structure/map checks, and runs **every** test on both interpreters. The
+   separate `full` job that used to follow it was a strict subset and was
+   deleted.
+2. `pydantic1` — `make test-full` on Python 3.12 with Pydantic downgraded past
+   the constraint, covering the half of the declared range the pin does not.
+   It asserts the major it is actually running before testing.
+3. `browser` — the optional Chromium behavior suite once on Python 3.12.
 
-This catches supported-Python drift quickly without paying the full-suite cost
-for every matrix entry. Jobs 2–4 need job 1, so a broken build fails once
-rather than four times.
+Jobs 2 and 3 need job 1, so a broken build fails once rather than three times.
+**Both majors run the whole suite**: the asymmetry — 1.x on the fast tier only
+— is exactly what hid `_subject_field`, and restoring it would hide the next
+one.

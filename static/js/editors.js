@@ -164,7 +164,7 @@ function greetingCarousel(character, initial) {
 
 // Persona picker -> POST /api/characters/{id}/start with the chosen greeting
 // index. The greeting becomes the opening scene (shown verbatim); the pipeline
-// runs underneath it. See greetings.start_story / docs/GREETING_IMPORT_DESIGN.md.
+// runs underneath it. See greetings.start_story / docs/design/GREETING_IMPORT_DESIGN.md.
 function quickStartModal(character, greetingIndex) {
   const personas = S.boot.personas || [];
   if (!personas.length) {
