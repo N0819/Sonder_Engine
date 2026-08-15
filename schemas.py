@@ -1,6 +1,7 @@
 # schemas.py
 """Pydantic schemas for all pipeline and world-state structures."""
 
+import html
 import json
 import math
 import re
@@ -3547,6 +3548,241 @@ def _unwrap_envelope(step_key, raw):
     return inner
 
 
+# ---------------------------------------------------------------------------
+# Inline markup in narration
+# ---------------------------------------------------------------------------
+# WE OPENED THIS DOOR ON PURPOSE AND THEN WERE SURPRISED BY WHAT CAME THROUGH.
+# The paragraph contract asks the narrator for `<p>...</p>` and the comment
+# under it says exactly why that marker and not a private token: "the model has
+# seen a billion <p> tags", where `[[P]]` returned an empty prose field and
+# `[[BREAK]]` silently dropped two speakers' lines. Familiarity is what made it
+# work -- and familiarity does not stop at one tag. Told that this channel
+# speaks HTML, the narrator reasonably concluded that it speaks HTML, and began
+# emitting `<i>` for a thought the prose voices rather than quotes. It is good
+# writing and it landed on the page as literal angle brackets.
+#
+# So the set is CLOSED HERE rather than guessed at downstream. Three outcomes,
+# no fourth: a tag is canonical (rewritten to one spelling), or it is
+# decoration this engine has no use for (removed, text kept), or it is a
+# container whose CONTENT is not prose (removed with its content). Nothing
+# reaches storage, the archive, the fidelity checks or the page as a literal
+# tag, whatever the model reaches for next.
+#
+# The rules the `<p>` handler already established, applied here too:
+#   * NO TEXT IS EVER DROPPED for a markup reason. A stray tag costs its own
+#     characters and nothing else -- never a word, never a sentence.
+#   * Unmatched canonical tags are REMOVED, not left in place. An opener with
+#     no closer is a typo, and honouring it would italicise the rest of a beat.
+#   * Escaped markup stays escaped: tags are stripped BEFORE entities are
+#     decoded, so `&lt;i&gt;` renders as the characters the narrator wrote and
+#     cannot be promoted into a tag on the way past.
+#
+# What survives is a short list chosen for FICTION, not for the web: emphasis,
+# strength, a struck-through correction, an underline, a highlight, sub/sup,
+# and a monospaced readout (a console, a ship's log). Everything else -- links,
+# spans, headings, lists, rules, quotes, abbreviations, bidi controls -- is
+# decoration around prose that already reads fine without it.
+_PROSE_MARK_TAGS = {
+    "i": "i", "em": "i", "cite": "i", "dfn": "i", "var": "i", "address": "i",
+    "b": "b", "strong": "b",
+    "u": "u", "ins": "u",
+    "s": "s", "del": "s", "strike": "s",
+    "mark": "mark",
+    "sup": "sup", "sub": "sub",
+    "code": "code", "kbd": "code", "samp": "code", "tt": "code",
+    "font": "font",
+}
+#: COLOUR IS A VOCABULARY, NOT A VALUE. `<font color="#3af">` reads on one
+#: ground and vanishes on another -- this engine has five themes including a
+#: pure-black console and a parchment tavern -- so the narrator names an
+#: INTENT and each theme supplies the ink. Every bucket resolves to a token
+#: every theme already defines, so a colour cannot be invisible anywhere.
+#: An unrecognised colour is not an error: the tags are dropped and the words
+#: stay, exactly like any other decoration.
+_PROSE_INK = {
+    "red": "red", "crimson": "red", "scarlet": "red", "blood": "red",
+    "amber": "amber", "orange": "amber", "gold": "amber", "yellow": "amber",
+    "green": "green", "emerald": "green", "lime": "green",
+    "blue": "blue", "cyan": "blue", "teal": "blue", "azure": "blue",
+    "violet": "violet", "purple": "violet", "magenta": "violet",
+    "pink": "violet", "indigo": "violet",
+    "grey": "grey", "gray": "grey", "silver": "grey", "faint": "grey",
+}
+_PROSE_COLOR_ATTR_RE = re.compile(
+    r"""\bcolor\s*[:=]\s*["']?\s*([A-Za-z]+)""", re.I)
+#: Elements whose CONTENT is not narration. `rt`/`rp` are ruby annotations --
+#: keeping them inline welds a pronunciation gloss into the middle of a word
+#: ("漢字かんじ"), so the base text survives and the reading is dropped rather
+#: than corrupting the sentence. The rest can only arrive by accident.
+_PROSE_DROP_CONTENT = frozenset({
+    "script", "style", "rt", "rp", "head", "title", "template", "noscript",
+})
+#: `<br>` is the one tag that IS text: it means a line break, prose renders
+#: with `white-space: pre-wrap`, and a newline is what the reader should see.
+_PROSE_TAG_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
+
+
+_PROSE_FONT_RE = re.compile(r'<font color="(\w+)">(.*?)</font>', re.S)
+
+
+def _quoted_regions(text):
+    """Spans between paired quote marks, both marks included.
+
+    Tag interiors are masked first, at equal length so every offset still
+    means what it meant. Without it `color="red"` reads as a quoted line and
+    the colour attribute deletes the colour it declares -- which is exactly
+    what it did.
+    """
+    text = re.sub(r"<[^>]*>", lambda m: "\x02" * len(m.group(0)), text)
+    regions, start = [], None
+    for index, char in enumerate(text):
+        if start is None:
+            if char in '"“':
+                start = index
+        elif char in '"”':
+            regions.append((start, index + 1))
+            start = None
+    return regions
+
+
+def _drop_ink_in_dialogue(text):
+    """Colour is the narration's, never a spoken line's.
+
+    A SPEAKER ALREADY HAS A COLOUR, and it is not the narrator's to choose:
+    `chat.js:paintProse` tints each quoted line from the reader's own
+    per-speaker palette. A `<font>` reaching inside a quote either fights that
+    tint or silently replaces it, and either way the page stops meaning what
+    the colour legend says it means.
+
+    Enforced here rather than asked for in the prompt, because a rule the
+    model has to remember is a rule that holds most of the time. The tags go
+    and every word stays -- the same trade the rest of this function makes.
+    """
+    if "<font" not in text:
+        return text
+    quotes = _quoted_regions(text)
+    if not quotes:
+        return text
+
+    out, cursor = [], 0
+    for match in _PROSE_FONT_RE.finditer(text):
+        if match.start() < cursor:
+            continue
+        overlaps = any(match.start() < end and start < match.end()
+                       for start, end in quotes)
+        if not overlaps:
+            continue
+        out.append(text[cursor:match.start()])
+        out.append(match.group(2))
+        cursor = match.end()
+    out.append(text[cursor:])
+    return "".join(out)
+
+
+def canonicalize_prose_markup(raw):
+    """Reduce narrator prose to plain text plus a closed set of inline tags.
+
+    Returns the cleaned string. Idempotent: running it on its own output
+    changes nothing, which matters because prose is also editable by hand and
+    a saved edit passes through here again on the next validated write.
+    """
+    text = str(raw or "")
+    if "<" not in text and "&" not in text:
+        return text
+
+    marks = list(_PROSE_TAG_RE.finditer(text))
+
+    # Pass 1 -- spans whose content is not prose. Nested opens of the same
+    # element are counted so an inner one cannot close the outer early.
+    dropped = []
+    index = 0
+    while index < len(marks):
+        mark = marks[index]
+        name = mark.group(1).lower()
+        if name in _PROSE_DROP_CONTENT and not mark.group(0).startswith("</"):
+            depth, cursor = 1, index + 1
+            while cursor < len(marks) and depth:
+                other = marks[cursor]
+                if other.group(1).lower() == name:
+                    depth += -1 if other.group(0).startswith("</") else 1
+                cursor += 1
+            end = (marks[cursor - 1].end() if depth == 0 and cursor
+                   else len(text))
+            dropped.append((mark.start(), end))
+            index = cursor
+            continue
+        index += 1
+
+    def _inside_dropped(position):
+        return any(start <= position < end for start, end in dropped)
+
+    live = [m for m in marks if not _inside_dropped(m.start())]
+
+    # Pass 2 -- which canonical tags are a matched pair. Everything else is
+    # removed, so an unclosed `<i>` costs four characters rather than the rest
+    # of the beat.
+    # Keyed by offset rather than by position in the list: the emission loop
+    # below walks `marks`, not `live`, so an index into one is not an index
+    # into the other and an offset is the only thing that means the same in
+    # both.
+    stack, paired, inks = [], set(), {}
+    for mark in live:
+        name = _PROSE_MARK_TAGS.get(mark.group(1).lower())
+        if name is None:
+            continue
+        if not mark.group(0).startswith("</"):
+            if name == "font":
+                found = _PROSE_COLOR_ATTR_RE.search(mark.group(0))
+                ink = _PROSE_INK.get(found.group(1).lower()) if found else None
+                if ink is None:
+                    continue    # unpaired, so both tags fall away with it
+                inks[mark.start()] = ink
+            stack.append((mark.start(), name))
+            continue
+        for depth in range(len(stack) - 1, -1, -1):
+            if stack[depth][1] == name:
+                paired.add(stack[depth][0])
+                paired.add(mark.start())
+                del stack[depth:]
+                break
+
+    out, cursor = [], 0
+    for mark in marks:
+        if mark.start() < cursor:
+            continue
+        out.append(text[cursor:mark.start()])
+        cursor = mark.end()
+        if _inside_dropped(mark.start()):
+            span = next(s for s in dropped if s[0] <= mark.start() < s[1])
+            cursor = max(cursor, span[1])
+            continue
+        name = mark.group(1).lower()
+        if name == "br":
+            out.append("\n")
+        elif name in _PROSE_MARK_TAGS and mark.start() in paired:
+            canonical = _PROSE_MARK_TAGS[name]
+            if mark.group(0).startswith("</"):
+                out.append("</%s>" % canonical)
+            elif canonical == "font":
+                out.append('<font color="%s">' % inks[mark.start()])
+            else:
+                out.append("<%s>" % canonical)
+    out.append(text[cursor:])
+
+    # Entities LAST, so nothing decoded here can be read as a tag above --
+    # EXCEPT the two that would become one. `&lt;i&gt;` is a narrator writing
+    # ABOUT a tag, and decoding it here would hand the renderer a real pair to
+    # italicise, which is the promotion this ordering exists to prevent. So
+    # angle brackets stay encoded through storage and the frontend decodes
+    # them inside text nodes only, after it has finished finding tags: the
+    # same rule as this function, applied at the other end.
+    joined = _drop_ink_in_dialogue("".join(out))
+    joined = joined.replace("\x00", "").replace("\x01", "")
+    joined = joined.replace("&lt;", "\x00").replace("&gt;", "\x01")
+    return (html.unescape(joined)
+            .replace("\x00", "&lt;").replace("\x01", "&gt;"))
+
+
 def _addressee_refs(flow):
     """Every spelling of "the person this beat is addressed to".
 
@@ -3714,6 +3950,19 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             if blocks:
                 result["prose"] = "\n\n".join(blocks)
                 result["paragraph_count"] = len(blocks)
+
+        # AND EVERY OTHER TAG, decided in this one place. `<p>` is consumed
+        # above because it means a paragraph and the engine has a paragraph;
+        # the rest of what the narrator reaches for is handled here, in the
+        # same breath and under the same rule -- no text is ever dropped for a
+        # markup reason. See `canonicalize_prose_markup`: the tags that survive
+        # are a closed set with one spelling each, and nothing outside it can
+        # reach storage, the archive or the page.
+        # AFTER the paragraph pass, never before: that one splits on `<p>`
+        # boundaries to guarantee no word is lost, and it can only do that
+        # while the boundaries are still there.
+        if isinstance(result.get("prose"), str):
+            result["prose"] = canonicalize_prose_markup(result["prose"])
 
         # HOW MANY PARAGRAPHS THE MODEL ACTUALLY MARKED, engine-written and
         # never asked for. Without it, "the model ignored the markers" and

@@ -276,6 +276,42 @@ font-size:var(--prose-size,17px);line-height:1.7}
    No font-weight or background: over a translucent panel those read as
    highlighting rather than as a voice. */
 .said{color:inherit}
+/* Inline emphasis the narrator asked for (chat.js splitEmphasis). Stated
+   rather than left to the user-agent default, because the reading face is a
+   serif at 17px and its true italic is the whole point -- `font-synthesis`
+   off means a face without one is left upright instead of being mechanically
+   sheared, which at this size looks like a rendering fault. Bold stays at
+   600: the prose faces run heavy at 700 and a bolded clause should read as
+   pressure, not as a heading. */
+.prose i,.prose em{font-style:italic;font-synthesis:none}
+.prose b,.prose strong{font-weight:600}
+.prose u{text-decoration:underline;text-underline-offset:.16em}
+.prose s{text-decoration:line-through}
+/* Highlight has to earn its contrast from the theme rather than the UA's
+   yellow, which is unreadable on four of the five grounds here. */
+.prose mark{background:color-mix(in srgb,var(--acc) 26%,transparent);
+color:inherit;padding:0 .12em;border-radius:3px}
+.prose sup,.prose sub{font-size:.76em;line-height:0}
+/* A console readout, a ship's log. Sized down because a monospace face at the
+   serif's point size reads a full step larger than the prose around it. */
+.prose code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+font-size:.9em}
+/* NAMED INKS, NOT COLOUR VALUES. The narrator names an intent and the theme
+   supplies the ink, so a warning light reads on parchment, on slate and on
+   LCARS black alike -- a literal `#3af` from model output would be legible on
+   some of those and invisible on others, and nothing downstream could tell.
+   Every token here is one all five themes define, which is what makes the
+   guarantee hold without a per-theme table to keep in sync.
+   Speech is deliberately absent: a quoted line takes its speaker's colour
+   from the reader's own palette, and `schemas._drop_ink_in_dialogue` removes
+   any ink that reaches inside a quote before it can argue with that. */
+.prose .ink{color:inherit}
+.prose .ink-red{color:var(--err)}
+.prose .ink-amber{color:var(--warn)}
+.prose .ink-green{color:var(--ok)}
+.prose .ink-blue{color:var(--acc2)}
+.prose .ink-violet{color:var(--acc)}
+.prose .ink-grey{color:var(--dim)}
 /* The picker beside each cast member. `auto` only appears once a colour has
    actually been pinned -- there is nothing to revert to otherwise, and a
    permanently-visible button that usually does nothing trains people to

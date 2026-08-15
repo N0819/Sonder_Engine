@@ -197,6 +197,143 @@ function foldTypography(text) {
     (ch) => _FOLD_PAIRS[ch] || ch);
 }
 
+// INLINE EMPHASIS, ON A CLOSED ALLOWLIST.
+//
+// The narrator reaches for `<i>` unprompted and uses it well -- for a thought
+// the prose is voicing rather than quoting ("<i>That was almost too easy.</i>")
+// and for what a gesture says without words. Nothing rendered it, so it landed
+// on the page as literal angle brackets. Measured: 3 of 2306 narrated turns,
+// every one balanced and every one used for that purpose.
+//
+// This does NOT open the prose to HTML. `paintProse` still builds text nodes
+// and never touches innerHTML, which is the rule that keeps model output from
+// becoming markup. What happens here is narrower: four tag names are
+// recognised, converted into elements this code creates itself, and EVERY
+// other angle bracket in the prose stays literal text. A `<script>`, an
+// attribute, an unbalanced `<i>` -- all render exactly as written, as they do
+// today.
+//
+// The tags come out BEFORE dialogue matching rather than after, because the
+// two collide: `speechSpans` searches the prose for the logged line, and a
+// tag inside a quote breaks that search, so an emphasised line would silently
+// lose its speaker tint. Resolving emphasis first means offsets are computed
+// against the text the reader actually sees.
+// The set `schemas.canonicalize_prose_markup` guarantees, plus the two
+// aliases a HUMAN is likely to type: prose is editable by hand
+// (PUT /api/turns/{id}/prose) and a hand edit never passes the boundary, so
+// this end cannot assume the canonical spelling is the only one it will see.
+const _EMPHASIS_TAGS = {
+  i: "i", em: "i", b: "b", strong: "b", u: "u", s: "s",
+  mark: "mark", sup: "sup", sub: "sub", code: "code", font: "font",
+};
+// `font` carries an ink NAME, never a value: the boundary resolves whatever
+// the narrator wrote onto a closed vocabulary, and each theme supplies the
+// actual colour. A `<font>` with no name is not markup here -- there is
+// nothing for it to mean.
+const _EMPHASIS_RE =
+  /<(\/?)(i|em|b|strong|u|s|mark|sup|sub|code|font)(?: color="([a-z]+)")?>/gi;
+
+// Angle brackets stay ENCODED through the boundary and are decoded here, in
+// text nodes only, once tag-finding is done -- so prose that talks about a
+// tag ("type &lt;b&gt; to make it bold") stays talk and never becomes one.
+// `&amp;` goes last or it would re-create the other two.
+function decodeProseEntities(text) {
+  return String(text)
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+// -> { text, runs: [{tag, start, end}] }, offsets into `text` (tags removed).
+function splitEmphasis(raw) {
+  const source = String(raw || "");
+  const marks = [...source.matchAll(_EMPHASIS_RE)];
+  if (!marks.length) return { text: source, runs: [] };
+
+  // Pass 1 -- which marks are actually a matched pair. An opener with no
+  // closer is a typo, not a directive: italicising the whole rest of the turn
+  // because one tag was left open is worse than showing the tag.
+  const stack = [];
+  const paired = new Set();
+  marks.forEach((mark, index) => {
+    const tag = _EMPHASIS_TAGS[mark[2].toLowerCase()];
+    // A colour with no name has nothing to render, so it is not a pair.
+    if (tag === "font" && !mark[1] && !mark[3]) return;
+    if (!mark[1]) { stack.push({ index, tag }); return; }
+    for (let k = stack.length - 1; k >= 0; k--) {
+      if (stack[k].tag === tag) {
+        paired.add(stack[k].index);
+        paired.add(index);
+        stack.length = k;          // anything left open inside stays literal
+        break;
+      }
+    }
+  });
+
+  // Pass 2 -- build the clean text and the runs over it.
+  const open = [];
+  const runs = [];
+  let text = "";
+  let cursor = 0;
+  marks.forEach((mark, index) => {
+    text += source.slice(cursor, mark.index);
+    cursor = mark.index + mark[0].length;
+    if (!paired.has(index)) { text += mark[0]; return; }
+    const tag = _EMPHASIS_TAGS[mark[2].toLowerCase()];
+    if (!mark[1]) {
+      open.push({ tag, start: text.length, ink: mark[3] || "" });
+      return;
+    }
+    for (let k = open.length - 1; k >= 0; k--) {
+      if (open[k].tag === tag) {
+        if (open[k].start < text.length) {
+          runs.push({ tag, start: open[k].start, end: text.length,
+                      ink: open[k].ink });
+        }
+        open.splice(k, 1);
+        break;
+      }
+    }
+  });
+  text += source.slice(cursor);
+  return { text, runs };
+}
+
+// Append text[from, to) to `host`, wrapping the emphasis runs inside it.
+// RUNS NEST. A bold word can be coloured and a coloured phrase can carry an
+// italic, and flattening those to siblings silently drops one of the two --
+// so a run's strictly-contained runs are emitted INTO it, recursively, and
+// only genuinely overlapping runs (which no well-formed markup produces, and
+// which the boundary cannot emit at all) fall back to first-wins.
+function appendEmphasized(host, text, runs, from, to) {
+  const add = (parent, lo, hi) => {
+    if (hi > lo) {
+      parent.append(document.createTextNode(
+        decodeProseEntities(text.slice(lo, hi))));
+    }
+  };
+  const ordered = runs
+    .filter((r) => r.start < to && r.end > from)
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+  let cursor = from;
+  for (const run of ordered) {
+    const start = Math.max(run.start, from);
+    const end = Math.min(run.end, to);
+    if (start < cursor) continue;
+    add(host, cursor, start);
+    // `font` is not an element here: it is a named ink the theme owns, so it
+    // renders as a class and never as a colour value from model output.
+    const node = run.tag === "font"
+      ? el("span", { class: "ink ink-" + run.ink })
+      : el(run.tag, {});
+    appendEmphasized(
+      node, text,
+      ordered.filter((r) => r !== run && r.start >= start && r.end <= end),
+      start, end);
+    host.append(node);
+    cursor = end;
+  }
+  add(host, cursor, to);
+}
+
 // A DIALOGUE TAG CHANGES TERMINAL PUNCTUATION, MECHANICALLY. The logged line
 // is `Right then.` and the narrator renders `"Right then," The Doctor
 // answers` -- same delivered line, different last character, and a literal
@@ -285,7 +422,7 @@ function speechSpans(prose, speech) {
 // Fills `host` with the prose, quoted lines wrapped in a tinted span.
 function paintProse(host, prose, speech, colors) {
   host.textContent = "";
-  const text = String(prose || "");
+  const { text, runs } = splitEmphasis(prose);
   const spans = (colors && speech && speech.length)
     ? speechSpans(text, speech) : [];
   let cursor = 0;
@@ -293,15 +430,15 @@ function paintProse(host, prose, speech, colors) {
     const color = colors[span.speaker];
     if (!color) continue;
     if (span.start > cursor) {
-      host.append(document.createTextNode(text.slice(cursor, span.start)));
+      appendEmphasized(host, text, runs, cursor, span.start);
     }
-    const mark = el("span", { class: "said", title: span.speaker },
-      text.slice(span.start, span.end));
+    const mark = el("span", { class: "said", title: span.speaker });
+    appendEmphasized(mark, text, runs, span.start, span.end);
     mark.style.color = color;
     host.append(mark);
     cursor = span.end;
   }
-  host.append(document.createTextNode(text.slice(cursor)));
+  appendEmphasized(host, text, runs, cursor, text.length);
   return host;
 }
 
