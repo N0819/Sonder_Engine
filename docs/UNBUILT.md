@@ -2466,6 +2466,24 @@ all built (`Design.md`, "Clothing by body region"). What remains:
 **Raised 2026-08-02**, after "step outside" landed correctly and still read
 wrong.
 
+**Half landed 2026-08-14; needs (2) below and nothing else.** A journey is
+now a standing thing rather than a single hop: a declared walk survives a
+beat that says nothing about it and advances one edge per beat
+(`agents/director._travel_continues`, `scene.approach`), a long edge takes
+two beats (`_LONG_EDGE_DISTANCES`), and the leg is computed BEFORE the prose
+is written and handed to the author as `travel_in_flight`, so the scenery
+changes on the page in the same breath as everything else. Need (1) is
+therefore decided, and decided against the Narrator: the ENGINE owns the
+crossing, the Director may only stop it (`travel_interrupted`), and no stage
+is asked to infer a passage from a `moved` flag. Need (3) is met by the
+distance tier rather than a new gate.
+
+What is still missing is need (2), and it is the perception question the
+entry always said was the hard one — see the paragraph that names it below.
+
+The original statement, kept because the craft argument still holds for the
+half that has not landed:
+
 A turn that moves a body renders the destination and nothing else. The engine
 has no representation of the crossing itself, so `positions` changes, the new
 room's view is composed, and the beat reads as a cut: the body was there, now it
@@ -2491,14 +2509,18 @@ Neither of those would have been fixed by travel narration, and travel
 narration would not have fixed either of them. What it WOULD change is a beat
 that is currently correct and thin.
 
-**What it needs, in order.** (1) Decide who owns the crossing — the Director
-resolving it as a sequence, or the Narrator given `prev_room`/`room` and told
-to render the passage. The Narrator already receives `co_present_positions`
-with `prev_room` and a `moved` flag, so the data is half there. (2) Decide what
-a body PERCEIVES mid-crossing, because that is a perception question and the
-honest answer is "both rooms, briefly" — which is the same union
-`_source_channels` now computes across a beat, and may be the same mechanism.
-(3) Gate it on distance, or it will bloat every doorway step in the engine.
+**What it needs.** (1) DONE — the engine owns the crossing: it computes the
+leg deterministically before the prose exists and the Director may only
+interrupt it. (3) DONE — gated on the `adjacent`/`near`/`far`/`remote` tier
+the edges already carry, so a doorway step is unaffected.
+
+(2) STILL OPEN, and it is the one that was always hardest: what a body
+PERCEIVES mid-crossing. The honest answer is "both rooms, briefly" — the
+same union `_source_channels` computes across a beat, and possibly the same
+mechanism. Today a mid-walk body is simply IN the room the leg put it in, so
+a corridor crossed over two beats is perceived as two rooms in sequence
+rather than as a passage between them. That is a truthful account and a thin
+one, which is exactly what this entry was raised about.
 
 ### 2.16 A summary window should be an INDEX over raw memory, not more prose
 
@@ -2778,8 +2800,9 @@ genuinely dispatchable the moment its subjects exist in scene and cold in
 practice because the corpus has never contained them; the SIMULATOR stays
 deferred) — shared between BOTH Director stages (interpret dispatches the
 same definitions, scoped to the player's declaration, merging into
-`state_assertions` before the deterministic validators), behind the
-`director_orchestration` setting, default OFF. Per-beat channel SCOPE
+`state_assertions` before the deterministic validators). It shipped behind
+the `director_orchestration` setting at default OFF; that flag is gone —
+see the LANDED paragraph below. Per-beat channel SCOPE
 drives dispatch AND per-specialist sheet assembly (chunked prompts,
 `prompts.specialist_prompt`; structure enforced by
 `tools/project_check.py`); the fan-out is genuinely PARALLEL and never

@@ -138,10 +138,12 @@ NSFW_PROMPT_IDS = frozenset([
 ])
 
 # ---------------------------------------------------------------------------
-# The director_resolve prompt, split into named segments so the orchestrated
-# Director (design note 19, behind the `director_orchestration` setting) can
-# cold-store the body-channel machinery in a scoped specialist while the
-# monolithic prompt below stays byte-identical to what it always was. The
+# The resolve sheet, split into named segments so each specialist can
+# cold-store the machinery for the channels it owns (design note 19). There
+# is no unsplit sheet any more and no setting that returns one: every
+# segment below belongs to exactly one specialist or to the prose author's
+# own sheet, held there by test_every_delegated_block_has_exactly_one_owner.
+# The
 # RESOLVE_BODY_* segments are the body specialist's ownership: the attire,
 # conditions and vitals instruction blocks move to `director_body` verbatim,
 # and `director_resolve_lean` is the prose author's sheet without them.
@@ -2243,8 +2245,8 @@ def prose_author_prompt(scope):
 # --- The orchestrated interpret stage's delegation note --------------------
 #
 # Appended to the director_interpret sheet AT THE CALL SITE (agents/
-# director.py) only when the `director_orchestration` setting is on, so the
-# monolithic path stays byte-identical. Appended as a SUFFIX on purpose:
+# director.py), on every beat -- the fan-out is the only path. Appended as a
+# SUFFIX rather than folded into the sheet, on purpose:
 # the interpret sheet is a stable prefix for provider caching, and the note
 # lands after the output shape, which is also where it argues best -- the
 # sheet's own PASS 1 block instructs "the FULL state_diff structure ... no

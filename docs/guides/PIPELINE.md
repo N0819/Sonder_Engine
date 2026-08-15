@@ -420,6 +420,29 @@ relative arrangement, and physical constraint. A touched pose is a complete
 snapshot rather than a partial merge, so obsolete `beneath`/`pinned` fields do
 not survive a later rise. Pose changes have their own manifest/audit category.
 
+A station is decoration on the position ledger, never a mover. `stations.at`
+names an anchor and the anchor belongs to a room, so resolving it as room
+membership let a threshold anchor — the back office's name for the door
+through to the lobby — read as being inside the back office, and the
+near-group repair then carried everyone standing near that body in with them.
+Where nobody is travelling, that repair may only settle which of the rooms
+the group ALREADY occupies wins, the player's above all; where the player IS
+travelling the anchor is the party's destination and still names it.
+
+A declared walk CONTINUES. A beat that says nothing about movement no longer
+abandons the journey: `_travel_continues` advances the mover one edge along
+the passable route (two beats for a `far`/`remote` edge), writing the leg
+into `state_diff.positions` BEFORE every movement backstop so restraint, the
+passable-route check and approach semantics all judge it exactly as they
+judge a declared move. The leg is computed before the resolve is called and
+handed to the prose author as `travel_in_flight`, so the scenery changes on
+the page rather than behind it. An INTERRUPTION is what must be established,
+not continuation: the Director asserts it in `travel_interrupted`, under a
+deterministic floor (no passable route, carried, already arrived) it cannot
+argue with. `out['travel']` records what happened and `commit.py` retires or
+keeps each standing `scene.approach` record from it, so the ledger and the
+committed position are written from one answer.
+
 Both Director stages stay ONE step each and fan out inside themselves
 (design note 19). This is the only Director path; there is no monolithic
 sheet and no setting that returns one. A deterministic, scene-state-keyed dispatch computes each

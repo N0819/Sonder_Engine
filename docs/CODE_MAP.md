@@ -12,7 +12,7 @@
 | `agents/character.py` | 3386 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6156 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 7756 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 7759 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1045 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -58,7 +58,7 @@
 | `pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `db` |
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
-| `prompts.py` | 5790 | Default system prompts and prompt preset access. | `db` |
+| `prompts.py` | 5792 | Default system prompts and prompt preset access. | `db` |
 | `providers.py` | 2809 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
@@ -144,14 +144,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 6283 | 1319 lines |
+| `director_resolve()` | 6286 | 1319 lines |
 | `director_interpret()` | 774 | 471 lines |
 | `_reconcile_resolution()` | 4144 | 445 lines |
 | `_reconcile_near_group_positions()` | 2395 | 276 lines |
 | `_evidence_present()` | 3219 | 232 lines |
-| `_run_specialists()` | 5928 | 202 lines |
-| `_specialist_payload()` | 5709 | 133 lines |
-| `_orchestration_scope_backstop()` | 6150 | 131 lines |
+| `_run_specialists()` | 5931 | 202 lines |
+| `_specialist_payload()` | 5712 | 133 lines |
+| `_orchestration_scope_backstop()` | 6153 | 131 lines |
 
 ### `agents/loops.py`
 
@@ -692,14 +692,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_prompt()` | 5727 | 27 lines |
-| `_payload_has()` | 5684 | 22 lines |
-| `specialist_prompt()` | 2126 | 21 lines |
-| `prose_author_prompt()` | 2222 | 19 lines |
-| `_preset_override()` | 2106 | 18 lines |
-| `director_resolve_sheets()` | 5768 | 11 lines |
-| `get_prompt()` | 5781 | 10 lines |
-| `_is_stamped()` | 5708 | 8 lines |
+| `character_prompt()` | 5729 | 27 lines |
+| `_payload_has()` | 5686 | 22 lines |
+| `specialist_prompt()` | 2128 | 21 lines |
+| `prose_author_prompt()` | 2224 | 19 lines |
+| `_preset_override()` | 2108 | 18 lines |
+| `director_resolve_sheets()` | 5770 | 11 lines |
+| `get_prompt()` | 5783 | 10 lines |
+| `_is_stamped()` | 5710 | 8 lines |
 
 ### `providers.py`
 
