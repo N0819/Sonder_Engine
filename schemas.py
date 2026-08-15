@@ -3547,6 +3547,97 @@ def _unwrap_envelope(step_key, raw):
     return inner
 
 
+def _addressee_refs(flow):
+    """Every spelling of "the person this beat is addressed to".
+
+    Both lists, because they are the same audience in two encodings:
+    `addressed_to` is int-coerced cast ids, `addressed_to_refs` preserves the
+    raw entries (a NAME string there is the only way to address an
+    unregistered background presence). `conceal_from` is written by the same
+    model in whichever of those spellings it reached for, plus the
+    `character:<id>` form the perception matchers already accept.
+    """
+    refs = set()
+    for value in (list(flow.get("addressed_to") or [])
+                  + list(flow.get("addressed_to_refs") or [])):
+        text = str(value).strip().casefold()
+        if text:
+            refs.add(text)
+            refs.add(f"character:{text}")
+    return refs
+
+
+def _uncross_concealed_speech(result, flow):
+    """A line cannot be concealed from the person it is addressed to.
+
+    THE FIELD IS AN EXCLUDED AUDIENCE, and the model fills it with whatever
+    ids it is holding -- which, for a whisper to the only other person
+    present, is the addressee. Live: chat 73 t2480, Hinami whispering to The
+    Doctor with `addressed_to: [58]` and `conceal_from: [58]` on the same
+    speech event. The Doctor's whole view of the beat was that he could SEE
+    her leaning in, and FEEL her lips against his ear -- "steady pressure,
+    weight and shared warmth" -- and did not receive the words. The
+    felt-but-not-seen path, firing on the one mind the line was for. It ran
+    on both whisper beats in that chat, and on 3 of the 24 turns in the
+    corpus that use concealment at all.
+
+    NOT REPAIRABLE BY CLEARING THE LIST. An empty `conceal_from` does not
+    mean "exclude nobody" -- `composer.concealed_from_observer` and
+    `perception._concealed_from_perceiver` both read empty as hidden from
+    every non-actor, so emptying it hides the line from the room as well.
+    When the addressee was the only entry, the event stops being concealed
+    at all and physical audibility decides instead: `hear_level` against a
+    `whisper` volume already reaches someone at arm's reach and already
+    fails to cross a hall, which is the deterministic floor this field was
+    standing in front of.
+
+    SPEECH ONLY, deliberately. Concealing an ACTION from the person you are
+    addressing is ordinary and load-bearing -- picking the pocket of someone
+    you are talking to is exactly that shape -- so actions are left alone.
+    There is no corresponding legitimate reading for a line: "I say this to
+    you, and you do not hear it" is not a thing a beat can mean.
+    """
+    refs = _addressee_refs(flow)
+    sequence = result.get("sequence")
+    if not refs or not isinstance(sequence, list):
+        return []
+
+    notes = []
+    for event in sequence:
+        if not isinstance(event, dict) or event.get("type") != "speech":
+            continue
+        if str(event.get("visibility") or "").strip().lower() != "concealed":
+            continue
+        listed = [value for value in (event.get("conceal_from") or [])
+                  if str(value or "").strip()]
+        if not listed:
+            continue
+        kept = [value for value in listed
+                if str(value).strip().casefold() not in refs]
+        if len(kept) == len(listed):
+            continue
+        dropped = ", ".join(
+            str(value) for value in listed
+            if str(value).strip().casefold() in refs
+        )
+        event["conceal_from"] = kept
+        if kept:
+            notes.append(
+                f"speech concealed from its own addressee ({dropped}); "
+                f"dropped from conceal_from, {len(kept)} excluded remain"
+            )
+        else:
+            # Emptied. Leaving it concealed would hide the line from
+            # EVERYONE, which is the worse half of the same bug.
+            event["visibility"] = "overt"
+            notes.append(
+                f"speech concealed from its own addressee ({dropped}) and "
+                f"from nobody else; concealment dropped, audibility left to "
+                f"volume and distance"
+            )
+    return notes
+
+
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
@@ -3841,6 +3932,10 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
 
         result["flow"] = flow
 
+        repairs = _uncross_concealed_speech(result, flow)
+        if repairs:
+            result["concealment_repairs"] = repairs
+
         # Extra players get the same speech-volume normalization the primary
         # player's sequence already gets (schemas.py above) -- otherwise a
         # co-player's out-of-enum volume either hard-fails or survives raw and
@@ -3879,13 +3974,16 @@ def validate_llm_output(step_key: str, raw: dict) -> tuple[dict, list[str]]:
     if not isinstance(raw, dict):
         raw = {}
     prepared = preprocess_llm_output(step_key, raw)
+    # A deterministic repair the operator should SEE. It means the guard
+    # worked, which is the only reason it is a warning and not a silence.
+    repairs = [str(note) for note in (prepared.get("concealment_repairs") or [])]
     if not model_cls:
-        return prepared, []
+        return prepared, repairs
     try:
         model = _validate(model_cls, prepared)
-        return _dump(model), []
+        return _dump(model), repairs
     except ValidationError as exc:
-        warnings = [f"Schema validation warning: {len(exc.errors())} errors"]
+        warnings = repairs + [f"Schema validation warning: {len(exc.errors())} errors"]
         for error in exc.errors()[:5]:
             location = ".".join(str(part) for part in error.get("loc", []))
             warnings.append(f"  {location}: {error.get('msg', '')}")
@@ -4599,11 +4697,13 @@ def validate_llm_output_strict(
 
     prepared = preprocess_llm_output(step_key, raw)
     model_cls = SCHEMA_MAP.get(step_key)
+    repairs = [str(note) for note in (prepared.get("concealment_repairs") or [])]
 
     if model_cls is None:
         return ValidationReport(
             valid=True,
             output=prepared,
+            warnings=list(repairs),
         )
 
     try:
@@ -4710,4 +4810,5 @@ def validate_llm_output_strict(
         valid=not semantic_errors,
         output=output,
         errors=semantic_errors,
+        warnings=list(repairs),
     )

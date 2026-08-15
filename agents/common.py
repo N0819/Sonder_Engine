@@ -1965,6 +1965,17 @@ def norm_sequence(out, warn=None):
     # subtract the concealing actions' own targets so the intended addressee
     # is never made deaf. Over-concealment only costs marginal eavesdroppers
     # (the addressee still hears); a leak is irreversible.
+    #
+    # THAT LAST PARENTHESIS HOLDS ONLY ON THIS PATH, and the case it does not
+    # cover was live for four stored beats. Here the addressee is recovered
+    # from the concealing ACTION's `targets`, which is why over-concealing is
+    # safe; but when the model writes the addressee into the SPEECH's own
+    # explicit `conceal_from`, the skip on the next line preserves it verbatim
+    # and nothing subtracts anything -- the addressee is made deaf by the
+    # field that was supposed to protect them. It cannot be fixed here:
+    # `targets` carries a NAME and `conceal_from` carries a cast ID, and this
+    # function never sees `flow.addressed_to`, the one place both encodings of
+    # the audience exist. `schemas._uncross_concealed_speech` does it there.
     concealed_from_union, conceal_targets = [], []
     for e in clean:
         if e["type"] == "action" and e.get("visibility") == "concealed":
