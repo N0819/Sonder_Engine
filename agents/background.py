@@ -224,14 +224,36 @@ def background_react(ctx, nonce):
         # downstream merge (perception.py, narration.py, commit.py's
         # _background_fired_reactions) works unchanged.
         out = scene_life(ctx, nonce, level, cfg)
-        if out["fired"] or level == "ambient":
-            # At `ambient` a directed line is deliberately withheld from the
-            # manager, so fall through to the per-presence path when the
-            # manager stayed silent -- that is exactly the case background_react
-            # already handles correctly.
-            if out["fired"]:
-                return out
-        else:
+        # A ROUTED LINE IS A DEBT, AND THE MANAGER WAS NEVER TOLD ABOUT IT.
+        #
+        # `routed_to_background` names presences whose Director-written line
+        # the engine DELETED, on the sole justification that this stage will
+        # do it better. `pick_background_reactors` honours that as a forced
+        # pick. The manager does not: `managed_presences` is "deliberately
+        # NOT pick_background_reactors" -- correct for salience, wrong for a
+        # debt, because it is handed the room's populace and decides for
+        # itself, and it cannot decide about an obligation nobody mentioned.
+        #
+        # At `full` the manager was the only path that ran, so when it stayed
+        # quiet the beat returned here and the gate holding the debt was never
+        # consulted. Live, chat 72 turns 45-50: six beats where the Director
+        # wrote a night clerk speaking and the player heard nothing, against a
+        # player saying in as many words that someone should be staffing the
+        # desk. A guard that deletes a line because another stage will do it
+        # better, handing it to a stage that cannot see it was handed
+        # anything, is just a guard that deletes lines.
+        _owed = [str(n).strip() for n in (dr.get("routed_to_background") or [])
+                 if str(n).strip()]
+        _spoke = {str((r.get("dialogue_log_entry") or {}).get("speaker")
+                      or r.get("name") or "").casefold()
+                  for r in (out.get("reactions") or [])}
+        _unpaid = [n for n in _owed if n.casefold() not in _spoke]
+        if out["fired"] and not _unpaid:
+            return out
+        # `ambient` already fell through on silence for the same reason in a
+        # narrower form: a directed line is withheld from the manager there,
+        # and a routed line is directed by construction.
+        if not out["fired"] and level == "full" and not _unpaid:
             return out
     cap = int(cfg.get("max_reactors", 1) or 1)
     cap = max(1, min(3, cap))  # hard ceiling; beyond this a crowd is a chorus

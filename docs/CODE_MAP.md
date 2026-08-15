@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `affect.py` | 2148 |  | `theory_of_mind` |
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
-| `agents/background.py` | 903 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
+| `agents/background.py` | 925 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3386 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6156 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
@@ -92,14 +92,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `scene_life()` | 479 | 120 lines |
+| `scene_life()` | 501 | 120 lines |
 | `_beat_for_presence()` | 109 | 80 lines |
-| `_react_one()` | 843 | 61 lines |
-| `_mint_blurbs()` | 668 | 57 lines |
-| `background_react()` | 213 | 52 lines |
-| `_place_block()` | 271 | 47 lines |
-| `managed_presences()` | 365 | 46 lines |
-| `_present_others()` | 796 | 45 lines |
+| `background_react()` | 213 | 74 lines |
+| `_react_one()` | 865 | 61 lines |
+| `_mint_blurbs()` | 690 | 57 lines |
+| `_place_block()` | 293 | 47 lines |
+| `managed_presences()` | 387 | 46 lines |
+| `_present_others()` | 818 | 45 lines |
 
 ### `agents/character.py`
 
