@@ -30,6 +30,10 @@ rather than prose, and everything points at them.
 - [`CODE_MAP.md`](CODE_MAP.md) — generated structural index of modules,
   functions, routes, tables and frontend sections. Regenerate with `make map`;
   never hand-edit.
+- [`CREDITS.md`](CREDITS.md) — other people's PROJECTS: what was read, under
+  what licence, and what was drawn from it. Update it in the same commit as
+  anything it credits. (Distinct from `guides/RESEARCH.md`, which is the
+  literature bibliography.)
 
 ## `guides/` — maintained implementation authority
 
