@@ -1,5 +1,59 @@
 # Changelog
 
+## alpha 8.4.1 — Nobody has to say they are still walking
+
+- **A walk you declared once keeps going.** A beat that said nothing about
+  movement was read as *abandoning* the journey — "the walker stopped to do
+  something else, and picking the thread back up is a fresh declaration" —
+  so travel only survived by being re-announced every single beat. That is
+  the sentence nobody wants to keep typing, and it is wrong about the
+  commonest thing in fiction: people talk while they walk. Now silence
+  continues, one room per beat and two for a long stretch, and an
+  **interruption** is the thing that has to be established. The Director
+  decides that, because "did what just happened stop you walking" needs the
+  whole beat to answer, under a floor it cannot argue with — no way through,
+  being carried, already arrived. The reasoning: continuing carries out the
+  declaration *you* made, and stopping you without being told is what
+  overrides it.
+
+- **The scenery changes on the page, not behind it.** The leg is worked out
+  before the prose is written and handed to the Director as part of the
+  beat, so the forecourt gives way to the doors and the doors to the lobby
+  in the same breath as everything else — rather than a position quietly
+  changing underneath a paragraph that left you standing still.
+
+- **A doorway is not a room you are in.** Standing "at the lobby doorway" was
+  resolved to whichever room *owned* that doorway — the back office, which
+  named it after where it leads — and then everyone standing near that person
+  was moved in with them. One live beat relocated a player and her companion
+  out of a hotel lobby they were unanimously standing in, into a back office
+  neither had entered. A station describes where you stand within a room now,
+  and can never carry you across one.
+
+- **Someone comes when you ring the bell — for real this time.** A night
+  clerk who arrived by being *placed in a room* was never recorded as anyone:
+  a name in the position ledger with nothing behind it, unable to perceive,
+  speak or ever be chosen to act. Four beats of ringing went unanswered while
+  a clerk technically stood there.
+
+- **And they can answer from the next room.** The engine had always worked out
+  that a body in the back office can hear a bell in the lobby through an open
+  door — and then only ever offered the beat to someone standing in the
+  *same* room. It granted the hearing and withheld the voice, which is why
+  the Director kept resorting to walking such people into the room so they
+  could speak at all. A shut door still means nobody comes.
+
+- **Rooms called `resolved_events` and `notes`.** Field names from the
+  Director's own output shape slipped into the map and were minted as blank
+  rooms adjoining a hotel lobby, which every route query then walked through.
+  No fiction names a room after a JSON key, so the engine now refuses them.
+
+- **Housekeeping.** Two documentation passes against the source found five
+  things recorded as unfinished that were in fact built — including a
+  182-line entry insisting no way existed to rebuild memory embeddings, next
+  to three functions that do exactly that, and a design register contradicting
+  itself outright.
+
 ## alpha 8.4 — Someone comes when you ring the bell
 
 - **The clerk came, and the engine deleted him.** A player rang a hotel
