@@ -394,13 +394,42 @@ def active_disguises(chat_id):
             continue
         state = _condition_state(payload)
         pick = lambda k: state.get(k) or payload.get(k)
+        # KNOWLEDGE ACCUMULATES ACROSS ROWS; APPEARANCE DOES NOT.
+        #
+        # The newest row decides what is presented -- there is one outward
+        # form -- but "who has been told the truth" is not a property of a
+        # row, it is a fact about people, and a superseded row does not
+        # un-tell them. The write-side rule now inherits it forward, and this
+        # is the same rule for rows that predate it or arrived some other way.
+        #
+        # BRANCHING IS HOW THEY ARRIVE. `_supersede_singular_conditions` runs
+        # at the WRITE, and a branch copies rows wholesale without one --
+        # measured live: chat 72 carried two rows started at the same clock
+        # second, and its descendants 73 and 74 inherited both, re-keyed.
+        # Equal `started_at` makes the ORDER BY a coin flip resolved by
+        # rowid, and the row that won carried `known_to: []` while every
+        # other row on that body named The Doctor. The one character who had
+        # been told was the only one fooled, for the rest of the story.
+        prior = out.get(subject.casefold()) or {}
+        carried = list(prior.get("known_to") or [])
+        for who in (pick("known_to") or []):
+            text = str(who).strip()
+            if text and text not in carried:
+                carried.append(text)
         out[subject.casefold()] = {
             "subject": subject,
             "description": str(pick("description") or "").strip(),
             "presented_appearance": str(pick("presented_appearance") or "").strip(),
             "concealed_terms": [str(t).strip() for t in (pick("concealed_terms") or [])
                                 if str(t).strip()],
-            "known_to": [str(n).strip() for n in (pick("known_to") or []) if str(n).strip()],
+            "known_to": carried,
+            # Does this disguise cover what a body is RECOGNISED by -- a
+            # face, a build, a voice -- or only a feature it hides? A glamour
+            # over fox ears is the second, and someone who knows her still
+            # knows her. Typed and defaulting to False, because the
+            # alternative (every disguise is a perfect identity mask) makes a
+            # mind conclude less than its senses support.
+            "conceals_identity": bool(pick("conceals_identity")),
             # The one channel that may SHOW an authored extra part through a
             # disguise, and the seam an additive transformation would use to
             # grant a part no card declares. Typed on purpose: the prose
@@ -543,6 +572,76 @@ def transformed_parts(authored_parts, transformation):
     return transformation.get("parts") or []
 
 
+#: How a sentence says absence. Lifted from `conceal_disguised_parts`'s own
+#: comment, which enumerated them to explain why a negation could not be read
+#: as permission -- the same list, now used to stop the negation reaching an
+#: observer at all.
+_ABSENCE = re.compile(
+    r"\b(?:no|not|none|nothing|neither|nor|never|without|absent|lacks?|"
+    r"lacking|hidden|concealed|invisible|missing|free\s+of|devoid)\b",
+    re.IGNORECASE)
+
+
+def _positive_presented_appearance(presented, concealed_terms):
+    """A presented appearance may only say what IS seen.
+
+    "…; no tails are visible" is not a description, it is a DISCLOSURE. An
+    observer who has never seen a kitsune does not perceive an absence of
+    tails -- they perceive a woman -- and stating the absence hands them the
+    category the disguise exists to keep. Reported live (chat 74): the Doctor,
+    who is not told, received "normal human ears visible on the sides of her
+    head; no tails are visible" and thereby learned that tails were a thing
+    anyone might have.
+
+    `conceal_disguised_parts` already met this exact sentence from the other
+    side -- a negation was reading as a mention and granting the parts back --
+    and fixed the mechanical half. This is the epistemic half.
+
+    Only clauses that BOTH negate and name something concealed are dropped.
+    The positive half of the same sentence is what the observer legitimately
+    sees and must survive: "an ordinary traveller with normal human ears"
+    stays, and only the denial after the semicolon goes. Dropping every clause
+    that mentions a concealed noun would delete the disguise itself, since a
+    glamour over fox ears is precisely a description of ears.
+    """
+    text = str(presented or "").strip()
+    if not text:
+        return ""
+    tokens = set()
+    for term in (concealed_terms or []):
+        tokens |= _part_tokens(term)
+    if not tokens:
+        return text
+    kept, seps, dropped = [], [], False
+    for match in re.finditer(r"\s*([^;.!?]+)([;.!?]*)", text):
+        clause = match.group(1).strip()
+        if not clause:
+            continue
+        if _ABSENCE.search(clause) and (_part_tokens(clause) & tokens):
+            dropped = True
+            continue
+        kept.append(clause)
+        seps.append(match.group(2))
+    if not dropped:
+        # Nothing to remove, so nothing to rewrite. The field is
+        # director-authored prose and a caller that asked for it should get
+        # exactly what was written, down to the terminal punctuation.
+        return text
+    if not kept:
+        # Every clause was a denial. Nothing is left that says what the
+        # observer SEES, so fall through to the scrub and then the generic
+        # label -- an information barrier fails toward concealment.
+        return ""
+    # Rejoin with the punctuation the sentence actually used. Splitting on the
+    # separators and joining with a space welded two clauses into one
+    # ungrammatical run ("...top of her head her appearance is...").
+    joiner = ". " if all(s.startswith(".") for s in seps[:-1] or ["."]) else "; "
+    out = joiner.join(kept).strip(" ;,")
+    if out and not out.endswith((".", "!", "?")):
+        out += "."
+    return out
+
+
 def disguised_visible_appearance(true_appearance, disguise):
     """What is VISIBLY perceived of a disguised subject -- by every observer,
     including one who knows the truth (a concealed feature is not seen even by
@@ -552,10 +651,11 @@ def disguised_visible_appearance(true_appearance, disguise):
     (legacy conditions), returns a deliberately generic label rather than the
     true appearance -- an information barrier must fail toward concealment, so
     a leaky-but-detailed description is never the fallback."""
-    presented = (disguise or {}).get("presented_appearance")
+    terms = (disguise or {}).get("concealed_terms") or []
+    presented = _positive_presented_appearance(
+        (disguise or {}).get("presented_appearance"), terms)
     if presented:
         return presented
-    terms = (disguise or {}).get("concealed_terms") or []
     if terms and true_appearance:
         scrubbed = true_appearance
         matched = False
@@ -568,7 +668,15 @@ def disguised_visible_appearance(true_appearance, disguise):
         # If no term actually matched the text (e.g. "tail" vs "tails"),
         # scrubbed is the unmodified TRUE appearance -- returning it would
         # leak the concealed form. Fail toward concealment instead.
-        if matched and scrubbed:
+        # A scrub that leaves a fragment is not a description. Removing "six
+        # golden tails" from "A woman with six golden tails" leaves "A woman
+        # with", which reads as damage rather than as concealment -- and is
+        # now reachable, because a presented appearance made entirely of
+        # denials falls through to here. Require something that can end a
+        # sentence.
+        if matched and scrubbed and not re.search(
+                r"\b(?:with|and|or|of|in|on|at|from|by|the|a|an|her|his|"
+                r"their|its)$", scrubbed, re.IGNORECASE):
             return scrubbed
     return "a person whose appearance is unremarkable"
 
@@ -637,6 +745,36 @@ def conceal_disguised_parts(parts_by_name, disguises):
         if kept:
             out[name] = kept
     return out
+
+
+def disguise_breaks_recognition(known_to, observer_name, conceals_identity):
+    """Can this observer still connect this body to the name they know?
+
+    A DISGUISE CONCEALS FEATURES; IDENTITY IS A SEPARATE FACT. The rule used
+    to be that any active disguise severed the name for anyone not in
+    `known_to`, however well they knew the person -- which makes every
+    disguise a perfect identity mask and is wrong about most of them. A
+    glamour over fox ears does not touch the face, so someone who knows her
+    still knows her, wearing unfamiliar ears; a full mask is a different
+    claim, and now has to make it.
+
+    Reported live (chat 74), where the old rule produced a view that
+    contradicted itself inside one paragraph: her NAME three times from the
+    proximity and pose lines, and a stranger's descriptor once from the
+    appearance line. The disguise leaked the identity and showed the false
+    body -- the worst of both.
+
+    Defaulting to recognition surviving is the direction the firewall's own
+    statement points: inference is the product, and a guard must not make a
+    mind conclude less than its senses support. The cost is that a disguise
+    which genuinely should hide who you are must say so; the benefit is that
+    it can, and can be told apart from one that never meant to.
+    """
+    if known_to is None:                       # no disguise on this body
+        return False
+    if str(observer_name or "").casefold() in (known_to or ()):
+        return False                           # told the truth: they know
+    return bool(conceals_identity)
 
 
 def disguise_known_to(disguise, subject_name, known_map):

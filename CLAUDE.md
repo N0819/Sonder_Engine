@@ -162,5 +162,27 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     writing more. Fix a sheet before a long run, not during one.
   - Treat sheet-authored values as *unproven until observed in conduct*. Two
     separate correct sheet edits have so far failed to change behaviour.
+- **Fix the CLASS, not the instance. A live case is evidence, never the
+  specification.** Nearly every defect here is found in one chat, and the
+  temptation is to write the fix that chat needs — a rule shaped around fox
+  ears, a guard that names one room, a prompt clause telling the model what
+  *this* character's disguise means. That fix is invisible the moment the
+  story changes, and it lies in the worst way: the test passes and the
+  behaviour is still wrong for everyone else. State the rule in the
+  vocabulary the ENGINE has — a disguise conceals features or it conceals
+  identity, an edge named as an opening is not a wall, a line cannot be
+  concealed from its own addressee — and let the live case be the thing that
+  proves the rule was missing.
+  - **Prompt text especially.** A prompt is read by every story, so an
+    example drawn from one of them narrows what the model thinks the field
+    is for. Name the distinction, never the instance: "covers what a body is
+    recognised by — face, build, bearing, voice" holds for a mask, a
+    uniform, an illusion and a glamour alike; "hides fox ears" holds for one
+    character in one chat.
+  - **Comments and commit messages are the exception, and should stay
+    specific.** Citing chat 74 turn 2532, a measured 4-of-13, or the exact
+    string that broke is how the next reader knows the rule was earned
+    rather than guessed. Evidence is particular; rules are general; do not
+    let the particular leak from the first into the second.
 - Run `make check` before considering a change complete; it will catch a stale `docs/CODE_MAP.md`, duplicate top-level symbols, and leftover patch-debris markers as hard failures.
 - Never commit `engine.db*`, `*.sqlite*`, `backdrops/`, `__pycache__/`, Python bytecode, or content-bearing `*.trace.json` diagnostics.

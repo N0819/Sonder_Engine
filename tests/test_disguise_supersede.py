@@ -49,7 +49,10 @@ def test_a_new_disguise_supersedes_every_other_one_on_that_body():
     sql, args = cur.calls[0]
     assert "SET active=0" in sql
     assert "condition_id<>?" in sql, "the row just written must survive"
-    assert args == (72, "physical_disguise", "glamour_2", "Hinami")
+    # The whole singular GROUP, not just this kind: a body cannot be
+    # disguised and transformed at once, and scoping to one kind let it.
+    assert args == (72, "physical_disguise", "physical_transformation",
+                    "glamour_2", "Hinami")
 
 
 def test_an_ending_ends_every_row_on_that_body():
@@ -60,7 +63,8 @@ def test_an_ending_ends_every_row_on_that_body():
     sql, args = cur.calls[0]
     assert "SET active=0" in sql
     assert "condition_id<>?" not in sql
-    assert args == (72, "physical_disguise", "Hinami")
+    assert args == (72, "physical_disguise", "physical_transformation",
+                    "Hinami")
 
 
 def test_it_is_scoped_to_the_one_body():
@@ -133,3 +137,49 @@ def test_the_reader_side_picks_the_newest_rather_than_whichever(temp_db):
 
     assert active_disguises(chat_id)["hinami"]["presented_appearance"] == \
         "the newest disguise"
+
+
+def _insert(temp_db, chat_id, cid, started, presented, known_to, active=1):
+    temp_db.qi(
+        "INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,"
+        "started_at,payload,active) VALUES(?,?,?,?,?,?,?)",
+        (cid, chat_id, "Hinami", "physical_disguise", started,
+         json.dumps({"condition_id": cid, "subject_id": "Hinami",
+                     "kind": "physical_disguise",
+                     "state": {"presented_appearance": presented,
+                               "known_to": known_to}}), active))
+
+
+def test_knowing_the_truth_survives_a_row_losing(temp_db):
+    """KNOWLEDGE ACCUMULATES; APPEARANCE DOES NOT.
+
+    Reproduces chat 74 exactly. A branch copies conditions wholesale without
+    a write, so the supersede rule never runs on them -- chat 72 carried two
+    rows started at the SAME clock second and its descendants inherited both.
+    Equal `started_at` turns the reader's ORDER BY into a coin flip resolved
+    by rowid, and the row that won carried an empty `known_to` while the
+    other named The Doctor. He had been told, and was the only one fooled.
+    """
+    from scene import active_disguises
+
+    chat_id = temp_db.qi("INSERT INTO chats(name,created) VALUES('t',0.0)")
+    _insert(temp_db, chat_id, "told", 1057.0, "an older form", ["The Doctor"])
+    _insert(temp_db, chat_id, "silent", 1057.0, "the newest form", [])
+
+    live = active_disguises(chat_id)["hinami"]
+    assert live["presented_appearance"] == "the newest form", \
+        "the newest row still decides the one outward form"
+    assert live["known_to"] == ["The Doctor"], \
+        "a superseded row does not un-tell the person it told"
+
+
+def test_an_inactive_row_contributes_nothing(temp_db):
+    """Accumulating from ENDED rows would make a disguise unusable against
+    anyone who ever saw through an earlier one."""
+    from scene import active_disguises
+
+    chat_id = temp_db.qi("INSERT INTO chats(name,created) VALUES('t',0.0)")
+    _insert(temp_db, chat_id, "old", 100.0, "gone", ["Marta"], active=0)
+    _insert(temp_db, chat_id, "now", 200.0, "current", ["The Doctor"])
+
+    assert active_disguises(chat_id)["hinami"]["known_to"] == ["The Doctor"]

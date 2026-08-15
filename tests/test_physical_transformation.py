@@ -190,7 +190,11 @@ def test_ending_one_ends_every_transformation_on_that_body():
                                      "active": 0}, "whatever")
     sql, args = calls[0]
     assert "condition_id<>?" not in sql
-    assert args == (7, "physical_transformation", "Hinami")
+    # Both kinds, because the group is singular as a whole: a body that
+    # transforms back stops presenting any borrowed form, including a
+    # glamour that was standing beside the transformation.
+    assert args == (7, "physical_disguise", "physical_transformation",
+                    "Hinami")
 
 
 # ---- The contract the Director is given ----
@@ -207,3 +211,34 @@ def test_the_director_is_told_the_distinction(clause):
     import prompts
 
     assert clause in json.dumps(prompts.DEFAULT_PROMPTS)
+
+
+def test_a_transformation_wins_over_a_disguise_that_outlived_it(temp_db,
+                                                                monkeypatch):
+    """ONE OUTWARD FORM, AND THE TRANSFORMATION IS IT.
+
+    The two kinds are a singular group enforced at the write -- but a branch
+    copies conditions wholesale without one. Live (chat 74): "you allow your
+    glamour to come undone" minted a `physical_transformation` BESIDE three
+    active disguises instead of ending them, so a body that had just revealed
+    its true form went on presenting the false one. The observer watched the
+    ears rise and saw human ears again on the very next beat.
+    """
+    from agents.perception import _subject_disguise_context
+
+    monkeypatch.setattr(
+        "agents.perception.active_disguises",
+        lambda _c: {"hinami": {"subject": "Hinami",
+                               "presented_appearance": "an ordinary human",
+                               "concealed_terms": ["fox ears"],
+                               "known_to": []}})
+    monkeypatch.setattr(
+        "agents.perception.active_transformations",
+        lambda _c: {"hinami": {"subject": "Hinami",
+                               "appearance": "a kitsune, ears and tails bare"}})
+
+    visible, payload, known_to, _ci = _subject_disguise_context(
+        1, "Hinami", "a kitsune, ears and tails bare", {})
+    assert payload is None, "a transformed body is concealing nothing"
+    assert known_to is None
+    assert "ordinary human" not in visible

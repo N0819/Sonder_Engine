@@ -139,3 +139,103 @@ def test_leak_tripwire_silent_without_terms():
     _disguise_leak_check(ctx, "perception_act", views, perceivers,
                          "Hinami", [], set())
     assert ctx.warnings == []  # no terms -> cannot tripwire (avoids false hits)
+
+
+# ---- A presented appearance may only say what IS seen --------------------
+
+def test_a_denial_never_reaches_an_unaware_observer():
+    """"…; no tails are visible" is not a description, it is a DISCLOSURE.
+
+    An observer who has never seen a kitsune does not perceive an absence of
+    tails -- they perceive a woman -- and stating the absence hands them the
+    category the disguise exists to keep. Live (chat 74): the Doctor, not in
+    known_to, received exactly this sentence.
+
+    `conceal_disguised_parts` already met this string from the other side (a
+    negation was reading as a mention and granting the parts back) and fixed
+    the mechanical half. This is the epistemic half.
+    """
+    from scene import disguised_visible_appearance
+
+    seen = disguised_visible_appearance("a kitsune", {
+        "presented_appearance": "A human-looking young woman with normal "
+                                "human ears visible on the sides of her "
+                                "head; no tails are visible.",
+        "concealed_terms": ["fox ears", "six golden tails", "fox tails"],
+    })
+    assert "no tails" not in seen
+    assert seen == ("A human-looking young woman with normal human ears "
+                    "visible on the sides of her head.")
+
+
+def test_the_positive_half_of_the_same_sentence_survives():
+    """Dropping every clause that mentions a concealed noun would delete the
+    disguise itself -- a glamour over fox ears IS a description of ears."""
+    from scene import disguised_visible_appearance
+
+    seen = disguised_visible_appearance("a kitsune", {
+        "presented_appearance": "Ordinary human ears sit on the sides of her "
+                                "head; no fox ears are anywhere to be seen.",
+        "concealed_terms": ["fox ears"],
+    })
+    assert seen.startswith("Ordinary human ears sit on the sides of her head")
+    assert "fox ears" not in seen
+
+
+def test_an_appearance_made_only_of_denials_falls_to_the_generic_label():
+    """Nothing is left that says what the observer SEES, and an information
+    barrier fails toward concealment."""
+    from scene import disguised_visible_appearance
+
+    seen = disguised_visible_appearance("A woman with six golden tails", {
+        "presented_appearance": "No tails are visible.",
+        "concealed_terms": ["six golden tails"],
+    })
+    assert "tails" not in seen
+    assert seen == "a person whose appearance is unremarkable"
+
+
+def test_prose_with_nothing_to_remove_is_returned_verbatim():
+    from scene import disguised_visible_appearance
+
+    for text in ("a plain human girl", "She looks entirely ordinary."):
+        assert disguised_visible_appearance("x", {
+            "presented_appearance": text,
+            "concealed_terms": ["fox ears"]}) == text
+
+
+# ---- A disguise conceals features; identity is a separate fact -----------
+
+def test_a_glamour_over_ears_does_not_hide_who_she_is():
+    """The old rule severed the name for anyone not in known_to, however well
+    they knew the person -- which makes every disguise a perfect identity
+    mask and is wrong about most of them.
+
+    Live (chat 74) it produced a view that contradicted itself inside one
+    paragraph: her NAME three times from the proximity and pose lines, and a
+    stranger's descriptor once from the appearance line.
+    """
+    from scene import disguise_breaks_recognition
+
+    assert not disguise_breaks_recognition(
+        {"marta"}, "The Doctor", conceals_identity=False)
+
+
+def test_a_mask_does_hide_who_she_is():
+    from scene import disguise_breaks_recognition
+
+    assert disguise_breaks_recognition(
+        {"marta"}, "The Doctor", conceals_identity=True)
+
+
+def test_being_told_beats_any_disguise():
+    from scene import disguise_breaks_recognition
+
+    assert not disguise_breaks_recognition(
+        {"the doctor"}, "The Doctor", conceals_identity=True)
+
+
+def test_no_disguise_at_all_never_breaks_recognition():
+    from scene import disguise_breaks_recognition
+
+    assert not disguise_breaks_recognition(None, "anyone", True)

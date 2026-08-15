@@ -311,6 +311,12 @@ def test_a_disguised_body_arrives_as_its_outward_form(temp_db, monkeypatch):
              "presented_appearance":
                  "a hooded pilgrim in travel-stained grey",
              "concealed_terms": ["fox-eared", "fox"],
+             # A hood over the whole outward form is an identity claim, and
+             # now has to make it: a disguise conceals FEATURES by default,
+             # and only one that covers what a body is recognised by severs
+             # the name. Without this the Doctor would still know her --
+             # correctly, for a glamour that only hides ears; wrongly here.
+             "conceals_identity": True,
              "known_to": [PLAYER],
          })))
     view = (_pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or "").casefold()
@@ -318,3 +324,32 @@ def test_a_disguised_body_arrives_as_its_outward_form(temp_db, monkeypatch):
     assert "tamamo" not in view
     assert "fox" not in view
     assert "pilgrim" in view
+
+
+def test_a_disguise_that_hides_only_a_feature_leaves_the_name(temp_db,
+                                                              monkeypatch):
+    """THE OTHER HALF, and the one the old rule got wrong.
+
+    A glamour over fox ears does not touch her face. Someone who has met her
+    still knows exactly who he is looking at -- wearing unfamiliar ears --
+    and denying that is the engine making a mind conclude less than its
+    senses support. Live (chat 74) the old rule produced a view that used her
+    NAME three times and a stranger's descriptor once, in one paragraph.
+    """
+    ctx, char_ids = _bystander_ctx(temp_db)
+    temp_db.qi(
+        "INSERT INTO world_conditions("
+        "condition_id,chat_id,subject_id,kind,started_at,payload,active) "
+        "VALUES(?,?,?,?,?,?,1)",
+        ("dz2", ctx.chat["id"], TAMAMO, "physical_disguise", time.time(),
+         json.dumps({
+             "subject_id": TAMAMO,
+             "description": "her fox ears glamoured to look human",
+             "presented_appearance": "an ordinary woman with human ears",
+             "concealed_terms": ["fox-eared", "fox"],
+             "known_to": [PLAYER],
+         })))
+    view = (_pass1(ctx, monkeypatch)[str(char_ids[DOCTOR])] or "").casefold()
+
+    assert "tamamo" in view, "he knows her face; the ears are not her face"
+    assert "fox" not in view, "the concealed feature is still concealed"

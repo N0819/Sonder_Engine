@@ -49,6 +49,7 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 
+from scene import disguise_breaks_recognition
 from spatial import (
     _clean_pose,
     entity_arc,
@@ -281,11 +282,10 @@ def observer_display_map(scene, observer_name, co_present, known):
         name = str(body.get("name") or "")
         if not name or name == observer_name:
             continue
-        known_to = body.get("disguise_known_to")
-        undisguised_to_me = (
-            known_to is None
-            or str(observer_name).casefold() in known_to)
-        if undisguised_to_me and _recognizes(name, recognized):
+        hidden = disguise_breaks_recognition(
+            body.get("disguise_known_to"), observer_name,
+            body.get("disguise_conceals_identity"))
+        if not hidden and _recognizes(name, recognized):
             out[name] = name
         else:
             strangers.append(
