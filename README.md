@@ -98,7 +98,7 @@ pip install -c constraints.txt -r requirements-dev.txt
 
 make check       # compile + regenerate the map + structure + full tests — run before calling a change done
 make check-fast  # the same, but only checks the map on disk is current instead of rewriting it
-make test-full   # every Python regression test (6323 tests, ~74s)
+make test-full   # every Python regression test (6329 tests, ~74s)
 make test-lf     # last-failed first, then the rest — the fix-verify loop
 make structure   # duplicate symbols, patch debris, stale map
 make map         # regenerate docs/CODE_MAP.md

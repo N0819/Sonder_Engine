@@ -12,8 +12,9 @@ This repo already maintains detailed docs for coding agents. Read them before ma
 4. [`docs/guides/DATABASE.md`](docs/guides/DATABASE.md) — schema, write helpers (`q`/`qi`/`qtx`/`transaction`/`wget`/`wset`), and the schema-change checklist.
 5. [`docs/guides/TESTING.md`](docs/guides/TESTING.md) — fast/full/browser tiers, dependency constraints, and CI policy.
 6. [`Design.md`](Design.md) — product philosophy, architecture, a verified conformance table (built / partial / not built), and structural debt. Its status rows were checked against source; keep them that way by editing the row in the same commit as the behaviour.
-7. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the single register of unfinished work: known defects, the roadmap, deferred audit findings, and every design-note residual. No other document keeps its own status list. Delete an entry in the commit that lands it; add the corresponding row to `Design.md`.
-8. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
+7. [`docs/UNBUILT.md`](docs/UNBUILT.md) — the register of unfinished work: known defects, the roadmap, deferred audit findings, and every design-note residual. It is *meant* to be the only status list and is not: `Design.md`'s conformance table, each design note's `Status:` header, `docs/guides/FEATURES.md`'s `(partial)` markers and `docs/design/OFFSCREEN_WORLD_COMPLETION.md`'s per-item tags are four more. When they disagree, fix `UNBUILT.md` first. Delete an entry in the commit that lands it; add the corresponding row to `Design.md`.
+8. [`docs/README.md`](docs/README.md) — the documentation index. `docs/guides/` is authority, `docs/design/` is argument, `docs/experiments/` is evidence, `docs/archive/` is superseded.
+9. [`agents/README.md`](agents/README.md) — how to add a new pipeline stage.
 
 Do not duplicate content from these files in explanations; point to them instead.
 
@@ -22,14 +23,15 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-full  # every Python regression test (6323 tests, ~74s — run this freely)
+make test-full  # every Python regression test (6329 tests, ~74s — run this freely)
 make test       # alias for test-full
 make test-lf    # last-failed first, then the rest — the fix-verify loop
 make test-fast  # NOT a tier to check your own work with; deselects 119 of 391 files,
                 #   including the persistence and firewall suites (see docs/guides/TESTING.md)
 make test-browser # optional real Chromium behavior tests
 make map        # regenerate docs/CODE_MAP.md
-make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test, stale-map checks)
+make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test,
+                #   prompt/schema-op drift, specialist + prose-author chunk ownership, stale map)
 make compile    # python -m compileall on all source
 make check-fast # compile + structure/map freshness + full suite
 make check      # compile + map + structure + full suite — run this before considering a change done

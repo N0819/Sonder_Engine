@@ -6,7 +6,7 @@ deliberately different verification levels.
 ## Test commands
 
 ```bash
-make test-full     # every Python regression test (6323 tests, ~74s)
+make test-full     # every Python regression test (6329 tests, ~74s)
 make test-lf       # last-failed first, then the rest -- the fix-verify loop
 make test-browser  # optional Chromium behavior tests
 make check-fast    # compile, structure/map freshness, then the full suite
@@ -23,7 +23,7 @@ current.
 
 Tests requesting the shared `temp_db` fixture are still marked `slow` during
 collection, and `make test-fast` still deselects them. Do not reach for it to
-check your own work: it deselects **1841 of 6323 tests, emptying 119 of 391
+check your own work: it deselects **1841 of 6329 tests, emptying 119 of 391
 test files**, including the persistence and information-firewall suites — the
 invariants this repo exists to keep honest. **Nothing runs it any more.** It
 was kept for the CI matrix-breadth run, but that job now runs `make check-fast`
@@ -38,7 +38,7 @@ test bodies of 0.02–0.10s. That one call was ~90% of the suite's wall clock.
 
 Moving the fixture's temp directory to tmpfs (`tests/conftest.py`,
 `_fast_tmp_dir`) removed it: **15m35s → 36s for all 3799 tests**, measured at
-the time. The suite has since grown to 6323 tests and ~74s, which is the same
+the time. The suite has since grown to 6329 tests and ~74s, which is the same
 per-test cost.
 Nothing about the database changed — same schema, same WAL, same isolation,
 same per-test file; only the storage backing moved, so no test can tell the

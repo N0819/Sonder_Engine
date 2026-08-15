@@ -134,3 +134,45 @@ def test_an_inert_entity_with_a_position_is_not_a_presence(temp_db):
 
     assert "Wooden Crate" not in temp_db.wget(
         ctx.chat.id, "background_presences", {})
+
+
+# --- a schema field name is not a room -----------------------------------
+
+class TestASchemaFieldNameIsNotARoom:
+    """Live, chat 72 turn 44. `state_diff.rooms` came back carrying
+    `resolved_events` and `notes` alongside two real rooms, and the shape
+    normalizer -- whose whole job is to coerce whatever arrives into the
+    container downstream readers assume -- dutifully turned each into a room
+    dict. The map for that story now has a room called `resolved_events`,
+    blank-named, sitting adjacent to the hotel lobby.
+
+    They are not typos. They are field names from the output shape the model
+    was just asked to produce, which is a nesting slip a model makes and a
+    thing the engine can recognise for certain: no fiction has a room called
+    `resolved_events`, and the cost of being wrong is refusing to mint a room
+    somebody would have had to name after a JSON key.
+    """
+
+    def test_output_field_names_are_refused_as_rooms(self):
+        from agents.director import _normalize_diff_shape
+
+        sd = _normalize_diff_shape({"rooms": {
+            "resolved_events": {"name": "", "desc": "", "adjacent": []},
+            "notes": {"name": "", "desc": "", "adjacent": []},
+            "hotel_lobby": {"name": "Hotel Lobby", "desc": "Warm.",
+                            "adjacent": []},
+        }})
+
+        assert set(sd["rooms"]) == {"hotel_lobby"}
+
+    def test_a_real_room_that_merely_shares_a_word_is_kept(self):
+        """The check is on the WHOLE id, not a substring: a story may well
+        have a room called `notes_office` or `summary_hall`."""
+        from agents.director import _normalize_diff_shape
+
+        sd = _normalize_diff_shape({"rooms": {
+            "notes_office": {"name": "Notes Office", "adjacent": []},
+            "summary_hall": {"name": "Summary Hall", "adjacent": []},
+        }})
+
+        assert set(sd["rooms"]) == {"notes_office", "summary_hall"}
