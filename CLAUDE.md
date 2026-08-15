@@ -118,22 +118,34 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
     turned away, because nothing underneath the spent goals wanted it. A drive
     survives goal decay; author one that cannot be satisfied, or it becomes a
     goal wearing the word.
-  - **A drive is not the only remedy and often not the right one — author
-    `psychology.projects` as well** (`docs/design/DESIGN_LONG_TERM_GOALS.md`, built:
-    `affect.apply_project_ops`, `character_schema.character_projects`,
-    `tests/test_projects.py`). A drive is eternal and PLACELESS: it cannot
-    name a room, so it cannot be walked to. An intention names a room and is
-    built to be completable, abandonable and swept when dormant. A project is
-    the tier between — durable but not eternal, able to name a place, and
-    explicitly immune to the three ways the courier's aims died: satisfied by
-    one instance, decayed by a barren stretch, abandoned along with the tactic
-    that served it. It BIASES appraisal rather than competing in the beat
-    auction, which is how the shrine kept losing — intention weight 0.8
-    against drive-serving wants at 1.0, nine beats running. Cap of two by
-    design, because scarcity is what makes "what is this person about right
-    now" have an answer at all. Author `satisfied_when` explicitly or the
-    project re-arms per occasion: "every run ends at the shrine" is a
-    project, "reach the shrine" is a task wearing the word.
+  - **The tier that answers this is `projects`, and it is NOT yours to
+    author** (`docs/design/DESIGN_LONG_TERM_GOALS.md`, built:
+    `affect.apply_project_ops`, `tests/test_projects.py`). A drive is eternal
+    and PLACELESS — it cannot name a room, so it cannot be walked to. An
+    intention names a room and is built to be completable, abandonable and
+    swept when dormant. A project is the tier between: durable but not
+    eternal, able to name a place, and immune to the three ways the courier's
+    aims died — satisfied by one instance, decayed by a barren stretch,
+    abandoned along with the tactic that served it. It BIASES appraisal
+    rather than competing in the beat auction, which is how the shrine kept
+    losing (intention weight 0.8 against drive-serving wants at 1.0, nine
+    beats running). Capped at two, because scarcity is what makes "what is
+    this person about right now" have an answer at all.
+    **Projects FORM DYNAMICALLY.** The character adopts one mid-play through
+    `project_ops`, under an adoption deliberation that refuses a task wearing
+    the word and a probation that lapses if nothing serves it. That is the
+    design, not a gap in it: a life's work a character arrives at is worth
+    more than one assigned to them, and giving one up must be a legible act
+    with a stated reason. `psychology.projects` on a card is a seeding
+    tolerance, NOT the authoring surface — when writing a sheet, put the work
+    into the drive and let the project be earned. Provenance, because it is
+    the argument for the tier: projects were built during the maze arms to
+    get NPCs to actually solve a maze, and to carry the ordinary long
+    intentions a life has — take the injured one to a doctor, go home, go to
+    the bar — and they are **what made NPCs pass the maze without any
+    alteration to their drives**. (Owner's measurement from the arms;
+    `docs/experiments/MAZE_ARMS.md` records A15's boundary-review result but
+    not this one, so it is not re-derivable from that table.)
   - **It fails invisibly because `serves: "drive"` stays valid against an
     empty drive.** The character emitted drive-serving wants for 150 beats
     against three empty strings, and nothing anywhere objected.
