@@ -3192,6 +3192,25 @@ def _supersede_disguises(cursor, chat_id, cond, written_id):
         Director cannot name ids it has never been shown -- so ending one row
         would silently promote the next and leave the glamour half-standing.
 
+    ACROSS THE WHOLE GROUP, not within one kind. The scoping used to be
+    `AND kind=?`, which made a body singular in its disguises and separately
+    singular in its transformations -- and therefore able to be both at once.
+    Live (chat 74): "you allow your glamour to come undone" minted
+    `physical_transformation:Hinami:glamour_dropped` BESIDE three active
+    disguises instead of ending them, so a body that had just revealed its
+    true form went on presenting the false one to every observer for the rest
+    of the story. Both kinds answer the same question -- what outward form
+    does this body present -- and two answers is one too many.
+
+    KNOWN_TO IS INHERITED. A superseding row that omits the field is not
+    saying "nobody knows any more", it is saying nothing, and the two were
+    indistinguishable: chat 74's winning row carried `known_to: []` while
+    every other row on that body named The Doctor, so the one character who
+    had been told was the only one fooled. The same trap `capacity` documents
+    -- an empty value must not mean both "authored as empty" and "never
+    filled in". A disguise ENDING clears it honestly; only a live one
+    inherits.
+
     Case-insensitive on subject because `subject_id` is a model-written name.
     """
     kind = str(cond.get("kind") or "")
@@ -3200,17 +3219,76 @@ def _supersede_disguises(cursor, chat_id, cond, written_id):
     subject = str(cond.get("subject_id") or "").strip()
     if not subject:
         return
+    group = list(SINGULAR_BODY_CONDITIONS)
+    marks = ",".join("?" * len(group))
     if int(cond.get("active", 1)):
+        # Read before the UPDATE, since it is what makes them unreadable.
+        # Guarded on the cursor's own capability rather than assumed: the
+        # rule's unit tests drive it with a recording stub that has no
+        # fetch, and inheritance is an enrichment -- worth skipping, never
+        # worth crashing the commit over.
+        superseded = []
+        if hasattr(cursor, "fetchall"):
+            cursor.execute(
+                f"SELECT payload FROM world_conditions WHERE chat_id=? "
+                f"AND kind IN ({marks}) AND active=1 "
+                f"AND condition_id<>? AND lower(subject_id)=lower(?)",
+                (chat_id, *group, written_id, subject))
+            superseded = list(cursor.fetchall() or [])
         cursor.execute(
-            "UPDATE world_conditions SET active=0 WHERE chat_id=? "
-            "AND kind=? AND active=1 "
-            "AND condition_id<>? AND lower(subject_id)=lower(?)",
-            (chat_id, kind, written_id, subject))
+            f"UPDATE world_conditions SET active=0 WHERE chat_id=? "
+            f"AND kind IN ({marks}) AND active=1 "
+            f"AND condition_id<>? AND lower(subject_id)=lower(?)",
+            (chat_id, *group, written_id, subject))
+        _inherit_known_to(cursor, chat_id, written_id, superseded)
     else:
         cursor.execute(
-            "UPDATE world_conditions SET active=0 WHERE chat_id=? "
-            "AND kind=? AND lower(subject_id)=lower(?)",
-            (chat_id, kind, subject))
+            f"UPDATE world_conditions SET active=0 WHERE chat_id=? "
+            f"AND kind IN ({marks}) AND lower(subject_id)=lower(?)",
+            (chat_id, *group, subject))
+
+
+def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
+    """Carry `known_to` onto a superseding row that did not restate it.
+
+    Only ADDS, and only when the new row is silent: a row that names its own
+    audience is authoritative, including when it deliberately names a smaller
+    one. Someone who was told the truth does not un-learn it because the
+    subject adjusted their glamour.
+    """
+    if not superseded_rows or not hasattr(cursor, "fetchone"):
+        return
+    cursor.execute(
+        "SELECT payload FROM world_conditions WHERE chat_id=? "
+        "AND condition_id=?", (chat_id, written_id))
+    row = cursor.fetchone()
+    if not row:
+        return
+    try:
+        payload = json.loads(row[0] if not isinstance(row, dict)
+                             else row["payload"])
+    except Exception:
+        return
+    state = payload.get("state")
+    if not isinstance(state, dict) or state.get("known_to"):
+        return
+    inherited = []
+    for old in superseded_rows or []:
+        try:
+            prior = json.loads(old[0] if not isinstance(old, dict)
+                               else old["payload"])
+        except Exception:
+            continue
+        for who in ((prior.get("state") or {}).get("known_to") or []):
+            text = str(who or "").strip()
+            if text and text not in inherited:
+                inherited.append(text)
+    if not inherited:
+        return
+    state["known_to"] = inherited
+    cursor.execute(
+        "UPDATE world_conditions SET payload=? WHERE chat_id=? "
+        "AND condition_id=?", (json.dumps(payload), chat_id, written_id))
 
 
 def commit_world_entities(ctx, nonce, *, prepared=None):

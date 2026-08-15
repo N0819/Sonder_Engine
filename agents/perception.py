@@ -27,6 +27,7 @@ from scene import (
     apply_awareness_diff,
     awareness_map,
     awareness_of,
+    disguise_breaks_recognition,
     disguise_known_to,
     disguised_visible_appearance,
     get_scene,
@@ -2005,11 +2006,10 @@ def _co_present_company(scene, observer_name, bodies, known):
         tier = proximity_rel(scene, observer_name, name)
         if tier is None:
             continue            # co-located only, like the field it feeds
-        known_to = body.get("disguise_known_to")
-        undisguised_to_me = (
-            known_to is None
-            or str(observer_name).casefold() in known_to)
-        if undisguised_to_me and _recognizes(name, recognized):
+        hidden = disguise_breaks_recognition(
+            body.get("disguise_known_to"), observer_name,
+            body.get("disguise_conceals_identity"))
+        if not hidden and _recognizes(name, recognized):
             label = name
         elif level == "full":
             label = _unknown_actor_label(
@@ -2125,7 +2125,8 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
 def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
     """Resolve a subject's active physical_disguise into perception inputs.
 
-    Returns (visible_appearance, disguise_payload_or_None, known_to_or_None):
+    Returns (visible_appearance, disguise_payload_or_None, known_to_or_None,
+    conceals_identity):
     - visible_appearance: what EVERY observer visually perceives -- the
       disguised outward form when a disguise is active (a concealed feature is
       not seen even by someone who knows it is there), else the true
@@ -2135,6 +2136,11 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
       and preserve the subject's real capabilities; None when no disguise.
     - known_to: casefolded names that legitimately know the truth (for the
       leak tripwire), or None.
+    - conceals_identity: whether this disguise covers what a body is
+      RECOGNISED by (a face, a build, a voice) as opposed to a feature it
+      merely hides. False for a glamour over fox ears: the face is still
+      the face, so anyone who knows her still knows her -- wearing
+      unfamiliar ears. See `scene.disguise_breaks_recognition`.
 
     Feeding the disguised appearance is the primary, fail-safe fix: the LLM is
     never handed the concealed features, so it cannot render them. The payload
@@ -2146,12 +2152,28 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
     # it lands here, before the concealment layer, and a body that is merely
     # transformed returns with no disguise payload and no known_to at all.
     key = str(subject_name or "").casefold()
+    transformation = active_transformations(chat_id).get(key)
     true_appearance = transformed_true_appearance(
-        true_appearance, active_transformations(chat_id).get(key))
+        true_appearance, transformation)
 
     disguise = active_disguises(chat_id).get(key)
+    if transformation and disguise:
+        # ONE OUTWARD FORM, AND THE TRANSFORMATION IS IT. The two kinds are a
+        # singular GROUP (`scene.SINGULAR_BODY_CONDITIONS`), enforced at the
+        # write -- but a branch copies conditions wholesale without a write,
+        # and rows minted before the rule was written are still out there.
+        # Live (chat 74): "you allow your glamour to come undone" minted a
+        # `physical_transformation` BESIDE three active disguises instead of
+        # ending them, so a body that had just revealed its true form went on
+        # presenting the false one. The observer watched the ears rise and
+        # then saw human ears again on the very next beat.
+        #
+        # The transformation wins because it is a statement about the BODY,
+        # while a disguise is a statement about what is shown of it -- and a
+        # body cannot be concealing a form it no longer has.
+        disguise = None
     if not disguise:
-        return true_appearance, None, None
+        return true_appearance, None, None, False
     known_to = disguise_known_to(disguise, subject_name, known_map)
     visible = disguised_visible_appearance(true_appearance, disguise)
     payload = {
@@ -2168,7 +2190,8 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
             "is in known_to additionally KNOWS (does not see) the concealed_truth "
             "and may act on it; an observer not in known_to has no awareness of it."),
     }
-    return visible, payload, known_to
+    return visible, payload, known_to, bool(disguise.get(
+        "conceals_identity"))
 
 
 # Vertical motion, and nothing else. A beat can legitimately open and close a
@@ -2436,7 +2459,7 @@ def perception_act(ctx, nonce):
     # p_visible is what is actually SEEN (disguised form when active), fed to
     # both the LLM and the deterministic injection below so a concealed feature
     # is never rendered as perceived.
-    p_visible, p_disguise, p_disguise_known = _subject_disguise_context(
+    p_visible, p_disguise, p_disguise_known, _ci = _subject_disguise_context(
         chat["id"], p_name, p_appearance, known)
     p_disguise_terms = (active_disguises(chat["id"]).get(str(p_name).casefold())
                         or {}).get("concealed_terms") or []
@@ -2562,12 +2585,13 @@ def perception_act(ctx, nonce):
             continue
         b_true = _appearance_as_prose(appearance_of(
             b_name, character_appearance(b_sh), sc))
-        b_visible, _, b_known_to = _subject_disguise_context(
+        b_visible, _, b_known_to, _ci = _subject_disguise_context(
             chat["id"], b_name, b_true, known)
         co_present.append({
             "name": b_name, "room": b_room, "appearance": b_visible,
             "aliases": character_scene_keys(b_sh)[1:],
             "disguise_known_to": b_known_to,
+            "disguise_conceals_identity": _ci,
         })
 
     perceivers = []
@@ -2904,7 +2928,7 @@ def perception_outcome(ctx, nonce):
     # view: p_appearance becomes the disguised (visible) form, so present_
     # appearances and the deterministic injection below never expose concealed
     # features. The knowledge layer (who KNOWS the truth) rides the payload.
-    p_appearance, p_disguise, p_disguise_known = _subject_disguise_context(
+    p_appearance, p_disguise, p_disguise_known, _ci = _subject_disguise_context(
         chat["id"], p_name, p_appearance_true, known)
     p_disguise_terms = (active_disguises(chat["id"]).get(str(p_name).casefold())
                         or {}).get("concealed_terms") or []
@@ -3692,10 +3716,10 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             continue
         if entity_arc(sc, name, b_name) == "rear":
             continue
-        known_to = body.get("disguise_known_to")
-        undisguised_to_me = (
-            known_to is None or str(name).casefold() in known_to)
-        recog = undisguised_to_me and _recognizes(b_name, recognized)
+        recog = not disguise_breaks_recognition(
+            body.get("disguise_known_to"), name,
+            body.get("disguise_conceals_identity")
+        ) and _recognizes(b_name, recognized)
         changed = any(same_subject(sc, b_name, item)
                       for item in appearance_changed or ())
         if recog and not changed:
@@ -3777,12 +3801,13 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                         entity_states, sensory_events):
     chat_id = ctx.chat["id"]
     bodies = []
-    p_visible, _, p_known_to = _subject_disguise_context(
+    p_visible, _, p_known_to, _ci = _subject_disguise_context(
         chat_id, p_name, p_appearance, known)
     bodies.append({
         "name": p_name, "room": room_of(sc, p_name),
         "appearance": p_visible, "aliases": [],
         "disguise_known_to": p_known_to,
+        "disguise_conceals_identity": _ci,
     })
     for c in ctx.cast:
         sh, _, _ = sheet_state(c)
@@ -3791,13 +3816,14 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
             continue
         b_true = _appearance_as_prose(appearance_of(
             b_name, character_appearance(sh), sc))
-        b_visible, _, b_known_to = _subject_disguise_context(
+        b_visible, _, b_known_to, _ci = _subject_disguise_context(
             chat_id, b_name, b_true, known)
         bodies.append({
             "name": b_name, "room": character_room(sc, sh),
             "appearance": b_visible,
             "aliases": character_scene_keys(sh)[1:],
             "disguise_known_to": b_known_to,
+            "disguise_conceals_identity": _ci,
         })
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
@@ -4021,7 +4047,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         if nm == p_name:
             visible, known_to = p_appearance, p_disguise_known
         else:
-            visible, _, known_to = _subject_disguise_context(
+            visible, _, known_to, _ci = _subject_disguise_context(
                 chat_id, nm, app, known)
         bodies.append({
             "name": nm, "room": cast_room(sc, nm, ctx.cast),

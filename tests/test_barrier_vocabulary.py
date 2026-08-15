@@ -224,3 +224,54 @@ def test_a_level_nothing_reads_on_both_ends_is_dropped_entirely():
     normalize_scene_bearings(scene)
     assert "vertical" not in scene["rooms"]["hall"]["adjacent"][0]
     assert "vertical" not in scene["rooms"]["loft"]["adjacent"][0]
+
+
+# ---- An edge named as an opening cannot be a wall -------------------------
+
+def test_a_named_doorway_is_never_a_wall():
+    """THE HOTEL ELEVATOR WITH ONE WORKING DOOR (chat 74).
+
+    It was minted as {'to': lobby, 'barrier': 'wall', 'name': 'lobby doors'}
+    with a single open edge to the third floor -- reachable from above and
+    sealed from below. The player declared "you step into the elevator", the
+    movement backstop correctly refused to walk her through a wall, and her
+    companion (whose position comes from the resolve diff, which is not
+    route-checked) went in without her. They spent the next beat in different
+    rooms, which is why nothing she did reached him.
+    """
+    from spatial import normalize_scene_barriers
+
+    scene = {"positions": {}, "rooms": {"elevator": {"adjacent": [
+        {"to": "lobby", "barrier": "wall", "name": "lobby doors"},
+        {"to": "attic", "barrier": "wall", "name": "access hatch"},
+    ]}}}
+    edges = normalize_scene_barriers(scene)["rooms"]["elevator"]["adjacent"]
+    assert [e["barrier"] for e in edges] == ["closed_door", "closed_door"]
+
+
+def test_it_downgrades_rather_than_opens():
+    """The name is evidence a way through EXISTS, never that it is open. A
+    closed door still blocks this beat and still has to be opened by an
+    action the resolve owns -- so this grants no passage, it only removes the
+    permanent seal."""
+    from spatial import normalize_scene_barriers, _PASSABLE_BARRIERS
+
+    scene = {"positions": {}, "rooms": {"r": {"adjacent": [
+        {"to": "x", "barrier": "wall", "name": "the front door"}]}}}
+    barrier = normalize_scene_barriers(scene)["rooms"]["r"]["adjacent"][0]
+    assert barrier["barrier"] not in _PASSABLE_BARRIERS
+
+
+def test_a_wall_that_is_only_described_stays_a_wall():
+    """An authored wall must survive. Only words that ONLY ever name an
+    opening count -- "partition" and "screen" are as often the thing that
+    stops you as the thing that lets you past, and are deliberately out."""
+    from spatial import normalize_scene_barriers
+
+    scene = {"positions": {}, "rooms": {"r": {"adjacent": [
+        {"to": "a", "barrier": "wall", "name": "concrete shaft wall"},
+        {"to": "b", "barrier": "wall", "name": "partition"},
+        {"to": "c", "barrier": "wall"},
+    ]}}}
+    edges = normalize_scene_barriers(scene)["rooms"]["r"]["adjacent"]
+    assert [e["barrier"] for e in edges] == ["wall"] * 3

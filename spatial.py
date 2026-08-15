@@ -402,11 +402,50 @@ def normalize_scene_barriers(scene: dict) -> dict:
         for edge in adjacency:
             if not isinstance(edge, dict):
                 continue
-            edge["barrier"] = normalize_barrier(
-                edge.get("barrier")
-            )
+            edge["barrier"] = _barrier_against_its_own_name(
+                normalize_barrier(edge.get("barrier")), edge.get("name"))
 
     return scene
+
+
+#: Words that only ever name an OPENING. Deliberately short: every one of
+#: these is a thing you go through, and none of them has a second sense that
+#: could name a solid surface. "Gate" and "arch" are in; "panel", "screen" and
+#: "partition" are not, because each of those is as often the thing that stops
+#: you as the thing that lets you past.
+_OPENING_WORDS = re.compile(
+    r"\b(?:door|doors|doorway|doorways|archway|arch|hatch|gate|gateway|"
+    r"entrance|entry|exit|opening|threshold|stairs|staircase|stairway|"
+    r"ladder|portal)\b", re.IGNORECASE)
+
+
+def _barrier_against_its_own_name(barrier, name):
+    """An edge named as an opening cannot be a wall.
+
+    A `wall` is the most restrictive answer the vocabulary has -- nothing
+    passes it, nothing sees through it -- and an edge that carries a NAME is
+    already claiming to be something. Live (chat 74): the hotel elevator was
+    minted with `{'to': lobby, 'barrier': 'wall', 'name': 'lobby doors'}` and
+    a single open edge to the third floor, so the car was reachable from above
+    and sealed from below. The player declared "you step into the elevator",
+    the movement backstop correctly refused to walk her through a wall, and
+    her companion -- whose position came from the resolve diff, which is not
+    route-checked -- went in without her. They spent the next beat in
+    different rooms, which is why nothing she did reached him.
+
+    DOWNGRADED TO `closed_door`, NOT OPENED. The name is evidence that a way
+    through exists; it is not evidence that the way is open. A closed door
+    still blocks this beat, still has to be opened by an action the resolve
+    owns, and still cannot be walked through by either the player or the
+    backstop -- so this grants no passage. What it removes is the PERMANENT
+    seal, and with it the class of map where a room can only be left in one
+    direction.
+    """
+    if barrier != "wall":
+        return barrier
+    if not _OPENING_WORDS.search(str(name or "")):
+        return barrier
+    return "closed_door"
 
 def room_of(scene: dict, name: str) -> Optional[str]:
     positions = scene.get("positions") or {}

@@ -7190,6 +7190,43 @@ def director_resolve(ctx, nonce):
             # a blocked route must strip it, not just warn.
             if sd["positions"].get(move_subject) == mv["to_room"]:
                 sd["positions"].pop(move_subject)
+            # AND EVERYONE ELSE THE SAME BEAT SENT THERE.
+            #
+            # The block above protects ONE body. Nobody else's position is
+            # route-checked -- an NPC arrives wherever the resolve diff says
+            # -- so a group that declared one movement had exactly half of it
+            # stopped, and the guard that exists to keep the player out of a
+            # wall became the thing that walked her companion through it
+            # without her.
+            #
+            # Live (chat 74): "you step into the elevator", the car minted
+            # with a walled edge to the lobby. She stayed; The Doctor went up.
+            # They spent the next beat in different rooms, so the beat where
+            # her glamour came undone reached him not at all -- he saw
+            # nothing, heard nothing, and went on seeing a human woman for
+            # the rest of the story. Nothing in the output looked wrong: he
+            # simply had nothing to react to.
+            #
+            # Scoped to THIS destination, deliberately. An NPC moving
+            # somewhere else this beat is doing their own thing and is none
+            # of this guard's business; one who is going exactly where the
+            # blocked declaration was going is part of the movement that was
+            # blocked. Their prior position stands, which is the same
+            # "position unchanged" the mover just got.
+            stranded = [
+                subject for subject, room in list(sd["positions"].items())
+                if room == mv["to_room"] and subject != move_subject
+            ]
+            for subject in stranded:
+                sd["positions"].pop(subject, None)
+            if stranded:
+                ctx.warnings.append(
+                    "Blocked movement also held back "
+                    + ", ".join(sorted(stranded))
+                    + f": the same beat sent them to '{mv['to_room']}', and "
+                    "stopping only the declarer would have split the group "
+                    "into rooms that cannot reach each other."
+                )
         elif contested and sd["positions"].get(move_subject) != mv["to_room"]:
             # Don't force interpret's declared intent through a door that is
             # still closed after this beat's diff -- observed live as the

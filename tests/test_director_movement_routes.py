@@ -305,3 +305,60 @@ def test_sealed_vehicle_still_blocks_occupant_exit(temp_db, monkeypatch):
 
     assert "The Stranger" not in out["state_diff"]["positions"]
     assert any("Blocked movement" in w for w in ctx.warnings)
+
+
+def test_a_blocked_move_does_not_leave_the_companion_on_the_far_side(
+    temp_db, monkeypatch,
+):
+    """THE GUARD MUST NOT SPLIT THE GROUP IT IS PROTECTING.
+
+    The route check protects ONE body -- the declarer. Nobody else's position
+    is route-checked, so an NPC arrives wherever the resolve diff says, and a
+    group that declared one movement had exactly half of it stopped.
+
+    Live (chat 74): "you step into the elevator", the car minted with a walled
+    edge to the lobby. She stayed; The Doctor went up. They spent the next
+    beat in different rooms, so the beat where her glamour came undone reached
+    him not at all -- and nothing in the output looked wrong, because he
+    simply had nothing to react to.
+    """
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, _station_scene(), "isolated_vault")
+    monkeypatch.setattr(
+        director, "_agent_json",
+        fanout_resolve_agent({"state_diff": {"positions": {
+            "The Stranger": "isolated_vault",   # the declarer
+            "Mara": "isolated_vault",           # swept along with her
+        }}}),
+    )
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    positions = out["state_diff"]["positions"]
+    assert "The Stranger" not in positions
+    assert "Mara" not in positions, \
+        "a companion sent to the blocked destination is held back too"
+    assert any("also held back" in w for w in ctx.warnings)
+
+
+def test_a_body_going_somewhere_else_is_none_of_the_guard_s_business(
+    temp_db, monkeypatch,
+):
+    """Scoped to THIS destination. An NPC moving elsewhere the same beat is
+    doing their own thing, and over-reaching here would freeze the room."""
+    import agents.director as director
+
+    ctx = _make_ctx(temp_db, _station_scene(), "isolated_vault")
+    monkeypatch.setattr(
+        director, "_agent_json",
+        fanout_resolve_agent({"state_diff": {"positions": {
+            "The Stranger": "isolated_vault",
+            "Mara": "lobby",
+        }}}),
+    )
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert "The Stranger" not in out["state_diff"]["positions"]
+    assert out["state_diff"]["positions"].get("Mara") == "lobby"
