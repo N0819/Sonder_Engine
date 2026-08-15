@@ -1,5 +1,55 @@
 # Changelog
 
+## alpha 8.4.2 — A reacting mind is still a mind
+
+- **Everything a character worked out while reacting was thrown away.** A
+  reaction is the beat with the most immediate pressure on a person — someone
+  has just done something to them, and they answer inside the same moment. The
+  reaction loop wrote each mind's conclusions to one place and the commit read
+  another, so the appliers were handed empty lists and had nothing to warn
+  about. Measured across all 82 stored reaction beats in the corpus, **every
+  single one** lost interior: 159 theories formed about other people, 93
+  relationship revisions, 20 belief changes, 18 things marked worth
+  remembering, 12 learned associations. They were reading the room and
+  revising who they thought someone was, into nothing.
+
+- **The only three projects this engine has ever produced were among them.** A
+  project is the tier between a drive and a passing intention — a life's work
+  a character *arrives at* mid-play rather than one an author assigns, adopted
+  under a deliberation built to refuse a task merely wearing the word. In three
+  branches of one story the Doctor adopted reaching a shrine near Kyoto to
+  investigate a bloodline's connection to the anomaly, with a real external
+  criterion, exactly the shape the deliberation exists to accept. None of the
+  three survived the beat they were formed in. They commit now.
+
+- **And a project could be forgotten between rounds of a single loop.** The
+  helper that merges a character's rounds knew which fields accumulate and
+  which overwrite, and projects were on the wrong side of that list — so one
+  adopted early and not restated a moment later was dropped. A project is
+  given up by being satisfied or disputed, never by a later round failing to
+  mention it. A test now holds every such field to that rule, so the next one
+  added cannot repeat it.
+
+- **The night clerk answers.** Six beats in one story where the Director wrote
+  a clerk speaking and the player heard silence — while saying in as many words
+  that someone should be staffing the desk, and eventually vaulting the counter
+  to go looking. Every guard involved was working correctly. The line was
+  routed to the right place, and then handed to a stage that was never told it
+  had been handed anything: at the richest scene setting the scene manager is
+  the only path, and when it declined to speak, the debt went with it. A guard
+  that deletes a line on the grounds that something else will do it better is
+  just a guard that deletes lines. An unpaid line now falls through whichever
+  way the manager went, and a presence it *did* voice is not asked twice.
+
+- **Housekeeping.** Four tests now cover the seams a project actually travels
+  — adopted in play, applied by commit into an interior rebuilt from scratch
+  every beat, handed back to the mind on the next one — because a break in any
+  of them is silent: the character still speaks, still sounds right, and simply
+  never comes to have a life's work. Guidance added earlier in 8.4.1 telling
+  authors to fill in projects by hand has been corrected; it bypasses the
+  deliberation that makes one mean anything. And a credits register now records
+  two surveyed repositories, their licences, and what was and was not taken.
+
 ## alpha 8.4.1 — Nobody has to say they are still walking
 
 - **A walk you declared once keeps going.** A beat that said nothing about
