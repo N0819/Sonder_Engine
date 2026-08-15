@@ -12,7 +12,7 @@
 | `agents/character.py` | 3386 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6156 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
-| `agents/director.py` | 7711 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 7756 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1045 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
@@ -144,14 +144,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 6238 | 1319 lines |
-| `director_interpret()` | 773 | 471 lines |
-| `_reconcile_resolution()` | 4099 | 445 lines |
-| `_reconcile_near_group_positions()` | 2350 | 276 lines |
-| `_evidence_present()` | 3174 | 232 lines |
-| `_run_specialists()` | 5883 | 202 lines |
-| `_specialist_payload()` | 5664 | 133 lines |
-| `_orchestration_scope_backstop()` | 6105 | 131 lines |
+| `director_resolve()` | 6283 | 1319 lines |
+| `director_interpret()` | 774 | 471 lines |
+| `_reconcile_resolution()` | 4144 | 445 lines |
+| `_reconcile_near_group_positions()` | 2395 | 276 lines |
+| `_evidence_present()` | 3219 | 232 lines |
+| `_run_specialists()` | 5928 | 202 lines |
+| `_specialist_payload()` | 5709 | 133 lines |
+| `_orchestration_scope_backstop()` | 6150 | 131 lines |
 
 ### `agents/loops.py`
 

@@ -58,6 +58,7 @@ from scene import (
     style_guide,
 )
 from providers import Aborted, generation_event_sink, token_sink
+import schemas
 from schemas import validate_llm_output
 from survival import survival_enabled, vitals_of
 from spatial import (
@@ -2307,6 +2308,33 @@ def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
             resolved_event, dialogue_log, conditions, tracked_names)
     ]
 
+def _output_field_names():
+    """Every top-level key the Director's own output shapes declare.
+
+    SOURCED FROM THE SCHEMAS, never hand-listed: the whole failure being
+    guarded is a model nesting one of these keys inside `rooms`, so a list
+    that can drift out of step with the real shape would go stale exactly
+    when a new field started leaking.
+    """
+    models = [getattr(schemas, "StateDiff", None)]
+    # Every Director-side stage, INCLUDING the specialists -- `resolved_events`
+    # is a specialist echo field and was one of the two that actually leaked.
+    models += [cls for key, cls in (getattr(schemas, "SCHEMA_MAP", {}) or {}
+                                    ).items() if key.startswith("director_")]
+    names = set()
+    for cls in models:
+        fields = getattr(cls, "model_fields", None) or getattr(
+            cls, "__fields__", None) or {}
+        names.update(str(f).casefold() for f in fields)
+    # Container names that ARE legitimate diff keys are not room ids either,
+    # but they are already handled above; what matters here is that a room
+    # can never be called one of these.
+    return frozenset(names)
+
+
+_OUTPUT_FIELD_NAMES = _output_field_names()
+
+
 def _normalize_diff_shape(sd):
     """Coerce a state_diff (from the main resolve output or a repair delta)
     to the canonical container shapes every downstream reader assumes.
@@ -2324,6 +2352,23 @@ def _normalize_diff_shape(sd):
               "telling_ops"):
         if not isinstance(sd.get(k), list):
             sd[k] = []
+    # A SCHEMA FIELD NAME IS NOT A ROOM. Live, chat 72 turn 44: `rooms` came
+    # back carrying `resolved_events` and `notes` alongside two real rooms,
+    # and the coercion above dutifully made each a room dict. That story's
+    # map now has a blank-named room called `resolved_events` adjacent to
+    # the hotel lobby, and every route query walks through it.
+    #
+    # These are not typos, they are keys from the output shape the model was
+    # just asked to produce -- an ordinary nesting slip, and one the engine
+    # can recognise for certain: no fiction names a room after a JSON key.
+    # Whole-id match only, so a genuine `notes_office` survives. Rooms are
+    # the only container this applies to; elsewhere the key is a body or an
+    # object name where a collision means nothing.
+    rooms = sd.get("rooms")
+    if isinstance(rooms, dict):
+        for _key in [k for k in rooms if str(k).strip().casefold()
+                     in _OUTPUT_FIELD_NAMES]:
+            rooms.pop(_key, None)
     sd.setdefault("time", None)
     return sd
 
