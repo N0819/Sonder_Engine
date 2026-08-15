@@ -3,7 +3,7 @@
 
 The output is intentionally structural rather than interpretive: module imports,
 large top-level functions, FastAPI routes, database tables, and frontend section
-markers. Keep durable architectural explanations in AGENTS.md and docs/PIPELINE.md.
+markers. Keep durable architectural explanations in AGENTS.md and docs/guides/PIPELINE.md.
 """
 
 from __future__ import annotations

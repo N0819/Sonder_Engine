@@ -156,6 +156,10 @@ def test_the_fanout_is_the_only_path_and_has_no_off_switch(temp_db,
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
 
+    # DELIBERATE USE OF A DEAD SETTING KEY. Nothing in the engine reads
+    # `director_orchestration` any more, and this is the tripwire that keeps
+    # it that way: if some future change starts honouring it again, these
+    # spellings will turn the fan-out off and this test will say so.
     for value in ("", "0", "off", "false"):
         temp_db.set_setting("director_orchestration", value)
         ctx = _make_ctx(temp_db, interp=_action_interp())

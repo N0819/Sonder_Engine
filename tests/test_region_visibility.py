@@ -1,5 +1,5 @@
 """Region visibility as a DERIVED, per-observer answer -- step 2 of
-docs/DESIGN_REGION_VISIBILITY.md.
+docs/design/DESIGN_REGION_VISIBILITY.md.
 
 The scar this shape exists to avoid repeating: `wearing`/`state`/`regions`
 are three representations of one wardrobe and they drifted until every writer

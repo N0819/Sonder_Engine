@@ -3,10 +3,10 @@
 What Sonder Engine does, in plain language. One line per feature, describing
 what you get rather than how it is built.
 
-This is a catalogue, not an argument. [`Design.md`](../Design.md) explains why
+This is a catalogue, not an argument. [`Design.md`](../../Design.md) explains why
 the system is shaped the way it is and carries the verified built / partial /
-not-built table; [`docs/UNBUILT.md`](UNBUILT.md) is the register of what is
-missing or broken; [`README.md`](../README.md) covers installing and running.
+not-built table; [`docs/UNBUILT.md`](../UNBUILT.md) is the register of what is
+missing or broken; [`README.md`](../../README.md) covers installing and running.
 Where a line here says **(partial)**, the feature exists and works but is
 narrower than it sounds — those two documents have the detail.
 

@@ -1222,7 +1222,7 @@ MIGRATIONS = [
     [
         # Content-addressed embedding storage; see the SCHEMA comment. The
         # table starts empty and fills as checkpoints are written or compacted
-        # (tools/compact_checkpoints.py), so nothing needs backfilling for the
+        # (`checkpoints.compact_checkpoints`), so nothing needs backfilling for the
         # engine to keep working -- an existing checkpoint still carries its
         # vectors inline and restores from them exactly as before.
         "CREATE TABLE IF NOT EXISTS memory_vectors("

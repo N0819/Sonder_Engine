@@ -63,7 +63,7 @@ from db import q, wget, wset
 # tell a place from a person without guessing at a bare capitalized phrase, and
 # the mechanism has produced 0 claims across the whole production corpus, so
 # there is no measurement to tune against yet. See the note in
-# docs/BACKGROUND_LIFE_DESIGN.md.
+# docs/design/BACKGROUND_LIFE_DESIGN.md.
 CLAIM_TTL_TURNS = 8
 # Never surface more than this many at once; the Director has a job to do.
 MAX_SURFACED = 6

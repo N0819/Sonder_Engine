@@ -1,7 +1,7 @@
 """Subject identity: one id per being, read from the ledger that already owns it.
 
-0c of ``docs/PROPOSAL_2026-08-06.md`` (section 2A, reordered first by amendment
-1), designed against ``docs/DESIGN_0c_subject_identity.md``.
+0c of ``docs/archive/PROPOSAL_2026-08-06.md`` (section 2A, reordered first by amendment
+1), designed against ``docs/design/DESIGN_0c_subject_identity.md``.
 
 WHAT ALREADY EXISTS, AND IS NOT TOUCHED. ``spatial.canonical_subject_map`` and
 ``spatial.normalize_scene_subjects`` fold a CHARACTER's two live spellings (a

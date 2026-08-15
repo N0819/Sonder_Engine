@@ -1817,7 +1817,7 @@ def char_import(body: dict = Body(...)):
 def character_start_story(cid: int, body: dict = Body(default={})):
     """Start story now: seed a chat from this character's greeting with the
     chosen persona (greeting shown verbatim, private knowledge routed to the
-    character). See greetings.start_story / docs/GREETING_IMPORT_DESIGN.md."""
+    character). See greetings.start_story / docs/design/GREETING_IMPORT_DESIGN.md."""
     persona_id = body.get("persona_id")
     if persona_id is None:
         raise HTTPException(400, "persona_id required")
@@ -3138,7 +3138,7 @@ def chat_positions_get(cid: int):
 
     Read from the scene blob, which is the single runtime source of truth for
     live positions -- not from `world_placements` (decommissioned) or
-    `world_entities` (a derived projection). See docs/DATABASE.md.
+    `world_entities` (a derived projection). See docs/guides/DATABASE.md.
     """
     from spatial import room_of
 
@@ -3532,7 +3532,7 @@ def bg_cfg_get(cid: int):
 
 @app.put("/api/chats/{cid}/background_config")
 def bg_cfg_put(cid: int, body: dict = Body(...)):
-    """Scene-manager settings (docs/BACKGROUND_LIFE_DESIGN.md §3.10).
+    """Scene-manager settings (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10).
 
     Lives beside dialogue_config rather than the style guide because these are
     simulation dials -- who gets to speak and act -- the same family as

@@ -46,7 +46,7 @@ _PEAK_NOVELTY = 0.7
 _SUSTAINED_LEVEL = 0.6
 
 # Ambient comfort: the world-side pleasure floor (comfort.py derives it,
-# docs/DESIGN_SURFACE_COMFORT.md designed it). Two hard rules, neither of
+# docs/design/DESIGN_SURFACE_COMFORT.md designed it). Two hard rules, neither of
 # them tuning:
 #
 #   1. Comfort feeds the pleasure LEVEL only, never the `drive` term that

@@ -8,13 +8,13 @@ an owner, this file points at it:
 
 | For | Read |
 |---|---|
-| Which file to edit for which change | [`AGENTS.md`](../AGENTS.md) |
+| Which file to edit for which change | [`AGENTS.md`](../../AGENTS.md) |
 | Exact stage order and payloads | [`PIPELINE.md`](PIPELINE.md) |
 | Schema, write helpers, persistence checklist | [`DATABASE.md`](DATABASE.md) |
-| Generated symbol/route/table index | [`CODE_MAP.md`](CODE_MAP.md) |
+| Generated symbol/route/table index | [`CODE_MAP.md`](../CODE_MAP.md) |
 | Test tiers and CI policy | [`TESTING.md`](TESTING.md) |
-| Philosophy and conformance status | [`Design.md`](../Design.md) |
-| Known defects and unbuilt work | [`UNBUILT.md`](UNBUILT.md) |
+| Philosophy and conformance status | [`Design.md`](../../Design.md) |
+| Known defects and unbuilt work | [`UNBUILT.md`](../UNBUILT.md) |
 
 > **A note on the diagrams.** They are Mermaid, rendered natively by GitHub and
 > by most Markdown viewers. Being source rather than images, they diff, review
@@ -84,7 +84,7 @@ The application is a single FastAPI process (`app.py`) over one SQLite
 database. There is no job queue and no external service: a turn runs inside the
 request that submitted it, streaming events back as it goes.
 
-**Submitting a turn.** `POST /api/chats/{id}/turn` does four things in a strict
+**Submitting a turn.** `POST /api/chats/{cid}/turns` does four things in a strict
 order, and the order is the concurrency control:
 
 1. Claim the pipeline slot for `(chat_id, frame_id)` — an atomic gate. A
@@ -515,6 +515,11 @@ project sits at intention weight until it has been served.
 
 ## 8. Memory and belief
 
+This is the summary. [`MEMORY.md`](MEMORY.md) is the reference for the whole
+layer — minting, provenance, embeddings, RRF/MMR ranking, unbidden recall,
+belief revision, consolidation, and how to change the embedding model. Anything
+below that disagrees with it is this file being stale; fix it there first.
+
 **Minting.** Memories are written at commit from what the character legitimately
 had: observation, dialogue heard, inference drawn. Each carries `kind`,
 `category`, `salience` (how much it mattered when formed), `confidence` (how
@@ -728,7 +733,7 @@ Psychology changes carry a specific warning worth repeating: an unfilled field
 does not error, does not warn, and does not appear in any test. It appears as a
 character who behaves wrongly fifty beats later, by which time the cause looks
 like a model problem. See the authoring notes in
-[`CLAUDE.md`](../CLAUDE.md) and [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md).
+[`CLAUDE.md`](../../CLAUDE.md) and [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](../design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md).
 
 ---
 

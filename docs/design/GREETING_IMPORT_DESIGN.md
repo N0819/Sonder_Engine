@@ -16,7 +16,7 @@
 > Still unbuilt and still wanted — ingest-time extraction caching with
 > `extractor_version`, idempotent seed event keys, `player_slot` and conflict
 > escalation, turn-0 greeting swipe, and two named invariant tests — are
-> registered in [`UNBUILT.md`](UNBUILT.md) §6.3.
+> registered in [`UNBUILT.md`](../UNBUILT.md) §6.3.
 
 ## Core idea
 
@@ -183,6 +183,13 @@ Pure variant-activation can't implement swipe because activating an old variant 
 | Greeting UI | `static/js/editors.js`, `app.js`, `chat.js` | matching `app.py` routes |
 
 ## Test surface
+
+*Proposed names, none of which shipped.* What exists is
+`tests/test_greetings.py`, `tests/test_generate_greeting.py` and
+`tests/test_greeting_player_handle.py`; the two invariant tests this section
+asks for that are still missing are registered in
+[`UNBUILT.md`](../UNBUILT.md) §6.3. Read the list below as the coverage
+argument, not as a file index.
 
 - `test_greeting_import.py`: alt greetings captured; placeholder normalization; `character_book`
   still imported; native round-trip byte-identical; extraction failure doesn't fail import.

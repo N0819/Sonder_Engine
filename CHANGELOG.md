@@ -1,5 +1,59 @@
 # Changelog
 
+## alpha 8.4.1 — Nobody has to say they are still walking
+
+- **A walk you declared once keeps going.** A beat that said nothing about
+  movement was read as *abandoning* the journey — "the walker stopped to do
+  something else, and picking the thread back up is a fresh declaration" —
+  so travel only survived by being re-announced every single beat. That is
+  the sentence nobody wants to keep typing, and it is wrong about the
+  commonest thing in fiction: people talk while they walk. Now silence
+  continues, one room per beat and two for a long stretch, and an
+  **interruption** is the thing that has to be established. The Director
+  decides that, because "did what just happened stop you walking" needs the
+  whole beat to answer, under a floor it cannot argue with — no way through,
+  being carried, already arrived. The reasoning: continuing carries out the
+  declaration *you* made, and stopping you without being told is what
+  overrides it.
+
+- **The scenery changes on the page, not behind it.** The leg is worked out
+  before the prose is written and handed to the Director as part of the
+  beat, so the forecourt gives way to the doors and the doors to the lobby
+  in the same breath as everything else — rather than a position quietly
+  changing underneath a paragraph that left you standing still.
+
+- **A doorway is not a room you are in.** Standing "at the lobby doorway" was
+  resolved to whichever room *owned* that doorway — the back office, which
+  named it after where it leads — and then everyone standing near that person
+  was moved in with them. One live beat relocated a player and her companion
+  out of a hotel lobby they were unanimously standing in, into a back office
+  neither had entered. A station describes where you stand within a room now,
+  and can never carry you across one.
+
+- **Someone comes when you ring the bell — for real this time.** A night
+  clerk who arrived by being *placed in a room* was never recorded as anyone:
+  a name in the position ledger with nothing behind it, unable to perceive,
+  speak or ever be chosen to act. Four beats of ringing went unanswered while
+  a clerk technically stood there.
+
+- **And they can answer from the next room.** The engine had always worked out
+  that a body in the back office can hear a bell in the lobby through an open
+  door — and then only ever offered the beat to someone standing in the
+  *same* room. It granted the hearing and withheld the voice, which is why
+  the Director kept resorting to walking such people into the room so they
+  could speak at all. A shut door still means nobody comes.
+
+- **Rooms called `resolved_events` and `notes`.** Field names from the
+  Director's own output shape slipped into the map and were minted as blank
+  rooms adjoining a hotel lobby, which every route query then walked through.
+  No fiction names a room after a JSON key, so the engine now refuses them.
+
+- **Housekeeping.** Two documentation passes against the source found five
+  things recorded as unfinished that were in fact built — including a
+  182-line entry insisting no way existed to rebuild memory embeddings, next
+  to three functions that do exactly that, and a design register contradicting
+  itself outright.
+
 ## alpha 8.4 — Someone comes when you ring the bell
 
 - **The clerk came, and the engine deleted him.** A player rang a hotel
@@ -1045,7 +1099,7 @@ warning fires when body prose names a part the sheet does not declare.
 Perception became deterministic; the `perception` entry in `providers.ROLES`
 did not go with it, so the settings panel went on offering a model for a stage
 that cannot call one. Removed from the role list, the per-provider sizing
-tips, `docs/FEATURES.md` and a `Design.md` row that still described one LLM
+tips, `docs/guides/FEATURES.md` and a `Design.md` row that still described one LLM
 call per perceiver. The perception STEP key stays where it is: stored steps,
 archives and traces from before the change still replay through it.
 
@@ -1341,8 +1395,8 @@ job scheduling; `tools/fire_rates.py` reports each against the turns or epochs
 that actually could have used it.
 
 The architectural direction and build order are now durable in
-`docs/PROPOSAL_ARCHITECTURAL_COMPLETION.md`, with the shorter execution map in
-`docs/AGENT_HANDOFF_ARCHITECTURE.md`. Both make the checkpoint/archive/branch
+`docs/design/OFFSCREEN_WORLD_ARCHITECTURE.md`, with the shorter execution map in
+`docs/archive/AGENT_HANDOFF_ARCHITECTURE.md`. Both make the checkpoint/archive/branch
 gate explicit. That gate has now been exercised by the event-spine change above:
 the first writer landed in the same change as checkpoint, archive, branch,
 deletion, migration, and fidelity coverage.
@@ -1446,7 +1500,7 @@ is no longer retroactively enlarged by development commits.
 
 ### The world keeps going when you are not there — floors first, under one ceiling
 
-Three of the five state-producers in `docs/DESIGN_LIVING_WORLD.md` are built at
+Three of the five state-producers in `docs/design/DESIGN_LIVING_WORLD.md` are built at
 their **deterministic floor**, each behind a per-chat setting that defaults off,
 because a merge must not change a running story. The two that are not built say
 so in the engine's own vocabulary rather than in a menu somebody has to remember
@@ -1675,7 +1729,7 @@ support, cache benefit and raw latency are three independent properties. A host
 whose model is on the wrong side of that needs a switch, and until now had none.
 
 One warning attached to the entry, because it cost an hour here: the timed calls
-in `docs/bench-2026-08-03/` cannot answer this. All 62 cache reads among them
+in `docs/experiments/bench-2026-08-03/` cannot answer this. All 62 cache reads among them
 come from one model, `nex-agi/nex-n2-pro`, and none of the logged models is a
 Claude — `_model_is_anthropic` gates the breakpoint, so the engine never marked
 any of them and those `cached_tokens` are the provider's own implicit caching.
@@ -2256,7 +2310,7 @@ channel, ordering preserved, no speech element left carrying an asterisk.
   Three consequences, each previously got wrong somewhere in this repo —
   inference is the product, not the risk; a leak is an engine failure, never a
   model's; firewall integrity is an invariant, not a model-selection criterion.
-- **Model benchmarking, recorded rather than assumed** (`docs/bench-2026-08-03/`,
+- **Model benchmarking, recorded rather than assumed** (`docs/experiments/bench-2026-08-03/`,
   eleven findings and seventeen raw logs). The load-bearing one is
   methodological: a small-payload benchmark does not predict real-contract
   behaviour, and every pair re-tested against the engine's own prompt and
@@ -3082,7 +3136,7 @@ standing situation.
 
 ### Documentation
 
-- **`docs/MEMORY.md`** — a full account of the memory system: what a turn mints
+- **`docs/guides/MEMORY.md`** — a full account of the memory system: what a turn mints
   and at what salience, the six provenance classes and the three summary scopes
   they route to, the two hard filters that run before any ranking, the four
   fused rankings and every scalar bonus with the measurement behind it,
@@ -3368,7 +3422,7 @@ measurement rather than by reading the code.
   keep the meaning and drop the vocabulary, against 441 real memories — it
   scored **0% at rank 1, 5 and 20, median rank 228 of 441.** Indistinguishable
   from random. It is a strong lexical retriever and a non-existent semantic
-  one, and README, `docs/RESEARCH.md` and the register all carried the
+  one, and README, `docs/guides/RESEARCH.md` and the register all carried the
   flattering figure until now.
 - **Changing the embedding model no longer loses everything silently.** A row
   embedded by another model scores 0.0 on both vector rankings forever, because
@@ -3496,7 +3550,7 @@ all three somewhere to live.
   (`providers.edit_image`), so furniture and camera angle stay put instead of
   the architecture being reinvented every time the light changes.
 
-- **A plain-language feature list.** [`docs/FEATURES.md`](docs/FEATURES.md) —
+- **A plain-language feature list.** [`docs/guides/FEATURES.md`](docs/guides/FEATURES.md) —
   every feature the app has, one line each, in the words a reader would use.
 
 ### Fixed
@@ -3763,11 +3817,11 @@ Every fix below was found by reading live play, not by testing.
   provenance and cross-runtime exchange, none of which may reach a character
   context here, so the contrast is drawn from the character's own memory and
   crosses no boundary ordinary recall does not already cross. See
-  [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5. Built independently from the
+  [`docs/guides/RESEARCH.md`](docs/guides/RESEARCH.md) §1.5. Built independently from the
   public spec, with thanks — the insight is theirs, the adaptation is ours,
   and Sonder speaks only for itself.
 
-- **An engineering reference.** [`docs/ENGINEERING.md`](docs/ENGINEERING.md)
+- **An engineering reference.** [`docs/guides/ENGINEERING.md`](docs/guides/ENGINEERING.md)
   explains how the system operates layer by layer and why each boundary sits
   where it does, with ten diagram placeholders. Connective tissue between
   `AGENTS.md`, `PIPELINE.md` and `DATABASE.md` rather than a restatement of
@@ -3974,7 +4028,7 @@ is the long list of ways the engine used to talk a character out of it.
 Most of it was found rather than designed. A maze harness ran the same
 character through the same seven-by-seven maze until the engine's own
 assumptions broke in front of us, and thirteen documented arms
-(`docs/MAZE_ARMS.md`) are the evidence for nearly every entry below. The
+(`docs/experiments/MAZE_ARMS.md`) are the evidence for nearly every entry below. The
 pattern that produced almost every fix: state the fact, leave the choice.
 
 ### Added
@@ -6447,7 +6501,7 @@ partition that keeps the discipline where it pays. Everything here is **off by
 default** (`background_config.scene_life`); with it unset, behaviour is
 byte-for-byte what it was.
 
-Design: [`docs/BACKGROUND_LIFE_DESIGN.md`](docs/BACKGROUND_LIFE_DESIGN.md).
+Design: [`docs/design/BACKGROUND_LIFE_DESIGN.md`](docs/design/BACKGROUND_LIFE_DESIGN.md).
 Live evidence: `demo/tavern_scene_life/` and `demo/trek_bridge_scene_life/`.
 
 ### Added
@@ -7171,7 +7225,7 @@ flies off, carrying its occupants at both levels).
   resolved): the frame-scoped scene blob is the single runtime source of truth for
   live state; `world_entities` is a derived projection; `world_placements`,
   `fiction_worlds`/`fiction_locations`, and `transit_edges` are decommissioned. The
-  authority model is documented in `CLAUDE.md`, `AGENTS.md`, `docs/DATABASE.md`, and
+  authority model is documented in `CLAUDE.md`, `AGENTS.md`, `docs/guides/DATABASE.md`, and
   `Design.md`, and pinned by a characterization suite (byte-identical spatial-reader
   and checkpoint/restore behavior).
 
@@ -7292,7 +7346,7 @@ tests.
   - **Start story now** (`POST /api/characters/{cid}/start`): pick a persona and
     play. The hand-authored greeting is shown **verbatim** (deterministic
     persona substitution); the simulation is booted underneath it.
-  - See `docs/GREETING_IMPORT_DESIGN.md`.
+  - See `docs/design/GREETING_IMPORT_DESIGN.md`.
 - **Rename stories** from the sidebar.
 - **Portable story export.** `chat_export` now embeds a `resources` bundle
   (persona + character sheets) plus the multiplayer roster, per-player inputs,
@@ -7372,7 +7426,7 @@ tests.
 - **Director populates location-appropriate background people.** New
   BACKGROUND POPULATION guidance: a tavern implies a barkeep and patrons, a gate
   a guard, an empty moor no one — grounded, modest, no dialogue/backstory.
-- `docs/RESEARCH.md` — sourced bibliography of the research the engine draws on.
+- `docs/guides/RESEARCH.md` — sourced bibliography of the research the engine draws on.
 - `.gitignore` (excludes `__pycache__`, all `*.db`/`*.sqlite*`, `.env`).
 
 ### Fixed — frontend

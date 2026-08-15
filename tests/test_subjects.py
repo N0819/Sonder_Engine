@@ -3,7 +3,7 @@
 The scene fold (`spatial.canonical_subject_map`) is gated on scene liveness --
 G3 -- and that gate is body-shaped: a faction, a crowd and a registry room own
 no position, no scale, no attire, so they can never be live and the fold can
-never reach them (docs/DESIGN_0c_subject_identity.md section 4, the
+never reach them (docs/design/DESIGN_0c_subject_identity.md section 4, the
 circularity). `subjects.resolve_subject` is the route-C answer: identity is
 read from the durable ledger that already owns each kind, the scene fold is
 left untouched, and where NO ledger owns a being nothing is minted -- the

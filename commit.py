@@ -243,7 +243,7 @@ def record_spatial_experience(st, sc, here_room, turn_idx):
     Durability now belongs to place_graph, and the legacy keys follow its
     memory (bounded by the same eviction) rather than the window's.
 
-    Persistence decision (docs/DATABASE.md checklist): all of this rides the
+    Persistence decision (docs/guides/DATABASE.md checklist): all of this rides the
     chat_chars.state JSON blob, which checkpoints snapshot/restore whole
     (checkpoints.snapshot_state/restore), chat_archive exports/imports
     verbatim, and the branch path copies row-for-row -- so no schema, remap,
@@ -2527,22 +2527,49 @@ def prepare_scene_commit(ctx):
                               "turn": getattr(ctx.turn, "idx", None)}
         if not _pending:
             sc.pop("approach", None)
-    elif isinstance(sc.get("approach"), dict):
-        # A beat that declares no movement at all abandons the approach: the
-        # walker stopped to do something else, and picking the thread back up
-        # is a fresh declaration. Only the player's own -- a companion halfway
-        # across a field is still halfway across it.
+    # A BEAT THAT SAYS NOTHING ABOUT MOVEMENT NO LONGER ENDS THE WALK.
+    #
+    # It used to: "the walker stopped to do something else, and picking the
+    # thread back up is a fresh declaration". That made travel survive only
+    # by being re-declared every beat -- the sentence nobody wants to keep
+    # writing -- and it is wrong about the commonest thing in fiction, which
+    # is people talking while they walk. Live, chat 72: a beat spent grabbing
+    # someone by the shoulders was read as abandoning a walk to the hotel
+    # that was plainly still under way.
+    #
+    # Silence continues (agents/director._travel_continues advances the leg
+    # and every movement backstop judges it). What retires a record is the
+    # walk actually ENDING: arriving, or an interruption the Director
+    # asserted. Both come back on `res["travel"]`, so the ledger and the
+    # committed position are written from one answer and cannot disagree.
+    _travel = res.get("travel") if isinstance(res, dict) else None
+    if isinstance(sc.get("approach"), dict) and isinstance(_travel, dict):
         _pending = sc["approach"]
         if "who" in _pending:
+            _old = _pending
+            _pending = sc["approach"] = (
+                {_old["who"]: {"to_room": _old.get("to_room"),
+                               "turn": _old.get("turn")}}
+                if _old.get("who") and _old.get("to_room") else {})
+        _done = {str(n) for n in (_travel.get("arrived") or [])}
+        _done |= {str(e.get("subject")) for e in (_travel.get("interrupted") or [])
+                  if isinstance(e, dict) and e.get("subject")}
+        for _name in _done:
+            _pending.pop(_name, None)
+        # Beats already spent on a long edge are carried on the record, so a
+        # hike does not restart every time the walkers stop to talk.
+        for _entry in (_travel.get("held") or []):
+            if not isinstance(_entry, dict) or not _entry.get("edge_beats"):
+                continue
+            _leg = _pending.get(str(_entry.get("subject")))
+            if isinstance(_leg, dict):
+                _leg["edge_beats"] = int(_entry["edge_beats"])
+        for _entry in (_travel.get("advanced") or []):
+            _leg = _pending.get(str((_entry or {}).get("subject")))
+            if isinstance(_leg, dict):
+                _leg.pop("edge_beats", None)   # a new edge starts fresh
+        if not _pending:
             sc.pop("approach", None)
-        else:
-            try:
-                from scene import persona_of
-                _pending.pop(persona_name(persona_of(ctx.chat)) or "", None)
-            except Exception:
-                pass
-            if not _pending:
-                sc.pop("approach", None)
 
     apply_attire_diff(sc, diff, ctx, res)
 
@@ -4104,6 +4131,51 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             if room:
                 sk["station_room"] = str(room)
 
+    # A BODY THE BEAT PLACED IN A ROOM, named nowhere else.
+    #
+    # Live, chat 72 turn 47. The player had been ringing a hotel bell for
+    # four beats; the Director finally brought somebody, and he arrived in
+    # `cast_changes` ("young man", arrived) and `positions` ("Sleepy Hotel
+    # Clerk") and in nothing else. Neither is harvested above, so he became a
+    # name in the position ledger with no presence record, no perception
+    # object and no way to ever be picked to act. That story's tracked
+    # presences afterwards held exactly one thing, and it was a screwdriver.
+    #
+    # `positions` obeys this function's own rule -- a structured field commit
+    # already trusts, never NER over prose -- and is a stronger signal than
+    # most, being the ledger the engine PLACES BODIES with. Anything placed
+    # in a room is in the scene by construction.
+    #
+    # Keyed on the positions name rather than on `cast_changes.who`, because
+    # `who` is a description the model wrote ("young man") while the
+    # positions key is the identity every other system keys on. Turn 47
+    # carried both for one figure; tracking the description too would mint a
+    # second presence nothing could ever match to the first.
+    _diff_positions = (diff.get("positions") or {})
+    _entity_kinds = {
+        str((edef or {}).get("name") or "").strip().casefold():
+            str((edef or {}).get("kind") or "").strip().casefold()
+        for edef in list((diff.get("entities") or {}).values())
+                  + list((_scene_now.get("entities") or {}).values())
+        if isinstance(edef, dict)
+    }
+    for _placed in _diff_positions:
+        _name = str(_placed or "").strip()
+        if not _name or name_in_roster(_name, roster):
+            continue
+        if _name.casefold() in _ubiquitous:
+            continue
+        # The same kind rule the entity harvest applies: exclude the clearly
+        # inert, default to inclusion for everything else. A bare name with
+        # no entity def at all is agent-shaped by default, which is the trade
+        # already made above -- a mistracked object never reacts anyway,
+        # because the gate still requires it to be salient.
+        if _entity_kinds.get(_name.casefold()) in _INERT_ENTITY_KINDS:
+            continue
+        candidates.add(_name)
+        sk = sketches.setdefault(_name, {})
+        sk.setdefault("station_room", str(_diff_positions[_placed]))
+
     # The deterministic backstop (background_react) authored one or more lines
     # this beat for the gate-picked presence(s): persist each as a real
     # dialogue turn so the same figure accrues toward promotion and reads as
@@ -4140,7 +4212,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             # objective self-knowledge wins; overwrite the prior sketch.
             record.setdefault("sketch", {}).update(sk)
 
-    # Scene-manager bookkeeping (docs/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
+    # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
     _persist_blurbs(br, presences)
     _append_manager_conduct(br, presences, turn_idx)
 
@@ -4300,6 +4372,60 @@ def _presence_in_addressed_refs(name, refs):
     )
 
 
+def _at_post_within_earshot(sc, station_room, player_room):
+    """Is a presence standing where they work, close enough to answer?
+
+    AT POST USED TO MEAN `station_room == player_room`, and that one `==` is
+    the whole of what the owner called a hole in the architecture: "they
+    should be able to respond from adjacent rooms".
+
+    Perception already models this properly -- `hear_level` is barrier- and
+    material-aware, an open doorway carries a voice and a shut one does not,
+    and `agents/background._beat_for_presence` runs exactly that check before
+    handing a presence a single word of the beat. So the engine granted the
+    clerk in the back office the hearing and withheld the agency: he could
+    hear the bell and could never be chosen to answer it.
+
+    The models kept trying to route around it, which is how it was found.
+    Chat 72 turn 45: the Director walked a night clerk INTO the lobby so he
+    could speak. Turn 47: the spatial specialist put another at the doorway
+    "near" the guests, and that teleported the player into the back office.
+    Both are a mind reaching for a thing the engine had no representation of.
+
+    AUDIBILITY IS THE TEST, NOT ADJACENCY, and the bar is a line heard in
+    FULL. That bar is the engine's own, already set: `_character_address_of`
+    requires `full` to count a line as addressed to somebody, and
+    `_beat_for_presence` was fixed to match it after a half-heard line let a
+    presence quote back verbatim what it had only caught a fragment of --
+    two paths reading the same level differently IS the bug there.
+    Consistency matters more here than physics, and it lands the right way
+    round anyway: at-post is the WEAKEST claim any presence has on a beat
+    (the standing invitation of working where you stand), so a muffled
+    thump through a shut door must not summon a body. Where the beat
+    genuinely warrants one, the stronger signals -- named in the prose,
+    addressed by the player, owed a reply -- fire regardless of the room.
+
+    Same room still qualifies trivially, and an unknown station qualifies
+    for nothing: not knowing where somebody stands is a reason to deliver
+    nothing, which is the rule the perception side already follows.
+    """
+    player_room = str(player_room or "")
+    if not station_room or not player_room:
+        return False
+    if str(station_room) == player_room:
+        return True
+    try:
+        return hear_level(
+            spatial_rel(sc, str(station_room), player_room), "normal"
+        ) == "full"
+    except Exception:
+        # Fail CLOSED. Everywhere else in this engine an unreadable fact
+        # grants the block; here granting means putting words in a mouth
+        # that may have no channel to the beat, so silence is the safe
+        # direction and the presence simply waits for a clearer signal.
+        return False
+
+
 def pick_background_reactor(ctx, dr_output):
     """Single-winner convenience wrapper over pick_background_reactors: the
     top-ranked qualifying background presence, or None. Preserves the original
@@ -4449,7 +4575,8 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # work is the weakest possible claim on a beat -- far weaker than being
         # addressed -- and `cap` still bounds how many are picked, so a busy
         # room does not become a chorus.
-        at_post = bool(station_room) and str(station_room) == str(player_room or "")
+        at_post = bool(station_room) and _at_post_within_earshot(
+            sc, station_room, player_room)
         if not (flow_addressed or routed or addressed or char_addr or owed
                 or mentioned or dialogue_turns or at_post):
             continue
@@ -6171,7 +6298,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                         intentions = intentions + [_a]
                 # PROJECTS (Tier 1.5): durable-but-not-eternal commitments,
                 # capped at two -- see affect.apply_project_ops and
-                # docs/DESIGN_LONG_TERM_GOALS.md. Authored ones seed from
+                # docs/design/DESIGN_LONG_TERM_GOALS.md. Authored ones seed from
                 # the card exactly as standing intentions do, deduped
                 # against live AND former so a project the character gave
                 # up (with a stated reason) never silently re-seeds over
@@ -6788,7 +6915,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             # OWN place-graph nodes, and every existing told entry's sureness
             # re-asked from belief_credence -- the node entry is a read-model
             # of the belief, and a belief explained away must stop steering
-            # (docs/DESIGN_PLACE_PURPOSE.md, mandatory drift rule). Runs
+            # (docs/design/DESIGN_PLACE_PURPOSE.md, mandatory drift rule). Runs
             # AFTER the merge so it reads reconciled beliefs, mirroring how
             # reconcile_inference_confidence treats memories.
             place_purpose.mirror_told_affords(st, turn.idx, _clock_seconds)

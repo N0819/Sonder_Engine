@@ -168,7 +168,7 @@ built:
 
 What that costs is the reason it is separated: a Pydantic declaration (mind the
 `stations` `extra="ignore"` scar), a commit merge path, and archive/checkpoint/
-branch handling — the full `docs/DATABASE.md` checklist. It is real schema work
+branch handling — the full `docs/guides/DATABASE.md` checklist. It is real schema work
 and should be costed as such rather than folded into "add object coverage".
 
 **So the order within step 3 is: draped first, line-of-sight second, and they

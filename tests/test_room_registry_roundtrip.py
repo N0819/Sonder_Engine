@@ -1,5 +1,5 @@
 """Schema-change checklist coverage for the Phase-2 room_registry table
-and lorebooks.retired_turn_id (docs/DATABASE.md): migration from the
+and lorebooks.retired_turn_id (docs/guides/DATABASE.md): migration from the
 Phase-1 lore_entries encoding, checkpoint snapshot/restore, export/import,
 and branch/clone id remapping. A schema change that doesn't round-trip
 through checkpoints and import is a corruption bug -- these are the tests

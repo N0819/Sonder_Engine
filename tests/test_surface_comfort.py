@@ -1,4 +1,4 @@
-"""Ambient comfort from surfaces (docs/DESIGN_SURFACE_COMFORT.md).
+"""Ambient comfort from surfaces (docs/design/DESIGN_SURFACE_COMFORT.md).
 
 Two hard rules are pinned here because losing either silently makes the
 feature harmful: comfort NEVER feeds `charge` (a warm bench must not

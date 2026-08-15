@@ -420,6 +420,29 @@ relative arrangement, and physical constraint. A touched pose is a complete
 snapshot rather than a partial merge, so obsolete `beneath`/`pinned` fields do
 not survive a later rise. Pose changes have their own manifest/audit category.
 
+A station is decoration on the position ledger, never a mover. `stations.at`
+names an anchor and the anchor belongs to a room, so resolving it as room
+membership let a threshold anchor — the back office's name for the door
+through to the lobby — read as being inside the back office, and the
+near-group repair then carried everyone standing near that body in with them.
+Where nobody is travelling, that repair may only settle which of the rooms
+the group ALREADY occupies wins, the player's above all; where the player IS
+travelling the anchor is the party's destination and still names it.
+
+A declared walk CONTINUES. A beat that says nothing about movement no longer
+abandons the journey: `_travel_continues` advances the mover one edge along
+the passable route (two beats for a `far`/`remote` edge), writing the leg
+into `state_diff.positions` BEFORE every movement backstop so restraint, the
+passable-route check and approach semantics all judge it exactly as they
+judge a declared move. The leg is computed before the resolve is called and
+handed to the prose author as `travel_in_flight`, so the scenery changes on
+the page rather than behind it. An INTERRUPTION is what must be established,
+not continuation: the Director asserts it in `travel_interrupted`, under a
+deterministic floor (no passable route, carried, already arrived) it cannot
+argue with. `out['travel']` records what happened and `commit.py` retires or
+keeps each standing `scene.approach` record from it, so the ledger and the
+committed position are written from one answer.
+
 Both Director stages stay ONE step each and fan out inside themselves
 (design note 19). This is the only Director path; there is no monolithic
 sheet and no setting that returns one. A deterministic, scene-state-keyed dispatch computes each
@@ -454,7 +477,7 @@ record (granted vs served vs produced) persists on the step under
 Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`scene.py`) key `scene_life`:
 
 - **`off` (default) — one presence.** `commit.py`'s `pick_background_reactor` is a deterministic, LLM-free check that returns `None` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is raisable to 3, so "one presence" is the default rather than an invariant.
-- **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](UNBUILT.md) §6.1.
+- **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](../design/BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](../UNBUILT.md) §6.1.
 
 Neither path grants persistent memory, psychology, or mind-models — that is what character promotion is for. This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
 
@@ -495,7 +518,7 @@ together with `narrator` it forms the `_PRESENTATIONAL_TAIL` — rerolling eithe
 re-runs the remaining tail rather than the whole turn.
 
 It does **not** yet carry the primary narrator's consciousness gate or its full
-fidelity payload ([`UNBUILT.md`](UNBUILT.md) §3.4, S3-A6).
+fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
 
 ### `commit`
 

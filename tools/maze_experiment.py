@@ -469,7 +469,7 @@ def scene_rooms(walls, goal=None):
     # Worth arriving at. Forty-nine chambers of identical grey stone is the
     # experiment, but it also means the payoff for a 28-move optimal run was
     # one flat sentence -- and the psychology investigation found his
-    # motivation thin (docs/DESIGN_PSYCHOLOGY_AS_PRESSURE.md). A destination
+    # motivation thin (docs/design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md). A destination
     # that is vivid on arrival gives the drive something to land on.
     #
     # It is safe to make this beautiful ONLY because it stays in `desc`:

@@ -23,7 +23,7 @@ registered in [`MAZE_ARMS.md`](MAZE_ARMS.md); the findings are in
 
 ```bash
 python tools/render_maze_runs.py <runs.jsonl> \
-    -o docs/maze/A9-9x9-trinity.md \
+    -o docs/experiments/maze/A9-9x9-trinity.md \
     --note "one line saying what this arm was testing"
 ```
 

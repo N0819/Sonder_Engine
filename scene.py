@@ -1158,7 +1158,7 @@ def is_player_speaker(speaker, chat):
 # whole chat.
 #
 # The rungs are `schemas.BehaviorController`'s, unchanged and in its order.
-# That enum and `docs/OFFSCREEN_LIFE_DESIGN.md` have specified this ladder
+# That enum and `docs/design/OFFSCREEN_LIFE_DESIGN.md` have specified this ladder
 # since before anything read either -- the document's step 2 is "wire
 # BehaviorController; nothing ticks yet, the ladder just becomes real and
 # settable" -- so inventing a second, friendlier vocabulary here would have
@@ -1216,7 +1216,7 @@ def is_player_speaker(speaker, chat):
 #                    one reduced turn per world epoch -- ONE character call
 #                    over the fail-closed `offscreen.agent_context`, ONE
 #                    Director adjudication, one atomic landing. The
-#                    knowledge firewall that `docs/OFFSCREEN_LIFE_DESIGN.md`
+#                    knowledge firewall that `docs/design/OFFSCREEN_LIFE_DESIGN.md`
 #                    decision 2 insists on is structural, not prompted: a
 #                    ticking character advances on ITS OWN knowledge --
 #                    sheet, memories, beliefs, plans, carried reports --
@@ -1372,7 +1372,7 @@ def background_config(chat_id):
     background_react: past that, a crowd is better represented as one chorus
     presence than as several individually-voiced extras.
 
-    `scene_life` selects the scene-manager path (docs/BACKGROUND_LIFE_DESIGN.md
+    `scene_life` selects the scene-manager path (docs/design/BACKGROUND_LIFE_DESIGN.md
     §3.10) and is OFF by default -- this relaxes an information rule and its
     value is a matter of taste, so it is opt-in per chat:
 

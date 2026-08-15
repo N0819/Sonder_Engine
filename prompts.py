@@ -138,10 +138,12 @@ NSFW_PROMPT_IDS = frozenset([
 ])
 
 # ---------------------------------------------------------------------------
-# The director_resolve prompt, split into named segments so the orchestrated
-# Director (design note 19, behind the `director_orchestration` setting) can
-# cold-store the body-channel machinery in a scoped specialist while the
-# monolithic prompt below stays byte-identical to what it always was. The
+# The resolve sheet, split into named segments so each specialist can
+# cold-store the machinery for the channels it owns (design note 19). There
+# is no unsplit sheet any more and no setting that returns one: every
+# segment below belongs to exactly one specialist or to the prose author's
+# own sheet, held there by test_every_delegated_block_has_exactly_one_owner.
+# The
 # RESOLVE_BODY_* segments are the body specialist's ownership: the attire,
 # conditions and vitals instruction blocks move to `director_body` verbatim,
 # and `director_resolve_lean` is the prose author's sheet without them.
@@ -551,6 +553,34 @@ _RESOLVE_PRELUDE_B4 = (
 # documented residual (the crowd-minting shape), caught by the backstop when
 # the merged diff carries transit state the gate did not predict.
 RESOLVE_PROSE_TRANSIT = TRANSIT_NOTE + "\n\n"
+
+# Gate (prose author): `travel_in_flight` in the payload -- exact presence,
+# not a prediction. Empty on the great majority of beats, so this block is
+# absent on them.
+RESOLVE_PROSE_TRAVEL = (
+ "TRAVEL ALREADY UNDER WAY: travel_in_flight lists people who declared a walk "
+ "on an earlier beat and have not arrived. THEY ARE STILL WALKING. A beat "
+ "spent talking, arguing or embracing is a beat spent doing that WHILE ON "
+ "THE WAY -- nobody has to re-announce a journey to still be making it, and "
+ "the engine no longer reads silence as stopping.\n"
+ "Each entry names where they are going and `reaches_this_beat`: the room "
+ "this beat puts them in. NARRATE REACHING IT. The scenery changes around "
+ "them as they talk -- the forecourt gives way to the doors, the doors to "
+ "the lobby -- and your prose is where that happens; the position is "
+ "committed from this list, so prose that leaves them standing where they "
+ "were contradicts what commits. An entry with `still_crossing` is on a long "
+ "stretch and is not there yet: show the ground going by, not an arrival. "
+ "`final_leg` means this beat they get where they were going.\n"
+ "ONE EXCEPTION, and it is yours to judge: if what happens in this beat "
+ "actually STOPS them, say so in travel_interrupted [{subject, reason}] and "
+ "leave them where they are. Something physically blocks or seizes them, "
+ "they turn back, they abandon the errand, the reason for going evaporates, "
+ "they are needed here and now. Being interested in a conversation is NOT an "
+ "interruption; people walk and talk. Do not use it to keep a scene in one "
+ "room -- a walk that is stopped is stopped for a reason a reader would "
+ "accept, and picking the journey up again costs the player a fresh "
+ "declaration.\n\n"
+)
 
 # Gate (prose author): the mapping_scene_proposal payload itself — exact
 # absence, not a prediction.
@@ -2165,6 +2195,7 @@ PROSE_AUTHOR_SHEET = (
     ("comm", RESOLVE_PROSE_COMM),
     (None, _RESOLVE_PRELUDE_B4),
     ("transit", RESOLVE_PROSE_TRANSIT),
+    ("travel", RESOLVE_PROSE_TRAVEL),
     ("mapping_proposal", RESOLVE_PROSE_PROPOSAL),
     (None, _RESOLVE_DELEGATION_CORE),
     ("hearsay", RESOLVE_PROSE_HEARSAY),
@@ -2214,8 +2245,8 @@ def prose_author_prompt(scope):
 # --- The orchestrated interpret stage's delegation note --------------------
 #
 # Appended to the director_interpret sheet AT THE CALL SITE (agents/
-# director.py) only when the `director_orchestration` setting is on, so the
-# monolithic path stays byte-identical. Appended as a SUFFIX on purpose:
+# director.py), on every beat -- the fan-out is the only path. Appended as a
+# SUFFIX rather than folded into the sheet, on purpose:
 # the interpret sheet is a stable prefix for provider caching, and the note
 # lands after the output shape, which is also where it argues best -- the
 # sheet's own PASS 1 block instructs "the FULL state_diff structure ... no

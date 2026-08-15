@@ -31,13 +31,13 @@ serve:
 
 test: test-full
 
-# CI matrix-breadth only: proves the pure-contract tests pass on a second
-# interpreter without paying for the database tier twice. NOT the tier to
-# check your own work with -- it deselects every test that touches the
-# database, which is 159 of 252 files and includes the persistence and
-# information-firewall suites. Since test databases moved to tmpfs
-# (tests/conftest.py) the whole suite costs about what this used to, so
-# there is no longer a speed argument for running less of it.
+# NOT the tier to check your own work with -- it deselects every test that
+# touches the database, 1841 of 6329 tests, emptying 119 of 391 files and
+# with them the persistence and information-firewall suites. Since test
+# databases moved to tmpfs (tests/conftest.py) the whole suite costs about
+# what this used to, so there is no longer a speed argument for running less
+# of it -- and CI no longer calls this at all (the matrix runs check-fast).
+# Kept as a manual escape hatch for a machine with no usable /dev/shm.
 test-fast:
 	$(PYTEST) -q -m "not slow"
 
