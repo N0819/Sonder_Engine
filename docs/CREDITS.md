@@ -67,6 +67,11 @@ continues* — is the same boundary Sonder draws at `commit.py`, arrived at
 independently. Most of what follows is Directive holding that boundary in a
 place Sonder has not yet held it.
 
+The adoption ORDER, the cost of each, and the firewall verdict per item are
+shelved separately in
+[`design/PROPOSAL_DIRECTIVE_ADOPTIONS.md`](design/PROPOSAL_DIRECTIVE_ADOPTIONS.md).
+This table stays the register of what was read and what was taken.
+
 ### Ideas drawn from it
 
 **Nothing has been adopted yet.** This table is the shortlist as surveyed; each
