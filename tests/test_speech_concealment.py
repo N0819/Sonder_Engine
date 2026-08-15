@@ -644,3 +644,109 @@ def test_director_interpret_out_of_enum_volume_does_not_crash():
     })
     assert report.valid, report.errors
     assert report.output["speech_volume"] in ("whisper", "mutter", "normal", "loud", "shout")
+
+
+# --- a line concealed from its own addressee (interpret normalization) ------
+# THE THIRD leak in this family, and the only one that runs the wrong way.
+# The first two let words reach people who should not have them. This one
+# withheld them from the ONE person entitled to them, which no leak test
+# would ever catch: live at chat 73 t2480, Hinami whispering to The Doctor
+# with addressed_to [58] and conceal_from [58] on the same speech event. His
+# whole view of the beat was seeing her lean in and FEELING her lips at his
+# ear -- and no words. Four stored beats across two branches, out of the
+# thirteen in the corpus that conceal speech at all.
+
+from schemas import preprocess_llm_output as _pp
+
+
+def _interpret(sequence, addressed_to):
+    # One list in, two out: normalization preserves the raw entries as
+    # `addressed_to_refs` and int-coerces `addressed_to`, so a NAME here is
+    # how an unregistered background presence is addressed.
+    flow = {"addressed_to": list(addressed_to)}
+    return _pp("director_interpret", {
+        "kind": "mixed", "sequence": [dict(e) for e in sequence],
+        "speech_volume": "whisper", "flow": flow,
+    })
+
+
+def _sp(out):
+    return next(e for e in out["sequence"] if e["type"] == "speech")
+
+
+def test_a_whisper_is_not_concealed_from_the_person_it_is_whispered_to():
+    out = _interpret(
+        [{"type": "speech", "text": "get us a room", "volume": "whisper",
+          "visibility": "concealed", "conceal_from": [58]}],
+        addressed_to=[58],
+    )
+    speech = _sp(out)
+    # Emptied, so the concealment goes with it: an empty conceal_from means
+    # hidden from EVERYONE, which is the worse half of the same bug.
+    assert speech["conceal_from"] == []
+    assert speech["visibility"] == "overt"
+    assert speech["volume"] == "whisper"      # audibility is still a whisper's
+    assert out["concealment_repairs"], "the repair must be reported, not silent"
+
+
+def test_the_rest_of_the_excluded_audience_survives():
+    out = _interpret(
+        [{"type": "speech", "text": "secret", "volume": "whisper",
+          "visibility": "concealed", "conceal_from": [58, 12, "the clerk"]}],
+        addressed_to=[58],
+    )
+    speech = _sp(out)
+    assert speech["visibility"] == "concealed"
+    assert speech["conceal_from"] == [12, "the clerk"]
+
+
+def test_an_addressee_named_rather_than_numbered_is_also_subtracted():
+    # addressed_to_refs is where an unregistered background presence lives,
+    # and conceal_from is written in whichever spelling the model reached for.
+    out = _interpret(
+        [{"type": "speech", "text": "psst", "volume": "whisper",
+          "visibility": "concealed", "conceal_from": ["The Doctor"]}],
+        addressed_to=["The Doctor"],
+    )
+    assert _sp(out)["visibility"] == "overt"
+
+
+def test_a_concealed_act_toward_the_addressee_is_left_alone():
+    # The legitimate shape, and the reason this guard is speech-only: you can
+    # absolutely pick the pocket of the person you are talking to. Corpus turn
+    # 342 is exactly this and must not be touched.
+    out = _interpret(
+        [{"type": "speech", "text": "lovely evening", "volume": "normal"},
+         {"type": "action", "attempt": "lift his wallet",
+          "visibility": "concealed", "conceal_from": [58], "targets": ["him"]}],
+        addressed_to=[58],
+    )
+    act = next(e for e in out["sequence"] if e["type"] == "action")
+    assert act["visibility"] == "concealed"
+    assert act["conceal_from"] == [58]
+    assert not out.get("concealment_repairs")
+
+
+def test_a_line_concealed_from_a_third_party_is_untouched():
+    out = _interpret(
+        [{"type": "speech", "text": "secret", "volume": "whisper",
+          "visibility": "concealed", "conceal_from": [12]}],
+        addressed_to=[58],
+    )
+    speech = _sp(out)
+    assert speech["visibility"] == "concealed"
+    assert speech["conceal_from"] == [12]
+    assert not out.get("concealment_repairs")
+
+
+def test_hidden_from_everyone_stays_hidden_from_everyone():
+    # An empty conceal_from is a real declaration, not an omission, and the
+    # repair must not read it as one.
+    out = _interpret(
+        [{"type": "speech", "text": "under his breath", "volume": "whisper",
+          "visibility": "concealed", "conceal_from": []}],
+        addressed_to=[58],
+    )
+    speech = _sp(out)
+    assert speech["visibility"] == "concealed"
+    assert speech["conceal_from"] == []
