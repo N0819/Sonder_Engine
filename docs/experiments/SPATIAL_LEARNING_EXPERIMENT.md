@@ -4,7 +4,7 @@ An experiment run against the live engine to answer a question raised by
 observed NPC backtracking: **does a character accumulate usable spatial
 knowledge across repeated attempts, or does it re-derive everything each time?**
 
-Harness: [`tools/maze_experiment.py`](../tools/maze_experiment.py). Reproduce
+Harness: [`tools/maze_experiment.py`](../../tools/maze_experiment.py). Reproduce
 with `--agent random` (free) or `--agent llm --preset fast --go` (spends
 tokens).
 
@@ -98,7 +98,7 @@ build regressed — but it is not evidence it improved either, and the drift
 result is what this arm actually establishes.
 
 Move-by-move traces of all five sight-arm runs, with the maze drawn and each
-move annotated, are in [`docs/MAZE_RUNS.md`](MAZE_RUNS.md) — regenerate with
+move annotated, are in [`docs/experiments/MAZE_RUNS.md`](MAZE_RUNS.md) — regenerate with
 `python tools/render_maze_runs.py <runs.jsonl>`.
 
 ### 2.1 Retention is real

@@ -171,7 +171,7 @@ $("#b-dlg").onclick = async () => {
   const stopQ = el("input", { type: "checkbox", ...(c.stop_on_question_to_player ? { checked: "" } : {}) });
   const silence = el("input", { type: "checkbox", ...(c.silence_ends_exchange ? { checked: "" } : {}) });
 
-  // Background life (docs/BACKGROUND_LIFE_DESIGN.md). Sits here rather than in
+  // Background life (docs/design/BACKGROUND_LIFE_DESIGN.md). Sits here rather than in
   // Genre & style because these are simulation dials -- who gets to speak --
   // the same family as NPC-to-NPC dialogue above. The style guide still owns
   // how invented extras SOUND.
@@ -191,7 +191,7 @@ $("#b-dlg").onclick = async () => {
   // all and nothing on screen to say it might.
   const promoteAfter = el("input", { type: "number", min: "0", max: "99",
                                      value: c.promote_after_addressed ?? 0 });
-  // Off-screen life (docs/OFFSCREEN_LIFE_DESIGN.md). The rungs come from the
+  // Off-screen life (docs/design/OFFSCREEN_LIFE_DESIGN.md). The rungs come from the
   // server rather than being listed here, so the menu cannot drift from the
   // ladder the engine actually implements.
   const offLife = el("select", {}, (c.offscreen_life_levels || []).map(
@@ -202,7 +202,7 @@ $("#b-dlg").onclick = async () => {
   // menu spells out what each one means rather than relying on the word.
   const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
                                      value: c.max_offscreen_actors ?? 3 });
-  // Living world mechanisms (docs/DESIGN_LIVING_WORLD.md), same convention —
+  // Living world mechanisms (docs/design/DESIGN_LIVING_WORLD.md), same convention —
   // and the clamp shown is the engine's own: each depth's `requires` rung
   // arrives computed, and refreshLw mirrors living_world.effective_depth
   // (the highest depth at or below the request that is built AND within

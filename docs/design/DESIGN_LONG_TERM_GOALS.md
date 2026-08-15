@@ -11,7 +11,7 @@ bullet): `affect.goal_slot_currency`,
 `agents/character._annotate_goal_currency`, tests in
 `tests/test_goal_currency.py`. Boundary review is prompt-normative in v1,
 not engine-gated — see below. Measurements that motivated it:
-[`MAZE_ARMS.md`](MAZE_ARMS.md) A11–A13 for the raw observations and
+[`MAZE_ARMS.md`](../experiments/MAZE_ARMS.md) A11–A13 for the raw observations and
 [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md) for
 the prior art this revives.
 

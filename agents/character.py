@@ -2909,7 +2909,7 @@ def character_step(ctx, cid, nonce):
         if _fresh:
             _self["project_review"] = {
                 "why": str(_preview.get("why") or "")}
-    # Place purpose, the recall half (docs/DESIGN_PLACE_PURPOSE.md): a felt
+    # Place purpose, the recall half (docs/design/DESIGN_PLACE_PURPOSE.md): a felt
     # need remembers the option. Triggered only by this character's OWN felt
     # vitals at the pressing tier, drawn only from their OWN place-graph
     # ledger plus name-derived expectation, routed only over their own

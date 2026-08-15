@@ -19,7 +19,7 @@ goal, optimal, the models, the commit, the exact argv, and — since A11 — the
 maze's own `edges` plus a `maze` fingerprint. Render its document with:
 
 ```bash
-python tools/render_maze_runs.py <runs.jsonl> -o docs/maze/A9-9x9-trinity.md
+python tools/render_maze_runs.py <runs.jsonl> -o docs/experiments/maze/A9-9x9-trinity.md
 ```
 
 **One document per arm, named for the arm, never a shared filename.** An arm's
@@ -180,7 +180,7 @@ varies, and two samples taken an hour apart are not an experiment.
 | **A12** | **7×7 authored** | A11's question again, on settled code | `94637dd`+ | **done** — the clean arm; see below |
 | **A13** | **7×7 authored** | a second subject, and cross-affordance interaction | post-A12 | **done** — the richest arm for psychology; see below |
 | **A15** | **7×7 authored** | project tier under boundary review | post-A13 | **done** — run 5 measured prompt-normative boundary review NOT holding, which is why v2 is engine-gated |
-| **A14** | **7×7 authored** | one configuration end to end, no mid-arm fixes | — | **not run** — the only thing missing from this table ([`UNBUILT.md`](UNBUILT.md) §7) |
+| **A14** | **7×7 authored** | one configuration end to end, no mid-arm fixes | — | **not run** — the only thing missing from this table ([`UNBUILT.md`](../UNBUILT.md) §7) |
 
 ### A6 / A7 — the bearings pair
 
@@ -257,7 +257,7 @@ sample.
 ### A11 — the authored 7×7
 
 The first arm on a maze chosen rather than generated:
-[`tools/mazes/maze7x7-a11.svg`](../tools/mazes/maze7x7-a11.svg), entrance at
+[`tools/mazes/maze7x7-a11.svg`](../../tools/mazes/maze7x7-a11.svg), entrance at
 the top of column 3, exit at the bottom of the same column.
 
 ```
@@ -310,7 +310,7 @@ one later reads its five runs as a series:
 | run 1, beat 20 | characters get an egocentric heading (`22bbef8`) | the Director was moving him backward and narrating it as the direction he asked for |
 | run 1, beat 40 | `max_output_tokens` reaches the caller (`c976385`) | beats were dying on truncated JSON at exactly 16000 tokens |
 | run 2, beat ~2 | Director gets compass bearings (`94637dd`) | one movement event in seven still named a bearing the rooms contradicted |
-| run 2, beat ~25 | running: multiple rooms per beat ([`DESIGN_RUNNING.md`](DESIGN_RUNNING.md)) | a courier whose craft is speed could only ever walk |
+| run 2, beat ~25 | running: multiple rooms per beat ([`DESIGN_RUNNING.md`](../design/DESIGN_RUNNING.md)) | a courier whose craft is speed could only ever walk |
 | run 3, beat 29 | `unentered` splits from `closed` | the shrine is a cul-de-sac, so the affordance layer argued against the destination for being a destination — it was never entered in any run |
 
 A11 also produced two findings that are about the ARM rather than the engine,
@@ -321,7 +321,7 @@ exactly one room and `winded` never fired anywhere — the maze is a perfect
 maze whose corridor cells are mostly bends, and the first version of the rule
 stopped a run at a bend. So for the whole of A11 the capability existed and had
 almost nothing to act on. The rule is now bounded by decision rather than
-sight; see [`DESIGN_RUNNING.md`](DESIGN_RUNNING.md) §3.
+sight; see [`DESIGN_RUNNING.md`](../design/DESIGN_RUNNING.md) §3.
 
 **His goals decayed while the bug was live.** By run 3 `ia1` ("reach the shrine
 as fast as possible") was **abandoned** and `ia3` ("beat your own best time")
@@ -421,7 +421,7 @@ east through Chamber 0204,"* resolved `r0203 → r0205`, two rooms in one beat �
 and `r0204` was recorded `basis: walked`, a room he never stopped in, via
 `passable_path`. Without that reconstruction the corridor he ran would have
 stayed a hole in his map exactly where his feet went
-([`DESIGN_RUNNING.md`](DESIGN_RUNNING.md) §4).
+([`DESIGN_RUNNING.md`](../design/DESIGN_RUNNING.md) §4).
 
 **Open, and not a navigation problem.** Removing *"never breaking stride"* from
 his sheet did not remove it from him: it survives in 69 of his 222 memories and

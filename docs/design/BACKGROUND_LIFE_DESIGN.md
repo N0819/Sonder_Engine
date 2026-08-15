@@ -10,7 +10,7 @@ What is **not** built: the whole digest lifecycle (§3.5), promotion conversion
 and the `ambient_turns` guard (§3.6 — an active defect, not just backlog),
 interim filler (§3.9), `canon_ref` (§3.8.1), the separation eval (§3.3.1), the
 narrator dilution clause (§5), and both §4 follow-ons. Those are registered in
-[`UNBUILT.md`](UNBUILT.md) §6.1; this document keeps the argument for them.
+[`UNBUILT.md`](../UNBUILT.md) §6.1; this document keeps the argument for them.
 
 Read the section text below as the original proposal — it was written before any
 of this existed, and its "not implemented" framing is preserved deliberately

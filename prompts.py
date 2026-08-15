@@ -552,6 +552,34 @@ _RESOLVE_PRELUDE_B4 = (
 # the merged diff carries transit state the gate did not predict.
 RESOLVE_PROSE_TRANSIT = TRANSIT_NOTE + "\n\n"
 
+# Gate (prose author): `travel_in_flight` in the payload -- exact presence,
+# not a prediction. Empty on the great majority of beats, so this block is
+# absent on them.
+RESOLVE_PROSE_TRAVEL = (
+ "TRAVEL ALREADY UNDER WAY: travel_in_flight lists people who declared a walk "
+ "on an earlier beat and have not arrived. THEY ARE STILL WALKING. A beat "
+ "spent talking, arguing or embracing is a beat spent doing that WHILE ON "
+ "THE WAY -- nobody has to re-announce a journey to still be making it, and "
+ "the engine no longer reads silence as stopping.\n"
+ "Each entry names where they are going and `reaches_this_beat`: the room "
+ "this beat puts them in. NARRATE REACHING IT. The scenery changes around "
+ "them as they talk -- the forecourt gives way to the doors, the doors to "
+ "the lobby -- and your prose is where that happens; the position is "
+ "committed from this list, so prose that leaves them standing where they "
+ "were contradicts what commits. An entry with `still_crossing` is on a long "
+ "stretch and is not there yet: show the ground going by, not an arrival. "
+ "`final_leg` means this beat they get where they were going.\n"
+ "ONE EXCEPTION, and it is yours to judge: if what happens in this beat "
+ "actually STOPS them, say so in travel_interrupted [{subject, reason}] and "
+ "leave them where they are. Something physically blocks or seizes them, "
+ "they turn back, they abandon the errand, the reason for going evaporates, "
+ "they are needed here and now. Being interested in a conversation is NOT an "
+ "interruption; people walk and talk. Do not use it to keep a scene in one "
+ "room -- a walk that is stopped is stopped for a reason a reader would "
+ "accept, and picking the journey up again costs the player a fresh "
+ "declaration.\n\n"
+)
+
 # Gate (prose author): the mapping_scene_proposal payload itself — exact
 # absence, not a prediction.
 RESOLVE_PROSE_PROPOSAL = (
@@ -2165,6 +2193,7 @@ PROSE_AUTHOR_SHEET = (
     ("comm", RESOLVE_PROSE_COMM),
     (None, _RESOLVE_PRELUDE_B4),
     ("transit", RESOLVE_PROSE_TRANSIT),
+    ("travel", RESOLVE_PROSE_TRAVEL),
     ("mapping_proposal", RESOLVE_PROSE_PROPOSAL),
     (None, _RESOLVE_DELEGATION_CORE),
     ("hearsay", RESOLVE_PROSE_HEARSAY),

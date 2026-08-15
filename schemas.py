@@ -1669,7 +1669,7 @@ class BackgroundReactOutput(LenientModel):
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
     commit-side append is a ROUTING operation rather than an authoring one
-    (docs/BACKGROUND_LIFE_DESIGN.md §3.11)."""
+    (docs/design/BACKGROUND_LIFE_DESIGN.md §3.11)."""
     name: str
     speech: Optional[DialogueLogEntry] = None
     action: str = ""
@@ -2069,6 +2069,27 @@ class DirectorResolve(LenientModel):
     # verdict:'confirmed'|'contested'|'false', landing}. Audited
     # deterministically in agents/director.py (_audit_fact_adjudications).
     fact_adjudications: list[dict] = Field(default_factory=list)
+    # A walk somebody declared once and this beat did not mention CONTINUES
+    # (agents/director._travel_continues) -- people talk while they walk, and
+    # making travel survive only by being re-declared every beat is the
+    # sentence nobody wants to keep writing. So an interruption is the thing
+    # that has to be asserted, and this is where the Director asserts it:
+    # {subject, reason}. "Did what just happened stop you walking" is
+    # objective causality and needs the whole beat to answer, which makes it
+    # exactly this stage's call -- and a structured field rather than a prose
+    # inference, because prose matching is the boundary this engine exists to
+    # stay on the right side of. A deterministic floor (no passable route,
+    # carried, already there, restrained) holds a walk regardless of what is
+    # said here; this field can only ever STOP a walk, never start one.
+    travel_interrupted: list[dict] = Field(default_factory=list)
+    # ENGINE-AUTHORED, never written by the model: what the continuation
+    # actually did this beat ({advanced, arrived, interrupted, held}).
+    # commit.py reads it to retire or keep each standing approach record, so
+    # the ledger and the position cannot disagree about who is still under
+    # way. Declared for the same reason `following_ops` is -- LenientModel
+    # drops undeclared keys on the round trip, and this has to survive into
+    # the persisted variant the pipeline drawer and a resume read back.
+    travel: dict[str, Any] = Field(default_factory=dict)
     # ENGINE-AUTHORED, never written by the model (same contract as
     # `following_ops` above). Background presences whose Director-written line
     # was removed so the background stage can voice them properly; read by
@@ -3038,7 +3059,7 @@ class MappingStageOutput(LenientModel):
     npc_suggestions: list[dict] = Field(default_factory=list)
     notes: str = ""
 
-# ---- Greeting interpretation (ingest-time, per docs/GREETING_IMPORT_DESIGN.md) ----
+# ---- Greeting interpretation (ingest-time, per docs/design/GREETING_IMPORT_DESIGN.md) ----
 
 class GreetingKnowledgeSeed(LenientModel):
     content: str = ""

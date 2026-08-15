@@ -219,7 +219,7 @@ def background_react(ctx, nonce):
         cfg = {}
     level = str(cfg.get("scene_life") or "off").strip().casefold()
     if level in ("ambient", "full"):
-        # Scene-manager path (docs/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12). It
+        # Scene-manager path (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12). It
         # returns the SAME _result() shape as the per-presence path, so every
         # downstream merge (perception.py, narration.py, commit.py's
         # _background_fired_reactions) works unchanged.
@@ -265,7 +265,7 @@ def background_react(ctx, nonce):
 
 
 # ---------------------------------------------------------------------------
-# Scene manager (docs/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12)
+# Scene manager (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12)
 # ---------------------------------------------------------------------------
 
 def _place_block(ctx, room_id):

@@ -16,10 +16,10 @@ authority.
 - Spend by dramatic density. Long stories and large casts must be cheap while
   nothing relevant is happening.
 
-Normative proposal: [`PROPOSAL_ARCHITECTURAL_COMPLETION.md`](PROPOSAL_ARCHITECTURAL_COMPLETION.md).
-Detailed off-screen rationale: [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md).
-Living-world frontier: [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md).
-Crowd substrate: [`PROPOSAL_CROWDS.md`](PROPOSAL_CROWDS.md).
+Normative proposal: [`PROPOSAL_ARCHITECTURAL_COMPLETION.md`](../design/OFFSCREEN_WORLD_ARCHITECTURE.md).
+Detailed off-screen rationale: [`OFFSCREEN_LIFE_DESIGN.md`](../design/OFFSCREEN_LIFE_DESIGN.md).
+Living-world frontier: [`DESIGN_LIVING_WORLD.md`](../design/DESIGN_LIVING_WORLD.md).
+Crowd substrate: [`PROPOSAL_CROWDS.md`](../design/DESIGN_CROWDS.md).
 
 ## Current status at start of this build
 
@@ -99,7 +99,7 @@ handoff boundary before the paid full-agent producer; do not infer that steps
 - Off-screen output is state, never narrator prose.
 - Unknown configuration falls to the documented safe/default behavior.
 - All new persistent keys are covered by checkpoint, archive/import, branch,
-  and deletion tests per `docs/DATABASE.md`.
+  and deletion tests per `docs/guides/DATABASE.md`.
 - `world_events` is the one objective happened-event spine; do not add an
   ad-hoc competing log. New columns/readers must keep its checkpoint,
   archive/import, branch-remap, cleanup, and cross-install fidelity tests whole.
@@ -115,7 +115,7 @@ handoff boundary before the paid full-agent producer; do not infer that steps
 - Re-contact: `gaps.py`, mapping/Director payload seams
 - Persistence: `db.py`, `checkpoints.py`, `chat_archive.py`
 - Measurement: `tools/fire_rates.py`
-- Maintained docs: `Design.md`, `docs/PIPELINE.md`, `docs/DATABASE.md`,
+- Maintained docs: `Design.md`, `docs/guides/PIPELINE.md`, `docs/guides/DATABASE.md`,
   `docs/UNBUILT.md`, generated `docs/CODE_MAP.md`, `CHANGELOG.md`
 
 Run the narrow off-screen/living-world tests first, then `make map`,

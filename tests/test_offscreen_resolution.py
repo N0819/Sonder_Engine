@@ -1,6 +1,6 @@
 """The two axes, the seeded draw, and the out-of-band producer.
 
-Steps 3, 3a and 4 of docs/PROPOSAL_2026-08-06.md section 1.2, plus the
+Steps 3, 3a and 4 of docs/archive/PROPOSAL_2026-08-06.md section 1.2, plus the
 section 1.0.2 producer. Every test names what broke or what it prevents;
 the recurring theme is the proposal's own: resolution decides SPEND, so it
 must be trivially testable, and a rung that claims to be seeded must

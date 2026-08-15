@@ -1,6 +1,6 @@
 """Canon provenance -- the provisional tier.
 
-0a of ``docs/PROPOSAL_2026-08-06.md`` section 6, with section 3.4 as the source
+0a of ``docs/archive/PROPOSAL_2026-08-06.md`` section 6, with section 3.4 as the source
 of the disposition vocabulary and section 1.0.3 as the source of the rules
 enforced here.
 
@@ -12,7 +12,7 @@ gives that output its own tier and refuses, on the write path, to let it look
 like anything else.
 
 WHAT THIS IS NOT. It does not promote. Promotion is the Director's, per
-section 7 of ``docs/PROPOSAL_2026-08-06_AMENDMENTS.md``; the seam is named in
+section 7 of ``docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md``; the seam is named in
 ``promote`` below and is deliberately unimplemented here so the tier can land
 and be tested without touching the Director seam.
 
@@ -341,7 +341,7 @@ def promote(record: Mapping[str, Any], disposition: str, *, adjudicator: str) ->
     """NOT IMPLEMENTED, and deliberately so. This is the named seam.
 
     Promotion out of the provisional tier belongs to the Director, per section 7
-    of ``docs/PROPOSAL_2026-08-06_AMENDMENTS.md``. Most of the path is described
+    of ``docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md``. Most of the path is described
     there as already existing: the Director names a claim in
     ``state_diff.ratified_claims``, ``commit`` hands that list to
     ``background_claims.settle_claims``, and ``settle_claims`` sets a status
@@ -356,5 +356,5 @@ def promote(record: Mapping[str, Any], disposition: str, *, adjudicator: str) ->
     raise NotImplementedError(
         "promotion out of the provisional tier is the Director's; the seam is "
         "state_diff.ratified_claims -> settle_claims, and the write into canon does not "
-        "exist yet. See docs/PROPOSAL_2026-08-06_AMENDMENTS.md section 7."
+        "exist yet. See docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md section 7."
     )

@@ -226,7 +226,7 @@ things that reading stops short of, both of which is why nothing was changed —
 a cache hit is not necessarily a speed win (one model went 33.1s → 4.0s, another
 5.3s → 34.6s), and there is no universal layout (`kimi-k2.5` wants `relocated`,
 `k2.6` wants `split`). Full record and the decision procedure in
-[`../UNBUILT.md`](../UNBUILT.md) § 1.25.
+[`../UNBUILT.md`](../../UNBUILT.md) § 1.25.
 
 The probe also nearly produced a false negative: its first run was against a
 model that caches nothing at all (0 of 188 live calls), which reads exactly like

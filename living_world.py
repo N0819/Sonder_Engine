@@ -5,7 +5,7 @@ carrier envelopes live in ``carriers.py``; E's reactive executor lives in
 ``offscreen.py``. This module owns the shared config, B's fuse mint, and D's
 obligation ledger.
 
-``docs/DESIGN_LIVING_WORLD.md`` is the argument; §9 there records the
+``docs/design/DESIGN_LIVING_WORLD.md`` is the argument; §9 there records the
 author's constraints verbatim. The floors landed here are deterministic,
 seeded where they draw, and free at rest — every model-assisted ceiling is
 declared in the ladder below and deliberately unbuilt, exactly as
@@ -68,7 +68,7 @@ from mechanics import stable_event_key
 #: second mechanism (design doc, preamble to §1).
 LIVING_WORLD_DEPTHS = ("off", "floor", "ceiling")
 
-#: The five approaches of ``docs/DESIGN_LIVING_WORLD.md`` §1–§5, in its
+#: The five approaches of ``docs/design/DESIGN_LIVING_WORLD.md`` §1–§5, in its
 #: order. The keys are the design document's own names so the setting, the
 #: document and the report of what fired can never be three vocabularies.
 LIVING_WORLD_APPROACHES = (
