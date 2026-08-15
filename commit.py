@@ -5879,7 +5879,31 @@ def prepare_memory_commit(ctx, *, scene=None):
         char_room = _room_of(sc, cname)
         room_data = (sc.get("rooms") or {}).get(char_room, {})
         room_name = room_data.get("name") or char_room or ""
-        own_result = ctx.character_results.get(ccid) or {}
+        # BOTH LOOPS, MERGED. The interaction loop merges its rounds into
+        # `ctx.character_results`; the reaction loop writes to
+        # `ctx.reaction_results` and nothing here ever read it, so everything
+        # a REACTING mind worked out was dropped -- silently, because the
+        # appliers below were handed empty lists and had nothing to warn
+        # about.
+        #
+        # Measured across the 82 stored reaction beats in the corpus: every
+        # single one carried interior content that never committed -- 159
+        # mind_model_updates, 93 relationship_updates, 20 belief_updates, 18
+        # remember_lines, 12 association_updates, and the only three project
+        # adoptions the engine has ever produced (chats 70/71/72, one beat
+        # across three branches: the Doctor committing to reach a shrine).
+        # A reaction is the beat with the most immediate pressure on a
+        # character, and they were forming theories about people and marking
+        # things worth remembering into nothing.
+        #
+        # MERGED rather than chosen between, because a character can both
+        # react and act in one beat, and the same union `_merge_character_
+        # results` already performs across micro-rounds is the right one
+        # here: accumulating lists combine, latest scalar state wins.
+        from agents.common import _merge_character_results
+        own_result = _merge_character_results(
+            ctx.reaction_results.get(ccid),
+            ctx.character_results.get(ccid)) or {}
         own_result = _normalize_character_output(own_result)
         # Place claims are re-keyed onto their place ONCE, up here, before
         # ANYTHING reads mind_model_updates. The inference memory minted for a

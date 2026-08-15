@@ -10,7 +10,7 @@
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 925 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3386 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 6156 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 6161 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `spatial` |
 | `agents/director.py` | 7759 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1145 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7666 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7690 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1675 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -118,14 +118,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1796 | 193 lines |
-| `_scrub_invented_dialogue()` | 4788 | 145 lines |
-| `_check_narrator_fidelity()` | 5790 | 125 lines |
-| `_extract_authority_claims()` | 1326 | 106 lines |
-| `_perceptible_entities()` | 904 | 98 lines |
-| `_check_presence_knowledge_channel()` | 3366 | 95 lines |
-| `region_visibility()` | 581 | 92 lines |
-| `observer_body_regions()` | 675 | 92 lines |
+| `norm_sequence()` | 1801 | 193 lines |
+| `_scrub_invented_dialogue()` | 4793 | 145 lines |
+| `_check_narrator_fidelity()` | 5795 | 125 lines |
+| `_extract_authority_claims()` | 1331 | 106 lines |
+| `_perceptible_entities()` | 909 | 98 lines |
+| `_check_presence_knowledge_channel()` | 3371 | 95 lines |
+| `region_visibility()` | 586 | 92 lines |
+| `observer_body_regions()` | 680 | 92 lines |
 
 ### `agents/composer.py`
 
@@ -400,12 +400,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5790 | 1215 lines |
+| `prepare_memory_commit()` | 5790 | 1239 lines |
 | `prepare_scene_commit()` | 2266 | 452 lines |
 | `commit_world_entities()` | 3216 | 287 lines |
 | `track_background_presences()` | 4020 | 276 lines |
 | `apply_attire_diff()` | 1971 | 253 lines |
-| `_commit_all_locked()` | 7413 | 195 lines |
+| `_commit_all_locked()` | 7437 | 195 lines |
 | `commit_transit_sweep()` | 2767 | 169 lines |
 | `pick_background_reactors()` | 4439 | 160 lines |
 

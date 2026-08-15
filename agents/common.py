@@ -352,6 +352,11 @@ def _merge_character_results(existing, new):
         "stance_updates",
         "inference_updates",
         "intent_ops",
+        # A project adopted in round 0 and not restated in round 1 was
+        # dropped here, which is the reaction-loop drop in miniature and
+        # inside a single loop. Projects are removed only by being satisfied
+        # or disputed -- never by a later round forgetting to mention one.
+        "project_ops",
         "belief_updates",
         "association_updates",
         "present_evidence_used",
