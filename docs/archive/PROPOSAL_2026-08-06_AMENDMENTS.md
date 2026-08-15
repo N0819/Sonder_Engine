@@ -1,5 +1,9 @@
 # Amendments to PROPOSAL_2026-08-06 — as of 2026-08-08
 
+> **ARCHIVED.** The delta half of a matched pair; it cannot be read alone.
+> Read beside [`PROPOSAL_2026-08-06.md`](PROPOSAL_2026-08-06.md). Live status
+> is [`../UNBUILT.md`](../UNBUILT.md).
+
 What changed after the proposal was written, and why. Everything here came out
 of measurement or a decision, not revision for its own sake; the proposal
 itself is left as written so the two can be read against each other.

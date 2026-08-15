@@ -181,7 +181,7 @@ class TestACrowdIsVisibleWithoutCostingASlot:
 # --- fixtures: the rule that separates them from emergences ------------------
 
 class TestAFixtureMayBeReMet:
-    """PROPOSAL_CROWDS.md §3a: "a fixture may be re-met; an emergence may not."
+    """docs/design/DESIGN_CROWDS.md §3a: "a fixture may be re-met; an emergence may not."
 
     `station_room` already existed and was used only to gate what a presence
     PERCEIVES. Nothing re-offered one when the player walked back into their

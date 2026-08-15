@@ -23,10 +23,14 @@ make map
 make structure
 ```
 
-`AGENTS.md`, `docs/guides/PIPELINE.md`, `docs/guides/DATABASE.md`, `docs/guides/TESTING.md`, and
-`Design.md` are the maintained guidance set. Dated audits and `*_DESIGN.md`
-files are scoped records or proposals, not implementation authority; check
-their claims against source and the maintained guides before acting on them.
+`AGENTS.md`, `Design.md` and everything in `docs/guides/` are the maintained
+guidance set — current implementation authority, changed in the same commit as
+the behaviour. `docs/design/`, `docs/experiments/` and `docs/archive/` are
+context rather than authority: a design note argues for one subsystem, an
+experiment record reports one unrepeatable run, and an archived document has
+been superseded. Check any of their claims against source and the maintained
+guides before acting on them. [`docs/README.md`](docs/README.md) is the index
+and says which is which.
 
 ## Edit routing
 

@@ -515,6 +515,11 @@ project sits at intention weight until it has been served.
 
 ## 8. Memory and belief
 
+This is the summary. [`MEMORY.md`](MEMORY.md) is the reference for the whole
+layer — minting, provenance, embeddings, RRF/MMR ranking, unbidden recall,
+belief revision, consolidation, and how to change the embedding model. Anything
+below that disagrees with it is this file being stale; fix it there first.
+
 **Minting.** Memories are written at commit from what the character legitimately
 had: observation, dialogue heard, inference drawn. Each carries `kind`,
 `category`, `salience` (how much it mattered when formed), `confidence` (how

@@ -4131,6 +4131,51 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             if room:
                 sk["station_room"] = str(room)
 
+    # A BODY THE BEAT PLACED IN A ROOM, named nowhere else.
+    #
+    # Live, chat 72 turn 47. The player had been ringing a hotel bell for
+    # four beats; the Director finally brought somebody, and he arrived in
+    # `cast_changes` ("young man", arrived) and `positions` ("Sleepy Hotel
+    # Clerk") and in nothing else. Neither is harvested above, so he became a
+    # name in the position ledger with no presence record, no perception
+    # object and no way to ever be picked to act. That story's tracked
+    # presences afterwards held exactly one thing, and it was a screwdriver.
+    #
+    # `positions` obeys this function's own rule -- a structured field commit
+    # already trusts, never NER over prose -- and is a stronger signal than
+    # most, being the ledger the engine PLACES BODIES with. Anything placed
+    # in a room is in the scene by construction.
+    #
+    # Keyed on the positions name rather than on `cast_changes.who`, because
+    # `who` is a description the model wrote ("young man") while the
+    # positions key is the identity every other system keys on. Turn 47
+    # carried both for one figure; tracking the description too would mint a
+    # second presence nothing could ever match to the first.
+    _diff_positions = (diff.get("positions") or {})
+    _entity_kinds = {
+        str((edef or {}).get("name") or "").strip().casefold():
+            str((edef or {}).get("kind") or "").strip().casefold()
+        for edef in list((diff.get("entities") or {}).values())
+                  + list((_scene_now.get("entities") or {}).values())
+        if isinstance(edef, dict)
+    }
+    for _placed in _diff_positions:
+        _name = str(_placed or "").strip()
+        if not _name or name_in_roster(_name, roster):
+            continue
+        if _name.casefold() in _ubiquitous:
+            continue
+        # The same kind rule the entity harvest applies: exclude the clearly
+        # inert, default to inclusion for everything else. A bare name with
+        # no entity def at all is agent-shaped by default, which is the trade
+        # already made above -- a mistracked object never reacts anyway,
+        # because the gate still requires it to be salient.
+        if _entity_kinds.get(_name.casefold()) in _INERT_ENTITY_KINDS:
+            continue
+        candidates.add(_name)
+        sk = sketches.setdefault(_name, {})
+        sk.setdefault("station_room", str(_diff_positions[_placed]))
+
     # The deterministic backstop (background_react) authored one or more lines
     # this beat for the gate-picked presence(s): persist each as a real
     # dialogue turn so the same figure accrues toward promotion and reads as

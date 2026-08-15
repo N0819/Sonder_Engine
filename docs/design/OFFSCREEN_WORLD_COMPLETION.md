@@ -72,7 +72,7 @@ fallible speaker.
 ### 2. Build crowds and persistent fixtures — **BUILT** (2026-08-10)
 
 All five steps are in the tree; see
-[`PROPOSAL_CROWDS.md`](DESIGN_CROWDS.md) §7a for what the building
+[`DESIGN_CROWDS.md`](DESIGN_CROWDS.md) §7a for what the building
 corrected in the design. `crowds.py` is pure; `StateDiff.crowd_ops` is how a
 Director says it; `commit.commit_crowds` is the persistence boundary;
 `agents.common.crowds_for_room` is the per-observer surface;
@@ -429,9 +429,15 @@ information, and motivated actors intersect.
 
 ## Related documents
 
-- [`PROPOSAL_ARCHITECTURAL_COMPLETION.md`](OFFSCREEN_WORLD_ARCHITECTURE.md)
-- [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md)
-- [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md)
-- [`PROPOSAL_CROWDS.md`](DESIGN_CROWDS.md)
-- [`AGENT_HANDOFF_ARCHITECTURE.md`](../archive/AGENT_HANDOFF_ARCHITECTURE.md)
-- [`UNBUILT.md`](../UNBUILT.md)
+- [`OFFSCREEN_WORLD_ARCHITECTURE.md`](OFFSCREEN_WORLD_ARCHITECTURE.md) — the
+  durable half of this pair: invariants, the seven parts, rejected shapes.
+- [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md) — characters not in the
+  room: the ladder, reactivation, villain ticks.
+- [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md) — extras in the room.
+- [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md) — the five routes A–E rated
+  on cheapness × fidelity.
+- [`DESIGN_CROWDS.md`](DESIGN_CROWDS.md) — crowd blobs. Built; §7a records what
+  the building changed.
+- [`UNBUILT.md`](../UNBUILT.md) — the register.
+- [`../archive/AGENT_HANDOFF_ARCHITECTURE.md`](../archive/AGENT_HANDOFF_ARCHITECTURE.md)
+  — archived session handoff, kept for its known-traps list.
