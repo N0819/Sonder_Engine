@@ -20,7 +20,8 @@ without them. Their reasoning is in git history and in `CHANGELOG.md`.
 
 **Partially re-verified 2026-07-31** against alpha 6.3. Entries confirmed still
 true against source this pass: §1.1, §1.3, §1.6, §1.11, §1.13, §2.3, §2.5,
-§2.14 (`fStrList`), §3.2 B1-residual. Entries **corrected** this pass: §1.13
+§3.2 B1-residual (§2.14's `fStrList` was confirmed then and has since been
+converted at eight of its ten sites). Entries **corrected** this pass: §1.13
 (the enum is real, but the validation seam the pipeline uses does not enforce
 it), and the present-beat citation entry, whose premise was stale — the ids it
 asked for already existed and already reached the payload; only the prompt
@@ -683,7 +684,11 @@ Not defects yet. Each is a measured shape that will become one silently.
   graph-bounded *views* rather than a second authority, which is right while both
   exist — but two representations of one fact is the shape that produced
   `rekey_place_claims` and `reconcile_inference_confidence`. **If a third
-  consumer appears, collapse them.**
+  consumer appears, collapse them** — and one has arrived to be judged:
+  `place_purpose.py` reads `state["place_graph"]` directly, for the `affords`
+  ledger rather than for routing. Whether an affordance reader counts is the
+  judgement this bullet exists to force; it is a second MODULE on the graph
+  either way, which is the condition, not the intent.
 - **The observation text repeats the view and cannot be trimmed away.** Each
   atom's `observed.text` is a span of the same scrubbed prose the character
   already has in `perception.view` — measured on chat 72, 737 B of atom text
@@ -1947,8 +1952,8 @@ per anomalous stage, and none of them is corpus size:
   turns, scene-scoped fields — nothing O(corpus)); the multiplier is the
   bounded rewrite ladder** (`_generate_narration` fidelity-correction and
   craft passes: up to 3 calls). Inference from code structure, not
-  measurement — the live per-call log lines died with the process (see
-  §1.34).
+  measurement — the live per-call log lines died with the process, before the
+  per-call ledger landed.
 
 **Nothing on the turn path scales with corpus.** Measured on the 2.1 GB
 copy: a full-corpus `memories_fts` MATCH is 2.3ms, the chat-scoped vector
@@ -1958,9 +1963,9 @@ lore/memory totals are red herrings for turn latency.
 
 **Why the harness is blind, and what answers it.** A fresh run of ≤10 turns
 (idx 0–9) can never reach the consolidation cadence, rarely trips wide
-specialist dispatch or a repair/rewrite retry, and — per §1.34 — nothing on
-the live path persists how long a stage took, so a slow live turn leaves
-only stage-total timestamps behind. `tools/stability_run.py` exists for
+specialist dispatch or a repair/rewrite retry, and, at the time this was
+measured, nothing on the live path persisted how long a stage took, so a slow
+live turn left only stage-total timestamps behind. `tools/stability_run.py` exists for
 exactly this: it drives real turns against the longest stories on a copy
 and parses per-role `llm_call` durations. Run it against long chats either
 side of any latency-relevant change.
@@ -1998,8 +2003,11 @@ side of any latency-relevant change.
   substance/pose manifest entries could never reach the scope backstop; and
   a repair delta's `stations` were silently dropped by
   `_merge_repair_into_diff`.
-- **The per-call ledger** (§1.34) is what turns the narrator question below
-  from an inference into a lookup.
+- **The per-call ledger** — `_engine_notes.llm_calls` on each saved variant,
+  `{step_key, role, requested, served, in, out, cached, duration, kind}` per
+  call, offered by `providers._log_usage` and attributed by contextvar so the
+  specialist fan-out and the parallel groups land on the right step — is what
+  turns the narrator question below from an inference into a lookup.
 
 **Correction (2026-08-12, live variants v26625/v26634/v26643, turn 2354):
 the "empty specialists" reading of these rerolls was wrong.** Two separate
@@ -2403,8 +2411,13 @@ all built (`Design.md`, "Clothing by body region"). What remains:
   still English word lists: a garment they do not know lands on the torso alone,
   which reads as "naked from the waist down" the moment it comes off. The
   coverage picker is the escape hatch — a garment whose coverage is set by hand
-  is never re-guessed — but nothing warns an author that a guess happened, so
-  the wrong span is only discovered when something undresses oddly. A garment
+  is never re-guessed — and the DETECTOR now exists too: `attire.span_is_a_guess`
+  and `guessed_spans` name every garment whose span came from a cue table rather
+  than from an author, with `placed` marking hand-set coverage so it is never
+  re-flagged. It is **unwired** — no production caller, only tests — and its own
+  docstring says where it belongs: the commit seam, handed to the Director. So
+  the wrong span is still only discovered when something undresses oddly, but
+  the remaining work is one call, not a mechanism. A garment
   that is only SOMETIMES full-length (a tunic, a sleeved vs. sleeveless shirt)
   is deliberately left single-region.
 - **`beneath` is authored per region, but the body's fallback is one string.**
@@ -2419,17 +2432,14 @@ all built (`Design.md`, "Clothing by body region"). What remains:
   as two features and `"vermillion, white, and gold"` as three. Found on a
   generated card, where it matters most: the generator writes prose entries,
   and the mangling happens the moment an author keeps them.
-  `embodiment.visible.distinctive_features` now uses `fLineList` (one per
-  line); the remaining `fStrList` callers were **enumerated exactly on
-  2026-07-31** (the earlier list over-named fields that had already moved) —
-  `static/js/editors.js` only, ten call sites: Aliases (two, at the character
-  and persona editors), Protected beliefs, Pride triggers, Shame triggers,
-  Recovery supports, Characteristic stress signs, Voice markers, Excluded
-  knowledge titles, Active concerns. Every one but Aliases is a clause by
-  nature, and the psychology ones are the fields `CLAUDE.md` warns fail
-  silently fifty beats later. Converting them is mechanical (`fLineList`
-  already exists and is already wired); it was left out of the change that
-  found it rather than sprawling.
+  **Eight of the ten call sites have since moved to `fLineList`** — Protected
+  beliefs, Pride triggers, Shame triggers, Recovery supports, Characteristic
+  stress signs, Voice markers, Excluded knowledge titles and Active concerns,
+  beside `embodiment.visible.distinctive_features` — leaving exactly the two
+  the entry always argued should stay: Aliases, at the character and persona
+  editors, which is the one field that is comma-natured by nature. `fStrList`
+  itself still splits on commas, so it remains a trap for any future caller
+  handed a clause; the fix if one appears is `fLineList`, not a smarter split.
 - **the reader has no view of it.** Regions exist in the card editor and in
   every prompt, but the story panel still shows the flat `wearing` list, so a
   reader cannot see that a robe is open, or that a shirt is stained, without
@@ -2910,12 +2920,17 @@ Materially improved — `_surface_translate_event` now fails closed, speaker
 attribution is structured, `_redact_concealed_from_event` is casefolded,
 word-anchored and pronoun-continuation-aware — but **not eliminated**.
 
-- **C1 — quoted spans are an identity smuggling channel.** Quotes are exempt
-  from the identity scrub by design, and the act pass has **no invented-dialogue
-  scrub at all** (only the outcome pass has one). At outcome, quotes with no
-  attribution cue are kept as environmental text, and the whitelist match is
-  `body == L or body in L or L in body` — so any short genuine line ("yes")
-  whitelists every fabricated quote containing it.
+- **C1 — quoted spans are an identity smuggling channel**, and the whitelist
+  that guards them is loose: `body == L or body in L or L in body`, so any
+  short genuine line ("yes") whitelists every fabricated quote containing it.
+  Quotes are exempt from the identity scrub by design. Both passes now run the
+  check — `_scrub_invented_dialogue` inside `_composer_tripwires`, reached from
+  `_composer_finish_observer`, so the act pass is no longer the blind one — but
+  it is **warn-only** in both, which is the right call and worth stating as
+  such: a composed view is realised from percepts, so dialogue in it that does
+  not match the delivered-line ground truth is an ENGINE defect, and scrubbing
+  it would hide the bug instead of the leak. The loose whitelist therefore
+  costs a missed WARNING now rather than a missed scrub.
 - **C2 — short and common-word names escape the identity floor.** Forms under
   three characters and single-token are never scrubbed. `_COMMON_WORD_NAMES` is a
   separate, exact-case mitigation, not a fix for this.
@@ -2930,17 +2945,23 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
 
 ### 3.2 Concealment gates not applied everywhere
 
-- **A8 — disguise `concealed_truth` still ships to everyone in the act pass.**
-  The outcome pass now scopes `subject_disguise` to the subject or a `known_to`
-  perceiver; `_act_payload` sets it unconditionally and never removes it.
-  `_disguise_leak_check` remains warn-only. *Latent.*
+- **A8 residual — `_disguise_leak_check` is warn-only.** The channel itself is
+  closed: `_act_payload` is gone with the model-authored views, `_composer_act`
+  is never handed `p_disguise`, and `concealed_truth` is minted only in
+  `_subject_disguise_context` and now reaches no payload in either pass. What
+  survives is the builder for the retired `action_onset` dict, which sets
+  `subject_disguise` and is read by nothing — dead code that reads like a live
+  leak, which is the reason to say so here rather than leave it to a grep.
 - **B4 residual — `_ensure_environment` does not check darkness** on the "is here
   with you" branch. Containment is now gated; light is not. *No dedicated test.*
 - **B5 residual — the micro-view append is still post-scrub**, running after the
   identity and invented-dialogue scrubs.
-- **C3 — stray view keys survive normalization.** `_normalise_views` writes
+- **C3 — stray view keys survive normalization**, and the exposure went with
+  the composer rewrite rather than being fixed. `_normalise_views` still writes
   through any unmatched key, so a view keyed by a non-awake character's name is
-  neither folded nor overwritten by the residue. *Plausible.*
+  neither folded nor overwritten by the residue — but it has no production
+  caller left; only `tests/test_pipeline_audit.py` reaches it. *Dead path, not
+  a live gate.*
 - **X3 — `conceal_from` without `visibility: "concealed"` bypasses the
   background declaration filter**, which consults `visibility` only. Every other
   guard in `agents/background.py` fail-closes on `conceal_from` independently,
@@ -2953,8 +2974,12 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
 
 ### 3.3 Sense and awareness gaps
 
-- **F4 residual — the micro-loop never reads the observer's authored sense
-  profile**, and action delivery there is boolean visual rather than graded.
+- **F4 residual — action delivery in the micro-loop is boolean visual rather
+  than graded.** The sense-profile half landed: `agents/loops.py` reads
+  `character_senses(observer_sheet)` and threads it into `_delivery_ok` and
+  `sense_adjusted`. Speech is graded there; an action is still a yes/no gate
+  followed by a whole sentence, so a half-seen act arrives entire or not at
+  all, where a half-heard line arrives as a fragment.
 - **F6 / S3-A5 residual — `spatial.spatial_digest` is still ungated** and
   renders every edge's authored room name, including rooms never visited. The
   perception payload was fixed (unseen edges keep their barrier, lose
@@ -2995,10 +3020,16 @@ All multiplayer-only, which is why they survived.
   `mapping_commit` with only vocabulary validation. **One mis-filed secret is
   instantly in every character's `world_knowledge`.**
 - **P7 — `known` introductions are validated by model judgment** over the
-  objective log: `validated_introductions` is applied with only roster resolution
-  and a frame gate, while the mapping model judges from `beat_dialogue_log` /
-  `beat_resolved_event` including concealed lines. Recognition never decays or
-  retracts. *Plausible.*
+  objective log: the mapping model judges from `beat_dialogue_log` /
+  `beat_resolved_event`, concealed lines included, and the engine takes its
+  verdict. The application gate is materially tighter than when this was
+  written — roster resolution, then a positive presence test on BOTH parties
+  (an introduction between two people who were both absent used to pass once
+  the roster admitted offscreen characters, trading a missed edge for an
+  invented one, which is worse because a wrong edge is indistinguishable from a
+  right one afterwards), then `is_recognized_in_frame`. What is untouched is
+  the judgement itself and the fact that **recognition never decays or
+  retracts**: there is no path that un-learns a face. *Plausible.*
 - **X24 — the legacy-archive raw-id fallback grafts interior state.**
   `chat_archive.py` resolves an archive integer against whatever local row holds
   that id, then attaches the archive's `chat_chars.state` to it. Memories are
@@ -3079,45 +3110,36 @@ staged-movement memory there is.
 From the erased 2026-07-19 audit. Its Gap 1 was conceptual, Gap 2 and Gap 7 are
 now largely closed, and Gap 4 is partial. These are what remain. Its Priority 3
 is done bar one item, and Priority 4 is done — the suite it measured at 527 tests
-now stands at 3,112.
-
-### 4.1 Gap 3 / Priority 0 — overlapping physical authorities
-
-Immediate state is split between the `world.scene` JSON document and the
-normalized world/entity tables. Both are useful, but *durable* is not the same as
-*authoritative*: when they disagree, downstream code can select different
-realities. `commit.py` already records a case where the two diverged and the
-divergence was judged the greater harm (§1.10).
-
-**Recommended direction: publish a field-level authority matrix**, then add
-assertions preventing two systems from independently owning one fact. Begin with
-positions, entity existence, room containment, time and conditions.
-
-- normalized tables — identity, containment, durable entity existence,
-  conditions, scheduled events;
-- scene projection — current render-oriented room graph, transient overlays,
-  attire presentation, cached adjacency;
-- lore — descriptive and historical canon, never immediate placement;
-- events — append-only causal ledger;
-- checkpoints — recovery snapshots, never a live authority.
-
-Eventually, generate the scene projection from normalized state plus presentation
-caches instead of maintaining two independently mutable world models.
-
-Verified absent: no authority matrix exists anywhere in the tree.
+now stands at 3,112. Gap 3 / Priority 0 (overlapping physical authorities) is
+gone too, and was settled the OPPOSITE way to the direction it recommended: it
+asked for the scene to be generated from the normalized tables, and
+consolidation made the frame-scoped `world.scene` blob the sole runtime
+authority with `world_entities` a derived projection and `world_placements`
+decommissioned. The matrix it said was "verified absent" is published in
+`docs/guides/DATABASE.md` and pinned by `tests/test_world_authority_consolidation.py`,
+whose `test_world_placements_have_no_runtime_writer` fails if the model forks
+again.
 
 ### 4.2 Gap 4 residual / Priority 1 — evidence-carrying perception
 
-**The headline item.** Mind models carry confidence and evidence text, but
-confidence can blend smoothly while resting on duplicated, circular or mutually
-dependent evidence. `EvidenceRef` carries an `event_id` and provenance is tracked
-per memory row, but `MindHypothesis.evidence` is still unverified free text, and
-there is no circular-report discounting.
+**The headline item, now half of it.** Mind models carry confidence and
+evidence, and confidence can still blend smoothly while resting on duplicated,
+circular or mutually dependent evidence.
 
-**Recommended direction: make evidence references first-class rows or stable
-event/signal IDs.** Track whether evidence was witnessed, reported, inferred, or
-copied from another belief, so revision can discount circular reports and
-preserve explicit competing hypotheses.
+The reference half landed: `MindHypothesis.evidence` is
+`list[EvidenceRef]` rather than free text, and `agents.character.ground_refs`
+holds `mind_model_updates`, `belief_updates` and `association_updates` to ids
+actually delivered to this mind — an update whose evidence does not resolve is
+DROPPED, not warned about, and derived summary prose is refused
+(`allow_summaries=False`) so a summary cannot launder itself into a durable
+belief.
+
+What is still missing is the DISCRIMINATOR. `EvidenceRef` carries `event_id`
+and `fact` and nothing that says whether the evidence was witnessed, reported,
+inferred, or copied from another belief — so two references can resolve
+perfectly and still be the same claim arriving twice. Without that, revision
+cannot discount a circular report or preserve competing hypotheses, and no
+`signal_id` exists anywhere in the tree.
 
 The same primitive is what §3.1 needs to stop matching on prose, and what
 `current:<perceiver>:<n>` already mints for the present beat. **Two of this
@@ -3131,18 +3153,28 @@ assertions, resolved objective events, imported canon, staged spatial
 necessities, character beliefs and narrator wording should not enter the same
 "proposed fact" pool. §3.5's P6 and P7 are this gap seen from the other side.
 
-**Recommended direction: assign every canon proposal a provenance and an allowed
-disposition:**
+**The tier itself has landed.** `canon_provenance.py` carries the seven
+dispositions verbatim — `imported_canon`, `resolved_fact`, `player_claim`,
+`spatial_generation`, `character_belief`, `narrator_audit`, `inferred_mapping`
+— under `PROVISIONAL`, with `outranks` claiming only that provisional sits
+below all seven and deliberately declining to rank them against each other,
+because nothing has measured that and inventing an order would be a decision
+taken by accident. Wired into `gaps.py`, `offscreen.py`, `subjects.py` and
+`living_world.py`; `tests/test_canon_provenance.py`.
 
-- `imported_canon` — update only through explicit edit/reinterpretation;
-- `resolved_fact` — may create or update objective canon;
-- `player_claim` — remains a claim unless Director Resolve accepts it;
-- `spatial_generation` — may establish only the minimum required geometry;
-- `character_belief` — belongs in memory/mind models, never objective lore;
-- `narrator_audit` — reject from canon;
-- `inferred_mapping` — provisional until corroborated.
+Two things remain, and they are the ones with teeth:
 
-Verified absent.
+- **Promotion out of the provisional tier is an explicit `NotImplementedError`
+  seam** (`canon_provenance.promote`). It belongs to the Director —
+  `state_diff.ratified_claims` → `background_claims.settle_claims`, which today
+  sets a status flag in the world-KV blob and writes nothing into canon. That
+  missing write is the whole of it, and it was left out so the tier could land
+  without touching the Director seam.
+- **The mapping path is not routed through it**, which is the privilege this
+  gap was opened about: mapping can still turn a proposal into durable lore
+  without a disposition. §3.5's P6 and P7 are the same gap seen from the read
+  side, and §1.30's warning applies — the read-side gate and the first real
+  producer must land together.
 
 ### 4.4 Gap 6 / Priority 2 — frame/global conflict control
 
