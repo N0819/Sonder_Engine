@@ -195,13 +195,24 @@ class TestAFixtureMayBeReMet:
     become a chorus.
     """
 
-    def test_the_at_post_signal_exists_and_is_room_scoped(self):
+    def test_the_at_post_signal_exists_and_is_scoped_by_earshot(self):
+        """It was scoped by `station_room == player_room` until an owner
+        named the consequence: "they should be able to respond from adjacent
+        rooms". Perception already modelled it -- `hear_level` is barrier-
+        and material-aware and `_beat_for_presence` runs exactly that check
+        -- so the engine was granting a clerk in the back office the hearing
+        and withholding the agency. The test is audibility now, at the
+        heard-in-full bar `_character_address_of` already sets, which keeps
+        a shut door silent."""
         import inspect
 
         import commit
         body = inspect.getsource(commit.pick_background_reactors)
         assert "at_post" in body
-        assert "station_room) == str(player_room" in body
+        assert "_at_post_within_earshot" in body
+        earshot = inspect.getsource(commit._at_post_within_earshot)
+        assert "hear_level" in earshot
+        assert '== "full"' in earshot
 
     def test_it_qualifies_a_presence_that_nothing_else_would(self):
         """The whole point: no address, no mention, no owed reply, no history
