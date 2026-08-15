@@ -1,5 +1,12 @@
 # Agent handoff — architectural completion and off-screen life
 
+> **ARCHIVED.** A session handoff for the off-screen build, kept for its
+> "Known traps" and edit map. Its required-order list is now entirely
+> `[built]`. Current status is in
+> [`../design/OFFSCREEN_WORLD_COMPLETION.md`](../design/OFFSCREEN_WORLD_COMPLETION.md);
+> the normative architecture is in
+> [`../design/OFFSCREEN_WORLD_ARCHITECTURE.md`](../design/OFFSCREEN_WORLD_ARCHITECTURE.md).
+
 This is the concise working map for the next coding agent. Read the linked
 maintained documents before editing; do not treat this handoff as runtime
 authority.
@@ -16,10 +23,10 @@ authority.
 - Spend by dramatic density. Long stories and large casts must be cheap while
   nothing relevant is happening.
 
-Normative proposal: [`PROPOSAL_ARCHITECTURAL_COMPLETION.md`](../design/OFFSCREEN_WORLD_ARCHITECTURE.md).
+Normative proposal: [`OFFSCREEN_WORLD_ARCHITECTURE.md`](../design/OFFSCREEN_WORLD_ARCHITECTURE.md).
 Detailed off-screen rationale: [`OFFSCREEN_LIFE_DESIGN.md`](../design/OFFSCREEN_LIFE_DESIGN.md).
 Living-world frontier: [`DESIGN_LIVING_WORLD.md`](../design/DESIGN_LIVING_WORLD.md).
-Crowd substrate: [`PROPOSAL_CROWDS.md`](../design/DESIGN_CROWDS.md).
+Crowd substrate: [`DESIGN_CROWDS.md`](../design/DESIGN_CROWDS.md).
 
 ## Current status at start of this build
 
