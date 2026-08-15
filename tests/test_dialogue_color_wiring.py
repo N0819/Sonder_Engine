@@ -229,9 +229,20 @@ class TestTheTintedUnitIsTheQuotedRegion:
         assert r"/[.,!?…;:]+$/" in block
 
     def test_nothing_reaches_an_html_parser(self):
-        """The prose is model output. createTextNode/createElement only."""
+        """The prose is model output. createTextNode/createElement only.
+
+        SCOPED TO THE WHOLE PAINTING PATH, not to `paintProse` alone. Text
+        emission moved out into `appendEmphasized` when inline markup landed,
+        and this guard -- which had named one function -- went green on a
+        `paintProse` that no longer created a single text node. A guard that
+        names a function stops covering the thing it protects the moment the
+        code is split, which is the failure mode this repository has now seen
+        often enough to expect.
+        """
         js = self._chat_js()
-        block = js[js.index("function paintProse("):]
-        block = block[:block.index("\n}")]
-        assert "innerHTML" not in block
+        block = js[js.index("function appendEmphasized("):]
+        block = block[:block.index("function proseEl(")]
         assert "createTextNode" in block
+        for parser_door in ("innerHTML", "outerHTML", "insertAdjacentHTML",
+                            "document.write", "DOMParser"):
+            assert parser_door not in block, parser_door

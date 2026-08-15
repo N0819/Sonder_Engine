@@ -2516,10 +2516,31 @@ def _fold_typography(text):
     return str(text or "").translate(_TYPOGRAPHY_FOLD)
 
 
+#: The closed set `schemas.canonicalize_prose_markup` may leave in prose. It
+#: is stripped for COMPARISON only -- the tags stay in the stored string,
+#: which is what the reader sees rendered.
+_PROSE_MARKUP_RE = re.compile(
+    r"</?(i|b|u|s|mark|sup|sub|code)>", re.I)
+
+
+def strip_prose_markup(text):
+    """Prose as the fidelity checks must read it: words, no marks.
+
+    The narrator emits inline emphasis unprompted -- a consequence of the
+    paragraph contract teaching it that this channel speaks HTML -- and a tag
+    landing INSIDE a quoted line breaks every check that looks for that line
+    by substring. `"I have <i>absolutely</i> got this,"` does not contain
+    `I have absolutely got this,`, so a correctly rendered line reads as a
+    DROPPED one, and the narrator is sent back to rewrite prose that was
+    already right.
+    """
+    return _PROSE_MARKUP_RE.sub("", str(text or ""))
+
+
 def _contains_quote(view, quote):
     body = _fold_typography(_quote_body(quote))
     normalized_view = re.sub(
-        r"\s+", " ", _fold_typography(view).casefold())
+        r"\s+", " ", _fold_typography(strip_prose_markup(view)).casefold())
     normalized_body = re.sub(r"\s+", " ", body.casefold()).rstrip(".,!?…;:")
     if not normalized_body:
         return False

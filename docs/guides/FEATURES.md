@@ -543,6 +543,15 @@ legitimately perceive, learn, remember or infer.
   full survey.
 - **Private voice setting** — A per-persona style instruction only the narrator
   sees.
+- **Emphasis, and ink the theme owns** — The narrator can italicise a thought
+  the prose voices rather than quotes, strike a correction, or turn a warning
+  light red. Colour is *named* — red, amber, green, blue, violet, grey — and
+  each theme supplies the actual ink, so nothing is invisible on parchment or
+  on black. **Colour never touches speech**: a quoted line already carries its
+  speaker's colour from your own palette, and any ink reaching inside a
+  quotation is discarded rather than left to argue with it. Everything outside
+  that small set is removed before the page with its words kept, so no markup
+  the model invents can ever reach you as raw tags.
 
 ## The reading view
 
