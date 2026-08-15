@@ -5,6 +5,40 @@
    last and maps that layout onto named visual systems. Keeping visual tokens
    here prevents a theme from becoming a fork of the entire interface. */
 
+/* Antonio, bundled rather than linked. LCARS is a TYPOGRAPHIC system before it
+   is a colour one -- the condensed uppercase face is the first thing anyone
+   recognises, and the elbows are the second. The theme has always asked for
+   `Antonio, Oswald, Roboto Condensed, Arial Narrow`, and a machine with none
+   of the four installed fell all the way through to generic sans-serif: the
+   whole layout doing LCARS work under a face that reads as a settings panel.
+   Shipped as two woff2 subsets (42KB total, variable 400-700) under
+   static/fonts, NOT a CDN link -- the engine runs local and offline, and a
+   font that arrives over the network is a font that is missing exactly when
+   there is no network. SIL OFL 1.1; static/fonts/OFL.txt travels with it.
+   `font-display: swap` so a cold cache shows fallback text immediately rather
+   than a blank frame. */
+@font-face {
+  font-family: "Antonio";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/antonio-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Antonio";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/antonio-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
 :root {
   --ui-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --prose-font: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
@@ -270,6 +304,14 @@
   --bd: #000;
   --lcars-lilac: #c9c;
   --lcars-blue: #9cf;
+  /* The frame's own measurements, named because five rules have to agree on
+     them: change the spine here and the sidebar, its elbow radius and the
+     tab pills that tuck under it all move together. */
+  --lcars-spine: 24px;
+  --lcars-gap: 5px;
+  --lcars-elbow: 36px;
+  --lcars-panel: #0d0d10;
+  --lcars-panel-2: #16161c;
   --page-background: #000;
   --input-bg: #000;
   --card-bg: #14141a;
@@ -1124,29 +1166,150 @@ body.has-backdrop .prose {
    left that turns the corner under the header. The elbow is what makes it
    read as LCARS rather than as a sidebar with a coloured border, so the
    sidebar owns the spine and rounds only its inward corners. */
+/* The spine is paid for out of the sidebar's OWN width, not added to it. Every
+   box here is border-box (styles.css:5), so the stock 286px already contains
+   the border and the list simply runs 24px narrower -- which the full-width
+   blocks below have room for.
+   Widening to 286 + spine was the obvious move and is wrong, because the story
+   column has a hard 720px floor (settings.js STORY_MIN_WIDTH) that the
+   ambience cluster's reserve cannot push below. At a 1440px window the column
+   and the cluster already overlap by ~7px in EVERY theme; 24px off the shell
+   took that to 19px, and the send button ran under the mute control. A theme
+   does not get to spend a budget the layout has already overdrawn. */
 :root[data-theme="lcars"] #side {
-  border-right: 18px solid var(--acc);
-  border-radius: 0 0 0 28px;
+  border-right: var(--lcars-spine) solid var(--acc);
+  border-radius: 0 0 0 var(--lcars-elbow);
   background: #000;
+  padding-top: 8px;
 }
-/* Black gutter between the sidebar's contents and the orange spine. Without
-   it the last tab (Lore) butts straight up against the bar and reads as
-   overlapping it -- and a gutter is the LCARS separator anyway: blocks are
-   divided by black, never by touching. */
-:root[data-theme="lcars"] #tabs,
-:root[data-theme="lcars"] #sidelist,
+/* Navigation is a COLUMN of blocks butting into the spine, which is the LCARS
+   arrangement and also the honest fix for a problem the old rule could only
+   work around: "CHARACTERS" and "PERSONAS" set in condensed uppercase do not
+   fit a quarter of a 286px strip, so four-across clipped and two-by-two was
+   the compromise. A full-width block has room for the longest label at a
+   readable size, and stacking is what the frame wanted anyway.
+
+   They run FLUSH to the spine on purpose -- square right edge, no gutter --
+   so each block reads as merging into the frame bar. That is the opposite of
+   the old rule, which held them off it; the difference is that a rounded pill
+   floating near a bar reads as overlapping it, while a square-ended block
+   touching it reads as attached. Separation between blocks is the black gap
+   above and below, never a margin against the frame. */
+:root[data-theme="lcars"] #tabs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--lcars-gap);
+  padding: 6px 0 12px 16px;
+}
+:root[data-theme="lcars"] #tabs button {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 18px 7px 14px;
+  border-radius: 999px 0 0 999px;
+  text-align: right;
+  font-size: 13px;
+  letter-spacing: .1em;
+}
+/* A run of controls cycles the palette so the column reads as a console bank
+   rather than a stack of identical keys. Sequential, not modular: there are
+   exactly four tabs and each gets its own colour. */
+:root[data-theme="lcars"] #tabs button:nth-child(1) { background: var(--lcars-blue); }
+:root[data-theme="lcars"] #tabs button:nth-child(2) { background: var(--acc2); }
+:root[data-theme="lcars"] #tabs button:nth-child(3) { background: var(--lcars-lilac); }
+:root[data-theme="lcars"] #tabs button:nth-child(4) { background: var(--err); }
+/* The ink has to be restated here, not left to the generic button rule. The
+   base sets `#tabs button.on{color:var(--acc)}` (styles.css:160) so the active
+   tab glows in the dark themes -- an ID selector, which outranks this theme's
+   `button{color:#000}` however late it is loaded. The active tab therefore
+   rendered ORANGE ON ORANGE: the one navigation control you most need to find
+   was the only one with no readable label. Caught by an automated pass that
+   flags any element whose computed ink equals its own fill; it was the only
+   hit in the interface. */
+:root[data-theme="lcars"] #tabs button.on {
+  background: var(--acc);
+  color: #000;
+}
+:root[data-theme="lcars"] #sidelist {
+  padding: 8px 12px 10px 16px;
+  border-top: 6px solid #000;
+}
+/* The two story actions take the same flush-right block shape as the tabs, so
+   the sidebar has one grammar from top to bottom instead of pills at the top
+   and a stock button row at the foot. */
 :root[data-theme="lcars"] #sideactions {
-  padding-right: 12px;
-}
-:root[data-theme="lcars"] #tabs { gap: 4px; }
-:root[data-theme="lcars"] #top {
-  border-bottom: 14px solid var(--lcars-lilac);
-  border-radius: 0 0 0 22px;
+  padding: 10px 0 12px 16px;
+  gap: var(--lcars-gap);
+  border-top: 8px solid #000;
   background: #000;
+}
+:root[data-theme="lcars"] #sideactions > button {
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 34px;
+  border-radius: 999px 0 0 999px;
+  text-align: right;
+  padding-right: 18px;
+}
+/* Cycled like the tabs. Two blocks in the same colour, stacked and the same
+   width, are two things you have to READ to tell apart -- which is the one job
+   a console bank exists to save you. */
+:root[data-theme="lcars"] #sideactions > button:nth-child(1) { background: var(--acc); }
+:root[data-theme="lcars"] #sideactions > button:nth-child(2) { background: var(--lcars-blue); }
+:root[data-theme="lcars"] #sideactions > button:nth-child(3) { background: var(--lcars-lilac); }
+/* Story rows are CONTENT, not frame, so they keep a card shape and take a
+   coloured left rail rather than becoming lozenges. The rail is what carries
+   selection -- a filled orange row would put the story's own title in black
+   ink on orange, which is the contrast trap this theme has already had to
+   undo twice elsewhere in this file. */
+:root[data-theme="lcars"] .story-item,
+:root[data-theme="lcars"] .item {
+  border-radius: 0 0 0 12px;
+  border-left: 6px solid #2b2b33;
+  background: var(--lcars-panel);
+}
+:root[data-theme="lcars"] .story-item.on,
+:root[data-theme="lcars"] .item.on {
+  border-left-color: var(--acc);
+  background: #181209;
+  color: var(--acc);
+}
+/* The old rule grew a 14px bar as a grid column ahead of the title. The rail
+   above says the same thing without spending layout on it, so the column and
+   its pseudo-element go. */
+:root[data-theme="lcars"] .story-item.on::before { display: none; }
+:root[data-theme="lcars"] .story-item.on {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+:root[data-theme="lcars"] #top {
+  align-items: flex-end;
+  padding: 10px 14px 11px;
+  border-bottom: 16px solid var(--lcars-lilac);
+  border-radius: 0 0 0 var(--lcars-elbow);
+  background: #000;
+  position: relative;
+}
+/* The segmented run along the frame bar -- the single most recognisable LCARS
+   gesture after the elbow itself. Anchored to the RIGHT edge and sized in its
+   own terms, so it cannot drift as the story title grows or shrinks; the black
+   slivers are the separators, which in this system are always gaps rather
+   than lines. Non-interactive and decorative only. */
+:root[data-theme="lcars"] #top::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -16px;
+  width: min(46%, 520px);
+  height: 16px;
+  background: linear-gradient(90deg,
+    var(--lcars-lilac) 0 38%, #000 38% 39.4%,
+    var(--acc2) 39.4% 71%, #000 71% 72.4%,
+    var(--lcars-blue) 72.4%);
+  pointer-events: none;
 }
 :root[data-theme="lcars"] #composer {
-  border-top: 14px solid var(--acc2);
-  border-radius: 0 22px 0 0;
+  border-top: 16px solid var(--acc2);
+  border-radius: 0 var(--lcars-elbow) 0 0;
   background: #000;
 }
 /* A 999px radius on a button as tall as the composer makes a disc. Widen it
@@ -1177,33 +1340,9 @@ body.has-backdrop .prose {
   padding-inline: 14px;
 }
 :root[data-theme="lcars"] button:hover { color: #000; }
-/* The tab strip has to fit four labels across a 286px sidebar minus an 18px
-   spine. Uppercase + .08em tracking + the 14px pill padding above overflowed
-   it and clipped "LORE" against the spine, so the strip opts out of both and
-   is allowed to shrink. */
-/* Two rows of two rather than four across: "CHARACTERS" and "PERSONAS" set in
-   condensed uppercase simply do not fit a quarter of a 286px sidebar, and
-   clipping the label of a navigation control to preserve a single row is the
-   wrong trade. Stacked blocks are the native LCARS arrangement anyway. */
-:root[data-theme="lcars"] #tabs {
-  flex-wrap: wrap;
-}
-:root[data-theme="lcars"] #tabs button {
-  background: var(--lcars-blue);
-  color: #000;
-  border: none;
-  flex: 1 1 44%;
-  min-width: 0;
-  padding-inline: 6px;
-  font-size: 12px;
-  border-radius: 999px;
-}
-:root[data-theme="lcars"] #tabs button.on {
-  background: var(--acc);
-  color: #000;
-}
-/* The stock LCARS trick: a run of controls cycles through the palette so
-   the strip reads as a console bank instead of a row of identical keys. */
+/* The same palette cycle across the top action bank. Modular here, unlike the
+   sidebar's four fixed tabs, because this row's length varies with what the
+   chat has enabled. */
 :root[data-theme="lcars"] #topactions button:nth-child(4n + 1) { background: var(--acc); }
 :root[data-theme="lcars"] #topactions button:nth-child(4n + 2) { background: var(--acc2); }
 :root[data-theme="lcars"] #topactions button:nth-child(4n + 3) { background: var(--lcars-lilac); }
@@ -1219,25 +1358,11 @@ body.has-backdrop .prose {
   padding-right: 10px;
 }
 
-/* Selected story: a full colour bar, not a hairline. */
-:root[data-theme="lcars"] .story-item.on::before {
-  content: "";
-  width: 14px;
-  align-self: stretch;
-  border-radius: 999px;
-  background: var(--acc);
-  margin: -3px 4px -3px -4px;
-}
-:root[data-theme="lcars"] .story-item.on {
-  grid-template-columns: 14px minmax(0, 1fr) auto;
-}
-:root[data-theme="lcars"] .story-item.on,
-:root[data-theme="lcars"] .item.on {
-  background: rgba(255, 153, 0, .16);
-  color: var(--acc);
-}
-:root[data-theme="lcars"] .card,
-:root[data-theme="lcars"] #modalbox {
+/* Selection is the left rail set with the row shapes further up, not a
+   pseudo-element in its own grid column. The old pair lived HERE, after those
+   rules and at equal specificity, so it won on order alone and put a 14px
+   track back into a grid that no longer had anything to put in it. */
+:root[data-theme="lcars"] .card {
   border-left: 8px solid var(--acc2);
 }
 /* LCARS has no ghost control: a block is filled or it is not there. That
@@ -1329,6 +1454,249 @@ body.has-backdrop .prose {
   background: #000;
   color: var(--acc);
   border-color: #000;
+}
+
+/* THE FICTION IS NOT CHROME. Everything above sets condensed uppercase with
+   wide tracking, which is right for a console and wrong for a paragraph of
+   prose -- and the story is the reason the console exists. The transcript, the
+   pinned lines and the box the player types into opt out of the whole
+   typographic system and stay book-set. This rule is the theme's single most
+   important line, and it is deliberately LAST among the type rules so nothing
+   above can win by ordering. */
+:root[data-theme="lcars"] .prose,
+:root[data-theme="lcars"] .pin,
+:root[data-theme="lcars"] #msgs,
+:root[data-theme="lcars"] #input {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: normal;
+}
+
+/* Frame selectors sit over the transcript as transparent chips in the dark
+   themes, which in a theme whose every button carries black ink meant black
+   glyphs on a transparent black panel -- the same defect this file already
+   had to undo for `button.ghost` and the window dismiss. Fixed the same way:
+   a filled block, because LCARS has no ghost control. */
+:root[data-theme="lcars"] .frame-pill {
+  background: var(--lcars-blue);
+  color: #000;
+  border: none;
+  border-radius: 999px;
+  opacity: 1;
+}
+:root[data-theme="lcars"] .frame-pill.on {
+  background: var(--acc);
+  color: #000;
+}
+:root[data-theme="lcars"] .frame-pill:hover { background: var(--warn); }
+
+/* ROOM AMBIENCE -- restoring state the frame would otherwise erase.
+   The cluster signals four things through BORDER COLOUR (styles.css:620-625):
+   playing, blocked, muted, working. This theme sets `border: none` on every
+   button, which silently deletes all four, leaving a row of identical purple
+   lozenges whose only difference is a colour nobody can see. Each state comes
+   back as a FILL, which is how this system says anything.
+   Geometry is untouched on purpose: the bar is absolutely positioned inside
+   #composer and its measured width feeds the story column's reserve
+   (settings.js `ambWidth`), so re-padding it here would move the prose. */
+:root[data-theme="lcars"] #b-ambience.on { background: var(--acc); }
+:root[data-theme="lcars"] #b-ambience.blocked { background: var(--warn); }
+:root[data-theme="lcars"] #b-amb-mute.muted,
+:root[data-theme="lcars"] #b-chime.muted { background: var(--err); }
+:root[data-theme="lcars"] #b-amb-reroll:disabled { background: var(--lcars-panel-2); }
+:root[data-theme="lcars"] #amb-vol {
+  accent-color: var(--acc);
+  background: transparent;
+}
+
+/* The player's channel, labelled the way a console labels an input. The tab
+   rides the composer's own frame bar rather than taking a row of its own, so
+   it costs no height. */
+:root[data-theme="lcars"] #composer::before {
+  content: "INPUT // PLAYER CHANNEL";
+  position: absolute;
+  top: -16px;
+  left: 26px;
+  padding: 0 10px;
+  background: var(--acc2);
+  color: #000;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  line-height: 16px;
+  border-radius: 0 0 8px 8px;
+  pointer-events: none;
+}
+:root[data-theme="lcars"] #input {
+  border: 2px solid var(--acc);
+  border-radius: 14px 0 14px 0;
+  background: rgba(0, 0, 0, .92);
+}
+/* A 999px radius on a control as tall as the composer makes a disc. Widen it
+   so Send reads as an LCARS lozenge instead. */
+:root[data-theme="lcars"] #send,
+:root[data-theme="lcars"] #stop { min-width: 118px; }
+
+/* The story's name gets a console eyebrow, and the frame selectors drop below
+   it -- a stacked title block, which is what gives the top bar its height and
+   somewhere for the segmented run to sit against.
+   The label goes on the CONTAINER, never on #chatname itself: that element
+   carries `overflow:hidden; text-overflow:ellipsis; white-space:nowrap`
+   (styles.css:204), and a block-level ::before inside it destroys the single
+   inline formatting context ellipsis needs -- long story names would run out
+   of the bar instead of truncating. One level up, the truncation is untouched.
+   The string is true of every instance it can appear over, which is the bar a
+   decorative label has to clear before it belongs in a stylesheet, where
+   nobody will ever think to look for wording. */
+:root[data-theme="lcars"] #top-context {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 3px;
+}
+:root[data-theme="lcars"] #top-context::before {
+  content: "SIMULATION // ACTIVE STORY";
+  color: var(--lcars-blue);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .18em;
+  white-space: nowrap;
+}
+:root[data-theme="lcars"] #chatname { font-size: 17px; color: var(--fg); }
+:root[data-theme="lcars"] #topactions button { min-height: 32px; padding-inline: 11px; }
+:root[data-theme="lcars"] #b-menu { background: var(--acc); }
+
+/* WINDOWS. The frame is what reads as LCARS -- a heavy left rail turning an
+   elbow into a header bar, with the segmented run beneath it. The window
+   stays CENTRED: pinning dialogs to the top-left is the more authentic
+   console arrangement and the worse interface, because a short confirm then
+   opens nowhere near where the eye already is. Identity comes from the frame,
+   not from putting the box somewhere surprising. */
+/* The foot matches the rail rather than contrasting with it. Two adjacent
+   borders in different colours meet at a MITRE -- CSS draws the join as a
+   diagonal -- so an orange rail against a blue foot rendered as a wedge
+   tapering across the bottom of every window, which reads as a mistake rather
+   than as an elbow. LCARS joins bars at right angles in one colour and turns
+   the corner with a radius; same colour, no seam to get wrong. */
+:root[data-theme="lcars"] #modalbox,
+:root[data-theme="lcars"] #modalbox.wide {
+  border: none;
+  border-left: 26px solid var(--acc);
+  border-bottom: 12px solid var(--acc);
+  border-radius: var(--lcars-elbow) 0 24px 0;
+  background: #000;
+}
+:root[data-theme="lcars"] #modalhead {
+  position: relative;
+  min-height: 76px;
+  padding: 26px 16px 11px 22px;
+  align-items: flex-end;
+  border: none;
+  border-bottom: 16px solid var(--lcars-lilac);
+  background: #000;
+}
+:root[data-theme="lcars"] #modalhead::before {
+  content: "LCARS // SONDER ENGINE";
+  position: absolute;
+  top: 9px;
+  left: 22px;
+  color: var(--lcars-blue);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .19em;
+}
+:root[data-theme="lcars"] #modalhead::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: -16px;
+  width: 31%;
+  height: 16px;
+  background: linear-gradient(90deg,
+    var(--acc2) 0 58%, #000 58% 61%, var(--warn) 61%);
+}
+:root[data-theme="lcars"] #modalbody { background: #000; }
+/* Section labels attach to the rail they belong to. The obvious LCARS move is
+   to push them right, and it is wrong HERE: there is no right-hand rail in a
+   window, so a right-aligned label floats free of the content it names and
+   reads as belonging to whatever card it happens to land above. Anchored left
+   it butts into the orange rail the window is already built on, which is the
+   same gesture the sidebar makes against the spine. */
+/* -17px is #modalbody's own padding-left (styles.css:391) and not a nudge:
+   #modalbox carries `overflow: hidden`, so a pill reaching any further than
+   the padding box is CLIPPED rather than overhanging. Exactly the padding
+   puts its left edge on the rail. */
+:root[data-theme="lcars"] #modalbody .section-title {
+  width: max-content;
+  max-width: 100%;
+  margin-left: -17px;
+  padding: 5px 20px 5px 17px;
+  border-radius: 0 999px 999px 0;
+  background: var(--acc);
+  color: #000;
+  text-align: left;
+}
+:root[data-theme="lcars"] #modalbody h4 {
+  color: var(--lcars-blue);
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  border-bottom: 3px solid var(--acc2);
+  padding-bottom: 4px;
+}
+/* Cards in a window take a coloured left rail, cycled so a long settings page
+   reads as banked modules rather than one undifferentiated column. */
+:root[data-theme="lcars"] #modalbody .card {
+  background: var(--lcars-panel);
+  border: none;
+  border-left: 8px solid var(--acc2);
+  border-radius: 0 0 0 16px;
+  box-shadow: inset 0 0 0 1px #25252d;
+}
+:root[data-theme="lcars"] #modalbody .card:nth-of-type(3n+2) { border-left-color: var(--lcars-lilac); }
+:root[data-theme="lcars"] #modalbody .card:nth-of-type(3n) { border-left-color: var(--lcars-blue); }
+
+/* The theme picker's cards are buttons semantically and cards visually, so
+   they opt out of the lozenge and back into dark-surface ink -- otherwise
+   every theme's description renders as black text on an orange block. */
+:root[data-theme="lcars"] .theme-choice {
+  background: var(--lcars-panel-2);
+  color: var(--fg);
+  border: none;
+  border-left: 9px solid var(--lcars-blue);
+  border-radius: 0 0 0 18px;
+  box-shadow: inset 0 0 0 1px #282831;
+}
+:root[data-theme="lcars"] .theme-choice:hover:not(:disabled) {
+  background: #1b1b21;
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+:root[data-theme="lcars"] .theme-choice.selected {
+  border-left-color: var(--acc);
+  box-shadow: inset 0 0 0 2px var(--acc);
+}
+:root[data-theme="lcars"] .theme-choice-copy,
+:root[data-theme="lcars"] .theme-choice-copy strong,
+:root[data-theme="lcars"] .theme-choice .dim { color: var(--fg); }
+:root[data-theme="lcars"] .theme-choice .dim { opacity: .74; }
+:root[data-theme="lcars"] .theme-choice.selected .theme-selected-badge {
+  background: var(--acc);
+  color: #000;
+  border-color: #000;
+}
+:root[data-theme="lcars"] .segmented-control button { background: var(--lcars-blue); }
+:root[data-theme="lcars"] .segmented-control button.on { background: var(--acc); }
+
+/* Narrow windows: the spine and the elbows are the first things to cost more
+   than they earn once there is no room beside them. */
+@media (max-width: 680px) {
+  :root[data-theme="lcars"] #side { --lcars-spine: 16px; }
+  :root[data-theme="lcars"] #top::after { width: 60%; }
+  :root[data-theme="lcars"] #modalbox,
+  :root[data-theme="lcars"] #modalbox.wide {
+    border-left-width: 16px;
+    border-radius: 22px 0 16px 0;
+  }
 }
 
 /* Bevelled like a cut block: a lit top edge, a shadowed bottom one, and a

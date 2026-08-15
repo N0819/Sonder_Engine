@@ -169,8 +169,40 @@ into this repository's documentation.
 
 ---
 
+## Antonio (typeface)
+
+**Source:** <https://github.com/googlefonts/antonioFont> · Copyright 2013 The
+Antonio Project Authors
+**Licence:** SIL Open Font License 1.1 — the full text travels with the files at
+[`../static/fonts/OFL.txt`](../static/fonts/OFL.txt).
+
+The **first** entry in this register that is an implementation rather than an
+idea, so the licence column is doing real work here for the first time. OFL 1.1
+permits bundling and redistribution inside a larger work, including a
+commercial one, provided the font files keep their copyright and licence notice
+and are not sold on their own. Nothing in it reaches Sonder's own MIT terms.
+
+| Taken | Where it landed | Note |
+|---|---|---|
+| The typeface itself, two woff2 subsets (latin, latin-ext), variable 400–700, 42KB total | `static/fonts/antonio-*.woff2`, declared by the `@font-face` pair at the head of `static/themes.css` and consumed through `--ui-font` in the `lcars` theme | Bundled, **never linked**. The engine runs local and offline; a font fetched from a CDN is missing exactly under the conditions this application is built for. `tests/test_ui_themes.py::test_lcars_ships_its_own_condensed_face` pins both the files and the absence of any `fonts.googleapis.com` / `fonts.gstatic.com` reference |
+
+Why a font at all, recorded because it is the reusable part: the `lcars` theme
+had **asked** for `Antonio, Oswald, Roboto Condensed, Arial Narrow` since it was
+written, and a machine with none of the four installed resolved that stack to
+generic `sans-serif`. LCARS is a typographic system before it is a colour one,
+so the entire frame was doing console work under a face that reads as a
+settings panel — a defect invisible to anyone whose machine happened to have one
+of the fallbacks. A named font stack is a request; only a bundled file is a
+guarantee.
+
+Nothing else from Google Fonts is vendored, and the OFL applies to this family
+only.
+
+---
+
 ## Change log for this file
 
 | Date | Change |
 |---|---|
 | 2026-08-14 | Created. Directive and grb-systems surveyed; nothing adopted from either yet. |
+| 2026-08-14 | Antonio added — the register's first adopted *implementation*, bundled under OFL 1.1 for the `lcars` theme. |

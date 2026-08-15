@@ -817,11 +817,35 @@ function syncVitalsGutter() {
 
 window.syncVitalsGutter = syncVitalsGutter;
 window.addEventListener("resize", syncVitalsGutter);
+// A theme may change any of the three things this measure depends on: the
+// sidebar's width, the composer's padding, and the ambience cluster's own
+// footprint. The observer below catches the first two because they resize
+// #composer, but the ambience bar is absolutely positioned inside it, so a
+// theme that only re-pads THAT would leave the reserve stale until the next
+// window resize -- a tracker sitting under the cluster, or hidden for want of
+// a gutter it actually has. The event already exists; this is the listener it
+// was missing.
+window.addEventListener("sonder-theme-change", syncVitalsGutter);
 if (window.ResizeObserver) {
   // Catches the sidebar collapsing, which no resize event reports.
   const observed = $("#composer");
   if (observed) {
     new ResizeObserver(syncVitalsGutter).observe(observed);
+  }
+  // And the AMBIENCE CLUSTER, which is the other half of the reserve above and
+  // was the half nobody watched. Its width is an input to --story-width, and
+  // it changes for reasons that never resize #composer: the volume slider
+  // dropping out at the container-query breakpoint, the bar growing when a
+  // track starts (the read above says so in as many words), and a themed
+  // webfont swapping in under the controls after first paint. Whenever it grew
+  // after the one measure that mattered, the story column stayed as wide as
+  // the stale figure allowed and the send button was laid out into space the
+  // cluster had since taken -- measured at 19px of overlap, send sitting under
+  // the mute control. Absolutely positioned, so it cannot report this by
+  // resizing its parent; it has to be observed directly.
+  const ambBar = $("#ambience-bar");
+  if (ambBar) {
+    new ResizeObserver(syncVitalsGutter).observe(ambBar);
   }
 }
 
