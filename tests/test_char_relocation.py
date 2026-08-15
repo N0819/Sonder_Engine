@@ -1,7 +1,7 @@
 """Moving a cast member to another room from the cast panel.
 
 Positions live in one place -- the frame-scoped `world.scene` blob, the single
-runtime source of truth for who is standing where (docs/DATABASE.md, Phase 3a).
+runtime source of truth for who is standing where (docs/guides/DATABASE.md, Phase 3a).
 So the properties worth defending are about not corrupting that blob:
 
 * a room id is validated against the scene, never trusted, because a position

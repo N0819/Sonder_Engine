@@ -1,6 +1,6 @@
 """Approach A of the living world: routine and residue.
 
-``docs/DESIGN_LIVING_WORLD.md`` §1, floor only. A routine is a pure
+``docs/design/DESIGN_LIVING_WORLD.md`` §1, floor only. A routine is a pure
 function from the simulation clock and a room's own name-tags to expected
 posture; seeded jitter keeps regularity from reading as clockwork; entropy
 is what elapsed time does to fires, food and dust. The residue is the diff

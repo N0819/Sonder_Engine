@@ -574,7 +574,7 @@ def drive(db):
 
 
 #: The "minimum convincing 8.0 milestone" from
-#: `docs/OFFSCREEN_WORLD_COMPLETION.md`, verbatim, with what in this drive
+#: `docs/design/OFFSCREEN_WORLD_COMPLETION.md`, verbatim, with what in this drive
 #: would demonstrate each. Kept here rather than in prose so the answer is
 #: recomputed from what actually ran instead of remembered from what was
 #: intended -- the difference between the two is most of this project's

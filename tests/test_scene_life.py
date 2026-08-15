@@ -1,4 +1,4 @@
-"""Regression tests for the scene-manager path (docs/BACKGROUND_LIFE_DESIGN.md).
+"""Regression tests for the scene-manager path (docs/design/BACKGROUND_LIFE_DESIGN.md).
 
 The manager voices a whole location's background populace in ONE batched call.
 That is a deliberate relaxation of the per-presence isolation the engine

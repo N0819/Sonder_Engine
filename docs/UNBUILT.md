@@ -26,7 +26,7 @@ payload; only the prompt never learned), §1.13 (the enum is real, but the
 validation seam the pipeline uses does not enforce it). §1.4 (`sqlite-vec`) was
 re-decided and **landed** — its either/or was wrong, since wiring the vector
 index would have regressed the information firewall — and is deleted per rule 1;
-`docs/RESEARCH.md` §1.4 carries the reasoning, and §1.15 below is the memory
+`docs/guides/RESEARCH.md` §1.4 carries the reasoning, and §1.15 below is the memory
 question that actually remains. Everything else below
 still carries its 2026-07-29 verification date and should be re-checked before
 being acted on — rule 2 exists because this file's claims go stale faster than
@@ -915,7 +915,7 @@ embeddings provider is configured.
 
 **Not a fix:** an ANN index. One was declared here once and deleted unwired in
 alpha 6.3 — it could not carry the two pre-ranking filters (turn cutoff, frame
-visibility), so it would have regressed the firewall; `docs/RESEARCH.md` §1.4
+visibility), so it would have regressed the firewall; `docs/guides/RESEARCH.md` §1.4
 keeps the reasoning. Benchmarked with `memory._cos` verbatim,
 both vectors per row, growing at the measured ~3.5 rows per turn per character:
 
@@ -1659,7 +1659,7 @@ regression will not show up in a test suite.
 and nothing in the model-selection process accounts for it. `Qwen/Qwen3.6-35B-A3B`
 cached 0 of 188 live calls; `nex-agi/nex-n2-pro` cached 63 of 79. On a pipeline
 this prefill-dominated (27k-token director payloads), that may outweigh every
-latency difference measured in `docs/bench-2026-08-03/RESULTS.md`.
+latency difference measured in `docs/experiments/bench-2026-08-03/RESULTS.md`.
 
 **Update 2026-08-08 — the switch this entry needed now exists, and the wrong
 file was nearly used to settle it.** Prompt caching is a per-provider checkbox
@@ -1670,7 +1670,7 @@ be A/B'd on a real story rather than only in `tools/cache_latency.py`.
 Two traps found while building it, both worth writing down because both produce
 a confident wrong answer:
 
-- **`docs/bench-2026-08-03/*.log` cannot answer this question.** All 62 cache
+- **`docs/experiments/bench-2026-08-03/*.log` cannot answer this question.** All 62 cache
   reads across its 267 timed calls come from ONE model, `nex-agi/nex-n2-pro`,
   and none of the logged models is a Claude. The engine's breakpoint is gated on
   `_model_is_anthropic`, so it never marked any of them — those `cached_tokens`
@@ -2416,7 +2416,7 @@ is the point: a silent retcon is the failure mode. Verified absent.
 
 The largest unbuilt subsystem, and the one that makes a large cast feel alive
 rather than merely stored. Argument:
-[`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md).
+[`OFFSCREEN_LIFE_DESIGN.md`](design/OFFSCREEN_LIFE_DESIGN.md).
 
 It decomposes: gap-history plus delta-summary is the valuable 80% and is the same
 generator as §2.8; the negotiation protocol is the hard, novel half and can trail
@@ -3605,7 +3605,7 @@ view of it that turn is not anonymized.
 Features their design notes argue for that are not built. The note holds the
 argument; only the gap is listed here.
 
-### 6.1 Background life — [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md)
+### 6.1 Background life — [`BACKGROUND_LIFE_DESIGN.md`](design/BACKGROUND_LIFE_DESIGN.md)
 
 Most of §3 shipped in alpha 4.0. What did not:
 
@@ -3628,7 +3628,7 @@ Most of §3 shipped in alpha 4.0. What did not:
 - **The prompt fix for §3.8** — a blurb tell should be available colour, not a
   required beat.
 
-### 6.2 Extensions — [`EXTENSIONS_DESIGN.md`](EXTENSIONS_DESIGN.md)
+### 6.2 Extensions — [`EXTENSIONS_DESIGN.md`](design/EXTENSIONS_DESIGN.md)
 
 Nothing built. The seams it builds on all exist (`runtime.register_step`,
 `build_plan`, `establishment_plan`, prompt presets, per-chat world-KV config).
@@ -3638,7 +3638,7 @@ Missing: the plan-splice registry at named anchors, pre/post hooks on
 `ext:<id>` key namespace, the `/api/extensions` routes, and all four rungs of the
 escalation ladder including story packs.
 
-### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](GREETING_IMPORT_DESIGN.md)
+### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md)
 
 About 60% shipped in alpha 1.4, under a materially different architecture — the
 narrator **does** run on turn 0 and its prose is overridden afterwards, rather
@@ -3656,7 +3656,7 @@ than the design's pre-baked variants plus resume. Still unbuilt and still wanted
 - **Two named invariant tests** — verbatim preservation and knowledge boundary —
   do not exist.
 
-### 6.4 Place purpose — [`DESIGN_PLACE_PURPOSE.md`](DESIGN_PLACE_PURPOSE.md)
+### 6.4 Place purpose — [`DESIGN_PLACE_PURPOSE.md`](design/DESIGN_PLACE_PURPOSE.md)
 
 v1 is built. Deliberately not built, each for a stated reason: witnessed
 drink/water/warmth (no thirst or cold vital, so no deterministic signal),
@@ -3686,7 +3686,7 @@ The walkable-edge defect is §1.6; the redundancy watch is §1.12.
   looked like a gap and was not: `visibly_no_way_through` pre-empts the distance
   verdict via the existing `_VERDICTS` precedence, which is the right order.
 
-### 6.6 Psychology as pressure — [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](DESIGN_PSYCHOLOGY_AS_PRESSURE.md)
+### 6.6 Psychology as pressure — [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)
 
 (a) and (b) shipped; (e) declined by design. Open:
 
@@ -3698,7 +3698,7 @@ The walkable-edge defect is §1.6; the redundancy watch is §1.12.
 - **(d) A trait as a disposition, not a switch.** Whether this needs explicit
   representation or emerges once (b) and (c) land is the open question.
 
-### 6.7 Long-term goals — [`DESIGN_LONG_TERM_GOALS.md`](DESIGN_LONG_TERM_GOALS.md)
+### 6.7 Long-term goals — [`DESIGN_LONG_TERM_GOALS.md`](design/DESIGN_LONG_TERM_GOALS.md)
 
 v1–v3 are built, including goal-slot currency. Undecided:
 
@@ -3712,7 +3712,7 @@ v1–v3 are built, including goal-slot currency. Undecided:
   and then losing* to a drive want, which is a different failure from the one
   observed.
 
-### 6.8 Living world — [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md)
+### 6.8 Living world — [`DESIGN_LIVING_WORLD.md`](design/DESIGN_LIVING_WORLD.md)
 
 Phase 1 (branch `living-floors`) built the deterministic floors of A
 (`routines.py`), B (`living_world.mint_consequences` +
@@ -3843,7 +3843,7 @@ Measurements the design notes name as the thing that would settle a question. An
 unrun experiment is unfinished work, not a broken thing.
 
 - **The gods expand the maze** —
-  [`DESIGN_MAZE_EXPANSION.md`](DESIGN_MAZE_EXPANSION.md). Designed, not built;
+  [`DESIGN_MAZE_EXPANSION.md`](experiments/DESIGN_MAZE_EXPANSION.md). Designed, not built;
   depends on nothing not already in the engine. Needs a second SVG whose western
   7×7 is byte-identical to `maze7x7-a11.svg`, an explicit `--expand` flag so
   `--resume`'s fingerprint guard is overridden rather than weakened, a

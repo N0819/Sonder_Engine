@@ -1,5 +1,5 @@
 """Greeting-seeded openings: ingest-time greeting interpretation and a
-"Start story now" launch. See docs/GREETING_IMPORT_DESIGN.md.
+"Start story now" launch. See docs/design/GREETING_IMPORT_DESIGN.md.
 
 `greeting_interpret` is to a character-card greeting what `director_interpret`
 is to player input -- one bounded parse of freeform opening prose into

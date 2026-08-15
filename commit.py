@@ -243,7 +243,7 @@ def record_spatial_experience(st, sc, here_room, turn_idx):
     Durability now belongs to place_graph, and the legacy keys follow its
     memory (bounded by the same eviction) rather than the window's.
 
-    Persistence decision (docs/DATABASE.md checklist): all of this rides the
+    Persistence decision (docs/guides/DATABASE.md checklist): all of this rides the
     chat_chars.state JSON blob, which checkpoints snapshot/restore whole
     (checkpoints.snapshot_state/restore), chat_archive exports/imports
     verbatim, and the branch path copies row-for-row -- so no schema, remap,
@@ -2527,22 +2527,49 @@ def prepare_scene_commit(ctx):
                               "turn": getattr(ctx.turn, "idx", None)}
         if not _pending:
             sc.pop("approach", None)
-    elif isinstance(sc.get("approach"), dict):
-        # A beat that declares no movement at all abandons the approach: the
-        # walker stopped to do something else, and picking the thread back up
-        # is a fresh declaration. Only the player's own -- a companion halfway
-        # across a field is still halfway across it.
+    # A BEAT THAT SAYS NOTHING ABOUT MOVEMENT NO LONGER ENDS THE WALK.
+    #
+    # It used to: "the walker stopped to do something else, and picking the
+    # thread back up is a fresh declaration". That made travel survive only
+    # by being re-declared every beat -- the sentence nobody wants to keep
+    # writing -- and it is wrong about the commonest thing in fiction, which
+    # is people talking while they walk. Live, chat 72: a beat spent grabbing
+    # someone by the shoulders was read as abandoning a walk to the hotel
+    # that was plainly still under way.
+    #
+    # Silence continues (agents/director._travel_continues advances the leg
+    # and every movement backstop judges it). What retires a record is the
+    # walk actually ENDING: arriving, or an interruption the Director
+    # asserted. Both come back on `res["travel"]`, so the ledger and the
+    # committed position are written from one answer and cannot disagree.
+    _travel = res.get("travel") if isinstance(res, dict) else None
+    if isinstance(sc.get("approach"), dict) and isinstance(_travel, dict):
         _pending = sc["approach"]
         if "who" in _pending:
+            _old = _pending
+            _pending = sc["approach"] = (
+                {_old["who"]: {"to_room": _old.get("to_room"),
+                               "turn": _old.get("turn")}}
+                if _old.get("who") and _old.get("to_room") else {})
+        _done = {str(n) for n in (_travel.get("arrived") or [])}
+        _done |= {str(e.get("subject")) for e in (_travel.get("interrupted") or [])
+                  if isinstance(e, dict) and e.get("subject")}
+        for _name in _done:
+            _pending.pop(_name, None)
+        # Beats already spent on a long edge are carried on the record, so a
+        # hike does not restart every time the walkers stop to talk.
+        for _entry in (_travel.get("held") or []):
+            if not isinstance(_entry, dict) or not _entry.get("edge_beats"):
+                continue
+            _leg = _pending.get(str(_entry.get("subject")))
+            if isinstance(_leg, dict):
+                _leg["edge_beats"] = int(_entry["edge_beats"])
+        for _entry in (_travel.get("advanced") or []):
+            _leg = _pending.get(str((_entry or {}).get("subject")))
+            if isinstance(_leg, dict):
+                _leg.pop("edge_beats", None)   # a new edge starts fresh
+        if not _pending:
             sc.pop("approach", None)
-        else:
-            try:
-                from scene import persona_of
-                _pending.pop(persona_name(persona_of(ctx.chat)) or "", None)
-            except Exception:
-                pass
-            if not _pending:
-                sc.pop("approach", None)
 
     apply_attire_diff(sc, diff, ctx, res)
 
@@ -4140,7 +4167,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             # objective self-knowledge wins; overwrite the prior sketch.
             record.setdefault("sketch", {}).update(sk)
 
-    # Scene-manager bookkeeping (docs/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
+    # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
     _persist_blurbs(br, presences)
     _append_manager_conduct(br, presences, turn_idx)
 
@@ -6171,7 +6198,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                         intentions = intentions + [_a]
                 # PROJECTS (Tier 1.5): durable-but-not-eternal commitments,
                 # capped at two -- see affect.apply_project_ops and
-                # docs/DESIGN_LONG_TERM_GOALS.md. Authored ones seed from
+                # docs/design/DESIGN_LONG_TERM_GOALS.md. Authored ones seed from
                 # the card exactly as standing intentions do, deduped
                 # against live AND former so a project the character gave
                 # up (with a stated reason) never silently re-seeds over
@@ -6788,7 +6815,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             # OWN place-graph nodes, and every existing told entry's sureness
             # re-asked from belief_credence -- the node entry is a read-model
             # of the belief, and a belief explained away must stop steering
-            # (docs/DESIGN_PLACE_PURPOSE.md, mandatory drift rule). Runs
+            # (docs/design/DESIGN_PLACE_PURPOSE.md, mandatory drift rule). Runs
             # AFTER the merge so it reads reconciled beliefs, mirroring how
             # reconcile_inference_confidence treats memories.
             place_purpose.mirror_told_affords(st, turn.idx, _clock_seconds)

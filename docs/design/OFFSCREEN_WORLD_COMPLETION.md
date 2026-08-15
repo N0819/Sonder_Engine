@@ -72,7 +72,7 @@ fallible speaker.
 ### 2. Build crowds and persistent fixtures — **BUILT** (2026-08-10)
 
 All five steps are in the tree; see
-[`PROPOSAL_CROWDS.md`](PROPOSAL_CROWDS.md) §7a for what the building
+[`PROPOSAL_CROWDS.md`](DESIGN_CROWDS.md) §7a for what the building
 corrected in the design. `crowds.py` is pure; `StateDiff.crowd_ops` is how a
 Director says it; `commit.commit_crowds` is the persistence boundary;
 `agents.common.crowds_for_room` is the per-observer surface;
@@ -429,9 +429,9 @@ information, and motivated actors intersect.
 
 ## Related documents
 
-- [`PROPOSAL_ARCHITECTURAL_COMPLETION.md`](PROPOSAL_ARCHITECTURAL_COMPLETION.md)
+- [`PROPOSAL_ARCHITECTURAL_COMPLETION.md`](OFFSCREEN_WORLD_ARCHITECTURE.md)
 - [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md)
 - [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md)
-- [`PROPOSAL_CROWDS.md`](PROPOSAL_CROWDS.md)
-- [`AGENT_HANDOFF_ARCHITECTURE.md`](AGENT_HANDOFF_ARCHITECTURE.md)
-- [`UNBUILT.md`](UNBUILT.md)
+- [`PROPOSAL_CROWDS.md`](DESIGN_CROWDS.md)
+- [`AGENT_HANDOFF_ARCHITECTURE.md`](../archive/AGENT_HANDOFF_ARCHITECTURE.md)
+- [`UNBUILT.md`](../UNBUILT.md)

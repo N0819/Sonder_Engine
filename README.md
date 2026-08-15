@@ -25,24 +25,24 @@ director_interpret → mapping → perception_act
 ```
 
 Every stage's output is stored as a step/variant pair, so any turn can be
-rerolled, rerun from a stage, or hand-edited. `docs/PIPELINE.md` has the exact
+rerolled, rerun from a stage, or hand-edited. `docs/guides/PIPELINE.md` has the exact
 flow, including the different opening-turn path.
 
 ## Start here
 
 1. [`AGENTS.md`](AGENTS.md) — edit routing, invariants, source-of-truth order.
    **Read first for any behavioural change.**
-2. [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — how the system operates,
+2. [`docs/guides/ENGINEERING.md`](docs/guides/ENGINEERING.md) — how the system operates,
    layer by layer, and why each boundary is where it is.
-3. [`docs/PIPELINE.md`](docs/PIPELINE.md) — stage-by-stage execution.
-4. [`docs/DATABASE.md`](docs/DATABASE.md) — schema, write helpers, and the
+3. [`docs/guides/PIPELINE.md`](docs/guides/PIPELINE.md) — stage-by-stage execution.
+4. [`docs/guides/DATABASE.md`](docs/guides/DATABASE.md) — schema, write helpers, and the
    checklist every new persistent field must satisfy.
-5. [`docs/MEMORY.md`](docs/MEMORY.md) — what a character remembers: minting,
+5. [`docs/guides/MEMORY.md`](docs/guides/MEMORY.md) — what a character remembers: minting,
    provenance, ranking, unbidden recall, belief revision, embeddings.
 6. [`docs/CODE_MAP.md`](docs/CODE_MAP.md) — generated index of modules,
    functions, routes, and tables. Regenerate with `make map`; never hand-edit.
-7. [`docs/TESTING.md`](docs/TESTING.md) — test tiers and CI policy.
-8. [`docs/FEATURES.md`](docs/FEATURES.md) — every feature in plain language:
+7. [`docs/guides/TESTING.md`](docs/guides/TESTING.md) — test tiers and CI policy.
+8. [`docs/guides/FEATURES.md`](docs/guides/FEATURES.md) — every feature in plain language:
    what the app does, one line each.
 9. [`Design.md`](Design.md) — philosophy, architecture, and a verified
    built / partial / not-built conformance table.
@@ -96,10 +96,10 @@ python -c "import watchfiles" || pip install watchfiles
 ```bash
 pip install -c constraints.txt -r requirements-dev.txt
 
-make check       # compile + map freshness + structure + full tests — run before calling a change done
-make check-fast  # the same, with the database-backed slow tests skipped
-make test-fast   # broad suite, no database-backed tests
-make test-full   # every Python regression test
+make check       # compile + regenerate the map + structure + full tests — run before calling a change done
+make check-fast  # the same, but only checks the map on disk is current instead of rewriting it
+make test-full   # every Python regression test (6323 tests, ~74s)
+make test-lf     # last-failed first, then the rest — the fix-verify loop
 make structure   # duplicate symbols, patch debris, stale map
 make map         # regenerate docs/CODE_MAP.md
 make run         # start the server, watching for code changes
@@ -108,7 +108,7 @@ make serve       # start the server with no watcher — for playing
 
 `make check` treats a stale `docs/CODE_MAP.md`, a duplicated top-level symbol,
 or leftover patch-debris markers as hard failures. Real-browser tests are
-optional (`make test-browser`); see [`docs/TESTING.md`](docs/TESTING.md).
+optional (`make test-browser`); see [`docs/guides/TESTING.md`](docs/guides/TESTING.md).
 
 Run everything from the repository root — the app uses top-level imports such
 as `from db import q` and is not an installed package.
@@ -150,7 +150,7 @@ it is deciding turned out, and it may not see another frame's memories — have
 to run *before* ranking, which is exactly what an approximate-nearest-neighbour
 index cannot do cheaply. At this workload the exhaustive scan is also simply
 cheaper than the problem: a few tens of milliseconds for a long story
-([`docs/RESEARCH.md`](docs/RESEARCH.md) §1.3–1.4).
+([`docs/guides/RESEARCH.md`](docs/guides/RESEARCH.md) §1.3–1.4).
 
 Configuring an `embeddings` provider is what makes recall work by MEANING.
 Without one, the two vector rankings fall back to a character n-gram hash: a
@@ -180,7 +180,7 @@ API keys, provider settings, and all story content live in the local database �
 ## Credits
 
 Prior art and research the engine draws on is sourced in
-[`docs/RESEARCH.md`](docs/RESEARCH.md). Named here because it is an external
+[`docs/guides/RESEARCH.md`](docs/guides/RESEARCH.md). Named here because it is an external
 standard rather than a library:
 
 - **[Sigma Stratum — SIGMA Runtime documentation](https://github.com/sigmastratum/documentation)**
@@ -189,7 +189,7 @@ standard rather than a library:
   divergence as well as recall — fetching contrasting rather than matching
   material when a mind has converged, and marking it non-authoritative. Public
   SRIPs are CC BY 4.0 with an Independent Implementation Safe Harbor. See
-  [`docs/RESEARCH.md`](docs/RESEARCH.md) §1.5 for what carries over and what
+  [`docs/guides/RESEARCH.md`](docs/guides/RESEARCH.md) §1.5 for what carries over and what
   deliberately does not.
 
   Implemented independently from the public specification, with thanks. Sonder
@@ -223,7 +223,7 @@ Embeddings from Pre-trained Language Models*](https://arxiv.org/abs/2011.05864)
 (BERT-flow, EMNLP 2020)**: cosine similarity tracks surface overlap more than
 meaning, so a memory omits unchanged standing state entirely rather than
 appending a delta to a fixed frame. Together they took the verbatim-twin rate
-in the memory bank from 14.6% to 0.4%. [`docs/RESEARCH.md`](docs/RESEARCH.md)
+in the memory bank from 14.6% to 0.4%. [`docs/guides/RESEARCH.md`](docs/guides/RESEARCH.md)
 §1.6 has the detail, and names the leads deliberately *not* used — Angband's
 message aggregation is GPL and was not read, TADS 3 is proprietary and
 prohibits derivatives, Curveship's licence was never verified.

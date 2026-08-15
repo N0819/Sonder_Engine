@@ -13,8 +13,8 @@ kept deliberately separate: cheapness and fidelity**. Cheap does not win by
 default; the frontier is the deliverable, including the options that are
 expensive and excellent. Sources: the architecture document ("Cost and
 performance", "Lifecycle and reactivation", "Design principles"),
-[`PROPOSAL_2026-08-06.md`](PROPOSAL_2026-08-06.md) §1 and its
-[amendments](PROPOSAL_2026-08-06_AMENDMENTS.md),
+[`PROPOSAL_2026-08-06.md`](../archive/PROPOSAL_2026-08-06.md) §1 and its
+[amendments](../archive/PROPOSAL_2026-08-06_AMENDMENTS.md),
 [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md),
 [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md), the crowd-blob
 proposal, and the bg-life modules as they stand on `main`

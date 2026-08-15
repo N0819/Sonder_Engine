@@ -3,7 +3,7 @@
 Status: **accepted direction; implementation in progress**
 Scope: living world, off-screen life, crowds, durable social continuity, and
 the remaining ideas worth carrying forward from the original architecture.
-Authority: `Design.md`, `docs/PIPELINE.md`, and `docs/DATABASE.md` remain the
+Authority: `Design.md`, `docs/guides/PIPELINE.md`, and `docs/guides/DATABASE.md` remain the
 maintained specifications. This proposal orders work and defines completion;
 it does not override those documents.
 

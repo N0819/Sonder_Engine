@@ -1,6 +1,6 @@
 """Place purpose: what a character may know about what places are FOR.
 
-Built to docs/DESIGN_PLACE_PURPOSE.md. The firewall shape under test: the
+Built to docs/design/DESIGN_PLACE_PURPOSE.md. The firewall shape under test: the
 `assumed` basis is DERIVED from the character's own place-graph node names
 and never stored (so the doc's breach condition -- the lexicon consulted
 for an unperceived name -- is structurally impossible); `witnessed` comes

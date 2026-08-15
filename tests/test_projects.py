@@ -1,7 +1,7 @@
 """Projects (Tier 1.5): durable-but-not-eternal commitments, capped at two.
 
 The tier between the eternal drive and the completable intention, built
-against four measured failures (docs/DESIGN_LONG_TERM_GOALS.md):
+against four measured failures (docs/design/DESIGN_LONG_TERM_GOALS.md):
 
 - `ia4` ("walk the proved line to the shrine") marked satisfied the beat
   after first arrival -- true once, never steering again. (A13 run 4.)

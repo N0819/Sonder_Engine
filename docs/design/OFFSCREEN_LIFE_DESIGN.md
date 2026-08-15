@@ -11,7 +11,7 @@
 > against standing intentions with NO model call
 > (`offscreen.stochastic_ticks`), replacing a shipped rung that rode the
 > mapping_commit model call and whose tick seed no RNG ever consumed. On top,
-> `docs/PROPOSAL_2026-08-06.md` §1.0 superseded the per-character tier with
+> `docs/archive/PROPOSAL_2026-08-06.md` §1.0 superseded the per-character tier with
 > per-tick resolution = importance × distance (`offscreen.resolution_for`),
 > and the medium (profile-summary) rung runs out of band on the shared,
 > frame-scoped world epoch
@@ -21,7 +21,7 @@
 > and a later epoch can fire only its pre-adjudicated effect, without a model
 > call. Full `character_agent` adaptation and later steps remain unbuilt.
 > Registered as
-> [`UNBUILT.md`](UNBUILT.md) §2.7 and §2.8, which those roadmap numbers now
+> [`UNBUILT.md`](../UNBUILT.md) §2.7 and §2.8, which those roadmap numbers now
 > point at; this document keeps the argument. Treated here as **one mechanism at
 > three cadences** rather than two features.
 >

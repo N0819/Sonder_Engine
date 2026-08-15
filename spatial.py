@@ -1092,6 +1092,54 @@ def passable_neighbors(scene: dict) -> dict:
     return neighbors
 
 
+def passable_route_next_step(
+    scene: dict,
+    from_room: Optional[str],
+    to_room: Optional[str],
+) -> Optional[str]:
+    """The FIRST room on a shortest passable walk from one room to another,
+    or None when there is no such walk.
+
+    `passable_route_exists` answers "could they get there"; this answers
+    "where does one beat of getting there put them". It exists for travel
+    that CONTINUES: a walk the player declared once and did not repeat,
+    which the engine advances a leg at a time rather than teleporting at the
+    end or abandoning the moment a beat is spent talking.
+
+    Deterministic by construction, which the whole feature depends on --
+    reroll and resume-from-stage both require the diff to be a function of
+    its inputs, so neighbours are walked in sorted order and a tie between
+    two equally short routes always breaks the same way. Same passability
+    rule as `passable_route_exists`: only edges already open this beat make
+    a path, so a walk does not advance through a door nobody has opened.
+    """
+    if not from_room or not to_room or from_room == to_room:
+        return None
+    rooms = scene.get("rooms") or {}
+    if to_room not in rooms:
+        return None
+    neighbors = passable_neighbors(scene)
+
+    # BFS from the destination BACKWARDS: the graph is undirected, so the
+    # first neighbour of `from_room` this reaches is a first hop on some
+    # shortest route. Searching from the destination means one pass answers
+    # the question rather than one pass per candidate hop.
+    seen = {to_room}
+    frontier = [to_room]
+    while frontier:
+        nxt = []
+        for room_id in frontier:
+            for neighbor in sorted(neighbors.get(room_id, ())):
+                if neighbor in seen:
+                    continue
+                if neighbor == from_room:
+                    return room_id
+                seen.add(neighbor)
+                nxt.append(neighbor)
+        frontier = sorted(nxt)
+    return None
+
+
 def passable_route_exists(
     scene: dict,
     from_room: Optional[str],

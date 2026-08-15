@@ -1,6 +1,6 @@
 """How much life the cast is permitted while nobody is watching.
 
-`docs/OFFSCREEN_LIFE_DESIGN.md` specified a ladder and `schemas.BehaviorController`
+`docs/design/OFFSCREEN_LIFE_DESIGN.md` specified a ladder and `schemas.BehaviorController`
 declared it; nothing consumed either. Meanwhile the mapping stage was asked for
 off-screen ticks on every scene change, unconditionally, and commit logged
 whatever came back — so the engine had an off-screen simulation with no dial,
@@ -138,7 +138,7 @@ class TestOneShapeForATick:
 
 
 class TestTheModelIsOutOfTheTickBusiness:
-    """Step 4 of docs/PROPOSAL_2026-08-06.md section 1.2: the shipped
+    """Step 4 of docs/archive/PROPOSAL_2026-08-06.md section 1.2: the shipped
     stochastic rung cost a model call (ticks rode the mapping_commit payload
     and its `tick_seed` seeded nothing — no RNG anywhere in commit.py ever
     consumed it). The design specifies a seeded draw against standing
