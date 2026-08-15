@@ -29,15 +29,19 @@ from commit import track_background_presences
 from pipeline_context import ChatData, PipelineContext, TurnData
 
 
+_UID = [0]
+
+
 def _ctx(temp_db, resolve_out, *, scene=None):
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
         ("Test", "", time.time()))
+    _UID[0] += 1
     char_id = temp_db.qi(
         "INSERT INTO characters(name,sheet,source,created,resource_uid) "
         "VALUES(?,?,?,?,?)",
         ("Mara", json.dumps(default_character_data("Mara")), "{}",
-         time.time(), "char_mara"))
+         time.time(), "char_mara_%d" % _UID[0]))
     temp_db.qi(
         "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
         (chat_id, char_id, "active", "{}"))
@@ -176,3 +180,64 @@ class TestASchemaFieldNameIsNotARoom:
         }})
 
         assert set(sd["rooms"]) == {"notes_office", "summary_hall"}
+
+
+def test_the_whole_chain_closes_for_the_clerk_who_never_came(temp_db):
+    """Chat 72, all four fixes on one path.
+
+    Beat 1: the Director brings somebody, placing them by `positions` alone
+    -- which used to make a ghost. Beat 2: the player rings again from the
+    next room, and the presence must now be pickable from where they stand
+    and must receive what they can actually hear.
+
+    Written as one test because the failure was a CHAIN: any single link
+    still broken gives an empty lobby, and each link passing in isolation
+    is what let four beats of bell-ringing go unanswered.
+    """
+    from agents.background import _beat_for_presence
+    from commit import pick_background_reactors, track_background_presences
+
+    scene = {
+        "location": "Hotel", "time": "night",
+        "rooms": {
+            "lobby": {"name": "Lobby", "adjacent": [
+                {"to": "office", "barrier": "open", "distance": "adjacent"}]},
+            "office": {"name": "Back Office", "adjacent": [
+                {"to": "lobby", "barrier": "open", "distance": "adjacent"}]},
+        },
+        "positions": {"The Stranger": "lobby"},
+        "entities": {}, "attire": {}, "overlays": {},
+    }
+
+    # BEAT 1 -- he arrives, named only by the position ledger.
+    ctx = _ctx(temp_db, {
+        "resolved_event": "A man in a wrinkled uniform appears in the office "
+                          "doorway, rubbing his eyes.",
+        "dialogue_log": [],
+        "state_diff": {"positions": {"Night Clerk": "office"}},
+    }, scene=scene)
+    track_background_presences(ctx, nonce=0)
+
+    tracked = temp_db.wget(ctx.chat.id, "background_presences", {})
+    assert "Night Clerk" in tracked, "arrived and was never recorded"
+    assert tracked["Night Clerk"]["sketch"]["station_room"] == "office"
+
+    # BEAT 2 -- the player rings again. He is one open doorway away, nobody
+    # has named him, and nothing else would qualify him.
+    beat = {
+        "resolved_event": "The bell rings out across the lobby.",
+        "dialogue_log": [{"speaker": "The Stranger",
+                          "exact_quote": '"Is anyone there?"',
+                          "volume": "normal"}],
+    }
+    ctx2 = _ctx(temp_db, beat, scene=scene)
+    temp_db.wset(ctx2.chat.id, "background_presences", tracked)
+
+    assert pick_background_reactors(ctx2, beat, cap=1) == ["Night Clerk"], (
+        "at his post one open doorway away and still not offered the beat")
+
+    # And what he is handed is what he can hear, not the omniscient frame.
+    heard = _beat_for_presence(beat, scene, "office", "Night Clerk",
+                               beat_room="lobby")
+    assert "Is anyone there?" in heard
+    assert "rings out across the lobby" not in heard
