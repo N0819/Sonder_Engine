@@ -37,10 +37,10 @@ from db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from frames import create_frame, get_frame
 from paradox import get_paradox
 from scene import active_cast, persona_of, set_char_state, set_char_status
-from spatial import (THRESHOLD_CROSSING_BEATS, _hiding_holders,
-                     anchor_bearing_of, has_visual, hear_level, is_alarming,
-                     room_of, rooms_adjacent, sound_path, sound_walk_level,
-                     spatial_rel, travel_bearing)
+from spatial import (THRESHOLD_CROSSING_BEATS, _anchor_dir, _hiding_holders,
+                     anchor_bearing_of, effective_anchors, has_visual,
+                     hear_level, is_alarming, room_of, rooms_adjacent,
+                     sound_path, sound_walk_level, spatial_rel, travel_bearing)
 
 NOT_A_ZONE = None
 
@@ -479,6 +479,8 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
       - moving without addressing anyone -> focus clears (locomotion resets gaze;
         egocentric_frame's pass-through inference still supplies 'ahead');
       - being addressed by someone -> focus the speaker;
+      - a POSE declared relative to a room anchor -> focus that anchor (see
+        anchor_focus_for; ranks under the salience-snap, over persistence);
       - otherwise focus PERSISTS unchanged (no time decay), except a focused
         target who is no longer co-located is garbage-collected to None.
 
@@ -553,6 +555,37 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
                     return {"kind": "edge", "ref": path[1]}
         return None
 
+    def anchor_focus_for(name):
+        """The focus a body's own POSE declares this beat, or None.
+
+        `poses[name].relative_to` may name a FIXTURE of the room -- a rack, a
+        hearth, a doorway -- and `normalize_scene_poses` now keeps it when it
+        resolves to an anchor. A body turned toward a fixture has a heading,
+        and the room already records where its fixtures are, so this is derived
+        geometry rather than a guess.
+
+        Ranked below addressing and below the salience-snap (a conversation or
+        a shout still claims attention) and ABOVE bare persistence -- which is
+        the whole point. A persisted focus is a fact about an EARLIER beat; a
+        pose declared THIS beat is fresher evidence of where the body turned.
+        Letting persistence win is what kept a doorway in a character's face
+        for the rest of a scene after he had turned to the wall.
+
+        A BODY referent is deliberately left alone: leaning against someone is
+        not the same claim as facing them, and `relative_to` has always carried
+        arrangement rather than gaze for bodies.
+        """
+        room = positions.get(name)
+        if not room:
+            return None
+        pose = ((new_scene.get("poses") or {}).get(name)) or {}
+        ref = str(pose.get("relative_to") or "").strip()
+        if not ref or colocated(name, ref):
+            return None
+        if ref in (effective_anchors(new_scene, room) or {}):
+            return {"kind": "anchor", "ref": ref}
+        return None
+
     names = set(cast_names or [])
     names.update(positions.keys())
 
@@ -573,6 +606,8 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
             new_focus = focus_on(name, addressed_by[name]) or rec.get("focus")
         else:
             new_focus = alarm_focus_for(name)     # G2 salience-snap
+            if new_focus is None:
+                new_focus = anchor_focus_for(name)
             if new_focus is None:
                 new_focus = rec.get("focus")      # persist (no decay)
                 if isinstance(new_focus, dict) and new_focus.get("kind") == "target" \
@@ -600,6 +635,10 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
         adjacency carries NO bearing, facing None (we will not guess a heading);
       - stayed put but now facing a doorway (focus is an edge) whose edge has a
         bearing -> face that bearing (turned toward someone across the doorway);
+      - stayed put with focus on a room ANCHOR -> face that anchor's bearing
+        (turned to a fixture: the rack, the hearth, the window). This is how a
+        body turns AWAY from anything -- it turns TOWARD something else, and
+        the room is what knows which way each of them lies;
       - otherwise facing PERSISTS unchanged (no decay).
     Names no longer positioned are pruned by infer_came_from already. Mutates
     new_scene['orientation'] in place; returns whether anything changed."""
@@ -636,6 +675,14 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
                 # enters your front arc (the blind-spot LIFT that must not
                 # depend on a strong narrator honouring a prompt exemption).
                 toward = anchor_bearing_of(new_scene, ref)
+                new_facing = toward if toward else prev_facing
+            elif focus.get("kind") == "anchor" and ref:
+                # Turned to a FIXTURE of this room -> face its bearing. The
+                # counterpart of the lift above, and the case that was missing:
+                # turning toward the towel rack is how a body turns AWAY from
+                # the doorway behind it, and only the room knows which way
+                # either of them lies.
+                toward = _anchor_dir(new_scene, new_r, ref)
                 new_facing = toward if toward else prev_facing
             else:
                 new_facing = prev_facing          # persist (no decay)
