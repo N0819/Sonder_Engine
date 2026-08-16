@@ -9,6 +9,7 @@ import re
 import attire as attire_model
 import crowds as crowds_model
 from character_schema import (
+    _extra_part_placement,
     character_appearance,
     character_extra_parts,
     character_knowledge_config,
@@ -741,7 +742,32 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
         shown_data = []
         self_view = same_subject(sc, observer, body)
         for part in parts:
-            verdict = visibility.get(str(part.get("at") or "torso")) or {}
+            # A REGION THIS MAP KNOWS, or nothing is shown.
+            #
+            # `region_visibility` is keyed by attire.REGIONS. A part authored
+            # on a CARD is coerced to those keys (character_schema's
+            # `_extra_part_placement`), but a part minted by a
+            # `physical_transformation` is model free text and nothing
+            # normalised it -- so `at` arrived as "top of the head" and "back
+            # of the waist". `.get()` missed, the empty verdict read as NOT
+            # concealed, and the guard failed OPEN.
+            #
+            # Live, chat 76 turn 71: every one of the eight regions correctly
+            # returned concealed/vantage "out of sight", and The Doctor still
+            # received "Two fox ears emerge from ... Hinami's top of the head"
+            # as a SIGHT percept through a closed bathroom door -- into his
+            # view, his observations, and his character step's appraisal.
+            #
+            # Resolve through the same fallback the card path uses, then treat
+            # an unresolvable placement as concealed. A guard on the firewall
+            # must fail CLOSED: an unknown region is not evidence of exposure,
+            # and a missing key must never read as permission.
+            at = str(part.get("at") or "").strip().casefold()
+            if at not in attire_model.REGIONS:
+                at = _extra_part_placement(str(part.get("kind") or ""))[0]
+            verdict = visibility.get(at)
+            if verdict is None:
+                continue
             cause = verdict.get("by") or {}
             concealed = verdict.get("visibility") == "concealed"
             if concealed and "garments" not in cause and not self_view:
