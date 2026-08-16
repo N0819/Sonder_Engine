@@ -2601,10 +2601,30 @@ def normalize_scene_poses(scene: dict) -> dict:
             poses.pop(name, None)
             continue
         other = pose.get("relative_to")
-        if other and _ci_get(positions, other) != my_room:
-            pose["relative_to"] = ""
-            pose["relation"] = ""
-            pose["constraint"] = ""
+        if other:
+            # A pose may be relative to a co-located BODY or to a FIXTURE of
+            # the body's own room. `support` has always accepted both (see the
+            # anchors check below); `relative_to` accepted only bodies, and
+            # silently cleared anything else.
+            #
+            # That asymmetry threw away the only structured record of which way
+            # a body had turned. Live (chat 74 turn 57): the Director declared
+            # `relative_to: "towel_rack"` for a character who had turned to face
+            # the wall, back to the room. `towel_rack` is a real anchor of that
+            # room bearing 'ne' -- but it is not a body, so this cleared it, and
+            # the only surviving trace was prose in `detail`. `focus` then kept a
+            # stale doorway edge from an earlier beat, `infer_facing` pinned the
+            # heading to that doorway's 'w', and the adjacent room stayed in
+            # full view: the same composed view read "back to the room" and
+            # "You see Hinami" a sentence apart.
+            #
+            # A body turned toward a fixture is exactly as real as a body
+            # leaning on one, and the room already says where its fixtures are.
+            anchors = effective_anchors(scene, my_room) or {}
+            if other not in anchors and _ci_get(positions, other) != my_room:
+                pose["relative_to"] = ""
+                pose["relation"] = ""
+                pose["constraint"] = ""
         support = pose.get("support")
         if support:
             anchors = (rooms.get(my_room) or {}).get("anchors") or {}

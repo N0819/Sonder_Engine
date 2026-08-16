@@ -1266,7 +1266,14 @@ RESOLVE_SPATIAL_POSES = (
  "or gains/loses a physical constraint. Station says WHERE, contact says WHAT TOUCHES, pose "
  "says HOW THE BODY IS ARRANGED; encode all applicable axes. If a present body lacks a pose "
  "but established context makes its current arrangement clear, establish it now. Never "
- "default an unspecified pose to standing or use 'before/in front of' without orientation.\n"
+ "default an unspecified pose to standing or use 'before/in front of' without orientation. "
+ "`relative_to` may name a co-located body OR one of that room's own anchors: a body turned "
+ "to the window, the hearth, or the door is oriented BY that fixture, and the engine derives "
+ "which way it then faces from the anchor's bearing. Record it whenever a beat turns someone "
+ "— and record turning away as turning TOWARD whatever they now face, because a heading is a "
+ "direction and 'not that way' is not one. A turn written only into `detail` reaches no mind: "
+ "prose is not state, so a body that turned its back keeps looking wherever it looked before, "
+ "and keeps seeing whatever was there.\n"
 )
 
 
