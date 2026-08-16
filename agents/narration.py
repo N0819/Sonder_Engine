@@ -21,15 +21,21 @@ import re
 
 from spatial import (
     containment_conceals,
+    contact_sensation,
+    effective_light,
     entity_arc,
     has_visual,
+    hiding_holders_of,
     room_of,
+    same_subject,
     spatial_digest,
     spatial_facts,
     spatial_rel,
+    substances_for,
     visible_adjacent_rooms,
     visual_level_between,
 )
+from weather import weather_for_room, weather_words
 
 
 def _spatial_facts_field(scene, observer):
@@ -300,6 +306,175 @@ def _speaker_display(name, recognized, appearance=None, aliases=None):
     stripped = _strip_identity_tokens(appearance, [name, *(aliases or [])]) \
         or None
     return _unknown_actor_label(name, stripped, aliases)
+
+
+def _standing_substance_clauses(scene, you):
+    """Standing substances involving `you`, as cause-blind touch clauses.
+
+    Mirrors `spatial.substance_event_clause`'s epistemic envelope exactly, so
+    a standing re-delivery can never exceed what the onset beat delivered:
+    the recipient side never names the source (an internal target knows the
+    matter reached them, not who caused it), and the source side never names
+    the destination (releasing is felt at your own body, where it landed is
+    sight's problem). `detail` is model prose delivered once at onset and is
+    deliberately not re-delivered -- every admission here subtracts.
+    """
+    clauses = []
+    for record in substances_for(scene, you):
+        substance = " ".join(str(record.get("substance") or "").split())[:160]
+        if not substance:
+            continue
+        amount = " ".join(str(record.get("amount") or "").split())[:80]
+        material = f"{amount} of {substance}" if amount else substance
+        placement = str(record.get("placement") or "").strip().casefold()
+        if same_subject(scene, record.get("target"), you):
+            if placement == "interior":
+                interior = " ".join(
+                    str(record.get("target_interior") or "").split())[:160]
+                clauses.append(
+                    f"your {interior or 'interior'} still holds {material}")
+            elif placement == "surface":
+                part = " ".join(
+                    str(record.get("target_part") or "").split())[:120]
+                clauses.append(f"{material} on your {part or 'skin'}")
+            else:
+                clauses.append(f"{material} within what you contain")
+        elif same_subject(scene, record.get("source"), you):
+            part = " ".join(str(record.get("source_part") or "").split())[:120]
+            clauses.append(f"{material} released from your {part or 'body'}")
+    return clauses
+
+
+#: Payload order for the manifest -- the fixed vocabulary of
+#: `composer.CHANNELS` minus `mixed`, which appears only when a merged span
+#: actually crossed channels (absent-when-empty, like the key itself).
+_MANIFEST_CHANNELS = ("sight", "hearing", "touch", "smell", "interoception")
+
+
+def _sensory_channels_manifest(scene, player_name, view, observations,
+                               recognized, cast_info, p_room):
+    """Per-sense delivery manifest for the narrator payload, or {}.
+
+    THE DEFECT: percepts carry a real channel from every builder through
+    `composer.observations_from_render`, and the tag was discarded one stage
+    before the prose -- the narrator payload was a single blob, so a model
+    obeying SCENE CRAFT's compression could not see that an entire sense went
+    silent, and the composer's delta dedupe means beat two of a standing
+    contact delivers no touch at all. Measured over 600 stored perception
+    steps: sight 1089 spans against touch 94 and delivered smell ~0 after the
+    opening turn.
+
+    EVERY ENTRY IS A RE-DELIVERY, NEVER A WIDENING -- the firewall is a gap
+    and guards subtract:
+      * this-beat spans are admitted only when byte-contained in the player's
+        own scrubbed view, so this second representation structurally cannot
+        exceed the first (the same invariant `observations_from_render`
+        keeps, re-checked here because observations are projected from the
+        render BEFORE the tripwire scrub);
+      * standing contacts: the player is a party (first-hand by definition),
+        and the other party passes the same recognition floor the view used
+        (`_speaker_display`), falling to "someone" for a spelling the floor
+        cannot place;
+      * standing substances: cause-blind both directions (see
+        `_standing_substance_clauses`);
+      * weather is exposure-gated by `weather_for_room` itself, per channel;
+      * a player sealed inside an enclosure gets no manifest at all -- the
+        room's air, light and weather are not theirs, and perception already
+        owns that view.
+    """
+    if not isinstance(scene, dict) or not p_room:
+        return {}
+    if hiding_holders_of(scene, player_name):
+        return {}
+
+    view_text = str(view or "")
+    by_channel = {}
+    for obs in observations or []:
+        if not isinstance(obs, dict):
+            continue
+        text = str(((obs.get("observed") or {}).get("text")) or "").strip()
+        if not text or text not in view_text:
+            continue
+        channel = str(obs.get("channel") or "mixed")
+        by_channel.setdefault(channel, []).append(text)
+
+    def _partner_label(other):
+        other = str(other)
+        info = (cast_info or {}).get(other)
+        if info is not None:
+            return _speaker_display(other, recognized,
+                                    info.get("appearance"),
+                                    info.get("aliases"))
+        if _recognizes(other, recognized or ()):
+            return other
+        return "someone"
+
+    touch_standing = []
+    for contact in (scene.get("contacts") or []):
+        if not isinstance(contact, dict):
+            continue
+        clause = contact_sensation(contact, you=player_name, scene=scene,
+                                   label_for=_partner_label)
+        if clause:
+            touch_standing.append(clause)
+    touch_standing.extend(_standing_substance_clauses(scene, player_name))
+
+    try:
+        scoped = weather_for_room(scene, p_room) or {}
+    except Exception:
+        scoped = {}
+    sight_standing = list(weather_words(scoped, "sight"))
+    hearing_standing = list(weather_words(scoped, "sound"))
+    if scoped.get("falls_on_you"):
+        touch_standing.append("%s %s falling on you"
+                              % (scoped["intensity"], scoped["precipitation"]))
+    if scoped.get("wind_reaches"):
+        touch_standing.append("%s on your skin" % scoped["wind"])
+
+    light = effective_light(scene, p_room)
+    sight_standing.append(f"light: {light}")
+
+    if light == "dark":
+        # Content wins over aperture: a filling light source or a percept
+        # that legitimately rode sight this beat means SOMETHING is seen.
+        sight_status = ("degraded", "almost no light reaches this room") \
+            if by_channel.get("sight") else \
+            ("silent", "no light reaches this room")
+    elif light == "dim":
+        sight_status = ("degraded", "dim light -- shapes, not detail")
+    else:
+        sight_status = ("live", "")
+
+    touch_live = bool(touch_standing or by_channel.get("touch"))
+    statuses = {
+        "sight": sight_status,
+        "hearing": ("live", ""),
+        "touch": ("live", "") if touch_live else
+                 ("silent", "nothing is in contact with your body this beat"),
+        "smell": ("live", "open air; nothing ledgered rides this channel"
+                  if not by_channel.get("smell") else ""),
+        "interoception": ("live", "your own body, always"),
+    }
+    standing = {
+        "sight": sight_standing,
+        "hearing": hearing_standing,
+        "touch": touch_standing,
+    }
+    manifest = {}
+    for channel in _MANIFEST_CHANNELS:
+        status, why = statuses[channel]
+        entry = {"status": status}
+        if why:
+            entry["why"] = why
+        if by_channel.get(channel):
+            entry["this_beat"] = by_channel[channel]
+        if standing.get(channel):
+            entry["standing"] = standing[channel]
+        manifest[channel] = entry
+    if by_channel.get("mixed"):
+        manifest["mixed"] = {"status": "live",
+                             "this_beat": by_channel["mixed"]}
+    return manifest
 
 
 def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
@@ -805,6 +980,18 @@ def narrator(ctx, nonce):
             _world_fields["co_present_positions"] = pos_payload
         if portal_states:
             _world_fields["portal_states"] = portal_states
+        # Per-sense delivery manifest (additive, absent-when-empty like
+        # authored_body_parts, so pre-change turns keep their payload shape
+        # and reroll/replay stay safe). Built from the outcome observations'
+        # own IR-derived channels plus the standing substrate; every
+        # admission subtracts -- see _sensory_channels_manifest.
+        _obs_map = (ctx.get("perception_outcome", {}) or {}).get(
+            "observations") or {}
+        _senses = _sensory_channels_manifest(
+            _scene_for_frame, player_name, view,
+            _obs_map.get("player") or [], recognized, cast_info, p_room)
+        if _senses:
+            _world_fields["sensory_channels"] = _senses
         _fidelity_facts = {
             "event_order": event_order,
             "position_facts": pos_facts,
