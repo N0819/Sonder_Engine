@@ -2061,6 +2061,32 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                     handle, cur["wearing"])
                 if canonical in cur["wearing"]:
                     cur["wearing"].remove(canonical)
+                elif report:
+                    # A `remove` naming nothing this body wears is a no-op --
+                    # the resolver already refused the handle, so nothing was
+                    # ever going to come off -- and it was a SILENT one, which
+                    # let the emitter keep believing the ledger held garments
+                    # it did not. Measured (chat 76, turn 57): the body
+                    # specialist re-removed the "utility sash with pouches"
+                    # taken off the beat before, and removed a "nightwear
+                    # garment" this branch never added (the name is a parent
+                    # branch's ledger bleeding into context). Surfaced on both
+                    # channels, dropped rather than guessed: a legitimate
+                    # alias resolves through `resolve_garment`'s tiers above
+                    # and never reaches this branch, while forcing an
+                    # unresolved handle through would remove a coin-flip
+                    # garment. Wrongly keeping a garment on is recoverable
+                    # next beat; wrongly removing one is not.
+                    ctx.tell_director(
+                        f"attire: `remove` named {handle!r} for {name}, but "
+                        "nothing they are currently wearing answers to it "
+                        f"(worn: {', '.join(cur['wearing']) or 'nothing'}). "
+                        "Dropped as a no-op -- a garment already off the "
+                        "body, or never on it, has no removal to apply. If a "
+                        "worn garment was meant, name it as the ledger does.")
+                    ctx.add_warning(
+                        f"attire: dropped no-op removal of {handle!r} for "
+                        f"{name} (not currently worn)")
             if d.get("state") is not None:
                 cur["state"] = (d["state"] if isinstance(d["state"], list)
                                 else [d["state"]])
@@ -2172,17 +2198,32 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                         f"{name}'s {_handle!r}; coverage unchanged")
         cur["regions"] = _after
         cur["wearing"] = attire_model.flat_wearing(_after)
+        # A derived-shaped note is always ours to rebuild, current or not --
+        # the same rule `rederive_entry` applies on every read path
+        # (`attire.is_derived_state_note`; chat 52 carried three stale notes
+        # at once and earned it). This seam used to keep a weaker hand-rolled
+        # form: a stale "bare at the ..." was dropped only when the old
+        # string was a SUBSTRING of the new note, i.e. only when the bare set
+        # grew by appending regions in the same order. The moment a garment
+        # re-covered a region, containment failed and the stale note survived
+        # as though authored. Measured (chat 76, turns 57/59/60): the STORED
+        # ledger held "bare at the head, arms", "bare at the head, torso,
+        # arms, waist, groin, legs" and "bare at the head, arms, waist,
+        # groin, legs" at once -- every reader healed the contradiction
+        # through `rederive_entry` on the way out, while the stored shape,
+        # which the attire panel, exports and checkpoints read raw, kept all
+        # three. Rebuilt unconditionally, not gated on `_notes` being
+        # non-empty: a body dressed again derives NO notes, and that is
+        # exactly the beat the last "bare at the" note must leave on.
+        # Authored prose survives -- keeping it is the point of `state`
+        # being a list.
         _notes = attire_model.flat_state(_after)
-        if _notes:
-            _authored = [
-                n for n in (cur.get("state") or [])
-                if isinstance(n, str) and n.strip() and n not in _notes
-                and not (
-                    n.casefold().startswith("bare at the ")
-                    and any(n.casefold() in note.casefold() for note in _notes)
-                )
-            ]
-            cur["state"] = _notes + _authored
+        _authored = [
+            n for n in (cur.get("state") or [])
+            if isinstance(n, str) and n.strip() and n not in _notes
+            and not attire_model.is_derived_state_note(n)
+        ]
+        cur["state"] = _notes + _authored
         _had = {g["name"].casefold()
                 for entry in _before.values()
                 for g in (entry.get("garments") or [])
@@ -4230,13 +4271,41 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # carried both for one figure; tracking the description too would mint a
     # second presence nothing could ever match to the first.
     _diff_positions = (diff.get("positions") or {})
-    _entity_kinds = {
-        str((edef or {}).get("name") or "").strip().casefold():
-            str((edef or {}).get("kind") or "").strip().casefold()
-        for edef in list((diff.get("entities") or {}).values())
-                  + list((_scene_now.get("entities") or {}).values())
-        if isinstance(edef, dict)
-    }
+    # KEYED BY BOTH ID AND DISPLAY NAME, because the caller below looks this up
+    # with a `positions` key -- and `positions` is keyed by entity ID while an
+    # entity def carries a separate human `name`. Keyed by name alone, the
+    # lookup missed for every entity whose id is not byte-identical to its
+    # name, which is nearly all of them: `utility_sash_with_pouches_hinami`
+    # against "utility sash with pouches hinami" is underscores against spaces.
+    # A miss returns None, None is not in _INERT_ENTITY_KINDS, and the guard
+    # below defaults to inclusion -- so the inert-kind rule never fired on this
+    # path at all.
+    #
+    # Live, chat 75 turns 57-60. Hinami took off a utility sash and set it on
+    # the bed; the beat placed it in the room, this path admitted it as a
+    # background presence, and the reactor gate then gave it a housekeeper
+    # persona and three turns of dialogue -- "Everything good in here?" -- with
+    # a `tell` of "tugs at the sash at her hip", the entity's own name folded
+    # back into a mannerism. The player, believing a hotel employee had walked
+    # in on her, asked the intruders to leave. Four of that story's six tracked
+    # presences were inanimate: a sash, a key card, a leather pouch and a sonic
+    # screwdriver.
+    #
+    # The comment above ("a mistracked object never reacts anyway") was the
+    # load-bearing assumption, and it was false: the gate lets a presence react
+    # once it is voiced, and a presence this path admits can be voiced.
+    _entity_kinds = {}
+    for _eid, _edef in (list((diff.get("entities") or {}).items())
+                        + list((_scene_now.get("entities") or {}).items())):
+        if not isinstance(_edef, dict):
+            continue
+        _kind = str(_edef.get("kind") or "").strip().casefold()
+        if not _kind:
+            continue
+        for _key in (_eid, _edef.get("name")):
+            _key = str(_key or "").strip().casefold()
+            if _key:
+                _entity_kinds.setdefault(_key, _kind)
     for _placed in _diff_positions:
         _name = str(_placed or "").strip()
         if not _name or name_in_roster(_name, roster):
