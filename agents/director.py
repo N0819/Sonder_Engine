@@ -860,6 +860,34 @@ def director_interpret(ctx, nonce):
                 sc, pers.get("name") or persona_name(pers)),
         },
         "present_characters": cast_info,
+        # Named figures with no character id. `flow.addressed_to` accepts a
+        # NAME STRING for exactly these (schemas.py: "the only way the director
+        # can address an UNREGISTERED background presence"), and the prompt
+        # asks for one -- but this stage was never shown WHICH figures exist,
+        # so the instruction named something the model could not see. The
+        # channel was documented and unusable.
+        #
+        # Live, chat 75 turn 60. The player told the intruders in her room to
+        # close the door and leave. The only addressable ids in front of the
+        # Director were registered cast, so it routed the line to The Doctor,
+        # who was standing in the corridor being talked past, and he left.
+        #
+        # Only figures with a resolvable room are listed -- addressing someone
+        # who is nowhere is meaningless -- but co-presence is FLAGGED rather
+        # than filtered, because calling through an open doorway is ordinary.
+        "addressable_presences": [
+            _bp for _bp in (
+                {"name": _pn,
+                 "room": (room_of(sc, _pn)
+                          or ((_pr.get("sketch") or {}).get("station_room") or "")),
+                 "same_room_as_player": (
+                     (room_of(sc, _pn)
+                      or ((_pr.get("sketch") or {}).get("station_room") or ""))
+                     == p_room)}
+                for _pn, _pr in
+                (wget(chat["id"], "background_presences", {}) or {}).items())
+            if _bp["room"]
+        ],
         "world_books": world_books,
         "standing_intentions": raw_intents[:12],
         "pending": wget(chat["id"], "pending", []),
