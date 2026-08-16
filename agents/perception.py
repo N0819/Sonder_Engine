@@ -58,7 +58,9 @@ from spatial import (
     measured_proximity_rel,
     merge_scene_with_diff,
     normalize_barrier,
+    normalize_bearing,
     proximity_rel,
+    relative_bearing,
     resolve_substance_ops,
     room_layout,
     room_of,
@@ -1873,9 +1875,41 @@ def _behind_rooms(scene, observer):
     NEW VISUAL detail from a room behind them -- they get sound/other channels
     and what they already remember, but not fresh sight (you don't watch the
     room you just walked out of unless you turn). Empty when the observer has
-    no movement history, so nothing is gated. See the perception FOV clause."""
+    no movement history, so nothing is gated. See the perception FOV clause.
+
+    THE REAR ARC, NOT JUST DEAD ASTERN. `relative_bearing` already distinguishes
+    `behind_left` / `behind_right`, but `egocentric_frame` collapses those into
+    the LATERAL buckets -- correctly, because an exit behind your left shoulder
+    is still the one on your left when prose places it. Reading only `behind`
+    therefore gated a doorway at 180 degrees and let one at 135 through, so a
+    body could turn its back on a room and go on receiving fresh sight of it.
+
+    Live (chat 74 turn 57): a character turned from the open doorway ('w') to
+    the towel rack ('ne'). `relative_bearing('ne','w')` is `behind_left`, the
+    room landed in `left`, and his view read "back to the room. You see Hinami".
+
+    This matches what the WITHIN-room path already does -- `entity_arc` gives a
+    source a front/rear arc rather than a single astern bearing -- so the two
+    scales of the same rule finally agree. Only sight is gated either way.
+    """
     frame = egocentric_frame(scene, observer)
-    return [e.get("to") for e in frame.get("behind") or [] if e.get("to")]
+    behind = [e.get("to") for e in frame.get("behind") or [] if e.get("to")]
+
+    orientation = scene.get("orientation") or {}
+    rec = next((v for k, v in orientation.items()
+                if str(k).casefold() == str(observer).casefold()), None) or {}
+    facing = rec.get("facing")
+    if not facing:
+        return behind                    # movement fallback only; no guessing
+
+    room = (scene.get("rooms") or {}).get(room_of(scene, observer)) or {}
+    for edge in room.get("adjacent") or []:
+        if not isinstance(edge, dict) or not edge.get("to"):
+            continue
+        rel = relative_bearing(facing, normalize_bearing(edge.get("dir")))
+        if str(rel or "").startswith("behind") and edge["to"] not in behind:
+            behind.append(edge["to"])
+    return behind
 
 
 def _visible_rooms_for(scene, observer, room_id):
@@ -2194,6 +2228,34 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
         "conceals_identity"))
 
 
+def _subject_concealed_terms(chat_id, subject_name):
+    """Tripwire terms for a body, through the SAME precedence the concealment
+    layer uses.
+
+    Read straight from `active_disguises` this was a second source of truth,
+    and the two disagreed exactly when it mattered. `_subject_disguise_context`
+    drops the disguise when the body is TRANSFORMED -- so it returns
+    `known_to=None` -- while the terms came back from the dead disguise anyway.
+    The tripwire then held concealed features with nobody marked as knowing
+    them, so EVERY observer read as unaware and an aware one got flagged.
+
+    Live (chat 74): Hinami's `glamour_dropped` transformation correctly
+    overrode three stale disguise rows, and `perception_outcome` still warned
+    that 'fox ears' had leaked to The Doctor -- who is in `known_to`, and who
+    by then was looking at ears that were genuinely there. The view was right;
+    the warning was noise, and noise on a firewall tripwire is expensive
+    because it trains a reader to ignore it.
+
+    A transformed body conceals nothing: it is not hiding a feature, it HAS
+    the feature. So there is nothing to tripwire on.
+    """
+    key = str(subject_name or "").casefold()
+    if active_transformations(chat_id).get(key):
+        return []
+    return [t for t in ((active_disguises(chat_id).get(key) or {})
+                        .get("concealed_terms") or []) if t]
+
+
 # Vertical motion, and nothing else. A beat can legitimately open and close a
 # door, or have one body approach while another retreats, so most antonym pairs
 # generate false positives -- but a hand cannot rise and descend in the same
@@ -2461,8 +2523,7 @@ def perception_act(ctx, nonce):
     # is never rendered as perceived.
     p_visible, p_disguise, p_disguise_known, _ci = _subject_disguise_context(
         chat["id"], p_name, p_appearance, known)
-    p_disguise_terms = (active_disguises(chat["id"]).get(str(p_name).casefold())
-                        or {}).get("concealed_terms") or []
+    p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
 
     speech_elems = [
         e for e in (interp.get("sequence") or [])
@@ -2930,8 +2991,7 @@ def perception_outcome(ctx, nonce):
     # features. The knowledge layer (who KNOWS the truth) rides the payload.
     p_appearance, p_disguise, p_disguise_known, _ci = _subject_disguise_context(
         chat["id"], p_name, p_appearance_true, known)
-    p_disguise_terms = (active_disguises(chat["id"]).get(str(p_name).casefold())
-                        or {}).get("concealed_terms") or []
+    p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
 
     # background_react (agents/background.py) is a separate, later stage
     # in the plan -- its output is merged in HERE rather than by mutating
