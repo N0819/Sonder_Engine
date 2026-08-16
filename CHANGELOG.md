@@ -1,5 +1,69 @@
 # Changelog
 
+## alpha 8.4.4 — A closed door is a closed door
+
+- **What is behind a shut door stays behind it.** A body changed by the story —
+  ears, tails, anything the change gave it — was described to everyone who
+  could not see it. The check that should have stopped this was correct about
+  every part of the body and never ran, because it asked *where on the body*
+  using one vocabulary and was answered in another. It failed toward showing.
+  It now fails toward hiding: a placement the engine cannot resolve is treated
+  as unseen, while anyone actually in the room still sees exactly what they did.
+
+- **Something you took off is not somebody who can talk.** A sash set down on
+  the bed was admitted to the story as a person, given a hotel employee's
+  manner and three turns of dialogue — so the player, believing a stranger had
+  walked in, asked them to leave. Objects are kept out by asking whether a
+  thing can be picked up and carried rather than by matching what it is called,
+  which no list can keep up with. A shrunken person and one carried by a giant
+  are both still people.
+
+- **A line goes to the person you said it to.** Telling the intruders in your
+  room to leave sent it to the one character standing outside it, who left. The
+  Director was asked to name the figure addressed and was never shown who was
+  present to name.
+
+- **Turning away means you stop seeing it.** Turning to face something that is
+  not a person — a rack, a window, a fire — was recorded as facing nothing at
+  all, so you kept looking exactly where you had been and kept seeing into the
+  room you had just turned your back on.
+
+- **Your clothes stop contradicting themselves.** The wardrobe could hold three
+  statements about one body at once, each written when something changed and
+  none of them cleared. Every reader healed it on the way past, so the story
+  read correctly while the ledger, the wardrobe panel and every export
+  disagreed.
+
+- **A story that changed your body describes it properly.** Anatomy the story
+  gave you was rendered from words never meant to be read aloud — *"two fox
+  ears emerge from the fluffy, pointed, golden of your top of the head."* The
+  placement is now understood, and the description that was jammed into it is
+  kept as a description instead of thrown away.
+
+- **The engine stops cutting your own dialogue badly.** The narrator does not
+  repeat your lines back at you, and removing them left the sentence around
+  them in pieces — *"you ask, your voice clear over the fading hum"* with
+  nothing asked. It now rebuilds the sentence rather than deleting from it.
+
+- **The story can tell which of your senses are live.** Everything you perceive
+  has always been tagged by sense — sight, hearing, touch, smell, your own body
+  — and all of it was flattened into one block before the narrator saw it, so a
+  beat where touch was saturated read the same as one where it was silent.
+  The narrator now sees which senses are carrying, which are dulled and why,
+  and what is standing on them: what is against your skin, what is on it, the
+  light, and the weather.
+
+- **Weather reaches the story.** It has been worked out for every room and for
+  each sense separately — so a cellar can hear rain it cannot see — and it went
+  only to the pictures and the ambient sound. It now reaches the writing.
+
+- **Running on your own hardware is much faster and more reliable.** A local
+  model was being asked for JSON in a way it was free to ignore, and often did;
+  it is now given the actual shape required. The heaviest stage of a turn went
+  from 53 seconds to 15, and the narrator from failing outright to passing
+  every time. Separately, a rejected request could quietly switch a model's
+  reasoning back on and pay for it on every turn afterwards.
+
 ## alpha 8.4.3 — A disguise conceals features, not who you are
 
 - **Someone who knows your face still knows your face.** Any disguise used to
