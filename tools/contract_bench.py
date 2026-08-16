@@ -16,6 +16,17 @@ model can actually do the job.
 
     python3 tools/contract_bench.py --step director_interpret --models a,b,c
     python3 tools/contract_bench.py --step character --models a,b --trials 3
+    python3 tools/contract_bench.py --step director_body --models a,b
+
+The request sent is the request the pipeline sends -- same system prompt, same
+role's reasoning effort, same JSON mode -- because a bench that quietly leaves
+reasoning on measures a regime production never runs, and does it worst for
+the thinking models it is meant to rank.
+
+The six Director specialists are benchable steps in their own right. They are
+scoped structural tasks and are where a smaller, cheaper model most plausibly
+belongs (design note 19), so they are the stages worth measuring before tiering
+anything down.
 
 Order the candidates by `model_bench` first; run the survivors through this.
 Speed is only interesting among models that work.
@@ -88,18 +99,13 @@ PAYLOADS = {
     # schema and fail another's outright -- they ask for different SHAPES, not
     # merely different content -- so every role a config assigns has to be
     # tested on its own terms.
-    "perception": {
-        "perceivers": [
-            {"id": "2", "name": "Vessel", "room": "inn_room",
-             "awareness": "awake"},
-        ],
-        "resolved_event": "Wren crosses to the casement and works the latch; "
-                          "it does not give. Vessel watches from the bed.",
-        "scene": SCENE,
-        "spatial_to_sources": {"Wren": {"same_room": True, "barrier": "open",
-                                        "distance": "same"}},
-        "variant_seed": "bench",
-    },
+    # NO "perception". Perception is deterministic -- every view is composed
+    # from the typed IR in agents/composer.py, and agents/perception.py imports
+    # no model seam at all -- so no model this tool ranked would ever be called
+    # for it. The prompt and schema survive so pre-change turns still validate
+    # and replay; a BENCH row is a different thing, and offering one reports a
+    # model's fitness for work it will never be given. Same argument as
+    # providers.ROLES makes for not offering a perception settings row.
     "character": {
         "self": {
             "name": "Vessel",
@@ -141,13 +147,117 @@ PAYLOADS = {
 }
 
 
-def _post(prov, model, system, user, max_tokens, timeout):
+# THE SIX SPECIALISTS, which had no payloads here at all -- so the stages that
+# actually decide whether a smaller model can be tiered in were the only ones
+# that could not be measured. Each gets the shared beat view (design note 19:
+# the beat, the declared acts, the final dice, the roster) plus its OWN
+# ledgers, and nothing else. Built at resolve, where every specialist runs.
+_SPEC_BASE = {
+    "source": "resolved_beat",
+    "player": "Wren",
+    "cast": ["Vessel"],
+    "declared_actions": [{"actor": "Wren",
+                          "attempt": "cross to the window and try the latch",
+                          "commitment": "contestable"}],
+    "dice_results_final": [],
+    "resolved_event": "Wren crosses to the casement and works the latch; it "
+                      "does not give. Her coat slips from one shoulder as she "
+                      "leans into it. \"It is stuck fast,\" she says.",
+    "dialogue_log": [{"speaker": "Wren", "exact_quote": "It is stuck fast."}],
+    "variant_seed": "bench",
+}
+_ROOMS_INDEX = {"inn_room": "Inn Room", "inn_hallway": "Hallway"}
+
+PAYLOADS.update({
+    "director_body": {
+        **_SPEC_BASE,
+        "attire": {"Wren": {"wearing": ["wool coat", "linen shirt", "boots"]},
+                   "Vessel": {"wearing": ["grey robe"]}},
+        "overlays": {}, "active_awareness": {"Wren": "awake", "Vessel": "awake"},
+        "simulation_clock": {"time_of_day": "late evening"},
+        "rooms": _ROOMS_INDEX,
+    },
+    "director_social": {**_SPEC_BASE, "background_presences": ["innkeeper"]},
+    "director_contact": {
+        **_SPEC_BASE,
+        "contacts": [], "contained": {}, "scales": {},
+        "rooms": _ROOMS_INDEX,
+        "entity_names": {"casement": "casement window", "desk": "writing desk"},
+        "worn_garments": [{"name": "wool coat", "worn_by": "Wren"},
+                          {"name": "grey robe", "worn_by": "Vessel"}],
+    },
+    "director_objects": {
+        **_SPEC_BASE,
+        "entities": {"casement": {"name": "casement window", "kind": "fixture",
+                                  "portable": False,
+                                  "state": {"latch": "stuck"}}},
+        "rooms": _ROOMS_INDEX, "notices": [],
+        "worn_garments": [{"name": "wool coat", "worn_by": "Wren"}],
+    },
+    "director_spatial": {
+        **_SPEC_BASE,
+        "rooms": SCENE["rooms"], "positions": SCENE["positions"],
+        "stations": {"Wren": "at the casement"},
+        "poses": {}, "contained": {}, "movement": None, "movers": {},
+    },
+    "director_offscreen": {
+        **_SPEC_BASE,
+        "crowds": [], "couriers": [], "carried_reports": [],
+        "unratified_claims": [],
+        "offscreen_planning": {"enabled": False, "plans": []},
+        "rooms": _ROOMS_INDEX,
+    },
+})
+
+# The engine does not key its prompts, its schemas and its provider roles the
+# same way, and benching the wrong one of the three fails silently or not at
+# all. `director_resolve` is the clearest case: a real SCHEMA_MAP step with no
+# prompt of that name, because the monolith is gone (design note 19) and the
+# prose author's prompt is `director_resolve_lean`. `--step director_resolve`
+# therefore raised KeyError, and the resolve contract -- the one every live
+# failure has been about -- could not be benched at all.
+PROMPT_KEY = {"director_resolve": "director_resolve_lean"}
+
+# Which provider role's reasoning effort each step runs under in production,
+# so _post can send what the pipeline sends. `character` has three tiers and
+# is benched at the most demanding one; a background character running cheaper
+# is a floor, not a ceiling.
+STEP_ROLE = {
+    "director_interpret": "director",
+    "director_resolve": "director",
+    "director_establish": "director",
+    "character": "character_major",
+    "narrator": "narrator",
+    "mapping": "mapping",
+    **{f"director_{n}": f"director_{n}" for n in
+       ("body", "social", "contact", "objects", "spatial", "offscreen")},
+}
+
+
+def providers_reasoning_effort(role):
+    """What the run will actually send, reported in the header. The whole
+    point of the fix below is that this is no longer implicitly 'whatever the
+    model defaults to'; printing it is how a reader knows which regime the
+    numbers came from."""
+    import providers
+    return providers.reasoning_effort_for(role)
+
+
+def _post(prov, model, system, user, max_tokens, timeout, role):
     import providers
     base = prov["base_url"].rstrip("/")
     body = {"model": model,
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
             "temperature": 0.4, "max_tokens": max_tokens}
+    # BENCH WHAT PRODUCTION SENDS. Hand-built, this body carried neither the
+    # role's reasoning effort nor JSON mode, so a thinking model was measured
+    # WITH reasoning while the pipeline runs it with reasoning off -- inflating
+    # latency and output tokens for exactly the models this tool exists to
+    # rank, and by a wide margin (measured elsewhere at 8.1x on one step).
+    # A tool that ranks models has to send the request the engine sends.
+    providers._apply_reasoning_effort(body, prov, role)
+    providers._apply_json_mode(body, prov, model, True)
     start = time.perf_counter()
     r = providers._session().post(base + "/chat/completions",
                                   headers=providers._headers(prov),
@@ -166,11 +276,12 @@ def _post(prov, model, system, user, max_tokens, timeout):
 def bench(prov, model, step, payload, system, trials, timeout, max_tokens):
     import llm_quality
     import schemas
+    role = STEP_ROLE.get(step, "default")
     passes, times, outs, errors = 0, [], [], []
     for _ in range(trials):
         got, elapsed, err = _post(prov, model, system,
                                   json.dumps(payload, ensure_ascii=False),
-                                  max_tokens, timeout)
+                                  max_tokens, timeout, role)
         times.append(elapsed)
         if err:
             errors.append(err)
@@ -214,10 +325,13 @@ def main(argv=None):
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
-    system = prompts.DEFAULT_PROMPTS[args.step]
+    system = prompts.DEFAULT_PROMPTS[PROMPT_KEY.get(args.step, args.step)]
     payload = PAYLOADS[args.step]
+    role = STEP_ROLE.get(args.step, "default")
+    effort = providers_reasoning_effort(role)
     print(f"step {args.step}  system {len(system)} chars  "
-          f"payload {len(json.dumps(payload))} chars\n")
+          f"payload {len(json.dumps(payload))} chars  "
+          f"role {role}  reasoning {effort or 'unset'}\n")
 
     rows = []
     for name in [m.strip() for m in args.models.split(",") if m.strip()]:
