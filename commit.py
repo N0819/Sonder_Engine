@@ -41,7 +41,7 @@ from spatial import (merge_scene_with_diff, _merge_entity, room_of,
                      normalize_room_id, spatial_rel, hear_level,
                      normalize_barrier, normalize_bearing, opposite_bearing,
                      passable_path, rooms_adjacent, visible_adjacent_rooms,
-                     guessed_room_sizes)
+                     guessed_room_sizes, _is_body_entity)
 from theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
                             select_active_hypotheses, sheet_capacity)
 from survival import vitals_of
@@ -4111,6 +4111,59 @@ _INERT_ENTITY_KINDS = frozenset({
     "trap", "corpse", "remains",
 })
 
+
+def _is_inert_presence_candidate(scene, eid, ent) -> bool:
+    """Is this a thing, rather than somebody who could speak?
+
+    Three tests, because no one of them holds alone.
+
+    The deny-list above is matched against a FREEFORM model string, and the
+    model does not write category words -- it writes compound nouns. Measured
+    across chats 74-76, the four objects tracked as presences were tagged
+    `device`, `key card`, `currency pouch` and `object`; only the last was on
+    any list. Nor can the list simply be extended to cover them, because its
+    two most useful generic words ("machine", "device") are left off ON PURPOSE
+    so a sentient robot tagged that way stays trackable. A word list cannot
+    separate a sonic screwdriver from a drone.
+
+    `portable` can, because it is structural rather than lexical: it means an
+    actor may pick this up and carry it. Across 65 scenes on disk it marks 174
+    entities and only two of them are people.
+
+    But it cannot stand alone, because THIS ENGINE LETS PEOPLE BE POCKETED, in
+    two different ways that fail differently:
+
+    - A shrunken character is portable and is the resized one, so she carries a
+      `scales` entry -- and `_is_body_entity` reads `scales`. Live in chat 41.
+    - A baseline character pocketed by a GIANT is portable and is NOT the
+      resized one, so there is no `scales` entry to find. She is caught only by
+      the other half of that predicate, `attire`, which holds only while she is
+      dressed. Measured, `_is_body_entity` scores 23 of 88 animate entities as
+      things -- `night clerk` among them -- so it is far too porous to gate on
+      by itself.
+
+    Hence the third term: an explicitly animate `kind` is never inert, using
+    the allow-list schemas already maintains for a neighbouring question. It is
+    conservative by construction, which is what makes it safe to trust here.
+
+    Residual, stated rather than papered over: a carried, undressed,
+    baseline-sized body whose kind is not on the animate list still reads as a
+    thing. It costs nothing observable -- a presence that SPEAKS is harvested
+    from `dialogue_log` above without ever reaching this gate, so the only
+    figure lost is one that is silent, unregistered and never acted.
+    """
+    if not isinstance(ent, dict):
+        return False
+    kind = str(ent.get("kind") or "").strip().casefold()
+    if kind in _INERT_ENTITY_KINDS:
+        return True
+    if not ent.get("portable"):
+        return False
+    from schemas import _ANIMATE_ENTITY_KINDS
+    return (kind not in _ANIMATE_ENTITY_KINDS
+            and not _is_body_entity(scene, eid, ent))
+
+
 def prepare_background_claims(ctx):
     """Embeddings for the canon rows a ratified background claim will become.
 
@@ -4218,7 +4271,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     if is_opening:
         entity_sources.append(((res.get("entities") or {}), (res.get("positions") or {})))
     for entities, positions in entity_sources:
-        for entity_def in entities.values():
+        for entity_id, entity_def in entities.items():
             if not isinstance(entity_def, dict):
                 continue
             # Track any named entity that is not CLEARLY inert. `kind` is a
@@ -4229,12 +4282,18 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             # captured in the scene but tracked by neither the cast nor the
             # background-presence system: declared, then inert. Enumerating
             # agent kinds is an unwinnable treadmill; instead exclude the
-            # clearly non-agent kinds and default to inclusion. A rare
-            # mistracked object never reacts anyway (the pick_background_
-            # reactors gate requires it to be addressed/owed/voiced), which
-            # is far cheaper than an agent that can never act.
+            # clearly non-agent kinds and default to inclusion.
+            #
+            # The trade that justified defaulting to inclusion -- "a rare
+            # mistracked object never reacts anyway" -- was FALSE. The gate
+            # lets a presence react once it is voiced, and this path can voice
+            # one: chat 75 gave a shed utility sash three turns of dialogue as
+            # a hotel housekeeper. So the exclusion has to actually work on a
+            # freeform kind string, which is what _is_inert_presence_candidate
+            # adds; the deny-list alone caught one of those four objects.
             kind = str(entity_def.get("kind") or "").strip().casefold()
-            if not kind or kind in _INERT_ENTITY_KINDS:
+            if not kind or _is_inert_presence_candidate(
+                    _scene_now, entity_id, entity_def):
                 continue
             name = str(entity_def.get("name") or "").strip()
             if not name or name_in_roster(name, roster):
@@ -4294,30 +4353,30 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # The comment above ("a mistracked object never reacts anyway") was the
     # load-bearing assumption, and it was false: the gate lets a presence react
     # once it is voiced, and a presence this path admits can be voiced.
-    _entity_kinds = {}
+    # Verdict, not kind: the test is no longer a single word lookup, so resolve
+    # it once per entity here and index the ANSWER by both keys.
+    _inert_by_key = {}
     for _eid, _edef in (list((diff.get("entities") or {}).items())
                         + list((_scene_now.get("entities") or {}).items())):
         if not isinstance(_edef, dict):
             continue
-        _kind = str(_edef.get("kind") or "").strip().casefold()
-        if not _kind:
-            continue
+        _verdict = _is_inert_presence_candidate(_scene_now, _eid, _edef)
         for _key in (_eid, _edef.get("name")):
             _key = str(_key or "").strip().casefold()
             if _key:
-                _entity_kinds.setdefault(_key, _kind)
+                _inert_by_key.setdefault(_key, _verdict)
     for _placed in _diff_positions:
         _name = str(_placed or "").strip()
         if not _name or name_in_roster(_name, roster):
             continue
         if _name.casefold() in _ubiquitous:
             continue
-        # The same kind rule the entity harvest applies: exclude the clearly
-        # inert, default to inclusion for everything else. A bare name with
-        # no entity def at all is agent-shaped by default, which is the trade
-        # already made above -- a mistracked object never reacts anyway,
-        # because the gate still requires it to be salient.
-        if _entity_kinds.get(_name.casefold()) in _INERT_ENTITY_KINDS:
+        # The same rule the entity harvest applies: exclude the clearly inert,
+        # default to inclusion for everything else. A bare name with no entity
+        # def at all stays agent-shaped by default -- there is nothing to judge
+        # it on, and a name the beat PLACED IN A ROOM is in the scene by
+        # construction (that is how the chat 72 night clerk was recovered).
+        if _inert_by_key.get(_name.casefold()):
             continue
         candidates.add(_name)
         sk = sketches.setdefault(_name, {})
