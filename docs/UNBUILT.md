@@ -2226,6 +2226,35 @@ shirt, ..."`. Not a defect — the suppression of per-beat repetition is the
 design.
 
 
+### 1.46 A transformation's parts are repaired on read, never at the source
+
+`scene.normalize_transformed_parts` coerces a `physical_transformation`'s
+`parts` onto `attire.REGIONS` and `EXTRA_PART_ASPECTS` and salvages the
+off-menu text into `description`, on the `rederive_entry` precedent — so
+stored conditions heal lazily and the malformed phrase ("emerge from the
+fluffy, pointed, golden of the top of the head") stopped reaching anyone.
+
+**The body specialist still writes the free text.** Its contract was not
+changed, so every new transformation mints the same shape and is repaired
+downstream on every read. `character_schema._normalize_extra_parts` shows what
+the closed menus look like at the authoring surface; the specialist prompt
+should say the same thing, and then the read-path repair becomes a floor
+rather than a working part.
+
+### 1.47 `contract_bench`'s specialist payloads are the flaw the shootout exists to document
+
+`tools/director_shootout.py` was written because `contract_bench` sent a
+927-character payload and reported a model at 3.95s that took 47.4s in a live
+turn — the bench was sending about 4,400 system tokens against a real
+director's 27,000, and mis-ranked the most expensive role in the pipeline.
+
+The six specialist payloads added in alpha 8.4.4 are synthetic two-character
+scenes and have exactly that flaw at smaller magnitude. They make the
+specialists benchable at all, which they were not; they should be rebuilt from
+a real chat the way `director_shootout` builds its own before anyone ranks a
+model for a tiering decision on them.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
@@ -3854,6 +3883,36 @@ unrun experiment is unfinished work, not a broken thing.
   put the first word at ~75% of a turn instead of 100%, but the narrator
   re-runs on a fidelity or craft rewrite on roughly a quarter of turns, so it
   needs a re-stream or a visible "revising" state first.
+
+### From the alpha 8.4.4 measurements
+
+All four are named by
+[`WORLD_METABOLISM_FIRE_RATES.md`](experiments/WORLD_METABOLISM_FIRE_RATES.md)
+or by the work that shipped in that release. Ordered by expected value.
+
+- **Why 3 of 31 characters have ever formed a PROJECT.** `tools/fire_rates.py`
+  reports `has ever held a project 9.68% (3/31)`, mean 0.03 against a cap of 2,
+  and the row's own note says the tier is unreachable if that is zero.
+  `CLAUDE.md` records projects as what made NPCs pass the maze without altering
+  their drives, and as the tier carrying "go home, take the injured one to a
+  doctor" — an NPC walking somewhere for a durable reason is the oldest
+  spontaneous-event engine there is. Whether the gap is the adoption
+  deliberation refusing, probation lapsing, or the prompt never reaching is
+  unmeasured. **Smallest number in the corpus with the largest documented
+  effect; measure this before enriching anything in the world layer.**
+- **Why the Director never declares a crowd, courier or caravan.** Every
+  off-screen row reads `no chances` — the precondition never arose. The ops
+  exist and are contracted. Unreachable, unread, or never applicable to the
+  stories played so far? Those have entirely different fixes, and the answer
+  decides whether a pre-planning sidecar is the right shape or a second inert
+  layer on top of the first.
+- **Whether `sensory_channels` changes the prose.** It is wired, tested and
+  firewall-argued, and payload-to-behaviour coupling is model-mediated. Same
+  beat, same model, before and after, is the only thing that settles it.
+- **Whether touch/smell scarcity is delivery starvation or story mix.** A
+  checkpoint replay counting beats where the scene held standing player
+  contacts or substances while `observations["player"]` carried no touch span.
+  Gates the substrate half of any further sensory work.
 
 ## 8. Parked
 
