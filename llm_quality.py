@@ -327,6 +327,31 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
     return out if touched else None
 
 
+_SCHEMA_CACHE: dict = {}
+
+
+def _step_json_schema(step_key: str):
+    """The JSON Schema for a step, or None if it has no model or will not build.
+
+    Cached because `model_json_schema()` walks the whole Pydantic graph and
+    these are the hottest calls in the process. None is a first-class answer:
+    every caller treats a missing schema as "send the advisory flag instead".
+    """
+    if step_key in _SCHEMA_CACHE:
+        return _SCHEMA_CACHE[step_key]
+    schema = None
+    try:
+        import schemas
+
+        model_cls = (schemas.SCHEMA_MAP or {}).get(step_key)
+        if model_cls is not None:
+            schema = model_cls.model_json_schema()
+    except Exception:
+        schema = None
+    _SCHEMA_CACHE[step_key] = schema
+    return schema
+
+
 def complete_validated_json(
     *,
     role: str,
@@ -357,6 +382,14 @@ def complete_validated_json(
     token_ceiling = None
     ran_out_of_room = False
 
+    # The step's own Pydantic model, offered to the provider as an enforceable
+    # grammar. This function already validates against it on the way back; a
+    # backend that can constrain sampling with it turns that check from a
+    # gate into a formality, and one that cannot is no worse off (providers
+    # falls back to json_object, then to nothing). Best-effort by design --
+    # a schema this fails to build must never cost the call.
+    json_schema = _step_json_schema(step_key)
+
     try:
         raw = chat_complete(
             role,
@@ -366,6 +399,7 @@ def complete_validated_json(
             max_tokens=max_tokens,
             sampler=sampler,
             candidate_offset=0,
+            json_schema=json_schema,
         )
     except Aborted:
         raise

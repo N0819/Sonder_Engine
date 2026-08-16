@@ -46,7 +46,7 @@
 | `importers.py` | 2715 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 183 |  | `logging_utils` |
 | `living_world.py` | 608 |  | `logging_utils`, `mechanics` |
-| `llm_quality.py` | 699 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `providers`, `schemas` |
+| `llm_quality.py` | 733 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
@@ -59,7 +59,7 @@
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 5826 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 2919 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
+| `providers.py` | 3007 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1789 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -564,14 +564,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 330 | 370 lines |
+| `complete_validated_json()` | 355 | 379 lines |
 | `_targeted_field_patch()` | 271 | 57 lines |
 | `output_ran_out_of_room()` | 89 | 47 lines |
 | `_extract_balanced_object()` | 35 | 34 lines |
 | `move_repeat_screen()` | 177 | 33 lines |
+| `_step_json_schema()` | 333 | 20 lines |
 | `strict_json_parse()` | 138 | 19 lines |
 | `_strip_fences()` | 71 | 16 lines |
-| `_dig()` | 244 | 12 lines |
 
 ### `logging_utils.py`
 
@@ -705,13 +705,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 1858 | 252 lines |
-| `async _chat_complete_async_once()` | 2229 | 102 lines |
-| `async chat_complete_async()` | 2140 | 88 lines |
-| `chat_complete()` | 1626 | 84 lines |
-| `_sse_openai()` | 1498 | 78 lines |
-| `async _sse_openai_async()` | 2332 | 63 lines |
-| `_embed_request()` | 2649 | 58 lines |
+| `_chat_complete_once()` | 1921 | 274 lines |
+| `async _chat_complete_async_once()` | 2316 | 103 lines |
+| `async chat_complete_async()` | 2225 | 90 lines |
+| `chat_complete()` | 1687 | 86 lines |
+| `_sse_openai()` | 1559 | 78 lines |
+| `async _sse_openai_async()` | 2420 | 63 lines |
+| `_embed_request()` | 2737 | 58 lines |
 | `resolve_role_candidates()` | 1281 | 54 lines |
 
 ### `psychology_runtime.py`

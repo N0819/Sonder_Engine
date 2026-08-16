@@ -243,7 +243,7 @@ def providers_reasoning_effort(role):
     return providers.reasoning_effort_for(role)
 
 
-def _post(prov, model, system, user, max_tokens, timeout, role):
+def _post(prov, model, system, user, max_tokens, timeout, role, step):
     import providers
     base = prov["base_url"].rstrip("/")
     body = {"model": model,
@@ -257,7 +257,15 @@ def _post(prov, model, system, user, max_tokens, timeout, role):
     # rank, and by a wide margin (measured elsewhere at 8.1x on one step).
     # A tool that ranks models has to send the request the engine sends.
     providers._apply_reasoning_effort(body, prov, role)
-    providers._apply_json_mode(body, prov, model, True)
+    # The step's schema, exactly as complete_validated_json now supplies it --
+    # an enforced grammar where the backend can compile one. Without this the
+    # bench measured the advisory `json_object` flag, which on a llama.cpp host
+    # is honoured only sometimes (narrator: 0/5 valid) while the engine's real
+    # path is enforced (5/5). Benching the weaker of the two would rank models
+    # on a failure mode production no longer has.
+    import llm_quality
+    providers._apply_json_mode(body, prov, model, True,
+                               llm_quality._step_json_schema(step))
     start = time.perf_counter()
     r = providers._session().post(base + "/chat/completions",
                                   headers=providers._headers(prov),
@@ -281,7 +289,7 @@ def bench(prov, model, step, payload, system, trials, timeout, max_tokens):
     for _ in range(trials):
         got, elapsed, err = _post(prov, model, system,
                                   json.dumps(payload, ensure_ascii=False),
-                                  max_tokens, timeout, role)
+                                  max_tokens, timeout, role, step)
         times.append(elapsed)
         if err:
             errors.append(err)
