@@ -1405,6 +1405,62 @@ def _strip_extended(body):
         body.pop(k, None)
     return body
 
+
+# `response_format: {"type": "json_object"}` is NOT universally accepted. LM
+# Studio 0.4.x hard-400s it -- "'response_format.type' must be 'json_schema' or
+# 'text'" -- where most backends either honour or ignore it.
+#
+# That rejection used to cost far more than JSON mode. The 400 retry dropped
+# EVERY optional field at once, so a 400 caused by response_format also took
+# `reasoning_effort` with it, and a role deliberately configured "off" silently
+# went back to thinking. Measured against a local Qwen3.6-35B-A3B, both still
+# passing validate_llm_output_strict 2/2: director_interpret 48.70s -> 6.03s
+# (8.1x) and character 52.38s -> 14.64s (3.6x). Nothing reported the cause --
+# the turn simply ran slow.
+#
+# So the retry is STAGED: response_format first, because it is the least
+# portable thing we send, and the blanket strip only if the provider is still
+# unhappy. A rejection is then REMEMBERED per provider and model so the next
+# call omits the field instead of paying the same 400 forever.
+#
+# Process-local and reset on restart, for the same reason the embedding pacer
+# is: the limit belongs to the provider, not the engine, and a restart is the
+# cheapest moment to re-ask after a runtime upgrade or a model swap.
+_NO_JSON_OBJECT: set = set()
+_NO_JSON_OBJECT_LOCK = threading.Lock()
+
+
+def _json_object_key(prov, model):
+    return (str(_prov_field(prov, "id") or _prov_field(prov, "name") or ""),
+            str(model or ""))
+
+
+def _json_object_supported(prov, model) -> bool:
+    """False once this provider+model has 400'd on response_format."""
+    with _NO_JSON_OBJECT_LOCK:
+        return _json_object_key(prov, model) not in _NO_JSON_OBJECT
+
+
+def _note_json_object_rejected(prov, model):
+    """Record that response_format=json_object is unusable here. Said once."""
+    key = _json_object_key(prov, model)
+    with _NO_JSON_OBJECT_LOCK:
+        if key in _NO_JSON_OBJECT:
+            return
+        _NO_JSON_OBJECT.add(key)
+    _logger.info(
+        "providers: %s rejects response_format=json_object for %s; sending "
+        "JSON-mode calls without it for the rest of this process",
+        _prov_field(prov, "name") or "provider", model)
+
+
+def _apply_json_mode(body, prov, model, json_mode):
+    """Attach JSON mode unless this provider+model is known to refuse it."""
+    if json_mode and _json_object_supported(prov, model):
+        body["response_format"] = {"type": "json_object"}
+    return body
+
+
 def _merge_samplers(cfg, sampler, temperature):
     scfg = _sampler_from(cfg)
     scall = _sampler_from(sampler)
@@ -1899,10 +1955,7 @@ def _chat_complete_once(
     _apply_cache_affinity(body, prov, role)
     _apply_reasoning_effort(body, prov, role)
 
-    if json_mode:
-        body["response_format"] = {
-            "type": "json_object",
-        }
+    _apply_json_mode(body, prov, model, json_mode)
 
     url = base + "/chat/completions"
     headers = _headers(prov)
@@ -1921,18 +1974,41 @@ def _chat_complete_once(
             if exc.status_code != 400:
                 raise
 
-            fallback_body = _strip_extended(dict(body))
-            if json_mode:
+            # Stage 1: response_format alone. Dropping only the least portable
+            # field keeps reasoning_effort and the extended samplers, which a
+            # blanket strip discards for a rejection they did not cause.
+            recovered = False
+            if "response_format" in body:
+                stage_one = dict(body)
+                stage_one.pop("response_format", None)
+                try:
+                    out = _sse_openai(
+                        url,
+                        headers,
+                        stage_one,
+                        sink,
+                        role=role,
+                        model=model,
+                    )
+                    _note_json_object_rejected(prov, model)
+                    recovered = True
+                except LLMError as exc_one:
+                    if exc_one.status_code != 400:
+                        raise
+
+            # Stage 2: every optional field, as before.
+            if not recovered:
+                fallback_body = _strip_extended(dict(body))
                 fallback_body.pop("response_format", None)
 
-            out = _sse_openai(
-                url,
-                headers,
-                fallback_body,
-                sink,
-                role=role,
-                model=model,
-            )
+                out = _sse_openai(
+                    url,
+                    headers,
+                    fallback_body,
+                    sink,
+                    role=role,
+                    model=model,
+                )
         # Same placeholder-skeleton guard as the non-streaming path below: a
         # model that "honours" response_format=json_object by streaming an
         # all-"..." skeleton would send that skeleton to the player as prose.
@@ -1961,16 +2037,32 @@ def _chat_complete_once(
     )
 
     if response.status_code == 400:
-        fallback_body = _strip_extended(dict(body))
-        if json_mode:
+        # Stage 1: response_format alone -- see _apply_json_mode. Keeping the
+        # reasoning controls here is the whole point: a 400 they did not cause
+        # must not turn a role configured "off" back into a thinking model.
+        if "response_format" in body:
+            stage_one = dict(body)
+            stage_one.pop("response_format", None)
+            response = _session().post(
+                url,
+                headers=headers,
+                json=stage_one,
+                timeout=_request_timeout(),
+            )
+            if response.status_code < 400:
+                _note_json_object_rejected(prov, model)
+
+        # Stage 2: every optional field, as before.
+        if response.status_code == 400:
+            fallback_body = _strip_extended(dict(body))
             fallback_body.pop("response_format", None)
 
-        response = _session().post(
-            url,
-            headers=headers,
-            json=fallback_body,
-            timeout=_request_timeout(),
-        )
+            response = _session().post(
+                url,
+                headers=headers,
+                json=fallback_body,
+                timeout=_request_timeout(),
+            )
 
     if response.status_code >= 400:
         raise LLMError(
@@ -2177,8 +2269,7 @@ async def _chat_complete_async_once(
     _apply_provider_routing(body, prov)
     _apply_cache_affinity(body, prov, role)
     _apply_reasoning_effort(body, prov, role)
-    if json_mode:
-        body["response_format"] = {"type": "json_object"}
+    _apply_json_mode(body, prov, model, json_mode)
 
     async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
         if sink:
@@ -2186,11 +2277,24 @@ async def _chat_complete_async_once(
                 out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)
             except LLMError as e:
                 if e.status_code == 400:
-                    b2 = dict(body)
-                    if json_mode:
+                    # Staged, as on the sync paths: response_format first so a
+                    # rejection it caused cannot strip the reasoning controls.
+                    recovered = False
+                    if "response_format" in body:
+                        b1 = dict(body)
+                        b1.pop("response_format", None)
+                        try:
+                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b1, sink, client, role=role, model=model)
+                            _note_json_object_rejected(prov, model)
+                            recovered = True
+                        except LLMError as e1:
+                            if e1.status_code != 400:
+                                raise
+                    if not recovered:
+                        b2 = dict(body)
                         b2.pop("response_format", None)
-                    b2 = _strip_extended(b2)
-                    out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
+                        b2 = _strip_extended(b2)
+                        out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
                 else:
                     raise
             # Same placeholder-skeleton guard as the sync streaming path:
@@ -2206,10 +2310,16 @@ async def _chat_complete_async_once(
         _t0 = time.time()
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
         if r.status_code == 400:
-            b2 = _strip_extended(dict(body))
-            if json_mode:
+            if "response_format" in body:
+                b1 = dict(body)
+                b1.pop("response_format", None)
+                r = await client.post(base + "/chat/completions", headers=_headers(prov), json=b1)
+                if r.status_code < 400:
+                    _note_json_object_rejected(prov, model)
+            if r.status_code == 400:
+                b2 = _strip_extended(dict(body))
                 b2.pop("response_format", None)
-            r = await client.post(base + "/chat/completions", headers=_headers(prov), json=b2)
+                r = await client.post(base + "/chat/completions", headers=_headers(prov), json=b2)
         if r.status_code >= 400:
             raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         parsed = r.json()
