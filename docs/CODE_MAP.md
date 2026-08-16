@@ -62,7 +62,7 @@
 | `providers.py` | 3007 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
-| `scene.py` | 1789 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1858 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5063 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 8057 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -741,14 +741,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `active_disguises()` | 364 | 82 lines |
-| `recent_events_for_observer()` | 1104 | 59 lines |
-| `_positive_presented_appearance()` | 585 | 58 lines |
-| `director_context()` | 1164 | 53 lines |
-| `active_transformations()` | 455 | 49 lines |
-| `conceal_disguised_parts()` | 700 | 48 lines |
-| `awareness_conditions()` | 825 | 47 lines |
-| `private_knowledge_for()` | 1746 | 44 lines |
+| `active_disguises()` | 366 | 82 lines |
+| `normalize_transformed_parts()` | 457 | 60 lines |
+| `recent_events_for_observer()` | 1173 | 59 lines |
+| `_positive_presented_appearance()` | 654 | 58 lines |
+| `active_transformations()` | 519 | 54 lines |
+| `director_context()` | 1233 | 53 lines |
+| `conceal_disguised_parts()` | 769 | 48 lines |
+| `awareness_conditions()` | 894 | 47 lines |
 
 ### `schemas.py`
 

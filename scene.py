@@ -8,6 +8,8 @@ from spatial import room_of, spatial_rel
 _UNSET = object()
 
 from character_schema import (
+    EXTRA_PART_ASPECTS,
+    _extra_part_placement,
     cast_entity_id,
     character_abilities,
     character_appearance,
@@ -452,6 +454,68 @@ def active_disguises(chat_id):
 SINGULAR_BODY_CONDITIONS = ("physical_disguise", "physical_transformation")
 
 
+def normalize_transformed_parts(parts):
+    """A transformation's parts, coerced onto the same menus a card's are.
+
+    `at` must be an `attire.REGIONS` key and `aspect` one of
+    `EXTRA_PART_ASPECTS`, because `agents.common.extra_part_phrase` renders
+    them as "emerges from the {aspect} of the {at}" and every visibility
+    verdict is keyed by region. A CARD's parts are coerced on the way in
+    (`character_schema._normalize_extra_parts`); a transformation's are model
+    free text and nothing coerced them, so both fields arrived as prose:
+
+        {"kind": "fox ears", "at": "top of the head",
+         "aspect": "fluffy, pointed, golden"}
+        -> "emerge from the fluffy, pointed, golden of the top of the head"
+
+    THE OFF-MENU TEXT IS SALVAGED, NOT DISCARDED, and that is the difference
+    from the card path. An author who miskeys a card can see it in the editor
+    and fix it; a transformation's stray text is the only description of that
+    anatomy in existence, and it is exactly the material detail worth
+    delivering ("fluffy, pointed, golden"). `extra_part_phrase` already
+    renders a `description`, so there is a correct slot standing empty. A
+    fragment the canonical fields already say is dropped, so "top of the head"
+    does not survive alongside at=head/aspect=top.
+
+    Healed on READ rather than migrated, on the `attire.rederive_entry`
+    precedent: stored conditions repair lazily instead of rewriting stories
+    mid-play.
+    """
+    out = []
+    for part in (parts or []):
+        if not isinstance(part, dict):
+            continue
+        kind = " ".join(str(part.get("kind") or "").split())
+        if not kind:
+            continue
+        guess_at, guess_aspect = _extra_part_placement(kind)
+        stray = []
+
+        at = str(part.get("at") or "").strip().casefold()
+        if at not in attire_model.REGIONS:
+            if at:
+                stray.append(at)
+            at = guess_at
+        aspect = str(part.get("aspect") or "").strip().casefold()
+        if aspect not in EXTRA_PART_ASPECTS:
+            if aspect:
+                stray.append(aspect)
+            aspect = guess_aspect
+
+        description = " ".join(str(part.get("description") or "").split())
+        if stray:
+            canon = {at, aspect, "the", "of", "a", "an"}
+            keep = [s for s in stray
+                    if set(s.replace(",", " ").split()) - canon]
+            if keep:
+                description = "; ".join(filter(None, [description] + keep))
+        fixed = dict(part, kind=kind, at=at, aspect=aspect)
+        if description:
+            fixed["description"] = description
+        out.append(fixed)
+    return out
+
+
 def active_transformations(chat_id):
     """Active `physical_transformation` conditions, keyed by casefolded subject.
 
@@ -488,7 +552,12 @@ def active_transformations(chat_id):
             continue
         state = _condition_state(payload)
         pick = lambda k: state.get(k) if state.get(k) is not None else payload.get(k)
-        parts = [p for p in (pick("parts") or []) if isinstance(p, dict)]
+        # `parts is None` means "unchanged" and `[]` means "none" -- see
+        # transformed_parts. Normalising must preserve that distinction, so a
+        # missing list stays missing rather than becoming an empty one.
+        _raw_parts = pick("parts")
+        parts = (None if _raw_parts is None
+                 else normalize_transformed_parts(_raw_parts))
         out[subject.casefold()] = {
             "subject": subject,
             "form": str(pick("form") or "").strip(),
