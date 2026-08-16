@@ -3818,7 +3818,7 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
         return prose
     out_parts.append(prose[last:])
     result = "".join(out_parts)
-    result = _DANGLING_SPEECH_VERB_RE.sub(lambda mm: f"{mm.group(1)} it.", result)
+    result = _DANGLING_SPEECH_VERB_RE.sub(_heal_dangling_verb, result)
     result = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, result)
     result = _collapse_empty_quote_debris(result)
     return re.sub(r"\s{2,}", " ", result).strip()
@@ -4557,7 +4557,34 @@ _DANGLING_SPEECH_VERB_RE = re.compile(
     # `[^\S\n]*` rather than `\s*`: the trailing whitespace this consumes must
     # not include the paragraph break it is standing in front of, or healing a
     # dangling verb silently welds two paragraphs together.
-    r")\b,?[^\S\n]*(?=[.!?]|$)",
+    #
+    # THREE LANDING SITES, not one. This used to be `,?[^\S\n]*(?=[.!?]|$)` --
+    # a verb was only healed where it ended the sentence, and the replacement
+    # appended its own full stop without consuming the punctuation it was
+    # standing in front of. Measured against the live artifact and its
+    # neighbours:
+    #
+    #   '"Q?" you ask, your voice clear over the hum.'
+    #        -> 'you ask, your voice clear over the hum.'   NOT HEALED
+    #   '"Q?" you ask.'          -> 'you ask it..'          DOUBLE STOP
+    #   'You ask, "Q?", quietly' -> 'You ask,, quietly'     DOUBLE COMMA
+    #
+    # The first is the one that reached a player (chat 76 turn 73): the
+    # narrator wrote a well-formed sentence and this function took the quote
+    # out of the middle of it, leaving a lowercase fragment on the page. A
+    # mid-sentence attribution is the ORDINARY way to write one, so the case
+    # the heal did not cover was the common case.
+    # The comma branch carries a lookahead, and it is the whole difficulty. A
+    # comma after a speech verb means two opposite things: the quote was cut
+    # from here (heal it), or the attribution is simply mid-flight and its
+    # quote is still coming (`he says, quiet and gentle, "Ellie."` -- live,
+    # Doctor Who t7). Only one fact separates them: whether a quote survives
+    # later in the SAME sentence. So look, rather than guess -- and rather than
+    # refusing the whole comma case, which is what left the common shape
+    # unhealed.
+    r")\b,?[^\S\n]*(?:(?P<end>[.!?])"
+    r"|(?P<cont>,(?![^.!?\n]*[\"“]))"
+    r"|(?P<eol>$))",
     # MULTILINE so `$` reaches the end of a PARAGRAPH, not just the end of the
     # string. Stripping a player quote off the end of a paragraph leaves the
     # verb dangling there exactly as it does at the end of the prose, and
@@ -4566,6 +4593,33 @@ _DANGLING_SPEECH_VERB_RE = re.compile(
     # into the next sentence instead ("You say, The guard does not move.").
     re.IGNORECASE | re.MULTILINE,
 )
+
+
+def _heal_dangling_verb(match):
+    """Give a stranded speech verb its object back, in the shape it landed in.
+
+    `it` is deliberately vague: the line itself is what the player already
+    knows and what this function exists to keep off the page, so the
+    replacement must refer to the utterance without reproducing it.
+    """
+    verb = match.group(1)
+    if match.group("cont"):
+        # A capital straight after the comma means the cut left two sentences
+        # welded by it ("I say,  He tells Karen the truth"), so close the
+        # first rather than running them together with an object between.
+        rest = match.string[match.end():].lstrip()
+        if rest[:1].isupper():
+            return f"{verb} it."
+        return f"{verb} it,"          # attribution mid-sentence: keep going
+    if match.group("end"):
+        return f"{verb} it{match.group('end')}"   # consume it; never double
+    return f"{verb} it."              # end of paragraph or of the prose
+
+
+# `, ,` and `,,` left where a quote sat between an attribution and its
+# continuation. The empty-quote collapser handles the quote marks; nothing
+# handled the punctuation on either side of them.
+_DOUBLED_COMMA_RE = re.compile(r",(?:[^\S\n]*,)+")
 
 # A quote can also be introduced by an attributive CLAUSE ending in a colon
 # ("...and when I speak again it's quieter, almost gentle:"). Stripping the
@@ -4689,7 +4743,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
                 continue
             prose = prose[:hit.start()] + prose[hit.end():]
             prose = _DANGLING_SPEECH_VERB_RE.sub(
-                lambda m: f"{m.group(1)} it.", prose)
+                _heal_dangling_verb, prose)
             prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
             continue
         for quoted in quoted_forms:
@@ -4700,7 +4754,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # "I ask,", "Alex says.") with nothing after it -- the subject varies
         # with narration_person (first/second/third), so match on the verb
         # rather than assuming "you".
-        prose = _DANGLING_SPEECH_VERB_RE.sub(lambda m: f"{m.group(1)} it.", prose)
+        prose = _DANGLING_SPEECH_VERB_RE.sub(_heal_dangling_verb, prose)
         prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
     for token, form in masks:
         prose = prose.replace(token, form)
@@ -4717,7 +4771,22 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
     prose = re.sub(r"[^\S\n]{2,}", " ", prose)      # the spacing debris
     prose = re.sub(r"[^\S\n]*\n[^\S\n]*", "\n", prose)  # tidy around breaks
     prose = re.sub(r"\n{3,}", "\n\n", prose)        # never a blank run
-    return prose.strip()
+    # A quote removed from between an attribution and its continuation leaves
+    # the punctuation from BOTH sides ("You ask,, quietly"). The empty-quote
+    # collapser above takes the marks; this takes the commas they sat between.
+    prose = _DOUBLED_COMMA_RE.sub(",", prose)
+    prose = re.sub(r"[^\S\n]+([,.!?])", r"\1", prose)   # " ," -> ","
+    # A paragraph that BEGAN with the player's quote now begins with the
+    # attribution that followed it, in lower case ("you ask it, your voice
+    # clear..."). Nothing else in this function can see that a sentence lost
+    # its head. Restoring the capital is safe here because narrator prose is
+    # ordinary English paragraphs -- and it is the last visible trace of the
+    # cut, so leaving it is leaving the seam on the page.
+    prose = prose.strip()
+    prose = re.sub(r"(\A|\n)([^\S\n]*)([a-z])",
+                   lambda m: m.group(1) + m.group(2) + m.group(3).upper(),
+                   prose)
+    return prose
 
 
 # An empty quote pair -- '' "" “” -- left where a stripped player line used to
