@@ -10,7 +10,7 @@
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 925 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3386 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 6193 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 6219 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1502 |  | `agents.common`, `scene`, `spatial` |
 | `agents/director.py` | 7824 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1038 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
@@ -118,14 +118,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1801 | 204 lines |
-| `_scrub_invented_dialogue()` | 4825 | 145 lines |
-| `_check_narrator_fidelity()` | 5827 | 125 lines |
-| `_extract_authority_claims()` | 1331 | 106 lines |
-| `_perceptible_entities()` | 909 | 98 lines |
-| `_check_presence_knowledge_channel()` | 3403 | 95 lines |
-| `region_visibility()` | 586 | 92 lines |
-| `observer_body_regions()` | 680 | 92 lines |
+| `norm_sequence()` | 1827 | 204 lines |
+| `_scrub_invented_dialogue()` | 4851 | 145 lines |
+| `_check_narrator_fidelity()` | 5853 | 125 lines |
+| `observer_body_regions()` | 681 | 117 lines |
+| `_extract_authority_claims()` | 1357 | 106 lines |
+| `_perceptible_entities()` | 935 | 98 lines |
+| `_check_presence_knowledge_channel()` | 3429 | 95 lines |
+| `region_visibility()` | 587 | 92 lines |
 
 ### `agents/composer.py`
 
