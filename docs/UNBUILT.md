@@ -1544,15 +1544,11 @@ continue. Re-run `tools/fire_rates.py` after a story or two.
 
 ### 1.27 Residuals from the speech-channel investigation
 
-Found in the same pass, none of them fixed.
+Found in the same pass. The attire-blob accumulation is now fixed (`commit.py`
+rebuilds `state` from `attire.flat_state` unconditionally and keeps only notes
+`attire.is_derived_state_note` says were authored; `tests/
+test_attire_commit_stored_shape.py`). The rest are open.
 
-- The stored `world.scene` attire blob accumulates superseded derived notes
-  (`['bare at the head, groin, legs', 'bare at the head', 'bare at the groin',
-  'bare at the legs']` on one body). Inert at runtime — every reader passes
-  through `attire.rederive_entry`, which returns the first note alone — but the
-  blob is what archives, branches and checkpoints carry, so a consumer that
-  reads it directly gets four mutually contradictory statements about one body.
-  Fix is to rederive on the WRITE path as well as the read path.
 - `manner` on a `contacts` row is free text with no engine semantics, so a
   contact describing one body partly inside another does not populate
   `contained` and none of the §1.24 enclosure-direction work fires on it.
@@ -2194,6 +2190,40 @@ Related and already landed: a `ResizeObserver` on `#ambience-bar`
 report its own growth by resizing `#composer` — the reserve was *additionally*
 going stale whenever the bar changed width after first paint. That fixes the
 staleness. It does not fix the floor, which is this entry.
+
+
+### 1.45 `_inject_visible_actor` is imported everywhere and called nowhere
+
+`agents/common._inject_visible_actor` has **zero production call sites**. Its
+three siblings in the same file are all wired (`_inject_dialogue` 3,
+`_compose_residue_view` 2, `_inject_action` 1); this one is imported by
+`agents/perception.py` and re-exported from `agents/__init__.py`, and only
+`tests/test_perception_appearance.py` and `tests/test_perception_identity_gate.py`
+ever call it. So it has passing tests and no effect, which is the worst
+combination available: it reads as a live floor.
+
+Both of its jobs appear to be superseded by the composer IR rather than
+missing. The appearance half is done by `composer.appearance_percept` →
+`"You see {desc}."`, which carries the same `_appearance_as_prose` output
+including the `wearing:` clause. The contradiction-stripping half looks for
+phrases ("no clear figure visible", "cannot see them") that do not occur:
+**0 of 5,499 stored views across the corpus contain any of them**, because the
+model-authored perception path that produced them is gone.
+
+So the likely correct change is deletion, of the helper and of the two tests
+that keep it looking alive. It is filed rather than done because it is a
+judgement about design intent — whether this was meant to be a deterministic
+floor that was never wired — and because `agents/__init__.py` is a
+compatibility facade that replay may depend on.
+
+Corrected while finding it: an earlier note in this session's handoff claimed
+the attire string never reaches perception at all. It does. It is emitted on
+FIRST MENTION and again when a structural change re-earns it (`force=True` on
+`appearance_percept`, gated by the render ledger), which is why sampling a run
+of turns with neither shows nothing. Measured live, chat 76 turn 60, in a
+player observation: `"...wearing charcoal pinstripe suit, light blue dress
+shirt, ..."`. Not a defect — the suppression of per-beat repetition is the
+design.
 
 
 ## 2. Roadmap
