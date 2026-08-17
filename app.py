@@ -1591,6 +1591,27 @@ def extension_install(body: dict = Body(...)):
         raise HTTPException(502, f"Install failed: {exc}") from exc
 
 
+@app.get("/api/extensions/updates")
+def extension_updates():
+    """Ask every git-sourced extension's remote whether it has moved.
+
+    One `ls-remote` each, no download. Never raises: an unreachable remote is
+    reported on its own row so one dead repository cannot fail the sweep for
+    everything else installed.
+    """
+    return {"updates": extension_runtime.check_updates()}
+
+
+@app.post("/api/extensions/{eid}/update")
+def extension_update(eid: str):
+    try:
+        return extension_runtime.update_extension(_extension_id(eid))
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Update failed: {exc}") from exc
+
+
 @app.delete("/api/extensions/{eid}")
 def extension_remove(eid: str):
     try:

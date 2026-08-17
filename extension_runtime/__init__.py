@@ -35,6 +35,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import threading
 from typing import Any, Callable
 
@@ -85,6 +86,12 @@ class Extension:
     capabilities: dict
     provenance: Any
     path: Path
+    #: Where an update would come from. Written at install for a git source and
+    #: absent for every other, which is what makes "cannot be checked" an
+    #: answer this module can give honestly rather than a guess it has to make.
+    source_url: str = ""
+    source_ref: str = ""
+    commit: str = ""
 
     @property
     def python_entry(self) -> str:
@@ -114,6 +121,10 @@ class Extension:
             "trust": self.trust,
             "capabilities": dict(self.capabilities),
             "provenance": self.provenance,
+            "source_url": self.source_url,
+            "source_ref": self.source_ref,
+            "commit": self.commit,
+            "updatable": bool(self.source_url),
         }
 
 
@@ -161,8 +172,19 @@ def _trust_class(manifest: dict, capabilities: dict, directory: Path) -> str:
 
 
 def _load_manifest(directory: Path) -> Extension:
-    raw = (directory / "manifest.json").read_text(encoding="utf-8")
-    manifest = json.loads(raw)
+    # Every failure out of this function is an ExtensionError, including a
+    # manifest that is not JSON. Discovery catches everything anyway, but
+    # install and update surface what this raises straight to the host, and
+    # `JSONDecodeError: Expecting property name` is a stack trace's answer to
+    # a question the host asked in English.
+    try:
+        raw = (directory / "manifest.json").read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ExtensionError(f"manifest.json could not be read: {exc}") from exc
+    try:
+        manifest = json.loads(raw)
+    except ValueError as exc:
+        raise ExtensionError(f"manifest.json is not valid JSON: {exc}") from exc
     if not isinstance(manifest, dict):
         raise ExtensionError("manifest.json must contain an object")
 
@@ -218,6 +240,9 @@ def _load_manifest(directory: Path) -> Extension:
         capabilities=capabilities,
         provenance=manifest.get("provenance"),
         path=directory,
+        source_url=str(manifest.get("source_url") or ""),
+        source_ref=str(manifest.get("source_ref") or ""),
+        commit=str(manifest.get("commit") or ""),
     )
 
 
@@ -1059,7 +1084,8 @@ __all__ = [
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
     "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
     "SonderExtensionAPI", "StepView", "activate", "apply_plan_splices",
-    "asset_path", "disable_extension", "disabled_reasons",
+    "asset_path", "check_update", "check_updates", "disable_extension",
+    "disabled_reasons",
     "dispatch_character_payload", "dispatch_route", "dispatch_turn_committed",
     "enable_extension", "enabled_ids", "extension", "extension_root",
     "extension_script", "extension_styles", "in_commit_scope",
@@ -1067,7 +1093,7 @@ __all__ = [
     "notify_step_saved", "observer_failures", "registered_commit_domains",
     "registered_routes", "registered_specialists", "registered_stages",
     "reload", "routing_notes", "run_commit_domains", "run_specialist_call",
-    "safe_mode", "ui_bundle", "ui_styles",
+    "safe_mode", "ui_bundle", "ui_styles", "update_extension",
 ]
 
 
@@ -1161,6 +1187,188 @@ def _safe_extract(archive, destination: Path) -> None:
                 f"{MAX_EXTRACTED_BYTES // (1024 * 1024)}MB")
 
 
+# ---------------------------------------------------------------- git sources
+#
+# "Compatible" is decided here and stated plainly rather than guessed at per
+# call. Three rules, each with a reason:
+#
+# * **http(s) only.** `ssh://` and `git@host:path` need a key and, without one,
+#   git BLOCKS on a passphrase prompt that nobody is there to answer -- an
+#   install that hangs forever rather than failing. `git://` and `ext::` are
+#   unauthenticated transports; the second can name a command to run.
+# * **No submodules, ever.** A submodule is a second URL chosen by the repo
+#   rather than by the host, and it can name any transport. Clone is explicitly
+#   `--no-recurse-submodules`; a repo that needs them is not installable here.
+# * **No argument injection.** A source beginning with `-` is a git FLAG, not a
+#   URL, so it is refused before it can become one.
+
+#: Hosts whose ordinary `https://host/owner/repo` form is a git remote even
+#: with no `.git` suffix. Not an allowlist of who may be installed from -- any
+#: https URL ending in `.git`, or prefixed `git+`, works too. This exists only
+#: so pasting the URL out of a browser address bar does the obvious thing.
+GIT_HOST_HINTS = ("github.com", "gitlab.com", "codeberg.org", "bitbucket.org",
+                  "git.sr.ht")
+
+#: How long a clone or a remote query may take before it is abandoned.
+GIT_TIMEOUT_SECONDS = 120
+
+
+def _split_git_ref(source: str) -> tuple[str, str | None]:
+    """`https://host/o/r#v2` -> (url, 'v2'). A ref may be a branch or a tag."""
+    url, _, ref = source.partition("#")
+    ref = ref.strip()
+    return url.strip(), (ref or None)
+
+
+#: Transports a repository may be cloned over. `file://` is here because it is
+#: how a repository on this machine is named, and it grants nothing the plain
+#: folder install does not already grant -- the host is choosing a local path
+#: either way. What is NOT here is the point: `ssh://` and `git@host:path` need
+#: a key and, lacking one, git blocks on a passphrase prompt inside a web
+#: request; `git://` is unauthenticated; `ext::` can name a command to run.
+GIT_SCHEMES = ("https://", "http://", "file://")
+_REFUSED_SCHEMES = ("ssh://", "git://", "ext::", "gopher://")
+
+
+def _source_kind(source: str) -> str:
+    """``git`` | ``zip`` | ``local`` -- what this source actually is."""
+    source = str(source or "").strip()
+    if source.startswith("-"):
+        raise ExtensionError(f"not a source: {source!r}")
+    bare = source[len("git+"):] if source.startswith("git+") else source
+    if bare.startswith(_REFUSED_SCHEMES):
+        raise ExtensionError(
+            "a repository must be reachable over http(s): an ssh remote needs "
+            "a key, and git stops for a passphrase nobody is there to type")
+    if source.startswith("git+") or bare.startswith("file://"):
+        return "git"
+    if not bare.startswith(("http://", "https://")):
+        # `git@host:path` -- scp-style, which is ssh by another spelling.
+        if re.match(r"^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:", source):
+            raise ExtensionError(
+                "a repository must be reachable over http(s): an ssh remote "
+                "needs a key, and git stops for a passphrase nobody is there "
+                "to type")
+        return "local"
+    url, _ref = _split_git_ref(source)
+    if url.endswith(".zip"):
+        return "zip"
+    if url.endswith(".git"):
+        return "git"
+    host = url.split("//", 1)[-1].split("/", 1)[0].lower()
+    segments = [part for part in url.split("//", 1)[-1].split("/")[1:] if part]
+    if host in GIT_HOST_HINTS and len(segments) == 2:
+        return "git"
+    return "zip"
+
+
+def _git(*args, cwd=None) -> str:
+    """Run one git command with the environment held still.
+
+    `GIT_TERMINAL_PROMPT=0` is the load-bearing one: without it a private or
+    mistyped repository makes git wait on a username prompt forever, inside a
+    web request, with nobody at the terminal it is prompting.
+    """
+    import subprocess
+
+    env = dict(os.environ)
+    env.update({
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_ASKPASS": "",
+        "SSH_ASKPASS": "",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GCM_INTERACTIVE": "never",
+    })
+    try:
+        done = subprocess.run(
+            ("git",) + tuple(args), cwd=str(cwd) if cwd else None, env=env,
+            capture_output=True, text=True, timeout=GIT_TIMEOUT_SECONDS)
+    except FileNotFoundError as exc:
+        raise ExtensionError(
+            "git is not installed, so a repository cannot be cloned") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ExtensionError(
+            f"git gave up after {GIT_TIMEOUT_SECONDS}s") from exc
+    if done.returncode != 0:
+        detail = (done.stderr or done.stdout or "").strip().splitlines()
+        raise ExtensionError(
+            f"git failed: {detail[-1] if detail else done.returncode}")
+    return done.stdout
+
+
+def _git_clone(source: str, destination: Path) -> tuple[str, str, str]:
+    """Clone into `destination`. Returns (url, ref, commit)."""
+    url, ref = _split_git_ref(source)
+    if url.startswith("git+"):
+        url = url[len("git+"):]
+    if not url.startswith(GIT_SCHEMES):
+        raise ExtensionError(f"not a cloneable URL: {url!r}")
+    args = ["clone", "--depth", "1", "--single-branch",
+            "--no-recurse-submodules", "--quiet"]
+    if ref:
+        args += ["--branch", ref]
+    # `--` so a URL can never be read as a flag, whatever it starts with.
+    _git(*args, "--", url, str(destination))
+    commit = _git("rev-parse", "HEAD", cwd=destination).strip()
+    if not ref:
+        ref = _git("rev-parse", "--abbrev-ref", "HEAD", cwd=destination).strip()
+    return url, ref, commit
+
+
+def _git_remote_head(url: str, ref: str | None) -> str:
+    """The commit a remote's branch or tag points at, without cloning it.
+
+    One round trip and no download, which is what makes an update CHECK cheap
+    enough to run for every installed extension at once.
+    """
+    out = _git("ls-remote", "--heads", "--tags", "--", url, *( [ref] if ref else [] ))
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            # An annotated tag resolves to `refs/tags/x^{}`; that dereferenced
+            # line is the commit, so prefer it when both are present.
+            if parts[1].endswith("^{}"):
+                return parts[0]
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2:
+            return parts[0]
+    raise ExtensionError(
+        f"the remote has no {ref!r}" if ref else "the remote reported no refs")
+
+
+def _audit_tree(root: Path) -> None:
+    """Apply the archive ceilings to a directory that arrived some other way.
+
+    A clone is not extracted, so `_safe_extract` never sees it -- and a git
+    repository can hold symlinks and gigabytes just as happily as a zip can.
+    The rules that govern what may be installed should not depend on how it
+    travelled.
+    """
+    total = 0
+    count = 0
+    base = root.resolve()
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ExtensionError(
+                f"repository contains a symlink: {path.relative_to(root)}")
+        if not path.is_file():
+            continue
+        count += 1
+        if count > MAX_ARCHIVE_MEMBERS:
+            raise ExtensionError(
+                f"repository holds more than {MAX_ARCHIVE_MEMBERS} files")
+        # Containment is re-checked on the resolved path even though nothing
+        # here chose it: `rglob` follows nothing, but a future caller might.
+        if base not in path.resolve().parents:
+            raise ExtensionError(f"path escapes the extension directory: {path}")
+        total += path.stat().st_size
+        if total > MAX_EXTRACTED_BYTES:
+            raise ExtensionError(
+                f"repository is larger than "
+                f"{MAX_EXTRACTED_BYTES // (1024 * 1024)}MB")
+
+
 def _staged_bundle_root(staged: Path) -> Path:
     """The directory holding `manifest.json`, unwrapping one nesting level.
 
@@ -1197,11 +1405,26 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
     root = extension_root()
     root.mkdir(parents=True, exist_ok=True)
     digest = None
+    origin_url = origin_ref = commit = None
+    kind = _source_kind(source)
 
     with tempfile.TemporaryDirectory(dir=root) as tmp:
         staged = Path(tmp) / "staged"
-        staged.mkdir()
-        if source.startswith(("http://", "https://")):
+        if kind == "git":
+            # Cloned into its own directory because `git clone` insists on an
+            # empty target, then the working tree is taken and `.git` is left
+            # behind: an update RE-CLONES rather than pulling, so there is no
+            # repository state to drift, no local modification to conflict
+            # with, and nothing of git's on the host's disk afterwards.
+            checkout = Path(tmp) / "checkout"
+            origin_url, origin_ref, commit = _git_clone(source, checkout)
+            _audit_tree(checkout)
+            shutil.copytree(checkout, staged, symlinks=False,
+                            ignore=shutil.ignore_patterns(
+                                ".git", "__pycache__", "*.pyc"))
+        else:
+            staged.mkdir()
+        if kind == "zip":
             import requests
 
             response = requests.get(source, timeout=60, stream=True)
@@ -1221,6 +1444,8 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
             except zipfile.BadZipFile as exc:
                 raise ExtensionError(f"not a zip archive: {exc}") from exc
             provenance = provenance or f"url:{source}"
+        elif kind == "git":
+            provenance = provenance or f"git:{origin_url}@{origin_ref}"
         else:
             origin = Path(source).expanduser()
             if not origin.is_dir():
@@ -1259,6 +1484,14 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
         manifest["provenance"] = provenance
         if digest:
             manifest["sha256"] = digest
+        # What an update CHECK needs later, written now. Without the url and
+        # ref there is nothing to ask, and without the commit there is nothing
+        # to compare the answer against -- an extension installed before these
+        # existed is simply reported as uncheckable rather than guessed at.
+        if origin_url:
+            manifest["source_url"] = origin_url
+            manifest["source_ref"] = origin_ref
+            manifest["commit"] = commit
         manifest_path.write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8")
@@ -1269,6 +1502,148 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
         if row["id"] == candidate.id:
             return row
     raise ExtensionError(f"{candidate.id!r} did not load after install")
+
+
+def check_update(extension_id: str) -> dict:
+    """Is there a newer commit for one installed extension?
+
+    Never raises. A network failure, a repository that has moved, a git that
+    is not installed -- all of them are reported as `checkable: False` with the
+    reason, because this runs for every installed extension at once and one
+    unreachable remote must not fail the sweep for the others.
+
+    Only git installs can be answered. A zip URL would have to be downloaded in
+    full to be compared, and a local directory has no upstream at all; both are
+    reported uncheckable rather than silently reported up to date, which is the
+    same claim with the truth taken out.
+    """
+    ext = installed_extensions().get(str(extension_id or ""))
+    if ext is None:
+        return {"id": extension_id, "checkable": False, "update": False,
+                "reason": "not installed"}
+    row = {"id": ext.id, "name": ext.name, "version": ext.version,
+           "current": ext.commit, "latest": "", "update": False,
+           "checkable": bool(ext.source_url and ext.commit),
+           "source_url": ext.source_url, "source_ref": ext.source_ref,
+           "reason": ""}
+    if not ext.source_url:
+        row["reason"] = ("installed from a folder or a zip, so there is no "
+                         "repository to ask")
+        return row
+    if not ext.commit:
+        row["reason"] = "installed before update checking existed"
+        return row
+    try:
+        row["latest"] = _git_remote_head(ext.source_url, ext.source_ref or None)
+    except ExtensionError as exc:
+        row["checkable"] = False
+        row["reason"] = str(exc)
+        return row
+    except Exception as exc:                      # pragma: no cover - defensive
+        row["checkable"] = False
+        row["reason"] = f"{type(exc).__name__}: {exc}"
+        return row
+    row["update"] = row["latest"] != ext.commit
+    return row
+
+
+def check_updates() -> list[dict]:
+    """`check_update` for everything installed, in id order."""
+    return [check_update(ext_id)
+            for ext_id in sorted(installed_extensions())]
+
+
+def update_extension(extension_id: str) -> dict:
+    """Re-install one git-sourced extension at its ref's current commit.
+
+    Re-clones rather than pulling. There is no `.git` in an installed
+    extension, deliberately: a pull would mean carrying repository state that
+    can drift, conflict with a host's local edit, or fail halfway and leave a
+    working tree nobody chose. A fresh clone validated in staging and moved
+    with `os.replace` is the same atomicity install already has, and the same
+    failure mode -- the old version, or the new one, never a mixture.
+
+    The enabled set and everything under `world["ext:<id>"]` survive: an update
+    is the same extension, so a story played with it keeps going.
+    """
+    import shutil
+
+    ext = installed_extensions().get(str(extension_id or ""))
+    if ext is None:
+        raise ExtensionError(f"{extension_id!r} is not installed")
+    if not ext.source_url:
+        raise ExtensionError(
+            f"{ext.id!r} was not installed from a repository, so there is "
+            "nothing to update from")
+
+    was_enabled = is_enabled(ext.id)
+    root = extension_root()
+    source = ext.source_url + (f"#{ext.source_ref}" if ext.source_ref else "")
+
+    with tempfile.TemporaryDirectory(dir=root) as tmp:
+        checkout = Path(tmp) / "checkout"
+        url, ref, commit = _git_clone(source, checkout)
+        if commit == ext.commit:
+            return {"id": ext.id, "updated": False, "commit": commit,
+                    "reason": "already at the newest commit"}
+        _audit_tree(checkout)
+        work = Path(tmp) / "work"
+        shutil.copytree(checkout, work, symlinks=False,
+                        ignore=shutil.ignore_patterns(
+                            ".git", "__pycache__", "*.pyc"))
+        # The same one-level unwrap install does: a repository usually holds
+        # the extension in a directory of its own rather than at its root.
+        bundle = _staged_bundle_root(work)
+        staged = Path(tmp) / ext.id
+        if bundle != staged:
+            os.replace(bundle, staged)
+        # The id is read from the manifest FIRST, because `_load_manifest`
+        # requires the directory name to match it and would otherwise report a
+        # rename as a directory-name mismatch -- true, and not the reason.
+        try:
+            declared = json.loads(
+                (staged / "manifest.json").read_text(encoding="utf-8"))
+            claimed = str(declared.get("id") or "")
+        except Exception:
+            claimed = ext.id                  # let _load_manifest say why
+        if claimed and claimed != ext.id:
+            raise ExtensionError(
+                f"the repository now declares id {claimed!r}, not "
+                f"{ext.id!r}; install it separately rather than updating")
+        # Validated BEFORE the installed copy is touched: an update that would
+        # not load must leave the working one exactly where it is.
+        candidate = _load_manifest(staged)
+        manifest_path = staged / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest.update({"provenance": f"git:{url}@{ref}", "source_url": url,
+                         "source_ref": ref, "commit": commit})
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+
+        previous = Path(tmp) / f"{ext.id}.previous"
+        os.replace(ext.path, previous)
+        try:
+            os.replace(staged, ext.path)
+        except Exception:
+            os.replace(previous, ext.path)        # put the old one back
+            raise
+
+    reload()
+    if was_enabled:
+        # `reload` cleared the live registrations; the enabled SET is durable,
+        # so this only re-imports what the host had already switched on.
+        try:
+            activate(refresh=True)
+        except Exception:
+            log.exception("extension %s did not re-activate after update",
+                          ext.id)
+    for row in listing():
+        if row["id"] == ext.id:
+            row["updated"] = True
+            row["previous_version"] = ext.version
+            return row
+    raise ExtensionError(f"{ext.id!r} did not load after the update")
 
 
 def remove_extension(extension_id: str) -> dict:

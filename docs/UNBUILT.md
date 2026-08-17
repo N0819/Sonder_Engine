@@ -3750,8 +3750,18 @@ Still missing:
   that runs the same two lints against an unbundled extension before shipping.
   The checks exist; the CLI entry point does not.
 - **Phase 2: the reviewed registry.** Every field it needs (id, version,
-  `sha256`, `provenance`) is already written at install time, so this is an
-  addition rather than a migration.
+  `sha256`, `provenance`, and now `source_url`/`source_ref`/`commit`) is
+  already written at install time, so this is an addition rather than a
+  migration.
+- **A zip or folder install cannot be checked for updates.** Only a repository
+  source has something to ask. A zip would have to be re-downloaded in full to
+  compare — an `ETag`/`Last-Modified` probe would be cheap and is not
+  universally honoured, so it was left out rather than shipped as a check that
+  is right most of the time. Reported as `checkable: false` with the reason.
+- **Update checks are manual.** There is no periodic sweep and no notification
+  badge; the host presses a button. A background check is a network call per
+  installed extension on a schedule nobody asked for, and wants a rate limit
+  and a stored last-checked time before it is worth having.
 - **Scoped clients**, which is what would make third-party frontends real for
   non-host players: scoped stream and chat reads, `client`-scope tokens. A
   firewall decision, and it deserves its own design note before code.

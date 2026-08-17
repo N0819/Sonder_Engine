@@ -5,7 +5,8 @@ Authority for the extension system as built. If this file and
 this one is right — the design note argues *why*, this one states *what*.
 Unfinished pieces are registered in [`docs/UNBUILT.md`](../UNBUILT.md) §6.2.
 
-An extension is a directory. It can add pipeline stages, observe every step,
+An extension is a directory, installed from a git repository, a zip, or a
+folder. It can add pipeline stages, observe every step,
 persist per-story and per-character state, read a character's interior, add
 sidebar tabs and step renderers, serve its own HTTP routes' worth of data, and
 restyle or replace the entire interface. It does all of that without editing a
@@ -117,8 +118,28 @@ plainly that it runs with the engine's own access.
 ## 3. Lifecycle
 
 **Install** — `POST /api/extensions/install` with `{"source": "..."}`, or the
-field at the bottom of the 🧩 Extensions menu. Source is either a local
-directory path or an `http(s)` URL to a zip.
+field at the bottom of the 🧩 Extensions menu. A source is one of three things,
+and which one is decided before anything is fetched:
+
+| Source | Recognised by |
+|---|---|
+| **a git repository** | ending in `.git`, a `git+` prefix, a `file://` URL, or an ordinary `https://github.com/owner/repo` on a known forge (GitHub, GitLab, Codeberg, Bitbucket, sourcehut) |
+| **a zip** | any other `http(s)` URL |
+| **a folder** | anything else |
+
+Append `#branch` or `#tag` to a repository URL to follow that instead of the
+default branch: `https://github.com/owner/repo#v2`.
+
+Only `http(s)` and `file://` can be cloned. `ssh://`, `git@host:path`, `git://`
+and `ext::` are refused — and the ssh case matters most, because it would not
+fail, it would **hang**: without a key, git blocks on a passphrase prompt inside
+a web request with nobody at the terminal to answer it. Submodules are never
+initialised; a submodule is a second URL chosen by the repository rather than
+by the host, and it can name any transport.
+
+A clone keeps the working tree and discards `.git`. Updates re-clone, so there
+is no repository state on your disk to drift, conflict with a local edit, or
+fail halfway.
 
 The install is staged, validated and then moved with `os.replace`, so an install
 interrupted at any point leaves either the old extension or none — never a
@@ -135,11 +156,37 @@ half-written directory that fails to load forever. Specifically:
 - `provenance` (`url:…` or `local:…`) and, for URL installs, `sha256` are
   written into the installed manifest — so a future reviewed-registry phase can
   tell a reviewed install from a sideloaded one without re-deriving it.
+- A repository is audited on the same ceilings as an archive — no symlinks, no
+  more than 4096 files, no more than 256 MB expanded — because a repository can
+  hold all three just as happily as a zip can.
 - Installing over an existing id is **refused**. Remove first.
 
 **Enable / disable** — `POST /api/extensions/{id}/enable` / `…/disable`. The
 enabled set is a JSON list in the `enabled_extensions` setting. Enabling imports
 your Python entry and calls `register(api)` exactly once.
+
+**Update** — `GET /api/extensions/updates` asks every git-sourced extension's
+remote whether it has moved (one `ls-remote` each, no download), and
+`POST /api/extensions/{id}/update` takes the newer commit. In the menu these
+are the **Check for updates** button and a per-extension **Update** button that
+appears only once a check has said there is one.
+
+Three properties worth knowing:
+
+- **Only a repository install can be checked.** A zip would have to be
+  downloaded in full to compare, and a folder has no upstream — both report
+  `checkable: false` with the reason rather than claiming to be up to date,
+  which is the same claim with the truth removed.
+- **A check never raises.** An unreachable remote is reported on its own row, so
+  one dead repository cannot fail the sweep for everything else.
+- **A bad upstream commit cannot take your working copy down.** The new tree is
+  cloned and validated in staging before the installed one is touched, and if
+  the swap fails the old directory goes back. A repository that renames its own
+  `id` is refused rather than updated into, since that would hand one
+  extension's stored story state to another.
+
+The enabled set and everything under `world["ext:<id>"]` survive an update: it
+is the same extension, so a story played with it keeps going.
 
 **Remove** — `DELETE /api/extensions/{id}`. Deletes the directory and **leaves
 `world["ext:<id>"]` alone**: removal takes the code, not the history, so
@@ -652,7 +699,9 @@ migration of everything already installed.
 | Route | Purpose |
 |---|---|
 | `GET /api/extensions` | listing, `load_errors`, `safe_mode` |
-| `POST /api/extensions/install` | `{"source": "<dir or url>"}` |
+| `POST /api/extensions/install` | `{"source": "<folder, zip URL, or repository>"}` |
+| `GET /api/extensions/updates` | ask every repository-sourced extension's remote |
+| `POST /api/extensions/{id}/update` | take the newer commit |
 | `POST /api/extensions/{id}/enable` | enable; imports and registers |
 | `POST /api/extensions/{id}/disable` | disable; deregisters |
 | `DELETE /api/extensions/{id}` | remove the directory, keep the story state |
