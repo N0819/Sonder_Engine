@@ -171,8 +171,10 @@ def test_non_anthropic_request_is_shaped_normally(monkeypatch):
     providers.PROMPT_CACHE_ENABLED = True
     body = _capture(monkeypatch, OPENROUTER_PROV, "deepseek/deepseek-v4-flash",
                     OPENAI_REPLY)
-    assert body["messages"][0] == {
-        "role": "system", "content": "You are the NARRATOR. Stable prefix."}
+    system = body["messages"][0]
+    assert system["role"] == "system"
+    assert system["content"].startswith("You are the NARRATOR. Stable prefix.")
+    assert "LANGUAGE AND SCHEMA CONTRACT" in system["content"]
 
 
 def test_the_cached_prefix_is_byte_stable_across_calls(monkeypatch):

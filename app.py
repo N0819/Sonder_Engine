@@ -2,10 +2,14 @@ import contextvars, json, queue, random, re, time, threading, os
 import updates
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from starlette.datastructures import Headers
+from starlette.middleware.gzip import GZipResponder
+from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
+                               Response)
 from fastapi.staticfiles import StaticFiles
 
 import attire
+import extension_runtime
 import guest_access as guest
 
 import db
@@ -43,6 +47,7 @@ from character_schema import (
     character_initial_outfit,
     character_name,
     character_name_from_text,
+    fold_identity_key,
     default_character_data,
     default_persona_data,
     new_uid,
@@ -67,7 +72,17 @@ from importers import (
 from commit import (commit_all, promotable_background_presences,
                     promote_background_character,
                     _known_name_roster, sync_room_registry_with_scene)
-from prompts import presets, active_preset, get_prompt, DEFAULT_PROMPTS, nsfw_enabled
+from prompts import (
+    presets, active_preset, get_prompt, DEFAULT_PROMPTS, nsfw_enabled,
+    default_prompts_for, preset_export_document, preset_import_document,
+    unique_preset_name,
+)
+from language_runtime import (
+    DEFAULT_LANGUAGE, STORY_LANGUAGE_KEY, LanguagePackError,
+    installed_language_packs,
+    language_scope, require_language_pack, set_story_language, set_ui_language,
+    story_language, story_language_scope, ui_language,
+)
 from memory import (
     add_lore, update_lore, delete_lore, LORE_CATEGORIES,
     LOREBOOK_TYPES, MEMORY_CATEGORIES, MEMORY_PROVENANCE, 
@@ -207,6 +222,63 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Sonder Engine", version="1.0", lifespan=lifespan)
+
+
+class SelectiveGZipMiddleware:
+    """gzip ordinary JSON, never a streamed response.
+
+    Worth having because the UI catalog is large: `/api/bootstrap` carries a
+    full message catalog (~190KB for Japanese, a third of the response) and
+    `/api/ui` carries another -- about 816KB per page load, compressing to
+    roughly a third.
+
+    Streaming is EXCLUDED, and not as a precaution. Starlette's GZipResponder
+    writes each streamed chunk into a `GzipFile`, and the compressor buffers
+    internally: a turn's NDJSON lines are far too small to fill that buffer,
+    so nothing reaches the browser until enough has accumulated. Applying it
+    to the turn stream stalled the live view -- the stage indicator stopped
+    advancing, token deltas stopped appearing, and the client eventually gave
+    up on a connection that looked dead, which the server then recorded as
+    `Aborted: generation aborted by user` mid-turn.
+
+    Keyed on the response's CONTENT TYPE rather than its path, so a streaming
+    route added later is covered without anyone remembering to list it.
+    """
+
+    STREAMED = ("application/x-ndjson", "text/event-stream")
+
+    def __init__(self, app, minimum_size: int = 2048):
+        self.app = app
+        self.minimum_size = minimum_size
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        accept = Headers(scope=scope).get("accept-encoding", "")
+        if "gzip" not in accept:
+            return await self.app(scope, receive, send)
+
+        responder = {"impl": None}
+
+        async def route(message):
+            if message["type"] == "http.response.start":
+                content_type = Headers(
+                    raw=message["headers"]).get("content-type", "")
+                if any(kind in content_type for kind in self.STREAMED):
+                    responder["impl"] = "plain"
+                else:
+                    responder["impl"] = "gzip"
+            if responder["impl"] == "gzip":
+                return await gzip_send(message)
+            return await send(message)
+
+        gzip_responder = GZipResponder(self.app, self.minimum_size)
+        gzip_responder.send = send
+        gzip_send = gzip_responder.send_with_gzip
+        await self.app(scope, receive, route)
+
+
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
 app.include_router(auth_router)
 
 # The voice anchor rides EVERY narrator call, so it is bounded on both axes:
@@ -979,8 +1051,47 @@ def _lore_entry_json(row) -> dict:
     }
 
 # ============================ BOOTSTRAP & SETTINGS ============================
+def _bootstrap_language():
+    """The UI pack to serve, and every pack worth offering.
+
+    Deliberately non-fatal. A malformed pack dropped into `language_packs/`
+    makes `installed_language_packs` raise, and this route is the whole
+    application's entry point -- so one bad directory took down the entire UI
+    rather than just the language picker. English is compiled into the
+    distribution, so there is always something to render with.
+    """
+    try:
+        return (require_language_pack(ui_language(), capability="ui"),
+                [pack.public()
+                 for pack in installed_language_packs().values()],
+                None)
+    except LanguagePackError as exc:
+        english = _english_language_pack()
+        return english, ([english.public()] if english else []), str(exc)
+
+
+def _english_language_pack():
+    try:
+        return require_language_pack(DEFAULT_LANGUAGE, capability="ui")
+    except LanguagePackError:
+        return None
+
+
+def _bootstrap_extensions():
+    """Installed extensions, never fatally. Same posture as _bootstrap_language:
+    a broken extension costs the host that extension, not the whole UI."""
+    try:
+        return extension_runtime.listing(), extension_runtime.load_errors()
+    except Exception as exc:
+        logging.getLogger("fiction_engine.pipeline").exception(
+            "extension listing failed")
+        return [], [{"dir": "", "error": str(exc)}]
+
+
 @app.get("/api/bootstrap")
 def bootstrap():
+    selected_ui, language_packs, language_error = _bootstrap_language()
+    extensions, extension_errors = _bootstrap_extensions()
     return {
         "providers": [_provider_public(r["id"]) for r in q("SELECT id FROM providers")],
         "provider_presets": DEFAULT_BASES,
@@ -1056,6 +1167,19 @@ def bootstrap():
         "prompt_presets": presets(),
         "active_preset": active_preset(),
         "lorebook_link_types": LOREBOOK_LINK_TYPES,
+        "language_packs": language_packs,
+        "ui_language": selected_ui.id if selected_ui else DEFAULT_LANGUAGE,
+        "ui_direction": selected_ui.direction if selected_ui else "ltr",
+        "ui_messages": dict(selected_ui.ui_catalog) if selected_ui else {},
+        # Surfaced rather than swallowed: the host needs to know a pack they
+        # installed is not being used, and why.
+        "language_error": language_error,
+        # Installed extensions, and every directory that failed to load --
+        # surfaced for exactly the reason `language_error` is. Both are
+        # deliberately non-fatal: a malformed extension must cost the host its
+        # own row in the panel, never the application's entry point.
+        "extensions": extensions,
+        "extension_errors": extension_errors,
     }
 
 @app.put("/api/agent_models")
@@ -1261,12 +1385,82 @@ def put_max_output_tokens(body: dict = Body(...)):
     set_setting("max_output_tokens", str(value))
     return {"ok": True, "value": value}
 
+def _default_authoring_language():
+    """The language to author in when the request does not say.
+
+    Characters, personas and lorebooks are global resources, so there is no
+    story whose language could be read. Defaulting to English meant a host who
+    had switched everything to Japanese still got English cards, because the
+    only thing that carried their choice was whichever frontend remembered to
+    send it. The interface language is the setting they actually changed.
+    """
+    try:
+        return require_language_pack(ui_language(), capability="story").id
+    except (LanguagePackError, ImportError):
+        return DEFAULT_LANGUAGE
+
+
+def _require_story_language(value):
+    """Resolve a request's story language, or refuse the request."""
+    try:
+        return require_language_pack(
+            value or _default_authoring_language(), capability="story").id
+    except (LanguagePackError, ImportError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/default_prompts")
+def default_prompts(language: str = DEFAULT_LANGUAGE):
+    """One story language's editable prompt bodies, for the prompt editor.
+
+    Bootstrap ships the English set; a host editing a Japanese preset needs
+    the Japanese sheets to edit, not English ones to overwrite them with.
+    """
+    selected = _require_story_language(language)
+    return {"language": selected, "prompts": default_prompts_for(selected)}
+
+
 @app.put("/api/prompt_presets")
 def save_preset(body: dict = Body(...)):
+    name = str(body.get("name") or "").strip()
+    if not name or name == "Default":
+        raise HTTPException(400, "a preset needs a name of its own")
+    language = _require_story_language(body.get("language"))
+    supplied = body.get("prompts") or {}
+    if not isinstance(supplied, dict):
+        raise HTTPException(400, "prompts must be an object")
     ps = presets()
-    ps[body["name"]] = body.get("prompts", {})
+    ps[name] = {
+        "language": language,
+        "prompts": {str(pid): str(text) for pid, text in supplied.items()
+                    if isinstance(text, str)},
+    }
     set_setting("prompt_presets", json.dumps(ps))
-    return {"ok": True}
+    return {"ok": True, "name": name, "language": language}
+
+
+@app.get("/api/prompt_presets/{name}/export")
+def export_preset(name: str):
+    try:
+        document = preset_export_document(name)
+    except KeyError as exc:
+        raise HTTPException(404, f"No prompt preset named {name!r}.") from exc
+    return document
+
+
+@app.post("/api/prompt_presets/import")
+def import_preset(body: dict = Body(...)):
+    document = body.get("preset")
+    try:
+        name, preset = preset_import_document(document, body.get("name"))
+    except (ValueError, LanguagePackError, ImportError) as exc:
+        raise HTTPException(400, f"Preset import failed: {exc}") from exc
+    ps = presets()
+    final = unique_preset_name(name, ps)
+    ps[final] = preset
+    set_setting("prompt_presets", json.dumps(ps))
+    return {"ok": True, "name": final, "language": preset["language"],
+            "renamed": final != name}
 
 @app.delete("/api/prompt_presets/{name}")
 def del_preset(name: str):
@@ -1281,6 +1475,62 @@ def del_preset(name: str):
 def set_active(body: dict = Body(...)):
     set_setting("active_preset", body.get("name", "Default"))
     return {"ok": True}
+
+
+# ---- Extensions ----
+# Thin by design: everything here is a call into extension_runtime, so the
+# loader's per-item isolation, containment checks and enable set live in one
+# place instead of being re-implemented per route.
+
+def _extension_id(eid: str) -> str:
+    if not extension_runtime.EXTENSION_ID.fullmatch(str(eid or "")):
+        raise HTTPException(404, "No such extension")
+    return str(eid)
+
+
+@app.get("/api/extensions")
+def extensions_list():
+    return {"extensions": extension_runtime.listing(),
+            "load_errors": extension_runtime.load_errors(),
+            "safe_mode": extension_runtime.safe_mode()}
+
+
+@app.post("/api/extensions/{eid}/enable")
+def extension_enable(eid: str):
+    try:
+        return extension_runtime.enable_extension(_extension_id(eid))
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.post("/api/extensions/{eid}/disable")
+def extension_disable(eid: str):
+    return extension_runtime.disable_extension(_extension_id(eid))
+
+
+@app.get("/api/extensions/{eid}/state")
+def extension_state(eid: str, chat_id: int):
+    return {"id": _extension_id(eid),
+            "chat_id": chat_id,
+            "state": wget(chat_id, f"ext:{_extension_id(eid)}")}
+
+
+@app.get("/api/extensions/ui.js")
+def extensions_ui():
+    # Served under /api/ rather than /static/ so `access_control` gates it:
+    # extension code stays behind the host session and never reaches the guest
+    # page, which loads its own shell.
+    return Response(extension_runtime.ui_bundle(),
+                    media_type="application/javascript")
+
+
+@app.get("/api/extensions/{eid}/asset/{path:path}")
+def extension_asset(eid: str, path: str):
+    try:
+        target = extension_runtime.asset_path(_extension_id(eid), path)
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return FileResponse(str(target))
 
 @app.get("/api/nsfw")
 def get_nsfw():
@@ -1525,17 +1775,18 @@ def lorebook_generate_plan(lid: int, body: dict = Body(default={})):
     _require_lorebook(lid)
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
     try:
-        plan = generate_lorebook_plan(
-            lid, brief,
-            mode=body.get("mode", "expand_tree"),
-            depth=body.get("depth", 2),
-            entry_target=body.get("entry_target", 40),
-            allow_new_books=body.get("allow_new_books", True),
-            allow_links=body.get("allow_links", True),
-            allow_updates=body.get("allow_updates", True),
-            preserve_locked=body.get("preserve_locked", True),
-            timeout=body.get("timeout"),
-        )
+        with language_scope(_require_story_language(body.get("language"))):
+            plan = generate_lorebook_plan(
+                lid, brief,
+                mode=body.get("mode", "expand_tree"),
+                depth=body.get("depth", 2),
+                entry_target=body.get("entry_target", 40),
+                allow_new_books=body.get("allow_new_books", True),
+                allow_links=body.get("allow_links", True),
+                allow_updates=body.get("allow_updates", True),
+                preserve_locked=body.get("preserve_locked", True),
+                timeout=body.get("timeout"),
+            )
     except LoreGenError as exc:
         # The run produced nothing usable, but its job row survives with the
         # request and any completed stage, so point the client at the resume
@@ -1771,7 +2022,19 @@ def image_models(pid: int):
 def char_generate(body: dict = Body(default={})):
     brief = str(body.get("prompt") or body.get("brief") or body.get("description") or "").strip()
     try:
-        cid, sheet = generate_character(brief)
+        language = require_language_pack(
+            body.get("language") or _default_authoring_language(),
+            capability="story").id
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        # Scoped, not merely passed: the provider boundary reads the
+        # contextvar to apply the schema policy AND to size the output
+        # budget. Passing `language` alone left both at English, which
+        # stacked the English contract under the Japanese one and
+        # truncated the sheet mid-JSON.
+        with language_scope(language):
+            cid, sheet = generate_character(brief, language=language)
     except Exception as exc:
         raise HTTPException(502, f"Character generation failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
@@ -1826,7 +2089,8 @@ def character_start_story(cid: int, body: dict = Body(default={})):
         chat_id, turn_id = greetings.start_story(
             cid, int(persona_id), int(body.get("greeting_index", 0)),
             lorebook_id=int(lorebook_id) if lorebook_id else None,
-            already_known=bool(body.get("already_known", True)))
+            already_known=bool(body.get("already_known", True)),
+            language=_require_story_language(body.get("language")))
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"chat_id": chat_id, "turn_id": turn_id}
@@ -1851,7 +2115,8 @@ def char_generate_greeting(cid: int, body: dict = Body(default={})):
         raise HTTPException(404, "Character not found")
     brief = str(body.get("prompt") or body.get("brief") or body.get("situation") or "")
     try:
-        greeting = greetings.generate_greeting(cid, brief)
+        greeting = greetings.generate_greeting(
+            cid, brief, language=_require_story_language(body.get("language")))
     except Exception as exc:
         raise HTTPException(502, f"Greeting generation failed: {exc}") from exc
     return {"greeting": greeting}
@@ -1861,7 +2126,8 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
     """Preview missing v3 psychology fields for editor review."""
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
     try:
-        sheet = fill_character_psychology(cid, brief)
+        with language_scope(_require_story_language(body.get("language"))):
+            sheet = fill_character_psychology(cid, brief)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
@@ -1871,12 +2137,13 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
 def _appearance_fill(kind, entity_id, body):
     """Shared handler for the two card editors' body-and-clothing generator."""
     try:
-        return fill_appearance(
-            kind, entity_id,
-            str(body.get("prompt") or body.get("brief") or "").strip(),
-            include_beneath=bool(body.get("beneath")),
-            draft=body.get("draft"),
-        )
+        with language_scope(_require_story_language(body.get("language"))):
+            return fill_appearance(
+                kind, entity_id,
+                str(body.get("prompt") or body.get("brief") or "").strip(),
+                include_beneath=bool(body.get("beneath")),
+                draft=body.get("draft"),
+            )
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
@@ -1920,7 +2187,19 @@ def char_del(cid: int):
 def persona_generate(body: dict = Body(default={})):
     brief = str(body.get("prompt") or body.get("brief") or body.get("description") or "").strip()
     try:
-        pid, sheet = generate_persona(brief)
+        language = require_language_pack(
+            body.get("language") or _default_authoring_language(),
+            capability="story").id
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        # Scoped, not merely passed: the provider boundary reads the
+        # contextvar to apply the schema policy AND to size the output
+        # budget. Passing `language` alone left both at English, which
+        # stacked the English contract under the Japanese one and
+        # truncated the sheet mid-JSON.
+        with language_scope(language):
+            pid, sheet = generate_persona(brief, language=language)
     except Exception as exc:
         raise HTTPException(502, f"Persona generation failed: {exc}") from exc
     _ensure_resource_uid("personas", pid, "persona")
@@ -2123,7 +2402,8 @@ def lore_export(lid: int):
 def lore_reinterpret_route(lid: int):
     _require_lorebook(lid)
     try:
-        count = reinterpret_lorebook(lid)
+        with language_scope(_require_story_language(None)):
+            count = reinterpret_lorebook(lid)
     except Exception as exc:
         raise HTTPException(502, f"Lorebook reinterpretation failed: {exc}") from exc
     return {
@@ -2255,9 +2535,94 @@ def lore_entry_delete(eid: int):
 # ============================ CHATS ============================
 @app.post("/api/chats")
 def chat_new(body: dict = Body(...)):
-    cid = qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-             (body.get("name") or f"Chat {int(time.time())}", body.get("scenario", ""), time.time()))
-    return dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
+    try:
+        language = require_language_pack(
+            body.get("language") or _default_authoring_language(),
+            capability="story").id
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    with transaction():
+        cid = qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                 (body.get("name") or f"Chat {int(time.time())}",
+                  body.get("scenario", ""), time.time()))
+        set_story_language(cid, language)
+    result = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
+    result["story_language"] = language
+    return result
+
+
+@app.get("/api/language-packs")
+def language_packs_get():
+    return {"language_packs": [
+        pack.public() for pack in installed_language_packs().values()
+    ]}
+
+
+@app.get("/api/ui")
+def ui_catalog_get():
+    pack = require_language_pack(ui_language(), capability="ui")
+    return {
+        "language": pack.id,
+        "direction": pack.direction,
+        "messages": dict(pack.ui_catalog),
+    }
+
+
+@app.get("/api/language-packs/{language_id}/ui")
+def language_pack_ui(language_id: str):
+    try:
+        pack = require_language_pack(language_id, capability="ui")
+    except LanguagePackError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {
+        "language": pack.public(),
+        "messages": dict(pack.ui_catalog),
+    }
+
+
+@app.put("/api/ui-language")
+def ui_language_put(body: dict = Body(...)):
+    if not str(body.get("language") or "").strip():
+        raise HTTPException(400, "language is required")
+    try:
+        language = set_ui_language(body.get("language"))
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "language": language}
+
+
+@app.get("/api/chats/{cid}/language")
+def chat_language_get(cid: int):
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    stored = str(wget(cid, STORY_LANGUAGE_KEY, DEFAULT_LANGUAGE) or DEFAULT_LANGUAGE)
+    effective = story_language(cid)
+    return {
+        "language": effective,
+        # What is on disk, which survives an uninstalled pack and comes back
+        # when it is reinstalled. The client must not offer `language` as the
+        # current selection when these differ -- that is how a chat carried
+        # from another machine lost its language to an unrelated save.
+        "stored": stored,
+        "installed": stored == effective,
+    }
+
+
+@app.put("/api/chats/{cid}/language")
+def chat_language_put(cid: int, body: dict = Body(...)):
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    _require_chat_idle(cid)
+    # Required, never defaulted: there is no spelling of "leave it alone", so
+    # an omitted field would be indistinguishable from a request to change to
+    # English -- and this route is issued on every style-guide save.
+    if not str(body.get("language") or "").strip():
+        raise HTTPException(400, "language is required")
+    try:
+        language = set_story_language(cid, body.get("language"))
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "language": language}
 
 @app.put("/api/chats/{cid}")
 def chat_edit(cid: int, body: dict = Body(...)):
@@ -2608,8 +2973,10 @@ def chat_get(cid: int):
     except Exception:
         pass
 
+    chat_payload = dict(chat)
+    chat_payload["story_language"] = story_language(cid)
     return {
-        "chat": dict(chat),
+        "chat": chat_payload,
         "participants": parts,
         "turns": turns,
         "dialogue_colors": dialogue_colors,
@@ -2687,7 +3054,8 @@ def draft_promotion(cid: int, body: dict = Body(...)):
     if not name:
         raise HTTPException(400, "Missing name")
     try:
-        draft = draft_promoted_character(cid, name)
+        with story_language_scope(cid):
+            draft = draft_promoted_character(cid, name)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
@@ -3242,10 +3610,14 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
     # Rewrite THAT key rather than adding a second spelling: two keys for one
     # person puts them in two rooms at once for every reader that walks
     # positions to find a room's occupants.
+    # fold_identity_key, and only when it is non-empty. The old ASCII-only
+    # fold mapped every Japanese name to "", so all of them compared equal and
+    # the pop below removed EVERY other character's position -- the two
+    # sibling folds in spatial.py and commit.py both guard for this.
+    folded_name = fold_identity_key(name)
     existing_keys = [
         key for key in positions
-        if re.sub(r"[^a-z0-9]", "", str(key).lower().strip())
-        == re.sub(r"[^a-z0-9]", "", name.lower().strip())
+        if folded_name and fold_identity_key(key) == folded_name
     ]
     for key in existing_keys:
         positions.pop(key)
@@ -3749,12 +4121,16 @@ def relationships_get(cid: int, ch: int):
 
 @app.post("/api/chats/{cid}/characters/{ch}/memories/consolidate")
 def mem_consolidate(cid: int, ch: int, body: dict = Body(default={})):
+    # A host-pressed button is still a model call into this story, and the
+    # summary it writes is read by every future beat. Without the scope it was
+    # written in English and persisted into a Japanese memory bank.
     try:
-        return consolidate_character_memory(
-            cid, ch,
-            through_turn_idx=body.get("through_turn_idx"),
-            archive_old=body.get("archive_old", True),
-        )
+        with story_language_scope(cid):
+            return consolidate_character_memory(
+                cid, ch,
+                through_turn_idx=body.get("through_turn_idx"),
+                archive_old=body.get("archive_old", True),
+            )
     except Exception as exc:
         raise HTTPException(502, str(exc))
 
@@ -3768,8 +4144,9 @@ def mem_backfill(cid: int, ch: int, body: dict = Body(default={})):
     press does nothing.
     """
     try:
-        result = backfill_memory_summary_windows(
-            cid, ch, window=int(body.get("window") or 10))
+        with story_language_scope(cid):
+            result = backfill_memory_summary_windows(
+                cid, ch, window=int(body.get("window") or 10))
         result["checkpoints_updated"] = (
             propagate_memory_summaries_to_checkpoints(cid, ch))
         return result
@@ -4299,7 +4676,12 @@ def turn_branch(tid: int):
             (ncid, idx + 1, json.dumps(b), time.time())
         )
 
-    return dict(q("SELECT * FROM chats WHERE id=?", (ncid,), one=True))
+    # `story_language` lives in the `world` table, not on the chat row, so it
+    # has to be added the way chat_new and chat_get already add it. The branch
+    # carries the value correctly; only this response was missing it.
+    branched = dict(q("SELECT * FROM chats WHERE id=?", (ncid,), one=True))
+    branched["story_language"] = story_language(ncid)
+    return branched
     
 @app.put("/api/turns/{tid}/input")
 def edit_input(tid: int, body: dict = Body(...)):

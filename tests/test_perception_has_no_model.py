@@ -89,13 +89,31 @@ def test_no_stage_reads_the_omniscient_prose(stage):
     assert "resolved_event" not in src
 
 
-def test_the_prompt_survives_for_replay_only():
-    """The `perception` prompt text is still in `prompts.py` and nothing
-    sends it. That is deliberate: stored steps, archives and pipeline
-    traces from before this change still validate and replay through the
-    `perception` step key, and deleting the entry would break the replay of
-    every pre-change turn — the same reasoning that keeps retired schema
-    fields declared."""
+def test_no_perception_prompt_survives_anywhere():
+    """Replay needs the STEP KEY, not a prompt.
+
+    The entry used to be kept on the stated grounds that deleting it "would
+    break the replay of every pre-change turn". It would not: replay validates
+    a stored step against `schemas.SCHEMA_MAP`, and neither `pipeline_trace`,
+    `chat_archive` nor `checkpoints` reads a prompt at all. What the entry
+    actually did was appear in the host's prompt editor as if editing it
+    changed anything, ride every bootstrap response, and cost 28,467
+    characters of translation in each language pack.
+    """
+    import schemas
+    from language_runtime import installed_language_packs
     from prompts import DEFAULT_PROMPTS
-    assert "perception" in DEFAULT_PROMPTS
+
+    assert "perception" not in DEFAULT_PROMPTS
+    for language_id, pack in installed_language_packs().items():
+        assert "perception" not in pack.card("system_prompts")["prompts"], language_id
+    # Nor a schema. An earlier version of this test asserted `"perception" in
+    # SCHEMA_MAP` on the grounds that "the step key is what replay resolves".
+    # That was wrong twice over: the real step keys are `perception_act`,
+    # `perception_outcome` and `perception_establish`, none of which are in
+    # SCHEMA_MAP, and no `perception` step exists anywhere in the live corpus
+    # (2,317 turns). Replay never resolved it, and the two `step_key ==
+    # "perception"` branches it justified could never fire.
+    assert "perception" not in schemas.SCHEMA_MAP
+    assert not any(key.startswith("perception") for key in schemas.SCHEMA_MAP)
     assert "_agent_json" not in open(perception.__file__).read()

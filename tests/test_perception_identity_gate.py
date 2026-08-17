@@ -414,14 +414,11 @@ def test_body_detail_floor_rejects_live_generic_inner_thigh_overlap():
     assert "Your exposed groin" in restored
 
 
-def test_perception_prompt_permits_rephrasing_but_forbids_generic_loss():
-    from prompts import DEFAULT_PROMPTS
-
-    clause = DEFAULT_PROMPTS["perception"].split("VISIBLE BODY REGIONS:", 1)[1]
-    clause = clause.split("PRONOUNS:", 1)[0].casefold()
-    assert "rephrase" in clause
-    assert "preserve its substantive concrete traits" in clause
-    assert "generic 'bare skin'" in clause
+# `test_perception_prompt_permits_rephrasing_but_forbids_generic_loss`
+# lived here. It asserted paragraphs of the `perception` prompt, which no
+# model has read since perception became deterministic; the prompt has now
+# been deleted from the packs. The rephrasing rule it guarded is enforced
+# by the composer's own admission code, which the rest of this file tests.
 
 
 def test_introduction_quote_survives_but_bare_name_is_scrubbed(temp_db, monkeypatch):

@@ -1,0 +1,330 @@
+{
+  "label_dangling": [
+    "a",
+    "an",
+    "the",
+    "with",
+    "of",
+    "and",
+    "or",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "from",
+    "by",
+    "her",
+    "his",
+    "their",
+    "its",
+    "as"
+  ],
+  "articles": [
+    "a",
+    "an",
+    "the"
+  ],
+  "tone_behavior_words": [
+    "smirk",
+    "smile",
+    "grin",
+    "expression",
+    "look",
+    "gesture"
+  ],
+  "indefinite_article": {
+    "vowels": "aeiou",
+    "vowel": "an",
+    "other": "a"
+  },
+  "linking_participles": [
+    "appearing",
+    "wearing",
+    "dressed",
+    "clad",
+    "wrapped",
+    "standing",
+    "sitting",
+    "holding",
+    "carrying",
+    "looking",
+    "seeming",
+    "aged"
+  ],
+  "ordinal_words": {
+    "2": "second",
+    "3": "third",
+    "4": "fourth",
+    "5": "fifth",
+    "6": "sixth",
+    "7": "seventh",
+    "8": "eighth",
+    "9": "ninth",
+    "10": "tenth",
+    "11": "eleventh",
+    "12": "twelfth"
+  },
+  "second_to_first": [
+    [
+      "\\byou are\\b",
+      "I am"
+    ],
+    [
+      "\\bYou are\\b",
+      "I am"
+    ],
+    [
+      "\\byou were\\b",
+      "I was"
+    ],
+    [
+      "\\bYou were\\b",
+      "I was"
+    ],
+    [
+      "\\byou have\\b",
+      "I have"
+    ],
+    [
+      "\\bYou have\\b",
+      "I have"
+    ],
+    [
+      "\\byourself\\b",
+      "myself"
+    ],
+    [
+      "\\bYourself\\b",
+      "Myself"
+    ],
+    [
+      "\\byours\\b",
+      "mine"
+    ],
+    [
+      "\\bYours\\b",
+      "Mine"
+    ],
+    [
+      "\\byour\\b",
+      "my"
+    ],
+    [
+      "\\bYour\\b",
+      "My"
+    ],
+    [
+      "\\byou\\b",
+      "me"
+    ],
+    [
+      "\\bYou\\b",
+      "I"
+    ]
+  ],
+  "generic_labels": [
+    "a voice",
+    "the unfamiliar person",
+    "an indistinct figure",
+    "you",
+    ""
+  ],
+  "dim_figure": "an indistinct figure",
+  "dim_figures": "indistinct figures",
+  "count_names": {
+    "1": "a",
+    "2": "two",
+    "3": "three",
+    "4": "four",
+    "5": "five",
+    "6": "six",
+    "7": "seven",
+    "8": "eight",
+    "9": "nine",
+    "10": "ten"
+  },
+  "count_words": {
+    "2": "Two",
+    "3": "Three",
+    "4": "Four",
+    "5": "Five",
+    "6": "Six",
+    "7": "Seven",
+    "8": "Eight",
+    "9": "Nine"
+  },
+  "tier_phrases": {
+    "within_reach": "within arm's reach",
+    "near": "close by",
+    "across": "across the room",
+    "default": "here"
+  },
+  "leading_connectives": [
+    "and a ",
+    "and an ",
+    "and the ",
+    "and ",
+    "a ",
+    "an ",
+    "the "
+  ],
+  "pose_prepositions": [
+    "on",
+    "in",
+    "against",
+    "under",
+    "beneath",
+    "over",
+    "across",
+    "atop",
+    "beside",
+    "behind",
+    "before",
+    "between",
+    "inside",
+    "onto",
+    "upon"
+  ],
+  "join": {
+    "two": "{first} and {last}",
+    "many": ", and {last}"
+  },
+  "dialogue_verbs": {
+    "shout": [
+      "shouts",
+      "shout"
+    ],
+    "whisper": [
+      "says under their breath",
+      "say under their breath"
+    ],
+    "mutter": [
+      "says under their breath",
+      "say under their breath"
+    ],
+    "default": [
+      "says",
+      "say"
+    ]
+  },
+  "articulation": {
+    "slurred": ", the words slurred around an occupied tongue",
+    "stifled": ", the words stifled and barely shaped",
+    "default": ""
+  },
+  "residue": {
+    "lead": {
+      "unconscious": "Darkness.",
+      "sedated": "A thick, floating dark.",
+      "asleep": "You are under, below waking.",
+      "default": "Darkness."
+    },
+    "pain": "a dull pain, far off, in a body you can't quite feel",
+    "targeted": "something shifts you; the world tilts without a direction",
+    "loud_event": "a sound, huge and wordless, reaches down and is gone",
+    "closing": {
+      "unconscious": " Nothing reaches you.",
+      "sedated": " Nothing holds shape.",
+      "asleep": "",
+      "default": ""
+    },
+    "separator": "; ",
+    "drowsy": ""
+  },
+  "templates": {
+    "side": " on your {side}",
+    "body_part_where_sides": "across both sides of {whose} {at}",
+    "body_part_where_side": "from the {aspect} side of {whose} {at}",
+    "body_part_where_aspect": "from the {aspect} of {whose} {at}",
+    "body_part_tucked": ", currently beneath clothing",
+    "pose_self_present": "You are",
+    "pose_self_past": "I was",
+    "pose_other_present": "{label} is",
+    "pose_other_past": "{label} was",
+    "pose_support": "on {support}",
+    "pose_relation": "against {other}",
+    "room": "You are in {room}.",
+    "light_dim": "The light is dim.",
+    "light_dark": "It is dark here.",
+    "appearance": "You see {description}.",
+    "posture": "You are {value}.",
+    "activity": "You are {value}.",
+    "held": "You hold: {items}.",
+    "exposed_self": "Your exposed {place}",
+    "exposed_other": "{label}'s exposed {place}",
+    "exposed_detail": "{subject} is visible: {detail}",
+    "muffled": "A muffled voice: {fragment}",
+    "muffled_indistinct": "...something indistinct...",
+    "residue_content": "{lead} {body}.",
+    "tone_behavior": " with {article}{tone}",
+    "tone_noun": " with {tone} in their voice",
+    "tone_article": " in {tone} voice",
+    "tone_adjective": " in {article} {tone} voice",
+    "dialogue_conducted": "{label}'s voice carries through everything around you, low and close: \"{body}\"",
+    "dialogue_visible": "{label} {verb}{manner}{articulation}: \"{body}\"",
+    "dialogue_unseen": "You hear {label} {verb}{articulation}: \"{body}\"",
+    "observable_empty": "{label}.",
+    "observable": "{label} {body}.",
+    "unknown_actor": "the {description}",
+    "unknown_actor_fallback": "the unfamiliar person",
+    "environment_here": "{label} is here with you.",
+    "environment_nearby": "You can see {label} nearby.",
+    "fallback_speech": "{label} says: {quote}",
+    "narrator_immediate": "You register your immediate surroundings.",
+    "narrator_nothing": "Nothing in particular reaches you this beat.",
+    "loop_speech": "{label} says: \"{body}\"",
+    "loop_faint_sound": "You register a faint sound -- nothing you can make out.",
+    "loop_muffled": "You hear a muffled fragment from {label}: \"...{fragment}...\"",
+    "arrived": "{label} comes in.",
+    "departed": "{label} leaves.",
+    "episode_muffled": "I heard a muffled voice: {fragment}",
+    "episode_conducted": "{label}'s voice carried through everything around me: \"{body}\"",
+    "episode_speech": "I heard {label} say: \"{body}\"",
+    "episode_act": "I saw {label} {action}{ending}",
+    "episode_arrived": "{label} came in.",
+    "episode_departed": "{label} left.",
+    "episode_room": "I was in {room}.",
+    "episode_appearance": "I saw {description}.",
+    "episode_light_dim": "The light was dim.",
+    "episode_light_dark": "It was dark.",
+    "episode_posture": "I was {value}.",
+    "episode_activity": "I was {value}.",
+    "episode_held": "I held: {items}.",
+    "bearing_from_above": "from above",
+    "bearing_from_below": "from below",
+    "bearing_barrier_fallback": "from the way through",
+    "bearing_barrier_sector": "{base} {sector}",
+    "bearing_barrier_compass": "{base}, from the {compass}",
+    "loop_faint_sound_placed": "You register a faint sound {where} -- nothing you can make out."
+  },
+  "muffle_ellipsis": "...",
+  "muffle_join": "... ",
+  "body_part_counters": {},
+  "counter_numerals": {},
+  "sound_barrier_phrases": {
+    "open": "through the opening",
+    "open_door": "through the doorway",
+    "closed_door": "through the door",
+    "window": "through the window",
+    "bars": "through the bars",
+    "membrane": "through the curtain",
+    "wall": "beyond the wall"
+  },
+  "sector_phrases": {
+    "ahead": "ahead of you",
+    "behind": "behind you",
+    "left": "to your left",
+    "right": "to your right"
+  },
+  "compass_words": {
+    "n": "north",
+    "ne": "northeast",
+    "e": "east",
+    "se": "southeast",
+    "s": "south",
+    "sw": "southwest",
+    "w": "west",
+    "nw": "northwest"
+  }
+}

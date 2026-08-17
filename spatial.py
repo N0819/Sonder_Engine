@@ -455,10 +455,14 @@ def room_of(scene: dict, name: str) -> Optional[str]:
     for k, v in positions.items():
         if k.lower().strip() == lname:
             return v
-    norm = re.sub(r"[^a-z0-9]", "", lname)
+    # Script-aware: the old ASCII fold erased every non-Latin name to "",
+    # so this fallback could never match one.
+    from character_schema import fold_identity_key
+
+    norm = fold_identity_key(lname)
     if norm:
         for k, v in positions.items():
-            if re.sub(r"[^a-z0-9]", "", k.lower().strip()) == norm:
+            if fold_identity_key(k) == norm:
                 return v
     return None
 
@@ -1525,6 +1529,26 @@ _COMPASS_WORDS = {"n": "north", "ne": "northeast", "e": "east",
                   "se": "southeast", "s": "south", "sw": "southwest",
                   "w": "west", "nw": "northwest"}
 
+# Reader-facing prose, spliced straight into a perception sentence, so it
+# follows the story language like every other engine phrase. Held English
+# before, which put "to your left" inside a Japanese view.
+def _phrase_table(name):
+    from language_runtime import compositor_value
+    try:
+        return dict(compositor_value(name))
+    except Exception:
+        return {}
+
+
+def _sound_barrier_phrases():
+    return _phrase_table("sound_barrier_phrases")
+
+
+def _sector_phrases():
+    return _phrase_table("sector_phrases")
+
+
+#: English compatibility views for tests and audits.
 _SOUND_BARRIER_PHRASES = {
     "open": "through the opening", "open_door": "through the doorway",
     "closed_door": "through the door", "window": "through the window",
@@ -1581,7 +1605,7 @@ def sound_bearing(scene: dict, observer: str, source: str):
         if not label:
             return None
         return {"scope": "same_room", "direction": label,
-                "phrase": _SECTOR_PHRASES[label]}
+                "phrase": _sector_phrases().get(label, label)}
     if rooms_adjacent(scene, o_room, s_room):
         next_room, scope = s_room, "adjacent"
     else:
@@ -1602,13 +1626,23 @@ def sound_bearing(scene: dict, observer: str, source: str):
         out["direction"] = direction
     if vertical:
         out["vertical"] = vertical
-    base = _SOUND_BARRIER_PHRASES.get(barrier) or "from the way through"
+    from language_runtime import compositor_text
+    base = (_sound_barrier_phrases().get(barrier)
+            or compositor_text("bearing_barrier_fallback"))
     if vertical:
-        out["phrase"] = "from above" if vertical == "up" else "from below"
+        out["phrase"] = compositor_text(
+            "bearing_from_above" if vertical == "up" else "bearing_from_below")
     elif direction:
-        out["phrase"] = f"{base} {_SECTOR_PHRASES[direction]}"
+        # The ORDER of base and sector differs by language, so the join is a
+        # template rather than an f-string.
+        out["phrase"] = compositor_text(
+            "bearing_barrier_sector", base=base,
+            sector=_sector_phrases().get(direction, direction))
     elif bearing:
-        out["phrase"] = f"{base}, from the {_COMPASS_WORDS[bearing]}"
+        out["phrase"] = compositor_text(
+            "bearing_barrier_compass", base=base,
+            compass=_phrase_table("compass_words").get(
+                bearing, _COMPASS_WORDS[bearing]))
     else:
         out["phrase"] = base
     return out

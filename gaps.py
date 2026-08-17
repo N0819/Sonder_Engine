@@ -54,6 +54,7 @@ from canon_provenance import is_node_id
 from db import active_frame_id, q, wget, wget_for_frame
 from logging_utils import logger
 from providers import chat_complete
+from prompts import get_prompt
 from spatial import room_of
 from subjects import resolve_subject
 
@@ -337,16 +338,7 @@ def _medium_overlay(cid, scene, record):
     for mv in record["moves"]:
         known_rooms.update((mv["from_room"], mv["to_room"]))
 
-    sys = (
-        "You summarize what a character plausibly did during turns that "
-        "happened off screen, from a deterministic trail of moves and events. "
-        "Stay strictly inside the trail: you may color it, never extend it. "
-        "Do NOT invent outcomes, alliances, acquisitions, injuries, or any "
-        "change to the world -- describe activity, not consequence. Any room "
-        "you mention MUST be named by id from rooms_available; mention no "
-        "room otherwise. Output STRICT JSON "
-        '{"summary": "<2-3 sentences>", "rooms": ["<ids used, possibly empty>"]}'
-    )
+    sys = get_prompt("gap_medium")
     user = json.dumps({
         "subject": record["subject"], "since_turn": record["since_turn"],
         "until_turn": record["until_turn"], "moves": record["moves"],

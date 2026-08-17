@@ -25,6 +25,7 @@ logger: no database, so scheduling is testable without ENGINE_DB.
 
 from __future__ import annotations
 
+import contextvars
 import threading
 import time
 
@@ -77,12 +78,37 @@ def submit(chat_id, key, fn, base_turn=None):
             return existing
         job = Job(chat_id, key, base_turn)
         _ACTIVE[(chat_id, job.key)] = job
-    threading.Thread(target=_run, args=(job, fn), daemon=True,
+    # Copied so the story language reaches the job; `_run` immediately drops
+    # the turn-scoped half of that copy. See _clear_turn_scoped_context.
+    context = contextvars.copy_context()
+    threading.Thread(target=context.run, args=(_run, job, fn), daemon=True,
                      name="job-%s-%s" % (chat_id, job.key[:24])).start()
     return job
 
 
+#: Contextvars that belong to ONE turn's wall clock and must not ride into
+#: background work, even though the copied context carries them.
+#:
+#: `submit` copies the whole context so the story language (and anything else
+#: a job legitimately needs) survives the thread hop. That copy is taken inside
+#: the commit step, whose context holds the live stream's `token_sink`, the
+#: turn's abort `cancel_event`, and sinks writing into a `PipelineContext`
+#: whose variants are already persisted. Left in place, a background
+#: consolidation streams tokens into the player's finished turn tagged
+#: `key="commit"`, and an abort kills the jobs that commit just scheduled.
+#: `offscreen.py`'s `_produce` argued exactly this before the copy existed.
+def _clear_turn_scoped_context():
+    from pipeline_context import current_step_key, current_warning_sink
+    from providers import (call_ledger_sink, cancel_event,
+                           generation_event_sink, token_sink)
+
+    for var in (token_sink, generation_event_sink, call_ledger_sink,
+                cancel_event, current_warning_sink, current_step_key):
+        var.set(None)
+
+
 def _run(job, fn):
+    _clear_turn_scoped_context()
     if job.cancelled.is_set():
         return _finish(job, "cancelled")
     with _LOCK:

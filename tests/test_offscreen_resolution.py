@@ -469,16 +469,14 @@ class TestTheProducer:
             transit_result={}) == []
 
     def test_the_producer_is_wired_at_the_commit_tail(self):
-        """jobs.py had zero production consumers — a queue with no producer.
-        The hook sits where the turn's facts are already durable, beside the
-        other post-transaction work whose failure is a warning."""
-        import inspect
+        """Superseded by `tests/test_commit_tail_producers.py`.
 
-        import commit
-
-        src = inspect.getsource(commit._commit_all_locked)
-        assert "schedule_profile_ticks" in src
-
+        This asserted a substring of `inspect.getsource`, which cannot fail on a
+        behavioural change: `job = None if True else schedule_profile_ticks(ctx)`
+        keeps the text and never runs the call. The replacement drives a real
+        commit and asserts the producer was reached.
+        """
+        import tests.test_commit_tail_producers  # noqa: F401  (the real cover)
     def test_nothing_cancels_jobs_on_turn_start(self):
         """The user's one explicit rule for this producer. jobs.cancel
         exists for authored teardown; the pipeline must not call it."""

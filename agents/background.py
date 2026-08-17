@@ -552,7 +552,8 @@ def scene_life(ctx, nonce, level, cfg):
         "variant_seed": nonce,
     }
 
-    out = _agent_json("character_bg", "scene_life", get_prompt("scene_life"),
+    out = _agent_json("character_bg", "scene_life",
+                      get_prompt("scene_life", ctx.language),
                       payload, temperature=0.85)
     out, warnings = validate_llm_output("scene_life", out)
     ctx.warnings.extend(warnings)
@@ -727,7 +728,7 @@ def _mint_blurbs(ctx, managed):
         }
         try:
             out = _agent_json("character_bg", "blurb_mint",
-                              get_prompt("blurb_mint"), payload,
+                              get_prompt("blurb_mint", ctx.language), payload,
                               temperature=0.9)
             out, warnings = validate_llm_output("blurb_mint", out)
             ctx.warnings.extend(warnings)
@@ -908,7 +909,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
     }
 
     out = _agent_json(
-        "character_bg", "background_react", get_prompt("background_react"),
+        "character_bg", "background_react",
+        get_prompt("background_react", ctx.language),
         payload, temperature=0.7,
     )
     # Warning-only re-normalization; strict schema validation (with

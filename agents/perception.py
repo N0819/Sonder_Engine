@@ -6,11 +6,13 @@ import copy
 import json
 import re
 
+from language_runtime import linguistic
 from character_schema import (
     character_appearance,
     character_name,
     character_name_from_text,
     character_senses,
+    name_boundary_regex,
     persona_appearance,
     persona_name,
     persona_senses,
@@ -349,95 +351,29 @@ def _perceiver_spatial_facts(scene, observer, sources):
 # prose relabels everything ("paint" matched "pain", one quoted line made a
 # page of body sensation 'hearing"), and a single channel cannot describe a
 # beat that arrives through several at once.
-_CHANNEL_CUES = (
-    # Interoception was a DISTRESS vocabulary -- pain, nausea, wounds, a fixed
-    # list of interior organs -- so it fired on 2.4% of 7,508 corpus
-    # observations and never once in a story built on sustained physical
-    # contact. Interior sensation is interoception whatever its valence, and a
-    # body reporting fullness or an interior stretch is reporting it from the
-    # one channel that carries it.
-    ("interoception", (
-        r"\bpain\b", r"\bache[sd]?\b", r"\baching\b", r"\bnausea\b",
-        r"\bdizzy\b", r"\bexhausted\b", r"\bstarving\b", r"\bwounded\b",
-        r"\bwounds\b", r"\byour wound\b",
-        r"\bbreathless\b", r"\bcannot breathe\b", r"\bout of breath\b",
-        r"\bheartbeat\b", r"\byour (?:pulse|heart|lungs|chest|stomach|"
-        r"belly|throat|muscles|nerves)\b",
-        r"\bwithin it\b", r"\bfullness\b", r"\binside you\b",
-        r"\bstretch(?:ed|ing)?\b", r"\bclench(?:es|ed|ing)?\b",
-        r"\bcramp(?:s|ed|ing)?\b", r"\bspasm(?:s|ed|ing)?\b",
-    )),
-    # Touch was similarly narrow: grips, presses and skin. It had no word for
-    # pressure that is not a grip, for weight, friction, texture, tremor or
-    # heat -- so nearly half of every observation the engine made matched no
-    # channel cue at all and fell through to `mixed`.
-    ("touch", (
-        r"\btouch(?:es|ed|ing)?\b", r"\bpressure\b", r"\bgrip(?:s|ped|ping)?\b",
-        r"\bagainst your\b", r"\bgrips? your\b", r"\bholds? your\b",
-        r"\bpress(?:es|ed|ing)? (?:into|against) you\b", r"\bwarmth\b",
-        r"\bskin\b",
-        r"\bfriction\b", r"\btexture\b", r"\btremors?\b", r"\btrembl(?:es|ing)\b",
-        r"\bweight of\b", r"\bheat of\b", r"\bcontact\b", r"\bagainst it\b",
-        r"\bclosed around it\b", r"\bregisters?\b", r"\bcontinuous while\b",
-    )),
-    ("hearing", (
-        r"\byou hear\b", r"\bsays?\b", r"\bsaid\b", r"\bvoice\b",
-        r"\bshout(?:s|ed|ing)?\b", r"\bwhisper(?:s|ed|ing)?\b",
-        r"\bmuffled\b", r"\balarm\b", r"\bfootsteps\b", r"\bsounds?\b",
-        r"\bsilence\b",
-    )),
-    ("smell", (
-        r"\bsmell(?:s|ed|ing)?\b", r"\bscent\b", r"\bstench\b", r"\bodou?rs?\b",
-    )),
-    ("sight", (
-        r"\byou see\b", r"\bwatch(?:es|ed|ing)?\b", r"\blight\b",
-        r"\bshadows?\b", r"\bglow(?:s|ing)?\b", r"\bcolou?rs?\b",
-    )),
-)
+def _ling(name):
+    """One deterministic recognition table from the ACTIVE story pack.
 
-_INTENSITY_CUES = (
-    r"\bexplosions?\b", r"\bgunshots?\b", r"\bscream(?:s|ed|ing)?\b",
-    r"\bcannot breathe\b", r"\bcritical\b", r"\bsevere\b", r"\bfires?\b",
-    r"\balarms?\b", r"\bstruck\b", r"\bagony\b", r"\bblinding\b",
-    r"\bdeafening\b", r"\boverwhelming\b", r"\bviolent(?:ly)?\b",
-)
+    These cue tables used to be English literals in this module, and
+    `linguistics.json` had no `agents.perception` entry at all -- so every
+    Japanese percept fell through to the `mixed` channel with flat salience,
+    and `_SELF_DIRECTED` never fired, telling an observer that an event
+    landing on their own body was somebody else's business.
 
-_SUDDENNESS_CUES = (
-    r"\bsuddenly\b", r"\bwithout warning\b", r"\blunges?\b", r"\bfalls?\b",
-    r"\bsnaps?\b", r"\berupts?\b", r"\bgunshots?\b", r"\bexplosions?\b",
-    r"\ball at once\b", r"\bjerks?\b",
-)
+    Read at use time, never at import: the story language is a contextvar and
+    two languages can be running in the same process.
+    """
+    return linguistic("agents.perception", name)
 
-_AMBIGUITY_CUES = (
-    r"\bmuffled\b", r"\bfragments?\b", r"\bunclear\b", r"\bindistinct\b",
-    r"\bblurred\b", r"\bvague(?:ly)?\b", r"\bbarely\b", r"\bfaint(?:ly)?\b",
-    r"\bcan(?:no|')t tell\b", r"\bsomething\b", r"\bsomeone\b",
-    r"\ba shape\b", r"\ba voice\b", r"\bmight be\b",
-)
-
-# An event AIMED at the perceiver, not merely witnessed by them. The old rule
-# recognised four verbs and 'at/toward you', so most contact and every form of
-# direct address read as not-directed-at-self -- the observer was told an event
-# landing on their own body was somebody else's business.
-_SELF_DIRECTED = re.compile(
-    r"\b(?:at|to|toward|towards|from)\s+you\b"
-    r"|\b(?:against|into|onto|over|around|through)\s+(?:you|your)\b"
-    r"|\b(?:grips?|grabs?|holds?|strikes?|touches|presses?|pins?|pulls?"
-    r"|shoves?|hits?|catches|seizes?|reaches for|closes on|lands on"
-    r"|wraps around)\s+(?:you|your)\b"
-    r"|\byou are\s+(?:being\s+)?(?:\w+(?:ed|en)|struck|hit|shot|torn|thrown"
-    r"|caught|dragged|pinned|held|bound)\b"
-    r"|\byour name\b"
-    # A continuous-contact clause has the perceiver's own body as its subject
-    # ("your shoulder registers ..."), which no agent-first pattern above
-    # reaches. Keyed on the deterministic verb rather than on a bare leading
-    # "your", because "your companion steps back" is not about the perceiver.
-    r"|\byour\s+(?:\w+\s+){0,2}registers?\b",
-    re.I,
-)
 
 # Closing quotes and brackets ride with the sentence they end.
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?…])[\"'”’)\]]*\s+")
+# Sentence end, script-aware. The ASCII branch needs trailing whitespace;
+# the CJK branch must not, because Japanese writes no space after 。 -- so
+# an English-only splitter returned the WHOLE Japanese event as one
+# "sentence", and every guard that keeps a safe subset of sentences (the
+# concealment redactor above all) had no subset to keep and failed open.
+_SENTENCE_SPLIT = re.compile(
+    r"(?<=[.!?…])[\"'”’)\]]*\s+|(?<=[。！？])[」』\"'”’)\]]*\s*")
 
 # Does this sentence ASSERT SIGHT -- somebody looking at something, in the
 # verbs a view actually uses for it. Read by `_strip_self_narration`'s floor,
@@ -470,7 +406,7 @@ def _cue_hits(cues, folded):
 
 
 def _atom_channel(folded):
-    for channel, cues in _CHANNEL_CUES:
+    for channel, cues in _ling("_CHANNEL_CUES"):
         if _cue_hits(cues, folded):
             return channel
     return "mixed"
@@ -800,7 +736,7 @@ def _observations_from_clean_views(clean_views):
         atoms = []
         for index, (channel, span) in enumerate(_observation_spans(text)):
             folded = span.casefold()
-            ambiguity = min(1.0, 0.15 + 0.2 * _cue_hits(_AMBIGUITY_CUES, folded))
+            ambiguity = min(1.0, 0.15 + 0.2 * _cue_hits(_ling("_AMBIGUITY_CUES"), folded))
             atoms.append({
                 "observation_id": f"current:{pid}:{index}",
                 "perceiver_id": pid,
@@ -809,14 +745,14 @@ def _observations_from_clean_views(clean_views):
                 "fidelity": "ambiguous" if ambiguity >= 0.5 else "rendered",
                 "observed": {"text": span},
                 "intensity": min(
-                    1.0, 0.35 + 0.2 * _cue_hits(_INTENSITY_CUES, folded)),
+                    1.0, 0.35 + 0.2 * _cue_hits(_ling("_INTENSITY_CUES"), folded)),
                 "suddenness": min(
-                    1.0, 0.1 + 0.25 * _cue_hits(_SUDDENNESS_CUES, folded)),
+                    1.0, 0.1 + 0.25 * _cue_hits(_ling("_SUDDENNESS_CUES"), folded)),
                 "ambiguity": ambiguity,
                 # Own-body state is about the perceiver by definition; nothing
                 # else in a second-person view needs a cue to say so.
                 "directed_at_self": channel == "interoception" or bool(
-                    _SELF_DIRECTED.search(span)),
+                    _ling("_SELF_DIRECTED").search(span)),
             })
         out[pid] = atoms
     return out
@@ -1663,7 +1599,14 @@ def _pronouns_for_perceiver(all_pronouns, perceiver, known):
 # lookbehinds rather than an optional group, because Python requires them
 # fixed-width -- and this way the quote stays attached to the sentence it
 # closes instead of being eaten by the split.
-_SENTENCE_SPLIT = re.compile(r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+')
+# Sentence end, script-aware. The ASCII branch needs trailing whitespace;
+# the CJK branch must not, because Japanese writes no space after 。 -- so
+# an English-only splitter returned the WHOLE Japanese event as one
+# "sentence", and every guard that keeps a safe subset of sentences (the
+# concealment redactor above all) had no subset to keep and failed open.
+_SENTENCE_SPLIT = re.compile(
+    r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+'
+    r'|(?<=[\u3002\uff01\uff1f])[\u300d\u300f"\u201d\u2019\')\]]*\s*')
 
 
 def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
@@ -2843,11 +2786,6 @@ def _surface_translate_event(event_text, touch_only_sources):
 
 # A sentence that opens with a bare pronoun continues the previous sentence's
 # subject rather than naming one of its own.
-_PRONOUN_SUBJECT = re.compile(
-    r"^[\"'“‘(\[]*\s*(?:he|she|they|it|his|her|hers|their|theirs|its|him|them)\b",
-    re.I,
-)
-
 _REDACTED_NOTICE = "[Some parts of the event are not perceptible to you.]"
 
 
@@ -2904,14 +2842,18 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
     continuing = False
     for sentence in sentences:
         folded = sentence.casefold()
+        # name_boundary_regex, not \b: Japanese particles are word characters,
+        # so `\bミカ\b` never matched `ミカは棚に向かう` and the concealed
+        # sentence was kept verbatim. This decides who may see an act, so it
+        # has to hold in every script the story is written in.
         names_concealed = any(
-            re.search(rf"\b{re.escape(name)}\b", folded)
+            name_boundary_regex(name).search(folded)
             for name in concealed_names
         )
         if names_concealed:
             continuing = True
             continue
-        if continuing and _PRONOUN_SUBJECT.match(sentence):
+        if continuing and _ling("_PRONOUN_SUBJECT").match(sentence):
             continue
         continuing = False
         kept.append(sentence)
@@ -3910,7 +3852,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
         # A scene opening is the one beat where everything is legitimately
         # new: full render for every mind, and the ledger starts here.
         rendered = composer.render_view(percepts, mode="character",
-                                        full_render=True)
+                                        full_render=True,
+                                        language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_establish", pid, name, rendered, known, roster,
             clean_views, observations, ledger)
@@ -4027,7 +3970,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         percepts.append(percept)
         rendered = composer.render_view(
             percepts, mode="character", prev_standing=prev_standing,
-            prev_described=prev_described)
+            prev_described=prev_described, language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_act", pid, name, rendered, known, roster,
             clean_views, observations, ledger, spoken_lines=spoken)
@@ -4316,7 +4259,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             percepts,
             mode="player" if is_player_view else "character",
             prev_standing=prev_standing, prev_described=prev_described,
-            full_render=is_player_view and full_player_render)
+            full_render=is_player_view and full_player_render,
+            language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
@@ -4344,7 +4288,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         if not is_player_view:
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,
-                prev_described=prev_described)
+                prev_described=prev_described, language=ctx.language)
             episodes[pid] = content
             episode_meta[pid] = {"gist": gist, "entities": entities}
     merged = dict(base_ledger)

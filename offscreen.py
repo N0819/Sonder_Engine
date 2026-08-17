@@ -98,6 +98,7 @@ import hashlib
 import json
 import random
 import re
+from prompts import get_prompt
 
 from logging_utils import logger
 
@@ -1143,20 +1144,7 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
         known_rooms.update((mv.get("from_room", ""), mv.get("to_room", "")))
     known_rooms.discard("")
 
-    sys = (
-        "You fill in what one character is plausibly occupied with off "
-        "screen, from their public profile and a deterministic trail, as "
-        "STATE FIELDS -- attributes, not narration. No sentences, no story: "
-        "an activity a person could be found mid-way through, as they would "
-        "do it. Do NOT invent outcomes, alliances, acquisitions, injuries, "
-        "arrivals, discoveries, or any change to the world: an occupation, "
-        "never a consequence. The character does not know where any other "
-        "person is or what anyone else has done. `at` MUST be an id from "
-        "rooms_available, or empty. Output STRICT JSON "
-        f'{{"doing": "<what they are occupied with, {DOING_MAX_WORDS} words '
-        'max, present participle>", "at": "<one room id or empty>", '
-        f'"manner": "<how, {MANNER_MAX_WORDS} words max, may be empty>"}}'
-    )
+    sys = get_prompt("offscreen_profile")
     user = json.dumps({
         "profile": _profile_surface(sheet),
         "since_turn": since_turn,
@@ -1658,45 +1646,22 @@ _AGENT_OUTCOME_PHRASES = {
 
 #: Invariant text only — the variable half is the user payload, so the whole
 #: system prompt is one cacheable constant.
-_AGENT_ATTEMPT_SYS = (
-    "You decide the next OWN move of one absent character, off screen, from "
-    "only what has actually reached them: their identity, interior, "
-    "memories, beliefs, plans, carried reports (each may be vague, "
-    "second-hand or wrong), where they last were by their own reckoning, "
-    "and how long they have been on their own. Declare the act they BEGIN "
-    "next in service of their own plan or drive -- an attempt, not its "
-    "outcome: whether it works is the world's to say, and someone acting on "
-    "a wrong report acts wrongly with full confidence. Where their active "
-    "plan no longer makes sense to them, abandon it and name it instead of "
-    "pressing on. Output STRICT JSON "
-    '{"attempt": "<the act they begin, %d words max, bare verb phrase>", '
-    '"toward": "<the place they make for, in their own words, or empty to '
-    'stay put>", "plan_op": "<keep|abandon>", '
-    '"plan_id": "<the plan_id abandoned, or empty>"}'
-    % AGENT_ATTEMPT_MAX_WORDS
-)
+# Compatibility views for audits/tests; runtime fetches the active pack.
+#
+# Resolved on ATTRIBUTE ACCESS, not at import: `get_prompt` reads the active
+# preset out of `settings`, so binding these eagerly made `import offscreen`
+# require a migrated database. See the same note in `importers.py`.
+_COMPAT_PROMPT_IDS = {
+    "_AGENT_ATTEMPT_SYS": "offscreen_agent_attempt",
+    "_AGENT_ADJUDICATE_SYS": "offscreen_agent_adjudicate",
+}
 
-_AGENT_ADJUDICATE_SYS = (
-    "You are the Director resolving ONE off-screen attempt by an absent "
-    "character. You own objective causality and may see the world as it "
-    "is; the character may not, and nothing you write reaches anyone as "
-    "prose -- your output is structured state. Resolve the attempt against "
-    "the standing world: an attempt built on a stale or wrong report meets "
-    "the world as it actually is, and fails or half-succeeds accordingly. "
-    "If the attempt moves them, put them in one room id from "
-    "rooms_available; an attempt to reach somewhere the world does not "
-    "contain leaves moved_to empty. Declare at most ONE consequence, and "
-    "only when the attempt genuinely changes the world beyond the "
-    "character themself -- an errand, a vigil or a journey mostly just "
-    "moves a body. A consequence needs a concrete what, a where from "
-    "rooms_available, a due_seconds delay before it lands, and a witnessed "
-    "public surface (empty when nobody could have seen it happen). Output "
-    'STRICT JSON {"outcome": "<success|partial|failure>", '
-    '"moved_to": "<room id or empty>", '
-    '"consequence": {"what": "...", "where": "<room id>", '
-    '"due_seconds": <number>, "witnessed": "..."} or null, '
-    '"advance_plan": <true|false>}'
-)
+
+def __getattr__(name):
+    pid = _COMPAT_PROMPT_IDS.get(name)
+    if pid is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return get_prompt(pid)
 
 
 def agent_proposal(cid, entry, context):
@@ -1725,7 +1690,8 @@ def agent_proposal(cid, entry, context):
     for _attempt in range(2):
         try:
             out = json.loads(chat_complete(
-                role, _AGENT_ATTEMPT_SYS, user, temperature=0.7,
+                role, get_prompt("offscreen_agent_attempt"), user,
+                temperature=0.7,
                 max_tokens=400))
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
@@ -1794,7 +1760,8 @@ def agent_adjudication(cid, scene, entry, proposal, plan, clock):
     for _attempt in range(2):
         try:
             out = json.loads(chat_complete(
-                "director", _AGENT_ADJUDICATE_SYS, user, temperature=0.4,
+                "director", get_prompt("offscreen_agent_adjudicate"), user,
+                temperature=0.4,
                 max_tokens=600))
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {str(exc)[:200]}"

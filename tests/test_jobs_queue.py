@@ -8,6 +8,7 @@ run without ENGINE_DB.
 
 import threading
 import time
+import contextvars
 
 import pytest
 
@@ -125,3 +126,67 @@ def test_two_keys_run_in_parallel():
     a = jobs.submit(6, "a", waiter, base_turn=0)
     b = jobs.submit(6, "b", waiter, base_turn=0)
     assert _wait(lambda: a.state == "done" and b.state == "done")
+
+
+def test_background_work_inherits_the_scheduling_language_context():
+    marker = contextvars.ContextVar("job_language_test", default="missing")
+    token = marker.set("selected-language")
+    try:
+        job = jobs.submit(7, "language", lambda _job: marker.get())
+    finally:
+        marker.reset(token)
+    assert _wait(lambda: job.state == "done")
+    assert job.result == "selected-language"
+
+
+def test_background_jobs_do_not_inherit_the_turns_streaming_sinks(temp_db):
+    """The context copy exists to carry the story language. It must not also
+    carry the live turn's sinks: `schedule_memory_consolidation` is submitted
+    from inside the commit step, so an inherited `token_sink` streams a
+    background call's tokens into the player's finished turn, and an inherited
+    `cancel_event` lets an abort kill the jobs commit just scheduled.
+    """
+    import queue as queue_module
+
+    from language_runtime import current_language_id
+    from pipeline_context import current_step_key, current_warning_sink
+    from providers import (call_ledger_sink, cancel_event,
+                           generation_event_sink, token_sink)
+
+    bus = queue_module.Queue()
+    seen = {}
+    tokens = [
+        token_sink.set(lambda delta: bus.put(delta)),
+        generation_event_sink.set(lambda event: bus.put(event)),
+        call_ledger_sink.set(lambda **kw: bus.put(kw)),
+        cancel_event.set(threading.Event()),
+        current_warning_sink.set([]),
+        current_step_key.set("commit"),
+        current_language_id.set("ja"),
+    ]
+    try:
+        def work(_job):
+            seen["token_sink"] = token_sink.get()
+            seen["generation_event_sink"] = generation_event_sink.get()
+            seen["call_ledger_sink"] = call_ledger_sink.get()
+            seen["cancel_event"] = cancel_event.get()
+            seen["warning_sink"] = current_warning_sink.get()
+            seen["step_key"] = current_step_key.get()
+            seen["language"] = current_language_id.get()
+
+        job = jobs.submit(1, "sinks", work)
+        assert _wait(lambda: job.state in ("done", "failed"))
+    finally:
+        for token in reversed(tokens):
+            token.var.reset(token)
+
+    # The language is the whole reason the context is copied.
+    assert seen["language"] == "ja"
+    # Everything scoped to the turn's wall clock is gone.
+    assert seen["token_sink"] is None
+    assert seen["generation_event_sink"] is None
+    assert seen["call_ledger_sink"] is None
+    assert seen["cancel_event"] is None
+    assert seen["warning_sink"] is None
+    assert seen["step_key"] is None
+    assert bus.empty()

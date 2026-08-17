@@ -84,7 +84,7 @@ def test_subject_detection_requires_the_sentence_to_open_with_the_name():
     assert subjects == ["Hinami takes a small sip."]
 
 
-def test_empty_and_missing_inputs_are_noops():
+def test_act_authority_empty_and_missing_inputs_are_noops():
     assert _check_player_act_authority("", [], PLAYER) == []
     assert _check_player_act_authority(T63, [], "") == []
     assert _check_player_act_authority(T63, [], None) == []
@@ -235,7 +235,7 @@ from agents.common import _check_character_speech_authority
 SILENT = ["Elyndra"]
 
 
-def test_the_live_failure_is_caught():
+def test_speech_authority_live_failure_is_caught():
     assert _check_character_speech_authority(
         "Elyndra adds a further comment. Hinami looks away.", SILENT)
 
@@ -267,7 +267,7 @@ def test_a_character_who_spoke_is_not_checked():
         "Elyndra adds a further comment.", ["Hinami"]) == []
 
 
-def test_a_pronoun_subject_is_not_guessed_at():
+def test_speech_authority_pronoun_subject_is_not_guessed_at():
     assert _check_character_speech_authority(
         "She adds a further comment.", SILENT) == []
 
@@ -278,7 +278,7 @@ def test_inflected_speech_verbs_are_caught():
             f"Elyndra {verb} to nobody in particular.", SILENT), verb
 
 
-def test_empty_and_missing_inputs_are_noops():
+def test_speech_authority_empty_and_missing_inputs_are_noops():
     assert _check_character_speech_authority("", SILENT) == []
     assert _check_character_speech_authority("Elyndra says something.", []) == []
     assert _check_character_speech_authority("Elyndra says something.", [""]) == []
@@ -302,7 +302,7 @@ from agents.common import _check_player_interiority_authority
 PLAYER = "Hinami"
 
 
-def test_the_live_failure_is_caught():
+def test_interiority_live_failure_is_caught():
     assert _check_player_interiority_authority(
         "Elyndra takes in the genuine terror in Hinami's wide eyes.",
         PLAYER, "W-what did you do to me!?")
@@ -337,7 +337,7 @@ def test_an_npcs_interior_state_is_not_the_players_business():
         "Elyndra feels a flicker of doubt.", PLAYER) == []
 
 
-def test_a_pronoun_subject_is_not_guessed_at():
+def test_interiority_pronoun_subject_is_not_guessed_at():
     """"her terror" in a two-woman scene could be either of them, and guessing
     would flag ordinary NPC description."""
     assert _check_player_interiority_authority(
@@ -349,7 +349,7 @@ def test_interior_verbs_are_caught_too():
         "Hinami realises what has happened to her.", PLAYER)
 
 
-def test_empty_and_missing_inputs_are_noops():
+def test_interiority_empty_and_missing_inputs_are_noops():
     assert _check_player_interiority_authority("", PLAYER) == []
     assert _check_player_interiority_authority("Hinami is afraid.", "") == []
 

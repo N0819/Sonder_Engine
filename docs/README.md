@@ -47,6 +47,8 @@ rather than prose, and everything points at them.
 - [`MEMORY.md`](guides/MEMORY.md) — what a character remembers: minting,
   provenance, ranking, unbidden recall, belief revision, embeddings.
 - [`TESTING.md`](guides/TESTING.md) — test tiers, dependency policy, CI layout.
+- [`LANGUAGE_PACKS.md`](guides/LANGUAGE_PACKS.md) — build and validate a full
+  story/UI language pack while preserving canonical English schemas.
 - [`FEATURES.md`](guides/FEATURES.md) — every user-visible feature in plain
   language, one line each. A catalogue, not an argument.
 - [`RESEARCH.md`](guides/RESEARCH.md) — sourced bibliography: the research the

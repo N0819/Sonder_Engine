@@ -1,0 +1,317 @@
+{
+  "label_dangling": [
+    "は",
+    "が",
+    "を",
+    "に",
+    "へ",
+    "で",
+    "と",
+    "の",
+    "も",
+    "から",
+    "まで",
+    "より"
+  ],
+  "articles": [],
+  "tone_behavior_words": [
+    "笑み",
+    "微笑",
+    "にやり",
+    "表情",
+    "視線",
+    "仕草"
+  ],
+  "indefinite_article": {
+    "vowels": "",
+    "vowel": "",
+    "other": ""
+  },
+  "linking_participles": [],
+  "ordinal_words": {
+    "2": "2番目",
+    "3": "3番目",
+    "4": "4番目",
+    "5": "5番目",
+    "6": "6番目",
+    "7": "7番目",
+    "8": "8番目",
+    "9": "9番目",
+    "10": "10番目",
+    "11": "11番目",
+    "12": "12番目"
+  },
+  "second_to_first": [
+    [
+      "あなた自身",
+      "私自身"
+    ],
+    [
+      "あなたの",
+      "私の"
+    ],
+    [
+      "あなた",
+      "私"
+    ]
+  ],
+  "generic_labels": [
+    "声",
+    "見知らぬ人物",
+    "ぼんやりした人影",
+    "あなた",
+    ""
+  ],
+  "dim_figure": "ぼんやりした人影",
+  "dim_figures": "いくつかのぼんやりした人影",
+  "count_names": {
+    "1": "一人",
+    "2": "二人",
+    "3": "三人",
+    "4": "四人",
+    "5": "五人",
+    "6": "六人",
+    "7": "七人",
+    "8": "八人",
+    "9": "九人",
+    "10": "十人"
+  },
+  "count_words": {
+    "2": "二人",
+    "3": "三人",
+    "4": "四人",
+    "5": "五人",
+    "6": "六人",
+    "7": "七人",
+    "8": "八人",
+    "9": "九人"
+  },
+  "tier_phrases": {
+    "within_reach": "手の届く距離",
+    "near": "すぐ近く",
+    "across": "部屋の向こう",
+    "default": "ここ"
+  },
+  "leading_connectives": [
+    "そして",
+    "また",
+    "さらに"
+  ],
+  "pose_prepositions": [
+    "上",
+    "中",
+    "下",
+    "そば",
+    "後ろ",
+    "前",
+    "間",
+    "内側"
+  ],
+  "join": {
+    "two": "{first}と{last}",
+    "many": "、そして{last}"
+  },
+  "dialogue_verbs": {
+    "shout": [
+      "叫ぶ",
+      "叫ぶ"
+    ],
+    "whisper": [
+      "ささやく",
+      "ささやく"
+    ],
+    "mutter": [
+      "つぶやく",
+      "つぶやく"
+    ],
+    "default": [
+      "言う",
+      "言う"
+    ]
+  },
+  "articulation": {
+    "slurred": "舌が回らず、言葉をもつれさせながら",
+    "stifled": "声を塞がれ、言葉をほとんど形にできないまま",
+    "default": ""
+  },
+  "residue": {
+    "lead": {
+      "unconscious": "闇。",
+      "sedated": "濃く漂う闇。",
+      "asleep": "意識は眠りの底にある。",
+      "default": "闇。"
+    },
+    "pain": "遠く、感覚の薄い身体に鈍い痛みがある",
+    "targeted": "何かに動かされ、方向も分からないまま世界が傾く",
+    "loud_event": "巨大で言葉にならない音が沈んだ意識まで届き、消える",
+    "closing": {
+      "unconscious": "何も届かない。",
+      "sedated": "何も形を保てない。",
+      "asleep": "",
+      "default": ""
+    },
+    "separator": "。",
+    "drowsy": "意識が薄れ、輪郭がほどけていく。"
+  },
+  "templates": {
+    "side": "あなたの{side}側、",
+    "body_part_where_sides": "{whose}の{at}の両側から",
+    "body_part_where_side": "{whose}の{at}の{aspect}側から",
+    "body_part_where_aspect": "{whose}の{at}の{aspect}から",
+    "body_part_tucked": "今は衣服の下に隠れている。",
+    "pose_self_present": "あなたは",
+    "pose_self_past": "私は",
+    "pose_other_present": "{label}は",
+    "pose_other_past": "{label}は",
+    "pose_support": "{support}の上に",
+    "pose_relation": "{other}にもたれて",
+    "room": "あなたは{room}にいる。",
+    "light_dim": "照明は薄暗い。",
+    "light_dark": "ここは暗い。",
+    "appearance": "{description}が見える。",
+    "posture": "あなたは{value}。",
+    "activity": "あなたは{value}。",
+    "held": "{items}を手にしている。",
+    "exposed_self": "あなたの露出した{place}",
+    "exposed_other": "{label}の露出した{place}",
+    "exposed_detail": "{subject}に{detail}が見えている。",
+    "muffled": "くぐもった声がする。{fragment}",
+    "muffled_indistinct": "……聞き取れない何か……",
+    "residue_content": "{lead}{body}。",
+    "tone_behavior": "{tone}を浮かべ、",
+    "tone_noun": "{tone}を声ににじませ、",
+    "tone_article": "{tone}を声ににじませ、",
+    "tone_adjective": "{tone}を声ににじませ、",
+    "dialogue_conducted": "{label}の声が周囲のものすべてを伝って、低く間近に響く。「{body}」",
+    "dialogue_visible": "「{body}」と{label}は{manner}{articulation}{verb}。",
+    "dialogue_unseen": "「{body}」と{label}が{articulation}{verb}のが聞こえる。",
+    "observable_empty": "{label}。",
+    "observable": "{label}は{body}。",
+    "unknown_actor": "見知らぬ{description}",
+    "unknown_actor_fallback": "見知らぬ人物",
+    "environment_here": "{label}がここにいる。",
+    "environment_nearby": "近くに{label}が見える。",
+    "fallback_speech": "「{quote}」と{label}が言う。",
+    "narrator_immediate": "周囲の様子が目に入る。",
+    "narrator_nothing": "この瞬間、特に何も感じ取れない。",
+    "loop_speech": "「{body}」と{label}が言う。",
+    "loop_faint_sound": "どこかでかすかな音がするが、内容までは聞き取れない。",
+    "loop_muffled": "{label}の方から、くぐもった断片が聞こえる。「……{fragment}……」",
+    "arrived": "{label}が入ってくる。",
+    "departed": "{label}が立ち去る。",
+    "episode_muffled": "くぐもった声を聞いた。{fragment}",
+    "episode_conducted": "{label}の声が周囲を伝わって聞こえた。「{body}」",
+    "episode_speech": "{label}の言葉を聞いた。「{body}」",
+    "episode_act": "{label}が{action}のを見た",
+    "episode_arrived": "{label}が入ってきた。",
+    "episode_departed": "{label}が立ち去った。",
+    "episode_room": "私は{room}にいた。",
+    "episode_appearance": "{description}が見えた。",
+    "presence": "{label}がいる。",
+    "episode_presence": "{label}がいた。",
+    "speech": "「{body}」と{label}が言う。",
+    "conducted": "{label}の声が周囲を伝わって響く。「{body}」",
+    "act": "{label}は{action}",
+    "pose": "{label}は{detail}。",
+    "episode_pose": "{label}は{detail}。",
+    "body_region": "{label}の身体に{detail}が見える。",
+    "episode_body_region": "{label}の身体について{detail}が見えた。",
+    "body_state": "{label}は{detail}。",
+    "episode_body_state": "{label}は{detail}だった。",
+    "presence_placed": "{label}は{side}{tier}にいる。",
+    "body_part": "{where}{part}が{count}生えている。",
+    "episode_light_dim": "照明は薄暗かった。",
+    "episode_light_dark": "そこは暗かった。",
+    "episode_posture": "私は{value}いた。",
+    "episode_activity": "私は{value}いた。",
+    "episode_held": "手には{items}があった。",
+    "bearing_from_above": "上の方",
+    "bearing_from_below": "下の方",
+    "bearing_barrier_fallback": "通路の向こう",
+    "bearing_barrier_sector": "{sector}、{base}",
+    "bearing_barrier_compass": "{base}、{compass}の方角",
+    "loop_faint_sound_placed": "{where}からかすかな音がするが、内容までは聞き取れない。"
+  },
+  "count_generic": {
+    "1": "",
+    "2": "二つ",
+    "3": "三つ",
+    "4": "四つ",
+    "5": "いくつも",
+    "6": "いくつも",
+    "7": "いくつも",
+    "8": "いくつも",
+    "9": "いくつも",
+    "10": "いくつも"
+  },
+  "side_words": {
+    "left": "左",
+    "right": "右"
+  },
+  "aspect_words": {
+    "back": "後ろ",
+    "front": "前",
+    "top": "上側",
+    "bottom": "下側",
+    "left": "左",
+    "right": "右",
+    "sides": "両側"
+  },
+  "body_part_counters": {
+    "尻尾": "本",
+    "しっぽ": "本",
+    "尾": "本",
+    "腕": "本",
+    "脚": "本",
+    "足": "本",
+    "角": "本",
+    "触手": "本",
+    "牙": "本",
+    "爪": "本",
+    "翼": "枚",
+    "羽根": "枚",
+    "羽": "枚",
+    "目": "つ",
+    "眼": "つ",
+    "耳": "つ"
+  },
+  "counter_numerals": {
+    "1": "一",
+    "2": "二",
+    "3": "三",
+    "4": "四",
+    "5": "五",
+    "6": "六",
+    "7": "七",
+    "8": "八",
+    "9": "九",
+    "10": "十"
+  },
+  "muffle_ellipsis": "……",
+  "muffle_join": "……",
+  "sound_barrier_phrases": {
+    "open": "開口部の向こう",
+    "open_door": "戸口の向こう",
+    "closed_door": "扉の向こう",
+    "window": "窓の向こう",
+    "bars": "格子の向こう",
+    "membrane": "帳の向こう",
+    "wall": "壁の向こう"
+  },
+  "sector_phrases": {
+    "ahead": "あなたの正面",
+    "behind": "あなたの背後",
+    "left": "あなたの左手",
+    "right": "あなたの右手"
+  },
+  "compass_words": {
+    "n": "北",
+    "ne": "北東",
+    "e": "東",
+    "se": "南東",
+    "s": "南",
+    "sw": "南西",
+    "w": "西",
+    "nw": "北西"
+  }
+}

@@ -3189,13 +3189,36 @@ _EMPTY_VIEW_MARKERS = (
 )
 
 
+def _empty_view_markers():
+    """The phrases that mean "nothing happened", in every installed language.
+
+    The literals above are English, so a Japanese empty view matched none of
+    them and was consolidated into autobiography -- an absence written up as
+    something the character lived through, which is the exact failure this
+    guard exists to prevent. The English strings are KEPT rather than
+    replaced: rows written before packs existed still carry them.
+    """
+    from language_runtime import compositor_value, installed_language_packs
+
+    markers = list(_EMPTY_VIEW_MARKERS)
+    for language_id in installed_language_packs():
+        try:
+            templates = compositor_value("templates", language_id)
+        except Exception:
+            continue
+        phrase = str(templates.get("narrator_nothing") or "").strip()
+        if phrase:
+            markers.append(phrase.casefold().rstrip("。."))
+    return tuple(dict.fromkeys(markers))
+
+
 def _is_empty_view(text):
     """True when a perception view records no event worth remembering."""
-    body = " ".join(str(text or "").split()).strip().casefold().rstrip(".")
+    body = " ".join(str(text or "").split()).strip().casefold().rstrip("。.")
     if not body:
         return True
     return any(body == m or body.startswith(m) and len(body) < len(m) + 25
-               for m in _EMPTY_VIEW_MARKERS)
+               for m in _empty_view_markers())
 
 
 def _substantive(memories):
