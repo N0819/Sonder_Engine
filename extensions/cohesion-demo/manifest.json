@@ -1,0 +1,20 @@
+{
+  "id": "cohesion-demo",
+  "version": "0.1.0",
+  "ext_api": 1,
+  "name": "Cohesion (demo)",
+  "description": "A reference extension: one deterministic pipeline stage after the Director resolves, and a per-story cohesion score it keeps once the turn is durable.",
+  "capabilities": {
+    "stages": [
+      {
+        "key": "pulse",
+        "anchor": "after:director_resolve",
+        "label": "Cohesion · pulse"
+      }
+    ],
+    "chat_state": true,
+    "characters": ["observe"],
+    "python": "extension.py",
+    "ui": {"js": "ui/panel.js"}
+  }
+}
