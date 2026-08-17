@@ -52,9 +52,46 @@ def _fast_tmp_dir():
 _TMP_DIR = _fast_tmp_dir()
 
 
+def _redirect_default_database():
+    """Point `db.DB` at a scratch file NOW -- at conftest import, before any
+    test module is imported.
+
+    A session-scoped autouse fixture is too late, and that is not a nicety.
+    pytest imports every test module during COLLECTION, and a module-level
+    import can reach the database before any fixture has run: `importers`
+    resolves `REINT_CHAR_SYS` through `__getattr__` -> `get_prompt()` ->
+    `active_preset()` -> `get_setting()` -> `db.q()`. On a fresh checkout with
+    no `engine.db` that raises `no such table: settings` and collection dies
+    (`test_character_import_drives.py`, `test_extra_parts_authoring.py`,
+    `test_initial_outfit.py`); on a developer's machine it does something
+    worse, and quietly -- it OPENS the live `engine.db`, which is the one
+    outcome the redirect exists to prevent.
+
+    The fixture below still runs, and still owns teardown. This only moves the
+    moment the default stops being `engine.db` to the earliest one available.
+    """
+    import db
+
+    fd, path = tempfile.mkstemp(suffix=".db", dir=_TMP_DIR)
+    os.close(fd)
+    os.remove(path)
+    db.configure(path)
+    db.init()
+    return path
+
+
+#: Done at import, not at fixture time. See above.
+_SESSION_DB = _redirect_default_database()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _never_the_real_database():
-    """Point the DEFAULT database at a scratch file for the whole session.
+    """Own the scratch database `_redirect_default_database` already installed.
+
+    The redirect itself happens at import (a fixture runs after collection,
+    which is already too late -- see that function). What remains here is the
+    part a fixture is actually for: keeping it configured for the session and
+    removing it afterwards.
 
     A test that asks for `temp_db` was always isolated. A test that never asks
     for one and still reaches `db.q` was not: `db.DB` defaults to `engine.db`,
@@ -74,11 +111,12 @@ def _never_the_real_database():
     """
     import db
 
-    fd, path = tempfile.mkstemp(suffix=".db", dir=_TMP_DIR)
-    os.close(fd)
-    os.remove(path)
-    db.configure(path)
-    db.init()
+    path = _SESSION_DB
+    # A module imported during collection may have opened it already; keep the
+    # same file rather than swapping underneath anything that did.
+    if db.DB != path:
+        db.configure(path)
+        db.init()
     try:
         yield path
     finally:

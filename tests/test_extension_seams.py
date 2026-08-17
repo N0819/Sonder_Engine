@@ -187,6 +187,96 @@ class TestCharacterPayloadRouting:
         assert extension_runtime.routing_notes(ctx) == [
             {"ext": "seams", "char_id": 7, "changed": ["extra", "perception"]}]
 
+    def test_a_hook_that_mutates_in_place_is_still_attributed(self, temp_db,
+                                                              bare):
+        """The audit trail must not be escapable by ordinary Python.
+
+        A hook is handed the real payload, so the natural way to write one
+        mutates it and returns it -- and comparing the returned object against
+        the passed one then compares an object with ITSELF. The first
+        implementation did exactly that and reported no change at all: an
+        extension putting a fact into a mind with no record of having done it,
+        which is the one guarantee this seam exists to make.
+        """
+        def hook(payload, info):
+            payload["forbidden_fact"] = "the warp core is failing"
+            return payload
+
+        bare.on_character_payload(hook)
+        ctx = _StubCtx(chat_id=_chat(temp_db))
+
+        out = extension_runtime.dispatch_character_payload(ctx, 7, {"self": {}})
+
+        assert out["forbidden_fact"] == "the warp core is failing"
+        assert extension_runtime.routing_notes(ctx) == [
+            {"ext": "seams", "char_id": 7, "changed": ["forbidden_fact"]}]
+
+    def test_mutating_and_returning_none_is_attributed_too(self, temp_db, bare):
+        """The same hole by a shorter route: mutate, then say 'unchanged'."""
+        def hook(payload, info):
+            payload["briefing"] = "smuggled in"
+            return None
+
+        bare.on_character_payload(hook)
+        ctx = _StubCtx(chat_id=_chat(temp_db))
+
+        out = extension_runtime.dispatch_character_payload(ctx, 7, {"self": {}})
+
+        assert out["briefing"] == "smuggled in"
+        assert extension_runtime.routing_notes(ctx) == [
+            {"ext": "seams", "char_id": 7, "changed": ["briefing"]}]
+
+    def test_a_nested_in_place_edit_is_attributed(self, temp_db, bare):
+        """A shallow copy would not have caught this one.
+
+        Copying the payload one level deep leaves the nested objects shared, so
+        rewriting the view a mind is given -- the single most consequential
+        edit an extension can make -- would compare equal to itself.
+        """
+        def hook(payload, info):
+            payload["perception"]["view"] = "a room with the door open"
+            return payload
+
+        bare.on_character_payload(hook)
+        ctx = _StubCtx(chat_id=_chat(temp_db))
+
+        extension_runtime.dispatch_character_payload(
+            ctx, 7, {"perception": {"view": "a room"}, "self": {}})
+
+        assert extension_runtime.routing_notes(ctx) == [
+            {"ext": "seams", "char_id": 7, "changed": ["perception"]}]
+
+    def test_a_removed_key_is_attributed(self, temp_db, bare):
+        def hook(payload, info):
+            payload.pop("self", None)
+            return payload
+
+        bare.on_character_payload(hook)
+        ctx = _StubCtx(chat_id=_chat(temp_db))
+
+        extension_runtime.dispatch_character_payload(
+            ctx, 7, {"self": {"name": "Ash"}})
+
+        assert extension_runtime.routing_notes(ctx) == [
+            {"ext": "seams", "char_id": 7, "changed": ["self"]}]
+
+    def test_an_unserialisable_value_does_not_silence_the_record(
+            self, temp_db, bare):
+        """Silence is the failure mode, so an exotic value must read as changed
+        rather than as untouched."""
+        class Opaque:
+            def __repr__(self):
+                raise RuntimeError("no repr for you")
+
+        bare.on_character_payload(
+            lambda payload, info: {**payload, "odd": Opaque()})
+        ctx = _StubCtx(chat_id=_chat(temp_db))
+
+        extension_runtime.dispatch_character_payload(ctx, 7, {"self": {}})
+
+        assert extension_runtime.routing_notes(ctx) == [
+            {"ext": "seams", "char_id": 7, "changed": ["odd"]}]
+
     def test_an_untouched_payload_records_nothing(self, temp_db, bare):
         bare.on_character_payload(lambda payload, info: None)
         ctx = _StubCtx(chat_id=_chat(temp_db))

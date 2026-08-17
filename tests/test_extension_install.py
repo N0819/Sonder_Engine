@@ -153,3 +153,107 @@ def test_removing_something_absent_is_an_error_not_a_crash(root):
 def test_an_invalid_id_is_refused_on_removal(root, bad):
     with pytest.raises(ext.ExtensionError, match="invalid extension id"):
         ext.remove_extension(bad)
+
+
+class TestArchiveResourceCeilings:
+    """Zip slip is about WHERE bytes land; these are about HOW MANY.
+
+    `MAX_BUNDLE_BYTES` caps the download, which says nothing about what it
+    expands to -- zip turns a few megabytes of zeroes into gigabytes, so a
+    bundle that passes every path check could still fill the host's disk. The
+    release note claimed a hostile archive "cannot damage the install"; that
+    was true of the directory and not of the volume it sits on.
+    """
+
+    def _bomb(self, path, *, member_bytes, members=1):
+        import zipfile
+
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("bomb/manifest.json", json.dumps({
+                "id": "bomb", "version": "1.0.0", "ext_api": 1, "name": "Bomb",
+                "capabilities": {},
+            }))
+            for index in range(members):
+                archive.writestr(f"bomb/pad{index}.bin", b"\0" * member_bytes)
+        return path
+
+    def test_a_highly_compressible_archive_is_refused(self, tmp_path,
+                                                      monkeypatch, temp_db):
+        import zipfile
+
+        monkeypatch.setenv(ext.ROOT_ENV, str(tmp_path / "extensions"))
+        (tmp_path / "extensions").mkdir()
+        ext.reload()
+        monkeypatch.setattr(ext, "MAX_EXTRACTED_BYTES", 64 * 1024)
+
+        bomb = self._bomb(tmp_path / "bomb.zip", member_bytes=1024 * 1024)
+        # The whole point: it is tiny on the wire and huge on disk.
+        assert bomb.stat().st_size < 16 * 1024
+
+        with zipfile.ZipFile(bomb) as archive:
+            with pytest.raises(ext.ExtensionError, match="expands to more than"):
+                ext._safe_extract(archive, tmp_path / "staged")
+
+    def test_a_flood_of_tiny_files_is_refused(self, tmp_path, monkeypatch,
+                                              temp_db):
+        """Bytes are not the only budget: empty files cost inodes and would
+        pass a size ceiling untouched."""
+        import zipfile
+
+        monkeypatch.setattr(ext, "MAX_ARCHIVE_MEMBERS", 8)
+        flood = self._bomb(tmp_path / "flood.zip", member_bytes=0, members=32)
+
+        with zipfile.ZipFile(flood) as archive:
+            with pytest.raises(ext.ExtensionError, match="more than the"):
+                ext._safe_extract(archive, tmp_path / "staged")
+
+    def test_an_honest_bundle_still_installs(self, tmp_path, monkeypatch,
+                                             temp_db):
+        """The ceilings must not be so tight that a real extension trips them."""
+        import zipfile
+
+        staged = tmp_path / "staged"
+        ordinary = self._bomb(tmp_path / "ok.zip", member_bytes=2048)
+        with zipfile.ZipFile(ordinary) as archive:
+            ext._safe_extract(archive, staged)
+        assert (staged / "bomb" / "manifest.json").is_file()
+        assert (staged / "bomb" / "pad0.bin").stat().st_size == 2048
+
+    def test_the_write_side_counter_is_belt_and_braces(self, tmp_path,
+                                                       monkeypatch, temp_db):
+        """Declared sizes are the archive's own claim about itself.
+
+        CPython's `zipfile` happens to enforce `file_size` on read, so in
+        practice a lie is caught before it costs anything -- try to fake one
+        and you get `BadZipFile` instead. That is luck we do not own, so the
+        bytes actually written are counted too, and this exercises that path
+        through the same interface `_safe_extract` uses.
+        """
+        class _Member:
+            def __init__(self, name, size):
+                self.filename = name
+                self.file_size = size
+                self.external_attr = 0
+
+            def is_dir(self):
+                return False
+
+        class _Archive:
+            """Declares one byte per file and writes far more."""
+
+            def __init__(self, root):
+                self.root = root
+                self.members = [_Member(f"pad{i}.bin", 1) for i in range(8)]
+
+            def infolist(self):
+                return self.members
+
+            def extract(self, member, path):
+                target = Path(path) / member.filename
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"\0" * 4096)
+
+        monkeypatch.setattr(ext, "MAX_EXTRACTED_BYTES", 8192)
+        staged = tmp_path / "staged"
+        with pytest.raises(ext.ExtensionError, match="expands to more than"):
+            ext._safe_extract(_Archive(staged), staged)

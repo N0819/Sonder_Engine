@@ -1797,21 +1797,28 @@ this measurement rather than porting it. Removal here needs a migration and
 should confirm the rowcount is not load-bearing for anything outside the repo
 first.
 
-### 1.36 The suite's database redirect runs after collection
+### 1.36 The suite's database redirect runs after collection — CLOSED in 9.0.1
 
-`tests/conftest.py::_never_the_real_database` is a session-scoped autouse
-fixture, and fixtures run *after* collection. A test module that touches `db`
-at IMPORT time — a module-level query, or a constant computed from one — still
-reaches `engine.db` before the redirect is in force.
+**Fixed.** `tests/conftest.py` now redirects `db.DB` at conftest *import*
+(`_redirect_default_database`), which pytest guarantees precedes every test
+module; the session fixture kept only the teardown it is actually for.
 
-Latent rather than firing: no current test module appears to do it. But the
-fixture exists because three prompt-cache tests once passed or failed on
-whether a checkbox was ticked in the live database, and the hole it was written
-to close is not fully closed. The next module-level query reopens it silently.
+Kept as a record because the prediction came true exactly as written. It had
+been filed as *latent* — "no current test module appears to do it" — and alpha
+9.0's language machinery made it fire: `importers.REINT_CHAR_SYS` resolves
+through the PEP-562 `__getattr__` added for lazy prompts, into `get_prompt()`
+→ `active_preset()` → `get_setting()` → `db.q()`, at module import. On a fresh
+checkout with no `engine.db` that killed collection outright
+(`test_character_import_drives.py`, `test_extra_parts_authoring.py`,
+`test_initial_outfit.py`, 3 errors, 0 tests run). On a developer's machine it
+did the quieter and worse thing: opened the live database, which is the one
+outcome the redirect exists to prevent.
 
-Nullo Engine closed the equivalent by setting its database env var at conftest
-**import**, which pytest guarantees precedes every test module, and pinning it
-with a test that asserts the redirect is in force. The same fix applies here.
+The lesson worth keeping is about the filing, not the fix. "Latent" was
+measured against the test modules that existed at the time, and a lazy-import
+mechanism added elsewhere for an unrelated reason turned every one of them into
+a module-level query. A hole whose closure depends on nobody writing an
+ordinary thing is not latent; it is open and unvisited.
 
 
 ### 1.37 The aversive half of the stress model has never run
@@ -2291,6 +2298,25 @@ The fix is not to translate the strings where they sit: each is either
 literal-coupled to a parser or persisted, so the real work is moving the
 clause construction behind the compositor card and migrating what is stored.
 Sized as its own change, not a follow-up patch.
+
+**`LanguagePack.fallback` is a dead contract.** The field is parsed
+(`language_runtime/__init__.py:154`), published on the pack (`:118`), and
+validated to point at an installed pack (`:272`) — and no lookup anywhere
+consults it. A pack declaring `"fallback": "en"` gets no fallback behaviour of
+any kind. Harmless today because nothing depends on it, and worth closing
+before third-party pack authors start writing manifests against it: either
+implement the resolution (a missing message or card field falls through to the
+named pack) or drop the field. Declared-and-ignored is the same
+invisible-failure shape as `capabilities.ui.css` was, and that one shipped
+unnoticed for a release.
+
+**A story does not record which pack version wrote it.** Chats stamp
+`story_language` and not the pack's `version`, so when a pack's wording or
+recognition tables change under an existing story there is nothing to
+reconstruct the old linguistic behaviour from — a memory minted under
+`ja 0.2.0-beta` is indistinguishable from one minted under a later revision.
+Cheap to add (one more key beside `story_language`), and only useful if added
+before the packs start moving.
 
 **Japanese still has open items from its first native review.** The review
 (the pack's first) fixed the sentence architecture, but three things were

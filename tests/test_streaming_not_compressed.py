@@ -95,3 +95,93 @@ def test_the_real_turn_stream_declares_a_streamed_content_type():
 
     source = inspect.getsource(app_module._stream)
     assert "application/x-ndjson" in source
+
+
+# ---------------------------------------------------------------- the rewrite
+#
+# The first implementation wrapped Starlette's `GZipResponder` and reached for
+# `.send_with_gzip`, a private attribute. `requirements.txt` declares
+# `fastapi>=0.101,<1`, and that range resolves to Starlette versions where the
+# attribute no longer exists -- every api request then raises AttributeError.
+# CI never saw it because `constraints.txt` pins the pair; `Start Sonder.bat`
+# installed `requirements.txt` WITHOUT those constraints, so the people who
+# would hit it were exactly the ones running the launcher on a fresh machine.
+#
+# The middleware now compresses with `zlib` and owns nothing private. These
+# pin the header handling that came with that, which the tests above did not
+# cover because Starlette used to do it.
+
+
+def test_the_middleware_owns_no_private_starlette_api():
+    """The regression itself. A private attribute is a dependency on a version,
+    not on a library.
+
+    Asserted over the parsed tree rather than the source text: the comment
+    above this block names the attribute in order to explain it, and a
+    substring check would fail on the explanation instead of on the code.
+    """
+    import ast
+    import pathlib
+
+    tree = ast.parse(
+        (pathlib.Path(__file__).resolve().parents[1] / "app.py")
+        .read_text(encoding="utf-8"))
+
+    used = {node.attr for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)}
+    named = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    imported = {alias.name for node in ast.walk(tree)
+                if isinstance(node, (ast.Import, ast.ImportFrom))
+                for alias in node.names}
+
+    assert "send_with_gzip" not in used
+    assert "GZipResponder" not in named | imported
+
+
+def test_content_length_is_dropped_when_the_body_is_compressed(client):
+    """It describes the UNCOMPRESSED body. Left in place, the client waits for
+    bytes that never come."""
+    response = client.get("/blob", headers={"accept-encoding": "gzip"})
+    assert response.headers.get("content-encoding") == "gzip"
+    raw = response.headers.get("content-length")
+    assert raw is None or int(raw) < 8000
+
+
+def test_a_compressed_response_varies_on_accept_encoding(client):
+    """Without it a shared cache serves gzip to a client that asked for
+    identity."""
+    response = client.get("/blob", headers={"accept-encoding": "gzip"})
+    assert "accept-encoding" in response.headers.get("vary", "").lower()
+
+
+def test_a_body_below_the_threshold_is_left_alone(client):
+    """Compressing a few hundred bytes costs more than it saves, and the
+    decision needs the first chunk to make -- so it is worth pinning that the
+    held-back start message is still delivered."""
+    application = _probe_app()
+
+    async def small(_request):
+        return JSONResponse({"ok": True})
+
+    application.routes.append(Route("/small", small))
+    with TestClient(application) as c:
+        response = c.get("/small", headers={"accept-encoding": "gzip"})
+    assert response.headers.get("content-encoding") is None
+    assert response.json() == {"ok": True}
+
+
+def test_an_already_encoded_response_is_not_compressed_twice():
+    import gzip as _gzip
+
+    from starlette.responses import Response
+
+    async def preencoded(_request):
+        return Response(_gzip.compress(b'{"pad":"' + b"x" * 8000 + b'"}'),
+                        media_type="application/json",
+                        headers={"content-encoding": "gzip"})
+
+    application = Starlette(routes=[Route("/pre", preencoded)])
+    application.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
+    with TestClient(application) as c:
+        response = c.get("/pre", headers={"accept-encoding": "gzip"})
+    assert response.json()["pad"] == "x" * 8000

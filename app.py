@@ -1,9 +1,8 @@
-import contextvars, json, queue, random, re, time, threading, os
+import contextvars, json, queue, random, re, time, threading, os, zlib
 import updates
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
 from starlette.datastructures import Headers
-from starlette.middleware.gzip import GZipResponder
 from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
                                Response)
 from fastapi.staticfiles import StaticFiles
@@ -232,17 +231,26 @@ class SelectiveGZipMiddleware:
     `/api/ui` carries another -- about 816KB per page load, compressing to
     roughly a third.
 
-    Streaming is EXCLUDED, and not as a precaution. Starlette's GZipResponder
-    writes each streamed chunk into a `GzipFile`, and the compressor buffers
-    internally: a turn's NDJSON lines are far too small to fill that buffer,
-    so nothing reaches the browser until enough has accumulated. Applying it
-    to the turn stream stalled the live view -- the stage indicator stopped
-    advancing, token deltas stopped appearing, and the client eventually gave
-    up on a connection that looked dead, which the server then recorded as
-    `Aborted: generation aborted by user` mid-turn.
+    Streaming is EXCLUDED, and not as a precaution. Starlette's own
+    GZipResponder writes each streamed chunk into a `GzipFile`, and the
+    compressor buffers internally: a turn's NDJSON lines are far too small to
+    fill that buffer, so nothing reaches the browser until enough has
+    accumulated. Applying it to the turn stream stalled the live view -- the
+    stage indicator stopped advancing, token deltas stopped appearing, and the
+    client eventually gave up on a connection that looked dead, which the
+    server then recorded as `Aborted: generation aborted by user` mid-turn.
 
     Keyed on the response's CONTENT TYPE rather than its path, so a streaming
     route added later is covered without anyone remembering to list it.
+
+    Compresses with `zlib` directly and touches NOTHING private. The first
+    version wrapped Starlette's `GZipResponder` and reached for
+    `.send_with_gzip`, an internal that `requirements.txt`'s own declared range
+    (`fastapi>=0.101,<1`) is wide enough to resolve away: on Starlette 0.50 the
+    attribute is gone and EVERY api request raises AttributeError. CI never saw
+    it because `constraints.txt` pins the pair, and `Start Sonder.bat` installs
+    `requirements.txt` without those constraints -- so the people who would hit
+    it were exactly the ones running the launcher on a fresh machine.
     """
 
     STREAMED = ("application/x-ndjson", "text/event-stream")
@@ -254,28 +262,87 @@ class SelectiveGZipMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
-        accept = Headers(scope=scope).get("accept-encoding", "")
-        if "gzip" not in accept:
+        if "gzip" not in Headers(scope=scope).get("accept-encoding", ""):
             return await self.app(scope, receive, send)
+        await _SelectiveGZipResponder(
+            self.app, self.minimum_size, self.STREAMED).run(scope, receive, send)
 
-        responder = {"impl": None}
 
-        async def route(message):
-            if message["type"] == "http.response.start":
-                content_type = Headers(
-                    raw=message["headers"]).get("content-type", "")
-                if any(kind in content_type for kind in self.STREAMED):
-                    responder["impl"] = "plain"
-                else:
-                    responder["impl"] = "gzip"
-            if responder["impl"] == "gzip":
-                return await gzip_send(message)
-            return await send(message)
+class _SelectiveGZipResponder:
+    """One response's worth of the decision, held until it can be made.
 
-        gzip_responder = GZipResponder(self.app, self.minimum_size)
-        gzip_responder.send = send
-        gzip_send = gzip_responder.send_with_gzip
-        await self.app(scope, receive, route)
+    The content type arrives with `http.response.start` and the size only with
+    the first body chunk, so both messages are held back until the answer is
+    known -- which is at the latest the first chunk, never further. A streamed
+    response is therefore delayed by exactly one message and no bytes are
+    buffered beyond it.
+    """
+
+    def __init__(self, app, minimum_size, streamed):
+        self.app = app
+        self.minimum_size = minimum_size
+        self.streamed = streamed
+        self.send = None
+        self.start = None
+        self.compressor = None
+
+    async def run(self, scope, receive, send):
+        self.send = send
+        await self.app(scope, receive, self.route)
+
+    async def route(self, message):
+        if message["type"] == "http.response.start":
+            self.start = message
+            return                                  # held: size still unknown
+        if message["type"] != "http.response.body":
+            return await self.send(message)
+
+        body = message.get("body", b"")
+        more = message.get("more_body", False)
+
+        if self.start is not None:
+            headers = Headers(raw=self.start["headers"])
+            content_type = headers.get("content-type", "")
+            already = headers.get("content-encoding", "")
+            small = not more and len(body) < self.minimum_size
+            if (already or small
+                    or any(kind in content_type for kind in self.streamed)):
+                start, self.start = self.start, None
+                await self.send(start)
+                return await self.send(message)
+            self.compressor = zlib.compressobj(
+                9, zlib.DEFLATED, zlib.MAX_WBITS | 16)
+            await self.send(self._gzip_start(self.start))
+            self.start = None
+
+        if self.compressor is None:                 # decided plain earlier
+            return await self.send(message)
+
+        # Z_SYNC_FLUSH per chunk: the compressor is allowed to hold bytes back
+        # otherwise, which is the exact mechanism that stalled the turn stream.
+        # Costs a little ratio on a multi-chunk response and guarantees that
+        # what the app wrote is on the wire.
+        chunk = self.compressor.compress(body)
+        chunk += (self.compressor.flush(zlib.Z_SYNC_FLUSH) if more
+                  else self.compressor.flush())
+        await self.send({"type": "http.response.body", "body": chunk,
+                         "more_body": more})
+
+    @staticmethod
+    def _gzip_start(message):
+        """Re-headered start: encoded, varying, and of unknown length.
+
+        `content-length` MUST go -- it describes the uncompressed body, and
+        leaving it makes the client wait for bytes that will never come.
+        """
+        headers = [
+            (key, value) for key, value in message["headers"]
+            if key.lower() not in (b"content-length", b"content-encoding")
+        ]
+        headers.append((b"content-encoding", b"gzip"))
+        if not any(key.lower() == b"vary" for key, _v in headers):
+            headers.append((b"vary", b"Accept-Encoding"))
+        return {**message, "headers": headers}
 
 
 app.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
