@@ -19,6 +19,9 @@ import db
 from character_schema import (
     character_name, character_appearance, character_public_history, persona_name,
 )
+from language_runtime import (
+    DEFAULT_LANGUAGE, language_scope, set_story_language, story_language_scope,
+)
 from llm_quality import complete_validated_json
 from prompts import get_prompt
 from memory import add_memories_batch, duplicate_lorebook_for_chat
@@ -173,7 +176,8 @@ def _seed_salience(value) -> float:
 
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 lorebook_id: int | None = None,
-                already_known: bool = True) -> tuple[int, int]:
+                already_known: bool = True,
+                language: str | None = None) -> tuple[int, int]:
     """'Start story now': create a chat seeded from a character's greeting.
     The greeting is shown verbatim; its private knowledge routes to the
     character. An optional lorebook is attached before turn 0 runs, so the
@@ -208,7 +212,10 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     if not rec or not str(rec.get("prose") or "").strip():
         raise ValueError("character has no greeting to start from")
     prose_tok = rec.get("prose") or ""
-    extraction = rec.get("extraction") or extract_greeting(sheet, prose_tok)
+    # Scoped here rather than after the chat row exists: this is a model call,
+    # and it runs before there is a chat whose story language could be read.
+    with language_scope(language or DEFAULT_LANGUAGE):
+        extraction = rec.get("extraction") or extract_greeting(sheet, prose_tok)
 
     def sub(s):  # deterministic {{PLAYER}} -> persona name
         return str(s or "").replace(PLAYER_TOKEN, p_name)
@@ -227,6 +234,9 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # the other's name.
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                 (f"{c_name} — {p_name}", prose_final, time.time()))
+    # Recorded before anything is seeded, because turn 0 runs below and every
+    # stage of it -- establishment, perception, the narrator -- reads this.
+    set_story_language(cid, language or DEFAULT_LANGUAGE)
     db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, cid))
     db.qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, char_id))
     if already_known:
@@ -309,12 +319,18 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
     tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
                 (cid, 0, "", time.time(), None))
-    list(_run_pipeline(cid, tid))
+    # `_run_pipeline` is called directly here rather than through
+    # `run_pipeline`, which is the ONLY place the story language was ever set.
+    # The opening beat is the first prose a reader sees, and it was always
+    # English.
+    with story_language_scope(cid):
+        list(_run_pipeline(cid, tid))
     _override_narrator(tid, prose_final)
     return cid, tid
 
 
-def generate_greeting(char_id: int, brief: str = "") -> dict:
+def generate_greeting(char_id: int, brief: str = "",
+                      language: str | None = None) -> dict:
     """Generate one greeting for a character, in that character's voice, and
     return it as a `sheet.opening.greetings` entry (NOT persisted -- the caller
     adds it to the list and saves through the normal character-update path,
@@ -348,14 +364,18 @@ def generate_greeting(char_id: int, brief: str = "") -> dict:
         "player_token": PLAYER_TOKEN,
     }
 
-    raw = chat_complete(
-        "utility",
-        get_prompt("generator_greeting"),
-        json.dumps(payload, ensure_ascii=False),
-        temperature=0.9,
-        max_tokens=2000,
-        json_mode=False,
-    )
+    # Scoped, not just passed: `providers` re-applies the schema policy at the
+    # boundary from the contextvar, so a language given only to `get_prompt`
+    # gets the Japanese contract with the English one appended underneath.
+    with language_scope(language or DEFAULT_LANGUAGE):
+        raw = chat_complete(
+            "utility",
+            get_prompt("generator_greeting"),
+            json.dumps(payload, ensure_ascii=False),
+            temperature=0.9,
+            max_tokens=2000,
+            json_mode=False,
+        )
     prose = _strip_greeting_wrapping(raw)
     if not prose:
         raise RuntimeError("Greeting generator returned no usable text.")

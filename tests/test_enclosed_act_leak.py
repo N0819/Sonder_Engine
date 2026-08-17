@@ -552,110 +552,15 @@ def test_outcome_payload_keeps_appearances_someone_can_see(
     assert "grey coat" in view, view
 
 
-# --- 2. the prompt rule that governs the surviving channel ------------------
+# --- 2. the prompt rule that governed the surviving channel -- REMOVED ------
 #
-# The leak reached the view through a stage with no code path to constrain it:
-# perception writes prose. The rule can only live in the prompt, so the prompt
-# is what is asserted -- these fail if the paragraphs are dropped or reworded
-# past recognition, which is exactly when the leak comes back.
-
-@pytest.fixture()
-def perception_prompt():
-    return DEFAULT_PROMPTS["perception"]
-
-
-def test_prompt_forbids_carrying_the_act_verb_into_a_surviving_channel(
-        perception_prompt):
-    text = perception_prompt
-    assert "NON-VISUAL CHANNELS CARRY SENSATION, NOT ACTS" in text
-    assert "never the name of the act producing it" in text
-    assert "Do NOT carry the declared " in text and "act's verb across" in text
-
-
-def test_prompt_says_heightened_senses_buy_resolution_not_knowledge(
-        perception_prompt):
-    text = perception_prompt
-    assert "ACUITY IS RESOLUTION, NOT KNOWLEDGE" in text
-    assert "never converts a sensation into knowledge of the act" in text
-
-
-def test_prompt_binds_when_sight_is_absent_not_only_when_all_channels_shut(
-        perception_prompt):
-    """The rule was scoped to "when a channel is closed" and did not land.
-
-    The failure case has an open, high-bandwidth touch channel and no sight,
-    so the model read the precondition as not applying and wrote a full
-    tactile account of the act. The trigger is absence of SIGHT.
-    """
-    text = perception_prompt
-    assert "NOT only when every channel is shut" in text
-    assert "continuous full-body contact" in text
-
-
-def test_prompt_puts_the_touch_boundary_at_the_contact_surface(
-        perception_prompt):
-    """Abstract "interior state" did not bind; a named boundary does.
-
-    Worse, the old wording ("muscle tension, pulse and breath read through
-    skin with uncanny precision") could be read as LICENSING an account of
-    what the other body was doing internally.
-    """
-    text = perception_prompt
-    assert "TOUCH RESOLVES AT THE SURFACE, NOT PAST IT" in text
-    assert "WHERE THE TWO BODIES MEET" in text
-    assert "licenses NOTHING further" in text
-
-
-def test_prompt_says_the_observable_is_written_for_a_sighted_bystander(
-        perception_prompt):
-    """The verb kept reappearing because the observable reads as a fact.
-
-    Naming where it comes from, and that it is not a sentence owed a place
-    in every view, attacks the reason the paraphrase kept happening.
-    """
-    text = perception_prompt
-    assert "THE DECLARED OBSERVABLE IS WRITTEN FOR A SIGHTED BYSTANDER" in text
-    assert "not a sentence to rephrase" in text
-
-
-def test_director_must_not_write_one_body_s_act_into_another_s_state():
-    """The gate above cannot save a leak written into the CONTAINER's record.
-
-    `_perceptible_entities` withholds state for an entity no perceiver can
-    reach -- and a container is in plain view by construction, so its own
-    state is never withheld from anyone. A Director that writes "shut over
-    the figure prying at its hinge" into the CONTAINER's posture has
-    published the occupant's act to every observer who can see the container,
-    and no downstream gate can take it back: the string is one body's
-    legitimate, perceivable state.
-
-    Observed live in the same playthrough as the rest of this file -- the
-    enclosing character's own `state.posture` named what the enclosed
-    character was doing. The nearby "CONTACT GOES IN contact_ops AND NOWHERE
-    ELSE" rule does not cover it: that governs contact RELATIONS, so a
-    free-text act attributed to another body walks straight past.
-    """
-    # `entities` is the objects specialist's channel now; establish still
-    # writes the opening scene from one sheet.
-    for prompt_id in ("director_objects", "director_establish"):
-        text = DEFAULT_PROMPTS[prompt_id]
-        assert "STATE DESCRIBES ONE BODY'S OWN DOING" in text, prompt_id
-        assert "never what a" in text and "body is doing to it" in text, prompt_id
-        # The reason, not just the rule -- this is what stops it being
-        # reworded away as redundant with the contact rule beside it.
-        assert "in plain view by construction" in text, prompt_id
-
-
-def test_prompt_documents_the_payload_fields_it_is_silently_handed(
-        perception_prompt):
-    """contacts / contained / scales / entities.state went over undocumented.
-
-    All four are in the payload builders in agents/perception.py with only
-    code comments to explain them; the model was left to infer their meaning,
-    and inferred generously.
-    """
-    text = perception_prompt
-    assert "scene.contacts" in text
-    assert "scene.contained" in text
-    assert "scene.scales" in text
-    assert "scene.entities[*].state" in text
+# This section asserted paragraphs of the `perception` prompt, on the stated
+# premise that "perception writes prose. The rule can only live in the
+# prompt." That premise is gone: perception makes no model call at all, every
+# view is composed from the typed IR in `agents/composer.py`, and the
+# `perception` prompt has been deleted from the language packs.
+#
+# Hole 1 therefore cannot recur -- there is no model left to disobey the rule.
+# Hole 2, the ungated entity table, is real code and is tested above. A test
+# that asserts wording no model reads is not coverage of anything, and it
+# cost a translation of 28,467 characters in every language pack.

@@ -27,6 +27,7 @@ PUBLIC_API_PATHS = frozenset({
     "/api/auth/setup",
     "/api/auth/login",
     "/api/auth/logout",
+    "/api/ui",
 })
 GUEST_ALLOWED_API_PATHS = frozenset({
     "/api/guest/state",

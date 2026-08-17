@@ -244,9 +244,14 @@ def test_a_preset_can_actually_replace_a_chunked_sheet(temp_db):
         "Mine": {"director_body": "BODY SHEET, REWRITTEN.",
                  "director_resolve_lean": "PROSE SHEET, REWRITTEN."}}))
     temp_db.set_setting("active_preset", "Mine")
-    assert prompts.specialist_prompt("body", ["attire"]) \
-        == "BODY SHEET, REWRITTEN."
-    assert prompts.prose_author_prompt(None) == "PROSE SHEET, REWRITTEN."
+    body = prompts.specialist_prompt("body", ["attire"])
+    prose = prompts.prose_author_prompt(None)
+    assert body.startswith("BODY SHEET, REWRITTEN.")
+    assert prose.startswith("PROSE SHEET, REWRITTEN.")
+    # Presets replace authored role instructions, but cannot replace the
+    # language/schema boundary every model call must retain.
+    assert "LANGUAGE AND SCHEMA CONTRACT" in body
+    assert "LANGUAGE AND SCHEMA CONTRACT" in prose
     # An untouched sheet still assembles from its chunks.
     assert "CROWDS:" in prompts.specialist_prompt("offscreen", ["crowd_ops"])
 
@@ -1599,9 +1604,11 @@ def test_interpret_always_gets_the_delegation_note_as_a_suffix(
 
     sheet = [c for c in calls if c["step_key"] == "director_interpret"
              ][0]["system"]
-    from prompts import get_prompt
-    assert sheet.startswith(get_prompt("director_interpret"))
+    from prompts import get_prompt_body
+    assert sheet.startswith(get_prompt_body("director_interpret"))
     assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet
+    assert sheet.endswith(
+        "translate only its free-text human-language values.")
     # The note must name the interpret spelling of the contact channel --
     # that is the one whose name differs between the stages.
     assert "contact_assertions" in sheet
@@ -2494,7 +2501,8 @@ def test_every_alias_normalizes_onto_a_routed_category():
     category with no route is the same silent drop, arriving through a
     spelling instead of a channel."""
     core_owned = {"time", "transit", "other"}
-    for alias, normalized in director._OMISSION_CATEGORY_ALIASES.items():
+    aliases = director._ling("_OMISSION_CATEGORY_ALIASES")
+    for alias, normalized in aliases.items():
         assert (normalized in director._CATEGORY_CHANNELS
                 or normalized in core_owned), (
             f"alias {alias!r} normalizes to {normalized!r}, which reaches "

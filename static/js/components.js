@@ -1,3 +1,19 @@
+// Story text, wrapped so `el()` cannot translate it.
+//
+// `el()` runs every text child through `t()` BEFORE the node is inserted, so
+// the `translate="no"` guard on the transcript never gets a chance -- the
+// string is already Japanese by the time it lands in the DOM. 153 of the
+// catalog's keys are single words, so a beat consisting of "Close", a
+// character named "Cast", or a story called "Book" all collide. Worst case
+// measured: the narrator-prose EDITOR translated the prose on its way in and
+// then PUT it back, persisting the translation into the story.
+//
+// Anything with a `nodeType` is passed through untouched by the loop below,
+// which is what makes this work.
+function txt(value) {
+  return document.createTextNode(value == null ? "" : String(value));
+}
+
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -6,11 +22,15 @@ function el(tag, attrs = {}, ...kids) {
     else if (k === "value") e.value = v;
     else if (k === "selected") e.selected = true;
     else if (k === "checked") e.checked = true;
-    else if (v !== null && v !== false) e.setAttribute(k, v);
+    else if (v !== null && v !== false) {
+      const value = ["title", "aria-label", "placeholder", "alt"].includes(k)
+        ? t(String(v)) : v;
+      e.setAttribute(k, value);
+    }
   }
   for (const k of kids.flat()) {
     if (k == null || k === false) continue;
-    e.append(k.nodeType ? k : document.createTextNode(String(k)));
+    e.append(k.nodeType ? k : document.createTextNode(t(String(k))));
   }
   return e;
 }
@@ -82,7 +102,7 @@ function modal(title, build, opts = {}) {
     });
   }
   S.modalOwnerToken = ++S.modalToken;
-  $("#modaltitle").textContent = title;
+  $("#modaltitle").textContent = t(title);
   box.classList.toggle("wide", !!opts.wide);
   // Consumed, not left standing: the next dialog is only this book's if it
   // was this book that was clicked.

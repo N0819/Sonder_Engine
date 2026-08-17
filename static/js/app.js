@@ -15,6 +15,11 @@ const LORE_LINK_TYPES = [
 
 async function boot() {
   S.boot = await api("GET", "/api/bootstrap");
+  S.uiCatalog = S.boot.ui_messages || {};
+  S.uiLanguage = S.boot.ui_language || "en";
+  S.uiTemplateRules = null;
+  localizeDocument();
+  watchUILanguage();
   S.nsfw = S.boot.nsfw_enabled || false;
 
   if (!Array.isArray(S.boot.lorebook_link_types)) {
@@ -82,6 +87,8 @@ function renderSide() {
   list.innerHTML = "";
   actions.innerHTML = "";
 
+  syncExtensionTabs();
+
   if (S.tab === "chats") {
     renderChatSidebar(list, actions);
   } else if (S.tab === "chars") {
@@ -94,6 +101,51 @@ function renderSide() {
     } else {
       renderLegacyLoreSidebar(list, actions);
     }
+  } else if (typeof S.tab === "string" && S.tab.startsWith("ext:")) {
+    // An extension owns this tab. If it has been retired since the reader
+    // selected it, fall back to the stories list rather than showing an empty
+    // sidebar with no way out.
+    const claimed = window.Sonder
+      && Sonder._renderSidebarTab(S.tab.slice(4), list);
+    if (!claimed) {
+      S.tab = "chats";
+      renderSide();
+    }
+  }
+}
+
+// Extension tabs sit in #tabs next to the built-in four, but they cannot be
+// authored there: an extension's UI script is the LAST script on the page, so
+// the static `$$("#tabs button")` binding above has already run by the time
+// the registration exists. Rebuilding them on every renderSide is also what
+// makes an extension disappearing (disabled, or retired after three throws)
+// take its tab with it.
+function syncExtensionTabs() {
+  const bar = $("#tabs");
+  if (!bar) return;
+  for (const stale of $$("#tabs button[data-ext-tab]")) stale.remove();
+
+  const tabs = (window.Sonder && Sonder._sidebarTabs()) || [];
+  for (const tab of tabs) {
+    // Concatenated rather than interpolated: a template literal is a message
+    // candidate to tools/extract_ui_catalog.py, and "ext:<id>" is a state key,
+    // not something to translate.
+    const key = "ext:" + tab.id;
+    bar.append(el("button", {
+      "data-tab": key,
+      "data-ext-tab": tab.id,
+      onclick: () => {
+        S.tab = key;
+        renderSide();
+      }
+    }, tab.label));
+  }
+
+  // The built-in handler only ever sets `.on` on built-in buttons, so the
+  // highlight is settled here for all of them at once -- otherwise a story
+  // tab stayed lit while an extension's panel was on screen.
+  for (const button of $$("#tabs button")) {
+    button.classList.toggle("on", button.dataset.tab === S.tab);
   }
 }
 
@@ -244,10 +296,30 @@ function renderWizardChoice(b) {
         "Build from scratch")));
 }
 
+function storyLanguagePacks() {
+  return ((S.boot && S.boot.language_packs) || []).filter(pack => pack.story);
+}
+
+function defaultStoryLanguage() {
+  // Falls back to the INTERFACE language, not to English. The wizard's own
+  // dropdown is the only thing that writes `storyLanguage`, so a host who set
+  // Japanese from the Prompts menu still got an English wizard -- and then
+  // English characters, because the wizard is what sends `language` to the
+  // generators.
+  let saved = "";
+  try { saved = localStorage.getItem("storyLanguage") || ""; }
+  catch (e) {}
+  const known = id => storyLanguagePacks().some(pack => pack.id === id);
+  if (saved && known(saved)) return saved;
+  const ui = S.uiLanguage || (S.boot && S.boot.ui_language) || "en";
+  return known(ui) ? ui : "en";
+}
+
 function wizardState() {
   return {
     name: "",
     scenario: "",
+    language: defaultStoryLanguage(),
     personaMode: "generate",
     personaBrief: "",
     personaId: null,
@@ -263,7 +335,9 @@ async function wizardFromScratch() {
   if (name == null) return;               // Cancel/Escape -> abort, don't create a chat
   const scenario = await promptModal("Scenario?");
   if (scenario == null) return;
-  const chat = await api("POST", "/api/chats", { name: name || "", scenario: scenario || "" });
+  const chat = await api("POST", "/api/chats", {
+    name: name || "", scenario: scenario || "", language: defaultStoryLanguage()
+  });
   await boot();
   await openChat(chat.id);
 }
@@ -398,16 +472,26 @@ function renderWizardScenario(b, state) {
     placeholder: "Story name" });
   const scenIn = el("textarea", { style: "width:100%;height:140px", placeholder:
     "Set the scene — where this starts, what's mapped so far, who's present." }, state.scenario);
+  const language = el("select", { style: "flex:1" },
+    storyLanguagePacks().map(pack => el("option", {
+      value: pack.id,
+      ...(pack.id === state.language ? { selected: "" } : {})
+    }, pack.native_name || pack.name || pack.id)));
 
   b.append(
     el("div", { class: "small dim" }, "Step 3 of 3 — the scenario"),
     el("div", { style: "margin-top:8px" }, nameIn, scenIn),
+    el("div", { class: "row", style: "margin-top:8px" },
+      el("span", { class: "small", style: "width:70px" }, "Language"), language),
     el("div", { class: "row", style: "margin-top:14px" },
       el("button", { onclick: () => renderWizardCharacters(b, state) }, "← Back"),
       el("span", { class: "spacer" }),
       el("button", { class: "primary", onclick: () => {
         state.name = nameIn.value.trim();
         state.scenario = scenIn.value.trim();
+        state.language = language.value || "en";
+        try { localStorage.setItem("storyLanguage", state.language); }
+        catch (e) {}
         runWizard(state);
       } }, "Create story")));
 }
@@ -416,7 +500,9 @@ async function runWizard(state) {
   backgroundTask("Setting up story", async () => {
     let personaId = state.personaId;
     if (state.personaMode === "generate") {
-      const r = await api("POST", "/api/personas/generate", { prompt: state.personaBrief });
+      const r = await api("POST", "/api/personas/generate", {
+        prompt: state.personaBrief, language: state.language
+      });
       personaId = r.id;
     }
 
@@ -425,14 +511,17 @@ async function runWizard(state) {
     for (let i = 0; i < state.characterBriefs.length; i++) {
       const text = state.characterBriefs[i].trim();
       if (!text) continue;
-      const r = await api("POST", "/api/characters/generate", { prompt: text });
+      const r = await api("POST", "/api/characters/generate", {
+        prompt: text, language: state.language
+      });
       characterIds.push(r.id);
       if (state.characterBriefsKnown[i]) knownIds.add(r.id);
     }
 
     const chat = await api("POST", "/api/chats", {
       name: state.name || "New story",
-      scenario: state.scenario
+      scenario: state.scenario,
+      language: state.language
     });
     if (personaId) {
       await api("PUT", `/api/chats/${chat.id}`, { persona_id: personaId });
@@ -938,4 +1027,13 @@ async function erOfferRebuild(chatId, bank) {
 // and login, which never load this file.
 
 boot()
-  .catch(e => toast("Could not load the app: " + (e?.message || e), "err", 0));
+  .then(() => {
+    // A language change from the Prompts menu has to reload (localizeDocument
+    // rewrites English source text in place and cannot translate twice), so
+    // it leaves a marker and we come back to that menu here. Without it the
+    // reader is dropped onto the story and the menu looks like it crashed.
+    if (typeof reopenPromptsIfRequested === "function") {
+      reopenPromptsIfRequested();
+    }
+  })
+  .catch(e => toast(`Could not load the app: ${(e?.message || e)}`, "err", 0));

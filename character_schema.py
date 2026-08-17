@@ -1182,6 +1182,86 @@ def normalize_persona_data(value: dict) -> dict:
         "narration": {"voice_setting": str(value.get("voice_setting") or "")},
     }
 
+# ---- Name matching ----
+
+#: Letters that can continue a word in a script that separates words with
+#: spaces: Latin (with its supplements), Greek, Cyrillic, plus digits and the
+#: underscore. Deliberately NOT `\w`, which also covers scripts that do not
+#: space their words.
+_SPACED_WORD_CHARS = (
+    r"A-Za-z0-9_À-ɏḀ-ỿͰ-ϿЀ-ӿ")
+#: Scripts written without spaces between words: kana, CJK ideographs and
+#: their compatibility blocks, Hangul, Thai. A name in one of these is
+#: followed directly by a particle or the next morpheme.
+_UNSPACED_SCRIPT = re.compile(
+    r"[぀-ヿ㐀-䶿一-鿿豈-﫿"
+    r"가-힯฀-๿]")
+
+
+@functools.lru_cache(maxsize=2048)
+def name_boundary_pattern(form: str) -> str:
+    """Match `form` as a whole name, in whatever script the name is written.
+
+    `\\b` and `(?<!\\w)` assert a transition between word and non-word
+    characters, which only describes scripts that put spaces between words.
+    Japanese particles are word characters, so `ヒナミに` never matched `ヒナミ`
+    and every name-keyed guard silently stopped firing -- identity scrubbing,
+    concealment redaction and name fidelity alike, each failing OPEN with no
+    warning because "no match" and "nothing to redact" are the same answer.
+
+    The decision is per-NAME, not per-language: a Japanese story carries Latin
+    names through code-switching and imported cards, and an English story
+    carries Japanese ones. Each end of the form is judged by its own script.
+
+    The boundary that IS applied excludes only spaced-script letters, so a
+    Latin name still refuses to match inside `Hinamis` while matching in
+    `彼はHinamiに`, where the neighbours are Japanese.
+    """
+    text = str(form or "")
+    if not text:
+        return r"(?!)"  # never matches, rather than matching everywhere
+    lead = "" if _UNSPACED_SCRIPT.match(text[0]) else f"(?<![{_SPACED_WORD_CHARS}])"
+    tail = "" if _UNSPACED_SCRIPT.match(text[-1]) else f"(?![{_SPACED_WORD_CHARS}])"
+    return lead + re.escape(text) + tail
+
+
+def name_boundary_regex(form: str, flags: int = 0):
+    """`name_boundary_pattern` compiled; cached by the pattern cache."""
+    return re.compile(name_boundary_pattern(form), flags)
+
+
+def fold_identity_key(value: Any) -> str:
+    """Casefold a name to a comparison key, keeping letters in every script.
+
+    The old fold was `re.sub(r"[^a-z0-9]", "", name.lower())`, which deletes
+    every non-ASCII character -- so every Japanese name folded to the EMPTY
+    STRING and therefore compared equal to every other Japanese name. Where a
+    caller guarded with `if norm:` that merely disabled the match; where it
+    did not, distinct people were treated as one.
+
+    Identical to the old behaviour for ASCII input.
+    """
+    return "".join(ch for ch in str(value or "").casefold().strip()
+                   if ch.isalnum())
+
+
+def cue_boundary_pattern(alternation: str) -> str:
+    """Wrap a language pack's cue alternation in a script-safe boundary.
+
+    The vocabulary moved into `linguistics.json` while the `\\b` around it
+    stayed in Python, so every Japanese alternative a pack added was
+    unreachable: `\\b(?:歩く|走る)\\b` cannot match, because CJK has no word
+    boundary in the sense `\\b` means. Cue alternations are also MIXED -- a
+    pack keeps the English alternatives for code-switching and quoted text --
+    so the boundary has to admit both in one pattern.
+
+    Excluding only spaced-script letters does that: `歩く` still matches
+    after a particle, while `walk` still refuses to match inside `sidewalk`.
+    """
+    return (f"(?<![{_SPACED_WORD_CHARS}])(?:{alternation})"
+            f"(?![{_SPACED_WORD_CHARS}])")
+
+
 # ---- Accessors ----
 
 def character_name(sheet: dict) -> str:

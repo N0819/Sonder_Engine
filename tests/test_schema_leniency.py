@@ -437,9 +437,9 @@ class TestNothingToReportWhereAnObjectWasDeclared:
 
     def test_an_empty_list_where_a_dict_was_declared(self):
         from schemas import validate_llm_output
-        out, warnings = validate_llm_output("perception", {"views": []})
+        out, warnings = validate_llm_output("director_spatial", {"positions": []})
         assert warnings == []
-        assert out["views"] == {}
+        assert out["positions"] == {}
 
     def test_a_nested_dict_value_may_be_empty_too(self):
         """The value of a `dict[str, Model]` is not a field of anything, so
@@ -474,7 +474,7 @@ class TestNothingToReportWhereAnObjectWasDeclared:
         """
         from schemas import validate_llm_output
         _, warnings = validate_llm_output(
-            "perception", {"views": [{"observer": "Mara"}]})
+            "director_spatial", {"positions": [{"observer": "Mara"}]})
         assert warnings
 
 

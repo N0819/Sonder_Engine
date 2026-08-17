@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from prompts import get_prompt
 
 #: The world-KV key artifacts live under, spelled once, frame-scoped in
 #: `db.FRAME_SCOPED_WORLD_KEYS`.
@@ -470,16 +471,7 @@ def mint_wording(artifact, roster):
     claim = " ".join(str(held.get("claim") or "").split())
     if not claim:
         return "", "nothing legible to word"
-    sys = (
-        "You letter one physical notice for an interactive-fiction world: "
-        "the actual words on the paper, as they would be written in-world "
-        "-- a proclamation's formality, a wanted bill's clumsy shout, a "
-        "market notice's plain hand. Write only what the claim states; "
-        "where the claim is vague ('several', 'a stranger', 'some place'), "
-        "the bill is vague in the same places, because whoever wrote it "
-        "knew no more than that. Output STRICT JSON "
-        '{"text": "<the notice\'s wording, %d words max>"}' % TEXT_MAX_WORDS
-    )
+    sys = get_prompt("artifact_wording")
     user = json.dumps({
         "artifact": artifact_voice(artifact),
         "claim": claim,
@@ -499,7 +491,12 @@ def mint_wording(artifact, roster):
         if not text:
             last_error = "text missing or empty"
             continue
-        if len(text.split()) > TEXT_MAX_WORDS:
+        # split() counts one "word" for a whole Japanese notice, so the cap
+        # never fired. Characters are the language-neutral measure; the
+        # multiplier is the rough words-to-characters ratio for English prose
+        # so the English bound is unchanged in practice.
+        if (len(text.split()) > TEXT_MAX_WORDS
+                or len(text) > TEXT_MAX_WORDS * 6):
             last_error = ("text runs past %d words: a bill is not a scene"
                           % TEXT_MAX_WORDS)
             continue

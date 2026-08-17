@@ -938,9 +938,13 @@ def refine_prompt(draft, place):
         return draft
     try:
         from agents.common import _agent_json
+        from language_runtime import DEFAULT_LANGUAGE
         from prompts import get_prompt
         out = _agent_json("backdrop_prompt", "backdrop_prompt",
-                          get_prompt("backdrop_prompt"),
+                          # Pinned to English: this produces an IMAGE-MODEL PROMPT, which
+                          # the backends are trained on in English, not reader-facing
+                          # prose. Same reasoning as ambience.py.
+                          get_prompt("backdrop_prompt", DEFAULT_LANGUAGE),
                           {"place": place, "draft": draft}, temperature=0.6)
         refined = str((out or {}).get("prompt") or "").strip()
         return refined or draft

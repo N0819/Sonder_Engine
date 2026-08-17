@@ -35,7 +35,7 @@ function appearanceFillButton(kind, card, readDraft, reopen) {
         reopen(refreshed);
         toast("Body and clothing generated. Review, then save.", "ok");
       } catch (e) {
-        toast("Appearance fill failed: " + e.message, "err");
+        toast(`Appearance fill failed: ${e.message}`, "err");
         button.textContent = label;
         button.disabled = false;
       }
@@ -122,7 +122,7 @@ function greetingCarousel(character, initial) {
         i = list.length - 1; render();
         toast("Greeting generated — edit it if you like, then save or quick-start.", "ok");
       } catch (e) {
-        toast("Generate failed: " + e.message, "err");
+        toast(`Generate failed: ${e.message}`, "err");
       } finally { gen.textContent = label; gen.disabled = false; }
     } }, "✨ Generate");
   const recover = el("button", { title: "Recover greetings from the imported card",
@@ -134,7 +134,7 @@ function greetingCarousel(character, initial) {
         if (r.sheet) character.sheet = JSON.stringify(r.sheet);
         i = 0; render();
         toast(`Recovered ${list.length} greeting(s) from the card.`, "ok");
-      } catch (e) { toast("Recover failed: " + e.message, "err"); }
+      } catch (e) { toast(`Recover failed: ${e.message}`, "err"); }
     } }, "⟲ Recover from card");
   const quick = el("button", { class: "primary",
     onclick: () => {
@@ -148,7 +148,7 @@ function greetingCarousel(character, initial) {
       const idx = i;
       api("PUT", "/api/characters/" + character.id, { sheet: updated })
         .then(() => { character.sheet = JSON.stringify(updated); quickStartModal(character, idx); })
-        .catch(e => toast("Could not save greetings: " + e.message, "err"));
+        .catch(e => toast(`Could not save greetings: ${e.message}`, "err"));
     } }, "⚡ Quick start with this greeting");
 
   render();
@@ -184,7 +184,7 @@ function quickStartModal(character, greetingIndex) {
       + "Uncheck for a strangers-meeting greeting, so they don't begin knowing "
       + "your name."
   });
-  modal("Quick start — " + character.name, b => {
+  modal(`Quick start — ${character.name}`, b => {
     b.append(
       el("div", { class: "small dim" },
         "Play as which persona? The greeting you selected becomes the opening "
@@ -357,7 +357,7 @@ function charEditor(c, options = {}) {
         charEditor(refreshed);
         toast("Missing psychology fields filled. Review and save any edits.", "ok");
       } catch (e) {
-        toast("Psychology fill failed: " + e.message, "err");
+        toast(`Psychology fill failed: ${e.message}`, "err");
         fillPsychology.textContent = label;
         fillPsychology.disabled = false;
       }
@@ -579,7 +579,7 @@ function charEditor(c, options = {}) {
                 : c ? "Character saved." : "Character created.",
               "ok"
             );
-          } catch (e) { toast("Could not save: " + e.message, "err") }
+          } catch (e) { toast(`Could not save: ${e.message}`, "err") }
         } }, "Save")));
   }, { wide: true });
 }
@@ -693,7 +693,7 @@ function personaEditor(p) {
             if (p) await api("PUT", "/api/personas/" + p.id, { sheet: s });
             else await api("POST", "/api/personas", { sheet: s });
             closeModal(); await boot(); toast(p ? "Persona saved." : "Persona created.", "ok");
-          } catch (e) { toast("Could not save: " + e.message, "err") }
+          } catch (e) { toast(`Could not save: ${e.message}`, "err") }
         } }, "Save")));
   });
 }
@@ -712,7 +712,7 @@ function promotionReviewModal(cid, name, draft) {
   const seedsTa = el("textarea", { style: "width:100%;height:90px" },
     draft.memory_seeds.join("\n"));
 
-  modal("Promote " + name, b => b.append(
+  modal(`Promote ${name}`, b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:8px" },
       `Grounded in ${draft.evidence_turns.length} recorded turn(s) `
       + `(#${draft.evidence_turns.join(", #")}). Review before attaching -- `
@@ -724,7 +724,7 @@ function promotionReviewModal(cid, name, draft) {
       el("button", { class: "primary", onclick: async () => {
         let sheet;
         try { sheet = JSON.parse(sheetTa.value) }
-        catch (e) { toast("Invalid JSON: " + e.message, "err"); return }
+        catch (e) { toast(`Invalid JSON: ${e.message}`, "err"); return }
         const memory_seeds = seedsTa.value.split("\n").map(s => s.trim()).filter(Boolean);
         try {
           await api("POST", `/api/chats/${cid}/promotions/confirm`,
@@ -732,7 +732,7 @@ function promotionReviewModal(cid, name, draft) {
           closeModal();
           await boot();
           toast(name + " is now a full character.", "ok");
-        } catch (e) { toast("Could not promote: " + e.message, "err") }
+        } catch (e) { toast(`Could not promote: ${e.message}`, "err") }
       } }, "✨ Confirm & attach"))));
 }
 
@@ -741,7 +741,7 @@ async function promoteBackgroundPresence(cid, name) {
   try {
     draft = await api("POST", `/api/chats/${cid}/promotions/draft`, { name });
   } catch (e) {
-    toast("Could not draft promotion: " + e.message, "err");
+    toast(`Could not draft promotion: ${e.message}`, "err");
     return;
   }
   promotionReviewModal(cid, name, draft);
@@ -783,7 +783,7 @@ function importModal(kind) {
   const typeSel = kind === "lorebook" ? el("select", {}, S.boot.lorebook_types.map(t => el("option", { value: t }, t))) : null;
   const sumIn = kind === "lorebook" ? el("input", { placeholder: "Brief summary for the mapping agent", style: "width:100%" }) : null;
 
-  modal("Import " + kind, b => {
+  modal(`Import ${kind}`, b => {
     b.append(drop, fileIn, status,
       kind === "lorebook" ? el("div", { class: "card" },
         el("div", { class: "ff" }, el("label", {}, "Book type"), typeSel),
@@ -804,7 +804,7 @@ function importModal(kind) {
           const payload = kind === "character" ? { card: fileContent, reinterpret: re.checked }
             : kind === "persona" ? { card: fileContent, reinterpret: re.checked }
               : { book: fileContent, reinterpret: re.checked, book_type: typeSel.value, summary: sumIn.value };
-          backgroundTask("Importing " + kind, () => api("POST", endpoint, payload),
+          backgroundTask(`Importing ${kind}`, () => api("POST", endpoint, payload),
             { onSuccess: async r => {
               await boot();
               if (kind === "lorebook" && r?.id) await loreModal(r.id);
@@ -821,13 +821,13 @@ function importModal(kind) {
 // ---- Generate ----
 function generateModal(kind) {
   const ta = el("textarea", { style: "width:100%;height:170px", placeholder: "Describe the " + kind + " you want…" });
-  modal("Generate " + kind, b => {
+  modal(`Generate ${kind}`, b => {
     b.append(ta,
       el("div", { class: "small dim", style: "margin-top:8px" }, "The dialog will close when generation starts. Progress is visible in the activity panel."),
       el("div", { class: "row", style: "margin-top:11px" },
         el("button", { class: "primary", onclick: () => {
           const prompt = ta.value.trim();
-          backgroundTask("Generating " + kind,
+          backgroundTask(`Generating ${kind}`,
             () => api("POST", `/api/${kind === "character" ? "characters" : "personas"}/generate`, { prompt }),
             { onSuccess: async () => { await boot() },
              successMessage: kind.charAt(0).toUpperCase() + kind.slice(1) + " generated.",
@@ -860,7 +860,7 @@ async function loreModal(lid) {
   try { d = await api("GET", "/api/lorebooks/" + lid) }
   catch (e) { $("#modalbody").innerHTML = ""; $("#modalbody").append(emptyState("Could not load lorebook: " + e.message)); return }
   const cats = S.boot.lore_categories, types = S.boot.lorebook_types;
-  modal("Lorebook — " + d.book.name, b => {
+  modal(`Lorebook — ${d.book.name}`, b => {
     const typeSel = fSelect("Type", types, d.book.book_type || "general");
     const sumIn = fArea("Summary for the mapping agent", d.book.summary || "", 2);
     b.append(el("div", { class: "row" },
@@ -871,7 +871,7 @@ async function loreModal(lid) {
       } }, "Rename"),
       el("button", { onclick: async () => { await exportLorebook(lid) } }, "⤓ Export"),
       el("button", { onclick: () => {
-        backgroundTask("Reinterpreting " + d.book.name,
+        backgroundTask(`Reinterpreting ${d.book.name}`,
           () => api("POST", `/api/lorebooks/${lid}/reinterpret`),
           { onSuccess: async () => { await boot(); await loreModal(lid) },
            successMessage: r => `Reinterpreted ${r?.reinterpreted || 0} entries.`,
@@ -930,13 +930,13 @@ async function loreModal(lid) {
 // ---- Export ----
 async function exportCharacter(id) {
   try { const d = await api("GET", `/api/characters/${id}/export`); downloadJSON(d, (d.data?.identity?.name || d.name || "character").replace(/[^a-z0-9_-]/gi, "_") + ".json"); toast("Character exported.", "ok"); }
-  catch (e) { toast("Export failed: " + e.message, "err") }
+  catch (e) { toast(`Export failed: ${e.message}`, "err") }
 }
 async function exportPersona(id) {
   try { const d = await api("GET", `/api/personas/${id}/export`); downloadJSON(d, (d.data?.identity?.name || d.name || "persona").replace(/[^a-z0-9_-]/gi, "_") + ".json"); toast("Persona exported.", "ok"); }
-  catch (e) { toast("Export failed: " + e.message, "err") }
+  catch (e) { toast(`Export failed: ${e.message}`, "err") }
 }
 async function exportLorebook(id) {
   try { const d = await api("GET", `/api/lorebooks/${id}/export`); downloadJSON(d, (d.name || "lorebook").replace(/[^a-z0-9_-]/gi, "_") + ".json"); toast("Lorebook exported.", "ok"); }
-  catch (e) { toast("Export failed: " + e.message, "err") }
+  catch (e) { toast(`Export failed: ${e.message}`, "err") }
 }

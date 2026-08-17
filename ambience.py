@@ -783,9 +783,16 @@ def refine_layers(layers, place):
         return layers, {}
     try:
         from agents.common import _agent_json
+        from language_runtime import DEFAULT_LANGUAGE
         from prompts import get_prompt
         out = _agent_json("ambience_prompt", "ambience_prompt",
-                          get_prompt("ambience_prompt"),
+                          # Pinned to English: this produces a FREESOUND LIBRARY SEARCH
+                          # QUERY, not reader-facing prose, and that library is indexed
+                          # in English. It was English only because outofband's worker
+                          # thread lost the story language -- correct by accident. Saying
+                          # so makes the pack's translated ambience_prompt knowingly
+                          # unused rather than silently dead.
+                          get_prompt("ambience_prompt", DEFAULT_LANGUAGE),
                           {"place": place, "layers": layers}, temperature=0.4)
         # What must not be in this room's bed, in the model's words. Written by
         # the prompt since the first version and, until now, read by nobody.
@@ -854,9 +861,10 @@ def refine_query(draft, place):
         return {"query": draft, "avoid": ""}
     try:
         from agents.common import _agent_json
+        from language_runtime import DEFAULT_LANGUAGE
         from prompts import get_prompt
         out = _agent_json("ambience_prompt", "ambience_prompt",
-                          get_prompt("ambience_prompt"),
+                          get_prompt("ambience_prompt", DEFAULT_LANGUAGE),
                           {"place": place, "draft": draft}, temperature=0.4)
         query = str((out or {}).get("query") or "").strip()
         return {"query": query or draft,

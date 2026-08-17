@@ -72,7 +72,9 @@
       <span id="turnstatus-elapsed" class="dim"></span>
     </div>
 
-    <div id="live" class="hidden"></div>
+    <!-- translate="no": the live pane streams model tokens, not engine
+         strings, and it grows one text node per animation frame. -->
+    <div id="live" class="hidden" translate="no"></div>
 
     <div id="composer">
 
@@ -157,6 +159,14 @@
 <script src="/static/js/chat.js"></script>
 <script src="/static/js/settings.js"></script>
 <script src="/static/js/themes.js"></script>
+<!-- The extension registry, before app.js so the consult points in
+     renderSide/handleEvt/openPipeline can see it, and pure enough that it
+     cannot break the boot it precedes. -->
+<script src="/static/js/extensions.js"></script>
 <script src="/static/js/app.js"></script>
+<!-- Every enabled extension's UI, concatenated by the server. Last on the
+     page: it registers against a host that is already fully defined, and a
+     failure here leaves the whole app already loaded behind it. -->
+<script src="/api/extensions/ui.js"></script>
 </body>
 </html>

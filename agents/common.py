@@ -9,20 +9,28 @@ import re
 import attire as attire_model
 import crowds as crowds_model
 from character_schema import (
+    _UNSPACED_SCRIPT,
     _extra_part_placement,
     character_appearance,
     character_extra_parts,
     character_knowledge_config,
     character_name,
     character_name_from_text,
+    cue_boundary_pattern,
+    name_boundary_pattern,
+    name_boundary_regex,
     normalize_character_data,
     persona_extra_parts,
     persona_name,
 )
 from db import get_setting, q, wget
+from language_runtime import (
+    compositor_text, compositor_value, english_linguistic, linguistic,
+)
 from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
+from prompts import get_prompt
 from scene import get_scene, persona_of, sheet_state, NON_AWAKE_GATED
 from schemas import normalize_speech_volume
 from spatial import (
@@ -44,11 +52,6 @@ from spatial import (
 )
 from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
-_REACTIVE_VERBS = {
-    "attack", "stab", "shoot", "strike", "grab", "restrain",
-    "shove", "throw", "charge", "lunge", "block", "steal",
-    "cast", "shoot at", "fire at", "swing at",
-}
 
 _REACTIVE_STAGES = {
     "preparation", "approach", "contact", "sustained",
@@ -64,13 +67,6 @@ _REACTIVE_STAGES = {
 # outward tell (eyes going distant, a whispered incantation) can still be
 # delivered -- the director just authors an explicit `observable` for it,
 # which overrides this default.
-_MENTAL_VERBS = {
-    "recall", "remember", "recollect", "consider", "think", "ponder",
-    "reflect", "deliberate", "decide", "resolve", "realize", "realise",
-    "understand", "know", "recognize", "recognise", "plan", "intend",
-    "imagine", "visualize", "visualise", "concentrate", "focus", "sense",
-    "feel", "believe", "assume", "wonder", "hope", "fear", "doubt",
-}
 
 # Outcomes only the person undergoing them may declare: interior volition
 # (agreeing, submitting, giving in) and involuntary body events (fainting,
@@ -81,30 +77,27 @@ _MENTAL_VERBS = {
 # director._route_authorial_npc_beat). A player act that merely CAUSES such an
 # outcome ('stabs Sarah') is untouched -- the player is the agent there, and
 # the target's response is resolved through the reaction phase.
-_AUTONOMY_VERBS = {
-    "orgasm", "climax", "cum", "submit", "surrender", "yield", "relent",
-    "succumb", "capitulate", "obey", "comply", "consent", "agree",
-    "acquiesce", "relax", "calm", "panic", "faint", "swoon", "buckle",
-    "forgive", "trust", "crave", "desire", "enjoy", "overwhelm",
-}
 
-_AUTONOMY_PHRASES = (
-    "over the edge", "gives in", "give in", "lets go", "let go",
-    "loses control", "lose control", "cannot hold", "can't hold",
-    "cannot resist", "can't resist", "cannot help", "can't help",
-    "falls in love", "changes her mind", "changes his mind",
-    "changes their mind", "makes up her mind", "makes up his mind",
-)
 
 # Words that can OPEN a clause without being its verb. A player action element
 # is authored verb-first by convention ('takes a deep breath...'), so an
 # attempt opening with one of these is a noun/pronoun-led clause -- somebody
 # or something OTHER than the declaring player is its subject.
-_SUBJECT_LEADS = {
-    "the", "a", "an", "this", "that", "these", "those", "his", "her",
-    "their", "its", "my", "your", "our", "he", "she", "they", "it",
-}
 
+
+def _ling(name):
+    return linguistic("agents.common", name)
+
+
+def _text(key, **values):
+    return compositor_text(key, **values)
+
+# Read-only English compatibility views for diagnostics/tests that import the
+# historical constants. Runtime guards use `_ling(...)` and remain context
+# local; these names are not consulted by a story pipeline.
+_DANGLING_SPEECH_VERB_RE = english_linguistic(
+    "agents.common", "_DANGLING_SPEECH_VERB_RE")
+_SPEECH_CUE = english_linguistic("agents.common", "_SPEECH_CUE")
 
 def _stem_token(tok):
     """Crude suffix stem for verb matching ('remembers' -> 'remember')."""
@@ -117,9 +110,6 @@ def _stem_token(tok):
 # Where one subject's predicate ends. Used to scope the autonomy test to the
 # clause that actually belongs to the named character -- see
 # _predicate_after_name.
-_CLAUSE_BREAKS = re.compile(
-    r"\b(?:and|but|as|while|then|so|because|before|after|until|when|though)\b"
-    r"|[,;:—]")
 
 
 def _predicate_after_name(text_cf, end):
@@ -134,7 +124,7 @@ def _predicate_after_name(text_cf, end):
     the character is actually the subject of -- 'steps back', not '...and I
     enjoy the view'."""
     tail = text_cf[end:].lstrip(" '’,")
-    cut = _CLAUSE_BREAKS.search(tail)
+    cut = _ling("_CLAUSE_BREAKS").search(tail)
     return tail[:cut.start()] if cut else tail
 
 
@@ -147,13 +137,13 @@ def _is_autonomous_response(verb, text):
     token, because the construction that matters routinely buries the verb
     ('...pushes Dr. Moon over the edge')."""
     v = str(verb or "").strip().casefold()
-    if v in _AUTONOMY_VERBS or _stem_token(v) in _AUTONOMY_VERBS:
+    if v in _ling("_AUTONOMY_VERBS") or _stem_token(v) in _ling("_AUTONOMY_VERBS"):
         return True
     low = str(text or "").casefold()
-    if any(phrase in low for phrase in _AUTONOMY_PHRASES):
+    if any(phrase in low for phrase in _ling("_AUTONOMY_PHRASES")):
         return True
     return any(
-        tok in _AUTONOMY_VERBS or _stem_token(tok) in _AUTONOMY_VERBS
+        tok in _ling("_AUTONOMY_VERBS") or _stem_token(tok) in _ling("_AUTONOMY_VERBS")
         for tok in re.findall(r"[a-z']+", low)
     )
 
@@ -166,11 +156,11 @@ def _is_mental_action(verb, attempt):
     physical act that merely mentions thought later ('carve while recalling
     the shape') is NOT suppressed."""
     v = str(verb or "").strip().lower()
-    if v in _MENTAL_VERBS or _stem_token(v) in _MENTAL_VERBS:
+    if v in _ling("_MENTAL_VERBS") or _stem_token(v) in _ling("_MENTAL_VERBS"):
         return True
     head = re.split(r"[^\w]+", str(attempt or "").strip().lower(), maxsplit=1)
     lead = head[0] if head else ""
-    return bool(lead) and (lead in _MENTAL_VERBS or _stem_token(lead) in _MENTAL_VERBS)
+    return bool(lead) and (lead in _ling("_MENTAL_VERBS") or _stem_token(lead) in _ling("_MENTAL_VERBS"))
 
 
 def observable_action_text(elem):
@@ -189,15 +179,7 @@ def observable_action_text(elem):
         return str(elem.get("attempt") or "")
     return str(obs or "")
 
-ATTEMPT_CUES = (
-    "try", "attempt", "aim", "rush", "lunge", "swing at", "reach for",
-    "move toward", "charge", "throw at", "shoot at", "fire at",
-    "grab for", "lunge at", "dive for", "reach toward",
-)
 
-ASSERTION_SKIP_CUES = (
-    "try", "attempt", "aim ", "try to", "attempt to",
-)
 
 def _dict(value):
     return value if isinstance(value, dict) else {}
@@ -1177,7 +1159,7 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
     lead = lead_tokens[0] if lead_tokens else ""
     if lead in {str(f).casefold() for f in (actor_forms or ())}:
         return None
-    if lead not in _SUBJECT_LEADS:
+    if lead not in _ling("_SUBJECT_LEADS"):
         return None
     named = []
     for cid, forms in (name_forms or {}).items():
@@ -1273,8 +1255,8 @@ def _requires_reaction_phase(event, valid_actor_ids, actor_names):
     return bool(
         event.get("intended_effects")
         or event.get("asserted_effects")
-        or verb in _REACTIVE_VERBS
-        or any(term in attempt for term in _REACTIVE_VERBS)
+        or verb in _ling("_REACTIVE_VERBS")
+        or any(term in attempt for term in _ling("_REACTIVE_VERBS"))
         or stage in _REACTIVE_STAGES
     )
 
@@ -1327,7 +1309,7 @@ def _classify_action_commitment(raw_text):
     text = (raw_text or "").casefold().strip()
     if not text:
         return "contestable"
-    if any(cue in text for cue in ATTEMPT_CUES):
+    if any(cue in text for cue in _ling("ATTEMPT_CUES")):
         return "contestable"
     return "asserted"
 
@@ -1622,16 +1604,6 @@ _STAGE_DIRECTION_RE = re.compile(r"\*([^*\n]{1,400}?)\*")
 # Function words carry no evidence that two descriptions name the same act --
 # "on her" appears in every second stage direction -- so they are excluded
 # before the overlap in _dedupe_promoted_actions is measured.
-_OVERLAP_STOPWORDS = frozenset({
-    "a", "an", "the", "and", "or", "but", "so", "as", "if", "then",
-    "in", "into", "on", "onto", "at", "to", "toward", "towards", "from",
-    "of", "off", "out", "up", "down", "over", "under", "with", "without",
-    "against", "across", "through", "between", "around", "back",
-    "her", "his", "their", "its", "my", "your", "our", "him", "she", "he",
-    "they", "them", "it", "you", "i", "we", "us", "me",
-    "is", "are", "was", "were", "be", "been", "being", "one", "that", "this",
-    "while", "still", "just", "now", "very", "own", "for", "by",
-})
 
 
 def split_stage_directions(text):
@@ -1741,7 +1713,7 @@ def _dedupe_promoted_actions(clean):
     """
     def _content(text):
         words = re.sub(r"[^\w\s]", " ", str(text or "")).lower().split()
-        return {w for w in words if w not in _OVERLAP_STOPWORDS}
+        return {w for w in words if w not in _ling("_OVERLAP_STOPWORDS")}
 
     declared = [_content(e.get("observable") or e.get("attempt"))
                 for e in clean
@@ -1762,11 +1734,6 @@ def _dedupe_promoted_actions(clean):
 # Words a sentence leans on rather than lands on. An interruption arrives where
 # the speaker drew breath, and the breath is taken just before one of these or
 # just after a comma -- not at an arbitrary word count.
-_BREATH_CONJUNCTIONS = frozenset({
-    "and", "but", "or", "so", "because", "which", "that", "if", "when",
-    "while", "though", "although", "since", "as", "then", "yet", "before",
-    "after", "unless", "until", "whether",
-})
 
 # Below this, a line has nothing to cut. "Wait." interrupted is still "Wait."
 # -- truncating it produces "Wait.—", which reads as a typo, and fictionally
@@ -1813,10 +1780,10 @@ def cut_short_speech(text, ratio=0.6):
             if words[index - 1].endswith(","):
                 keep = index
                 break
-            if words[index].lower().strip(",;:") in _BREATH_CONJUNCTIONS:
+            if words[index].lower().strip(",;:") in _ling("_BREATH_CONJUNCTIONS"):
                 keep = index
                 break
-            if words[index - 1].lower().strip(",;:") in _BREATH_CONJUNCTIONS:
+            if words[index - 1].lower().strip(",;:") in _ling("_BREATH_CONJUNCTIONS"):
                 keep = max(1, index - 1)
                 break
         kept = words[:keep]
@@ -2087,12 +2054,6 @@ def _append_once(view, text, marker=None):
 
 # Rank/title/honorific tokens dropped before comparing names, plus single-letter
 # middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
-_NAME_TITLE_TOKENS = {
-    "commander", "cmdr", "captain", "capt", "lieutenant", "lt", "ensign",
-    "doctor", "dr", "mr", "mrs", "ms", "miss", "lord", "lady", "sir", "chief",
-    "admiral", "general", "sergeant", "sgt", "colonel", "col", "major",
-    "professor", "prof", "the", "a", "an",
-}
 
 
 def _significant_name_tokens(name):
@@ -2101,7 +2062,7 @@ def _significant_name_tokens(name):
     out = set()
     for tok in re.findall(r"[A-Za-z']+", str(name or "")):
         low = tok.strip(".'").casefold()
-        if len(low) < 3 or low in _NAME_TITLE_TOKENS:
+        if len(low) < 3 or low in _ling("_NAME_TITLE_TOKENS"):
             continue
         out.add(low)
     return out
@@ -2298,15 +2259,17 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # label itself was a deterministic identity leak walking straight past
     # the knows_identity gate it exists to serve.
     if appearance_text:
+        articles = frozenset(compositor_value("articles"))
         name_tokens = _identity_token_set(actor_name, aliases)
         cleaned = re.sub(
-            r"^(a|an|the)\s+", "", appearance_text.strip(), flags=re.I,
+            r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
+            appearance_text.strip(), flags=re.I,
         ).replace(",", "")
         words = [w for w in cleaned.split()
                  if re.sub(r"[^\w]", "", w).casefold() not in name_tokens]
         # Dropping a leading name can expose the article that followed it
         # ("Hinami, a fox-eared..." -> "a fox-eared..."); re-strip it.
-        while words and words[0].lower() in ("a", "an", "the"):
+        while words and words[0].lower() in articles:
             words = words[1:]
         # A LINKING PARTICIPLE introduces a phrase, and the 5-word cap cuts
         # that phrase off part-way: appearance summaries overwhelmingly read
@@ -2319,12 +2282,10 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # listed; a bare -ing rule would eat real nouns ("the figure in
         # mourning"). Applied before the cap so the kept words are the
         # distinguishing head of the description rather than its filler.
-        _LINKING_PARTICIPLES = {
-            "appearing", "wearing", "dressed", "clad", "wrapped", "standing",
-            "sitting", "holding", "carrying", "looking", "seeming", "aged",
-        }
+        linking_participles = frozenset(
+            compositor_value("linking_participles"))
         for _i, _w in enumerate(words):
-            if _i and re.sub(r"[^\w]", "", _w).casefold() in _LINKING_PARTICIPLES:
+            if _i and re.sub(r"[^\w]", "", _w).casefold() in linking_participles:
                 words = words[:_i]
                 break
         truncated = len(words) > 5
@@ -2334,10 +2295,8 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # prose when this label is injected inline. Trim any trailing
         # article/preposition/conjunction/possessive so the label ends on a
         # content word.
-        _DANGLING = {"a", "an", "the", "with", "of", "and", "or", "in", "on",
-                     "at", "to", "for", "from", "by", "her", "his", "their",
-                     "its", "as"}
-        while words and words[-1].lower() in _DANGLING:
+        dangling = frozenset(compositor_value("label_dangling"))
+        while words and words[-1].lower() in dangling:
             words = words[:-1]
         # One preposition over from the participle fix above: the cap can
         # also cut a phrase just AFTER the dangler took one word with it --
@@ -2350,13 +2309,15 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # nothing was truncated; a cap-cut label ends on a whole phrase.
         if truncated:
             for _i in range(len(words) - 1, 0, -1):
-                if words[_i].lower() in _DANGLING:
+                if words[_i].lower() in dangling:
                     if len(words) - 1 - _i <= 1:
                         words = words[:_i]
                     break
         if words:
-            return "the " + " ".join(words).rstrip(".;:").lower()
-    return "the unfamiliar person"
+            return _text(
+                "unknown_actor",
+                description=" ".join(words).rstrip(".;:").lower())
+    return _text("unknown_actor_fallback")
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
                  volume="normal", proximity=None, behind_sources=None,
@@ -2434,20 +2395,6 @@ def _strip_identity_tokens(text, forms):
 # Single-token names that are also everyday English words ("Rose walks in"
 # vs "the rose garden"). For these, only the exact capitalized form is
 # scrubbed, so ordinary lowercase prose is never mangled.
-_COMMON_WORD_NAMES = frozenset({
-    "amber", "angel", "art", "ash", "autumn", "bear", "bill", "blue",
-    # `data` is here on the engine's own evidence, not on principle: chat 22
-    # carries a character named Data, and every line about sensor data is a
-    # line that would otherwise introduce him.
-    "brook", "buck", "chase", "clay", "colt", "daisy", "data", "dawn", "dean",
-    "drew", "duke", "earl", "faith", "fern", "fox", "ginger", "glen",
-    "grace", "hazel", "heath", "holly", "hope", "hunter", "iris", "ivy",
-    "jack", "jade", "jasmine", "joy", "june", "king", "lane", "lily",
-    "major", "mark", "may", "melody", "misty", "olive", "pearl", "rain",
-    "raven", "red", "reed", "robin", "rose", "ruby", "rusty", "sandy",
-    "sky", "star", "storm", "summer", "sunny", "violet", "will", "wolf",
-    "wren",
-})
 
 # Mirrors _protected_view_quotes' quoted-span shape: a name inside a quote
 # is sensory signal the observer legitimately heard (an introduction, a
@@ -2462,11 +2409,6 @@ _COMMON_WORD_NAMES = frozenset({
 # apostrophes -- She's, Hinami's -- never open a span), and an internal '
 # counts as content only when a word char follows it (I'm, don't), so the
 # span still closes at the real terminating quote.
-_QUOTED_SPAN_RE = re.compile(
-    r'(["“][^"“”]+["”]'
-    r"|(?<![\w'’])'(?:[^']|'(?=\w))*?'(?![\w])"
-    r")"
-)
 
 def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
     """Deterministic identity floor for perception view prose.
@@ -2493,35 +2435,71 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
         return view, []
     allowed = {str(f or "").strip().casefold()
                for f in (allowed_forms or []) if str(f or "").strip()}
-    segments = _QUOTED_SPAN_RE.split(text)
-    leaked = []
+    segments = _ling("_QUOTED_SPAN_RE").split(text)
+
+    # ONE alternation, longest form first, so the longest name wins at every
+    # position. Scripts without spaces make this load-bearing rather than
+    # tidy: a name boundary cannot be asserted in Japanese (see
+    # `name_boundary_pattern`), so a short unknown name like レイ would
+    # otherwise eat into a longer recognised one like レイヤ. Allowed forms
+    # are therefore matched too, and replaced with themselves, which shields
+    # them from being partially consumed.
+    candidates = []
     for src in unknown_sources:
         name = str(src.get("name") or "").strip()
         if not name or name.casefold() in allowed:
             continue
         label = _unknown_actor_label(
             name, src.get("appearance"), aliases=src.get("aliases"))
-        fired = False
         for form in [name] + [str(a or "").strip()
                               for a in (src.get("aliases") or [])]:
             if not form or form.casefold() in allowed:
                 continue
-            if len(form) < 3 and len(form.split()) == 1:
-                continue  # too short to match without false positives
-            if len(form.split()) == 1 and form.casefold() in _COMMON_WORD_NAMES:
+            # A short Latin form cannot be told from an ordinary word; a short
+            # CJK form is a perfectly ordinary name, and skipping it is the
+            # leak this whole pass exists to prevent.
+            if (len(form) < 3 and len(form.split()) == 1
+                    and not _UNSPACED_SCRIPT.match(form[:1])):
+                continue
+            if (len(form.split()) == 1
+                    and form.casefold() in _ling("_COMMON_WORD_NAMES")):
                 # common-word guard: exact capitalized form only
-                pat = re.compile(
-                    r"(?<!\w)" + re.escape(form[:1].upper() + form[1:])
-                    + r"(?!\w)")
+                exact = form[:1].upper() + form[1:]
+                candidates.append(
+                    (exact, f"(?-i:{name_boundary_pattern(exact)})", name, label))
             else:
-                pat = re.compile(
-                    r"(?<!\w)" + re.escape(form) + r"(?!\w)", re.IGNORECASE)
-            for i in range(0, len(segments), 2):  # even = outside quotes
-                if segments[i] and pat.search(segments[i]):
-                    segments[i] = pat.sub(label, segments[i])
-                    fired = True
-        if fired:
+                candidates.append(
+                    (form, name_boundary_pattern(form), name, label))
+    if not candidates:
+        return view, []
+    shields = sorted(
+        {str(f or "").strip() for f in (allowed_forms or []) if str(f or "").strip()},
+        key=len, reverse=True)
+    ordered = sorted(candidates, key=lambda item: len(item[0]), reverse=True)
+    by_group = {}
+    parts = []
+    for index, form in enumerate(shields):
+        by_group[f"s{index}"] = None
+        parts.append(f"(?P<s{index}>{name_boundary_pattern(form)})")
+    for index, (_form, pattern, name, label) in enumerate(ordered):
+        by_group[f"u{index}"] = (name, label)
+        parts.append(f"(?P<u{index}>{pattern})")
+    combined = re.compile("|".join(parts), re.IGNORECASE)
+
+    leaked = []
+
+    def _replace(match):
+        entry = by_group.get(match.lastgroup)
+        if entry is None:  # an allowed form: kept exactly as written
+            return match.group(0)
+        name, label = entry
+        if name not in leaked:
             leaked.append(name)
+        return label
+
+    for i in range(0, len(segments), 2):  # even = outside quotes
+        if segments[i]:
+            segments[i] = combined.sub(_replace, segments[i])
     if not leaked:
         return view, []
     return "".join(segments), leaked
@@ -2827,13 +2805,6 @@ def declared_goal(result):
 # deliberately narrow -- `say`/`said` and friends, never `tell`/`told` -- so an
 # ordinary spoken line that happens to quote someone ('He told me "get out" and
 # I left.') is not mistaken for narration and gutted.
-_SPEECH_NARRATION_RE = re.compile(
-    r"(?<![\w'])(?:you|your|yours"
-    r"|says?|said|saying|replie[sd]|reply|answers?|answered"
-    r"|mutters?|muttered|whispers?|whispered|murmurs?|murmured"
-    r"|adds?|added|calls?|called|shouts?|shouted)(?![\w'])",
-    re.I,
-)
 
 
 def repair_narrated_speech(text):
@@ -2859,13 +2830,13 @@ def repair_narrated_speech(text):
     raw = str(text or "")
     if not raw.strip():
         return text
-    segments = _QUOTED_SPAN_RE.split(raw)
+    segments = _ling("_QUOTED_SPAN_RE").split(raw)
     # split() alternates residue/span/residue...; odd indices are the spans.
     spans = [s for i, s in enumerate(segments) if i % 2 == 1]
     if not spans:
         return text
     residue = " ".join(s for i, s in enumerate(segments) if i % 2 == 0)
-    if len(residue.split()) < 2 or not _SPEECH_NARRATION_RE.search(residue):
+    if len(residue.split()) < 2 or not _ling("_SPEECH_NARRATION_RE").search(residue):
         return text
     bodies = [b for b in (_quote_body(s) for s in spans) if b]
     if not bodies:
@@ -2922,27 +2893,12 @@ def player_speech_lines(interp):
 # and "reached" all count. Kept to unambiguous bodily/manipulative verbs: this
 # exists to catch the player being handed conduct they never declared, not to
 # police prose.
-_PLAYER_ACT_STEMS = (
-    "take", "took", "grab", "lift", "raise", "lower", "drink", "drank", "sip",
-    "eat", "ate", "swallow", "nod", "shrug", "smile", "step", "walk", "move",
-    "turn", "stand", "stood", "straighten", "rise", "rose", "sit", "sat",
-    "kneel", "crouch", "lean", "shift", "reach", "push", "pull", "open",
-    "close", "hand", "press", "grip", "hold", "held", "accept", "follow",
-    "drop", "place", "put", "set", "wipe", "brush", "tighten", "loosen",
-    "cross", "tilt", "lift", "swing", "climb", "duck", "slide", "settle",
-)
-_PLAYER_ACT_VERBS = "|".join(
-    rf"{stem}(?:e?s|ed|ing|d)?" for stem in _PLAYER_ACT_STEMS
-)
 
 
 
 # Leading words that are not the name itself. Splitting a name on whitespace
 # and taking token 0 matched "The" for a player called "The Stranger", which
 # then matched almost every sentence in the beat.
-_NAME_LEADERS = {"the", "a", "an", "dr", "dr.", "mr", "mr.", "mrs", "mrs.",
-                 "ms", "ms.", "miss", "lord", "lady", "sir", "captain", "cmdr",
-                 "cmdr.", "commander", "doctor", "lt", "lt.", "sgt", "sgt."}
 
 
 def _player_name_forms(player_name):
@@ -2955,7 +2911,7 @@ def _player_name_forms(player_name):
     for word in re.split(r"[\s,]+", name):
         clean = word.strip()
         if (len(clean) >= 3 and clean[:1].isupper()
-                and clean.casefold() not in _NAME_LEADERS):
+                and clean.casefold() not in _ling("_NAME_LEADERS")):
             forms.append(clean)
     # Longest first so "The Stranger" is preferred over "Stranger".
     return sorted(set(forms), key=len, reverse=True)
@@ -2982,7 +2938,6 @@ def _player_subject_sentences(prose, player_name):
 # A sentence whose subject is a bare pronoun, optionally after a short leading
 # adverbial ("After a moment, he lowers the device"). Bounded so it cannot
 # reach past a genuine subject into a subordinate clause.
-_SUBJECT_PRONOUN_RE = re.compile(r"^(?:[^,]{0,40},\s*)?(?:he|she|they)\b", re.I)
 
 _SUBJECT_OPENERS = {}
 
@@ -3060,15 +3015,13 @@ def _sentence_subjects(prose, names, split=None):
         if matched:
             current = matched
             yield stripped, matched
-        elif _SUBJECT_PRONOUN_RE.match(stripped):
+        elif _ling("_SUBJECT_PRONOUN_RE").match(stripped):
             yield stripped, current
         else:
             yield stripped, None
 
 
 # A conjunct that introduces its OWN subject is not the tracked body's doing.
-_NEW_SUBJECT_RE = re.compile(
-    r"^(?:he|she|they|it|who|which|that|i|we|you)\b", re.I)
 
 
 def _predicate_heads(tail, window):
@@ -3092,7 +3045,7 @@ def _predicate_heads(tail, window):
     heads = []
     for part in re.split(r",|\band\b|\bthen\b|;", tail or "", flags=re.I):
         part = part.strip()
-        if not part or _NEW_SUBJECT_RE.match(part):
+        if not part or _ling("_NEW_SUBJECT_RE").match(part):
             continue
         heads.append(
             (" ".join(re.findall(r"[A-Za-z']+", part)[:window]), part))
@@ -3106,22 +3059,13 @@ def _strip_subject(sentence, name):
         match = re.match(rf"^{re.escape(form)}(?:'s)?\b", sentence)
         if match:
             return sentence[match.end():]
-    match = _SUBJECT_PRONOUN_RE.match(sentence)
+    match = _ling("_SUBJECT_PRONOUN_RE").match(sentence)
     return sentence[match.end():] if match else ""
 
 
 # Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
 # Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
 # not speech, and a character who declared silence is entitled to all of them.
-_ATTRIBUTION_STEMS = (
-    "say", "speak", "reply", "respond", "answer", "add", "offer", "remark",
-    "observe", "note", "comment", "continue", "go on", "put in", "interject",
-    "interrupt", "counter", "retort", "insist", "repeat", "explain", "admit",
-    "confess", "agree", "protest", "object", "ask", "inquire", "wonder aloud",
-    "murmur", "mutter", "mumble", "whisper", "breathe", "hiss", "growl",
-    "purr", "drawl", "call", "shout", "yell", "cry", "exclaim", "declare",
-    "announce", "state", "tell", "greet", "chuckle out", "manage",
-)
 # NOTE the distinct name: `_SPEECH_VERBS` further down is a different thing
 # (a literal tuple used for dialogue-cue detection). Two symbols of that name
 # in one module is exactly the duplicate `make structure` fails on.
@@ -3138,7 +3082,6 @@ def _inflect(stem):
     return rf"{pattern}\s+{re.escape(rest)}" if rest else pattern
 
 
-_ATTRIBUTION_VERBS = "|".join(_inflect(stem) for stem in _ATTRIBUTION_STEMS)
 
 # How far past the name to look for the verb. Same window the player check
 # uses, and for the same reason: the act must be what this body is DOING, not
@@ -3191,7 +3134,7 @@ def _check_character_speech_authority(resolved_event, silent_names,
         without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
         tail = _strip_subject(without_quotes, subject)
         for head, _clause in _predicate_heads(tail, _SPEECH_VERB_WINDOW):
-            if re.search(rf"\b(?:{_ATTRIBUTION_VERBS})\b", head, re.I):
+            if re.search(cue_boundary_pattern(_ling("_ATTRIBUTION_VERBS")), head, re.I):
                 warnings.append(
                     "Speech attributed to a character who declared none "
                     f"(character-speech authority): {subject}: "
@@ -3207,23 +3150,11 @@ def _check_character_speech_authority(resolved_event, silent_names,
 # what perception delivers, what contact is possible, and (chat 56 t1391) it
 # can directly reverse the intent the character declared, which was to scan
 # her "without crowding her".
-_LOCOMOTION_STEMS = (
-    "step", "walk", "stride", "move", "approach", "advance", "close",
-    "cross", "back", "retreat", "withdraw", "edge", "inch", "sidle",
-    "lean", "kneel", "crouch", "climb", "duck", "slide", "settle",
-    "follow", "enter", "leave", "come", "came", "go", "went", "reach",
-    "closes the distance", "draw closer", "draw nearer",
-)
-_LOCOMOTION_VERBS = "|".join(_inflect(stem) for stem in _LOCOMOTION_STEMS)
 
 # Movement is not always written as a locomotion VERB. The live case wrote it
 # as a verb plus a distance noun -- "takes a half-step closer" -- whose head
 # verb is "take", which is no more locomotive than taking a screwdriver. What
 # marks it as movement is the distance word, so read the clause for one.
-_PROXIMITY_RE = re.compile(
-    r"\b(?:closer|nearer|half[-\s]?step|a\s+step|steps?\s+"
-    r"(?:closer|nearer|back|away|toward|towards|forward)"
-    r"|closes?\s+the\s+distance|within\s+(?:arm|reach))\b", re.I)
 
 
 def _check_character_act_authority(resolved_event, declared_actions, name,
@@ -3259,12 +3190,12 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
     if declared_actions:
         # Already moving under their own declaration: the Director may render
         # that movement however it likes.
-        if re.search(rf"\b(?:{_LOCOMOTION_VERBS})\b", declared_text, re.I):
+        if re.search(cue_boundary_pattern(_ling("_LOCOMOTION_VERBS")), declared_text, re.I):
             return []
         verbs, kind, proximity = (
-            _LOCOMOTION_VERBS, "undeclared movement", True)
+            _ling("_LOCOMOTION_VERBS"), "undeclared movement", True)
     else:
-        verbs, kind, proximity = _PLAYER_ACT_VERBS, "act not declared", False
+        verbs, kind, proximity = _ling("_PLAYER_ACT_VERBS"), "act not declared", False
 
     warnings = []
     all_names = [name] + [n for n in (other_names or []) if n != name]
@@ -3275,7 +3206,7 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
         tail = _strip_subject(without_quotes, subject)
         for head, clause in _predicate_heads(tail, 3):
             if re.search(rf"\b(?:{verbs})\b", head, re.I) or (
-                    proximity and _PROXIMITY_RE.search(clause)):
+                    proximity and _ling("_PROXIMITY_RE").search(clause)):
                 warnings.append(
                     f"Character {kind} this beat (character-act authority): "
                     f"{name}: {sentence[:120]!r}"
@@ -3288,12 +3219,6 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
 # -quote form must not mistake an apostrophe for a delimiter, so a quote may
 # only OPEN where no letter precedes it and CLOSE where no letter follows --
 # which leaves "You're" intact inside the span.
-_PROSE_QUOTE_RES = (
-    re.compile(r'"([^"]+)"'),
-    re.compile(r"“([^”]+)”"),
-    re.compile(r"‘([^’]+)’"),
-    re.compile(r"(?<![A-Za-z])'((?:[^']|'(?=[A-Za-z]))+)'(?![A-Za-z])"),
-)
 
 # Below this, a quoted span is a label or a scare quote rather than an
 # utterance -- a readout reading "STABLE", the word "safe".
@@ -3324,7 +3249,7 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
     # Director RE-PUNCTUATES a line it is quoting, and an exact membership
     # test then reads its own faithful rendering as an invention.
     folded_allowed = [_echo_fold(a) for a in (allowed_bodies or ()) if _echo_fold(a)]
-    for pattern in _PROSE_QUOTE_RES:
+    for pattern in _ling("_PROSE_QUOTE_RES"):
         for span in pattern.findall(resolved_event or ""):
             body = _quote_body(span)
             if not body or body in seen:
@@ -3365,8 +3290,6 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
 # copper and silver coins" is knowledge about coins in general. The definite
 # article is what turns a generality into a claim of acquaintance, so it is
 # what gates the single-word match below.
-_DEFINITE_DETS = ("the", "this", "that", "these", "those",
-                  "your", "her", "his", "their", "its", "my", "our")
 
 
 # WHAT THE DIRECTOR MAY STILL SPEAK FOR.
@@ -3392,11 +3315,6 @@ _DEFINITE_DETS = ("the", "this", "that", "these", "those",
 # its own recognition of the room. The list is deliberately narrow: routing a
 # borderline speaker costs one call and gets a better line, while keeping one
 # costs the defect this whole change exists to remove.
-_DIRECTOR_VOICEABLE_KINDS = frozenset({
-    "creature", "monster", "beast", "animal", "mount", "swarm",
-    "undead", "zombie", "revenant", "drone", "automaton", "construct",
-    "golem",
-})
 
 
 def director_may_voice(speaker, scene, presence_rec=None):
@@ -3423,7 +3341,7 @@ def director_may_voice(speaker, scene, presence_rec=None):
     if not kind:
         kind = str(((presence_rec or {}).get("sketch") or {}).get("kind")
                    or "").strip().casefold()
-    return kind in _DIRECTOR_VOICEABLE_KINDS
+    return kind in _ling("_DIRECTOR_VOICEABLE_KINDS")
 
 
 def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
@@ -3507,7 +3425,7 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                     break
             elif re.search(
                     r"(?<!\w)(?:%s)\s+(?:[\w'-]+\s+){0,2}%s(?!\w)"
-                    % ("|".join(_DEFINITE_DETS), re.escape(pcf)), q):
+                    % ("|".join(_ling("_DEFINITE_DETS")), re.escape(pcf)), q):
                 hit = p
                 break
         if hit:
@@ -3527,28 +3445,10 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
 # adjectives that name what is INSIDE a mind, as against the surface a body
 # shows: "trembling", "wide eyes", "a shrill cry" are observable and always
 # allowed; "terror", "panic", "she realises" are not.
-_INTERIOR_STATES = (
-    "terror", "terrified", "panic", "panicked", "fear", "afraid", "frightened",
-    "dread", "horror", "horrified", "anguish", "despair", "grief", "sorrow",
-    "misery", "miserable", "shame", "ashamed", "humiliation", "humiliated",
-    "guilt", "regret", "remorse", "rage", "fury", "furious", "resentment",
-    "bitterness", "envy", "jealousy", "loneliness", "longing", "yearning",
-    "desire", "arousal", "lust", "joy", "elation", "delight", "relief",
-    "relieved", "contentment", "gratitude", "hope", "anxiety", "anxious",
-    "unease", "uneasy", "embarrassment", "embarrassed", "confusion",
-    "confused", "curiosity", "curious", "trust", "distrust", "affection",
-)
 
 # Verbs that report a mind's own operation rather than its body's motion.
-_INTERIOR_VERBS = (
-    "realise", "realize", "understand", "know", "believe", "doubt", "wonder",
-    "want", "wish", "hope", "fear", "decide", "intend", "remember", "recall",
-    "feel", "sense", "notice that", "recognise", "recognize", "regret",
-)
 
 # Words that assert an interior state is TRUE, which no observer may know.
-_INTERIOR_CERTAINTY = ("genuine", "real", "true", "unmistakable", "obvious",
-                       "clearly", "plainly", "evident", "undisguised")
 
 
 def _check_player_interiority_authority(resolved_event, player_name,
@@ -3595,15 +3495,15 @@ def _check_player_interiority_authority(resolved_event, player_name,
         low = body.casefold()
         if subject != player_name and not _mentions_player(low, player_name):
             continue
-        hits = [w for w in _INTERIOR_STATES
+        hits = [w for w in _ling("_INTERIOR_STATES")
                 if re.search(rf"\b{re.escape(w)}\b", low)
                 and not re.search(rf"\b{re.escape(w)}\b", declared)]
-        hits += [v for v in _INTERIOR_VERBS
+        hits += [v for v in _ling("_INTERIOR_VERBS")
                  if re.search(rf"\b{re.escape(v)}(?:s|es|d|ed|ing)?\b", low)
                  and not re.search(rf"\b{re.escape(v)}", declared)]
         if not hits:
             continue
-        certainty = [c for c in _INTERIOR_CERTAINTY
+        certainty = [c for c in _ling("_INTERIOR_CERTAINTY")
                      if re.search(rf"\b{re.escape(c)}\b", low)]
         warnings.append(
             "Player interior state not declared this beat "
@@ -3630,24 +3530,10 @@ def _mentions_player(low_sentence, player_name):
 # "catch" ("her hair catching the warm light"), "draw" ("draws a breath"),
 # "find" ("finds the words"). The list must earn its flags -- an act guard
 # that fires on scenery is one a maintainer learns to ignore.
-_MANIPULATION_STEMS = (
-    "grip", "grab", "take", "took", "hold", "held", "pull", "push", "press",
-    "lift", "open", "close", "drop", "place", "put", "set", "hand", "accept",
-    "drink", "eat", "clutch", "seize", "tug", "twist", "touch", "grasp",
-    "wrap", "pick", "pocket", "snatch", "shove", "haul",
-)
-_MANIPULATION_VERBS = "|".join(_inflect(stem) for stem in _MANIPULATION_STEMS)
 
 # The player's own body is not a new object. An act on it re-describes what
 # they are doing with themselves, which is elaboration however it is worded --
 # "pushes herself upright" for a declared "slowly stands up".
-_OWN_BODY_NOUNS = frozenset("""
-hand hands finger fingers fist fists arm arms elbow elbows chest head hair
-face eye eyes ear ears tail tails mouth lips lip throat neck shoulder shoulders
-back knee knees leg legs foot feet body breath breaths weight skin palm palms
-cheek cheeks jaw brow chin waist hip hips heart lungs ribs stomach nose tongue
-herself himself themselves itself myself yourself ourselves
-""".split())
 
 # The DIRECT object a verb takes -- the noun it acts ON, with no preposition
 # in between. "grip the edge" is taking hold of the world; "pressed flat
@@ -3655,30 +3541,22 @@ herself himself themselves itself myself yourself ourselves
 # seizing the metal is how a guard starts crying wolf on ordinary prose.
 # The captured group is the whole noun phrase after the article; the HEAD noun
 # is its last word, so "the warm light" reads as "light" rather than "warm".
-_DIRECT_OBJECT_RE = re.compile(
-    r"^(?:\s+(?!(?:against|on|onto|at|to|from|with|beneath|under|over|into|"
-    r"in|toward|towards|across|by|around|through|near|beside|behind)\b)"
-    r"[A-Za-z']+){0,2}\s+(?:the|a|an)"
-    # Stop the noun phrase at a preposition or conjunction, or "the edge of
-    # the console" reads its head noun as "the".
-    r"((?:\s+(?!(?:of|in|on|at|to|from|with|for|as|and|but|by|into|onto)\b)"
-    r"[A-Za-z']+){1,3})", re.I)
 
 
 def _undeclared_world_object(clause, declared_low):
     """The world object a clause has the player take hold of, when the player's
     own declaration never mentions it. None when the clause touches only their
     own body, reaches for nothing, or names something they already declared."""
-    for match in re.finditer(rf"\b(?:{_MANIPULATION_VERBS})\b", clause, re.I):
-        obj = _DIRECT_OBJECT_RE.match(clause[match.end():])
+    for match in re.finditer(cue_boundary_pattern(_ling("_MANIPULATION_VERBS")), clause, re.I):
+        obj = _ling("_DIRECT_OBJECT_RE").match(clause[match.end():])
         if not obj:
             continue
         phrase = obj.group(1).split()
         noun = phrase[-1].casefold()
         # A phrase headed by the player's own body is elaboration whatever
         # sits in front of it: "the edge of the console" is the console.
-        if noun in _OWN_BODY_NOUNS or any(
-                w.casefold() in _OWN_BODY_NOUNS for w in phrase):
+        if noun in _ling("_OWN_BODY_NOUNS") or any(
+                w.casefold() in _ling("_OWN_BODY_NOUNS") for w in phrase):
             continue
         if re.search(rf"\b{re.escape(noun)}", declared_low):
             continue
@@ -3753,7 +3631,7 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
         # first (see `_predicate_heads`).
         for head, clause in _predicate_heads(tail, 3):
             if declared_low is None:
-                if not re.search(rf"\b(?:{_PLAYER_ACT_VERBS})\b", head, re.I):
+                if not re.search(cue_boundary_pattern(_ling("_PLAYER_ACT_VERBS")), head, re.I):
                     continue
                 detail = ""
             else:
@@ -3774,8 +3652,6 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
 # re-compiled on every narrator validation pass. The capper keeps the
 # surrounding marks (it rewrites spans); the fidelity check needs only the
 # body, and tolerates shorter lines.
-_QUOTE_SPAN_RE = re.compile(r'(["“])([^"“”]{6,})(["”])')
-_QUOTE_BODY_RE = re.compile(r'["“]([^"“”]{4,})["”]')
 
 
 def _cap_repeated_quotes(prose, view, exclude_bodies=()):
@@ -3791,7 +3667,7 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
     if not prose:
         return prose
     excluded = {re.sub(r"\s+", " ", str(b).casefold()) for b in (exclude_bodies or [])}
-    quote_re = _QUOTE_SPAN_RE
+    quote_re = _ling("_QUOTE_SPAN_RE")
     source_text = re.sub(r"\s+", " ", str(view or "").casefold())
     # Source count per body: how many times the view presents that exact line.
     source_counts = {}
@@ -3818,8 +3694,8 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
         return prose
     out_parts.append(prose[last:])
     result = "".join(out_parts)
-    result = _DANGLING_SPEECH_VERB_RE.sub(_heal_dangling_verb, result)
-    result = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, result)
+    result = _ling("_DANGLING_SPEECH_VERB_RE").sub(_heal_dangling_verb, result)
+    result = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, result)
     result = _collapse_empty_quote_debris(result)
     return re.sub(r"\s{2,}", " ", result).strip()
 
@@ -3832,6 +3708,56 @@ def _quote_body(quote):
 # rather than a summary.
 _MUFFLE_KEEP_MIN = 4
 _MUFFLE_MAX_WORDS = 3
+
+
+#: Content-bearing runs in a script that does not space its words: kanji,
+#: katakana, Hangul, and any Latin/digit run carried through code-switching.
+#: Hiragana is deliberately absent -- it carries particles and inflection,
+#: which is precisely the low-information half that drops out of a half-heard
+#: line, and dropping it leaves chunks that are still verbatim substrings.
+_UNSPACED_CONTENT_RUN = re.compile(
+    r"[㐀-䶿一-鿿豈-﫿]+|[ァ-ヿ]+|[가-힯]+|[A-Za-z0-9]+")
+
+
+def _muffle_tokens(body):
+    """Verbatim chunks of a line, and the shortest one worth keeping.
+
+    Returns `(tokens, keep_min)` because the threshold is a property of the
+    script, not a constant: four characters is a short English word and a
+    whole Japanese clause.
+
+    `.split()` alone made this a no-op wherever words are not space-separated
+    -- the entire utterance came back as one "word", sailed past the
+    `_MUFFLE_MAX_WORDS` filter, and a character who should half-hear a
+    whispered secret heard all of it. Every chunk here is still a verbatim
+    substring, which `_scrub_invented_dialogue` depends on.
+    """
+    text = str(body or "")
+    if _UNSPACED_SCRIPT.search(text):
+        return _UNSPACED_CONTENT_RUN.findall(text), 1
+    return ([w.strip(".,;:!?\"'“”‘’") for w in text.split()],
+            _MUFFLE_KEEP_MIN)
+
+
+def _compositor_value(name):
+    from language_runtime import compositor_value
+    return compositor_value(name)
+
+
+def _muffle_middle(body, keep=3):
+    """The middle few content chunks of a line, for the interaction loop.
+
+    Shares `_muffle_tokens` with `_muffled_fragment` so there is ONE rule for
+    what survives half-hearing. The loop used to slice `quote.split()`, which
+    yields a single token in a language without spaces and therefore returned
+    the whole utterance.
+    """
+    tokens, keep_min = _muffle_tokens(body)
+    kept = [w for w in tokens if len(w) >= keep_min]
+    if not kept:
+        return _text("muffled_indistinct")
+    start = max(0, len(kept) // 2)
+    return " ".join(kept[start:start + keep])
 
 
 def _muffled_fragment(body):
@@ -3849,10 +3775,10 @@ def _muffled_fragment(body):
     across punctuation ("ledger, sink" -> "ledger sink") would fail that
     check and get the whole line dropped.
     """
-    words = [w.strip(".,;:!?\"'\u201c\u201d\u2018\u2019") for w in (body or "").split()]
-    kept = [w for w in words if len(w) >= _MUFFLE_KEEP_MIN]
+    words, keep_min = _muffle_tokens(body)
+    kept = [w for w in words if len(w) >= keep_min]
     if not kept:
-        return "...something indistinct..."
+        return _text("muffled_indistinct")
     if len(kept) > _MUFFLE_MAX_WORDS:
         # The longest carry best; original order is preserved so the fragment
         # still tracks the shape of the sentence.
@@ -3863,7 +3789,14 @@ def _muffled_fragment(body):
                 seen.add(w)
                 kept2.append(w)
         kept = kept2
-    return "..." + "... ".join(kept) + "..."
+    # The glyphs belong to the language: Japanese sets an ellipsis as the
+    # doubled three-dot leader with no spaces (……棚……小瓶……), and ASCII dots
+    # with half-width gaps read as broken typography inside Japanese prose.
+    # The pack's own `muffled_indistinct` already used the right form, so the
+    # same feature was being typeset two different ways.
+    lead = str(_compositor_value("muffle_ellipsis"))
+    join = str(_compositor_value("muffle_join"))
+    return lead + join.join(kept) + lead
 
 
 # `tone` is a free-text field and models fill it with two grammatically
@@ -3879,17 +3812,6 @@ def _muffled_fragment(body):
 # read as an adjective gives "in a warmth voice" -- bad, so the noun list
 # below is explicit about the irregulars that no suffix catches, and the
 # suffixes cover the productive endings that cannot be adjectives.
-_TONE_NOUN_SUFFIXES = ("ness", "ity", "ment", "ion", "ance", "ence",
-                       "ency", "acy", "ism")
-_TONE_NOUNS = frozenset({
-    "warmth", "worry", "fear", "anger", "hope", "pity", "malice", "awe",
-    "joy", "sorrow", "grief", "scorn", "spite", "venom", "steel", "ice",
-    "iron", "edge", "gravel", "sarcasm", "irony", "apathy", "sympathy",
-    "empathy", "mischief", "wonder", "dread", "relief", "longing",
-    "laughter", "disgust", "envy", "pride", "panic", "care", "love",
-    "hate", "doubt", "regret", "contempt", "humor", "humour", "affection",
-    "concern", "menace", "reverence", "restraint", "command", "resolve",
-})
 
 
 def _tone_clause(tone):
@@ -3899,18 +3821,25 @@ def _tone_clause(tone):
     if not tone:
         return ""
     # An observable BEHAVIOUR, not a vocal quality: "with a smirk".
-    if re.search(r"\b(smirk|smile|grin|expression|look|gesture)\b",
-                 tone, re.I):
-        article = "" if re.match(r"^(?:a|an|the)\b", tone, re.I) else "a "
-        return f" with {article}{tone}"
+    articles = tuple(compositor_value("articles"))
+    article_re = r"^(?:" + "|".join(map(re.escape, articles)) + r")\b"
+    behavior_re = r"\b(?:" + "|".join(map(
+        re.escape, compositor_value("tone_behavior_words"))) + r")\b"
+    if re.search(behavior_re, tone, re.I):
+        indefinite = compositor_value("indefinite_article")
+        article = "" if re.match(article_re, tone, re.I) \
+            else indefinite["other"] + " "
+        return _text("tone_behavior", article=article, tone=tone)
     head = [w for w in re.split(r"[^\w]+", tone) if w]
     head = head[-1].casefold() if head else ""
-    if head in _TONE_NOUNS or head.endswith(_TONE_NOUN_SUFFIXES):
-        return f" with {tone} in their voice"
-    if re.match(r"^(?:a|an|the)\b", tone, re.I):
-        return f" in {tone} voice"
-    article = "an" if tone[:1].casefold() in "aeiou" else "a"
-    return f" in {article} {tone} voice"
+    if head in _ling("_TONE_NOUNS") or head.endswith(_ling("_TONE_NOUN_SUFFIXES")):
+        return _text("tone_noun", tone=tone)
+    if re.match(article_re, tone, re.I):
+        return _text("tone_article", tone=tone)
+    indefinite = compositor_value("indefinite_article")
+    article = (indefinite["vowel"] if tone[:1].casefold()
+               in indefinite["vowels"] else indefinite["other"])
+    return _text("tone_adjective", article=article, tone=tone)
 
 
 def _inject_dialogue(view, display, quote, level, volume, can_see,
@@ -3922,14 +3851,13 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
         return view
     if level == "fragment":
         return _append_once(
-            view, f"A muffled voice: {_muffled_fragment(body)}")
+            view, _text("muffled", fragment=_muffled_fragment(body)))
     if conducted:
         # Heard from inside the speaker: the mass around the listener is the
         # medium, so it arrives low and close rather than across a distance.
         return _append_once(
             view,
-            f"{display}'s voice carries through everything around you, "
-            f'low and close: "{body}"')
+            _text("dialogue_conducted", label=display, body=body))
     # Two forms of the same verb, because the two frames below take different
     # ones. "You hear X" is a bare-infinitive construction -- "you hear her
     # SAY", never "you hear her says" -- and this wrote the inflected form into
@@ -3937,45 +3865,25 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
     # broken English: 226 occurrences across 71 turns of the live corpus, all
     # of them in exactly the situations this engine cares most about (a voice
     # through a door, in the dark, from inside an enclosure).
-    if volume == "shout":
-        verb, bare = "shouts", "shout"
-    elif volume in ("whisper", "mutter"):
-        verb, bare = "says under their breath", "say under their breath"
-    else:
-        verb, bare = "says", "say"
+    verbs = compositor_value("dialogue_verbs")
+    verb, bare = verbs.get(volume, verbs["default"])
     # Articulation is FORMATION, stamped at the source (see
     # _stamp_dialogue_articulation): the same malformed sound reaches every
     # listener, so it renders identically for all of them and rides the
     # dialogue tag rather than gating the level. The quote itself stays
     # verbatim -- the fidelity scrubs match on it, and dialogue fidelity
     # forbids rewriting words actually said.
-    if articulation == "slurred":
-        artic = ", the words slurred around an occupied tongue"
-    elif articulation == "stifled":
-        artic = ", the words stifled and barely shaped"
-    else:
-        artic = ""
+    articulation_text = compositor_value("articulation")
+    artic = articulation_text.get(articulation, articulation_text["default"])
     manner = _tone_clause(tone) if can_see else ""
     if can_see:
-        add = f'{display} {verb}{manner}{artic}: "{body}"'
+        add = _text("dialogue_visible", label=display, verb=verb,
+                    manner=manner, articulation=artic, body=body)
     else:
-        add = f'You hear {display} {bare}{artic}: "{body}"'
+        add = _text("dialogue_unseen", label=display, verb=bare,
+                    articulation=artic, body=body)
     return _append_once(view, add)
 
-_OBSERVED_STOPWORDS = frozenset({
-    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "with",
-    "her", "his", "their", "its", "she", "he", "they", "it", "him", "them",
-    "as", "into", "toward", "towards", "across", "for", "from", "by", "up",
-    "down", "over", "under", "then", "while", "is", "are", "was", "were", "be",
-    "been", "this", "that", "these", "those", "your", "you", "herself",
-    "himself", "themselves", "itself", "slightly", "slowly", "again",
-    # Same category as the prepositions already above -- function words, not
-    # distinctive content. Counting "against"/"beside" as evidence that two
-    # descriptions are the same beat inflated overlap on unrelated actions
-    # that merely happened near the same wall.
-    "against", "beside", "behind", "near", "through", "around", "before",
-    "between", "onto", "off", "out", "back", "away", "past", "along",
-})
 
 
 def _content_tokens(text):
@@ -3983,7 +3891,7 @@ def _content_tokens(text):
     -- the basis for 'has this beat already been narrated?' overlap."""
     toks = []
     for raw in re.split(r"[^\w]+", str(text or "").lower()):
-        if not raw or raw in _OBSERVED_STOPWORDS:
+        if not raw or raw in _ling("_OBSERVED_STOPWORDS"):
             continue
         for suf in ("ing", "ed", "es", "s"):
             if len(raw) > len(suf) + 2 and raw.endswith(suf):
@@ -4024,11 +3932,6 @@ def self_name_forms(primary_name, forms=None):
 # figure" is not a shortening of one body's descriptor, it is the word every
 # stranger label is built from, and rewriting it into "you" would claim any
 # passing body as the perceiver.
-_GENERIC_LABEL_HEADS = frozenset({
-    "person", "figure", "one", "body", "stranger", "someone", "somebody",
-    "people", "presence", "voice", "shape", "appearance", "thing", "man",
-    "woman", "child", "adult", "individual", "form", "silhouette",
-})
 
 
 def self_reference_forms(name, appearance=None, aliases=None, *,
@@ -4096,7 +3999,7 @@ def self_reference_forms(name, appearance=None, aliases=None, *,
         if len(words) < 3:
             continue
         head = words[-1].casefold()
-        if head in _GENERIC_LABEL_HEADS or head in avoid_words or len(head) < 3:
+        if head in _ling("_GENERIC_LABEL_HEADS") or head in avoid_words or len(head) < 3:
             continue
         short = f"the {words[-1]}"
         if short.casefold() in avoid_labels:
@@ -4141,12 +4044,12 @@ def _self_second_person(text, forms):
         # Ordinary-English single-token names ("Rose", "Hope") are matched
         # case-sensitively, exactly as the identity scrub does, so common
         # lowercase prose is never rewritten into second person.
-        flags = 0 if form.casefold() in _COMMON_WORD_NAMES else re.I
+        flags = 0 if form.casefold() in _ling("_COMMON_WORD_NAMES") else re.I
         patterns.append(re.compile(
             r"(?<!\w)" + re.escape(form) + r"(['’]s)?(?!\w)", flags))
     if not patterns:
         return text
-    segments = _QUOTED_SPAN_RE.split(text)
+    segments = _ling("_QUOTED_SPAN_RE").split(text)
     for i in range(0, len(segments), 2):  # even indices = unquoted prose
         before = segments[i]
         after = before
@@ -4161,42 +4064,29 @@ def _self_second_person(text, forms):
 
 
 # Third-person-singular forms that must agree with an inserted "you".
-_YOU_AGREEMENT = {
-    "is": "are", "was": "were", "has": "have", "does": "do",
-    "isn't": "aren't", "wasn't": "weren't", "hasn't": "haven't",
-    "doesn't": "don't", "isn’t": "aren’t", "wasn’t": "weren’t",
-    "hasn’t": "haven’t", "doesn’t": "don’t",
-}
 
 # Words that can follow a subject, end in -s, and are NOT verbs -- the guard
 # on the regular-verb rule below, which otherwise strips a meaningful "s"
 # ("You always" -> "You alway"). Deliberately a closed list: a missed entry
 # costs one dropped letter, while dropping the rule entirely costs "You steps".
-_NON_VERB_S_WORDS = frozenset({
-    "afterwards", "always", "anyways", "backwards", "besides", "downwards",
-    "forwards", "nevertheless", "onwards", "perhaps", "sideways", "sometimes",
-    "thus", "towards", "unless", "upwards", "yes",
-})
 
-_YOU_VERB_RE = re.compile(r"(?<!\w)([Yy]ou)(\s+)([A-Za-z’']+)")
 
 # Stems that take -es rather than a bare -s ("catch/catches", "push/pushes",
 # "fix/fixes", "go/goes", "pass/passes"); everything else drops a single -s.
 # "ss" not "s": a stem ending in ONE s is rare ("bus"), while "loses",
 # "raises", "closes" are common and keep their stem-final e.
-_ES_STEM_ENDINGS = ("ss", "x", "z", "ch", "sh", "o")
 
 
 def _base_from_third_person_s(word):
     """Undo third-person-singular -s/-es/-ies on a regular present verb, or
     return None when the word is not one."""
     low = word.lower()
-    if (low in _NON_VERB_S_WORDS or len(low) <= 3 or not low.endswith("s")
+    if (low in _ling("_NON_VERB_S_WORDS") or len(low) <= 3 or not low.endswith("s")
             or low.endswith(("ss", "us", "is", "as", "'s", "’s"))):
         return None
     if low.endswith("ies") and len(low) > 4:      # carries -> carry
         return word[:-3] + "y"
-    if low.endswith("es") and low[:-2].endswith(_ES_STEM_ENDINGS):
+    if low.endswith("es") and low[:-2].endswith(_ling("_ES_STEM_ENDINGS")):
         return word[:-2]                          # catches -> catch
     return word[:-1]                              # steps -> step
 
@@ -4211,7 +4101,7 @@ def _fix_you_agreement(text):
     """
     def _sub(m):
         you, gap, word = m.group(1), m.group(2), m.group(3)
-        fixed = _YOU_AGREEMENT.get(word.lower())
+        fixed = _ling("_YOU_AGREEMENT").get(word.lower())
         if fixed is None:
             fixed = _base_from_third_person_s(word)
         if fixed is None:
@@ -4220,7 +4110,7 @@ def _fix_you_agreement(text):
             fixed = fixed[:1].upper() + fixed[1:]
         return f"{you}{gap}{fixed}"
 
-    return _YOU_VERB_RE.sub(_sub, str(text or ""))
+    return _ling("_YOU_VERB_RE").sub(_sub, str(text or ""))
 
 
 def _self_pronoun_sub(m):
@@ -4254,7 +4144,7 @@ def _observable_predicate(display, surface):
         words = words[1:]
     stripped = " ".join(words).strip()
     if not stripped:
-        return f"{display}."
+        return _text("observable_empty", label=display)
     first = stripped.split(maxsplit=1)[0]
     # Independent subject clause (starts with a capitalized non-actor word that
     # isn't a normal sentence-initial cap): render as its own sentence.
@@ -4262,7 +4152,7 @@ def _observable_predicate(display, surface):
     if independent:
         return stripped if stripped.endswith((".", "!", "?")) else stripped + "."
     body = stripped[0].lower() + stripped[1:]
-    return f"{display} {body}."
+    return _text("observable", label=display, body=body)
 
 
 def _action_already_rendered(view, display, surface):
@@ -4344,11 +4234,6 @@ def _inject_action(view, display, attempt, can_see, event_id=None, delivered=Non
 # labels themselves narrated. Normalizing at the PASTE POINT rather than at the
 # five construction sites keeps one mechanism and leaves the payload form,
 # which is correct, alone.
-_APPEARANCE_LABELS = (
-    ("; wearing:", ", wearing"),
-    ("; clothing state:", ","),
-    ("; currently:", ","),
-)
 
 
 def _appearance_as_prose(appearance):
@@ -4356,7 +4241,7 @@ def _appearance_as_prose(appearance):
     text = str(appearance or "").strip()
     if not text:
         return ""
-    for label, replacement in _APPEARANCE_LABELS:
+    for label, replacement in _ling("_APPEARANCE_LABELS"):
         text = text.replace(label, replacement)
     # The base appearance is authored as its own sentence; its terminal stop
     # and leading capital both fight the clause it is now part of.
@@ -4407,7 +4292,7 @@ def _inject_visible_actor(
             return text
         return _append_once(
             text,
-            f"You see {prose}.",
+            _text("appearance", description=prose),
             # Marker stays the RAW form: it is what a previous injection would
             # have left behind, and dedupe must catch those too.
             marker=prose or appearance,
@@ -4415,7 +4300,7 @@ def _inject_visible_actor(
 
     return _append_once(
         text,
-        f"You see {display}.",
+        _text("appearance", description=display),
         marker=display,
     )
 
@@ -4459,31 +4344,28 @@ def _compose_residue_view(level, *, targeted=False, loud_event=False, pain=False
     in hand), so this IS the whole output. The fragments become, verbatim, that
     mind's fragmentary memory of the beat (commit mints episodic memory from the
     view), which is exactly the vague recovered impression waking should give."""
-    lead = {
-        "unconscious": "Darkness.",
-        "sedated": "A thick, floating dark.",
-        "asleep": "You are under, below waking.",
-    }.get(level, "Darkness.")
+    residue = compositor_value("residue")
+    lead = residue["lead"].get(level, residue["lead"]["default"])
     frag = []
     if pain:
-        frag.append("a dull pain, far off, in a body you can't quite feel")
+        frag.append(residue["pain"])
     if targeted:
-        frag.append("something shifts you; the world tilts without a direction")
+        frag.append(residue["targeted"])
     if loud_event:
-        frag.append("a sound, huge and wordless, reaches down and is gone")
+        frag.append(residue["loud_event"])
     if not frag:
-        closing = {"unconscious": " Nothing reaches you.",
-                   "sedated": " Nothing holds shape.",
-                   "asleep": ""}.get(level, "")
+        closing = residue["closing"].get(
+            level, residue["closing"]["default"])
         return (lead + closing).strip()
-    body = "; ".join(frag[:2])
-    return f"{lead} {body[0].upper()}{body[1:]}."
+    body = residue["separator"].join(frag[:2])
+    body = body[0].upper() + body[1:]
+    return _text("residue_content", lead=lead, body=body)
 
 
 def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
     if view:
         return view
-    parts = [f"You are in {perceiver.get('room_name')}."]
+    parts = [_text("room", room=perceiver.get("room_name"))]
     if perceiver.get("room_notes"):
         parts.append(perceiver["room_notes"])
     # `same_room` is true for a body sealed inside something standing in the
@@ -4492,7 +4374,7 @@ def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
     # injection sites had; `concealed` is absent (falsy) for every rel that
     # never went through containment, so open scenes are unchanged.
     if rel.get("same_room") and not rel.get("concealed"):
-        parts.append(f"{display} is here with you.")
+        parts.append(_text("environment_here", label=display))
         if action_desc:
             # action_desc is now an intent-free `observable` surface (predicate
             # or independent clause); compose it cleanly rather than gluing it
@@ -4501,7 +4383,7 @@ def _ensure_environment(view, perceiver, display, rel, vis, action_desc):
             if sentence:
                 parts.append(sentence)
     elif vis:
-        parts.append(f"You can see {display} nearby.")
+        parts.append(_text("environment_nearby", label=display))
     return " ".join(parts)
 
 def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None):
@@ -4513,7 +4395,7 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
         rname = p.get("room_name")
         rnotes = p.get("room_notes")
         if rname and rname != "None":
-            parts.append(f"You are in {rname}.")
+            parts.append(_text("room", room=rname))
         if rnotes:
             parts.append(rnotes)
         for d in dlog:
@@ -4527,7 +4409,9 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
                 if known is not None and speaker != p.get("name") \
                         and speaker not in (known.get(p.get("name")) or []):
                     speaker = _unknown_actor_label(speaker)
-                parts.append(f'{speaker} says: {d["exact_quote"]}')
+                parts.append(_text(
+                    "fallback_speech", label=speaker,
+                    quote=d["exact_quote"]))
         views[pid] = " ".join(parts) if parts else None
     return views
 
@@ -4537,12 +4421,6 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
 # gentle, 'Ellie'") is a normal attribution around a quote that survived, not a
 # dangling verb -- healing it produced "he says it., quiet and gentle," in live
 # NPC dialogue whenever the same beat also stripped a player echo (v4).
-_SPEECH_CUE = (
-    r"say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|"
-    r"tell|tells|told|reply|replies|replied|answer|answers|answered|voice|"
-    r"voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|"
-    r"continue|continues|continued|offer|offers|offered"
-)
 
 
 # ONE vocabulary, shared with the colon healer below. These two lists drifted:
@@ -4552,47 +4430,6 @@ _SPEECH_CUE = (
 # nothing after it (live, chat 72). A dangling verb and a dangling colon are
 # the same wound from the same cut, and there is no reason for them to disagree
 # about what counts as speech. `_SPEECH_CUE` is defined below and reused here.
-_DANGLING_SPEECH_VERB_RE = re.compile(
-    r"\b(" + _SPEECH_CUE + r"|call|calls|called|shout|shouts|shouted"
-    # `[^\S\n]*` rather than `\s*`: the trailing whitespace this consumes must
-    # not include the paragraph break it is standing in front of, or healing a
-    # dangling verb silently welds two paragraphs together.
-    #
-    # THREE LANDING SITES, not one. This used to be `,?[^\S\n]*(?=[.!?]|$)` --
-    # a verb was only healed where it ended the sentence, and the replacement
-    # appended its own full stop without consuming the punctuation it was
-    # standing in front of. Measured against the live artifact and its
-    # neighbours:
-    #
-    #   '"Q?" you ask, your voice clear over the hum.'
-    #        -> 'you ask, your voice clear over the hum.'   NOT HEALED
-    #   '"Q?" you ask.'          -> 'you ask it..'          DOUBLE STOP
-    #   'You ask, "Q?", quietly' -> 'You ask,, quietly'     DOUBLE COMMA
-    #
-    # The first is the one that reached a player (chat 76 turn 73): the
-    # narrator wrote a well-formed sentence and this function took the quote
-    # out of the middle of it, leaving a lowercase fragment on the page. A
-    # mid-sentence attribution is the ORDINARY way to write one, so the case
-    # the heal did not cover was the common case.
-    # The comma branch carries a lookahead, and it is the whole difficulty. A
-    # comma after a speech verb means two opposite things: the quote was cut
-    # from here (heal it), or the attribution is simply mid-flight and its
-    # quote is still coming (`he says, quiet and gentle, "Ellie."` -- live,
-    # Doctor Who t7). Only one fact separates them: whether a quote survives
-    # later in the SAME sentence. So look, rather than guess -- and rather than
-    # refusing the whole comma case, which is what left the common shape
-    # unhealed.
-    r")\b,?[^\S\n]*(?:(?P<end>[.!?])"
-    r"|(?P<cont>,(?![^.!?\n]*[\"“]))"
-    r"|(?P<eol>$))",
-    # MULTILINE so `$` reaches the end of a PARAGRAPH, not just the end of the
-    # string. Stripping a player quote off the end of a paragraph leaves the
-    # verb dangling there exactly as it does at the end of the prose, and
-    # before paragraph breaks survived this far there was no such position to
-    # catch: everything collapsed onto one line, where the dangling verb ran
-    # into the next sentence instead ("You say, The guard does not move.").
-    re.IGNORECASE | re.MULTILINE,
-)
 
 
 def _heal_dangling_verb(match):
@@ -4634,10 +4471,6 @@ _DOUBLED_COMMA_RE = re.compile(r",(?:[^\S\n]*,)+")
 # eaten. Requiring a speech cue in the same clause keeps this off a real
 # non-speech colon (a list, a ratio, a time). `[^.!?:]*` cannot cross a
 # sentence boundary, so the cue and the colon are always in one clause.
-_DANGLING_SPEECH_COLON_RE = re.compile(
-    r"(\b(?:" + _SPEECH_CUE + r")\b[^.!?:]*):\s*\.?\s*(?=[A-Z]|$)",
-    re.IGNORECASE,
-)
 
 
 def _heal_dangling_colon(m):
@@ -4737,14 +4570,14 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
             folded = _echo_fold(body)
             if len(folded.split()) < _ECHO_FOLD_MIN_WORDS:
                 continue
-            hit = next((m for m in _QUOTE_SPAN_RE.finditer(prose)
+            hit = next((m for m in _ling("_QUOTE_SPAN_RE").finditer(prose)
                         if _echo_fold(m.group(2)) == folded), None)
             if hit is None:
                 continue
             prose = prose[:hit.start()] + prose[hit.end():]
-            prose = _DANGLING_SPEECH_VERB_RE.sub(
+            prose = _ling("_DANGLING_SPEECH_VERB_RE").sub(
                 _heal_dangling_verb, prose)
-            prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
+            prose = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, prose)
             continue
         for quoted in quoted_forms:
             prose = prose.replace(quoted, "")
@@ -4754,8 +4587,8 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # "I ask,", "Alex says.") with nothing after it -- the subject varies
         # with narration_person (first/second/third), so match on the verb
         # rather than assuming "you".
-        prose = _DANGLING_SPEECH_VERB_RE.sub(_heal_dangling_verb, prose)
-        prose = _DANGLING_SPEECH_COLON_RE.sub(_heal_dangling_colon, prose)
+        prose = _ling("_DANGLING_SPEECH_VERB_RE").sub(_heal_dangling_verb, prose)
+        prose = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, prose)
     for token, form in masks:
         prose = prose.replace(token, form)
     prose = _collapse_empty_quote_debris(prose)
@@ -4793,13 +4626,12 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
 # sit (Fable review, DW t12: "I can't hold her eyes. ''"). Collapse the orphan
 # and heal the punctuation/space it leaves. Only a genuinely EMPTY pair is
 # touched, so real quoted dialogue is never harmed.
-_EMPTY_QUOTE_RE = re.compile(r"""\s*(?:''|""|“”|‘’|"\s*"|'\s*')\s*""")
 
 
 def _collapse_empty_quote_debris(prose):
     if not prose:
         return prose
-    out = _EMPTY_QUOTE_RE.sub(" ", prose)
+    out = _ling("_EMPTY_QUOTE_RE").sub(" ", prose)
     # A lead-in left dangling against the removed quote ("She said, .", "then, .")
     out = re.sub(r"[,:]\s*\.", ".", out)
     out = re.sub(r"\s+([.,!?;])", r"\1", out)
@@ -4813,10 +4645,6 @@ def _phrase_ngrams(text, n):
 
 # Content words whose repetition is a genuine tic; function-word runs ("in the
 # middle of") are not. A phrase must carry at least one of these to be flagged.
-_TIC_STOPWORDS = frozenset(
-    "the a an and or but of to in on at by for with from as is are was were be "
-    "been it its his her their my your our i he she they we you him them me "
-    "that this these those there here then when once again still not no".split())
 
 
 def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
@@ -4836,7 +4664,7 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
     for block in blocks:
         for phrase in set(_phrase_ngrams(block, n)):
             words = phrase.split()
-            if all(w in _TIC_STOPWORDS for w in words):
+            if all(w in _ling("_TIC_STOPWORDS") for w in words):
                 continue
             counts[phrase] = counts.get(phrase, 0) + 1
     # Prefer the longest/most-specific phrases; drop a phrase fully contained
@@ -4881,40 +4709,11 @@ def _already_established_phrases(view, recent_prose, limit=12):
 # body contains sentence punctuation mis-splits into fragments, but every such
 # fragment carries a quote character and is therefore exempt from dropping
 # (below), so mis-splits can only UNDER-dedupe, never eat real content.
-_SPEECH_VERBS = (
-    "say", "says", "said", "saying", "whisper", "whispers", "whispered",
-    "whispering", "mutter", "mutters", "muttered", "muttering", "murmur",
-    "murmurs", "murmured", "murmuring", "manage", "managed",
-    "manages", "breathe", "breathes", "breathed", "gasp", "gasps", "gasped",
-    "gasping", "croak", "croaks", "croaked", "rasp", "rasps", "rasped",
-    "reply", "replies", "replied", "replying", "answer", "answers",
-    "answered", "answering", "hiss", "hisses", "hissed",
-    "stammer", "stammers", "stammered", "whimper", "whimpers", "whimpered",
-    "choke", "chokes", "force", "forces", "add", "adds", "added", "plead",
-    "pleads", "pleaded", "pleading", "beg", "begs", "begged", "begging",
-    "cry", "cries", "call", "calls", "called", "get out", "let out",
-    "shout", "shouts", "shouted", "shouting", "scream", "screams",
-    "screamed", "screaming", "yell", "yells", "yelled", "yelling",
-    "ask", "asks", "asked", "asking", "respond", "responds", "responded",
-    "sob", "sobs", "sobbed", "sobbing", "snap", "snaps", "snapped",
-    "growl", "growls", "growled", "blurt", "blurts", "blurted",
-    "exclaim", "exclaims", "exclaimed", "repeat", "repeats", "repeated",
-    "insist", "insists", "insisted", "demand", "demands", "demanded",
-    "announce", "announces", "announced", "declare", "declares", "declared",
-    "wail", "wails", "wailed", "moan", "moans", "moaned",
-    "intone", "intones", "intoned", "utter", "utters", "uttered",
-    "speak", "speaks", "spoke", "speaking", "tell", "tells", "told",
-)
-_SPEECH_VERB_RE = re.compile(
-    r"\b(?:" + "|".join(re.escape(v) for v in _SPEECH_VERBS) + r")\b", re.I)
 # Attribution cue for the dialogue-fidelity floor: a speech verb, or a bare
 # voice noun ("A muffled voice: ..."). Deliberately excludes reading verbs
 # (reads, is written/painted/carved, displays) so quoted ENVIRONMENTAL text --
 # signage, labels, screens -- is never mistaken for dialogue.
-_DIALOGUE_CUE_RE = re.compile(
-    _SPEECH_VERB_RE.pattern + r"|\bvoices?\b", re.I)
 _YOU_RE = re.compile(r"\byou\b|\byour\b", re.I)
-_NPC_PRONOUN_RE = re.compile(r"\bshe\b|\bhe\b|\bthey\b|\bher\b|\bhim\b|\bhis\b", re.I)
 
 
 def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
@@ -5029,7 +4828,7 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
             # any NPC pronoun/cast name) is in scope.
             prefix = view[:qs]
             you = max((mm.start() for mm in _YOU_RE.finditer(prefix)), default=-1)
-            npc = max((mm.start() for mm in _NPC_PRONOUN_RE.finditer(prefix)), default=-1)
+            npc = max((mm.start() for mm in _ling("_NPC_PRONOUN_RE").finditer(prefix)), default=-1)
             if name_re:
                 npc = max([npc] + [mm.start() for mm in name_re.finditer(prefix)])
             if you < 0 or you <= npc:
@@ -5037,7 +4836,7 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
             start, end = _clause_start(qs), qe
         else:
             cstart = _clause_start(qs)
-            pre_attr = bool(_DIALOGUE_CUE_RE.search(view[cstart:qs]))
+            pre_attr = bool(_ling("_DIALOGUE_CUE_RE").search(view[cstart:qs]))
             tstop = _tail_stop(qe)
             tail = view[qe:tstop]
             tail_lead = tail.lstrip()
@@ -5046,7 +4845,7 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
             # tail is a NEW sentence and out of scope.
             tail_attr = bool(tail_lead) and (
                 tail_lead[0].islower() or tail_lead[0] in ",—–-") \
-                and bool(_DIALOGUE_CUE_RE.search(tail))
+                and bool(_ling("_DIALOGUE_CUE_RE").search(tail))
             if not pre_attr and not tail_attr:
                 continue  # no speech attribution: environmental text (signage)
             start = cstart if pre_attr else qs
@@ -5084,10 +4883,6 @@ _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
 _VIEW_QUOTE_CHARS = ('"', "“", "”")
 _VIEW_DEDUPE_MIN_WORDS = 5
 
-_VIEW_QUOTED_SPAN_RE = re.compile(
-    r'["“][^"“”]*["”]'          # "..." / “...”
-    r"|(?<!\w)'[^']{3,}?'(?!\w)"  # '...' , not an apostrophe
-)
 _VIEW_MASK = "\x00Q%d\x00"
 
 
@@ -5104,7 +4899,7 @@ def _mask_quoted_spans(text):
         spans.append(match.group(0))
         return _VIEW_MASK % (len(spans) - 1)
 
-    return _VIEW_QUOTED_SPAN_RE.sub(_swap, text), spans
+    return _ling("_VIEW_QUOTED_SPAN_RE").sub(_swap, text), spans
 
 
 def _unmask_quoted_spans(text, spans):
@@ -5183,20 +4978,11 @@ def _dedupe_view_sentences(text):
         return text
     return _unmask_quoted_spans("".join(kept).rstrip(), spans)
 
-_NARRATION_QUOTE_RE = re.compile(r'["“][^"“”]*["”]')
 #: A doubled opening mark makes the paired pattern match an EMPTY span and
 #: desynchronise every quote after it on the line -- observed live. Folded to
 #: one mark before pairing rather than special-cased afterwards.
-_NARRATION_DOUBLED_QUOTE_RE = re.compile(r'["“]{2,}')
 #: An opening mark with no partner, running to end of line. Applied only after
 #: the paired passes, so it can only ever catch what is genuinely unclosed.
-_NARRATION_DANGLING_QUOTE_RE = re.compile(r'["“][^"“”]*$', re.MULTILINE)
-_NARRATION_SQUOTE_RE = re.compile(r"(?<!\w)'[^']{3,}?'(?!\w)")
-_FIRST_PERSON_RE = re.compile(
-    r"\b(i|i'm|i've|i'll|i'd|me|my|mine|myself"
-    r"|we|we're|we've|we'll|we'd|us|our|ours|ourselves)\b", re.IGNORECASE)
-_SECOND_PERSON_RE = re.compile(
-    r"\b(you|you're|you've|you'll|you'd|your|yours|yourself)\b", re.IGNORECASE)
 # Third-person player evidence comes almost entirely from the player's NAME
 # used as a proper noun; pronouns are inherently ambiguous ("her"/"him"/
 # "them" nearly always refer to OTHER people in the scene). We therefore
@@ -5204,7 +4990,6 @@ _SECOND_PERSON_RE = re.compile(
 # ones -- and even those only survive as a tiebreak once hysteresis in
 # _resolve_narration_person guards against a lone token flipping the whole
 # campaign's established person.
-_THIRD_SUBJECT_PRONOUNS = frozenset({"he", "she", "they"})
 
 def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
     """Weighted first/second/third-person evidence from the player's own
@@ -5221,9 +5006,9 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
       dict values (obj == poss == "her") no longer masquerade as the player
       being narrated in third person.
     """
-    narrative = _NARRATION_DOUBLED_QUOTE_RE.sub('"', str(raw_input or ""))
-    narrative = _NARRATION_QUOTE_RE.sub(" ", narrative)
-    narrative = _NARRATION_SQUOTE_RE.sub(" ", narrative)
+    narrative = _ling("_NARRATION_DOUBLED_QUOTE_RE").sub('"', str(raw_input or ""))
+    narrative = _ling("_NARRATION_QUOTE_RE").sub(" ", narrative)
+    narrative = _ling("_NARRATION_SQUOTE_RE").sub(" ", narrative)
     # Whatever quote mark is left opened dialogue that never closed, so the
     # rest of the line is dialogue too. Folded here rather than guarded at the
     # call sites, because a guard that must be remembered will be forgotten and
@@ -5231,10 +5016,10 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
     # quote let every "I" and "my" inside the speech vote on how the NARRATION
     # should read. Rare and decisive -- 11 of 2163 live player turns change
     # verdict, and one of them latched a whole story into first person.
-    narrative = _NARRATION_DANGLING_QUOTE_RE.sub(" ", narrative)
+    narrative = _ling("_NARRATION_DANGLING_QUOTE_RE").sub(" ", narrative)
     counts = {
-        "first": len(_FIRST_PERSON_RE.findall(narrative)),
-        "second": len(_SECOND_PERSON_RE.findall(narrative)),
+        "first": len(_ling("_FIRST_PERSON_RE").findall(narrative)),
+        "second": len(_ling("_SECOND_PERSON_RE").findall(narrative)),
         "third": 0,
     }
     for part in re.findall(r"[A-Za-z']+", str(player_name or "")):
@@ -5246,7 +5031,7 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
     seen_pronouns = set()
     for pron in (player_pronouns or {}).values():
         pron = str(pron or "").strip().lower()
-        if pron in _THIRD_SUBJECT_PRONOUNS and pron not in seen_pronouns:
+        if pron in _ling("_THIRD_SUBJECT_PRONOUNS") and pron not in seen_pronouns:
             seen_pronouns.add(pron)
             counts["third"] += len(re.findall(rf"\b{re.escape(pron)}\b", narrative, re.IGNORECASE))
     return counts
@@ -5275,30 +5060,30 @@ def _detect_narration_person(raw_input, player_name=None, player_pronouns=None):
 # table (neopronouns, mixed sets like she/them) is skipped entirely rather than
 # guessed at -- the check exists to catch UNAMBIGUOUS flips, so anything it
 # can't be certain about is not its business.
-_PRONOUN_GROUPS = {
-    "he": ("he", "him", "his", "himself"),
-    "she": ("she", "her", "hers", "herself"),
-    "they": ("they", "them", "their", "theirs", "themselves", "themself"),
-}
-_PRONOUN_TO_GROUP = {w: g for g, ws in _PRONOUN_GROUPS.items() for w in ws}
+def _pronoun_to_group():
+    """Pronoun -> group, for the ACTIVE story pack.
+
+    Built at MODULE level before, which evaluated `_ling` once at import with
+    the contextvar still at its "en" default. The Japanese pack deliberately
+    adds 彼/彼女/彼ら groups and every one of them was dead, so the pronoun
+    fidelity check silently returned nothing for a Japanese story. This is the
+    exact hazard `linguistic()`'s own docstring warns about: the lookup has to
+    happen at use time, because two languages can run in one process.
+    """
+    return {w: g for g, ws in _ling("_PRONOUN_GROUPS").items() for w in ws}
 
 # Splits a sentence into clauses. A pronoun is only scored against a name in
 # the SAME clause, which is what keeps "Vorne glanced at the ensign; her hands
 # shook" (referent is the ensign, not Vorne) out of the check.
-_CLAUSE_SPLIT = re.compile(
-    r"[,;:()\[\]—–]|\s+(?:and|but|while|as|when|then|though|although"
-    r"|so|yet|because|before|after|until|which|who|whose|that)\s+",
-    re.I,
-)
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+#
+# The CJK branch takes no trailing whitespace, because Japanese writes none
+# after 。 -- an ASCII-only splitter returned the whole passage as one clause,
+# so every pronoun scored against every name in it.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])[」』\"\'”’)\]]*\s*")
 
 # Names that are also ordinary capitalized English words. A cast member called
 # one of these can't be told apart from the common word, so we decline to score
 # their clauses rather than burn a rewrite on "Will you hand him the padd".
-_AMBIGUOUS_NAME_WORDS = {
-    "will", "may", "art", "grace", "hope", "rose", "mark", "bill", "dawn",
-    "sky", "rain", "storm", "ray", "faith", "joy", "sun", "star",
-}
 
 
 def _pronoun_group(pronouns):
@@ -5311,7 +5096,7 @@ def _pronoun_group(pronouns):
         word = str(pronouns.get(key) or "").strip().lower()
         if not word:
             continue
-        group = _PRONOUN_TO_GROUP.get(word)
+        group = _pronoun_to_group().get(word)
         if group is None:
             return None
         groups.add(group)
@@ -5346,7 +5131,7 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
         for token in re.findall(r"[A-Za-z']+", canonical):
             if len(token) < 3 or not token[:1].isupper():
                 continue
-            if token.lower() in _AMBIGUOUS_NAME_WORDS:
+            if token.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
                 continue
             if token in token_owner and token_owner[token][0] != canonical:
                 token_owner[token] = None
@@ -5364,7 +5149,7 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
     warnings = []
     flagged = set()
     for sentence in _SENTENCE_SPLIT.split(scan):
-        for clause in _CLAUSE_SPLIT.split(sentence):
+        for clause in _ling("_CLAUSE_SPLIT").split(sentence):
             words = re.findall(r"[A-Za-z']+", clause)
             if len(words) < 2:
                 continue
@@ -5378,7 +5163,7 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
             if head > 1:
                 continue
             for word in words[head + 1:]:
-                other = _PRONOUN_TO_GROUP.get(word.lower())
+                other = _pronoun_to_group().get(word.lower())
                 # A stray "they" is routinely a group ("Vorne watched them
                 # scatter"), so only a GENDERED singular counts as a flip.
                 if not other or other == group or other == "they":
@@ -5387,7 +5172,7 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
                 if key in flagged:
                     break
                 flagged.add(key)
-                expected = "/".join(_PRONOUN_GROUPS[group][:3])
+                expected = "/".join(_ling("_PRONOUN_GROUPS")[group][:3])
                 warnings.append(
                     f"Pronoun mismatch for '{canonical}' (canonical {expected}): "
                     f"prose renders '{word}'"
@@ -5419,13 +5204,13 @@ def _check_player_person(prose, player_name, narration_person, player_aliases=No
     text = str(prose or "")
     if not text:
         return []
-    segments = _QUOTED_SPAN_RE.split(text)
+    segments = _ling("_QUOTED_SPAN_RE").split(text)
     hits = []
     for form in [player_name, *(player_aliases or [])]:
         form = str(form or "").strip()
         if not form:
             continue
-        flags = 0 if form.casefold() in _COMMON_WORD_NAMES else re.I
+        flags = 0 if form.casefold() in _ling("_COMMON_WORD_NAMES") else re.I
         pattern = re.compile(
             r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", flags)
         for i in range(0, len(segments), 2):  # even indices = unquoted prose
@@ -5568,11 +5353,6 @@ def _check_event_order(prose, event_order):
 # your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
 # all appear constantly in ordinary prose, and every one of them would turn
 # this into a false-positive generator that spends a rewrite on correct pages.
-_NARR_LOWERING = re.compile(
-    r"\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?|downwards?)\b", re.I)
-_NARR_RAISING = re.compile(
-    r"\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|hoist(?:s|ed|ing)?|"
-    r"upwards?)\b", re.I)
 
 
 def _check_action_direction(prose, event_order):
@@ -5595,15 +5375,15 @@ def _check_action_direction(prose, event_order):
     """
     if not prose or not event_order:
         return []
-    p_low = bool(_NARR_LOWERING.search(prose))
-    p_high = bool(_NARR_RAISING.search(prose))
+    p_low = bool(_ling("_NARR_LOWERING").search(prose))
+    p_high = bool(_ling("_NARR_RAISING").search(prose))
     warnings = []
     for ev in event_order:
         if not isinstance(ev, dict) or ev.get("kind") != "action":
             continue
         act = str(ev.get("action") or "")
-        a_low = bool(_NARR_LOWERING.search(act))
-        a_high = bool(_NARR_RAISING.search(act))
+        a_low = bool(_ling("_NARR_LOWERING").search(act))
+        a_high = bool(_ling("_NARR_RAISING").search(act))
         if a_low == a_high:
             continue                # the act says both directions, or neither
         said = "downward" if a_low else "upward"
@@ -5645,7 +5425,7 @@ def _actor_reference_patterns(display):
     for tok in re.findall(r"[A-Za-z']+", display):
         if len(tok) < 3 or not tok[:1].isupper():
             continue
-        if tok.lower() in _AMBIGUOUS_NAME_WORDS:
+        if tok.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
             continue
         pats.append(re.compile(
             r"(?<!\w)" + re.escape(tok) + r"(?:['’]s)?(?!\w)"))
@@ -5729,7 +5509,7 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         cand_group = _group_of(best[1])
         ambiguous = False
         for pm in re.finditer(r"\b(he|she|they)\b", between, re.I):
-            pg = _PRONOUN_TO_GROUP.get(pm.group(1).lower())
+            pg = _pronoun_to_group().get(pm.group(1).lower())
             if cand_group and pg and pg != cand_group:
                 ambiguous = True
                 break
@@ -5747,11 +5527,6 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
 
 # Perception/gesture verbs that make a following room mention a LOOK, not a
 # placement ("glances at the corridor"); they must not trip the position check.
-_LOOK_VERB_RE = re.compile(
-    r"\b(?:glance[sd]?|glancing|look(?:s|ed|ing)?|stare[sd]?|staring|"
-    r"gaze[sd]?|gazing|point(?:s|ed|ing)?|gesture[sd]?|gesturing|"
-    r"nod(?:s|ded|ding)?|turn(?:s|ed|ing)?|face[sd]?|facing|"
-    r"toward[s]?)\s*$", re.I)
 
 
 def _check_position_fidelity(prose, position_facts, room_names):
@@ -5806,7 +5581,7 @@ def _check_position_fidelity(prose, position_facts, room_names):
                 pm = place.search(scan, best)
                 if not pm:
                     continue
-                if _LOOK_VERB_RE.search(scan[:pm.start()]):
+                if _ling("_LOOK_VERB_RE").search(scan[:pm.start()]):
                     continue
                 warnings.append(
                     f"Character placed in wrong room: '{name}' is narrated "
@@ -5864,27 +5639,6 @@ def _check_portal_fidelity(prose, portal_states):
 # "you feel", "your terror", "terror grips you" -- the same boundary
 # `_check_player_interiority_authority` defends on the Director's side, at the
 # last stage before the reader.
-_YOU_INTERIOR = re.compile(
-    r"\byou(?:r)?\s+(?:own\s+)?(?:" + "|".join(
-        re.escape(w) for w in _INTERIOR_STATES) + r")\b"
-    r"|\byou\s+(?:feel|felt|realise|realised|realize|realized|know|knew|"
-    r"want|wanted|wish|wished|hope|hoped|fear|feared|understand|understood|"
-    r"remember|remembered|decide|decided|sense|sensed)\b"
-    r"|\b(?:" + "|".join(re.escape(w) for w in _INTERIOR_STATES) +
-    r")\s+(?:grips|grip|floods|flood|washes|wash|rises|rise|takes|take|"
-    r"fills|fill|seizes|seize|surges|surge)\s+(?:through\s+)?you\b"
-    # A named interior state anywhere in a clause that also reaches for the
-    # player. The three patterns above all require the state to sit directly
-    # beside "you"/"your" or to govern it through a short verb list, and prose
-    # does not oblige: chat 56 ("Run!") t6 rendered the Director's invented
-    # "the terror in her eyes has begun to recede" as "The terror that had
-    # been living wide-open in YOUR eyes pulls back to something smaller",
-    # where "your" attaches to "eyes" and the verb is "pulls back". One word
-    # out of reach of every branch, and the guard was silent.
-    r"|\b(?:the|that|this|a|an)\s+(?:"
-    + "|".join(re.escape(w) for w in _INTERIOR_STATES)
-    + r")\b(?=[^.!?]{0,60}\byou(?:r)?\b)",
-    re.I)
 
 
 def _check_player_interiority_prose(prose, view=""):
@@ -5907,7 +5661,7 @@ def _check_player_interiority_prose(prose, view=""):
         return []
     source = str(view or "").casefold()
     warnings = []
-    for match in _YOU_INTERIOR.finditer(prose):
+    for match in _ling("_YOU_INTERIOR").finditer(prose):
         phrase = match.group(0)
         # Present in the view already -> the narrator is rendering, not adding.
         if phrase.casefold() in source:
@@ -5975,7 +5729,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         re.sub(r"\s+", " ", _quote_body(q).casefold()).rstrip(".,!?…;:")
         for q in (exclude_quotes or []) if _quote_body(q)
     }
-    quote_pattern = _QUOTE_BODY_RE
+    quote_pattern = _ling("_QUOTE_BODY_RE")
     normalized_prose = re.sub(r"\s+", " ", prose.casefold())
     for match in quote_pattern.finditer(view_text):
         quote = re.sub(r"\s+", " ", match.group(1).strip())
@@ -6017,7 +5771,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         spoken = re.sub(r"\s+", " ", _quote_body(event.get("quote"))).casefold()
         if actor and len(spoken) >= 15:
             speech_events.append((actor, spoken))
-    for match in _QUOTE_BODY_RE.finditer(prose):
+    for match in _ling("_QUOTE_BODY_RE").finditer(prose):
         span = re.sub(r"\s+", " ", match.group(1)).casefold()
         actors = {actor for actor, spoken in speech_events if spoken in span}
         if len(actors) >= 2:
@@ -6064,14 +5818,9 @@ def _llm_resolve_player_room(sc, pers, cast, interp, player_input):
         "movement": (interp or {}).get("movement") or {},
         "private_thought": (interp or {}).get("private_thought") or ""
     }
-    sys = (
-        "You are a position resolver. Given a player persona, a list of NPC character names, "
-        "and a set of position keys, identify which position key corresponds to the PLAYER "
-        "character. Output STRICT JSON {\"key\": \"<one of the position_keys>\"} or "
-        "{\"key\": null} if no match."
-    )
     try:
-        out = jparse(chat_complete("utility", sys, json.dumps(payload, ensure_ascii=False),
+        out = jparse(chat_complete("utility", get_prompt("position_resolver"),
+                                   json.dumps(payload, ensure_ascii=False),
                                    temperature=0.0, max_tokens=1000))
         key = out.get("key") if isinstance(out, dict) else None
         if key and key in positions:

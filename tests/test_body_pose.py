@@ -195,10 +195,10 @@ class TestObserverProjection:
             observer_name="Mara", recognized=["Ivo"], changed=["Ivo"])
 
     def test_prompts_forbid_default_standing_and_appearance_roll_calls(self):
-        perception = DEFAULT_PROMPTS["perception"]
+        # The perception half of this test asserted a prompt no model reads --
+        # perception composes deterministically and its prompt is gone from
+        # the packs. The spatial specialist is a live model call, so its half
+        # is the half that can still regress.
         resolve = DEFAULT_PROMPTS["director_spatial"]
-        assert "Presence and visibility do not imply standing" in perception
-        assert "scene.pose_unknown" in perception
-        assert "fresh roll-call of age, beauty, species traits" in perception
         assert "BODY POSE AND RELATIVE ARRANGEMENT" in resolve
         assert "Never default an unspecified pose to standing" in resolve

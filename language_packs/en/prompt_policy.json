@@ -1,0 +1,4 @@
+{
+  "common": "LANGUAGE AND SCHEMA CONTRACT: Write every human-readable value intended for the reader in English. The engine protocol remains canonical English regardless of story language: preserve every supplied JSON key, schema field, enum literal, identifier, step name, body-region id, and operation name exactly as specified. Never translate, rename, inflect, or localize protocol tokens. Return structurally valid JSON whenever the prompt defines a JSON shape; translate only its free-text human-language values.",
+  "roles": {}
+}

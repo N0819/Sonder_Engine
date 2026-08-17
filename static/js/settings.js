@@ -42,6 +42,32 @@ $("#b-style").onclick = async () => {
   const r = await api("GET", `/api/chats/${chatId}/style_guide`);
   if (S.chatId !== chatId) return;
   const g = r.style_guide || {};
+  // Non-fatal: api() throws on any non-ok response, so a language failure
+  // used to mean the whole style-guide modal never opened.
+  let languageState = { language: "en", stored: "en", installed: true };
+  try { languageState = await api("GET", `/api/chats/${chatId}/language`); }
+  catch (e) { toast(e.message, "warn"); }
+  if (S.chatId !== chatId) return;
+  // When the stored pack is not installed on this machine (a chat carried
+  // over from another install), the value on disk is still correct and comes
+  // back when the pack returns. Offer it as the selected option rather than
+  // silently showing English -- pressing Save then wrote English over it, and
+  // that is not recoverable.
+  const storedMissing = languageState.installed === false;
+  const language = el("select", { style: "flex:1" }, [
+    ...(storedMissing ? [el("option", { value: languageState.stored, selected: "" },
+      `${languageState.stored} (pack not installed)`)] : []),
+    ...((S.boot && S.boot.language_packs) || []).filter(pack => pack.story)
+      .map(pack => el("option", {
+        value: pack.id,
+        ...(!storedMissing && pack.id === languageState.language ? { selected: "" } : {})
+      }, pack.native_name || pack.name || pack.id))]);
+  const uiLanguage = el("select", { style: "flex:1" },
+    ((S.boot && S.boot.language_packs) || []).filter(pack => pack.ui)
+      .map(pack => el("option", {
+        value: pack.id,
+        ...(pack.id === S.uiLanguage ? { selected: "" } : {})
+      }, pack.native_name || pack.name || pack.id)));
 
   const SELF = "(self-determine — infer from scenario & lore)";
   const PRESETS = ["cosmic horror", "noir", "cyberpunk", "high fantasy",
@@ -99,6 +125,14 @@ $("#b-style").onclick = async () => {
       "Applies to what the engine ", el("b", {}, "invents"),
       " — new rooms, objects, lore, and the register of resolved events. It never overrides canon, an established room, or something you declared yourself, and it is never quoted back into the prose."),
     el("div", { class: "row", style: "margin-top:10px" },
+      el("span", { class: "small", style: "width:100px" }, "Story language"), language),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "Controls future Director interpretation, deterministic compositor output, and generated memories. Existing prose and memories are not translated."),
+    el("div", { class: "row", style: "margin-top:8px" },
+      el("span", { class: "small", style: "width:100px" }, "Interface"), uiLanguage),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "Controls menus, dialogs, labels, and error messages for this installation."),
+    el("div", { class: "row", style: "margin-top:10px" },
       el("span", { class: "small", style: "width:70px" }, "Genre"), genre, datalist, selfBtn),
     el("div", { class: "row", style: "margin-top:6px" },
       el("span", { class: "small", style: "width:70px" }, "Tone"), tone),
@@ -127,6 +161,8 @@ $("#b-style").onclick = async () => {
         "Your own condition sits in the margin beside the prose. Everyone else's is tracked either way and read in the Cast panel — turn this on to have theirs surface alongside yours as well.")),
     el("div", { class: "row", style: "margin-top:10px" },
       el("button", { class: "primary", onclick: async () => {
+        const uiChanged = uiLanguage.value !== S.uiLanguage;
+        const languageChanged = language.value !== languageState.stored;
         await api("PUT", `/api/chats/${chatId}/survival`,
                   { enabled: survivalBox.checked,
                     show_npcs: npcBox.checked });
@@ -137,10 +173,24 @@ $("#b-style").onclick = async () => {
             avoid: avoid.value, weather_severity: severity.value,
           },
         });
+        // Last, and only on a real change: this is the one field here whose
+        // route refuses to run mid-turn, and the only one whose loss is
+        // permanent.
+        if (languageChanged) {
+          const languageOut = await api(
+            "PUT", `/api/chats/${chatId}/language`, { language: language.value });
+          if (S.chat && S.chatId === chatId) {
+            S.chat.chat.story_language = languageOut.language;
+          }
+        }
+        if (uiChanged) {
+          await api("PUT", "/api/ui-language", { language: uiLanguage.value });
+        }
         if (S.chatId === chatId) await refreshVitalsHud();
         closeModal();
         toast(Object.keys(out.style_guide).length
           ? "Style guide saved." : "Style guide cleared — the engine self-determines.", "ok");
+        if (uiChanged) window.location.reload();
       } }, "Save"),
       el("button", { onclick: async () => {
         await api("PUT", `/api/chats/${chatId}/style_guide`, { style_guide: {} });
@@ -1318,7 +1368,7 @@ function renderFramesListPanel(d, chatId) {
               }
               refresh();
             } catch (e) {
-              toast("Could not create frame: " + e.message, "err");
+              toast(`Could not create frame: ${e.message}`, "err");
             }
           }
         }, "+ Create frame")));
@@ -1357,7 +1407,7 @@ function renderPersonaStationingPanel(chatId) {
             { frame_id: sel.value ? +sel.value : null });
           toast(`${p.name} is now in ${sel.options[sel.selectedIndex].text}.`, "ok");
         } catch (e) {
-          toast("Could not move them: " + e.message, "err");
+          toast(`Could not move them: ${e.message}`, "err");
           refresh();
         }
       };
@@ -1445,7 +1495,7 @@ function renderParadoxPanel(chatId) {
             toast("Fixed point declared.", "ok");
             refresh();
           } catch (e) {
-            toast("Could not declare it: " + e.message, "err");
+            toast(`Could not declare it: ${e.message}`, "err");
           }
         }
       }, "+ Declare")));
@@ -1777,7 +1827,7 @@ function embeddingBankBlock() {
             await api("POST", "/api/memory/embeddings/rebuild", {});
             toast("Rebuilding memory vectors in the background.", "ok");
           } catch (err) {
-            toast("Could not start: " + (err?.message || err), "err");
+            toast(`Could not start: ${(err?.message || err)}`, "err");
           }
           render();
         },
@@ -1813,7 +1863,7 @@ function renderFirstRunProviderSetup(b) {
     try {
       prov = await api("POST", "/api/providers", { kind: kindSel.value, api_key: keyIn.value });
     } catch (e) {
-      toast("Could not create provider: " + e.message, "err");
+      toast(`Could not create provider: ${e.message}`, "err");
       connectBtn.disabled = false;
       return;
     }
@@ -1918,11 +1968,11 @@ function renderFullApiSettings(b) {
             cacheBox.checked = !!r.prompt_cache;
             p.prompt_cache = !!r.prompt_cache;
             await boot();
-            toast("Prompt caching " + (r.prompt_cache ? "on" : "off")
-              + " for " + (p.name || p.kind) + ".", "ok");
+            toast(`Prompt caching ${(r.prompt_cache ? "on" : "off")
+              + " for " + (p.name || p.kind) + "."}`, "ok");
           } catch (e) {
             cacheBox.checked = !want;
-            toast("Could not change caching: " + e.message, "err");
+            toast(`Could not change caching: ${e.message}`, "err");
           }
         };
         const cacheLabel = el("label", {
@@ -1971,7 +2021,7 @@ function renderFullApiSettings(b) {
             const r = await api("PUT", "/api/max_output_tokens", { value: motInput.value });
             motInput.value = String(r.value);
             await boot();
-            toast("Response limit saved: " + r.value + " tokens.", "ok");
+            toast(`Response limit saved: ${r.value + " tokens."}`, "ok");
           },
         }, "Save"),
         el("button", {
@@ -2583,10 +2633,9 @@ function renderFullApiSettings(b) {
                 && (String(p) !== String(embedWas.provider)
                     || String(m || "") !== String(embedWas.model || ""))) {
               embedWarned = true;
-              toast("Changing the embeddings model means every memory already "
-                  + "stored has to be re-read through it — until then those "
+              toast(`Changing the embeddings model means every memory already ${"stored has to be re-read through it — until then those "
                   + "memories are found by keyword only. Save, and the engine "
-                  + "will offer to rebuild.", "warn", 11000);
+                  + "will offer to rebuild."}`, "warn", 11000);
             }
           },
           isEmbeddings ? {
@@ -3010,35 +3059,179 @@ function renderUpdateDone(b, r) {
 }
 
 // ---- Prompts ----
-$("#b-prompts").onclick = () => {
+//: Set before a language change reloads the page, so the reader lands back in
+//: the menu they were in rather than on the story with the modal gone.
+const REOPEN_PROMPTS_KEY = "sonder.reopenPrompts";
+
+function openPromptsModal() {
   const names = ["Default", ...Object.keys(S.boot.prompt_presets)];
   const sel = el("select", {}, names.map(n => el("option", { value: n, ...(n === S.boot.active_preset ? { selected: "" } : {}) }, n)));
   const nameIn = el("input", { placeholder: "preset name", value: S.boot.active_preset === "Default" ? "" : S.boot.active_preset });
+  // A preset overrides only the language it was authored in (prompts.py's
+  // _preset_override), so the editor has to say which language it is showing
+  // -- and be able to load that pack's own sheets to edit, rather than
+  // offering English ones to overwrite a Japanese story with.
+  const storyPacks = (S.boot.language_packs || []).filter(p => p.story);
+  // The language actually in force: this story's, or the interface's when no
+  // story is open. Without this the control always opened on the first pack
+  // in the list and silently disagreed with the interface around it.
+  const currentLanguage =
+    (S.chat && S.chat.chat && S.chat.chat.story_language)
+    || S.uiLanguage || "en";
+  const langSel = el("select", {}, storyPacks.map(p =>
+    el("option", {
+      value: p.id,
+      ...(p.id === currentLanguage ? { selected: "" } : {})
+    }, p.native_name || p.name || p.id)));
+  // Bootstrap already ships the English bodies; every other language costs
+  // one fetch, once per modal.
+  const baselines = { en: S.boot.default_prompts };
+  const fileIn = el("input", { type: "file", accept: ".json,application/json", style: "display:none" });
+  const presetOf = n => (n === "Default" ? null : S.boot.prompt_presets[n]);
+
   modal("Prompts", b => {
     const tas = {};
     const renderTA = () => {
       $$(".pta").forEach(x => x.remove());
-      const src = sel.value === "Default" ? {} : (S.boot.prompt_presets[sel.value] || {});
-      for (const [k, v] of Object.entries(S.boot.default_prompts)) {
+      const defaults = baselines[langSel.value] || {};
+      const preset = presetOf(sel.value);
+      // A preset's bodies only belong on top of its own language's sheets.
+      const src = (preset && preset.language === langSel.value) ? preset.prompts : {};
+      for (const [k, v] of Object.entries(defaults)) {
         const ta = el("textarea", { class: "pta", style: "width:100%", rows: "6" }, src[k] || v);
         tas[k] = ta; b.append(el("div", { class: "card pta" }, el("b", {}, k), ta));
       }
     };
-    b.append(el("div", { class: "row" }, "Preset: ", sel,
-      el("button", { onclick: async () => { await api("PUT", "/api/active_preset", { name: sel.value }); await boot(); toast("Preset activated.", "ok"); } }, "Set active"),
+    const showLanguage = async () => {
+      const id = langSel.value;
+      if (!baselines[id]) {
+        try { baselines[id] = (await api("GET", "/api/default_prompts?language=" + encodeURIComponent(id))).prompts; }
+        catch (e) { return toast(e.message, "err"); }
+      }
+      renderTA();
+    };
+    b.append(el("div", { class: "row" }, "Preset: ", sel, "Language: ", langSel),
+      el("div", { class: "small dim", style: "margin:-4px 0 8px 0" },
+        "One switch: this picks the prompt sheets shown below and also sets the "
+        + "interface language and this story's language. Existing prose and "
+        + "memories are not translated."),
+      el("div", { class: "row" },
+      el("button", { onclick: async () => {
+        await api("PUT", "/api/active_preset", { name: sel.value });
+        await boot();
+        // A preset applies only to its own language, so activating an English
+        // one while working in Japanese is legal and does nothing -- say so,
+        // rather than letting it read as the setting not having stuck.
+        const chosen = presetOf(sel.value);
+        if (chosen && chosen.language !== langSel.value) {
+          toast(`Preset activated, but it is a ${chosen.language} preset and `
+                + `this is ${langSel.value} — it will not apply here.`, "warn");
+        } else {
+          toast("Preset activated.", "ok");
+        }
+      } }, "Set active"),
       nameIn,
       el("button", { onclick: async () => {
         const nm = nameIn.value.trim(); if (!nm || nm === "Default") return toast("Pick a preset name.", "warn");
-        const prompts = {}; for (const [k, ta] of Object.entries(tas)) if (ta.value !== S.boot.default_prompts[k]) prompts[k] = ta.value;
-        await api("PUT", "/api/prompt_presets", { name: nm, prompts }); await boot(); closeModal();
+        const defaults = baselines[langSel.value] || {};
+        const prompts = {}; for (const [k, ta] of Object.entries(tas)) if (ta.value !== defaults[k]) prompts[k] = ta.value;
+        await api("PUT", "/api/prompt_presets", { name: nm, language: langSel.value, prompts }); await boot(); closeModal();
         toast("Preset saved.", "ok");
       } }, "Save preset"),
+      el("button", { onclick: async () => {
+        if (sel.value === "Default") return toast("Pick a saved preset to export.", "warn");
+        try {
+          const doc = await api("GET", "/api/prompt_presets/" + encodeURIComponent(sel.value) + "/export");
+          downloadJSON(doc, sel.value.replace(/[^a-z0-9_-]/gi, "_") + ".prompt-preset.json");
+          toast("Preset exported.", "ok");
+        } catch (e) { toast(e.message, "err"); }
+      } }, "Export"),
+      el("button", { onclick: () => fileIn.click() }, "Import"),
       el("button", { onclick: async () => {
         if (sel.value === "Default") return;
         if (!await confirmModal("Delete this preset?", { danger: true, confirmLabel: "Delete" })) return;
         await api("DELETE", "/api/prompt_presets/" + encodeURIComponent(sel.value));
         await boot(); closeModal(); toast("Preset deleted.", "ok");
-      } }, "Delete preset")));
-    sel.onchange = renderTA; renderTA();
+      } }, "Delete preset"), fileIn));
+    fileIn.onchange = () => {
+      const f = fileIn.files && fileIn.files[0];
+      fileIn.value = "";
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        let doc;
+        try { doc = JSON.parse(reader.result); }
+        catch (e) { return toast(`Invalid JSON: ${e.message}`, "err"); }
+        try {
+          const r = await api("POST", "/api/prompt_presets/import", { preset: doc });
+          await boot(); closeModal();
+          // An import never overwrites a saved sheet, so say when it landed
+          // under a different name than the file asked for.
+          toast(r.renamed ? `Preset imported as "${r.name}".` : "Preset imported.", "ok");
+        } catch (e) { toast(e.message, "err"); }
+      };
+      reader.readAsText(f);
+    };
+    sel.onchange = () => {
+      // Following the preset to its own language is what makes its bodies
+      // visible at all; leaving the selector behind would show the sheets
+      // greyed back to pack defaults.
+      const preset = presetOf(sel.value);
+      if (preset && storyPacks.some(p => p.id === preset.language)) langSel.value = preset.language;
+      showLanguage();
+    };
+    // The whole language change, from one control. The prompt sheets, the
+    // interface and the open story all move together -- a host who picks
+    // Japanese here means Japanese, not "Japanese prompts under an English
+    // interface". Story language is per-chat, so it only applies to the story
+    // currently open, and only when no turn is running.
+    langSel.onchange = async () => {
+      const id = langSel.value;
+      await showLanguage();
+      // The wizard reads this for the language of a NEW story, so the single
+      // switch has to set it too -- otherwise new characters and personas are
+      // still generated in whatever the wizard last remembered.
+      try { localStorage.setItem("storyLanguage", id); } catch (e) {}
+      let storyNote = "";
+      if (S.chatId) {
+        try {
+          const out = await api("PUT", `/api/chats/${S.chatId}/language`,
+                                { language: id });
+          if (S.chat) S.chat.chat.story_language = out.language;
+        } catch (e) {
+          // A turn in flight refuses the change; the interface still moves.
+          storyNote = " This story kept its language: " + e.message;
+        }
+      }
+      if (id !== S.uiLanguage) {
+        try {
+          await api("PUT", "/api/ui-language", { language: id });
+          toast(`Language changed.${storyNote}`, "ok");
+          // Reload for the same reason the style guide does: localizeDocument
+          // rewrites English source text in place, so it cannot translate a
+          // second time from an already-translated DOM. Come back to this
+          // menu afterwards -- the change was made FROM here, and dropping
+          // the reader onto the story reads as the menu having crashed.
+          try { sessionStorage.setItem(REOPEN_PROMPTS_KEY, "1"); } catch (e) {}
+          return window.location.reload();
+        } catch (e) { return toast(e.message, "err"); }
+      }
+      if (storyNote) toast(storyNote.trim(), "warn");
+    };
+    const active = presetOf(sel.value);
+    if (active && storyPacks.some(p => p.id === active.language)) langSel.value = active.language;
+    showLanguage();
   });
-};
+}
+
+$("#b-prompts").onclick = openPromptsModal;
+
+// Called by app.js once boot() has repopulated S.boot, which this modal reads.
+function reopenPromptsIfRequested() {
+  let wanted = false;
+  try {
+    wanted = !!sessionStorage.getItem(REOPEN_PROMPTS_KEY);
+    if (wanted) sessionStorage.removeItem(REOPEN_PROMPTS_KEY);
+  } catch (e) { return; }  // private mode: the menu simply does not reopen
+  if (wanted) openPromptsModal();
+}

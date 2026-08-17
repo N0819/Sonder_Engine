@@ -103,7 +103,8 @@ def test_the_prompt_states_the_past_rule_and_names_the_row_marker():
     started collecting memory_refs that grounding then dropped. The rule is
     stated in the contract AND the marker names itself on the row; the two are
     not alternatives."""
-    source = open("prompts.py", encoding="utf-8").read()
+    from prompts import DEFAULT_PROMPTS
+    source = DEFAULT_PROMPTS["character"]
     assert "MEMORY IS PAST" in source
     assert "is REMEMBERED PAST -- without exception" in source
     assert "temporal_status" in source
@@ -115,7 +116,8 @@ def test_the_prompt_states_the_past_rule_and_names_the_row_marker():
 def test_the_prompt_says_which_one_to_cite():
     """The payload change alone is not enough -- the model reached for real
     ids because they looked authoritative, so the rule is stated too."""
-    source = open("prompts.py", encoding="utf-8").read()
+    from prompts import DEFAULT_PROMPTS
+    source = DEFAULT_PROMPTS["character"]
     assert "EVIDENCE HAS TWO LANES" in source
     assert "ids from perception.observations" in source
     # The reason, not just the instruction: a rule without its why is the
