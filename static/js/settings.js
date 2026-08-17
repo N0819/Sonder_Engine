@@ -3281,6 +3281,13 @@ function extensionCapabilitySummary(caps) {
   return parts;
 }
 
+//: id -> the row `/api/extensions/updates` last returned for it. Held across
+//: reopens of the menu so a check survives an enable or a remove redrawing
+//: the list, and deliberately NOT fetched on open: a check is one network
+//: round trip per installed extension, which is not something to spend every
+//: time someone glances at the menu.
+let EXTENSION_UPDATES = {};
+
 async function openExtensionsMenu() {
   let data;
   try { data = await api("GET", "/api/extensions"); }
@@ -3355,13 +3362,49 @@ async function openExtensionsMenu() {
         openExtensionsMenu();
       };
 
+      // An update button appears only once a check has actually said so.
+      // Offering one unconditionally would mean either checking on every open
+      // (a round trip per extension, for a glance) or offering an action that
+      // usually does nothing.
+      const report = EXTENSION_UPDATES[ext.id];
+      let update = null;
+      if (report && report.update) {
+        update = el("button", { class: "primary", title: report.latest || "" },
+          "Update");
+        update.onclick = async () => {
+          await backgroundTask("Updating extension",
+            () => api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/update`),
+            { onSuccess: async () => {
+                delete EXTENSION_UPDATES[ext.id];
+                // The Python half is already the new one; the browser still
+                // holds the old script, so reload it the way enable does.
+                if (window.Sonder && enabled) {
+                  Sonder._unload(ext.id);
+                  await Sonder._load(ext.id);
+                  Sonder.refresh();
+                }
+                openExtensionsMenu();
+              },
+              successMessage: "Extension updated." });
+        };
+      }
+
       b.append(el("div", { class: "card" },
         el("div", { class: "row" },
           el("b", {}, ext.name || ext.id),
           el("span", { class: "small dim" }, `v${ext.version || "?"}`),
           el("span", { class: "small dim" },
             ext.provenance ? String(ext.provenance) : "local"),
-          toggle, remove),
+          update, toggle, remove),
+        report
+          ? el("div", { class: "small", style: "margin-top:4px" },
+              report.update
+                ? el("span", { class: "ok" }, "An update is available.")
+                : report.checkable
+                  ? el("span", { class: "dim" }, "Up to date.")
+                  : el("span", { class: "dim" },
+                      "Cannot check for updates — ", txt(String(report.reason || ""))))
+          : null,
         ext.description
           ? el("div", { class: "small dim", style: "margin-top:4px" }, ext.description)
           : null,
@@ -3379,7 +3422,7 @@ async function openExtensionsMenu() {
     // Install sits at the BOTTOM: the list is what you came for, and the
     // install field is the occasional act.
     const source = el("input", {
-      placeholder: "https://…/extension.zip  or  /path/to/extension",
+      placeholder: "https://github.com/…  or  https://…/extension.zip  or  /path/to/extension",
       style: "flex:1" });
     const installBtn = el("button", { class: "primary" }, "Install");
     installBtn.onclick = async () => {
@@ -3400,13 +3443,34 @@ async function openExtensionsMenu() {
           },
           successMessage: "Extension installed — enable it to switch it on." });
     };
+    const checkBtn = el("button", {}, "Check for updates");
+    checkBtn.onclick = async () => {
+      await backgroundTask("Checking for updates",
+        () => api("GET", "/api/extensions/updates"),
+        { onSuccess: async (result) => {
+            EXTENSION_UPDATES = {};
+            for (const row of (result.updates || [])) EXTENSION_UPDATES[row.id] = row;
+            openExtensionsMenu();
+          },
+          successMessage: null });
+    };
+
     b.append(
       el("div", { style: "margin-top:14px;border-top:1px solid var(--bd);padding-top:10px" },
-        el("div", { class: "small" }, "Install an extension"),
+        el("div", { class: "row" },
+          el("div", { class: "small" }, "Install an extension"),
+          el("span", { style: "flex:1" }),
+          checkBtn),
         el("div", { class: "row", style: "margin-top:6px" }, source, installBtn),
         el("div", { class: "small dim", style: "margin-top:4px" },
-          "A zip from a URL, or a folder on this machine. Installed extensions "
-          + "arrive switched off — nothing runs until you enable it.")));
+          "A git repository, a zip from a URL, or a folder on this machine. "
+          + "Add #branch or #tag to a repository URL to follow that instead of "
+          + "the default branch. Installed extensions arrive switched off — "
+          + "nothing runs until you enable it."),
+        el("div", { class: "small dim", style: "margin-top:4px" },
+          "Only what was installed from a repository can be checked for "
+          + "updates: a zip would have to be downloaded in full to compare, "
+          + "and a folder has no upstream.")));
 
     b.append(el("div", { class: "small dim", style: "margin-top:10px" },
       "A capability list is what the extension DECLARES, checked against what "

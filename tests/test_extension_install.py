@@ -10,6 +10,7 @@ and an interrupted install must leave either the old extension or none.
 from __future__ import annotations
 
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -257,3 +258,315 @@ class TestArchiveResourceCeilings:
         staged = tmp_path / "staged"
         with pytest.raises(ext.ExtensionError, match="expands to more than"):
             ext._safe_extract(_Archive(staged), staged)
+
+
+class TestGitSources:
+    """Installing from a repository, and finding out when it has moved.
+
+    Exercised against a real local repository rather than a mocked subprocess:
+    the interesting parts of this path are git's actual behaviour -- what
+    `--branch` accepts, what `rev-parse` returns, what `ls-remote` prints for a
+    tag versus a branch -- and a mock would assert my beliefs about git instead
+    of git.
+    """
+
+    def _repo(self, tmp_path, ext_id="repo-ext", version="1.0.0"):
+        import subprocess
+
+        origin = tmp_path / "origin"
+        (origin / ext_id).mkdir(parents=True)
+        (origin / ext_id / "manifest.json").write_text(json.dumps({
+            "id": ext_id, "version": version, "ext_api": 1, "name": "Repo Ext",
+            "capabilities": {},
+        }), encoding="utf-8")
+
+        def git(*args):
+            subprocess.run(("git",) + args, cwd=origin, check=True,
+                           capture_output=True)
+
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "t@example.com")
+        git("config", "user.name", "T")
+        git("add", "-A")
+        git("commit", "-q", "-m", "one")
+        return origin, git
+
+    def _commit_more(self, origin, git, ext_id="repo-ext", version="1.1.0"):
+        (origin / ext_id / "manifest.json").write_text(json.dumps({
+            "id": ext_id, "version": version, "ext_api": 1, "name": "Repo Ext",
+            "capabilities": {},
+        }), encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "two")
+
+    # -- what counts as a repository URL
+
+    @pytest.mark.parametrize("source,kind", [
+        ("https://github.com/owner/repo", "git"),
+        ("https://github.com/owner/repo.git", "git"),
+        ("https://gitlab.com/owner/repo", "git"),
+        ("https://example.com/thing.git", "git"),
+        ("git+https://example.com/thing", "git"),
+        ("https://github.com/owner/repo#v2", "git"),
+        ("https://example.com/bundle.zip", "zip"),
+        ("https://example.com/download", "zip"),
+        ("https://github.com/owner/repo/releases/x.zip", "zip"),
+        ("/srv/extensions/mine", "local"),
+        ("file:///srv/repos/mine", "git"),
+        ("git+file:///srv/repos/mine", "git"),
+    ])
+    def test_a_source_is_classified_before_anything_is_fetched(self, source,
+                                                               kind):
+        assert ext._source_kind(source) == kind
+
+    def test_an_ssh_remote_is_refused_with_the_reason(self):
+        """It would not fail -- it would HANG. Without a key git blocks on a
+        passphrase prompt that nobody is at the terminal to answer."""
+        for source in ("ssh://git@github.com/o/r.git",
+                       "git@github.com:o/r.git",
+                       "git://example.com/r"):
+            with pytest.raises(ext.ExtensionError, match="ssh|http"):
+                ext._source_kind(source)
+
+    def test_a_source_that_is_a_git_flag_is_refused(self):
+        """`--upload-pack=...` is a command, not a URL."""
+        with pytest.raises(ext.ExtensionError):
+            ext._source_kind("--upload-pack=touch /tmp/pwned")
+
+    # -- installing
+
+    def test_a_repository_installs_and_records_where_it_came_from(
+            self, tmp_path, monkeypatch, temp_db):
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, _git = self._repo(tmp_path)
+
+        row = ext.install_extension(f"file://{origin}")
+
+        assert row["id"] == "repo-ext"
+        assert row["version"] == "1.0.0"
+        assert row["updatable"] is True
+        assert row["commit"]
+        assert row["source_ref"] == "main"
+        # The working tree, not the repository: an update re-clones, so there
+        # is no git state on the host to drift or conflict.
+        assert not (root / "repo-ext" / ".git").exists()
+
+    def test_a_ref_may_be_named(self, tmp_path, monkeypatch, temp_db):
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, git = self._repo(tmp_path)
+        git("tag", "v1")
+        self._commit_more(origin, git)
+
+        row = ext.install_extension(f"file://{origin}#v1")
+
+        assert row["version"] == "1.0.0", "the tag, not the newer default branch"
+        assert row["source_ref"] == "v1"
+
+    # -- checking
+
+    def test_a_check_finds_a_moved_remote(self, tmp_path, monkeypatch,
+                                          temp_db):
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, git = self._repo(tmp_path)
+        ext.install_extension(f"file://{origin}")
+
+        before = ext.check_update("repo-ext")
+        assert before["checkable"] is True
+        assert before["update"] is False
+
+        self._commit_more(origin, git)
+        after = ext.check_update("repo-ext")
+        assert after["update"] is True
+        assert after["latest"] != after["current"]
+
+    def test_a_source_with_no_upstream_is_uncheckable_not_up_to_date(
+            self, tmp_path, monkeypatch, temp_db):
+        """The distinction the whole report exists to make.
+
+        Reporting a folder install as "up to date" is the same claim with the
+        truth taken out -- nothing was asked, so nothing is known.
+        """
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        plain = tmp_path / "plain-ext"
+        plain.mkdir()
+        (plain / "manifest.json").write_text(json.dumps({
+            "id": "plain-ext", "version": "1.0.0", "ext_api": 1,
+            "name": "Plain", "capabilities": {},
+        }), encoding="utf-8")
+        ext.install_extension(str(plain))
+
+        report = ext.check_update("plain-ext")
+        assert report["checkable"] is False
+        assert report["update"] is False
+        assert "zip" in report["reason"] or "folder" in report["reason"]
+
+    def test_an_unreachable_remote_is_reported_not_raised(
+            self, tmp_path, monkeypatch, temp_db):
+        """A sweep runs for every installed extension, so one dead repository
+        must not fail the check for the others."""
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, _git = self._repo(tmp_path)
+        ext.install_extension(f"file://{origin}")
+        shutil.rmtree(origin)
+
+        report = ext.check_update("repo-ext")
+        assert report["checkable"] is False
+        assert report["update"] is False
+        assert report["reason"]
+
+        # And the sweep still returns a row for it.
+        assert [row["id"] for row in ext.check_updates()] == ["repo-ext"]
+
+    # -- updating
+
+    def test_updating_takes_the_newer_commit(self, tmp_path, monkeypatch,
+                                             temp_db):
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, git = self._repo(tmp_path)
+        first = ext.install_extension(f"file://{origin}")
+        self._commit_more(origin, git)
+
+        row = ext.update_extension("repo-ext")
+
+        assert row["updated"] is True
+        assert row["version"] == "1.1.0"
+        assert row["previous_version"] == "1.0.0"
+        assert row["commit"] != first["commit"]
+
+    def test_updating_an_unchanged_repository_does_nothing(
+            self, tmp_path, monkeypatch, temp_db):
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, _git = self._repo(tmp_path)
+        ext.install_extension(f"file://{origin}")
+
+        row = ext.update_extension("repo-ext")
+        assert row["updated"] is False
+
+    def test_an_update_keeps_the_extension_enabled(self, tmp_path, monkeypatch,
+                                                   temp_db):
+        from db import set_setting
+
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, git = self._repo(tmp_path)
+        ext.install_extension(f"file://{origin}")
+        set_setting(ext.ENABLED_SETTING, json.dumps(["repo-ext"]))
+        ext.activate(refresh=True)
+        self._commit_more(origin, git)
+
+        ext.update_extension("repo-ext")
+
+        assert ext.is_enabled("repo-ext") is True
+
+    def test_an_update_that_would_not_load_leaves_the_old_one_standing(
+            self, tmp_path, monkeypatch, temp_db):
+        """Validation happens in staging, before the installed copy is touched.
+
+        The version a host is running must never be destroyed by a broken
+        upstream commit -- that turns someone else's bad push into an outage on
+        a machine that did nothing.
+        """
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, git = self._repo(tmp_path)
+        ext.install_extension(f"file://{origin}")
+
+        (origin / "repo-ext" / "manifest.json").write_text(
+            "{ not json at all", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "broken")
+
+        with pytest.raises(ext.ExtensionError):
+            ext.update_extension("repo-ext")
+
+        rows = {row["id"]: row for row in ext.listing()}
+        assert rows["repo-ext"]["version"] == "1.0.0"
+        assert rows["repo-ext"]["error"] is None
+
+    def test_a_repository_that_renames_itself_is_refused(
+            self, tmp_path, monkeypatch, temp_db):
+        """An id change is a different extension, and updating into it would
+        silently hand one extension's stored story state to another."""
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        origin, git = self._repo(tmp_path)
+        ext.install_extension(f"file://{origin}")
+
+        (origin / "repo-ext" / "manifest.json").write_text(json.dumps({
+            "id": "renamed-ext", "version": "2.0.0", "ext_api": 1,
+            "name": "Renamed", "capabilities": {},
+        }), encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-q", "-m", "renamed")
+
+        with pytest.raises(ext.ExtensionError, match="install it separately"):
+            ext.update_extension("repo-ext")
+
+    def test_updating_something_with_no_upstream_is_refused(
+            self, tmp_path, monkeypatch, temp_db):
+        root = tmp_path / "extensions"
+        root.mkdir()
+        monkeypatch.setenv(ext.ROOT_ENV, str(root))
+        ext.reload()
+        plain = tmp_path / "plain-ext"
+        plain.mkdir()
+        (plain / "manifest.json").write_text(json.dumps({
+            "id": "plain-ext", "version": "1.0.0", "ext_api": 1,
+            "name": "Plain", "capabilities": {},
+        }), encoding="utf-8")
+        ext.install_extension(str(plain))
+
+        with pytest.raises(ext.ExtensionError, match="nothing to update from"):
+            ext.update_extension("plain-ext")
+
+    # -- the ceilings apply to a clone too
+
+    def test_a_clone_is_audited_like_an_archive(self, tmp_path, monkeypatch):
+        """`_safe_extract` never sees a clone, and a repository can hold
+        symlinks and gigabytes just as happily as a zip can."""
+        tree = tmp_path / "tree"
+        (tree / "sub").mkdir(parents=True)
+        (tree / "sub" / "real.txt").write_text("x" * 100, encoding="utf-8")
+        ext._audit_tree(tree)                       # fine as it stands
+
+        monkeypatch.setattr(ext, "MAX_EXTRACTED_BYTES", 10)
+        with pytest.raises(ext.ExtensionError, match="larger than"):
+            ext._audit_tree(tree)
+
+    def test_a_symlink_in_a_repository_is_refused(self, tmp_path):
+        tree = tmp_path / "tree"
+        tree.mkdir()
+        (tree / "real.txt").write_text("ok", encoding="utf-8")
+        try:
+            (tree / "escape").symlink_to("/etc/passwd")
+        except (OSError, NotImplementedError):
+            pytest.skip("this platform does not make symlinks")
+        with pytest.raises(ext.ExtensionError, match="symlink"):
+            ext._audit_tree(tree)
