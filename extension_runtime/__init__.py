@@ -751,6 +751,20 @@ def dispatch_character_payload(ctx, char_id, payload, names=()):
         if api is None:
             continue
         before = current
+        # Fingerprint BEFORE the call. Comparing the returned object against
+        # the passed one is the obvious implementation and it does not work:
+        # a hook is handed the real payload, so the ordinary
+        #
+        #     def hook(payload, info):
+        #         payload["forbidden_fact"] = "..."
+        #         return payload
+        #
+        # mutates both sides of the comparison at once and the diff comes back
+        # EMPTY -- an extension altering what a mind knows with no attribution
+        # record, which is precisely the guarantee this seam exists to make.
+        # Returning `None` (leave it alone) after mutating in place is the same
+        # hole by a shorter route.
+        stamps = _payload_stamps(before)
         try:
             info = PayloadContext(api, ctx, char_id, names)
             result = fn(before, info)
@@ -764,17 +778,42 @@ def dispatch_character_payload(ctx, char_id, payload, names=()):
             log.warning("extension %s payload hook returned %s; ignored",
                         ext_id, type(result).__name__)
             continue
-        # Diff on top-level keys only. Deeper diffing would cost a full walk of
-        # the largest object in the turn on every beat, and the question this
-        # answers -- WHO touched this mind -- is answered at this resolution.
-        changed = sorted(
-            {key for key in set(before) | set(result)
-             if before.get(key) is not result.get(key)
-             and before.get(key) != result.get(key)})
+        after = _payload_stamps(result)
+        changed = sorted({key for key in set(stamps) | set(after)
+                          if stamps.get(key) != after.get(key)})
         if changed:
             _note_routing(ctx, ext_id, char_id, changed)
         current = result
     return current
+
+
+def _payload_stamps(payload) -> dict:
+    """A comparable snapshot of each top-level value, taken by VALUE.
+
+    Serialised rather than shallow-copied because a shallow copy still shares
+    the nested objects: `payload["perception"]["view"] = ...` would leave the
+    copy and the original identical and slip past the audit. Cost is one dump
+    of the payload per registered hook, on a turn that is about to spend
+    seconds in a model call -- and zero on the overwhelmingly common turn where
+    no hook is registered at all, because this is never reached.
+
+    Top-level keys are the resolution the record is kept at: the question is
+    WHO touched this mind, not which leaf moved.
+    """
+    stamps = {}
+    for key, value in payload.items():
+        try:
+            stamps[key] = json.dumps(value, sort_keys=True, default=str,
+                                     ensure_ascii=False)
+        except Exception:
+            # An unserialisable value is still comparable by its repr, and a
+            # value that cannot even be repr'd must read as CHANGED rather
+            # than as untouched -- silence here is the failure mode.
+            try:
+                stamps[key] = repr(value)
+            except Exception:
+                stamps[key] = object()
+    return stamps
 
 
 def _note_routing(ctx, ext_id, char_id, changed) -> None:
@@ -1052,10 +1091,21 @@ __all__ = [
 #: Generous for a real extension (the reference one is a few KB) and far below
 #: anything that could exhaust a host running this on their own machine.
 MAX_BUNDLE_BYTES = 32 * 1024 * 1024
+#: What the bundle may become once unpacked. The download cap above bounds the
+#: COMPRESSED bytes and says nothing about the expanded ones: zip is happy to
+#: turn a few megabytes of zeroes into several gigabytes, so a bundle that
+#: passes every path check can still fill the host's disk. Generous for a real
+#: extension -- the reference one is a few KB -- and far below anything that
+#: matters on a machine someone plays on.
+MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
+#: And a count, because a million empty files costs inodes rather than bytes
+#: and would slip under the ceiling above entirely.
+MAX_ARCHIVE_MEMBERS = 4096
 
 
 def _safe_extract(archive, destination: Path) -> None:
-    """Extract a zip, refusing any member that would escape `destination`.
+    """Extract a zip, refusing any member that would escape `destination` --
+    or that would cost more than an extension has any business costing.
 
     ZIP SLIP: an archive may name `../../etc/thing` or an absolute path, and a
     naive extractall writes it wherever the name says. The engine's directory
@@ -1063,9 +1113,20 @@ def _safe_extract(archive, destination: Path) -> None:
     possible -- so this is the one place a downloaded file chooses a path.
     Symlinks are refused for the same reason: a link is a path that resolves
     later, after any check.
+
+    ZIP BOMB: every check is made against the DECLARED sizes in the central
+    directory before a single byte is written, and the write is then verified
+    against them. Checking the declaration alone would trust the archive about
+    its own size, which is the same mistake as trusting it about its own paths.
     """
     root = destination.resolve()
-    for member in archive.infolist():
+    members = archive.infolist()
+    if len(members) > MAX_ARCHIVE_MEMBERS:
+        raise ExtensionError(
+            f"archive holds {len(members)} files, more than the "
+            f"{MAX_ARCHIVE_MEMBERS} an extension may install")
+    declared = 0
+    for member in members:
         name = member.filename
         if name.startswith("/") or ".." in Path(name).parts:
             raise ExtensionError(f"archive escapes its directory: {name!r}")
@@ -1075,7 +1136,29 @@ def _safe_extract(archive, destination: Path) -> None:
         target = (root / name).resolve()
         if target != root and root not in target.parents:
             raise ExtensionError(f"archive escapes its directory: {name!r}")
-    archive.extractall(root)
+        declared += int(member.file_size or 0)
+        if declared > MAX_EXTRACTED_BYTES:
+            raise ExtensionError(
+                f"archive expands to more than "
+                f"{MAX_EXTRACTED_BYTES // (1024 * 1024)}MB")
+
+    # Member by member, counting what actually lands. CPython's `zipfile`
+    # happens to enforce `file_size` on read, so a lie in the central directory
+    # is caught before it costs anything -- but that is luck this code does not
+    # own, and `extractall` would believe the declaration it was just handed.
+    written = 0
+    for member in members:
+        archive.extract(member, root)
+        if member.is_dir():
+            continue
+        try:
+            written += (root / member.filename).stat().st_size
+        except OSError:
+            continue
+        if written > MAX_EXTRACTED_BYTES:
+            raise ExtensionError(
+                f"archive expands to more than "
+                f"{MAX_EXTRACTED_BYTES // (1024 * 1024)}MB")
 
 
 def _staged_bundle_root(staged: Path) -> Path:

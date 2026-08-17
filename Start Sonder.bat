@@ -60,7 +60,13 @@ REM --- Install / update dependencies -----------------------------
 if not exist "%STAMP%" (
     echo Installing dependencies ^(this may take a minute^)...
     "%VENV_PY%" -m pip install --upgrade pip
-    "%VENV_PY%" -m pip install -r requirements.txt
+    REM -c constraints.txt: requirements.txt declares RANGES, and the range
+    REM for fastapi resolves to versions CI never runs. One of them moved a
+    REM Starlette internal this app had reached for, so a fresh install here
+    REM could fail every api request while CI stayed green -- the people hit
+    REM by that being exactly the ones running this launcher. Install what
+    REM was actually tested.
+    "%VENV_PY%" -m pip install -c constraints.txt -r requirements.txt
     if errorlevel 1 (
         echo.
         echo [!] Failed to install dependencies.
