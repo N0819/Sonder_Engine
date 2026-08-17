@@ -482,7 +482,7 @@ function resolveAmbience(turnId, signature, opts = {}) {
       if (verdict && !opts.reroll) AMB.failed.add(signature);
       // A verdict about the ROOM is a warn (the feature worked; the answer
       // was no); only a malfunction gets the error dress.
-      toast("Ambience: " + (error?.message || "could not find a sound"),
+      toast(`Ambience: ${(error?.message || "could not find a sound")}`,
             error?.kind && error.kind !== "failed" ? "warn" : "err");
       return null;
     })
@@ -598,12 +598,12 @@ async function rerollAmbience(layer = null) {
   playAmbience(found.layers || [], found.token);
   updateAmbienceBtn();
   if (found.silent) {
-    toast("Nothing to hear in this room" + (found.reason ? ` — ${found.reason}` : "."),
+    toast(`Nothing to hear in this room${(found.reason ? ` — ${found.reason}` : ".")}`,
           "warn");
     return;
   }
   const named = (found.layers || []).map(l => l.title).filter(Boolean).join(" + ");
-  if (named) toast("Now playing: " + named, "ok");
+  if (named) toast(`Now playing: ${named}`, "ok");
 }
 
 function ambienceOnVisibleTurn(turnId, opts = {}) {

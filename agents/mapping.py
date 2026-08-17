@@ -116,7 +116,7 @@ def mapping_stage(ctx, nonce):
     out = _agent_json(
         "mapping",
         "mapping_stage",
-        get_prompt("mapping_stage"),
+        get_prompt("mapping_stage", ctx.language),
         payload,
         temperature=0.2,
     )

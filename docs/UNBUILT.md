@@ -2255,6 +2255,88 @@ a real chat the way `director_shootout` builds its own before anyone ranks a
 model for a tiering decision on them.
 
 
+### 1.48 Language packs: what is not finished
+
+The pack machinery is built and English is byte-identical to before the
+extraction. What is unfinished is the one non-English pack and the surfaces
+the language layer does not own.
+
+**Japanese has never been reviewed by a native speaker.** `language_packs/ja`
+ships `translation_status: model-draft`, `version: 0.2.0-beta`. It has been
+checked for structural integrity — every canonical protocol span survives
+translation, every regex compiles, capture-group counts match English, no
+mask markers leaked — and none of that is a judgement about whether the
+Japanese reads naturally, whether a cue is too broad, or whether the register
+is right for fiction. Until it is read by someone who speaks it, treat
+`story: true` for `ja` as a claim about coverage, not about quality.
+
+**Story content authored outside the language layer stays English.** Layer B
+renders admitted percepts through the pack, but several producers build reader-
+facing clauses themselves and hand them over as data:
+
+- `spatial.py` contact and substance clauses (`contact_sensation`,
+  `substance_event_clause`) — these reach the view AND the memory episode, so
+  they are written permanently into a non-English character's memory bank;
+- `scene.appearance_of`'s glue (`"; wearing: "`, `"; clothing state: "`), whose
+  separators are also parsed back by `attire.py` and `agents/perception.py`,
+  so translating them breaks the readers unless all three move together;
+- `attire.py`'s ledger phrases (`"bare at the %s"`), which are persisted and
+  served raw to the attire panel — a later translation does not repair stories
+  already written;
+- `paradox.py`'s `_HAZARD_WOUND_NOTE`, appended to room notes;
+- the first-person memory episodes minted in `commit.py` and `offscreen.py`
+  (`"I said …"`, `"I tried to …"`, the drive-rupture memory).
+
+The fix is not to translate the strings where they sit: each is either
+literal-coupled to a parser or persisted, so the real work is moving the
+clause construction behind the compositor card and migrating what is stored.
+Sized as its own change, not a follow-up patch.
+
+**Japanese still has open items from its first native review.** The review
+(the pack's first) fixed the sentence architecture, but three things were
+identified and not done:
+
+- **Co-presence is not grouped.** English merges several present bodies into
+  one sentence and counts indistinct figures (`_render_presence_group`); the
+  Japanese adapter renders one sentence per body, so four people in a room
+  give four clauses of identical shape, each ending 「…にいる。」 The pack's
+  `dim_figures`, `count_words` and `join` are authored for this and unused.
+  Worse in Japanese than English, because the sentence-final morphology
+  repeats too.
+- **Two dialogue renderers still coexist and disagree.** `agents/common.py`'s
+  `_inject_dialogue` and `language_adapters/japanese.py`'s `_speech` both
+  render speech; they now agree on articulation and tone, but they are two
+  implementations of one contract and should be one.
+- **`_tone_clause` picks its frame by English morphology** (noun-suffix and
+  article tests) even for Japanese input. It is harmless today only because
+  all three Japanese tone templates are the same string; editing one will
+  surprise whoever does it. The durable fix is the prompt contract's new
+  requirement that `tone` be a 体言, plus a single frame.
+
+**"句点 inside 「」" is not normalised.** Standard Japanese practice omits the
+closing 句点 inside quotation marks; the engine emits whatever the model wrote.
+
+**RTL is accepted and unimplemented.** `manifest.direction: "rtl"` validates,
+reaches `document.documentElement.dir`, and nothing else: there are no
+`[dir=...]` rules in `static/`, and the stylesheets use physical `left`/`right`
+properties throughout. Both shipped packs are `ltr`, so no RTL pack has ever
+been rendered. A pack declaring `rtl` today gets a mirrored text direction over
+an unmirrored layout.
+
+**The UI catalog scanner is deliberately broad.** `tools/extract_ui_catalog.py`
+harvests string literals, so roughly 4% of the 2006 English messages are code
+fragments, selectors and markup that never render. They are carried as
+`translation_exceptions.json` entries rather than filtered, which keeps the
+parity check honest but hands translators strings they must not touch.
+
+**Provenance is not recorded per story.** A chat stores `story_language` and
+nothing else — not the pack version, adapter, or translation status it was
+played under. A story played across a pack upgrade has beats produced under
+different linguistic rules with nothing on disk saying so. Judged acceptable
+while old pack versions are not retained, but a `story_language_pack_version`
+stamp would at least make a behaviour change explicable afterwards.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

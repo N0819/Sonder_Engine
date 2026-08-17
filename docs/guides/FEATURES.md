@@ -44,6 +44,16 @@ narrower than it sounds — those two documents have the detail.
   act in the same scene, each with their own position, perception and prose.
 - **Guest invites** — A single-use join code, expiring in 30 minutes, that lets
   a friend play one persona in one story and reach nothing else.
+- **Story language** *(partial)* — A story can be played in an installed
+  language other than English: prompts, the engine's own deterministic prose,
+  generated memories and the interface all follow it, chosen per story and
+  separately from the interface language. Japanese ships as a beta pack that
+  no native speaker has reviewed yet, and some engine-written phrases still
+  come through in English — see `docs/UNBUILT.md` §1.48.
+- **Prompt presets you can carry between installs** — A saved set of edited
+  system prompts exports to a file and imports on another machine. A preset
+  records the language it was written in and only applies to stories in that
+  language, so an English sheet cannot quietly replace a Japanese one.
 
 ## A turn, and what you can do to it
 

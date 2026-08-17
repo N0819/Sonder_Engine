@@ -7,7 +7,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 
 from db import get_setting, q, wget, wset
-from prompts import get_prompt
+from language_runtime import compositor_text, english_linguistic, linguistic
+from prompts import get_prompt, prompt_fragment
 from scene import (
     NON_AWAKE_GATED,
     apply_awareness_diff,
@@ -37,6 +38,13 @@ from spatial import (
 )
 from weather import weather_for_room, weather_words
 
+
+def _ling(name):
+    return linguistic("agents.narration", name)
+
+# English compatibility view for tests/tooling; live checks use `_ling(...)`.
+_ENFORCEABLE_PREFIXES = english_linguistic(
+    "agents.narration", "_ENFORCEABLE_PREFIXES")
 
 def _spatial_facts_field(scene, observer):
     """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
@@ -160,78 +168,12 @@ def _resolve_narration_person(chat_id, raw_input, player_name, player_pronouns,
 # were never in this list -- that check has real false positives (e.g. a
 # location's own name appearing in scenario/lore text the player would never
 # actually say aloud).
-_ENFORCEABLE_PREFIXES = (
-    "Dialogue from view missing or altered",
-    # Two characters' lines welded into one pair of quotes. Enforceable for
-    # the same reason as a dropped line and then some: the reader is not
-    # merely missing something, they are told the wrong person said it. The
-    # check only fires when two DIFFERENT speakers' full logged bodies both
-    # sit inside one span, which does not happen by accident.
-    "Merged dialogue from different speakers",
-    # A cast member's pronouns flipping mid-scene is the same tier of failure
-    # as a dropped line -- the reader sees a character silently change -- and
-    # the check that raises it (agents/common.py's _check_pronoun_fidelity)
-    # only fires on unambiguous flips, so it is cheap enough to enforce.
-    "Pronoun mismatch for",
-    # PERSON DISCIPLINE is called an ABSOLUTE, hard error by the narrator
-    # prompt itself, and the check that raises it (agents/common.py's
-    # _check_player_person) only fires on the player's literal name outside
-    # quoted dialogue -- unambiguous enough to spend a rewrite on.
-    "Player named in third person",
-    # The player's own interiority. The narrator renders the player-facing
-    # slice; it does not get to tell the player what their character feels.
-    # Enforced rather than warned because it is the LAST stage -- a feeling
-    # asserted here reaches the reader as fact and becomes what the story
-    # said happened. The check exempts anything already in the view, so it
-    # only ever fires on what the narrator added on its own, which is
-    # unambiguous enough to spend a rewrite on.
-    "Narrator asserted the player's interior state",
-    # F1: a response rendered before its stimulus breaks causality on the
-    # page; the check (_check_event_order) fires only on a strict verbatim
-    # position inversion between two located quotes.
-    "Dialogue rendered out of order",
-    # F4: a tracked mind's line reading as an anonymous body's is silent
-    # misattribution; the check (_check_quote_attribution) fires only when a
-    # DIFFERENT speaker's reference is positively nearest.
-    "Quote attributed to wrong speaker",
-    # F2: an unmoved character re-located by prose alone is a continuity
-    # break the reader sees (_check_position_fidelity).
-    "Character placed in wrong room",
-    # F3: a shut portal rendered open (or vice versa) contradicts committed
-    # world state (_check_portal_fidelity).
-    "Portal state contradicts the scene",
-    # F5: an act rendered in the OPPOSITE direction to the one the record
-    # gives -- the page saying "lifts" where the beat lowered. Only the
-    # reversal is enforced; _check_action_direction's weaker "may be missing"
-    # finding stays a warning, because correct prose can carry a descent with
-    # no directional verb in it at all.
-    "Physical direction reversed",
-)
 
 # Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
 # draft containing any triggers ONE rewrite naming them (reusing the correction
 # loop). Conservative -- only clear tells, to avoid false positives on ordinary
 # prose. Dialogue is exempt (quotes are fixed); we scan the whole draft but the
 # patterns don't match normal speech.
-_CRAFT_TELLS = [
-    (r"\bshift(?:s|ed|ing)?\s+(?:her|his|their|my|its)\s+weight\b", "shifts weight"),
-    (r"\beyes?\s+flick(?:s|ed|ing)?\b", "eyes flick"),
-    (r"\btake[sn]?\s+the\s+(?:\w+\s+){1,2}in\b(?!\s+(?:his|her|their|both|one|two)\s+hands?)",
-     "'take the room in' (filtering)"),
-    (r"\btak(?:e|es|ing)\s+in\s+the\s+\w+\b", "'take in the room' (filtering)"),
-    (r"\bI'?m\s+aware\s+of\b", "'I'm aware of' (filtering)"),
-    (r"\bwash(?:es|ed)?\s+over\s+(?:me|you|him|her|them|us)\b", "washes over (emotion)"),
-    (r"\bhang(?:s|ing|ed)?\s+in\s+the\s+air\b|\bhung\s+in\s+the\s+air\b", "hangs in the air"),
-    (r"\bmiddle\s+distance\b", "middle distance"),
-    (r"\bfull\s+height\b", "full height"),
-    (r"\bclose\s+air\b", "the close air"),
-    (r"\b(?:deliberate|deliberately|unhurried|unhurriedly|pointedly|casually)\b",
-     "adverb tell (deliberate/unhurried/pointedly/casually)"),
-    (r"\bslow\s+and\s+steady\b", "slow and steady"),
-    (r"\b(?:muted|soft|softly|dim|dimly|faint|faintly|diffused|warm|low)\s+"
-     r"(?:\w+\s+){0,2}(?:glow|glimmer|gleam|light|murmur|hum|clink|drone)\b",
-     "generic muted/dim + light/sound"),
-]
 
 
 def _craft_tells(prose: str) -> list:
@@ -246,7 +188,7 @@ def _craft_tells(prose: str) -> list:
     # tell inside curly quotes would otherwise burn unwinnable retries.
     scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
     found = []
-    for pat, label in _CRAFT_TELLS:
+    for pat, label in _ling("_CRAFT_TELLS"):
         if re.search(pat, scan, re.I):
             found.append(label)
     return list(dict.fromkeys(found))
@@ -823,14 +765,14 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
 
 
 def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
-                        fidelity_facts=None):
+                        fidelity_facts=None, language="en"):
     call_payload = dict(payload)
     if correction_notes:
         call_payload["correction_notes"] = correction_notes
     out = _agent_json(
         "narrator",
         "narrator",
-        get_prompt("narrator"),
+        get_prompt("narrator", language),
         call_payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
@@ -862,10 +804,10 @@ def narrator(ctx, nonce):
     est = ctx.get("director_establish") or {}
     if est:
         view = (ctx.get("perception_establish", {}).get("views") or {}).get("player") \
-            or "You register your immediate surroundings."
+            or compositor_text("narrator_immediate", ctx.language)
     else:
         view = (ctx.get("perception_outcome", {}).get("views") or {}).get("player") \
-            or "Nothing in particular reaches you this beat."
+            or compositor_text("narrator_nothing", ctx.language)
     # Frame-filtered: t.idx is GLOBAL play order shared by every frame,
     # so without this an OTHER concurrently-played frame's prior prose
     # would leak into this frame's own rhythm/repetition context.
@@ -1032,16 +974,17 @@ def narrator(ctx, nonce):
         "variant_seed": nonce,
     }
     out, warnings, fidelity_warnings = _generate_narration(
-        payload, view, prev, p_lines, fidelity_facts=_fidelity_facts)
+        payload, view, prev, p_lines, fidelity_facts=_fidelity_facts,
+        language=ctx.language)
 
-    enforceable = [w for w in fidelity_warnings if w.startswith(_ENFORCEABLE_PREFIXES)]
+    enforceable = [w for w in fidelity_warnings if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
     if enforceable:
-        correction = ("Your previous draft for THIS turn had these problems -- "
-                      "rewrite fixing them, without introducing new ones: "
-                      + " | ".join(enforceable))
+        correction = prompt_fragment(
+            "narrator_fidelity_correction", ctx.language).format(
+                problems=" | ".join(enforceable))
         out, warnings, fidelity_warnings = _generate_narration(
             payload, view, prev, p_lines, correction_notes=correction,
-            fidelity_facts=_fidelity_facts)
+            fidelity_facts=_fidelity_facts, language=ctx.language)
 
     # Craft screen: while the accepted draft carries banned AI tells, spend a
     # rewrite naming them (bounded to 2). Keep a rewrite ONLY if it preserves
@@ -1053,13 +996,13 @@ def narrator(ctx, nonce):
     craft_attempts = 0
     while best_tells and craft_attempts < _retry_cap:
         craft_attempts += 1
-        craft_note = ("Your previous draft for THIS turn used banned AI tells / weak "
-                      "phrasing -- rewrite the PROSE to remove every one, keeping all "
-                      "dialogue verbatim and every fact intact: " + "; ".join(best_tells))
+        craft_note = prompt_fragment(
+            "narrator_craft_correction", ctx.language).format(
+                problems="; ".join(best_tells))
         r_out, r_warnings, r_fid = _generate_narration(
             payload, view, prev, p_lines, correction_notes=craft_note,
-            fidelity_facts=_fidelity_facts)
-        r_enforceable = [w for w in r_fid if w.startswith(_ENFORCEABLE_PREFIXES)]
+            fidelity_facts=_fidelity_facts, language=ctx.language)
+        r_enforceable = [w for w in r_fid if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
         r_tells = _craft_tells(r_out.get("prose", ""))
         if not r_enforceable and len(r_tells) < len(best_tells):
             out, warnings, fidelity_warnings = r_out, r_warnings, r_fid
@@ -1168,15 +1111,17 @@ def narrator_extra(ctx, nonce):
             "exemplars": json.loads(get_setting("exemplars") or "[]"),
             "variant_seed": nonce,
         }
-        out, warnings, fidelity_warnings = _generate_narration(payload, view, prev, p_lines)
+        out, warnings, fidelity_warnings = _generate_narration(
+            payload, view, prev, p_lines, language=ctx.language)
 
-        enforceable = [w for w in fidelity_warnings if w.startswith(_ENFORCEABLE_PREFIXES)]
+        enforceable = [w for w in fidelity_warnings if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
         if enforceable:
-            correction = ("Your previous draft for THIS turn had these problems -- "
-                          "rewrite fixing them, without introducing new ones: "
-                          + " | ".join(enforceable))
+            correction = prompt_fragment(
+                "narrator_fidelity_correction", ctx.language).format(
+                    problems=" | ".join(enforceable))
             out, warnings, fidelity_warnings = _generate_narration(
-                payload, view, prev, p_lines, correction_notes=correction)
+                payload, view, prev, p_lines, correction_notes=correction,
+                language=ctx.language)
 
         if fidelity_warnings:
             out["fidelity_warnings"] = fidelity_warnings

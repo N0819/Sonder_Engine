@@ -4,7 +4,13 @@ This document describes the implemented orchestration in the `agents/` package, 
 
 ## Runtime containers
 
-A turn runs through a `PipelineContext` containing typed chat and turn records, active cast rows, player input, named step outputs, per-character results, reaction results, and warnings.
+A turn runs through a `PipelineContext` containing typed chat and turn records,
+active cast rows, player input, the validated per-story language-pack id,
+named step outputs, per-character results, reaction results, and warnings.
+Protocol keys and enum values remain canonical across languages. The selected
+pack governs prompt policy, deterministic human-language recognition, and the
+compositor's Layer-B rendering; its Layer-A percept admission remains the same
+language-neutral information boundary.
 
 Every completed stage is also saved to:
 

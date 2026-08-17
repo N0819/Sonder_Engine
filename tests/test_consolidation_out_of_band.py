@@ -208,15 +208,14 @@ def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
 
 
 def test_the_commit_tail_no_longer_blocks_on_consolidation():
-    """The live pipeline's tail schedules the job; only commit_memories'
-    standalone path (tests, direct callers) keeps the blocking form. Pinned
-    on source because the alternative -- driving all of _commit_all_locked
-    -- would test everything except the one line that regressed."""
-    tail = inspect.getsource(commit._commit_all_locked)
-    assert "schedule_memory_consolidation" in tail
-    assert "_consolidate_committed_memories" not in tail
+    """Superseded by `tests/test_commit_tail_producers.py`.
 
-
+    This asserted a substring of `inspect.getsource`, which cannot fail on a
+    behavioural change: `job = None if True else schedule_memory_consolidation(ctx)`
+    keeps the text and never runs the call. The replacement drives a real
+    commit and asserts the producer was reached.
+    """
+    import tests.test_commit_tail_producers  # noqa: F401  (the real cover)
 def test_utility_is_configured_not_inherited(monkeypatch):
     """`utility` is the background helper lane (memory consolidation above
     all), and unset it follows `default` -- the model hosts pick for their

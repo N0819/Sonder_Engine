@@ -1,5 +1,6 @@
 """Atomic world-state commit with mutation validation."""
 
+import contextvars
 import copy
 import json, re, threading, time, weakref
 from concurrent.futures import ThreadPoolExecutor
@@ -21,7 +22,9 @@ from providers import embed_texts
 from prompts import get_prompt
 import affect
 import psychology_runtime
-from character_schema import (character_name, character_name_from_text,
+from character_schema import (_UNSPACED_SCRIPT, character_name,
+                              fold_identity_key,
+                              character_name_from_text,
                               new_uid, character_psychology,
                               character_interoception,
                               character_initial_outfit,
@@ -3634,9 +3637,13 @@ def _form_in(form, body):
     Starfleet cast contains `Data`, and matching that case-insensitively would
     have every line mentioning sensor data introduce a man.
     """
-    from agents.common import _COMMON_WORD_NAMES
-    flags = 0 if form.casefold() in _COMMON_WORD_NAMES else re.I
-    return bool(re.search(rf"\b{re.escape(form)}\b", body, flags))
+    from character_schema import name_boundary_regex
+    from language_runtime import linguistic
+    common_word_names = linguistic("agents.common", "_COMMON_WORD_NAMES")
+    flags = 0 if form.casefold() in common_word_names else re.I
+    # A name boundary, not \b: `\bヒナミ\b` never matches `ヒナミさん`, so
+    # every Japanese address form read as unspoken.
+    return bool(name_boundary_regex(form, flags).search(body))
 
 
 def _address_forms(roster):
@@ -3672,7 +3679,12 @@ def _address_forms(roster):
         if len(tokens) > 1:
             # The last token: a surname, or the noun under a title.
             forms.add(tokens[-1].strip(".,"))
-        candidates[full] = {f for f in forms if len(f) >= 3}
+        # The 3-character floor exists to stop short LATIN fragments from
+        # matching ordinary words. A short CJK name is an ordinary name, and
+        # dropping it meant a whole cast could not be addressed by name.
+        candidates[full] = {
+            f for f in forms
+            if len(f) >= 3 or _UNSPACED_SCRIPT.match(f[:1] or "")}
 
     # Ambiguity: a form claimed by two names identifies neither.
     seen = {}
@@ -5942,10 +5954,12 @@ def _room_of(scene, name):
     for k, v in positions.items():
         if k.lower().strip() == lname:
             return v
-    norm = re.sub(r"[^a-z0-9]", "", lname)
+    # Script-aware: the old ASCII fold erased every non-Latin name to "",
+    # so this fallback could never match one.
+    norm = fold_identity_key(lname)
     if norm:
         for k, v in positions.items():
-            if re.sub(r"[^a-z0-9]", "", k.lower().strip()) == norm:
+            if fold_identity_key(k) == norm:
                 return v
     return None
 
@@ -7270,8 +7284,18 @@ def _consolidate_committed_memories(ctx):
         return None
 
     if ctx.cast:
+        # A bare pool worker starts from an EMPTY context, so the story
+        # language was lost and `memory_consolidate` resolved to English --
+        # writing English autobiography into a Japanese story's memory bank.
+        # `agents/narration.py` and `agents/director.py` copy the context for
+        # exactly this reason; this pool was missed.
+        parent = contextvars.copy_context()
+
+        def _consolidate_in_context(char_row):
+            return parent.run(_consolidate_one, char_row)
+
         with ThreadPoolExecutor(max_workers=len(ctx.cast)) as pool:
-            for note in pool.map(_consolidate_one, ctx.cast):
+            for note in pool.map(_consolidate_in_context, ctx.cast):
                 if note:
                     notes.append(note)
     return notes
@@ -7814,6 +7838,20 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"artifact wording scheduling failed: {exc}")
         results["artifact_wording"] = {"error": str(exc)}
+
+    # Installed extensions observe the turn HERE, on the same terms as every
+    # other hook in this tail: after the turn's facts are durable, so an
+    # extension's own write can never be the thing left standing when a domain
+    # failure rolls the turn back. It is also the only place an extension may
+    # write per-turn state at all (extension_runtime/api.py's commit scope).
+    # A failure is a warning, never a rollback -- and never silence.
+    try:
+        import extension_runtime as _extensions
+
+        results["extensions"] = _extensions.dispatch_turn_committed(ctx)
+    except Exception as exc:
+        ctx.add_warning(f"extension turn hooks failed: {exc}")
+        results["extensions"] = {"error": str(exc)}
 
     # Approach A's floor is computed on the Director payload path, which no
     # commit domain ever sees -- so without this echo the one mechanism whose

@@ -29,6 +29,7 @@ from dataclasses import dataclass
 
 from db import q, get_setting
 from logging_utils import logger as _logger
+from language_runtime import apply_common_prompt_policy
 
 token_sink = contextvars.ContextVar("token_sink", default=None)
 generation_event_sink = contextvars.ContextVar(
@@ -845,6 +846,32 @@ def _apply_reasoning_effort(body, prov, role):
     return body
 
 
+def _scale_for_language(max_tokens):
+    """Widen an output budget by the story language's own cost factor.
+
+    Every `max_tokens` in this codebase was chosen against English. Japanese
+    spends roughly twice as many tokens to say the same thing, so an
+    English-tuned cap truncates it -- and a truncated response is not a
+    shorter answer, it is invalid JSON and a generation reported as failed.
+    Measured: character generation returned exactly 5000 tokens against a
+    5000 cap and 502'd.
+
+    Applied HERE rather than at 42 call sites, so a new language gets the
+    right budget everywhere by declaring one number in its manifest. The
+    host's configured ceiling still clamps the result.
+    """
+    if not max_tokens:
+        return max_tokens
+    try:
+        from language_runtime import output_token_scale
+        scale = float(output_token_scale())
+    except Exception:
+        return max_tokens
+    if scale <= 1.0:
+        return max_tokens
+    return int(max_tokens * scale)
+
+
 def _clamp_max_tokens(max_tokens, ceiling=None):
     """Cap a requested output budget at the configured ceiling. Only ever
     lowers -- a caller asking for less (a 1000-token utility call) keeps its
@@ -911,10 +938,16 @@ ROLES = [
     # NO "perception". Perception is deterministic -- every view is composed
     # from the typed IR in `agents/composer.py` and `agents/perception.py`
     # imports no model seam at all -- so a model chosen for that role would
-    # never be called. The STEP key survives in prompts.py and schemas.py so
-    # pre-change turns still validate and replay; a settings row is a
-    # different thing, and offering one sells a host a choice that does
-    # nothing and a cost they will not pay.
+    # never be called. Neither the prompt nor the schema survives: replay
+    # reads STORED VARIANTS, not prompt text, and it resolves the real step
+    # keys (`perception_act`, `perception_outcome`, `perception_establish`),
+    # none of which were ever in `SCHEMA_MAP`. A `perception` step has never
+    # existed in the corpus. Keeping either cost 28,467 characters of prompt
+    # in every language pack, an uneditable entry in the host's prompt editor,
+    # and two validation branches that read as firewall protection and could
+    # not fire.
+    # A settings row is a different thing again, and offering one sells a host
+    # a choice that does nothing and a cost they will not pay.
     "character_bg",
     "character_mid",
     "character_major",
@@ -1698,8 +1731,13 @@ def chat_complete(
     json_schema=None,
 ):
     _check_cancel()
+    # Final, universal boundary: even repair prompts and utility calls that do
+    # not originate in prompts.py must know that free text is localized while
+    # JSON/schema protocol remains canonical English.
+    system = apply_common_prompt_policy(system)
     retry_config = retry_config or DEFAULT_RETRY
-    max_tokens = _clamp_max_tokens(max_tokens, ceiling=token_ceiling)
+    max_tokens = _clamp_max_tokens(
+        _scale_for_language(max_tokens), ceiling=token_ceiling)
 
     candidates = resolve_role_candidates(role)
 

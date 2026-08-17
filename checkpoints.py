@@ -488,6 +488,10 @@ PRESERVED_SETTING_KEYS = (
     "dialogue_config",     # NPC autonomy, prose pacing, line budgets
     "background_config",   # background life / scene-manager dials
     "style_guide",         # genre, tone, register
+    # Author-controlled story language. It changes prompt interpretation,
+    # deterministic recognition and compositor rendering, so a reroll must
+    # not silently return the story to the language selected beforehand.
+    "story_language",
     # `narration_person` WAS on this list and does not belong on it. Every
     # other key here is a dial the reader can reach; that one is DETECTED from
     # how the player writes, and has no endpoint and no control in `static/`.

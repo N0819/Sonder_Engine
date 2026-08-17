@@ -18,19 +18,7 @@ from schemas import (
     output_example,
     validate_llm_output_strict,
 )
-
-_REPAIR_SYSTEM = """
-You repair JSON responses produced by another model.
-
-Return exactly one strict JSON object. Do not use Markdown fences.
-The object must match the supplied rigid example structurally.
-
-Preserve all valid information from the previous response.
-Restore information omitted from the previous response by consulting the
-original request. Fix every validation error, not merely the first one.
-
-Do not explain your changes.
-""".strip()
+from prompts import get_prompt
 
 def _extract_balanced_object(text: str):
     """Extract the first balanced {...} object from prose-wrapped output.
@@ -155,25 +143,6 @@ def strict_json_parse(text: str) -> dict:
 
     return value
 
-_MOVE_SCREEN_SYSTEM = """You screen ONE question about a character's draft action.
-
-You are given: `already_did` (a conversational job this character recently
-performed), `draft_does` (what their new draft does), and `what_is_new`
-(what the character registers this beat).
-
-Answer STRICT JSON: {"verdict": "keep" | "redo"}.
-
-- "keep" when the beat INVITED, answered, challenged, or materially advanced
-  that thread, or when the repetition is itself meaningful -- one continuous
-  riff, an insistence, a deliberate return. Continuing something the beat
-  asked for is not repetition.
-- "redo" only when nothing new motivates it: the draft resets to an earlier
-  job the beat has moved past.
-
-When you cannot tell, answer "redo". Nothing but the JSON object.
-"""
-
-
 def move_repeat_screen(ctx, sh, repeated_move, what_is_new):
     """keep (True) / redo (False) / undecided (None), on the cheap lane.
 
@@ -188,7 +157,7 @@ def move_repeat_screen(ctx, sh, repeated_move, what_is_new):
     try:
         raw = chat_complete(
             "utility",
-            _MOVE_SCREEN_SYSTEM,
+            get_prompt("move_repeat_screen"),
             json.dumps({
                 "already_did": str(repeated_move.get("move") or "")[:400],
                 "draft_does": str(repeated_move.get("current") or "")[:400],
@@ -210,23 +179,6 @@ def move_repeat_screen(ctx, sh, repeated_move, what_is_new):
 
 
 # --- The cheap rung: patch the fields that failed, not the whole beat -------
-
-_PATCH_SYSTEM = """You repair ONE malformed field at a time in a JSON object.
-
-You are given `invalid_fragments`: a map of field path -> the value that
-failed validation, and `validation_errors`: the exact validator message for
-each path. Return STRICT JSON: an object keyed by the SAME paths, whose
-values are the corrected values for those fields ONLY.
-
-Rules:
-- Preserve every fact the original fragment carries. You are fixing SHAPE,
-  not content: same names, same wording, same numbers.
-- Never invent a subject, a name, or a value that is not already in the
-  fragment. If a fragment cannot be repaired without inventing something,
-  omit that path from your answer entirely.
-- Return nothing but the JSON object. No prose, no explanation.
-"""
-
 
 def _error_paths(errors):
     """The dotted field paths named by validator messages ("a.b: msg")."""
@@ -302,7 +254,7 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
     try:
         raw = chat_complete(
             "repair",
-            _PATCH_SYSTEM,
+            get_prompt("patch_json_field"),
             json.dumps({"invalid_fragments": fragments,
                         "validation_errors": messages}, ensure_ascii=False),
             temperature=0.0,
@@ -345,7 +297,12 @@ def _step_json_schema(step_key: str):
 
         model_cls = (schemas.SCHEMA_MAP or {}).get(step_key)
         if model_cls is not None:
-            schema = model_cls.model_json_schema()
+            # Pydantic 2 renamed ``schema`` to ``model_json_schema``. The
+            # project supports both majors, so use the public method exposed
+            # by the installed version rather than failing closed on 1.x.
+            schema_builder = getattr(model_cls, "model_json_schema", None)
+            schema = (schema_builder() if schema_builder is not None
+                      else model_cls.schema())
     except Exception:
         schema = None
     _SCHEMA_CACHE[step_key] = schema
@@ -573,7 +530,7 @@ def complete_validated_json(
         try:
             previous_raw = chat_complete(
                 role,
-                _REPAIR_SYSTEM,
+                get_prompt("repair_json"),
                 json.dumps(
                     repair_payload,
                     ensure_ascii=False,
@@ -637,7 +594,7 @@ def complete_validated_json(
         try:
             fallback_raw = chat_complete(
                 role,
-                system + "\n\n" + _REPAIR_SYSTEM,
+                system + "\n\n" + get_prompt("repair_json"),
                 json.dumps(
                     fallback_payload,
                     ensure_ascii=False,

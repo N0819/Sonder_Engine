@@ -4,12 +4,16 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
+from collections.abc import Mapping
 from pathlib import Path
+from string import Formatter
 
 from generate_code_map import OUTPUT, ROOT, generate
+from extract_ui_catalog import UI_PATH, catalog as english_ui_catalog
 
 FORBIDDEN_PATCH_MARKERS = (
     "Replace the entire",
@@ -18,9 +22,66 @@ FORBIDDEN_PATCH_MARKERS = (
     "---- PATCH ",
 )
 
+CANONICAL_LANGUAGE_TOKEN = re.compile(
+    r"`[^`]+`|\$\{[^}]+\}|"
+    r"\{[A-Za-z_][A-Za-z0-9_.]*(?:![rsa])?(?::[^{}]+)?\}|"
+    r"https?://[^\s)\]}>;,）】〉》」、。；，]+|"
+    r"[\"'](?P<jsonkey>[a-z][a-z0-9_.:-]*)[\"'](?=\s*:)|"
+    # `|` and `<>` belong in this class. A schema example's enum is written as
+    # one quoted alternation ("reinforce|weaken|revise") and its id templates
+    # as "current:<perceiver>:0" -- excluding those characters meant the whole
+    # span matched nothing, so a translator could render the enum in the target
+    # language and no check objected. Underscore-bearing members like
+    # `stated_fact` were caught by the identifier rule below and survived,
+    # which is precisely the split the shipped Japanese pack shows.
+    r"(?P<quote>[\"'])(?P<quotedtoken>[A-Za-z][A-Za-z0-9_.:|<>-]*)(?P=quote)|"
+    # A language quotes with its own marks. The protocol span is what must
+    # survive, not the punctuation a translator wrapped it in.
+    r"「(?P<cornertoken>[A-Za-z][A-Za-z0-9_.:|<>-]*)」|"
+    r"『(?P<dcornertoken>[A-Za-z][A-Za-z0-9_.:|<>-]*)』|"
+    r"(?<![A-Za-z0-9_])[a-z][a-z0-9]*_[a-z0-9_]+(?:\.[a-z0-9_]+)*|"
+    r"(?<![A-Za-z0-9_])[a-z]+\.[a-z][a-z0-9_.{}\[\]]+|"
+    r"</?[A-Za-z][^>]*>"
+)
+
+
+_TOKEN_CONTENT_GROUPS = ("jsonkey", "quotedtoken", "cornertoken", "dcornertoken")
+
+
+def canonical_language_tokens(text: str) -> set:
+    """The protocol spans a translation must carry through unchanged.
+
+    Returns a SET, not a multiset. A translation legitimately repeats or merges
+    sentences -- Japanese splits one English clause about `"keep"` into two --
+    and counting occurrences would forbid ordinary rephrasing while catching
+    nothing extra. What must never happen is a span DISAPPEARING, which set
+    difference reports exactly.
+    """
+    found = set()
+    for match in CANONICAL_LANGUAGE_TOKEN.finditer(text):
+        token = next(
+            (match.group(name) for name in _TOKEN_CONTENT_GROUPS
+             if match.group(name) is not None),
+            match.group(0))
+        if token.lower() not in {"e.g", "e.g.", "i.e", "i.e."}:
+            found.add(token)
+    return found
+
 
 def check_duplicate_python_symbols(errors: list[str]) -> None:
-    for path in sorted(list(ROOT.glob("*.py")) + list((ROOT / "agents").rglob("*.py"))):
+    """A redefined top-level name silently replaces the first one.
+
+    `tests/` is included because that is where it does the most damage and
+    the least noise: a duplicated test name does not error, it DELETES the
+    earlier test. Four were being dropped from
+    `tests/test_player_act_authority.py` -- three guards each defining
+    `test_empty_and_missing_inputs_are_noops` -- and one of the lost four was
+    the false-positive guard on player-speech authority, whose whole job is to
+    stop the check crying wolf on ordinary narration.
+    """
+    for path in sorted(list(ROOT.glob("*.py"))
+                       + list((ROOT / "agents").rglob("*.py"))
+                       + list((ROOT / "tests").glob("test_*.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         symbols: dict[str, list[int]] = defaultdict(list)
         for node in tree.body:
@@ -348,14 +409,246 @@ def check_generated_map(errors: list[str]) -> None:
         errors.append("docs/CODE_MAP.md is stale; run python tools/generate_code_map.py")
 
 
+def check_language_pack_surfaces(errors: list[str]) -> None:
+    """English is the reference inventory every other complete pack matches."""
+    try:
+        from language_runtime import installed_language_packs
+        import prompts
+        packs = installed_language_packs(refresh=True)
+    except Exception as exc:
+        errors.append(f"could not load language packs: {exc}")
+        return
+    english = packs.get("en")
+    if english is None:
+        errors.append("built-in English language pack is missing")
+        return
+    prompt_ids = set(english.card("system_prompts")["prompts"])
+    if prompt_ids != set(prompts.DEFAULT_PROMPTS):
+        errors.append("English system-prompt card and runtime registry disagree")
+    for pid, text in prompts.DEFAULT_PROMPTS.items():
+        if "LANGUAGE AND SCHEMA CONTRACT" not in text:
+            errors.append(f"system prompt {pid!r} lacks the language/schema contract")
+    expected_ui = english_ui_catalog()
+    try:
+        actual_ui = json.loads(UI_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        errors.append(f"could not read English UI catalog: {exc}")
+    else:
+        if actual_ui != expected_ui:
+            errors.append(
+                "English UI catalog is stale; run python tools/extract_ui_catalog.py")
+
+    # Structural parity is not translation completeness. A non-English pack
+    # may retain source values only when it records each one as a code/proper-
+    # name exception. Long authored prompt bodies must not remain byte-for-byte
+    # English even though their prompt ids and schema paths match.
+    english_prompts = english.card("system_prompts")
+
+    def authored_strings(value, path=()):
+        # Mapping, not dict: LanguagePack.card() returns the frozen
+        # mappingproxy built by language_runtime._freeze, which is NOT a dict
+        # subclass. Type-testing for dict walked zero leaves and silently
+        # disarmed every prompt check below.
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                yield from authored_strings(child, path + (str(key),))
+        elif isinstance(value, (list, tuple)):
+            for index, child in enumerate(value):
+                yield from authored_strings(child, path + (str(index),))
+        elif isinstance(value, str):
+            yield path, value
+
+    english_authored = dict(authored_strings(english_prompts))
+    for language_id, pack in packs.items():
+        if language_id == "en":
+            continue
+        pack_dir = ROOT / "language_packs" / language_id
+        exceptions_path = pack_dir / "translation_exceptions.json"
+        try:
+            exceptions = json.loads(exceptions_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(
+                f"language pack {language_id!r} has no readable translation "
+                f"exception ledger: {exc}")
+            exceptions = {}
+        unchanged = {
+            key for key, source in english.ui_catalog.items()
+            if pack.ui_catalog.get(key) == source
+        }
+        if unchanged != set(exceptions):
+            errors.append(
+                f"language pack {language_id!r} has "
+                f"{len(unchanged.difference(exceptions))} unexplained unchanged "
+                f"UI values and {len(set(exceptions).difference(unchanged))} stale "
+                "translation exceptions")
+        if any(not str(reason or "").strip() for reason in exceptions.values()):
+            errors.append(
+                f"language pack {language_id!r} has an empty translation-exception reason")
+        ui_protocol_drift = [
+            key for key, source in english.ui_catalog.items()
+            if canonical_language_tokens(source).difference(
+                canonical_language_tokens(pack.ui_catalog.get(key, "")))
+        ]
+        if ui_protocol_drift:
+            errors.append(
+                f"language pack {language_id!r} changes canonical tokens in UI "
+                f"values: {', '.join(repr(key) for key in ui_protocol_drift[:8])}")
+        localized_authored = dict(authored_strings(pack.card("system_prompts")))
+        unchanged_authored = []
+        prompt_protocol_drift = []
+        for path, source in english_authored.items():
+            if any(segment in {"nsfw_prompt_ids", "order"} for segment in path):
+                continue
+            localized = localized_authored.get(path, "")
+            if len(source) >= 160 and localized == source:
+                unchanged_authored.append(".".join(path))
+            lost = canonical_language_tokens(source).difference(
+                canonical_language_tokens(localized))
+            if lost:
+                prompt_protocol_drift.append(
+                    f"{'.'.join(path)} ({', '.join(sorted(lost)[:3])})")
+        if unchanged_authored:
+            errors.append(
+                f"language pack {language_id!r} retains English authored prompt "
+                f"bodies: {', '.join(unchanged_authored[:8])}")
+        if prompt_protocol_drift:
+            errors.append(
+                f"language pack {language_id!r} changes canonical tokens in "
+                f"system prompts: {', '.join(prompt_protocol_drift[:8])}")
+
+    # Three surfaces that nothing validated. Each fails at USE time, deep
+    # inside a turn, with an exception that does not name the language pack.
+    for language_id, pack in packs.items():
+        # Emptiness measured AGAINST ENGLISH, because the sheets carry
+        # structural whitespace entries -- prose_author_sheet[16] is (None,
+        # "\n"), a deliberate separator. What must never happen is English
+        # holding real instructions where a pack holds nothing.
+        localized = dict(authored_strings(pack.card("system_prompts")))
+        blank = [".".join(path) for path, source in english_authored.items()
+                 if source.strip() and not localized.get(path, "").strip()]
+        if blank:
+            errors.append(
+                f"language pack {language_id!r} has empty authored prompt "
+                f"text: {', '.join(sorted(blank)[:8])}")
+        # A pattern is compiled lazily by _linguistic_cached, so an invalid one
+        # loads clean and raises a bare re.error mid-turn.
+        for module, transforms in pack.card("linguistics").items():
+            for name, value in transforms.items():
+                if not (isinstance(value, Mapping) and value.get("$type") == "regex"):
+                    continue
+                try:
+                    compiled = re.compile(
+                        str(value.get("pattern")), int(value.get("flags") or 0))
+                except re.error as exc:
+                    errors.append(
+                        f"language pack {language_id!r} has an uncompilable "
+                        f"regex {module}.{name}: {exc}")
+                    continue
+                # Capture groups are read POSITIONALLY (m.group(2)) and
+                # re.split keeps only captured text, so a pack that adds its
+                # own alternatives in fresh groups makes group(1) None on
+                # every match of those alternatives -- an AttributeError deep
+                # in a turn, or silently dropped text. A pack may widen a
+                # pattern; it may not change its shape.
+                reference = (english.card("linguistics")
+                             .get(module, {}).get(name))
+                if not (isinstance(reference, Mapping)
+                        and reference.get("$type") == "regex"):
+                    continue
+                try:
+                    expected = re.compile(
+                        str(reference["pattern"]),
+                        int(reference.get("flags") or 0)).groups
+                except re.error:
+                    continue
+                if compiled.groups != expected:
+                    errors.append(
+                        f"language pack {language_id!r} regex {module}.{name} "
+                        f"has {compiled.groups} capture groups; English "
+                        f"defines {expected} and callers read them by position")
+        # compositor_text() formats these at render time; an unknown field or
+        # an unbalanced brace surfaces as a broken view, never as a bad pack.
+        templates = pack.card("compositor").get("templates") or {}
+        english_templates = english.card("compositor").get("templates") or {}
+        for key, template in templates.items():
+            try:
+                fields = {name for _t, name, _s, _c
+                          in Formatter().parse(str(template)) if name}
+            except ValueError as exc:
+                errors.append(
+                    f"language pack {language_id!r} compositor template "
+                    f"{key!r} is unparseable: {exc}")
+                continue
+            reference = english_templates.get(key)
+            if reference is None:
+                continue
+            allowed = {name for _t, name, _s, _c
+                       in Formatter().parse(str(reference)) if name}
+            unknown = fields.difference(allowed)
+            if unknown:
+                errors.append(
+                    f"language pack {language_id!r} compositor template "
+                    f"{key!r} names fields English does not supply: "
+                    f"{', '.join(sorted(unknown))}")
+        # A mask token that survived translation is invisible to every rule
+        # above, because it looks like ordinary text.
+        leaked = sorted({
+            ".".join(path) for card in ("system_prompts", "compositor",
+                                        "authoring")
+            for path, value in authored_strings(pack.card(card))
+            if "⟦" in value or "⟧" in value})
+        leaked += sorted(key for key, value in pack.ui_catalog.items()
+                         if "⟦" in value or "⟧" in value)
+        if leaked:
+            errors.append(
+                f"language pack {language_id!r} still contains translation "
+                f"mask markers: {', '.join(leaked[:8])}")
+
+
+def check_no_dead_prompts(errors: list[str]) -> None:
+    """Every prompt in the pack must be fetchable by something.
+
+    A prompt nobody fetches is not free. It is listed in the host's prompt
+    editor as though editing it would change behaviour, it is shipped in every
+    bootstrap response, and it is paid for again in every language a pack is
+    translated into. The `perception` prompt was 28,467 characters of exactly
+    that: perception composes each view deterministically from the typed IR
+    and has no entry in `providers.ROLES`, so nothing had read it for
+    releases.
+    """
+    import re as _re
+    import sys as _sys
+
+    # `tools/` is on sys.path, the repo root is not.
+    if str(ROOT) not in _sys.path:
+        _sys.path.insert(0, str(ROOT))
+    from language_runtime import installed_language_packs
+    import prompts as _prompts
+
+    ids = set(installed_language_packs()["en"].card("system_prompts")["prompts"])
+    used = set(_prompts.SPECIALISTS_BY_NAME.values())
+    used.add("director_resolve_lean")  # assembled, not fetched by id
+    for path in sorted(ROOT.glob("*.py")) + sorted((ROOT / "agents").rglob("*.py")):
+        used.update(_re.findall(
+            r'get_prompt(?:_body)?\(\s*["\']([a-z_0-9]+)["\']',
+            path.read_text(encoding="utf-8")))
+    dead = sorted(ids - used)
+    if dead:
+        errors.append(
+            "language pack 'en' carries prompts nothing fetches: "
+            + ", ".join(dead))
+
+
 def main() -> int:
     errors: list[str] = []
     check_duplicate_python_symbols(errors)
+    check_no_dead_prompts(errors)
     check_patch_debris(errors)
     check_empty_tests(errors)
     check_prompt_schema_ops(errors)
     check_specialist_prompt_chunks(errors)
     check_prose_author_chunks(errors)
+    check_language_pack_surfaces(errors)
     check_generated_map(errors)
 
     if errors:

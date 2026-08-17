@@ -46,9 +46,15 @@ calls down into this module, exactly as it calls into `common`.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass, field
 
+from language_runtime import (
+    LanguagePackError, current_language_id, language_pack, linguistic,
+    renderer_for)
+
+logger = logging.getLogger(__name__)
 from scene import disguise_breaks_recognition
 from spatial import (
     _clean_pose,
@@ -72,7 +78,6 @@ from .common import (
     _recognizes,
     _self_second_person,
     _unknown_actor_label,
-    _QUOTED_SPAN_RE,
 )
 
 
@@ -87,6 +92,26 @@ PERCEPT_KINDS = (
 )
 
 CHANNELS = ("sight", "hearing", "touch", "interoception", "smell", "mixed")
+
+# English is the reference adapter while Layer B is extracted card by card.
+# Loading these transforms through the installed pack is intentional: the
+# default language exercises the same pack discovery/validation path every
+# future language uses, instead of leaving English as an untested special case.
+_ENGLISH_COMPOSITOR = language_pack("en").card("compositor")
+
+
+def _compositor(name):
+    """One compositor value from the ACTIVE story pack, read at use time."""
+    from language_runtime import compositor_value
+    return compositor_value(name)
+_EN_TEMPLATES = _ENGLISH_COMPOSITOR["templates"]
+
+
+def _ling(name):
+    return linguistic("agents.composer", name)
+
+def _en(key, **values):
+    return str(_EN_TEMPLATES[key]).format(**values)
 
 
 @dataclass(frozen=True)
@@ -124,10 +149,7 @@ def body_key(name):
 # Referring expressions
 # --------------------------------------------------------------------------
 
-_LABEL_DANGLING = {
-    "a", "an", "the", "with", "of", "and", "or", "in", "on", "at", "to",
-    "for", "from", "by", "her", "his", "their", "its", "as",
-}
+_LABEL_DANGLING = frozenset(_ENGLISH_COMPOSITOR["label_dangling"])
 
 
 def _descriptor_words(name, appearance, aliases=None):
@@ -178,9 +200,8 @@ def _label_from_words(words, cap):
 #: because past that the honest reading is "a crowd", and a numeral in the
 #: middle of a sentence is still prose rather than an engine device.
 _ORDINAL_WORDS = {
-    2: "second", 3: "third", 4: "fourth", 5: "fifth", 6: "sixth",
-    7: "seventh", 8: "eighth", 9: "ninth", 10: "tenth", 11: "eleventh",
-    12: "twelfth",
+    int(number): str(word)
+    for number, word in _ENGLISH_COMPOSITOR["ordinal_words"].items()
 }
 
 
@@ -359,19 +380,29 @@ def _addresses(intended_target, observer_name):
     return any(str(t).casefold() == on for t in targets)
 
 
-_SUDDEN_VERBS = frozenset({
-    "lunge", "leap", "slam", "snap", "erupt", "explode", "scream", "shatter",
-    "fall", "collapse", "strike", "hit", "shoot", "fire", "grab", "seize",
-    "run", "sprint", "bolt", "dash", "charge", "throw", "jerk",
-})
 
 
 def _surface_suddenness(surface):
-    words = str(surface or "").casefold().split()
-    if not words:
+    """How abruptly an act arrives, from its leading verb.
+
+    Keyed on `split()[0]`, which is the whole clause in a language that does
+    not space its words -- so `Percept.suddenness` was pinned at 0.1 for every
+    Japanese act, flattening a salience signal the observer receives and
+    killing the "a sudden chain leads" discourse rule outright.
+    """
+    text = str(surface or "").casefold().strip()
+    if not text:
         return 0.1
+    cues = _ling("_SUDDEN_VERBS")
+    words = text.split()
     first = re.sub(r"[^\w]", "", words[0]).rstrip("s")
-    return 0.6 if first in _SUDDEN_VERBS else 0.1
+    if first in cues:
+        return 0.6
+    # No leading token to test: fall back to whether the clause OPENS with a
+    # cue, which is the same question asked without assuming a space.
+    if len(words) == 1 and any(text.startswith(str(cue)) for cue in cues):
+        return 0.6
+    return 0.1
 
 
 # --------------------------------------------------------------------------
@@ -403,8 +434,22 @@ def environment_percept(room_id, room_name, room_notes="", light=""):
 # three times: referentially indistinguishable AND reading as a stutter
 # (282 views in the corpus replay). The plural is kept beside the singular
 # so the two can never drift apart.
-DIM_FIGURE = "an indistinct figure"
-DIM_FIGURES = "indistinct figures"
+# Read at USE time, from the ACTIVE pack. Bound from the English pack at
+# import before, so a Japanese reader in a dim room was told about "an
+# indistinct figure" -- and `generic_labels` (which filters these out of
+# memory entities) is per-pack, so the English form also got indexed as if it
+# named somebody. The English compat exports stay for tests and audits.
+DIM_FIGURE = str(_ENGLISH_COMPOSITOR["dim_figure"])
+DIM_FIGURES = str(_ENGLISH_COMPOSITOR["dim_figures"])
+
+
+def _dim_figure(plural=False):
+    return str(_compositor("dim_figures" if plural else "dim_figure"))
+
+
+def _unfamiliar_person():
+    from language_runtime import compositor_text
+    return str(compositor_text("unknown_actor_fallback"))
 
 
 def presence_percepts(scene, observer_name, co_present, display_map):
@@ -442,9 +487,9 @@ def presence_percepts(scene, observer_name, co_present, display_map):
         # descriptor (`observer_display_map`).
         display = display_map.get(name)
         if level == "full":
-            label = display or "the unfamiliar person"
+            label = display or _unfamiliar_person()
         else:
-            label = display if display == name else DIM_FIGURE
+            label = display if display == name else _dim_figure()
         side = entity_side(scene, observer_name, name)
         out.append(Percept(
             kind="presence", channel="sight",
@@ -457,8 +502,10 @@ def presence_percepts(scene, observer_name, co_present, display_map):
     return out
 
 
-_COUNT_NAMES = {1: "a", 2: "two", 3: "three", 4: "four", 5: "five",
-                6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+_COUNT_NAMES = {
+    int(number): str(word)
+    for number, word in _ENGLISH_COMPOSITOR["count_names"].items()
+}
 
 
 def body_part_percepts(rows):
@@ -838,11 +885,7 @@ _STANDING_ORDER = {
     "ambient": 8,
 }
 
-_TIER_PHRASES = {
-    "within_reach": "within arm's reach",
-    "near": "close by",
-    "across": "across the room",
-}
+_TIER_PHRASES = dict(_ENGLISH_COMPOSITOR["tier_phrases"])
 
 
 # A placeholder holding the position the presence group will occupy, so
@@ -864,16 +907,19 @@ def _cap(sentence):
     return sentence[:1].upper() + sentence[1:] if sentence else sentence
 
 
-_COUNT_WORDS = {2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six",
-                7: "Seven", 8: "Eight", 9: "Nine"}
+_COUNT_WORDS = {
+    int(number): str(word)
+    for number, word in _ENGLISH_COMPOSITOR["count_words"].items()
+}
 
 
 def _presence_clause(p):
     """One body's presence as a bare clause -- no capital, no full stop, so
     it can stand alone or be joined with others."""
-    tier = _TIER_PHRASES.get(str(p.data.get("tier")), "here")
+    tier = _TIER_PHRASES.get(
+        str(p.data.get("tier")), _TIER_PHRASES["default"])
     side = p.data.get("side")
-    side_clause = f" on your {side}" if side in ("left", "right") else ""
+    side_clause = _en("side", side=side) if side in ("left", "right") else ""
     return f"{p.source_label} is {tier}{side_clause}"
 
 
@@ -881,8 +927,10 @@ def _join_clauses(clauses):
     if len(clauses) == 1:
         return clauses[0]
     if len(clauses) == 2:
-        return f"{clauses[0]} and {clauses[1]}"
-    return ", ".join(clauses[:-1]) + f", and {clauses[-1]}"
+        return str(_ENGLISH_COMPOSITOR["join"]["two"]).format(
+            first=clauses[0], last=clauses[1])
+    return ", ".join(clauses[:-1]) + str(
+        _ENGLISH_COMPOSITOR["join"]["many"]).format(last=clauses[-1])
 
 
 def _render_presence_group(percepts):
@@ -936,8 +984,7 @@ def _render_presence_group(percepts):
 #: Articles and connectives a hand-authored `kind` may already carry. The
 #: renderer supplies its own count word, so "a", "an", "the" and a leading
 #: "and" would double up ("A and a long flexible tail...").
-_LEADING_CONNECTIVES = ("and a ", "and an ", "and the ", "and ",
-                        "a ", "an ", "the ")
+_LEADING_CONNECTIVES = tuple(_ENGLISH_COMPOSITOR["leading_connectives"])
 
 
 def _strip_leading_connective(kind):
@@ -969,16 +1016,18 @@ def _render_body_part(p):
     aspect, at = p.data["aspect"], p.data["at"]
     whose = "your" if you else f"{p.source_label}'s"
     if aspect == "sides":
-        where = f"across both sides of {whose} {at}"
+        where = _en("body_part_where_sides", whose=whose, at=at)
     elif aspect in ("left", "right"):
-        where = f"from the {aspect} side of {whose} {at}"
+        where = _en(
+            "body_part_where_side", aspect=aspect, whose=whose, at=at)
     else:
-        where = f"from the {aspect} of {whose} {at}"
+        where = _en(
+            "body_part_where_aspect", aspect=aspect, whose=whose, at=at)
     sentence = f"{_cap(subject)} {verb} {where}"
     if p.data.get("description"):
         sentence += f", {p.data['description'].rstrip('.')}"
     if p.data.get("tucked"):
-        sentence += ", currently beneath clothing"
+        sentence += _en("body_part_tucked")
     return sentence + "."
 
 
@@ -997,18 +1046,21 @@ def _render_pose(p, *, past=False):
     """
     you = p.source_label == "you"
     if you:
-        subject = "I was" if past else "You are"
+        subject = _en("pose_self_past" if past else "pose_self_present")
     else:
-        subject = f"{_cap(p.source_label)} {'was' if past else 'is'}"
+        subject = _en(
+            "pose_other_past" if past else "pose_other_present",
+            label=_cap(p.source_label))
     parts = [str(p.data.get("posture") or "").strip()]
     support = str(p.data.get("support") or "").strip()
     if support:
         parts.append(support if support.split()[:1] and support.split()[0] in
-                     _POSE_PREPOSITIONS else f"on {support}")
+                     _POSE_PREPOSITIONS else _en("pose_support", support=support))
     other = str(p.data.get("relative_to") or "").strip()
     if other:
         relation = str(p.data.get("relation") or "").strip()
-        parts.append(f"{relation} {other}" if relation else f"against {other}")
+        parts.append(f"{relation} {other}" if relation
+                     else _en("pose_relation", other=other))
     clause = " ".join(x for x in parts if x).strip()
     if not clause:
         return ""
@@ -1022,17 +1074,14 @@ def _render_pose(p, *, past=False):
     return sentence.rstrip(".") + "."
 
 
-_POSE_PREPOSITIONS = frozenset({
-    "on", "in", "against", "under", "beneath", "over", "across", "atop",
-    "beside", "behind", "before", "between", "inside", "onto", "upon",
-})
+_POSE_PREPOSITIONS = frozenset(_ENGLISH_COMPOSITOR["pose_prepositions"])
 
 
 def _render_standing(p):
     if p.kind == "environment":
         parts = []
         if p.data.get("room_name"):
-            parts.append(f"You are in {p.data['room_name']}.")
+            parts.append(_en("room", room=p.data["room_name"]))
         if p.data.get("room_notes"):
             notes = str(p.data["room_notes"]).strip()
             if notes and notes[-1:] not in ".!?":
@@ -1040,15 +1089,15 @@ def _render_standing(p):
             parts.append(notes)
         light = str(p.data.get("light") or "").casefold()
         if light in ("dim", "low"):
-            parts.append("The light is dim.")
+            parts.append(_en("light_dim"))
         elif light in ("dark", "none", "pitch_black", "black"):
-            parts.append("It is dark here.")
+            parts.append(_en("light_dark"))
         return " ".join(parts)
     if p.kind == "presence":
         return _cap(_presence_clause(p)) + "."
     if p.kind == "appearance":
         desc = _appearance_as_prose(p.data.get("description"))
-        return f"You see {desc}." if desc else ""
+        return _en("appearance", description=desc) if desc else ""
     if p.kind == "pose":
         return _render_pose(p)
     if p.kind == "body_part":
@@ -1056,11 +1105,11 @@ def _render_standing(p):
     if p.kind == "body_state":
         parts = []
         if p.data.get("posture"):
-            parts.append(f"You are {p.data['posture']}.")
+            parts.append(_en("posture", value=p.data["posture"]))
         if p.data.get("activity"):
-            parts.append(f"You are {p.data['activity']}.")
+            parts.append(_en("activity", value=p.data["activity"]))
         if p.data.get("held_items"):
-            parts.append("You hold: " + ", ".join(p.data["held_items"]) + ".")
+            parts.append(_en("held", items=", ".join(p.data["held_items"])))
         return " ".join(parts)
     if p.kind == "sensation":
         clause = str(p.data.get("clause") or "").strip()
@@ -1072,9 +1121,10 @@ def _render_standing(p):
             return ""
         if detail[-1:] not in ".!?":
             detail += "."
-        subject = ("Your exposed " + place if p.source_label == "you"
-                   else f"{_cap(p.source_label)}'s exposed {place}")
-        return f"{subject} is visible: {detail}"
+        subject = (_en("exposed_self", place=place)
+                   if p.source_label == "you" else _en(
+                       "exposed_other", label=_cap(p.source_label), place=place))
+        return _en("exposed_detail", subject=subject, detail=detail)
     if p.kind == "ambient":
         desc = str(p.data.get("desc") or "").strip()
         if desc and desc[-1:] not in ".!?":
@@ -1090,7 +1140,7 @@ def _render_event(p):
         # (bare-infinitive heard form, conducted, articulation) emitting into
         # nothing -- no duplicate detection against model prose needed.
         if p.fidelity == "fragment":
-            return f"A muffled voice: {p.data.get('fragment', '')}"
+            return _en("muffled", fragment=p.data.get("fragment", ""))
         return _inject_dialogue(
             "", p.source_label, f'"{body}"', p.data.get("level", "full"),
             p.data.get("volume", "normal"), p.data.get("can_see", False),
@@ -1102,16 +1152,17 @@ def _render_event(p):
             p.source_label, p.data.get("surface")) or ""
     if p.kind == "crossing":
         if p.data.get("direction") == "arrived":
-            return f"{_cap(p.source_label)} comes in."
-        return f"{_cap(p.source_label)} leaves."
+            return _en("arrived", label=_cap(p.source_label))
+        return _en("departed", label=_cap(p.source_label))
     if p.kind == "substance":
         clause = str(p.data.get("clause") or "").strip()
         return _cap(clause) + "." if clause else ""
     return ""
 
 
-def render_view(percepts, *, mode="character", prev_standing=frozenset(),
-                prev_described=frozenset(), full_render=False):
+def _render_view_english(percepts, *, mode="character",
+                         prev_standing=frozenset(),
+                         prev_described=frozenset(), full_render=False):
     """Decision-free realisation of one observer's percepts.
 
     ``mode='character'`` renders the full standing state every beat;
@@ -1202,48 +1253,82 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
                         standing_keys=standing_keys, described=described)
 
 
+def render_view(percepts, *, mode="character", prev_standing=frozenset(),
+                prev_described=frozenset(), full_render=False,
+                language=None, renderer=None):
+    """Render through the story language's deterministic Layer-B adapter.
+
+    Layer A's admitted ``Percept`` list is unchanged and remains the
+    information boundary. A language adapter receives only that list and the
+    ordinary render-mode state, so changing languages cannot grant it scene,
+    database, or identity knowledge that the observer never earned.
+    """
+    selected = renderer if renderer is not None else _safe_renderer(language)
+    if selected is not None:
+        try:
+            return selected.render_view(
+                percepts, mode=mode, prev_standing=prev_standing,
+                prev_described=prev_described, full_render=full_render)
+        except Exception:
+            # A view is what an observer perceives at all. A malformed pack
+            # must cost wording, never the whole beat, so fall through to the
+            # in-module reference renderer rather than killing the turn.
+            logger.exception("language renderer failed; using English wording")
+    return _render_view_english(
+        percepts, mode=mode, prev_standing=prev_standing,
+        prev_described=prev_described, full_render=full_render)
+
+
 # --------------------------------------------------------------------------
 # Layer B -- the episode renderer (memory mode)
 # --------------------------------------------------------------------------
 
-_YOU_TO_ME = (
-    (re.compile(r"\byou are\b"), "I am"), (re.compile(r"\bYou are\b"), "I am"),
-    (re.compile(r"\byou were\b"), "I was"), (re.compile(r"\bYou were\b"), "I was"),
-    (re.compile(r"\byou have\b"), "I have"), (re.compile(r"\bYou have\b"), "I have"),
-    (re.compile(r"\byourself\b"), "myself"), (re.compile(r"\bYourself\b"), "Myself"),
-    (re.compile(r"\byours\b"), "mine"), (re.compile(r"\bYours\b"), "Mine"),
-    (re.compile(r"\byour\b"), "my"), (re.compile(r"\bYour\b"), "My"),
-    (re.compile(r"\byou\b"), "me"), (re.compile(r"\bYou\b"), "I"),
+#: English compatibility view; the live table is read per-language below.
+_YOU_TO_ME = tuple(
+    (re.compile(pattern), replacement)
+    for pattern, replacement in _ENGLISH_COMPOSITOR["second_to_first"]
 )
+
+
+def _second_to_first_rules():
+    """The active pack's second->first person rewrites, compiled at use time.
+
+    Bound from the English pack at import before, so the Japanese pack's
+    あなた→私 rules were authored and dead: a first-person memory came out
+    「あなたは立っている。」 sitting next to 「私は中庭にいた。」
+    """
+    from language_runtime import compositor_value
+    return tuple((re.compile(pattern), replacement)
+                 for pattern, replacement in compositor_value("second_to_first"))
 
 
 def _first_person(text):
     """Second person -> first person, outside quoted spans (a quoted 'you'
     is what was said and stays verbatim)."""
-    segments = _QUOTED_SPAN_RE.split(str(text or ""))
+    segments = linguistic(
+        "agents.common", "_QUOTED_SPAN_RE").split(str(text or ""))
+    rules = _second_to_first_rules()
     for i in range(0, len(segments), 2):
         seg = segments[i]
-        for pattern, replacement in _YOU_TO_ME:
+        for pattern, replacement in rules:
             seg = pattern.sub(replacement, seg)
         segments[i] = seg
     return "".join(segments)
 
 
-_GENERIC_LABELS = frozenset({
-    "a voice", "the unfamiliar person", "an indistinct figure", "you", "",
-})
+_GENERIC_LABELS = frozenset(_ENGLISH_COMPOSITOR["generic_labels"])
 
 
 def _episode_sentence(p):
     if p.kind == "speech":
         if p.fidelity == "fragment":
-            return f"I heard a muffled voice: {p.data.get('fragment', '')}"
+            return _en(
+                "episode_muffled", fragment=p.data.get("fragment", ""))
         body = p.data.get("body") or ""
         if p.data.get("conducted"):
-            return (f"{_cap(p.source_label)}'s voice carried through "
-                    f'everything around me: "{body}"')
-        verb = "say" if p.data.get("can_see") else "say"
-        return f'I heard {p.source_label} {verb}: "{body}"'
+            return _en(
+                "episode_conducted", label=_cap(p.source_label), body=body)
+        return _en("episode_speech", label=p.source_label, body=body)
     if p.kind == "act":
         surface = _first_person(str(p.data.get("surface") or "").strip())
         words = surface.split()
@@ -1251,20 +1336,22 @@ def _episode_sentence(p):
             base = _base_from_third_person_s(words[0])
             if base:
                 rest = " ".join(words[1:]).rstrip(".")
-                return (f"I saw {p.source_label} {base}"
-                        + (f" {rest}." if rest else "."))
+                ending = f" {rest}." if rest else "."
+                return _en(
+                    "episode_act", label=p.source_label,
+                    action=base, ending=ending)
         sentence = _observable_predicate(p.source_label, surface)
         return sentence or ""
     if p.kind == "crossing":
         if p.data.get("direction") == "arrived":
-            return f"{_cap(p.source_label)} came in."
-        return f"{_cap(p.source_label)} left."
+            return _en("episode_arrived", label=_cap(p.source_label))
+        return _en("episode_departed", label=_cap(p.source_label))
     if p.kind == "substance":
         clause = _first_person(str(p.data.get("clause") or "").strip())
         return _cap(clause) + "." if clause else ""
     if p.kind == "environment":
         name = p.data.get("room_name")
-        return f"I was in {name}." if name else ""
+        return _en("episode_room", room=name) if name else ""
     if p.kind == "pose":
         return _render_pose(p, past=True)
     if p.kind == "sensation":
@@ -1272,7 +1359,7 @@ def _episode_sentence(p):
         return _cap(clause) + "." if clause else ""
     if p.kind == "appearance":
         desc = _appearance_as_prose(p.data.get("description"))
-        return f"I saw {desc}." if desc else ""
+        return _en("episode_appearance", description=desc) if desc else ""
     if p.kind == "residue":
         return _compose_residue_view(
             p.data.get("level"), targeted=p.data.get("targeted", False),
@@ -1281,8 +1368,8 @@ def _episode_sentence(p):
     return ""
 
 
-def render_episode(percepts, *, prev_standing=frozenset(),
-                   prev_described=frozenset()):
+def _render_episode_english(percepts, *, prev_standing=frozenset(),
+                            prev_described=frozenset()):
     """Mint one first-person episode from the IR -- the salient delta.
 
     Consumes the SAME fidelity-degraded surfaces the view renderer consumes
@@ -1361,6 +1448,41 @@ def render_episode(percepts, *, prev_standing=frozenset(),
     content = " ".join(ordered).strip()
     gist = best[1] if best else (ordered[0] if ordered else "")
     return content, gist[:240], entities[:16]
+
+
+def _safe_renderer(language):
+    """The pack's adapter, or None to use the in-module English renderer.
+
+    `renderer_for` raises when a pack names an adapter that is not available;
+    that is a configuration fault, and it was reaching callers as a dead turn.
+
+    `language=None` follows the story's contextvar. The default used to be the
+    literal "en", so any caller that omitted the argument rendered English
+    inside a Japanese turn and said nothing about it -- the same silent
+    fallback this whole layer exists to avoid.
+    """
+    try:
+        return renderer_for(
+            current_language_id.get() if language is None else language)
+    except LanguagePackError:
+        logger.exception("no renderer for language %r; using English", language)
+        return None
+
+
+def render_episode(percepts, *, prev_standing=frozenset(),
+                   prev_described=frozenset(), language=None, renderer=None):
+    """Mint a memory episode through the selected deterministic adapter."""
+    selected = renderer if renderer is not None else _safe_renderer(language)
+    if selected is not None:
+        try:
+            return selected.render_episode(
+                percepts, prev_standing=prev_standing,
+                prev_described=prev_described)
+        except Exception:
+            logger.exception("language renderer failed; using English wording")
+    return _render_episode_english(
+        percepts, prev_standing=prev_standing,
+        prev_described=prev_described)
 
 
 # --------------------------------------------------------------------------

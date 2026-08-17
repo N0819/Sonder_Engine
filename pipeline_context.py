@@ -138,6 +138,10 @@ class PipelineContext:
     turn: TurnData
     cast: list
     input: str
+    # Human-language policy for this story. Protocol keys and enums remain
+    # canonical; prompts, deterministic recognizers and compositor Layer B
+    # use this installed pack id.
+    language: str = "en"
 
     director_establish: Optional[dict] = None
     director_interpret: Optional[dict] = None

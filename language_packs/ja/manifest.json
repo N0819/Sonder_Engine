@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "ja",
+  "name": "Japanese",
+  "native_name": "日本語",
+  "direction": "ltr",
+  "version": "0.2.0-beta",
+  "translation_status": "model-draft",
+  "fallback": "en",
+  "ui": true,
+  "story": true,
+  "adapter": "japanese",
+  "coverage": {
+    "authoring": true,
+    "compositor": true,
+    "deterministic_linguistics": true,
+    "system_prompts": true,
+    "ui": true
+  },
+  "cards": [
+    "authoring",
+    "compositor",
+    "linguistics",
+    "system_prompts"
+  ],
+  "output_token_scale": 2.0
+}
