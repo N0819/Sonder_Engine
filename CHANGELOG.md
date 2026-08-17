@@ -1,5 +1,41 @@
 # Changelog
 
+## alpha 9.0.1 — The audit trail had a hole in it
+
+Four fixes from an outside review of 9.0. Two of them broke promises 9.0 itself
+made.
+
+- **An extension that changes what a character is told is now always recorded.**
+  9.0's argument for letting an extension reroute information however it likes
+  was that every such change is attributed to whoever made it — so a character
+  who knows something they should not points at its author instead of looking
+  like an engine fault. The check compared what the extension handed back
+  against what it was given, and the ordinary way to write one edits the thing
+  it was given and returns it. That compared an object with itself and found no
+  difference: the fact reached the mind and the record stayed empty. The
+  comparison is now made against a snapshot taken before the extension runs,
+  and it sees changes made deep inside a value as well as at the top.
+
+- **A fresh copy of the engine can run its own tests again.** 9.0's language
+  machinery made the test suite reach for a database while it was still working
+  out what tests exist — which failed outright on a newly downloaded copy, and
+  on a machine that already had stories did something quieter and worse: it
+  opened the real one. The redirect that protects your live database now
+  happens before anything else can.
+
+- **A fresh Windows install can no longer end up with a broken engine.** The
+  launcher installed whatever versions of its dependencies happened to be
+  current, rather than the ones actually tested. One of them changed something
+  the compression layer had reached into, and the result was every request
+  failing on a machine that had done nothing wrong. The compression is
+  rewritten to depend on nothing private, and the launcher now installs the
+  tested set.
+
+- **A hostile extension archive can no longer fill your disk.** Installing
+  already refused archives that tried to write outside their own folder. It did
+  not limit what they expand to, and a small download can unpack to many
+  gigabytes. There are now ceilings on both.
+
 ## alpha 9.0 — Another language, and other people's code
 
 Two things this release did not have before: the engine can be played in a
