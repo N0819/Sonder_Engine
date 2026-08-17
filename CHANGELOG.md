@@ -1,5 +1,37 @@
 # Changelog
 
+## alpha 9.1 — Extensions come from somewhere, and can be told they have moved
+
+- **An extension can be installed straight from its repository.** Paste
+  `https://github.com/someone/their-extension` into the install field and it is
+  cloned. Anything ending in `.git` works, as do GitLab, Codeberg, Bitbucket and
+  sourcehut, and a repository on this machine. Add `#branch` or `#tag` to follow
+  that instead of whatever the default branch is. Zips and folders still install
+  exactly as before.
+
+- **And it can be checked for updates.** A button asks each installed
+  extension's repository whether it has moved — one small question each, no
+  downloading — and an Update button appears on the ones that have. Updating
+  keeps the extension switched on and keeps everything it had stored in your
+  stories, because it is the same extension.
+
+- **An extension you installed from a zip or a folder says so.** It reports
+  that it cannot be checked, and why, rather than claiming to be up to date. A
+  zip would have to be downloaded in full to compare, and a folder has no
+  repository behind it. Saying "up to date" there would be the same sentence
+  with the true part removed.
+
+- **A bad update cannot take a working extension down.** The new version is
+  fetched and checked before the installed one is touched, and if anything is
+  wrong the old one stays exactly where it was. Someone else pushing a broken
+  commit is not allowed to become an outage on your machine.
+
+- **What can be cloned from is deliberately narrow.** Repositories are fetched
+  over http(s) only. An ssh address is refused rather than attempted, because it
+  would not fail — it would sit forever waiting for a passphrase nobody is there
+  to type. Submodules are never fetched: a submodule is a second address chosen
+  by the repository rather than by you.
+
 ## alpha 9.0.1 — The audit trail had a hole in it
 
 Four fixes from an outside review of 9.0. Two of them broke promises 9.0 itself
