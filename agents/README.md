@@ -25,9 +25,15 @@ Each file owns one clear part of the turn pipeline:
 
 ## Adding an agent stage
 
+This checklist is for an ENGINE stage. A third-party stage needs none of it:
+`extension_runtime`'s `api.add_stage(key, anchor=..., handler=...)` registers
+the handler and its plan position in one call, and the resulting `ext:` step
+inherits schemas-free persistence, one-active-variant, reroll, branches and the
+pipeline drawer on its own. See [`docs/guides/EXTENSIONS.md`](../docs/guides/EXTENSIONS.md).
+
 1. Put the implementation in the closest role module, or create a new focused module.
 2. Add its structured output contract to `schemas.py` (including `SCHEMA_MAP`, keyed by step id) and prompt to `prompts.py`.
-3. Register the fixed step in `runtime.STEP_HANDLERS` (or call `register_step()` from an extension).
+3. Register the fixed step in `runtime.STEP_HANDLERS`.
 4. Insert it into `runtime.build_plan()` and/or `runtime.establishment_plan()`.
 5. Give it a field on `PipelineContext` (`pipeline_context.py`) if later stages read its output.
 6. Add persistence logic in `commit.py` only when the stage owns durable output.
@@ -42,6 +48,11 @@ already do. `runtime.py` should stay the only module that knows the plan;
 step ids themselves are also named in `schemas.SCHEMA_MAP` and
 `pipeline_context.py`, which is why steps 2 and 5 exist. Keep plan placement
 explicit even when dispatch is registered dynamically.
+
+One consequence of the extension splice hook that is easy to miss: **the anchor
+vocabulary is the core step keys**, and extensions name them from outside the
+tree. Renaming a core step therefore breaks every extension anchored on it, in
+a way nothing in this repo will catch. Treat a step id as a published name.
 
 Adding a second representation of perceived information is security-sensitive.
 It must be a projection of the already-permitted view, not a parallel model

@@ -8,6 +8,11 @@
 <link rel="stylesheet" href="/static/styles.css">
 <link rel="stylesheet" href="/static/lorebooks.css">
 <link rel="stylesheet" href="/static/themes.css">
+<!-- Every enabled extension's stylesheet. Last of the sheets so an extension
+     theme can override the host's, and a document rather than a <style> the
+     extension bundle writes, so a theme is in effect before first paint
+     instead of flashing the host's colours first. -->
+<link rel="stylesheet" href="/api/extensions/ui.css">
 </head>
 <body>
 <div id="app">
@@ -47,6 +52,7 @@
         <button id="b-api" title="API connections" aria-label="API connections">⚙ API</button>
         <button id="b-update" title="Check for updates from GitHub" aria-label="Check for updates">⬆ Update</button>
         <button id="b-prompts" class="icon-button" title="Prompts" aria-label="Prompts">📝</button>
+        <button id="b-extensions" class="icon-button" title="Extensions" aria-label="Extensions">🧩</button>
         <button
           id="b-nsfw"
           class="nsfw-btn"

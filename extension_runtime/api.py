@@ -373,6 +373,100 @@ class StepView:
         return value if isinstance(value, list) else []
 
 
+class CommitView:
+    """What an `add_commit_domain` callback receives: a turn mid-transaction.
+
+    The difference from `CommittedTurn` is the whole point of the seam. This
+    runs INSIDE `_commit_all_locked`'s transaction, so a write made here is
+    atomic with the turn's own -- if a later domain fails, this write is rolled
+    back with everything else, which is exactly the ghost-state hazard the
+    `ExtState` gate exists to prevent. State reached from here is therefore
+    UNGATED: the transaction is the guarantee.
+    """
+
+    def __init__(self, api, ctx):
+        self._api = api
+        self._ctx = ctx
+        chat = getattr(ctx, "chat", None)
+        turn = getattr(ctx, "turn", None)
+        self.chat_id = getattr(chat, "id", None)
+        self.turn_idx = getattr(turn, "idx", None)
+        self.turn_id = getattr(turn, "id", None)
+        self.state = (_world_state(api.id, self.chat_id, gated=False)
+                      if self.chat_id is not None else None)
+
+    def char_state(self, char_id):
+        return _char_ext_state(self._api.id, self.chat_id, char_id, gated=False)
+
+    def step_content(self, key):
+        getter = getattr(self._ctx, "get", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter(key)
+        except Exception:
+            return None
+
+
+class PayloadContext:
+    """Identity handed to an `on_character_payload` hook alongside the payload.
+
+    Deliberately thin: the hook already receives the assembled payload, which
+    is the powerful object. This says WHOSE it is, so a hook can decide whether
+    this is a mind it was installed to touch.
+    """
+
+    def __init__(self, api, ctx, char_id, names=()):
+        self.api = api
+        self.char_id = int(char_id)
+        self.names = tuple(names)
+        chat = getattr(ctx, "chat", None)
+        turn = getattr(ctx, "turn", None)
+        self.chat_id = getattr(chat, "id", None)
+        self.turn_idx = getattr(turn, "idx", None)
+        self.turn_id = getattr(turn, "id", None)
+        self._ctx = ctx
+
+    @property
+    def name(self):
+        return self.names[0] if self.names else ""
+
+    def step(self, key):
+        getter = getattr(self._ctx, "get", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter(key)
+        except Exception:
+            return None
+
+
+class Request:
+    """One call to an extension's own HTTP route.
+
+    A plain object rather than the framework's request: an extension that binds
+    to Starlette's types inherits every future upgrade of them, and the whole
+    point of the facade is that it does not.
+    """
+
+    def __init__(self, method, path, query=None, body=None):
+        self.method = str(method or "GET").upper()
+        self.path = str(path or "")
+        self.query = dict(query or {})
+        self.body = body
+
+    @property
+    def chat_id(self):
+        """`?chat_id=` as an int, or None -- the parameter almost every route wants."""
+        try:
+            return int(self.query.get("chat_id"))
+        except (TypeError, ValueError):
+            return None
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return f"<Request {self.method} {self.path}>"
+
+
 class CommittedTurn:
     """What an `on_turn_committed` hook receives: a durable turn, and a pen."""
 
@@ -454,17 +548,167 @@ class SonderExtensionAPI:
                       handler=wrapper)
         return full_key
 
-    def on_step(self, pattern, fn):
-        """Observe every saved step whose key matches an fnmatch pattern."""
+    def on_step(self, pattern, fn=None):
+        """Observe every saved step whose key matches an fnmatch pattern.
+
+        Usable as a call or as a decorator -- `on_turn_committed` right beside
+        it is a decorator, and an API where the two neighbouring hooks are
+        spelled differently is one people get wrong once each.
+        """
         from . import _record_step_observer
+
+        if fn is None:
+            def decorate(func):
+                _record_step_observer(self.id, str(pattern or "*"), func)
+                return func
+            return decorate
         _record_step_observer(self.id, str(pattern or "*"), fn)
         return fn
 
     def on_turn_committed(self, fn):
-        """Run after a turn's facts are durable; the only write-enabled seam."""
+        """Run after a turn's facts are durable, outside the transaction."""
         from . import _record_commit_observer
         _record_commit_observer(self.id, fn)
         return fn
+
+    def add_commit_domain(self, name, fn, *, on_error="warn"):
+        """Run `fn(CommitView)` INSIDE the turn's own transaction.
+
+        The atomic counterpart to `on_turn_committed`: a write made here is
+        rolled back with the turn if a later domain fails, so an extension can
+        keep state that cannot survive a beat that did not happen.
+
+        `on_error="warn"` (the default) keeps the engine's promise that a broken
+        extension never costs a turn -- the failure becomes a warning and the
+        transaction continues. `on_error="fail"` opts INTO rolling the turn
+        back, which is the right choice only when the extension's state being
+        wrong is worse than the beat being lost.
+        """
+        name = str(name or "").strip()
+        if not _STAGE_KEY.fullmatch(name):
+            raise ExtensionError(f"invalid commit domain name: {name!r}")
+        if not callable(fn):
+            raise ExtensionError(f"commit domain {name!r} needs a callable")
+        if on_error not in ("warn", "fail"):
+            raise ExtensionError(
+                f"commit domain {name!r} on_error must be 'warn' or 'fail'")
+        from . import _record_commit_domain
+        _record_commit_domain(self.id, name, fn, on_error)
+        return f"ext:{self.id}:{name}"
+
+    def add_director_specialist(self, name, *, channels, prompt, gate=None,
+                                role="default", label=None):
+        """Add a Director specialist family of your own.
+
+        The Director is no longer one mind: each stage fans out to a prose
+        author plus six scoped specialists, each owning a subset of
+        `state_diff`'s channels. This adds a seventh, on the same fan-out, with
+        the same scope gating, the same fail-open (your specialist failing
+        leaves the stage author's channels standing and never kills a beat) and
+        the same canonical merge order.
+
+        Three things it is NOT, each stated because the alternative would be
+        found out fifty beats later:
+
+        * **Your channels are namespaced `ext:<your-id>:<channel>`.** You cannot
+          take ownership of `attire` or `positions`; a family that could would
+          silently replace the body or spatial specialist's work.
+        * **Your channels are evidence, not causality.** No engine commit domain
+          reads an `ext:` channel, so what you write lands in the merged
+          `state_diff` and changes nothing by itself. Act on it from your own
+          `add_commit_domain` or stage.
+        * **Nothing narrates it.** The prose author's sheet is assembled from
+          in-tree chunks, so a change you record is in the ledger and not in the
+          prose unless you put it there yourself.
+
+        `gate(facts) -> bool` decides whether this beat has work for the family;
+        omit it and it runs on physical beats, which is the fail-open rule the
+        engine's own gates follow.
+        """
+        from agents.director import register_specialist
+        from . import _record_specialist
+
+        full = register_specialist(self.id, name, channels=channels,
+                                   prompt=prompt, gate=gate, role=role,
+                                   label=label)
+        _record_specialist(self.id, full)
+        return full
+
+    def on_character_payload(self, fn):
+        """Alter what one mind is about to be given. The routing seam.
+
+        `fn(payload, info)` runs after `character_step` has assembled a
+        character's payload and before the model sees it. Return a dict to
+        replace it, or `None` to leave it alone.
+
+        This is the surface the information-routing requirement names, and it is
+        deliberately unrestricted: a hook may add, remove or rewrite anything.
+        What the engine guarantees in exchange is ATTRIBUTION -- every top-level
+        key a hook changes is recorded against this extension's id and rides the
+        turn's commit results, so a mind that knows something it should not can
+        be traced to whoever put it there in one read.
+
+        With that power the firewall guarantee stops describing Sonder's
+        pipeline for this build and starts being yours. `docs/guides/
+        EXTENSIONS.md` section 8 states where the responsibility passes and why
+        the objective route (make it true, let perception distribute it) is
+        still the better craft.
+        """
+        from . import _record_payload_hook
+        _record_payload_hook(self.id, fn)
+        return fn
+
+    def add_route(self, path, fn, *, methods=("GET",)):
+        """Serve `fn(Request)` at `/api/extensions/<your-id>/x/<path>`.
+
+        Under `/x/` so an extension can never shadow a host route on its own
+        namespace (`enable`, `state`, `asset`, `ui.js`), whatever it names its
+        path. The return value is JSON-encoded; raise `ExtensionError` for a
+        400, anything else for a 500.
+        """
+        path = "/" + str(path or "").strip().strip("/")
+        if ".." in path:
+            raise ExtensionError(f"invalid route path: {path!r}")
+        if not callable(fn):
+            raise ExtensionError(f"route {path!r} needs a callable")
+        wanted = tuple(str(m or "").upper() for m in (methods or ("GET",)))
+        for method in wanted:
+            if method not in ("GET", "POST", "PUT", "DELETE", "PATCH"):
+                raise ExtensionError(f"route {path!r} cannot serve {method!r}")
+        from . import _record_route
+        _record_route(self.id, path, fn, wanted)
+        return f"/api/extensions/{self.id}/x{path}"
+
+    # -- models
+
+    def llm_json(self, system, payload, *, role="utility", temperature=None,
+                 max_tokens=8000):
+        """One loose validated-by-nobody JSON call on a configured role.
+
+        Deliberately NOT `_agent_json`: that path validates against
+        `schemas.SCHEMA_MAP`, which only knows the engine's own steps. An
+        extension owns its output's shape, so it gets the parse and not the
+        schema. Returns whatever parsed, with the raw text under `text` if it
+        did not.
+        """
+        from agents.common import jparse
+        from providers import chat_complete
+
+        raw = chat_complete(
+            role, str(system or ""),
+            payload if isinstance(payload, str) else json.dumps(
+                payload, ensure_ascii=False),
+            temperature=temperature, max_tokens=max_tokens)
+        return jparse(raw)
+
+    def llm_text(self, system, user, *, role="utility", temperature=None,
+                 max_tokens=8000):
+        """The same call, unparsed, for an extension that wants prose."""
+        from providers import chat_complete
+
+        return chat_complete(role, str(system or ""), str(user or ""),
+                             temperature=temperature, json_mode=False,
+                             max_tokens=max_tokens)
 
     # -- storage
 
@@ -516,7 +760,8 @@ def _stage_wrapper(api, key, handler, on_error):
 
 
 __all__ = [
-    "CharacterAccess", "CharacterHandle", "CommittedTurn", "ExtState",
-    "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "SonderExtensionAPI",
-    "StepView", "enter_commit_scope", "in_commit_scope", "leave_commit_scope",
+    "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
+    "ExtState", "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
+    "Request", "SonderExtensionAPI", "StepView", "enter_commit_scope",
+    "in_commit_scope", "leave_commit_scope",
 ]

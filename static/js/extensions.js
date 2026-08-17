@@ -163,6 +163,13 @@ const Sonder = {
 
   // Teardown: drop every registration owned by `extId`. Called by the
   // three-strikes rule, and by the host when an extension is disabled.
+  //
+  // What this can and cannot undo is worth being exact about: it removes every
+  // registration made through this registry, and the script and stylesheet
+  // elements the host injected. It cannot undo side effects the extension's
+  // code had on its way past -- a monkeypatched global, a timer, a listener
+  // added straight to `document`. An extension that does those things and
+  // wants to be cleanly disableable has to undo them itself.
   _unregister(extId) {
     if (!extId) return;
     Sonder._sidebar = Sonder._sidebar.filter(tab => tab.owner !== extId);
@@ -173,7 +180,59 @@ const Sonder = {
       Sonder._events.set(event, list.filter(entry => entry.owner !== extId));
     }
     Sonder._faults.delete(extId);
-  }
+    Sonder._dropAssets(extId);
+  },
+
+  // ---- Hot load / unload ----
+  //
+  // The page-load path is one `<script>` for every enabled extension, and a
+  // script tag loads once: a page served while an extension was disabled holds
+  // an EMPTY bundle forever, so enabling it made the pipeline stage appear on
+  // the next turn while the sidebar tab never did. Measured in play, not in
+  // tests. Every registry is genuinely consulted per use -- it was the
+  // bundle's ARRIVAL that was page-bound, so that is what these fix.
+  //
+  // Ids are host-controlled (they come back from `/api/extensions`, and the
+  // server validates them against EXTENSION_ID before anything is served), but
+  // they still go through `encodeURIComponent` and into `dataset` rather than
+  // into an interpolated selector.
+  _elementId(kind, extId) { return `ext-${kind}-${extId}`; },
+
+  _dropAssets(extId) {
+    for (const kind of ["js", "css"]) {
+      const node = document.getElementById(Sonder._elementId(kind, extId));
+      if (node) node.remove();
+    }
+  },
+
+  // Load one extension's assets into the live page. Resolves when its script
+  // has run (or failed), so the caller can redraw and see the new tab.
+  _load(extId) {
+    if (!extId) return Promise.resolve(false);
+    Sonder._dropAssets(extId);
+    const encoded = encodeURIComponent(extId);
+
+    const style = document.createElement("link");
+    style.id = Sonder._elementId("css", extId);
+    style.rel = "stylesheet";
+    style.href = `/api/extensions/${encoded}/ui.css`;
+    document.head.append(style);
+
+    return new Promise(resolve => {
+      const script = document.createElement("script");
+      script.id = Sonder._elementId("js", extId);
+      script.src = `/api/extensions/${encoded}/ui.js`;
+      // Both paths resolve: a failed fetch is a broken extension, not a
+      // broken host, and the caller still has a page to redraw.
+      script.onload = () => resolve(true);
+      script.onerror = () => { Sonder._fault(extId, new Error("ui.js")); resolve(false); };
+      document.body.append(script);
+    });
+  },
+
+  // Disable: drop the registrations, then the assets. Order matters only in
+  // that `_unregister` already drops the assets, so this stays one call.
+  _unload(extId) { Sonder._unregister(extId); }
 };
 
 window.Sonder = Sonder;

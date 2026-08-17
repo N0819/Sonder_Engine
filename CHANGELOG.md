@@ -1,5 +1,83 @@
 # Changelog
 
+## alpha 9.0 — Another language, and other people's code
+
+Two things this release did not have before: the engine can be played in a
+language other than English, and other people can extend it without touching a
+line of it.
+
+### The story can be in your language
+
+- **A story picks a language, and the whole engine follows it.** Not a
+  translation layer over English output — every human-language surface the
+  engine authors comes from an installed language pack: the prompts the agents
+  are written with, the phrases the composer builds views out of, the
+  recognition tables that decide whether a name was spoken, the defaults a new
+  character is authored from, and the interface itself.
+
+- **What the engine stores stays English, on purpose.** Schema keys, enum
+  values, step names, ledger vocabulary — the protocol is one language so that
+  one deterministic engine can read a story written in any of them. A story
+  begun in Japanese exports, branches, checkpoints and reloads exactly like any
+  other, and a pack can be added later without rewriting what is already
+  saved.
+
+- **The information firewall is language-aware.** The guards that keep a fact
+  out of a mind that never perceived it are pattern matches against names and
+  spoken lines, and they were written for languages that put spaces between
+  words. In Japanese every one of them silently matched nothing — a whole
+  boundary reading as "no leak found" because it could not find anything at
+  all. Recognition is now script-aware, and a pack that cannot enforce a guard
+  fails loudly instead of quietly permitting it.
+
+- **Japanese ships as the first pack**, and it is honestly labelled: it is a
+  model draft with no native review, and the interface language and the story
+  language can be set independently.
+
+- **Prompt presets import and export**, tagged with the language they were
+  written in and carried verbatim.
+
+### Extensions
+
+- **An extension is a directory, and installing one is a button.** Point the
+  new 🧩 menu at a folder or a zip URL. Nothing reviews what arrives, and the
+  dialog says so before you enable it — but a malformed or hostile *archive*
+  cannot damage the install: escaping paths and symlinks are refused before
+  anything is unpacked, and the install is staged and moved atomically, so an
+  interruption leaves the old extension or none.
+
+- **A third party can add a pipeline stage without editing the engine.** They
+  name a position (`after:director_resolve`) and the stage joins the plan,
+  inheriting reroll, variants, branches, checkpoints, exports and the pipeline
+  drawer for free. Anything they store rides your checkpoints and archives the
+  same way.
+
+- **They can also do the ambitious things.** Read a character's settled
+  interior, write inside the turn's own transaction, add a seventh Director
+  specialist of their own, serve their own routes, make model calls on your
+  configured providers, build entire custom interfaces and themes, and change
+  what a character is about to be told.
+
+- **That last one is deliberately unlimited, and deliberately traceable.** The
+  firewall this engine is built around constrains what reaches a fictional
+  *mind*; it was never meant to constrain the people building on it. So an
+  extension may reroute information however it likes — and every change it
+  makes to what a mind receives is recorded against its name on the turn, so a
+  character who knows something they should not points at whoever put it there
+  instead of looking like an engine fault.
+
+- **A broken extension costs you an extension, never a story.** One that fails
+  to load leaves every other one running. One whose stage throws leaves a note
+  in the drawer and finishes the beat. One whose panel throws three times is
+  retired from the page while the page keeps working. There is a switch
+  (`SONDER_EXTENSIONS_SAFE=1`) that boots with all of them off.
+
+- **Enabling and disabling take effect immediately**, in the browser as well as
+  the engine.
+
+- **`extensions/cohesion-demo/` is a working reference**, and the developer
+  guide is `docs/guides/EXTENSIONS.md`.
+
 ## alpha 8.4.4 — A closed door is a closed door
 
 - **What is behind a shut door stays behind it.** A body changed by the story —

@@ -120,6 +120,11 @@ class _StubCtx:
     def get(self, key, default=None):
         return self._values.get(key, default)
 
+    def __setitem__(self, key, value):
+        # `PipelineContext` puts an unknown key in `_extra`; the routing note
+        # writes through exactly that door, so the stub has to have one.
+        self._values[key] = value
+
     def add_warning(self, message):
         self.warnings.append(message)
 
@@ -469,8 +474,14 @@ class TestStateRidesTheEngine:
         assert report["errors"] == {}
         assert DEMO in report["ran"]
         from db import wget
-        assert wget(chat_id, f"ext:{DEMO}") == {"cohesion": 53.0,
-                                                "last_turn": 4}
+        assert wget(chat_id, f"ext:{DEMO}") == {
+            "cohesion": 53.0,
+            "last_turn": 4,
+            # Bounded on purpose: world KV is copied wholesale into every
+            # checkpoint, branch and archive, so an unbounded log here would
+            # grow all three forever.
+            "history": [{"turn": 4, "delta": 3, "cohesion": 53.0}],
+        }
 
     def test_the_gate_closes_again_after_dispatch(self, temp_db, real_ext_root):
         _enable(DEMO)

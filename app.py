@@ -1503,6 +1503,35 @@ def extension_enable(eid: str):
         raise HTTPException(404, str(exc)) from exc
 
 
+@app.post("/api/extensions/install")
+def extension_install(body: dict = Body(...)):
+    """Install from a local directory or an http(s) URL.
+
+    Phase 1: nothing reviews what arrives, and the consent for that is taken in
+    the browser before this is called. What this route owes the host is that a
+    malformed or hostile ARCHIVE cannot damage the install — see
+    `extension_runtime.install_extension`, which stages, validates and then
+    moves atomically.
+    """
+    source = str(body.get("source") or "").strip()
+    if not source:
+        raise HTTPException(400, "source is required")
+    try:
+        return {"extension": extension_runtime.install_extension(source)}
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Install failed: {exc}") from exc
+
+
+@app.delete("/api/extensions/{eid}")
+def extension_remove(eid: str):
+    try:
+        return extension_runtime.remove_extension(_extension_id(eid))
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
 @app.post("/api/extensions/{eid}/disable")
 def extension_disable(eid: str):
     return extension_runtime.disable_extension(_extension_id(eid))
@@ -1522,6 +1551,61 @@ def extensions_ui():
     # page, which loads its own shell.
     return Response(extension_runtime.ui_bundle(),
                     media_type="application/javascript")
+
+
+@app.get("/api/extensions/ui.css")
+def extensions_ui_css():
+    """Every enabled extension's stylesheet, as a document.
+
+    A document rather than a `<style>` the bundle writes, so a theme is in
+    effect before first paint instead of flashing the host's colours first.
+    """
+    return Response(extension_runtime.ui_styles(), media_type="text/css")
+
+
+@app.get("/api/extensions/{eid}/ui.js")
+def extension_ui_one(eid: str):
+    """One extension's script, so the browser can load it AFTER page load.
+
+    This is what makes enable hot rather than reload-only: the page-load bundle
+    is a `<script>` tag and a script tag loads once, so enabling an extension
+    the page was served without needs its code fetched separately.
+    """
+    return Response(extension_runtime.extension_script(_extension_id(eid)),
+                    media_type="application/javascript")
+
+
+@app.get("/api/extensions/{eid}/ui.css")
+def extension_ui_css_one(eid: str):
+    return Response(extension_runtime.extension_styles(_extension_id(eid)),
+                    media_type="text/css")
+
+
+@app.api_route("/api/extensions/{eid}/x/{path:path}",
+               methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def extension_route(eid: str, path: str, request: Request):
+    """Dispatch to a route an extension registered with `api.add_route`.
+
+    Namespaced under `/x/` so an extension can never shadow a host route in its
+    own namespace, whatever it names its path. The extension receives the
+    engine's own `Request` shim, never Starlette's — an extension that bound to
+    the framework's types would inherit every future upgrade of them.
+    """
+    body = None
+    if request.method in ("POST", "PUT", "PATCH"):
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+    try:
+        result = extension_runtime.dispatch_route(
+            _extension_id(eid), request.method, path,
+            query=dict(request.query_params), body=body)
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"Extension route failed: {exc}") from exc
+    return result if isinstance(result, (dict, list)) else {"result": result}
 
 
 @app.get("/api/extensions/{eid}/asset/{path:path}")

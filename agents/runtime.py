@@ -228,8 +228,13 @@ def register_step(key, handler, *, replace=False):
     """Register a fixed pipeline step without editing dispatch logic.
 
     Dynamic ``character:<id>`` steps remain owned by ``character_step``.
-    Plan construction is deliberately separate: callers must still add a new
-    key to ``build_plan`` or ``establishment_plan`` at the intended position.
+
+    Plan construction is separate for ENGINE steps: an in-tree stage must still
+    be added to ``build_plan`` or ``establishment_plan`` at its intended
+    position, because a core stage's position is a design decision that belongs
+    where the plan is read. A third party does NOT have to edit this file --
+    ``extension_runtime``'s ``api.add_stage`` registers the handler here and
+    its position through ``_extension_splices`` in one call.
     """
     if not isinstance(key, str) or not key.strip():
         raise ValueError("step key must be a non-empty string")

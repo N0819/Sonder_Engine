@@ -39,9 +39,10 @@ import threading
 from typing import Any, Callable
 
 from .api import (
-    CharacterAccess, CharacterHandle, CommittedTurn, ExtState, ExtensionError,
-    PSYCHOLOGY_STATE_KEYS, SonderExtensionAPI, StepView, enter_commit_scope,
-    in_commit_scope, leave_commit_scope,
+    CharacterAccess, CharacterHandle, CommitView, CommittedTurn, ExtState,
+    ExtensionError, PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
+    SonderExtensionAPI, StepView, enter_commit_scope, in_commit_scope,
+    leave_commit_scope,
 )
 
 log = logging.getLogger("extension_runtime")
@@ -58,7 +59,7 @@ _VERSION = re.compile(r"^\d+(\.\d+)*$")
 # a manifest written for a later ext_api must stay loadable, not become an error.
 KNOWN_CAPABILITIES = (
     "stages", "chat_state", "char_state", "characters", "routing", "python",
-    "ui",
+    "ui", "system", "routes", "commit_domains",
 )
 
 _lock = threading.RLock()
@@ -327,6 +328,10 @@ class _Registration:
     stages: list[dict] = field(default_factory=list)
     step_observers: list[tuple] = field(default_factory=list)
     commit_observers: list[Callable] = field(default_factory=list)
+    commit_domains: list[dict] = field(default_factory=list)
+    payload_hooks: list[Callable] = field(default_factory=list)
+    routes: dict[str, dict] = field(default_factory=dict)
+    specialists: list[str] = field(default_factory=list)
     error: str | None = None
 
 
@@ -358,6 +363,38 @@ def _record_commit_observer(ext_id, fn) -> None:
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.commit_observers.append(fn)
+
+
+def _record_commit_domain(ext_id, name, fn, on_error) -> None:
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        record.commit_domains = [item for item in record.commit_domains
+                                 if item["name"] != name]
+        record.commit_domains.append({"ext_id": ext_id, "name": name, "fn": fn,
+                                      "on_error": on_error})
+
+
+def _record_payload_hook(ext_id, fn) -> None:
+    if not callable(fn):
+        raise ExtensionError("on_character_payload needs a callable")
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        record.payload_hooks.append(fn)
+
+
+def _record_specialist(ext_id, full_name) -> None:
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        if full_name not in record.specialists:
+            record.specialists.append(full_name)
+
+
+def _record_route(ext_id, path, fn, methods) -> None:
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        for method in methods:
+            record.routes[f"{method} {path}"] = {"fn": fn, "path": path,
+                                                 "method": method}
 
 
 def _module_name(ext_id: str) -> str:
@@ -406,6 +443,16 @@ def _deregister(ext_id: str, *, error: str | None = None) -> None:
             STEP_HANDLERS.pop(stage["full_key"], None)
     except Exception:
         log.exception("could not unregister steps for extension %s", ext_id)
+    if record.specialists:
+        # Director specialists live in that module's own registries, so
+        # disabling has to reach in and take them back out -- otherwise a
+        # disabled extension keeps being dispatched every beat.
+        try:
+            from agents.director import unregister_specialists
+            unregister_specialists(ext_id)
+        except Exception:
+            log.exception(
+                "could not unregister specialists for extension %s", ext_id)
     if error is None:
         _registered.pop(ext_id, None)
         sys.modules.pop(_module_name(ext_id), None)
@@ -633,6 +680,203 @@ def dispatch_turn_committed(ctx) -> dict:
     return report
 
 
+def run_commit_domains(ctx, results) -> None:
+    """Run every registered commit domain INSIDE the turn's transaction.
+
+    Called from `commit.py`'s `_commit_all_locked`, which is why this one is
+    NOT total in the way the other seams are: a domain registered with
+    `on_error="fail"` is asking for its failure to roll the turn back, and
+    swallowing that here would make the option a lie. Everything else --
+    activation, lookup, a domain that only warns -- still cannot cost a turn.
+    """
+    try:
+        activate()
+        with _lock:
+            domains = [dict(item) for record in _registered.values()
+                       for item in record.commit_domains]
+    except Exception:
+        log.exception("extension commit domains could not be resolved")
+        return
+    domains.sort(key=lambda item: (item["ext_id"], item["name"]))
+    for domain in domains:
+        api = _apis.get(domain["ext_id"])
+        if api is None:
+            continue
+        name = f"ext:{domain['ext_id']}:{domain['name']}"
+        try:
+            results[name] = domain["fn"](CommitView(api, ctx))
+        except Exception as exc:
+            log.exception("extension commit domain %s failed", name)
+            _observer_failures[domain["ext_id"]] = _observer_failures.get(
+                domain["ext_id"], 0) + 1
+            if domain["on_error"] == "fail":
+                raise
+            note = getattr(ctx, "add_warning", None)
+            if callable(note):
+                try:
+                    note(f"commit domain {name} failed (turn kept): {exc}")
+                except Exception:
+                    pass
+            results[name] = {"error": str(exc)}
+
+
+def dispatch_character_payload(ctx, char_id, payload, names=()):
+    """Let routing hooks rewrite one character's payload, with attribution.
+
+    The powerful seam, and the one the responsibility doctrine is about: a hook
+    may add, remove or rewrite anything here. What is guaranteed is not
+    restraint but LEGIBILITY -- every top-level key a hook changes is recorded
+    against its extension id on the context, so a mind that knows what it
+    should not names its author in one read rather than looking like an engine
+    defect.
+
+    Total: any failure leaves the payload exactly as the engine assembled it.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    try:
+        activate()
+        with _lock:
+            hooks = [(record.ext_id, fn) for record in _registered.values()
+                     for fn in record.payload_hooks]
+        if not hooks:
+            return payload
+    except Exception:
+        log.exception("extension payload hooks could not be resolved")
+        return payload
+
+    current = payload
+    for ext_id, fn in hooks:
+        api = _apis.get(ext_id)
+        if api is None:
+            continue
+        before = current
+        try:
+            info = PayloadContext(api, ctx, char_id, names)
+            result = fn(before, info)
+        except Exception:
+            _observer_failures[ext_id] = _observer_failures.get(ext_id, 0) + 1
+            log.exception("extension %s payload hook failed", ext_id)
+            continue
+        if result is None:
+            result = before
+        if not isinstance(result, dict):
+            log.warning("extension %s payload hook returned %s; ignored",
+                        ext_id, type(result).__name__)
+            continue
+        # Diff on top-level keys only. Deeper diffing would cost a full walk of
+        # the largest object in the turn on every beat, and the question this
+        # answers -- WHO touched this mind -- is answered at this resolution.
+        changed = sorted(
+            {key for key in set(before) | set(result)
+             if before.get(key) is not result.get(key)
+             and before.get(key) != result.get(key)})
+        if changed:
+            _note_routing(ctx, ext_id, char_id, changed)
+        current = result
+    return current
+
+
+def _note_routing(ctx, ext_id, char_id, changed) -> None:
+    """Record a routing edit where the turn's own diagnostics already live."""
+    log.info("extension %s rewrote character %s payload keys: %s",
+             ext_id, char_id, ", ".join(changed))
+    try:
+        entries = ctx.get("_extension_routing")
+        if not isinstance(entries, list):
+            entries = []
+        entries.append({"ext": ext_id, "char_id": int(char_id),
+                        "changed": list(changed)})
+        ctx["_extension_routing"] = entries
+    except Exception:
+        log.exception("could not record extension routing note")
+
+
+def routing_notes(ctx) -> list:
+    try:
+        entries = ctx.get("_extension_routing")
+    except Exception:
+        return []
+    return [dict(item) for item in entries] if isinstance(entries, list) else []
+
+
+def dispatch_route(ext_id: str, method: str, path: str, query=None, body=None):
+    """Serve one call to an extension's own route. Raises for the host to map."""
+    activate()
+    ext_id = str(ext_id or "")
+    if not is_enabled(ext_id):
+        raise ExtensionError(f"extension {ext_id!r} is not enabled")
+    path = "/" + str(path or "").strip().strip("/")
+    with _lock:
+        record = _registered.get(ext_id)
+        entry = record.routes.get(f"{str(method).upper()} {path}") if record else None
+    if entry is None:
+        raise ExtensionError(
+            f"extension {ext_id!r} serves no {str(method).upper()} {path}")
+    api = _apis.get(ext_id)
+    if api is None:
+        raise ExtensionError(f"extension {ext_id!r} is not active")
+    return entry["fn"](Request(method, path, query, body))
+
+
+def registered_routes() -> list[dict]:
+    with _lock:
+        return sorted(
+            ({"ext_id": record.ext_id, "method": entry["method"],
+              "path": entry["path"]}
+             for record in _registered.values()
+             for entry in record.routes.values()),
+            key=lambda row: (row["ext_id"], row["path"], row["method"]))
+
+
+def run_specialist_call(spec, scope, payload):
+    """The model call an extension-owned Director specialist runs as.
+
+    Lives HERE rather than in `agents/director.py` because of what it does:
+    it parses permissively, and `test_stage_modules_stay_on_strict_path`
+    forbids that in a stage module. The rule is right and worth keeping exactly
+    as strict as it is -- a Director stage's own output reaches `commit.py`, so
+    it must go through `schemas.validate_llm_output_strict` or a malformed
+    answer commits as junk. An extension specialist's output does not: its
+    channels are namespaced `ext:<id>:<channel>` and no commit domain reads
+    one, so nothing it writes can commit by itself. An extension also owns the
+    shape of its own channels, which `SCHEMA_MAP` cannot know. Same split, and
+    same reason, as `api.llm_json`.
+    """
+    from agents.common import jparse
+    from providers import chat_complete
+
+    sheet = (
+        f"{spec['prompt']}\n\n"
+        "Answer with a JSON object. Emit ONLY these keys, and only where this "
+        "beat gives them content:\n"
+        + "\n".join(f"- {channel}" for channel in scope)
+    )
+    return jparse(chat_complete(
+        spec["role"], sheet,
+        json.dumps(payload, ensure_ascii=False, default=str),
+        temperature=0.2, max_tokens=8000))
+
+
+def registered_specialists() -> list[dict]:
+    with _lock:
+        return sorted(
+            ({"ext_id": record.ext_id, "name": name}
+             for record in _registered.values()
+             for name in record.specialists),
+            key=lambda row: (row["ext_id"], row["name"]))
+
+
+def registered_commit_domains() -> list[dict]:
+    with _lock:
+        return sorted(
+            ({"ext_id": item["ext_id"], "name": item["name"],
+              "on_error": item["on_error"]}
+             for record in _registered.values()
+             for item in record.commit_domains),
+            key=lambda row: (row["ext_id"], row["name"]))
+
+
 def observer_failures() -> dict[str, int]:
     with _lock:
         return dict(_observer_failures)
@@ -664,6 +908,70 @@ def asset_path(ext_id: str, relative: str) -> Path:
     return target
 
 
+def _wrap_ui(ext: "Extension", source: str) -> str:
+    """Attribute an extension's script to it, and give it its own scope.
+
+    The begin/end pair is what lets the front end attribute every registration
+    to an extension without the extension cooperating (and without it being
+    able to claim another's name by doing so).
+
+    The function scope around it is not decoration. Concatenation puts every
+    extension's top level in ONE script: two extensions declaring `const EXT`
+    is a SyntaxError that kills the whole bundle, and re-injecting a script on
+    re-enable would redeclare against itself. Both disappear inside a scope.
+    An extension that wants a global must say so -- `window.foo = ...`.
+    """
+    return (
+        f'(function () {{\n'
+        f'window.Sonder && Sonder._begin("{ext.id}");\n'
+        f'try {{\n'
+        f'{source}\n'
+        f'}} catch (error) {{\n'
+        f'  console.error({{ extension: "{ext.id}", error: error }});\n'
+        f'  window.Sonder && Sonder._fault("{ext.id}", error);\n'
+        f'}} finally {{\n'
+        f'  window.Sonder && Sonder._end();\n'
+        f'}}\n'
+        f'}})();\n'
+        f'//# sourceURL=/api/extensions/{ext.id}/asset/{ext.ui_entry}\n'
+    )
+
+
+def _read_asset(ext: "Extension", relative: str) -> str | None:
+    try:
+        return asset_path(ext.id, relative).read_text(encoding="utf-8")
+    except Exception:
+        log.exception("extension %s asset %s could not be read",
+                      ext.id, relative)
+        return None
+
+
+def extension_script(ext_id: str) -> str:
+    """One enabled extension's wrapped UI script, or an empty string.
+
+    Exists so the browser can load a single extension AFTER page load, which is
+    what makes enable/disable hot rather than reload-only.
+    """
+    if safe_mode():
+        return ""
+    ext = installed_extensions().get(str(ext_id or ""))
+    if ext is None or not ext.ui_entry or not is_enabled(ext.id):
+        return ""
+    source = _read_asset(ext, ext.ui_entry)
+    return "" if source is None else _wrap_ui(ext, source)
+
+
+def extension_styles(ext_id: str) -> str:
+    """One enabled extension's stylesheet, or an empty string."""
+    if safe_mode():
+        return ""
+    ext = installed_extensions().get(str(ext_id or ""))
+    if ext is None or not ext.css_entry or not is_enabled(ext.id):
+        return ""
+    source = _read_asset(ext, ext.css_entry)
+    return "" if source is None else source
+
+
 def ui_bundle() -> str:
     """Every enabled extension's UI script, concatenated in id order.
 
@@ -678,30 +986,230 @@ def ui_bundle() -> str:
     for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
         if ext.id not in enabled or not ext.ui_entry:
             continue
-        try:
-            source = asset_path(ext.id, ext.ui_entry).read_text(encoding="utf-8")
-        except Exception:
-            log.exception("extension %s ui script could not be read", ext.id)
+        source = _read_asset(ext, ext.ui_entry)
+        if source is None:
             continue
-        # The begin/end pair is what lets the front end attribute every
-        # registration to an extension without the extension cooperating.
-        parts.append(
-            f'window.Sonder && Sonder._begin("{ext.id}");\n'
-            f'{source}\n'
-            f';window.Sonder && Sonder._end();\n'
-            f'//# sourceURL=/api/extensions/{ext.id}/asset/{ext.ui_entry}\n'
-        )
+        parts.append(_wrap_ui(ext, source))
     return "\n".join(parts)
 
 
+def ui_styles() -> str:
+    """Every enabled extension's stylesheet, concatenated in id order.
+
+    A separate document rather than a `<style>` written by the bundle, so a
+    theme lands before first paint instead of flashing the host's colours
+    first. Each block is fenced by a comment naming its owner, which is how the
+    host removes one again on disable.
+    """
+    if safe_mode():
+        return ""
+    parts = []
+    enabled = set(enabled_ids())
+    for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
+        if ext.id not in enabled or not ext.css_entry:
+            continue
+        source = _read_asset(ext, ext.css_entry)
+        if source is None:
+            continue
+        parts.append(f"/* extension: {ext.id} */\n{source}")
+    return "\n\n".join(parts)
+
+
 __all__ = [
-    "CharacterAccess", "CharacterHandle", "CommittedTurn", "EXT_API_VERSION",
-    "ENABLED_SETTING", "ExtState", "Extension", "ExtensionError",
-    "PSYCHOLOGY_STATE_KEYS", "SonderExtensionAPI", "StepView", "activate",
-    "apply_plan_splices", "asset_path", "disable_extension",
-    "disabled_reasons", "dispatch_turn_committed", "enable_extension",
-    "enabled_ids", "extension", "extension_root", "in_commit_scope",
+    "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
+    "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
+    "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
+    "SonderExtensionAPI", "StepView", "activate", "apply_plan_splices",
+    "asset_path", "disable_extension", "disabled_reasons",
+    "dispatch_character_payload", "dispatch_route", "dispatch_turn_committed",
+    "enable_extension", "enabled_ids", "extension", "extension_root",
+    "extension_script", "extension_styles", "in_commit_scope",
     "installed_extensions", "is_enabled", "listing", "load_errors",
-    "notify_step_saved", "observer_failures", "registered_stages", "reload",
-    "safe_mode", "ui_bundle",
+    "notify_step_saved", "observer_failures", "registered_commit_domains",
+    "registered_routes", "registered_specialists", "registered_stages",
+    "reload", "routing_notes", "run_commit_domains", "run_specialist_call",
+    "safe_mode", "ui_bundle", "ui_styles",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Install and removal
+#
+# Phase 1 of the distribution plan: a host installs from a local directory or
+# a URL, with nothing reviewing what arrives. Phase 2 adds a registry of
+# reviewed extensions, and every field it needs (stable id, version, an
+# integrity hash, a provenance record) is written HERE so that phase is an
+# addition rather than a migration of everything already installed.
+#
+# The honesty about that is in the consent dialog, not in a restriction: an
+# extension runs in this process with the engine's own access. What this code
+# owes the host is that a BROKEN or HOSTILE archive cannot damage the install
+# before they ever get to consent -- so the checks below are about the archive,
+# not about the code's intentions.
+# ---------------------------------------------------------------------------
+
+#: A downloaded bundle is held in memory before it is written, so it is capped.
+#: Generous for a real extension (the reference one is a few KB) and far below
+#: anything that could exhaust a host running this on their own machine.
+MAX_BUNDLE_BYTES = 32 * 1024 * 1024
+
+
+def _safe_extract(archive, destination: Path) -> None:
+    """Extract a zip, refusing any member that would escape `destination`.
+
+    ZIP SLIP: an archive may name `../../etc/thing` or an absolute path, and a
+    naive extractall writes it wherever the name says. The engine's directory
+    is user-writable by design here -- that is what makes in-UI install
+    possible -- so this is the one place a downloaded file chooses a path.
+    Symlinks are refused for the same reason: a link is a path that resolves
+    later, after any check.
+    """
+    root = destination.resolve()
+    for member in archive.infolist():
+        name = member.filename
+        if name.startswith("/") or ".." in Path(name).parts:
+            raise ExtensionError(f"archive escapes its directory: {name!r}")
+        # 0xA000 is S_IFLNK in the high bits of a zip's external attributes.
+        if (member.external_attr >> 16) & 0xF000 == 0xA000:
+            raise ExtensionError(f"archive contains a symlink: {name!r}")
+        target = (root / name).resolve()
+        if target != root and root not in target.parents:
+            raise ExtensionError(f"archive escapes its directory: {name!r}")
+    archive.extractall(root)
+
+
+def _staged_bundle_root(staged: Path) -> Path:
+    """The directory holding `manifest.json`, unwrapping one nesting level.
+
+    An archive made with `zip -r ext.zip my-extension/` unpacks to a single
+    directory rather than to the manifest, and that is what people produce, so
+    accept it rather than making them repack.
+    """
+    if (staged / "manifest.json").is_file():
+        return staged
+    entries = [p for p in staged.iterdir() if not p.name.startswith(".")]
+    if len(entries) == 1 and entries[0].is_dir() \
+            and (entries[0] / "manifest.json").is_file():
+        return entries[0]
+    raise ExtensionError("no manifest.json in the bundle")
+
+
+def install_extension(source: str, *, provenance: str | None = None) -> dict:
+    """Install from a local directory or an http(s) URL. Returns the listing row.
+
+    Staged, validated, then moved into place with `os.replace`, so an install
+    interrupted at any point leaves either the old extension or none -- never a
+    half-written directory that then fails to load forever. (Learned from a
+    non-atomic checkpoint write in the translation tool, which corrupted itself
+    on interrupt and could only be recovered by discarding paid work.)
+    """
+    import hashlib
+    import shutil
+    import tempfile
+    import zipfile
+
+    source = str(source or "").strip()
+    if not source:
+        raise ExtensionError("nothing to install")
+    root = extension_root()
+    root.mkdir(parents=True, exist_ok=True)
+    digest = None
+
+    with tempfile.TemporaryDirectory(dir=root) as tmp:
+        staged = Path(tmp) / "staged"
+        staged.mkdir()
+        if source.startswith(("http://", "https://")):
+            import requests
+
+            response = requests.get(source, timeout=60, stream=True)
+            response.raise_for_status()
+            blob = b""
+            for chunk in response.iter_content(64 * 1024):
+                blob += chunk
+                if len(blob) > MAX_BUNDLE_BYTES:
+                    raise ExtensionError(
+                        f"bundle is larger than {MAX_BUNDLE_BYTES // (1024*1024)}MB")
+            digest = hashlib.sha256(blob).hexdigest()
+            import io
+
+            try:
+                with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                    _safe_extract(archive, staged)
+            except zipfile.BadZipFile as exc:
+                raise ExtensionError(f"not a zip archive: {exc}") from exc
+            provenance = provenance or f"url:{source}"
+        else:
+            origin = Path(source).expanduser()
+            if not origin.is_dir():
+                raise ExtensionError(f"not a directory: {source}")
+            shutil.copytree(origin, staged, dirs_exist_ok=True,
+                            symlinks=False, ignore=shutil.ignore_patterns(
+                                "__pycache__", "*.pyc", ".git"))
+            provenance = provenance or f"local:{origin.name}"
+
+        bundle = _staged_bundle_root(staged)
+        # `_load_manifest` requires the DIRECTORY NAME to equal the declared
+        # id, so the bundle is renamed to its own id before validation --
+        # inside the staging area, where a bad name costs nothing.
+        declared = json.loads(
+            (bundle / "manifest.json").read_text(encoding="utf-8"))
+        claimed = str(declared.get("id") or "")
+        if not EXTENSION_ID.fullmatch(claimed):
+            raise ExtensionError(f"invalid extension id: {claimed!r}")
+        if bundle.name != claimed:
+            renamed = bundle.parent / claimed
+            if renamed.exists():
+                shutil.rmtree(renamed)
+            os.replace(bundle, renamed)
+            bundle = renamed
+        # Validate BEFORE anything is moved into place: a bundle that cannot
+        # produce a manifest never becomes an installed directory.
+        candidate = _load_manifest(bundle)
+        destination = root / candidate.id
+        if destination.exists():
+            raise ExtensionError(
+                f"{candidate.id!r} is already installed — remove it first")
+        # Record where it came from, so phase 2 can tell a reviewed install
+        # from a sideloaded one without re-deriving it.
+        manifest_path = bundle / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["provenance"] = provenance
+        if digest:
+            manifest["sha256"] = digest
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+        os.replace(bundle, destination)
+
+    reload()
+    for row in listing():
+        if row["id"] == candidate.id:
+            return row
+    raise ExtensionError(f"{candidate.id!r} did not load after install")
+
+
+def remove_extension(extension_id: str) -> dict:
+    """Delete an installed extension. Its stored per-story state is LEFT.
+
+    Removal takes the code, not the history: a story played with an extension
+    keeps whatever that extension wrote under `world["ext:<id>"]`, so
+    reinstalling picks the story back up rather than starting it over, and a
+    story remains loadable in the meantime. Orphaned state is small, inert, and
+    the alternative -- deleting it -- silently destroys play the host may not
+    have meant to discard.
+    """
+    import shutil
+
+    extension_id = str(extension_id or "")
+    if not EXTENSION_ID.fullmatch(extension_id):
+        raise ExtensionError(f"invalid extension id: {extension_id!r}")
+    directory = extension_root() / extension_id
+    if not directory.is_dir():
+        raise ExtensionError(f"{extension_id!r} is not installed")
+    try:
+        disable_extension(extension_id)
+    except Exception:
+        pass  # removing it is the point; a failed disable must not block that
+    shutil.rmtree(directory)
+    reload()
+    return {"id": extension_id, "removed": True}

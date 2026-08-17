@@ -1,0 +1,51 @@
+/* Cohesion demo -- the reference extension stylesheet.
+ *
+ * Every rule is prefixed `ext-cohesion-demo-`, which is the convention an
+ * extension should follow: the host's stylesheet is not namespaced, so an
+ * unprefixed `.card` here would restyle every card in the app.
+ *
+ * Colours come from the host's custom properties rather than literals, so the
+ * panel follows the reader's theme instead of fighting it. An extension that
+ * WANTS to override the theme sets those properties on `:root` -- that is the
+ * supported way to ship a full theme, and it is deliberately available.
+ */
+
+.ext-cohesion-demo-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--control-radius, 8px);
+  padding: 12px;
+  margin: 8px;
+}
+
+.ext-cohesion-demo-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ext-cohesion-demo-score { font-variant-numeric: tabular-nums; }
+
+.ext-cohesion-demo-meter {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg3);
+}
+
+.ext-cohesion-demo-fill { height: 100%; transition: width .3s ease; }
+
+.ext-cohesion-demo-note,
+.ext-cohesion-demo-evidence-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.ext-cohesion-demo-pulse { line-height: 1.5; }
+
+.ext-cohesion-demo-evidence {
+  margin: 6px 0 0 16px;
+  padding: 0;
+}

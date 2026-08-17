@@ -40,7 +40,12 @@ CANONICAL_LANGUAGE_TOKEN = re.compile(
     r"「(?P<cornertoken>[A-Za-z][A-Za-z0-9_.:|<>-]*)」|"
     r"『(?P<dcornertoken>[A-Za-z][A-Za-z0-9_.:|<>-]*)』|"
     r"(?<![A-Za-z0-9_])[a-z][a-z0-9]*_[a-z0-9_]+(?:\.[a-z0-9_]+)*|"
-    r"(?<![A-Za-z0-9_])[a-z]+\.[a-z][a-z0-9_.{}\[\]]+|"
+    # `(?<!\.)`: the character class contains `.`, so a dotted name at the
+    # END OF A SENTENCE swallowed the full stop -- "…with a manifest.json."
+    # yielded the token `manifest.json.`, which no translation can carry
+    # through because the Japanese sentence ends in 。 instead. The token is
+    # the name, never the punctuation after it.
+    r"(?<![A-Za-z0-9_])[a-z]+\.[a-z][a-z0-9_.{}\[\]]+(?<!\.)|"
     r"</?[A-Za-z][^>]*>"
 )
 
@@ -639,8 +644,157 @@ def check_no_dead_prompts(errors: list[str]) -> None:
             + ", ".join(dead))
 
 
+EXTENSION_DEEP_IMPORTS = (
+    "db", "commit", "pipeline_context", "agents", "providers", "prompts",
+    "schemas", "scene", "memory", "affect",
+)
+
+
+def _extension_dirs() -> list[Path]:
+    root = ROOT / "extensions"
+    if not root.is_dir():
+        return []
+    return sorted(child for child in root.iterdir()
+                  if child.is_dir() and not child.name.startswith("."))
+
+
+def check_extension_manifests(errors: list[str]) -> None:
+    """Every bundled extension loads, and declares what it actually registers.
+
+    Two distinct failures, and only the first is loud at runtime. A manifest
+    that will not parse is already an error the host sees in the Extensions
+    menu -- catching it here just means the repo's own reference extension
+    cannot ship broken. The second is silent: a capability DECLARED and never
+    registered is a promise to the host that nothing keeps, which is the
+    `check_no_dead_prompts` class of defect exactly. It matters more here than
+    there, because the declaration is what the consent dialog shows -- a host
+    reading "pipeline stage" and getting none has been told something false.
+    """
+    # `make structure` runs this from tools/, so the repo root is not on the
+    # path the way it is for every test.
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import extension_runtime
+
+    for directory in _extension_dirs():
+        manifest_path = directory / "manifest.json"
+        if not manifest_path.is_file():
+            errors.append(f"extensions/{directory.name}: no manifest.json")
+            continue
+        try:
+            ext = extension_runtime._load_manifest(directory)
+        except Exception as exc:
+            errors.append(f"extensions/{directory.name}: {exc}")
+            continue
+
+        caps = ext.capabilities
+        for field, relative in (("python", ext.python_entry),
+                                ("ui.js", ext.ui_entry),
+                                ("ui.css", ext.css_entry)):
+            if relative and not (directory / relative).is_file():
+                errors.append(
+                    f"extensions/{ext.id}: {field} names {relative!r}, "
+                    f"which does not exist")
+
+        declared = {str(stage.get("key") or "")
+                    for stage in (caps.get("stages") or [])
+                    if isinstance(stage, dict)}
+        if not declared:
+            continue
+        # A dry-run registration: load the entry against a throwaway API and
+        # see what it ACTUALLY registers. Cheaper and far more honest than
+        # parsing the source for `add_stage` calls.
+        try:
+            registered = _dry_run_registrations(extension_runtime, ext)
+        except Exception as exc:
+            errors.append(f"extensions/{ext.id}: register(api) failed: {exc}")
+            continue
+        missing = sorted(declared - registered)
+        if missing:
+            errors.append(
+                f"extensions/{ext.id}: manifest declares stage(s) "
+                f"{', '.join(missing)} that register(api) never adds")
+
+
+def _dry_run_registrations(extension_runtime, ext) -> set[str]:
+    """Which stage keys `register(api)` really adds, without enabling anything."""
+    recorded: set[str] = set()
+
+    class _Recorder(extension_runtime.SonderExtensionAPI):
+        def add_stage(self, key, **kwargs):
+            recorded.add(str(key))
+            return f"ext:{self.id}:{key}"
+
+        def add_commit_domain(self, name, fn, **kwargs):
+            return f"ext:{self.id}:{name}"
+
+        def on_step(self, pattern, fn=None):
+            return fn if fn is not None else (lambda func: func)
+
+        def on_turn_committed(self, fn):
+            return fn
+
+        def on_character_payload(self, fn):
+            return fn
+
+        def add_route(self, path, fn, **kwargs):
+            return f"/api/extensions/{self.id}/x{path}"
+
+    module = extension_runtime._import_entry(ext)
+    register = getattr(module, "register", None)
+    if not callable(register):
+        raise RuntimeError("entry defines no register(api)")
+    register(_Recorder(ext.id, ext.path))
+    return recorded
+
+
+def check_extension_imports(errors: list[str]) -> None:
+    """Deep engine imports inside `extensions/` stay VISIBLE, not forbidden.
+
+    A `code` extension runs in-process and can import anything; pretending
+    otherwise would be the read-gating mistake again (`AGENTS.md`: the firewall
+    is for minds, not developers). What this check defends is the facade's
+    STABILITY PROMISE -- an extension that imports `db` directly is coupled to
+    an internal that moves, which is precisely the SillyTavern failure mode the
+    design refuses. So: a warning for bundled extensions that do it without
+    declaring `capabilities.system`, and nothing at all for those that declare
+    it, because then the author has said they accept the coupling.
+    """
+    for directory in _extension_dirs():
+        manifest_path = directory / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue  # check_extension_manifests already reported it
+        if (manifest.get("capabilities") or {}).get("system"):
+            continue
+        for source in sorted(directory.rglob("*.py")):
+            if "__pycache__" in source.parts:
+                continue
+            try:
+                tree = ast.parse(source.read_text(encoding="utf-8"))
+            except SyntaxError as exc:
+                errors.append(f"{source.relative_to(ROOT)}: {exc}")
+                continue
+            for node in ast.walk(tree):
+                names = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    names = [node.module]
+                for name in names:
+                    head = name.split(".")[0]
+                    if head in EXTENSION_DEEP_IMPORTS:
+                        errors.append(
+                            f"{source.relative_to(ROOT)}:{node.lineno}: imports "
+                            f"{name!r} directly. Use the api facade, or declare "
+                            f'"system": true to accept the coupling.')
+
+
 def main() -> int:
     errors: list[str] = []
+    check_extension_manifests(errors)
+    check_extension_imports(errors)
     check_duplicate_python_symbols(errors)
     check_no_dead_prompts(errors)
     check_patch_debris(errors)

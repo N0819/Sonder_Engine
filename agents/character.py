@@ -2381,6 +2381,27 @@ def _prune_seeded_psychology(psych, interior):
             block.pop(key, None)
 
 
+def _extension_character_payload(ctx, cid, payload, sheet=None):
+    """Hand the assembled payload to installed routing hooks, or leave it be.
+
+    Lazy-imported and total, the same discipline as `runtime.py`'s two extension
+    seams and for the same reason: this runs inside the turn's wall clock, so a
+    broken extension must cost the beat nothing. With no hooks registered --
+    the overwhelmingly common case -- this is one attribute lookup.
+    """
+    try:
+        import extension_runtime
+
+        names = ()
+        if sheet is not None:
+            name = character_name(sheet)
+            names = (name,) if name else ()
+        return extension_runtime.dispatch_character_payload(
+            ctx, cid, payload, names)
+    except Exception:
+        return payload
+
+
 def character_step(ctx, cid, nonce):
     chat = ctx.chat
     row = next((c for c in ctx.cast if c["id"] == cid), None)
@@ -3187,6 +3208,13 @@ def character_step(ctx, cid, nonce):
             "choose, or say -- so an observant witness's banked suspicion can pay "
             "off. Never contradict a ground already shown, and never announce it "
             "as exposition; it emerges through behavior.")
+    # The routing seam. LAST thing before the model sees the payload, so an
+    # extension edits what is actually sent rather than something the engine
+    # then rebuilds. Total: any failure leaves the payload exactly as assembled
+    # here, and every top-level key a hook changes is attributed to it on the
+    # context and echoed in the turn's commit results.
+    payload = _extension_character_payload(ctx, cid, payload, sh)
+
     out = _agent_json(
         role,
         "character",

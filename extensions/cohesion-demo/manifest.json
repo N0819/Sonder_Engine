@@ -1,9 +1,9 @@
 {
   "id": "cohesion-demo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "ext_api": 1,
   "name": "Cohesion (demo)",
-  "description": "A reference extension: one deterministic pipeline stage after the Director resolves, and a per-story cohesion score it keeps once the turn is durable.",
+  "description": "A reference extension: one deterministic pipeline stage after the Director resolves, a per-story cohesion score it keeps once the turn is durable, and a route of its own for the panel to read history from.",
   "capabilities": {
     "stages": [
       {
@@ -14,7 +14,10 @@
     ],
     "chat_state": true,
     "characters": ["observe"],
+    "routes": [
+      {"method": "GET", "path": "/history", "description": "Recent cohesion readings for one story."}
+    ],
     "python": "extension.py",
-    "ui": {"js": "ui/panel.js"}
+    "ui": {"js": "ui/panel.js", "css": "ui/panel.css"}
   }
 }
