@@ -443,7 +443,9 @@ function paintProse(host, prose, speech, colors) {
 }
 
 function proseEl(prose, speech) {
-  return paintProse(el("div", { class: "prose" }), prose, speech,
+  // translate="no" here as well as on the turn: prose elements are also
+  // built for previews and perceiver views that sit outside a turn.
+  return paintProse(el("div", { class: "prose", translate: "no" }), prose, speech,
                     S.chat && S.chat.dialogue_colors);
 }
 
@@ -528,6 +530,10 @@ function renderChat() {
   for (const t of frameTurns) {
     const isLast = last && t.id === last.id;
     const d = el("div", {
+      // Story text, not engine text: everything under a turn was written by
+      // a model or by the reader, so the UI catalog must never touch it.
+      // Without this a narrator line containing "Close" rendered 閉じる.
+      translate: "no",
       class: "turn" + (t.stale ? " stale" : ""),
       // Findable by id from outside this render. The narration preview needs
       // it to repaint a turn that is ALREADY on screen instead of appending a
@@ -536,7 +542,7 @@ function renderChat() {
     });
 
     if (t.player_input) {
-      d.append(el("div", { class: "pin" }, t.player_input));
+      d.append(el("div", { class: "pin" }, txt(t.player_input)));
     }
 
     d.append(proseEl(t.prose || "…", t.speech));
@@ -655,7 +661,7 @@ async function editTurnInput(t) {
 }
 
 function editTurnProse(t) {
-  const ta = el("textarea", { style: "width:100%;height:260px" }, t.prose || "");
+  const ta = el("textarea", { style: "width:100%;height:260px" }, txt(t.prose || ""));
   modal("Edit narration", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:8px" },
       "Changes only what's shown for this beat — the events, world state, "
@@ -871,9 +877,22 @@ function handleEvt(ev) {
     if (h) h.textContent = "✓ " + ev.label;
     showNarrationEarly(ev);
   } else if (ev.type === "error") {
-    toast("Pipeline error: " + ev.error, "err", 9000);
+    toast(`Pipeline error: ${ev.error}`, "err", 9000);
   } else if (ev.type === "aborted") {
     toast("Generation stopped.", "warn");
+  }
+
+  // Extensions see the same stream the transcript does, and see it AFTER the
+  // host has handled it -- an extension listener must not be able to change
+  // what the reader was going to be shown. `emit` swallows every throw, and
+  // `done` has no host branch at all: it exists here only as a signal, which
+  // is why nothing above it changed.
+  if (window.Sonder) {
+    if (ev.type === "step") Sonder.emit("turn:step", ev);
+    else if (ev.type === "token") Sonder.emit("turn:token", ev);
+    else if (ev.type === "done") Sonder.emit("turn:done", ev);
+    else if (ev.type === "aborted") Sonder.emit("turn:aborted", ev);
+    else if (ev.type === "error") Sonder.emit("turn:error", ev);
   }
 }
 
@@ -927,7 +946,7 @@ function showNarrationEarly(ev) {
   // and let the superseded one stand.
   let d = document.getElementById(EARLY_TURN_ID);
   if (!d) {
-    d = el("div", { class: "turn", id: EARLY_TURN_ID });
+    d = el("div", { class: "turn", id: EARLY_TURN_ID, translate: "no" });
     M.append(d);
   }
   d.textContent = "";
@@ -1050,7 +1069,7 @@ async function showRerollVariant(next) {
               { variant_id: variant.id });
     RR.variants.forEach((v, i) => { v.active = i === index; });
   } catch (e) {
-    toast("Could not switch version: " + e.message, "err");
+    toast(`Could not switch version: ${e.message}`, "err");
   }
   return true;
 }
@@ -1113,7 +1132,7 @@ async function runStream(url, body, context = {}) {
     await streamPost(url, body, handleEvt);
   } catch (e) {
     ok = false;
-    toast("Pipeline failed: " + e.message, "err", 9000);
+    toast(`Pipeline failed: ${e.message}`, "err", 9000);
   } finally {
     if (_activeRun === run) _activeRun = null;
     S.busy = false;
@@ -1176,7 +1195,7 @@ async function exportChat(id) {
     );
     toast("Story exported.", "ok");
   } catch (e) {
-    toast("Export failed: " + e.message, "err");
+    toast(`Export failed: ${e.message}`, "err");
   }
 }
 
@@ -1708,7 +1727,22 @@ async function openPipeline(tid) {
       renderEngineNotes(notes, content);
 
       const lenses = stepLenses(content);
-      if (!lenses) {
+      // A step an extension ADDED is a step only that extension knows the
+      // shape of, so it renders its own; everything else keeps the lens bar
+      // and the raw JSON exactly as before. The renderer arrives already
+      // safe-wrapped, so a throw inside it leaves an empty box rather than an
+      // unrendered drawer.
+      const extRender = window.Sonder && Sonder._stepRenderer(s.key);
+      if (extRender) {
+        perspectives.innerHTML = "";
+        pre.innerHTML = "";
+        // The default box is a <pre> because the default content is JSON.
+        // A step key never changes owner, so relaxing it once here is safe
+        // and the other branches never have to undo it.
+        pre.style.whiteSpace = "normal";
+        pre.style.fontFamily = "inherit";
+        extRender(content, pre, s);
+      } else if (!lenses) {
         perspectives.innerHTML = "";
         pre.textContent = content === null
           ? variant.content
@@ -1844,8 +1878,7 @@ async function openPipeline(tid) {
                 pre.textContent
               );
 
-              modal(
-                "Edit step — " + s.label,
+              modal(`Edit step — ${s.label}`,
                 body => {
                   body.append(
                     ta,
@@ -1942,7 +1975,7 @@ function relMeter(label, value, centered) {
 async function relationshipModal(p, boundChatId = null) {
   const chatId = boundChatId ?? S.chatId;
   if (!chatId || S.chatId !== chatId) return;
-  modal("Relationships — " + p.name, async body => {
+  modal(`Relationships — ${p.name}`, async body => {
     const ownsModal = modalOwnership(body);
     body.innerHTML = "";
     body.append(loadingBlock("Loading…"));
@@ -1996,7 +2029,7 @@ async function relationshipModal(p, boundChatId = null) {
 // ---- Memory browser ----
 function memModal(p) {
   S.memoryCharacter = p;
-  modal("Memory browser — " + p.name, body => {
+  modal(`Memory browser — ${p.name}`, body => {
     const layout = el("div", { class: "memory-layout" });
     const sidebar = el("div", { class: "memory-sidebar" });
     const main = el("div", { class: "memory-main" });
@@ -2132,7 +2165,7 @@ async function exportCharacterMemories() {
     downloadJSON(d, (p.name || "character").replace(/[^a-z0-9_-]/gi, "_") + "_memories.json");
     toast("Memories exported.", "ok");
   } catch (e) {
-    toast("Export failed: " + e.message, "err");
+    toast(`Export failed: ${e.message}`, "err");
   }
 }
 
@@ -2168,7 +2201,7 @@ function importCharacterMemoriesModal() {
     r.readAsText(f);
   };
 
-  modal("Import memories — " + p.name, b => {
+  modal(`Import memories — ${p.name}`, b => {
     b.append(drop, fileIn, status,
       el("div", { class: "row", style: "margin-top:12px" },
         el("button", {
@@ -2186,7 +2219,7 @@ function importCharacterMemoriesModal() {
               closeModal();
               loadMemoryBrowse();
             } catch (e) {
-              toast("Import failed: " + e.message, "err");
+              toast(`Import failed: ${e.message}`, "err");
             }
           }
         }, "Import")));
@@ -2459,7 +2492,7 @@ function memoryCard(m) {
         toast("Memory deleted.", "ok");
         await reloadMemView();
       } catch (e) {
-        toast("Could not delete: " + e.message, "err");
+        toast(`Could not delete: ${e.message}`, "err");
       }
     }
   }, "Delete");
@@ -2474,7 +2507,7 @@ function memoryCard(m) {
           : "Memory archived.", "ok");
         await reloadMemView();
       } catch (e) {
-        toast("Could not update: " + e.message, "err");
+        toast(`Could not update: ${e.message}`, "err");
       }
     }
   }, m.archived ? "Restore" : "Archive");
@@ -2700,7 +2733,7 @@ function backfillMemoryEras() {
   const name = S.memoryCharacter?.name || "character";
   // backgroundTask closes the modal and onSuccess reopens it, exactly as
   // Consolidate does -- one long model job, the panel rebuilt from the result.
-  backgroundTask("Rebuilding " + name + "'s earlier eras",
+  backgroundTask(`Rebuilding ${name + "'s earlier eras"}`,
     () => api("POST",
       `/api/chats/${S.chatId}/characters/${cid}/memories/backfill`, {}),
     {
@@ -2720,7 +2753,7 @@ function consolidateMemories() {
   const cid = memCharId();
   if (!cid) return;
   const name = S.memoryCharacter?.name || "character";
-  backgroundTask("Consolidating " + name + "'s memory",
+  backgroundTask(`Consolidating ${name + "'s memory"}`,
     () => api("POST",
       `/api/chats/${S.chatId}/characters/${cid}/memories/consolidate`,
       { archive_old: true }),

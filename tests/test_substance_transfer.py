@@ -77,13 +77,13 @@ class TestSchemaAndPromptContract:
             material_effects=[effect]).dict()["material_effects"] == [effect]
 
     def test_contract_is_material_generic_and_keeps_it_out_of_contact(self):
+        # The two `perception` assertions that were here asserted a prompt no
+        # model reads; it is gone from the packs. Everything below is a live
+        # model call and can still regress.
         resolve = DEFAULT_PROMPTS["director_contact"]
-        perception = DEFAULT_PROMPTS["perception"]
         assert "MATERIAL TRANSFER — MATTER HAS ITS OWN LEDGER" in resolve
         assert "A material is NOT a body part" in resolve
         assert "exactly one standing relation:'interior' contact" in resolve
-        assert "scene.substances lists distinct non-discrete matter" in perception
-        assert "STANDING STATE" in perception
         character = DEFAULT_PROMPTS["character"]
         assert "MATERIAL EFFECTS YOU COMPLETE" in character
         assert "active_state.hedonic.released" in character

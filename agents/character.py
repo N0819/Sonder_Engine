@@ -11,6 +11,7 @@ import affect
 from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from db import q, wget
+from language_runtime import compositor_text, linguistic
 from character_schema import (
     cast_entity_id,
     character_name_from_text,
@@ -85,6 +86,9 @@ from .common import (
     character_room,
     norm_sequence,
 )
+
+def _ling(name):
+    return linguistic("agents.character", name)
 
 def _merge_standing_intentions(authored, emergent):
     """Merge a character's authored standing intentions with the emergent ones
@@ -243,12 +247,11 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
 # Repeated letters collapse so "Mmm" and "Mmmm" are one opener, which is
 # exactly the kind of near-miss a model uses to feel like it varied.
 _REFRAIN_RUN_RE = re.compile(r"(.)\1{2,}")
-_REFRAIN_WORD_RE = re.compile(r"[a-z']+")
 _REFRAIN_MIN_LINES = 3
 
 
 def _self_line_tokens(line):
-    return _REFRAIN_WORD_RE.findall(
+    return _ling("_REFRAIN_WORD_RE").findall(
         _REFRAIN_RUN_RE.sub(r"\1\1", str(line or "").lower()))
 
 
@@ -515,7 +518,7 @@ def _speech_texts(result):
 
 
 def _normalized_line(text):
-    return " ".join(_REFRAIN_WORD_RE.findall(str(text or "").lower()))
+    return " ".join(_ling("_REFRAIN_WORD_RE").findall(str(text or "").lower()))
 
 
 # Spoken lines this short are interjections; see _first_verbatim_repeat.
@@ -1167,26 +1170,6 @@ LOOP_DENSITY = 0.5
 # The raw markers stay underneath. This adds a reading, it does not replace
 # the evidence, and a model that wants to disagree with the reading still has
 # everything it needs to.
-_VERDICTS = (
-    ("visibly_no_way_through", "closed",
-     "you can see from here it has no other way out"),
-    # Split out below in _verdict when the chamber is also UNTRIED. What a
-    # room LEADS TO and what is IN it are different questions, and `closed`
-    # only ever answered the first.
-
-    ("no_route_onward", "no way through",
-     "you went in and had to come straight back, more than once"),
-    ("no_new_ground_that_way", "spent",
-     "every door you have seen down that way is one you have taken"),
-    ("circling_here", "circling",
-     "you have been going round these same few rooms"),
-    ("untried", "UNTRIED",
-     "you have never been through this doorway"),
-    ("worked_before", "proven",
-     "that way once took you somewhere you meant to get to"),
-    ("been_there", "known",
-     "you have been through here before"),
-)
 # Ordering only. `untried` leads and the discouraging verdicts trail, but
 # `proven` deliberately sits just behind `untried` rather than ahead of it:
 # choosing between a way that worked and a way not yet tried is what
@@ -1220,7 +1203,7 @@ def _verdict(entry, frontier_hops=None):
     salience inversion (the right door as the lightest entry) was fixed once
     and must not be re-created by decoration.
     """
-    for key, label, because in _VERDICTS:
+    for key, label, because in _ling("_VERDICTS"):
         if not entry.get(key):
             continue
         # A cul-de-sac you have NEVER been inside is not a spent one. `closed`
@@ -2958,7 +2941,7 @@ def character_step(ctx, cid, nonce):
     payload = {
         "self": _self,
         "perception": {
-            "view": view or "You register nothing new this beat.",
+            "view": view or compositor_text("narrator_nothing", ctx.language),
             "observations": observations,
             # What THIS room visibly affords -- "rest (the bed)" -- a
             # structured echo of what the view already shows, from anchors
@@ -3117,7 +3100,8 @@ def character_step(ctx, cid, nonce):
     # not carry. Built from the finished payload on purpose: the gate must read
     # what the model will actually receive, not re-derive the conditions a
     # second time and drift from them.
-    _cprompt = character_prompt(payload).replace("{name}", character_name(sh))
+    _cprompt = character_prompt(
+        payload, language=ctx.language).replace("{name}", character_name(sh))
     if _carried_reports:
         _cprompt += (
             "\n\nCARRIED REPORTS: carried_reports contains what you know about "

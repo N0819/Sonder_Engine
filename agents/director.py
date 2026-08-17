@@ -18,6 +18,7 @@ from character_schema import (
     character_name,
     character_name_from_text,
     character_public_history,
+    name_boundary_pattern,
     persona_abilities,
     persona_appearance,
     persona_extra_parts,
@@ -28,10 +29,12 @@ from character_schema import (
 from db import get_setting, q, wget
 from memory import lorebook_manifest
 from paradox import paradox_visible_to
+from language_runtime import apply_prompt_policy, english_linguistic, linguistic
 from prompts import (
-    INTERPRET_DELEGATION_NOTE,
     PROSE_DUTY_CHUNKS,
     get_prompt,
+    get_prompt_body,
+    interpret_delegation_note,
     prose_author_prompt,
     specialist_prompt,
 )
@@ -122,6 +125,15 @@ from .common import (
     scene_compact_attire,
     scene_extra_parts,
 )
+
+def _ling(name):
+    return linguistic("agents.director", name)
+
+# English compatibility views only; runtime uses context-local `_ling(...)`.
+_UNCONSCIOUSNESS_CUE = english_linguistic(
+    "agents.director", "_UNCONSCIOUSNESS_CUE")
+_SLEEP_CUE = english_linguistic("agents.director", "_SLEEP_CUE")
+_STAY_UNDER_CUE = english_linguistic("agents.director", "_STAY_UNDER_CUE")
 
 def _cast_match_forms(cast):
     """Two views of the cast's identifying text, both casefolded: by id (for
@@ -646,7 +658,7 @@ def director_establish(ctx, nonce):
     out = _agent_json(
         "director",
         "director_establish",
-        get_prompt("director_establish"),
+        get_prompt("director_establish", ctx.language),
         payload,
         temperature=0.7,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
@@ -925,7 +937,10 @@ def director_interpret(ctx, nonce):
     out = _agent_json(
         "director",
         "director_interpret",
-        get_prompt("director_interpret") + INTERPRET_DELEGATION_NOTE,
+        apply_prompt_policy(
+            get_prompt_body("director_interpret", ctx.language)
+            + interpret_delegation_note(ctx.language),
+            ctx.language, "director_interpret"),
         payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
@@ -1299,26 +1314,7 @@ def director_interpret(ctx, nonce):
 # structured act from a heuristic.
 # ---------------------------------------------------------------------------
 
-_DECL_STOPWORDS = frozenset("""
-a an the and or but nor then i i'm i'll i've you you're he she it it's we
-they my your his her its our their me him them us who whom whose which
-what how why this that these those there here to of in on at by for with
-from as is are was were be been being am do does did done have has had
-having will would can could shall should may might must not no yes if so
-too also just very quite about around while when where over under out up
-down off into onto again once still now then before after behind toward
-towards through between against along away back get gets got go goes
-going gone come comes came take takes took make makes made turn turns
-turned start starts started begin begins began try tries tried trying
-attempt attempts keep keeps kept let lets say says said tell tells told
-ask asks asked look looks looked see sees saw put puts one two moment
-little bit around some any all both each other another same own than
-""".split())
 
-_QUOTED_UNIT_RE = re.compile(r'["“]([^"“”]{4,})["”]')
-_CLAUSE_SPLIT_RE = re.compile(
-    r"[.;!?\n]+|,\s+(?:and|then|but)\s+|\s+(?:and\s+then|then)\s+|\s+and\s+"
-)
 
 _RECONCILE_INTERPRET_MAX_UNITS = 4
 _INTERPRET_COVERAGE_MIN = 0.5
@@ -1330,7 +1326,7 @@ def _decl_tokens(text):
     tokens = set()
     for tok in re.findall(r"[a-z0-9']+", str(text or "").casefold()):
         tok = tok.strip("'")
-        if len(tok) >= 3 and tok not in _DECL_STOPWORDS:
+        if len(tok) >= 3 and tok not in _ling("_DECL_STOPWORDS"):
             tokens.add(tok)
     return tokens
 
@@ -1341,9 +1337,9 @@ def _declaration_units(raw_input):
     skipped -- too little signal to judge coverage without false positives
     (the conservative floor)."""
     text = str(raw_input or "")
-    units = [m.group(1).strip() for m in _QUOTED_UNIT_RE.finditer(text)]
-    narrative = _QUOTED_UNIT_RE.sub(" ", text)
-    for clause in _CLAUSE_SPLIT_RE.split(narrative):
+    units = [m.group(1).strip() for m in _ling("_QUOTED_UNIT_RE").finditer(text)]
+    narrative = _ling("_QUOTED_UNIT_RE").sub(" ", text)
+    for clause in _ling("_CLAUSE_SPLIT_RE").split(narrative):
         clause = clause.strip(" ,")
         if clause:
             units.append(clause)
@@ -1452,7 +1448,7 @@ def _reconcile_interpretation(ctx, out, sc):
     try:
         repair = _agent_json(
             "director", "interpret_repair",
-            get_prompt("interpret_repair"),
+            get_prompt("interpret_repair", ctx.language),
             {
                 "player_raw_input": raw_input,
                 "current_interpretation": {
@@ -1605,10 +1601,6 @@ def _reconcile_interpretation(ctx, out, sc):
 # failure (a character held at gunpoint narrated but never written to
 # state_diff.conditions); the general omission audit above it is what covers
 # the open-ended class.
-_RESTRAINT_KEYWORDS = (
-    "held at", "pinned", "rifle to", "gunpoint", "restrained", "hostage",
-    "grappled",
-)
 
 def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
                                   tracked_names):
@@ -1634,7 +1626,7 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
     flagged_names = set()
     for text in text_units:
         lower = text.casefold()
-        if not any(keyword in lower for keyword in _RESTRAINT_KEYWORDS):
+        if not any(keyword in lower for keyword in _ling("_RESTRAINT_KEYWORDS")):
             continue
         for name in tracked_names:
             if name and name.casefold() in lower:
@@ -1667,31 +1659,9 @@ def _untracked_restraint_subjects(resolved_event, dialogue_log, conditions,
 #
 # The inflections are unambiguous, and the bare form is admitted only where a
 # modal or infinitive marker makes it a verb ("might faint", "about to faint").
-_FAINT_VERB = (r"faint(?:s|ed|ing)|"
-               r"(?:will|would|might|may|can|could|should|must|to|nearly|"
-               r"almost|about\s+to|going\s+to)\s+faint")
-_UNCONSCIOUSNESS_CUE = re.compile(
-    r"\b(?:"
-    r"unconscious|out\s+cold|"
-    r"knocked?\s+(?:out|unconscious|senseless)|"
-    # "pass out" / "black out" bare-infinitive forms were missed: `passes?`
-    # matches "passe"/"passes" but never "pass", so second-person prose ("the
-    # blow makes you pass out") escaped the floor entirely.
-    r"black(?:s|ed)?\s+out|"
-    r"pass(?:es|ed)?\s+out|"
-    + _FAINT_VERB + r"|"
-    r"los(?:e|es|t|ing)\s+consciousness|"
-    r"go(?:es)?\s+limp|went\s+limp|slumps?\s+unconscious|"
-    r"sedated|put\s+under"
-    r")\b"
-)
 # Titles whose trailing period is not a sentence break (so "Dr. Moon" is one
 # clause, and "unconscious ... Dr. Moon" across a real "anomaly." break stays
 # two clauses).
-_TITLE_ABBREV = frozenset((
-    "dr", "mr", "mrs", "ms", "prof", "st", "sr", "jr", "mt", "rev", "hon",
-    "gen", "capt", "sgt", "lt", "col", "gov", "fr", "det", "sen", "rep",
-))
 _MAX_UNCONSCIOUSNESS_GAP = 5  # word tokens between a cue and its subject name
 
 
@@ -1704,7 +1674,7 @@ def _sentence_break_positions(low):
     for m in re.finditer(r"[.!?]|\n", low):
         if low[m.start()] == ".":
             wm = re.search(r"([a-z]+)$", low[:m.start()])
-            if wm and wm.group(1) in _TITLE_ABBREV:
+            if wm and wm.group(1) in _ling("_TITLE_ABBREV"):
                 continue
         breaks.append(m.start())
     return breaks
@@ -1728,23 +1698,6 @@ def _sentence_break_positions(low):
 # ('dazed' is untouched -- present but degraded). Support is read generously and
 # from anywhere in the beat, because a false drop must be rarer than the false
 # imposition it prevents.
-_SLEEP_CUE = re.compile(
-    r"\b(?:"
-    r"asleep|sleeps?|sleeping|"
-    r"slumber\w*|"
-    r"dozes?|dozing|dozed|"
-    r"nods?\s+off|nodded\s+off|"
-    r"drifts?\s+off|drifted\s+off|drifting\s+off|"
-    r"drops?\s+off|dropped\s+off|"
-    r"pass(?:es|ed)?\s+into\s+sleep|"
-    r"go(?:es)?\s+to\s+sleep|went\s+to\s+sleep|going\s+to\s+sleep|"
-    r"knocked?\s+out|out\s+cold|unconscious|"
-    r"black(?:s|ed)?\s+out|"
-    r"pass(?:es|ed)?\s+out|" + _FAINT_VERB + r"|"
-    r"los(?:e|es|t|ing)\s+consciousness|"
-    r"sedated|drugged|put\s+under"
-    r")\b"
-)
 
 
 def _awareness_support_in_beat(player_input, resolved_event, dialogue_log):
@@ -1761,7 +1714,7 @@ def _awareness_support_in_beat(player_input, resolved_event, dialogue_log):
         if isinstance(entry, dict) and entry.get("exact_quote"):
             texts.append(str(entry["exact_quote"]))
 
-    return any(_SLEEP_CUE.search(text.casefold()) for text in texts if text)
+    return any(_ling("_SLEEP_CUE").search(text.casefold()) for text in texts if text)
 
 
 def _unsupported_player_awareness(conditions, player_name, player_input,
@@ -1856,38 +1809,11 @@ _NATURAL_SLEEP_SECONDS = 8 * 3600  # ordinary sleep, on the simulation clock
 # sleeper" from "shouts across the room the sleeper is in", so shouting/calling
 # out is left to the Director rather than made deterministic. Hands on a body,
 # or the word "wake" aimed at it, is unambiguous.
-_ROUSE_CUE = re.compile(
-    r"\b(?:"
-    r"wakes?|waking|woke|woken|awakens?|awakened|awakening|"
-    r"rouses?|rousing|roused|"
-    r"shakes?|shaking|shook|shaken|"
-    r"nudges?|nudging|nudged|"
-    r"jostles?|jostling|jostled|"
-    r"prods?|prodding|prodded|pokes?|poking|poked|"
-    r"shoves?|shoving|shoved|"
-    r"slaps?|slapping|slapped|"
-    r"splash\w*|douses?|dousing|doused|"
-    r"hauls?|hauling|hauled|drags?|dragging|dragged|"
-    r"lifts?|lifting|lifted|pulls?|pulling|pulled"
-    r")\b"
-)
 # What a PLAYER can say that means "leave me under". `_SLEEP_CUE` plus the
 # stayings it does not cover. Kept separate from `_SLEEP_CUE` on purpose:
 # that one decides whether to KEEP an onset and errs toward keeping, so
 # widening it would make prose more likely to put the player under -- the
 # direction the original bug came from.
-_STAY_UNDER_CUE = re.compile(
-    # _SLEEP_CUE's alternatives, minus its closing `)\b`, plus the stayings.
-    _SLEEP_CUE.pattern[:-len(r")\b")] + r"|"
-    r"dream\w*|"
-    r"stays?\s+(?:under|out|asleep)|stayed\s+(?:under|out|asleep)|"
-    r"keeps?\s+sleeping|kept\s+sleeping|"
-    r"remains?\s+(?:under|asleep|unconscious)|remained\s+(?:under|asleep|unconscious)|"
-    r"snor\w+|"
-    r"do(?:es)?\s+not\s+wake|don'?t\s+wake|doesn'?t\s+wake|"
-    r"without\s+waking"
-    r")\b"
-)
 
 
 def _clause_attributed_subjects(text_units, cue_re, subject_names,
@@ -1966,7 +1892,7 @@ def _rouse_attempts(interp, char_actions, resolved_event, gated_names):
     if not gated_names:
         return set()
     units = _declared_act_texts(interp, char_actions) + [str(resolved_event or "")]
-    return _clause_attributed_subjects(units, _ROUSE_CUE, gated_names,
+    return _clause_attributed_subjects(units, _ling("_ROUSE_CUE"), gated_names,
                                        prefer_object=True)
 
 
@@ -2105,7 +2031,7 @@ def _awareness_exits(chat_id, conditions, player_name, player_input,
 
     # 1. the player's own declaration
     declared = str(player_input or "").strip()
-    player_acts = bool(declared) and not _STAY_UNDER_CUE.search(declared.casefold())
+    player_acts = bool(declared) and not _ling("_STAY_UNDER_CUE").search(declared.casefold())
     if target and player_acts:
         for record in gated:
             subject = re.sub(r"[^a-z0-9]", "", record["subject"].casefold())
@@ -2183,7 +2109,7 @@ def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions
                 aware_subjects.add(str(c.get("subject_id") or "").casefold())
 
     flagged = _clause_attributed_subjects(
-        text_units, _UNCONSCIOUSNESS_CUE, tracked_names)
+        text_units, _ling("_UNCONSCIOUSNESS_CUE"), tracked_names)
     return [n for n in sorted(flagged) if n.casefold() not in aware_subjects]
 
 # Destruction tripwire (movement/space Phase 3b follow-up). Observed live:
@@ -2206,38 +2132,27 @@ def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions
 #   subject-first:  "<name> ... was razed / burned down / in ruins"
 #   verb-object:    "razed/consumed/destroyed (the) <name>"
 #   of-phrase:      "ruins/ashes/nothing left of <name>"
-_DESTRUCTION_TERMINAL_CUES = (
-    r"(?:was |were |now )?(?:utterly |completely |entirely )?"
-    r"(?:destroyed|razed|levell?ed|flattened|obliterated|annihilated|"
-    r"incinerated|collapsed|burn(?:ed|t)\s+down|"
-    r"burn(?:ed|t)\s+to\s+the\s+ground|"
-    r"reduced\s+to\s+(?:ash|ashes|rubble|cinders)|"
-    r"wiped\s+out|in\s+ruins|no\s+longer\s+stands|no\s+more|"
-    r"consumed\s+by|engulfed\s+in\s+flames|swallowed\s+by|"
-    r"lost\s+to\s+the\s+(?:flames|fire|sea))"
-)
-_DESTRUCTION_VERB_OBJECT = (
-    r"(?:destroy(?:ed|s)|raz(?:ed|ing)|levell?(?:ed|ing)|consum(?:ed|ing)|"
-    r"obliterat(?:ed|ing)|annihilat(?:ed|ing)|flatten(?:ed|ing)|"
-    r"incinerat(?:ed|ing)|swallow(?:ed|ing)|engulf(?:ed|ing)|"
-    r"wip(?:ed|ing)\s+out|burn(?:ed|t|ing)\s+down)"
-)
-_DESTRUCTION_OF_PHRASE = (
-    r"(?:ruins?|ashes|remains|destruction|razing|loss|"
-    r"nothing\s+(?:\w+\s+){0,2}?(?:left|remains|remained))\s+(?:\w+\s+){0,2}?of"
-)
 
 def _destruction_name_pattern(name_cf):
     """One compiled pattern per known place name covering the three
     destruction-shaped positions above. Bounded word-gaps, not free
-    sentence co-occurrence."""
-    name = re.escape(name_cf)
+    sentence co-occurrence.
+
+    The name boundary is script-aware and the gaps allow an unspaced run:
+    `\\b` never fires against a Japanese particle, and `\\s+` between a cue and
+    a name assumes words are spaced, so all three positions were dead in
+    Japanese. The English genitive and determiners stay OPTIONAL rather than
+    being removed -- a Japanese story still carries them through
+    code-switching and imported names.
+    """
+    name = name_boundary_pattern(name_cf)
+    gap = r"[,\s]*"
     return re.compile(
-        rf"\b{name}(?:'s)?\b[,\s]+(?:\S+\s+){{0,4}}?{_DESTRUCTION_TERMINAL_CUES}"
-        rf"|{_DESTRUCTION_VERB_OBJECT}\s+"
+        rf"{name}(?:'s)?{gap}(?:\S+\s+){{0,4}}?{_ling("_DESTRUCTION_TERMINAL_CUES")}"
+        rf"|{_ling("_DESTRUCTION_VERB_OBJECT")}{gap}"
         rf"(?:the\s+|all\s+of\s+|the\s+whole\s+|the\s+entire\s+|most\s+of\s+)?"
-        rf"{name}\b"
-        rf"|{_DESTRUCTION_OF_PHRASE}\s+(?:the\s+)?{name}\b"
+        rf"{name}"
+        rf"|{_ling("_DESTRUCTION_OF_PHRASE")}{gap}(?:the\s+)?{name}"
     )
 
 def _narrated_destruction_subjects(resolved_event, dialogue_log, sd, sc,
@@ -2698,9 +2613,6 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
     return changed
 
 
-_RAPID_FOLLOW_VERBS = frozenset({
-    "run", "sprint", "flee", "dash", "bolt", "race", "charge",
-})
 
 
 def _declares_rapid_movement(result):
@@ -2711,7 +2623,7 @@ def _declares_rapid_movement(result):
         if not isinstance(event, dict) or event.get("type") != "action":
             continue
         verb = str(event.get("verb") or "").strip().casefold()
-        if verb in _RAPID_FOLLOW_VERBS:
+        if verb in _ling("_RAPID_FOLLOW_VERBS"):
             return True
         attempt = str(event.get("attempt") or "").strip().casefold()
         # Start-boundary matching avoids treating "runs a hand through hair"
@@ -3189,56 +3101,10 @@ def _omission_subject_encoded(sd, subject, forms=None):
 
 # Category synonyms a model may plausibly write in a manifest entry, folded
 # onto the canonical evidence-class names.
-_OMISSION_CATEGORY_ALIASES = {
-    "room": "rooms", "location": "rooms",
-    "adjacent": "adjacency", "door": "adjacency", "passage": "adjacency",
-    "barrier": "adjacency",
-    "position": "positions", "movement": "positions",
-    "station": "stations", "placement": "stations",
-    "pose": "poses", "posture": "poses", "body_pose": "poses",
-    "body_arrangement": "poses",
-    "entity": "entities", "object": "entities",
-    "condition": "conditions", "status_effect": "conditions",
-    "clothing": "attire", "outfit": "attire",
-    "contact": "contacts", "contacts": "contacts",
-    "contact_ops": "contacts", "body_position": "contacts",
-    "substance": "substances", "substances": "substances",
-    "substance_ops": "substances", "material": "substances",
-    "material_transfer": "substances", "residue": "substances",
-    "item": "inventory", "inventory_ops": "inventory",
-    "cast": "cast_changes", "arrival": "cast_changes",
-    "departure": "cast_changes",
-    "vehicle": "transit", "portal": "transit", "link": "transit",
-    # --- The rest of the delegated channel families -------------------
-    # Every family a specialist owns needs a category that REACHES it. A
-    # category with no route is a change that lands nowhere: no specialist
-    # is handed it, so nobody can encode it, so it is detected as an
-    # omission on every beat that contains it and buys a repair call that
-    # asks a mind which was never given the event. Measured twice --
-    # contacts/substances/poses/stations were dead this way since 8.2, and
-    # `overlays`/`vitals` were dead the same way while body OWNED them.
-    # The floor is now a test (test_every_delegated_family_is_reachable):
-    # a new delegated channel must be reachable by some category or the
-    # suite fails.
-    "overlay": "overlays", "mark": "overlays", "marking": "overlays",
-    "appearance": "overlays", "physiology": "overlays",
-    "expression": "overlays", "breathing": "overlays",
-    "arousal": "overlays", "reaction": "overlays",
-    "vital": "vitals", "reserves": "vitals", "stamina": "vitals",
-    "injury": "vitals", "wound": "vitals",
-    "contained": "containment", "container": "containment",
-    "enclosure": "containment",
-    "scale": "scales", "size": "scales",
-    "destroyed": "destruction", "destruction": "destruction",
-    "artifact": "artifacts", "artifact_ops": "artifacts",
-    "notice": "artifacts", "claim": "artifacts",
-    "introduction": "introductions", "name_exchange": "introductions",
-    "world_fact": "world_facts", "fact": "world_facts",
-}
 
 def _normalize_omission_category(category):
     cat = str(category or "").strip().casefold()
-    return _OMISSION_CATEGORY_ALIASES.get(cat, cat) or "other"
+    return _ling("_OMISSION_CATEGORY_ALIASES").get(cat, cat) or "other"
 
 def _entity_state_has_transit(entity_def):
     state = entity_def.get("state") if isinstance(entity_def, dict) else None
@@ -3709,7 +3575,7 @@ def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
     try:
         audit = _agent_json(
             "director", "resolve_reconcile",
-            get_prompt("resolve_reconcile"),
+            get_prompt("resolve_reconcile", ctx.language),
             {
                 "resolved_event": out.get("resolved_event", ""),
                 "dialogue_log": dlog_compact,
@@ -4123,7 +3989,7 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
         try:
             result = _agent_json(
                 spec["role"], spec["step_key"],
-                specialist_prompt(name, scope), payload,
+                specialist_prompt(name, scope, ctx.language), payload,
                 temperature=0.0,
                 max_tokens=None,   # the configured ceiling
             )
@@ -4488,7 +4354,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         try:
             repair = _agent_json(
                 "director", "resolve_repair",
-                get_prompt("resolve_repair"),
+                get_prompt("resolve_repair", ctx.language),
                 {
                     "resolved_event": resolved_event,
                     "dialogue_log": dlog_compact,
@@ -6019,7 +5885,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             return _agent_json(
                 spec["role"],
                 spec["step_key"],
-                specialist_prompt(name, state["scope"]),
+                specialist_prompt(name, state["scope"], ctx.language),
                 _specialist_payload(name, ctx, sc, view, extras),
                 temperature=0.2,
                 max_tokens=None,   # the configured ceiling
@@ -6755,7 +6621,7 @@ def director_resolve(ctx, nonce):
         # persisted below and audited by the same backstop.
         _prose_scope = _prose_author_scope(
             ctx, sc, payload, _orch_facts, p_name)
-    _resolve_prompt = prose_author_prompt(_prose_scope)
+    _resolve_prompt = prose_author_prompt(_prose_scope, ctx.language)
 
     out = _agent_json(
         "director",

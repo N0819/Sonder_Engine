@@ -1437,7 +1437,7 @@ async function moveLoreBook(bookId, parentId, position) {
     await refreshLoreUI(bookId);
     toast("Lorebook moved.", "ok");
   } catch (error) {
-    toast("Could not move lorebook: " + error.message, "err");
+    toast(`Could not move lorebook: ${error.message}`, "err");
   }
 }
 
@@ -1451,7 +1451,7 @@ async function reorderLoreBook(bookId, direction) {
 
     await refreshLoreUI(bookId);
   } catch (error) {
-    toast("Could not reorder lorebook: " + error.message, "err");
+    toast(`Could not reorder lorebook: ${error.message}`, "err");
   }
 }
 
@@ -2079,8 +2079,7 @@ function splitNumberList(value) {
 }
 
 function reinterpretLoreBook(state) {
-  backgroundTask(
-    "Reinterpreting " + state.selected.name,
+  backgroundTask(`Reinterpreting ${state.selected.name}`,
     () => api(
       "POST",
 `/api/lorebooks/${state.selected.id}/reinterpret`
@@ -3391,11 +3390,9 @@ function renderLorePlanPreview(state, container) {
               { plan: accepted, job_id: plan._job?.id }
             );
 
-            toast(
-              "Applied lorebook plan: "
-                + `${result.result?.books_created || 0} books, `
+            toast(`Applied lorebook plan: ${`${result.result?.books_created || 0} books, `
                 + `${result.result?.entries_created || 0} entries, `
-                + `${result.result?.links_created || 0} links.`,
+                + `${result.result?.links_created || 0} links.`}`,
               "ok"
             );
 

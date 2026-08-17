@@ -3045,12 +3045,15 @@ class LoreEntryRelation(LenientModel):
     refines_entry_ids: list[int] = Field(default_factory=list)
     contradicts_entry_ids: list[int] = Field(default_factory=list)
     
-class PerceptionOutput(LenientModel):
-    views: dict[str, Optional[str]] = Field(default_factory=dict)
-    # Produced by deterministic post-processing from the final scrubbed view,
-    # never trusted from model output. This makes structured perception a
-    # projection of the already-audited prose channel, not a second leak path.
-    observations: dict[str, list[Observation]] = Field(default_factory=dict)
+# `PerceptionOutput` lived here, keyed as the `perception` step. Removed: it
+# was unreachable. Perception makes no model call -- every view is composed
+# deterministically in `agents/composer.py` -- so there is no model output to
+# validate. The real step keys are `perception_act`, `perception_outcome` and
+# `perception_establish`, none of which appear in SCHEMA_MAP, and no
+# `perception` step exists in the live corpus (2,317 turns checked) or in
+# `STEP_HANDLERS`. The two `step_key == "perception"` branches that read as
+# firewall protection went with it: a guard that cannot fire protects nothing,
+# and reads as though something is covered when it is not.
 
 class MappingStageOutput(LenientModel):
     relevant_books: list[int] = Field(default_factory=list)
@@ -3119,7 +3122,6 @@ SCHEMA_MAP = {
     "narrator": NarratorOutput,
     "character": CharacterOutput,
     "mapping_stage": MappingStageOutput,
-    "perception": PerceptionOutput,
     "mapping_commit": MappingCommit,
     "background_react": BackgroundReactOutput,
     "scene_life": SceneLifeOutput,
@@ -3897,18 +3899,6 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             # invisible to both.
             _fill_entity_names(patch)
 
-    if step_key == "perception":
-        # Observations are a deterministic projection of the final scrubbed
-        # view. Model-authored copies are discarded before validation so a
-        # malformed or malicious second channel can neither fail the step nor
-        # smuggle information past the prose gates.
-        result.pop("observations", None)
-        views = result.get("views")
-        if isinstance(views, dict):
-            result["views"] = {
-                k: _flatten_view_value(v) for k, v in views.items()
-            }
-
     if step_key == "narrator":
         # PARAGRAPHS ARE MARKED WITH <p>...</p> AND RENDERED HERE.
         #
@@ -4474,10 +4464,6 @@ OUTPUT_EXAMPLES = {
         },
         "salience": 0.5,
     },
-    "perception": {
-        "views": {},
-        "observations": {},
-    },
     "mapping_stage": {
         "relevant_books": [],
         "relevant_lore": [],
@@ -4803,30 +4789,6 @@ def semantic_output_errors(
 
         if not isinstance(output.get("interaction"), dict):
             errors.append("interaction must be an object")
-
-    elif step_key == "perception":
-        perceivers = source_payload.get("perceivers") or []
-        views = output.get("views")
-
-        if not isinstance(views, dict):
-            errors.append("views must be an object")
-        else:
-            expected = {
-                str(item.get("id"))
-                for item in perceivers
-                if isinstance(item, dict)
-                and item.get("id") is not None
-            }
-
-            missing = sorted(
-                expected - {str(key) for key in views}
-            )
-
-            if missing:
-                errors.append(
-                    "views is missing perceiver IDs: "
-                    + ", ".join(missing)
-                )
 
     elif step_key == "mapping_stage":
         if not isinstance(output.get("scene_patch"), dict):

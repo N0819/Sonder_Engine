@@ -8,6 +8,7 @@ import random
 from character_schema import (character_appearance, character_name,
                               character_name_from_text, character_senses)
 from db import wget
+from language_runtime import compositor_text
 from scene import (
     NON_AWAKE_GATED,
     awareness_map,
@@ -35,6 +36,7 @@ from .common import (
     _dict_list,
     _list,
     _merge_character_results,
+    _muffle_middle,
     _next_speaker_candidates,
     _observable_predicate,
     _requires_director_resolution,
@@ -128,23 +130,33 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                     "hearing", observer_senses)
                 quote = str(event.get("text") or "")
                 if level == "full":
-                    additions.append(f'{display} says: "{quote}"')
+                    additions.append(compositor_text(
+                        "loop_speech", label=display, body=quote))
                 elif level == "trace":
                     # Contentless by contract (G4): detection and direction at
                     # best -- no words, no identity, not even the gated
                     # `display` label, which would still say "someone you
                     # know of is there".
                     hint = sound_bearing(scene, observer_name, actor_name)
-                    where = f" {hint['phrase']}" if hint else ""
+                    # Two templates, not one padded slot. A bearing changes
+                    # the SHAPE of the sentence, not just its content: English
+                    # needed a word gap the caller was supplying with an
+                    # f-string, and Japanese with no bearing read 「どこかから」.
                     additions.append(
-                        "You register a faint sound" + where
-                        + " -- nothing you can make out.")
+                        compositor_text("loop_faint_sound_placed",
+                                        where=str(hint["phrase"])) if hint
+                        else compositor_text("loop_faint_sound"))
                 else:
-                    words = quote.split()
-                    fragment = " ".join(
-                        words[max(0, len(words) // 2):max(0, len(words) // 2) + 3])
-                    additions.append(
-                        f'You hear a muffled fragment from {display}: "...{fragment}..."')
+                    # The SHARED degrader, not a second copy of the rule.
+                    # This built its fragment with `quote.split()`, which
+                    # returns one token for a language that does not space its
+                    # words -- so a listener at partial hearing received the
+                    # entire secret, verbatim. `_muffle_tokens` was fixed for
+                    # exactly this and this call site was missed; one muffling
+                    # rule, in one place, is the only way that stays true.
+                    fragment = _muffle_middle(quote)
+                    additions.append(compositor_text(
+                        "loop_muffled", label=display, fragment=fragment))
                 perceived_by.add(observer_id)
             elif event.get("type") == "action":
                 if event.get("visibility") == "concealed":

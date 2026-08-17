@@ -255,7 +255,7 @@ function generateBackdrop(turnId, signature) {
       // blacklisting those converted one bad minute into "this room never
       // gets a picture" for the rest of the session.
       if (error?.kind === "failed") BD.failed.add(signature);
-      toast("Backdrop: " + (error?.message || "generation failed"),
+      toast(`Backdrop: ${(error?.message || "generation failed")}`,
             error?.kind && error.kind !== "failed" ? "warn" : "err");
       return null;
     })

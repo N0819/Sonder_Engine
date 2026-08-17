@@ -22,11 +22,13 @@ sentences carrying what he saw. The sentences left standing were the weather
 and a voice. It reached his structured observations and his committed memory
 the same way: what that mind knows about that beat is now a sound.
 
-Two fixes, and this file pins the second. The first is upstream, where the data
-first goes wrong: the perception prompt now requires each view to be written
-from inside its own perceiver (`test_the_prompt_requires_the_perceivers_own
-_frame`). The second is this floor — when the guard's own drop would leave a
-view with no sight in it, the view stands and the refusal is reported.
+Two fixes were made, and this file pins the one that still exists. The first
+was upstream, in the perception PROMPT -- and perception no longer makes a
+model call at all: every view is composed deterministically from the typed IR
+in `agents/composer.py`, so there is no prompt left to carry that requirement
+and no model left to disobey it. The second is this floor — when the guard's
+own drop would leave a view with no sight in it, the view stands and the
+refusal is reported. That one is machinery, and it is what is tested here.
 """
 
 from __future__ import annotations
@@ -132,15 +134,3 @@ class TestTheProseTheFloorReads:
                       "The pressure presses against his skin."):
             assert not _SIGHT_ASSERTION.search(prose), prose
 
-
-def test_the_prompt_requires_the_perceivers_own_frame():
-    """The floor is a floor. The reason the model wrote an outside-view at all
-    is that nothing told it not to: the perception prompt carried no person
-    discipline while a deterministic scrub enforced one, so the two disagreed
-    and the character paid for it."""
-    from prompts import get_prompt
-    text = get_prompt("perception")
-    assert "PERSON" in text
-    lowered = text.lower()
-    assert "'you'" in lowered or '"you"' in lowered
-    assert "never" in lowered

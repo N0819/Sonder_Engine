@@ -13,6 +13,7 @@ from character_schema import (character_name, character_name_from_text,
 from checkpoints import ensure_checkpoint, restore_checkpoint
 from commit import commit_all
 from db import active_frame_id, q, qi, wset
+from language_runtime import current_language_id, story_language
 from pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
     current_warning_sink,
@@ -187,6 +188,40 @@ STEP_HANDLERS = {
     "narrator_extra": narrator_extra,
     "commit": commit_all,
 }
+
+
+def _extension_splices(plan, chat_id):
+    """Let installed extensions place their own registered steps.
+
+    `register_step` below has always covered the handler half of adding a
+    stage; plan placement was the half it punted on, which is why a third
+    party could not add one without editing this file. Lazy-imported (the
+    package reaches back into this module to register handlers) and total: any
+    failure at all leaves the plan exactly as this module built it, so a broken
+    extension can never cost a turn.
+    """
+    try:
+        import extension_runtime
+
+        return extension_runtime.apply_plan_splices(plan, chat_id)
+    except Exception:
+        _step_logger.exception("extension plan splices failed")
+        return plan
+
+
+def _extension_step_saved(ctx, key, content):
+    """Tell extension observers a step's content just became durable.
+
+    Same lazy/total discipline as the splice hook, for a stronger reason: this
+    runs inside the turn's own wall clock, so an observer's failure must cost
+    the turn nothing.
+    """
+    try:
+        import extension_runtime
+
+        extension_runtime.notify_step_saved(ctx, key, content)
+    except Exception:
+        _step_logger.exception("extension step notification failed")
 
 
 def register_step(key, handler, *, replace=False):
@@ -405,6 +440,7 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
         saved = _with_engine_notes(
             h["v"], ctx, k, parallel_with=[m for m in members if m != k])
         sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), saved)
+        _extension_step_saved(ctx, k, saved)
         yield _evt(k, lbl, sid, vid, n, saved)
 
 
@@ -419,6 +455,7 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     # notes, so no downstream stage reads a key its schema never declared.
     saved = _with_engine_notes(holder["v"], ctx, key)
     sid, vid, n = save_step(turn_id, key, label, ordn, saved)
+    _extension_step_saved(ctx, key, saved)
     yield _evt(key, label, sid, vid, n, saved)
 
 def resume_key_for_turn(turn_id, chat_id):
@@ -556,7 +593,11 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if _has_extras:
         plan.append(("narrator_extra", "Narrator · render (other players)"))
     plan.append(("commit", "Mapping & memory · commit-up"))
-    return plan
+    # Last, so an extension anchors against the plan the engine actually built
+    # this beat -- and only against it: splices derive from the enabled set and
+    # installed manifests alone, never from anything this turn happens to be,
+    # because resume/reroll recompute this function and must get the same list.
+    return _extension_splices(plan, chat_id)
 
 _BG_KEY = "background_react"
 
@@ -697,6 +738,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         turn=TurnData.from_row(turn_row),
         cast=cast_rows,
         input=turn_row["player_input"],
+        language=story_language(chat_id),
         extra_players=_load_extra_players(chat_id, turn_row["idx"], turn_row["frame_id"]),
     )
 
@@ -1003,6 +1045,7 @@ def run_pipeline(
         with _ABORTS_LOCK:
             ABORTS[(chat_id, frame_id)] = abort
     cancel_event.set(abort)
+    language_token = current_language_id.set(story_language(chat_id))
 
     try:
         # Do not stop consuming _run_pipeline merely because the flag has
@@ -1030,6 +1073,7 @@ def run_pipeline(
         raise
 
     finally:
+        current_language_id.reset(language_token)
         cancel_event.set(None)
         active_frame_id.set(None)
 

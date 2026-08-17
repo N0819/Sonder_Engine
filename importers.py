@@ -11,6 +11,7 @@ from providers import (
     clamp_read_timeout,
 )
 from prompts import EXTRA_PARTS_NOTE, get_prompt
+from language_runtime import language_pack
 from character_schema import (
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
@@ -22,6 +23,18 @@ from character_schema import (
     normalize_persona_data,
     persona_name,
 )
+
+#: Output budget for the whole-sheet authoring generators (character, persona,
+#: promotion draft, psychology fill, lorebook structure and entries).
+#:
+#: These emit ONE large structured document, and a cap that truncates does not
+#: degrade -- it returns invalid JSON and the whole generation is reported as a
+#: failure. 5000 was chosen when sheets were smaller; a full v3 character sheet
+#: with psychology, embodiment and an opening exceeds it in English and is not
+#: close in a language that costs more tokens per unit of content. The
+#: provider boundary scales this by the story language's own factor, and the
+#: host's `max_output_tokens` ceiling still clamps it.
+AUTHORING_MAX_TOKENS = 20000
 
 @contextmanager
 def _silent_provider_stream():
@@ -407,140 +420,26 @@ def heuristic_character_sheet(d):
         sheet["opening"]["greetings"] = greetings
     return sheet
 
-REINT_CHAR_SYS = (
- "Convert this character card into a native simulation-first sheet. "
- "Preserve setting only if it is explicitly supplied; otherwise create a "
- "character with no assumed relationship to the player, beyond what "
- "is directly stated.\n\n"
- "Separate embodiment.visible from embodiment.latent AND from initial_outfit. "
- "embodiment.visible is stable BODY appearance only: build, face, hair, eyes, "
- "skin, scars, and other features that remain when clothes change. Hidden "
- "capabilities, transformations, secret identities, and equipment functions "
- "belong in latent. Put every garment/accessory currently worn in "
- "initial_outfit.wearing; never repeat outfit text in the appearance summary.\n\n"
- # The same wording the four card-authoring prompts carry, for the same
- # reason drive is repeated below: this path keeps its own schema prompt, so
- # guidance added there never reaches it. Non-human cards are the ecosystem's
- # commonest kind -- a kitsune imported without this arrives with nine tails
- # in prose and none the engine can see.
- + EXTRA_PARTS_NOTE + "\n\n"
- "Psychology should be behaviorally concrete and conditional. Traits include "
- "strength, ordinary expression, activation cues, and inhibitors. Values include "
- "priority, behavioral expression, and conflicts. The self_model includes a few "
- "durable self/world beliefs with confidence and emotional charge. Coping "
- "strategies name triggers, responses, effectiveness, and costs. Learned "
- "associations must be supported by the card's history or examples and remain "
- "biases, never irresistible commands. Do not assign diagnoses.\n\n"
- # Mirrors generator_character/promote_character in prompts.py. Those two
- # were given this guidance and this template slot; the import path was
- # not (it keeps its own schema prompt here), so every imported character
- # arrived with an empty drive and no standing goals -- i.e. permanently
- # reactive, with nothing to say about it.
- "DRIVE is the deepest thing this character lives for -- REQUIRED and "
- "load-bearing: the engine derives the character's proactive wants from "
- "it every beat, so a blank drive makes the character passive. essence = "
- "the core they protect/pursue (concrete, not a platitude); expression = "
- "how it shows in behavior, INCLUDING their initiative; taboo = the line "
- "they will not cross. Infer it from the card -- its description, "
- "personality, scenario and example dialogue all evidence what this "
- "character wants. Make expression drive ACTION, not just restraint.\n\n"
- "STANDING GOALS (initial_state.goals) are the character's durable "
- "objectives -- REQUIRED, 1-3 concrete goals with priority. These are "
- "what the character proactively pursues turn to turn; without them the "
- "character only ever reacts to others. Make them active and specific to "
- "who they are.\n\n"
- "Abilities use honest levels: novice, competent, expert, master, with "
- "scope, limits, and notes. Do not inflate.\n\n"
- "private_history entries include fact_id, content, about_entity, and "
- "known_by. Empty known_by means only the character knows it.\n\n"
- "Output STRICT JSON matching the native character schema:\n"
- "{"
- "\"identity\":{\"uid\":\"\",\"name\":\"\",\"aliases\":[],"
- "\"pronouns\":{\"subject\":\"they\",\"object\":\"them\","
- "\"possessive\":\"their\"}},"
- "\"initial_outfit\":{\"wearing\":[],\"state\":[]},"
- "\"simulation\":{\"tier\":\"bg|mid|major\","
- "\"temperature\":0.8,\"sampler\":{}},"
- "\"embodiment\":{\"senses\":[{\"channel\":\"vision\","
- "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
- "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
- "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
- "\"extra_parts\":[],"
- "\"latent\":[{\"capability\":\"\",\"visible_when\":\"\","
- "\"limits\":\"\"}],\"interoception\":{\"acuity\":0.5,"
- "\"pain_sensitivity\":0.5,\"fatigue_sensitivity\":0.5,"
- "\"pleasure_sensitivity\":0.5}},"
- "\"psychology\":{\"drive\":{\"essence\":\"\",\"expression\":\"\","
- "\"taboo\":\"\"},"
- "\"traits\":[{\"name\":\"\",\"strength\":0.5,"
- "\"expression\":\"\",\"activation_cues\":[],\"inhibited_by\":[]}],"
- "\"values\":[{\"name\":\"\",\"priority\":0.5,\"expression\":\"\","
- "\"conflicts_with\":[]}],"
- "\"self_model\":{\"summary\":\"\",\"protected_beliefs\":[],"
- "\"pride_triggers\":[],\"shame_triggers\":[],"
- "\"beliefs\":[{\"belief\":\"\",\"confidence\":0.5,\"protected\":false,"
- "\"emotional_charge\":0.0,\"source\":\"\"}]},"
- "\"coping\":{\"under_stress\":[],"
- "\"default_conflict_style\":\"\",\"strategies\":[{\"name\":\"\","
- "\"trigger\":\"\",\"response\":\"\",\"effectiveness\":0.5,\"costs\":\"\"}],"
- "\"recovery_supports\":[]},"
- "\"stress_profile\":{\"baseline_reactivity\":0.5,\"recovery_rate\":0.5,"
- "\"overload_threshold\":0.8,\"attentional_style\":\"\",\"somatic_signs\":[]},"
- "\"learning\":{\"associations\":[{\"cue\":\"\",\"appraisal_bias\":\"\","
- "\"response_tendency\":\"\",\"strength\":0.5,\"generalization_tags\":[]}]}},"
- "\"social\":{\"voice\":{\"register\":\"\",\"cadence\":\"\","
- "\"verbosity\":\"natural\",\"markers\":[],\"notes\":\"\"},"
- "\"baseline_stances\":{\"unknown_person\":{\"trust\":0.0,"
- "\"warmth\":0.0,\"threat_sensitivity\":0.0}}},"
- "\"competence\":{\"abilities\":[{\"name\":\"\","
- "\"level\":\"competent\",\"scope\":\"\",\"limits\":\"\","
- "\"notes\":\"\"}]},"
- "\"knowledge\":{\"access_tags\":[\"common\"],"
- "\"excluded_titles\":[],\"public_history\":\"\","
- "\"private_history\":[{\"fact_id\":\"\",\"content\":\"\","
- "\"about_entity\":\"self\",\"known_by\":[]}]},"
- "\"initial_state\":{\"mood\":{\"label\":\"neutral\","
- "\"valence\":0.0,\"arousal\":0.0},"
- "\"goals\":[{\"goal\":\"\",\"priority\":0.5}],"
- "\"active_concerns\":[],\"stress\":{\"activation\":0.0,\"load\":0.0,"
- "\"coping_mode\":\"\"},\"hedonic\":{\"pain\":0.0,\"pleasure\":0.0,"
- "\"source\":\"\"}},"
- "\"opening\":{\"first_message\":\"\"}"
- "}."
-)
+# Compatibility names for tests and prompt audits. The authored text lives in
+# the English language pack; runtime call sites fetch the active pack afresh.
+#
+# Resolved on ATTRIBUTE ACCESS, not at import. `get_prompt` reads the active
+# preset, which is a `settings` row, so binding these eagerly made importing
+# this module require a migrated database -- and `db.init()` runs inside the
+# app's lifespan, i.e. after `import app`. A fresh clone running `make run`
+# died on `no such table: settings`.
+_COMPAT_PROMPT_IDS = {
+    "REINT_CHAR_SYS": "import_character_reinterpret",
+    "REINT_PERSONA_SYS": "import_persona_reinterpret",
+}
 
-REINT_PERSONA_SYS = (
- "Convert this player persona into a native simulation-first persona. "
- "Do not assume a setting, genre, pre-existing NPC relationships, or "
- "special narrative role unless explicitly supplied.\n\n"
- "Separate visible embodiment from latent capabilities AND from clothing. "
- "embodiment.visible is stable BODY appearance only; every starting "
- "garment/accessory belongs in initial_outfit.wearing and must not be repeated "
- "in the appearance summary. "
- "narration.voice_setting is private narrator guidance and is never "
- "available to NPCs.\n\n"
- + EXTRA_PARTS_NOTE + "\n\n"
- "Output STRICT JSON matching the native persona schema:\n"
- "{"
- "\"identity\":{\"uid\":\"\",\"name\":\"\",\"aliases\":[],"
- "\"pronouns\":{\"subject\":\"they\",\"object\":\"them\","
- "\"possessive\":\"their\"}},"
- "\"initial_outfit\":{\"wearing\":[],\"state\":[]},"
- "\"embodiment\":{\"senses\":[{\"channel\":\"vision\","
- "\"acuity\":\"ordinary\",\"range\":\"ordinary\",\"notes\":\"\"}],"
- "\"visible\":{\"summary\":\"\",\"build\":\"\",\"face\":\"\","
- "\"hair\":\"\",\"eyes\":\"\",\"distinctive_features\":[]},"
- "\"extra_parts\":[],"
- "\"latent\":[]},"
- "\"competence\":{\"abilities\":[{\"name\":\"\","
- "\"level\":\"competent\",\"scope\":\"\",\"limits\":\"\","
- "\"notes\":\"\"}]},"
- "\"knowledge\":{\"public_history\":\"\","
- "\"private_history\":[{\"fact_id\":\"\",\"content\":\"\","
- "\"about_entity\":\"self\",\"known_by\":[]}]},"
- "\"narration\":{\"voice_setting\":\"\"}"
- "}."
-)
+
+def __getattr__(name):
+    pid = _COMPAT_PROMPT_IDS.get(name)
+    if pid is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return get_prompt(pid)
+
 
 def import_character(payload, reinterpret=False):
     native = _native_payload(payload, "character")
@@ -565,10 +464,11 @@ def import_character(payload, reinterpret=False):
                 # _jparse's brace repair turns it into a parseable object with
                 # the tail nested in the wrong place (see
                 # character_schema.repair_character_shape).
-                max_tokens = max(5000, int(len(payload_json) / 2))
+                max_tokens = max(AUTHORING_MAX_TOKENS,
+                                 int(len(payload_json) / 2))
                 raw = chat_complete(
                     "utility",
-                    REINT_CHAR_SYS,
+                    get_prompt("import_character_reinterpret"),
                     payload_json,
                     max_tokens=max_tokens,
                 )
@@ -697,6 +597,7 @@ _PART_WORDS = (
 )
 
 
+
 def _prose_names_a_part(sheet):
     """Does this card's BODY prose describe a part the schema would want?
 
@@ -753,9 +654,9 @@ def import_persona(payload, reinterpret=False):
             try:
                 raw = chat_complete(
                     "utility",
-                    REINT_PERSONA_SYS,
+                    get_prompt("import_persona_reinterpret"),
                     json.dumps(source_payload, ensure_ascii=False),
-                    max_tokens=5000,
+                    max_tokens=AUTHORING_MAX_TOKENS,
                 )
                 parsed = _jparse(raw)
                 if not parsed:
@@ -853,7 +754,7 @@ def draft_promoted_character(chat_id, name):
             get_prompt("promote_character"),
             json.dumps({"name": name, "evidence": evidence}, ensure_ascii=False),
             temperature=0.4,
-            max_tokens=5000,
+            max_tokens=AUTHORING_MAX_TOKENS,
         )
 
     parsed = _jparse(raw)
@@ -886,14 +787,15 @@ def draft_promoted_character(chat_id, name):
         "evidence_turns": [e["turn"] for e in evidence],
     }
 
-def generate_character(brief):
+def generate_character(brief, language="en"):
+    authoring = language_pack(language).card("authoring")
     with _silent_provider_stream():
         raw = chat_complete(
             "utility",
-            get_prompt("generator_character"),
-            brief or "Create a character.",
+            get_prompt("generator_character", language),
+            brief or authoring["create_character_brief"],
             temperature=0.9,
-            max_tokens=5000,
+            max_tokens=AUTHORING_MAX_TOKENS,
         )
     
     parsed = _jparse(raw)
@@ -987,7 +889,7 @@ def fill_character_psychology(char_id, brief):
             get_prompt("fill_character_psychology"),
             json.dumps(payload, ensure_ascii=False),
             temperature=0.65,
-            max_tokens=5000,
+            max_tokens=AUTHORING_MAX_TOKENS,
         )
     proposed = _jparse(raw)
     if not proposed:
@@ -1155,14 +1057,15 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
     return normalize(merged)
 
 
-def generate_persona(brief):
+def generate_persona(brief, language="en"):
+    authoring = language_pack(language).card("authoring")
     with _silent_provider_stream():
         raw = chat_complete(
             "utility",
-            get_prompt("generator_persona"),
-            brief or "Create a player persona.",
+            get_prompt("generator_persona", language),
+            brief or authoring["create_persona_brief"],
             temperature=0.9,
-            max_tokens=5000,
+            max_tokens=AUTHORING_MAX_TOKENS,
         )
     
     parsed = _jparse(raw)
@@ -2121,7 +2024,7 @@ def _lore_gen_structure(params, ctx):
             get_prompt("generator_lorebook"),
             json.dumps(payload, ensure_ascii=False),
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=AUTHORING_MAX_TOKENS,
         )
 
     parsed = _jparse(raw)
@@ -2668,7 +2571,7 @@ def generate_lore_entries(lorebook_id, brief):
             get_prompt("generator_lorebook"),
             json.dumps(payload, ensure_ascii=False),
             temperature=0.7,
-            max_tokens=8000,
+            max_tokens=AUTHORING_MAX_TOKENS,
         )
 
     parsed = _jparse(raw)
