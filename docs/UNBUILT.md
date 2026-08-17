@@ -3682,13 +3682,66 @@ Most of §3 shipped in alpha 4.0. What did not:
 
 ### 6.2 Extensions — [`EXTENSIONS_DESIGN.md`](design/EXTENSIONS_DESIGN.md)
 
-Nothing built. The seams it builds on all exist (`runtime.register_step`,
-`build_plan`, `establishment_plan`, prompt presets, per-chat world-KV config).
-Missing: the plan-splice registry at named anchors, pre/post hooks on
-`compute_step`, `register_commit_domain`, the UI surface registries,
-`extensions/<name>/manifest.json` discovery and `enabled_extensions`, the
-`ext:<id>` key namespace, the `/api/extensions` routes, and all four rungs of the
-escalation ladder including story packs.
+**Built in 9.0.** The `extensions/` loader with per-item isolation and computed
+trust classes, `enabled_extensions`, the `SonderExtensionAPI` facade, the
+plan-splice registry at named anchors, `on_step`/`on_turn_committed`, the four
+`ext:<id>` state homes with the committed-turn write gate, character reads
+including settled psychology, `window.Sonder` with sidebar tabs / step renderers
+/ stream events / three-strikes retirement, the `/api/extensions` routes,
+install from directory or URL with zip-slip and symlink refusal and atomic
+`os.replace`, enable/disable/remove in the 🧩 menu, and the `cohesion-demo`
+reference extension. Developer documentation:
+[`docs/guides/EXTENSIONS.md`](guides/EXTENSIONS.md).
+
+The tier ladder (Tier 0–3, story packs as rung 1) was **abandoned**, not
+deferred — design note §2 records why. Do not treat its absence as debt.
+
+A second batch closed the surfaces the first release left open: `ui.css` is
+served (as its own document, linked after the host's sheets), enable/disable
+hot-load in the browser through `Sonder._load`/`_unload`, extensions serve their
+own routes under `/api/extensions/<id>/x/`, `api.add_commit_domain` runs inside
+the turn's transaction, `api.on_character_payload` is the attributed routing
+seam, `api.llm_json`/`llm_text` give a model call on any configured role,
+`api.add_director_specialist` adds a seventh Director family, and
+`check_extension_manifests`/`check_extension_imports` lint the tree.
+
+Still missing:
+
+- **Declarative advisor stages** — a stage as data (role, prompt, input-scope
+  whitelist, anchor) for authors who write no code. Genuinely useful; no longer a
+  prerequisite for anything.
+- **Pre/post hooks on `compute_step`**, and the two routing hooks that were
+  designed alongside `on_character_payload` but not built: `on_admission` and
+  `on_view`, which would let an extension alter what perception ADMITS rather
+  than only what the assembled payload carries.
+- **An extension specialist cannot reach the prose author.**
+  `PROSE_AUTHOR_SHEET` and `test_every_delegated_block_has_exactly_one_owner`
+  are in-tree, so a registered family writes its channel to the merged
+  `state_diff` and nothing narrates it. Documented in the guide rather than
+  fixed; closing it means a prose-chunk registry with the one-owner test
+  extended across the boundary.
+- **`tools/project_check.py --extension <path>`** — the author-facing self-check
+  that runs the same two lints against an unbundled extension before shipping.
+  The checks exist; the CLI entry point does not.
+- **Phase 2: the reviewed registry.** Every field it needs (id, version,
+  `sha256`, `provenance`) is already written at install time, so this is an
+  addition rather than a migration.
+- **Scoped clients**, which is what would make third-party frontends real for
+  non-host players: scoped stream and chat reads, `client`-scope tokens. A
+  firewall decision, and it deserves its own design note before code.
+- **Frame-scoped extension state.** `ext:<id>` world keys are chat-global (not in
+  `FRAME_SCOPED_WORLD_KEYS`), so they are shared across eras.
+- **`extension_runtime/` is outside the UI catalog's reach.**
+  `tools/extract_ui_catalog.py` scans root `*.py` and `agents/*.py`, so the
+  dozen-odd extension registration errors that surface in the Extensions menu's
+  error field are never harvested and never translated — while the four that
+  happen to live in `agents/director.py` are. Recorded as verbatim exceptions
+  rather than translated, because four of sixteen would make one list half
+  Japanese. Fix is to add the package to the scanner and translate the set.
+- **`Sonder._unload` cannot undo side effects**, only registrations and the two
+  injected elements. A monkeypatched global, a timer or a `document`-level
+  listener survives a disable. Inherent to the no-sandbox posture; stated in the
+  guide so an author can compensate.
 
 ### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md)
 

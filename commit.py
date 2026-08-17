@@ -7665,6 +7665,8 @@ def _commit_domain(ctx, results, name, operation):
 
 
 def _commit_all_locked(ctx, nonce):
+    import extension_runtime as _extensions_module
+
     prepared = _prepare_turn_commit(ctx)
     results = {}
 
@@ -7767,6 +7769,14 @@ def _commit_all_locked(ctx, nonce):
                 ctx, results, "pending",
                 lambda: wset(ctx.chat.id, "pending", []),
             )
+            # Extension commit domains run LAST inside the transaction, after
+            # every engine domain has landed: an extension computing from the
+            # turn's own durable writes must be able to read them. Their
+            # failures are contained by the registration's own `on_error` --
+            # "warn" (the default) keeps the promise that a broken extension
+            # never costs a turn, "fail" is an extension saying its state being
+            # wrong is worse than the beat being lost.
+            _extensions_module.run_commit_domains(ctx, results)
     except Exception as exc:
         raise RuntimeError(
             f"Commit failed and was rolled back: {exc}"
@@ -7849,6 +7859,13 @@ def _commit_all_locked(ctx, nonce):
         import extension_runtime as _extensions
 
         results["extensions"] = _extensions.dispatch_turn_committed(ctx)
+        # Attribution for the routing seam. An extension that rewrote what a
+        # mind was given names itself HERE, on the durable turn, so a character
+        # who knows something they should not is one read from their author
+        # rather than looking like an engine defect.
+        _routing = _extensions.routing_notes(ctx)
+        if _routing:
+            results["extensions"]["routing"] = _routing
     except Exception as exc:
         ctx.add_warning(f"extension turn hooks failed: {exc}")
         results["extensions"] = {"error": str(exc)}

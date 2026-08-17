@@ -1,231 +1,349 @@
-# Extension System — Design Notes (exploratory, not yet built)
+# Extension System — design note
 
-Status: **design exploration for a future feature.** Nothing here is implemented
-— re-verified at alpha 6.1; registered as [`UNBUILT.md`](../UNBUILT.md) §6.2.
-Captures how user-authored extensions (UI changes + pipeline interaction) could be
-added to Sonder Engine, grounded in the existing seams. Verify file:line anchors
-against current code before acting — they drift, and all three §0 anchors already
-have. The seams themselves are all still real: `runtime.register_step`,
-`build_plan`, `establishment_plan`, prompt presets, and per-chat world-KV config.
+Status: **built and shipping in 9.0.** The loader, the facade, the plan-splice
+registry, per-story/per-character/settings state, character reads, the
+`window.Sonder` registries, install/enable/disable/remove, and the
+`cohesion-demo` reference extension shipped first; a second batch added served
+stylesheets, client-side hot-load, extension-owned routes, in-transaction commit
+domains, the attributed character-payload routing hook, a model-call facade and a
+Director-specialist registry (§7a). All in the tree: `extension_runtime/`,
+`extensions/`, `static/js/extensions.js`, `tests/test_extensions.py`,
+`tests/test_extension_seams.py`, `tests/test_extension_install.py`.
 
----
+This file is the **argument**. What the system *does*, field by field, is
+[`docs/guides/EXTENSIONS.md`](../guides/EXTENSIONS.md); if the two disagree, the
+guide is right. What remains unbuilt is [`UNBUILT.md`](../UNBUILT.md) §6.2.
 
-## 0. What the codebase already gives you
-
-Three de-facto extension mechanisms already exist and should be the skeleton, not
-replaced:
-
-1. **`agents/runtime.py:register_step()`** (~line 170) — an explicit, tested
-   (`tests/test_agent_package.py`) API for registering a pipeline step handler
-   without editing dispatch, with a reserved `character:<id>` namespace guard. Its
-   docstring deliberately punts on the missing half: *plan placement* — there is no
-   hook to splice a registered step into `build_plan()` (runtime.py ~365) or
-   `establishment_plan()` (~461). **That splice hook is the single biggest missing
-   piece of a pipeline extension story.**
-2. **Prompt presets** — `prompts.py:get_prompt()` resolves `active_preset` →
-   `prompt_presets` (settings-stored JSON) → `DEFAULT_PROMPTS`, with CRUD at
-   `PUT /api/prompt_presets` / `PUT /api/active_preset`. A prompt-override extension
-   is already just data.
-3. **Data-driven providers and role models** — providers live in a DB table
-   (`providers.py:provider()`, `POST /api/providers`); per-role model choice is the
-   `agent_models` setting (`resolve_role_candidates()` with fallbacks). Per-chat
-   behavioral config is world-KV: `scene.py:dialogue_config()/reaction_config()/
-   background_config()/fiction_model()`, all read via `wget`.
-
-Also: any unknown key assigned into `PipelineContext` lands in `_extra`
-(`pipeline_context.py`), and any step run via `_step_stream` → `storage.save_step`
-automatically gets `steps`/`variants` rows — so an extension stage inherits reroll,
-one-active-variant, staleness, and the pipeline drawer **for free**, provided it
-appears in the plan deterministically.
+The note was rewritten when the system was built. The version it replaces was an
+exploratory ladder of four tiers whose central safety claim did not survive
+contact — §2 records why, because the reasoning is the part worth keeping.
 
 ---
 
-## 1. Extension surfaces and taxonomy
+## 1. The ruling that reshaped the design
 
-### (a) Pipeline surfaces
+The first plan narrowed the developer API "for firewall reasons": stages would
+receive scoped views because a broader surface could leak; extension output could
+not reach a character payload; the recommended ship was a declarative,
+data-only tier precisely *because* it could not breach the boundary.
 
-| Want | Real seam | Status |
-|---|---|---|
-| Inject a custom stage | `runtime.register_step()` + a new **plan-splice registry** consulted inside `build_plan()`/`establishment_plan()` at named anchors (`after:perception_outcome`, `before:narrator`, …) | Handler half exists; splice half must be added (small, contained) |
-| Pre/post hook on an existing stage | Wrap in `runtime.compute_step()` — the one chokepoint every step passes through | Feasible; dangerous (see §4) |
-| Transform a stage's output | Same chokepoint, post-handler | Same danger; defer |
-| New deterministic commit domain | `commit.py:_commit_all_locked()` — a registry of extra `_commit_domain(...)` calls in the same `transaction()`; plus a post-commit observer slot next to `_consolidate_committed_memories` | Clean fit with existing `_commit_domain` structure |
-| New provider | Already data: `POST /api/providers` | Exists |
-| Prompt overrides | `prompts.py:presets()` / `get_prompt()` | Exists |
-| Per-chat behavior presets | `wset` keys read by `scene.py:dialogue_config()` etc. | Exists (needs a bundling format) |
+That was wrong, and it was wrong in a way worth naming because it is easy to
+repeat. It conflated **reading** a mind with **writing** to one.
 
-### (b) UI surfaces (browser globals, no ES modules — every hook is a registry core render fns consult)
+> **The firewall is for MINDS, not for developers or tooling.** It constrains
+> what reaches a fictional mind. It says nothing about what the engine, its
+> instruments, or a third party may OBSERVE — reading a mind puts nothing in
+> anyone's head. The only place a breach can occur is the WRITE side.
+>
+> — [`AGENTS.md`](../../AGENTS.md) § Information boundaries, now the canonical
+> statement.
 
-| Want | Real seam |
-|---|---|
-| Header button | `#top` in `static/index.html`; existing buttons via `$("#b-world").onclick` in `settings.js` |
-| Sidebar tab + list | `renderSide()` in `app.js` (`S.tab` switch) |
-| Settings pane | tab arrays inside the `#b-cast` modal builder (`settings.js`) |
-| Custom turn action / decoration | `renderChat()` in `chat.js` — the `.turn` div and `.tbtns` row |
-| Narration render decorator | Same prose node; `detectSceneMood()/applySceneMood()` (chat.js) is an in-tree example |
-| Pipeline-step visualization | `openPipeline()` (chat.js) — per-step-key renderer registry |
-| Live stream tap | `handleEvt()` (chat.js) — every `step_start`/`token`/`step` event flows through here |
-| Modal/panel primitives | `el()` and `modal()`/`closeModal()` in `components.js` |
+The engine already reads every mind at once, in four places, correctly: the
+pipeline drawer, persisted traces, `chat_archive`, `pipeline_trace`. An API
+narrowed on the read side protects nothing and costs real capability. The
+owner's ruling, adopted as the design's stance:
 
----
+**Developers get full access, and maintaining the epistemic firewall is theirs.
+An extension that breaks it is a poorly designed extension** — the same judgment
+the engine passes on a leaky core stage, applied to third-party code.
 
-## 2. The "easily written" spectrum
+It is also the only honest position available. A `code`-class extension runs
+in-process; it can reach `PipelineContext` through Python introspection no matter
+what the facade withholds. Read-gating was never enforcement, only ergonomics.
+Saying so converts a loophole into a documented surface.
 
-- **Tier 0 — pure data bundle ("story pack").** JSON manifest bundling prompt-preset
-  overrides, per-chat config defaults (applied by `newChatWizard`, app.js), lorebooks,
-  characters. Zero code, zero risk beyond prompt injection. ~80% of what hobbyist
-  authors want.
-- **Tier 1 — declarative manifest with two generative primitives (recommended first ship).**
-  - *Declarative UI*: buttons/panels as data (`{placement, label, action:{endpoint, render}}`);
-    author writes no JS.
-  - *Declarative "advisor stage"*: a stage as data — role, prompt, an **input-scope
-    whitelist**, an anchor slot. Engine assembles payload from whitelisted scopes, so
-    the epistemic firewall is enforced **by construction**.
-- **Tier 2 — structured Python/JS plugins.** `extensions/<name>/hooks.py` exposing
-  `register(api)` with a narrow capability API; a JS file registering panels via
-  `window.Sonder.*`. Real power, *advisory* safety only (in-process Python can `import db`).
-- **Tier 3 — arbitrary plugins.** Tier 2 with no pretense of constraint.
+Where responsibility transfers, stated so the developer can discharge it: Sonder's
+firewall guarantee describes **Sonder's** pipeline. An extension that alters
+admission, view composition, payload contents or a character's decision seam is
+now the author of that part of the information model, and the guarantee is theirs
+to make. An extension may contradict `Design.md` outright — omniscient characters,
+collapsed layers — and that produces at worst a poorly made extension, never an
+engine failure.
 
-**Sweet spot: ship Tier 0+1 together.** The advisor stage is the novel, high-leverage
-piece — a "foreshadowing critic", "combat referee note", "weather sim" stage that shows
-up in the pipeline drawer with reroll/variants working, no code, and *cannot* breach the
-firewall. Skip the sandboxed-DSL tier (near-tier-2 cost, near-tier-1 power).
+### 1.1 Facts versus manner, dissolved
 
----
+The original open question was whether an extension might inject *facts* into a
+character's prompt or only *manner*. Under the ruling it dissolves: both are
+permitted, and the developer owns the result. What survives is **craft guidance,
+not a rail**:
 
-## 3. Concrete minimal design (Tier 1)
-
-**Discovery/loading.** `extensions/<name>/manifest.json` scanned at startup from
-`_startup_engine()` (app.py) and via new host-only endpoints (`GET/POST /api/extensions`,
-enable/disable persisted as an `enabled_extensions` settings key). Manifest:
-
-```json
-{
-  "id": "foreshadow-critic", "version": "1",
-  "capabilities": ["prompts", "ui:button", "stage:read:narration,director_resolve"],
-  "prompts": { "narrator": "…preset text…" },
-  "chat_defaults": { "background_config": { "max_reactors": 2 } },
-  "ui": [ { "placement": "turn-button", "label": "Critique",
-            "action": { "endpoint": "/api/turns/{tid}/pipeline", "render": "step:foreshadow" } } ],
-  "stages": [ { "key": "ext:foreshadow-critic", "label": "Critic · foreshadowing",
-                "anchor": "after:narrator", "role": "default",
-                "reads": ["narrator", "director_resolve", "recent_events"],
-                "prompt": "…", "on_error": "warn" } ]
-}
-```
-
-**Namespacing:** extension step keys forced into `ext:<id>` — mirror the existing
-`character:` reservation in `register_step()`.
-
-**Plan integration (the one core change).** `build_plan()`/`establishment_plan()` end
-with `plan = _apply_extension_splices(plan, chat_id)`, splices from the enabled set,
-ordered by anchor then id. Must be a **pure function of (enabled set, interp, chat
-config)** because `resume_key_for_turn()` and the `from_key` paths recompute the plan
-from stored `director_interpret` content — nondeterminism breaks resume. Enable/disable
-mid-history is the same plan-change class the runtime already survives (orphan-step logic
-deletes single-variant orphans, preserves rerolled ones).
-
-**Stage execution scopes.** Generic handler assembles the payload only from an
-engine-controlled whitelist:
-- Safe: `narrator`, `director_interpret`, `director_resolve`, `perception_outcome`
-  *player* view, `recent_events`, `simulation_clock`, `fiction_model`.
-- Never in Tier 1: other characters' `perception_act`/`interaction_views`,
-  `ctx.character_results`, `private_knowledge_for`, memory internals.
-
-Crucially, **no built-in stage reads `ext:*` output** — a declarative stage is an
-*annotator*: its output is a step (visible in `openPipeline`, renderable by the UI entry,
-available to the next turn's player) but cannot flow into a character payload. Influence
-on characters goes through legitimate surfaces (prompt presets, `dialogue_config`).
-
-**Failure containment.** `on_error: "warn"` catches exceptions, materializes
-`{"error": …}` as step content, appends to `ctx.warnings` — satisfying
-`_assert_plan_materialized` and one-active-variant without a flaky stage killing turns.
-`on_error: "fail"` opts into normal step failure.
-
-**Persistence.** Tier 1 stages persist nothing outside `steps`/`variants` — sidesteps the
-whole DATABASE.md checklist because step rows already ride branch/export/checkpoint
-machinery. A Tier 2 `register_commit_domain(name, fn)` runs inside
-`_commit_all_locked`'s transaction (after `narration_person`, before `pending`),
-inheriting atomic rollback — with the obligation that any new table must join
-checkpoint/export coverage or reruns silently diverge.
-
-**UI loading.** One new script tag in `static/index.html` **after** `app.js`:
-`<script src="/api/extensions/ui.js">` — served as the concatenation of enabled
-extensions' declarative-UI bootstrap (and, at Tier 2, raw JS). Loading last means every
-global (`$`, `el`, `modal`, `api`, `S`, `boot`) exists. Serving under `/api/` (not
-`/static/`) matters: `access_control` only guards `/api/*`, keeping extension code
-session-gated — and because guests get the separate `guest.html` with a two-endpoint
-allowlist, **extension JS never reaches guests**.
-
-`window.Sonder` registry: `registerHeaderButton`, `registerTab`, `registerTurnAction`,
-`registerTurnDecorator`, `registerStepRenderer(key, fn)`, `onStreamEvent(fn)`,
-`refresh()`. Core render fns consult registries every call (`renderSide`, `renderChat`,
-`openPipeline`, `handleEvt`) — so late registration is a non-issue; `Sonder.refresh()`
-forces a render.
+Text cannot be mechanically classified as fact versus manner, so nothing in the
+engine will ever catch "the warp core is failing" appended to a mind that never
+heard the klaxon. The objective route — make it true in the world, let
+deterministic perception distribute it — stays the recommended pattern, but not
+for safety. It is better craft. It produces dramatic irony, rumor lag and false
+belief for free, because the gap between truth and each mind stays real. An
+extension that pastes truth into heads flattens its own story. *That* is the
+sense in which a firewall-breaking extension is poorly designed rather than
+forbidden.
 
 ---
 
-## 4. Safety and the hard problems
+## 2. Why the tier ladder was abandoned
 
-**Threat model, three tiers:**
-1. *Local single-user, self-authored*: author owns the machine + `engine.db`. "Safety" =
-   protecting invariants from *accident*, not malice.
-2. *Shared guest links*: already contained (guests hit `guest.html` + two-path allowlist,
-   never load SPA scripts). Keep it: never inject extension JS into the guest page; never
-   let a manifest widen `GUEST_ALLOWED_API_PATHS`.
-3. *Community-distributed extensions*: the real danger. A Tier 2/3 Python extension is
-   arbitrary code execution (read `engine.db`, exfiltrate, persist malware). A Tier 2/3 JS
-   extension runs same-realm with the host cookie and can call **every** host API —
-   including `GET /api/bootstrap`, which exposes provider API keys. A malicious "theme"
-   that steals keys is a one-liner.
+The replaced note proposed four tiers and recommended shipping Tier 0 (pure data
+packs) plus Tier 1 (declarative advisor stages) first, on the argument that a
+declarative stage's inputs come from an engine-controlled whitelist and so
+"cannot breach the firewall by construction."
 
-**Firewall breaks by accident.** A naive "pre-stage hook gets full ctx" makes it one line:
-copy `ctx["director_resolve"]["outcome"]` or another character's `interaction_views` into
-a character payload's `perception.view` (assembled at `agents/character.py`) → invariant
-violated. So Tier 1 forbids payload mutation entirely; Tier 2's `api` facade exposes
-*scoped getters*, never `ctx`. If payload-transform hooks are ever added, the hook must run
-*inside* `character_step` after payload assembly (redact/append only), never the surrounding
-ctx.
+Three things killed it:
 
-**Persistence boundary breaks.** A hook calling `qi()`/`wset()` mid-pipeline writes outside
-the commit transaction: a later domain failure rolls back everything *except* that write,
-and `restore_checkpoint` won't cover extension tables absent snapshot integration → ghost
-state on rerun. Enforcement is impossible in-process; mitigation = API shape (no DB handle;
-give `register_commit_domain` + `on_turn_committed`) + a `tools/project_check.py`-style lint
-flagging `import db` in `extensions/`.
+1. **The safety was the point, and the safety was illusory.** The ladder's rungs
+   were ordered by how much they *could* breach. Once §1 settled that breaching is
+   the developer's business, the ordering had no load left to bear.
+2. **A declarative tier is not the cheap rung.** The generic handler, the scope
+   whitelist, the prompt/schema drift lint and the payload assembler are most of
+   the work of the code tier, for a fraction of its power.
+3. **Nobody wanted it.** The motivating extension (a Star Trek system for another
+   engine's community) needs custom UI, custom themes, character targeting and its
+   own model calls on day one. Shipping a rung it could not stand on would have
+   proved nothing.
 
-**Sandboxing, honestly.** In-process Python sandboxing (RestrictedPython, builtins-strip) is
-not a security boundary — don't claim it. Real options: (a) subprocess extension host over
-JSON/stdio with timeouts — genuine isolation, meaningful build cost, reasonable eventual home
-for untrusted stage logic; (b) WASM — overkill. JS: `<iframe sandbox>` + postMessage gives
-real containment but kills the pleasant `el()`/`modal()` integration; a CSP with same-origin
-`connect-src` blocks only naive exfiltration. **Achievable posture: Tier 0/1 are actually
-safe (data-only, engine-interpreted, capabilities enforced); Tier 2/3 are trusted code behind
-an explicit consent screen** ("This extension can run code with full access to your database
-and API keys") — the Obsidian/VS Code model, stated plainly.
+So the code tier shipped first. `data` and `prompt` survive not as rungs of a
+ladder but as **computed trust classes** — a label on the consent dialog,
+derived from what an extension can actually do rather than from what it claims.
+The declarative advisor stage remains genuinely useful for authors who write no
+code and is registered as unbuilt, not as a prerequisite.
 
 ---
 
-## 5. Roadmap
+## 3. What the API shape is for, since it is not a wall
 
-1. **Rung 1 (days):** Story packs — manifest import/export bundling prompt presets +
-   chat-default configs + lorebooks; a "Packs" section in settings. Pure data over existing
-   endpoints; no new invariant exposure.
-2. **Rung 2 (the real ship):** Tier 1 — extension loader + settings key, plan-splice hook in
-   `build_plan`/`establishment_plan`, generic declarative-stage handler over `register_step`,
-   `ext:` key reservation, `/api/extensions/ui.js` + `window.Sonder` registries, per-step
-   renderer in `openPipeline`. Regression tests: resume/reroll with an extension stage
-   enabled; disable-mid-history orphan behavior; a test asserting the scope whitelist never
-   exposes `character_results`/private views.
-3. **Rung 3:** Tier 2 Python `register(api)` with scoped getters, `register_commit_domain`
-   (inside the transaction) and `on_turn_committed` (post-commit, warn-only), plus the consent
-   screen and the `import db` lint.
-4. **Rung 4 (only if community distribution materializes):** subprocess extension host for
-   untrusted stage logic; signed/curated pack index.
+Every narrowing that survived is an **accident-preventer**, and each one is named
+after the accident:
 
-**Invariant conflicts to keep off the roadmap until designed:** payload-mutating hooks
-(conflict with information-boundary invariants — off until the inside-`character_step` design
-exists); extension-owned tables (conflict with the persistence checklist unless
-checkpoint/export integration ships in the same rung); anything varying the plan
-non-deterministically (breaks `resume_key_for_turn` — plan splices must derive only from
-durable settings).
+- A stage receives `StepView`, not `PipelineContext` — so you do not move a fact
+  between two minds by *reflex*, because the object you were handed did not
+  contain the other mind.
+- `on_step` receives the saved key and content, never the context — so a step
+  observer cannot quietly become a payload channel.
+- Per-turn writes are gated to `on_turn_committed` — so an extension's write is
+  not the one thing left standing when a domain failure rolls the turn back. The
+  ghost-state failure is real and specific: a mid-pipeline write survives the
+  rollback that undid everything it was computed from, and the rerun then replays
+  against state that never went away. `set_now()` is the named escape hatch; an
+  extension that wants it has to say so.
+- Everything durable is namespaced `ext:<id>` — so four homes (world KV, char
+  state, settings, step rows) inherit checkpoints, archives and branches
+  **wholesale**, and no extension has to walk `DATABASE.md`'s schema checklist.
+
+None of these stop a determined developer, and none are advertised as doing so.
+They are the shape that makes the correct thing the *default* thing.
+
+---
+
+## 4. The plan splice, and why it must be pure
+
+`register_step` always covered the handler half of adding a stage. Plan placement
+was the half it punted on, and that omission is the entire reason a third party
+had to edit `agents/runtime.py` to add a stage. `apply_plan_splices` closes it.
+
+Two properties are load-bearing:
+
+**Pure function of durable settings plus manifests.** `resume_key_for_turn` and
+every `from_key` path rebuild the plan from stored step content. A splice that
+varied with anything not persisted would make the recomputed plan differ from the
+one that ran, and resume would break in a way that looks like data corruption.
+
+**Silent when it cannot apply.** An unknown anchor, or an anchor naming a core
+step this turn does not run, means the stage is not planned this turn — not an
+error, and above all not bolted onto a nearby position. Relocating it would make
+the plan differ between the run and the recompute, which is the same failure by
+another route.
+
+The anchor vocabulary is core step keys only. `character:*` is refused because
+`_run_pipeline` detects the parallel character group by scanning for consecutive
+`character:` keys, so a splice inside it would silently serialize the whole cast.
+`ext:*` is refused because ordering would then depend on registration order,
+which is not a durable fact.
+
+---
+
+## 5. Trust, phased
+
+**Phase 1 — what ships.** Install from a local directory or an `http(s)` zip.
+Nothing reviews what arrives. Consent is taken in the browser at the enable
+moment, where the trust class is stated plainly, because a warning on a page
+nobody reads is not consent.
+
+In-process Python sandboxing (RestrictedPython, stripped builtins) is not a
+security boundary and this project does not claim one. Same for the browser half:
+extension JS is same-origin with the session cookie, and an `<iframe sandbox>`
+would buy real containment at the cost of the `el()`/`modal()` integration that
+makes writing a panel pleasant. The honest posture is Obsidian's and VS Code's —
+**trusted code behind an explicit consent screen**, said out loud.
+
+What the install path *does* owe the host, and does deliver, is narrower and
+achievable: a malformed or hostile **archive** cannot damage the install before
+consent is ever reached. Zip-slip and symlink members are refused before
+extraction; the bundle is capped; staging is validated and then moved with
+`os.replace`, so an interrupted install leaves either the old extension or none.
+(That last one is not theoretical — a non-atomic checkpoint write in the
+translation tool corrupted itself on interrupt and could only be recovered by
+discarding paid work.)
+
+**Phase 2 — the reviewed registry.** A site of extensions reviewed case by case.
+The design decision that matters *now* is that every field phase 2 needs — stable
+id, version, integrity hash, provenance record — is written at install time
+today. Phase 2 is therefore an addition, not a migration of everything already
+installed.
+
+**Removal keeps history.** Deleting an extension deletes its code and leaves
+`world["ext:<id>"]` alone, so reinstalling picks a story back up rather than
+starting it over. Orphaned state is small and inert; the alternative silently
+destroys play the host may not have meant to discard.
+
+---
+
+## 6. What was taken from SillyTavern, and what was refused
+
+Read from their v1.18.0 source. The refusals shaped concrete decisions here:
+
+- **`getContext()` as a growing grab-bag over deep-importable internals.** Their
+  core failure: no boundary, so every internal refactor breaks extensions, and the
+  context object carries deprecated shims as scar tissue. Sonder's facade is
+  closed and versioned (`ext_api`).
+- **Ordering by accident** — `loading_order` integers with an alphabetical
+  fallback, prompt injections merged in alphabetical key order (built-ins prefix
+  keys with digits to win). Sonder uses named anchors and deterministic id
+  ordering, and §4's purity law makes ordering a *correctness* property with
+  tests rather than a convention.
+- **Mutation-by-reference event payloads.** Handlers mutating the outgoing prompt
+  array gives two unarbitrated prompt channels. Sonder's hooks never mutate engine
+  structures.
+- **One shared settings blob**, where any extension's debounced save writes
+  everyone's settings. Sonder: four namespaced homes.
+- **Silent failure culture** — load errors console-only for years, swallowed
+  handler exceptions. Sonder: per-item load errors with reasons in the UI,
+  `disabled_reasons()`, counted observer failures, three-strikes auto-retire.
+- **Stack-trace sniffing for attribution.** Sonder forces `ext:<id>` namespacing
+  and wraps each extension's bundle in `_begin`/`_end`, so attribution is
+  structural and unforgeable.
+
+**Taken deliberately:** zip/URL install as the phase-1 publishing story — their
+ecosystem exists because publishing is pushing a repo, and that is worth copying
+even though phase 2 diverges from where it left them. Also the manifest as plain
+JSON, namespaced routes, and the three-home state instinct (settings / chat /
+character), upgraded with checkpoint and branch guarantees they cannot offer.
+
+---
+
+## 7. What building it proved, disproved, or forced
+
+The prototype was built to pressure-test the plan. It changed the plan in
+fourteen places; these are the ones that carry a reason.
+
+1. **Discovery caching must be invalidate-only, not eager-rescan.** The
+   language-pack template rescans at reset, which caches the directory as it
+   looked at reset time. Extension discovery invalidates and rescans on the next
+   *read*. Found by eight failing tests.
+2. **Splices must be applied grouped-per-anchor in one pass.** Inserting sorted
+   splices sequentially against the mutating plan list reverses their order at a
+   shared anchor — each insert lands at anchor+1. Pinned by
+   `test_two_extensions_at_one_anchor_order_by_id`.
+3. **`character:` and `ext:` anchors had to be refused** — not in the plan; see §4.
+4. **`on_error="warn"` needs `None → {}` coercion.** `_assert_plan_materialized`
+   treats a `None` step value as missing and fails the *turn*, so a "contained"
+   handler failure was killing beats anyway. The wrapper coerces `None` and
+   non-dict returns.
+5. **`char_state` writes are gated like world state, not ungated like settings.**
+   `chat_chars.state` is committed per-turn state, so the ghost-state gate
+   applies. `request_bind` is the deliberate exception.
+6. **`char_state` must honour the frame override.** Commit writes through
+   `set_char_state(..., frame_id=...)`, so the facade reads via
+   `COALESCE(ccf.state, cc.state)`. A naive base-row write is invisible in a
+   framed chat.
+7. **`ext:<id>` world keys are chat-global**, not in `FRAME_SCOPED_WORLD_KEYS`,
+   so they are shared across eras. A named limitation, not an oversight.
+8. **Manifest `stages` are declarations; `add_stage` is the registration.** The
+   manifest drives the consent display only. Its `on_error` is informational — the
+   `add_stage` argument governs. This split is why §9 of the guide can say
+   capabilities are disclosure rather than sandbox.
+9. **`#tabs` buttons are bound once at parse time**, before the extension bundle
+   (the last script) exists. Extension tabs are therefore rebuilt on every
+   `renderSide` with their own handlers. The registries-consulted-per-render
+   doctrine survived; the static-binding detail did not.
+10. **The UI-catalog scanner constrains host-side extension code.** Every string
+    literal in `static/js/*.js` is harvested as translatable, so host strings must
+    be genuine reader-facing messages or written as non-literals — the
+    three-strikes toast now exists in Japanese. `extensions/**/ui/*.js` is *not*
+    scanned; panel strings are the extension's own i18n concern.
+11. **A pinned-literal test byte-anchors a line the step-renderer edit wanted to
+    change** (`test_pipeline_perspectives.py`), so the edit inserted after the
+    anchor instead. Consult-point edits are in tension with literal-pinning tests.
+12. **Step persistence for `ext:` keys needed no new machinery.** `save_step` on an
+    `ext:` key inherits one-active-variant and reroll.
+13. **`agents/README.md`'s add-a-stage checklist now understates** — with the
+    splice registry, plan placement no longer requires editing `build_plan`.
+14. **Hot enable/disable is live on the server and was reload-only on the
+    client.** Found in play, not in tests: enabling an extension made its pipeline
+    stage appear on the next turn while its sidebar tab did not.
+    `/api/extensions/ui.js` is a `<script>` tag, and a script tag loads once — a
+    page loaded while the extension was disabled holds a zero-byte bundle forever.
+    Every registry *is* consulted per use, exactly as designed; the bundle's
+    ARRIVAL is what was page-bound. Closed in the second batch by serving each
+    extension's script and stylesheet separately and injecting them on enable
+    (`Sonder._load` / `_unload`). What remains true, and is now stated in the
+    guide, is that teardown reaches registrations and injected elements only — a
+    monkeypatched global or a `document`-level listener survives a disable, which
+    is the honest cost of having no sandbox.
+
+---
+
+## 7a. The second batch, and the one thing it revealed
+
+Six surfaces closed after the first release: `ui.css` served, client-side
+hot-load, extension-owned routes under `/x/`, `add_commit_domain` inside the
+turn's transaction, `on_character_payload` with attribution, `llm_json`, and a
+Director-specialist registry. Only the last two changed the argument.
+
+**`on_character_payload` is where the §1 ruling stops being theory.** Every other
+seam narrows by accident-prevention; this one is deliberately unrestricted, and
+it is the first place an extension can hand a mind a fact it had no channel to.
+What the engine gives in exchange is not restraint but a NAME: the dispatcher
+diffs the payload before and after each hook and records which top-level keys
+changed, against the extension's id, on the durable turn. The reasoning is
+`CLAUDE.md`'s investigation doctrine applied to third-party code — a defect
+surfaces where it is rendered and almost never where it originated, and the
+single most expensive version of that is a character who knows too much, because
+every stage looks innocent. Attribution turns a day of reading stages into one
+read of `extensions.routing`.
+
+Top-level keys only, deliberately: a deep diff costs a full walk of the largest
+object in the turn on every beat, and the question being answered — *who touched
+this mind* — is answered at that resolution.
+
+**The Director specialist registry was the last place "full pipeline access" was
+still false.** A specialist lives in six registries (`SPECIALISTS`,
+`_CHANNEL_GATES`, `_CHANNEL_SPECIALISTS`, `schemas.SPECIALIST_CHANNELS` plus a
+model plus `SCHEMA_MAP`, `prompts.SPECIALIST_PROMPT_SPECS`, `providers.ROLES`),
+and they are not independent: `_dispatch_specialists` reads `SPECIALISTS` live
+and then indexes `_CHANNEL_GATES` by channel, so patching five of six is not a
+degraded specialist but a `KeyError` inside the Director on every beat. Exactly
+the shape `add_stage` was built to end, one layer down.
+
+Building it turned up a latent defect in the engine's own code:
+`_CHANNEL_SPECIALISTS` was a module-level comprehension over `SPECIALISTS`,
+frozen at import. Any family registered afterwards was visible to dispatch and
+invisible to `_route_repair_omissions` — a split that routes a repair to nobody
+and reports nothing. It is now rebuilt on registration.
+
+Three limits were kept rather than papered over, and each is in the guide:
+channels are namespaced `ext:<id>:<channel>` so a family cannot silently take
+`attire`; the channels are evidence rather than causality, because no engine
+commit domain reads an `ext:` channel; and **nothing narrates them**, because the
+prose author's sheet is assembled from in-tree chunks and the one-owner test that
+guards it cannot reach across the boundary. That last one is the real residual —
+a change recorded in the ledger and absent from the prose is precisely the kind
+of defect that takes fifty beats to notice.
+
+---
+
+## 8. What is left
+
+In [`UNBUILT.md`](../UNBUILT.md) §6.2, which is the status list. In short:
+declarative advisor stages; the two admission-side routing hooks (`on_admission`,
+`on_view`); a prose-author chunk registry so an extension specialist's channel can
+be narrated (§7a); the `--extension` self-check CLI; the scoped-client work that
+would make third-party frontends real for non-host players; and phase 2's
+registry.

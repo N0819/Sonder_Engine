@@ -3235,3 +3235,198 @@ function reopenPromptsIfRequested() {
   } catch (e) { return; }  // private mode: the menu simply does not reopen
   if (wanted) openPromptsModal();
 }
+
+// ---- Extensions ----
+//
+//: Set before enabling/disabling reloads the page, so the reader lands back
+//: in this menu rather than on the story with the dialog gone.
+const REOPEN_EXTENSIONS_KEY = "sonder.reopenExtensions";
+//
+// The management surface for `extensions/`. The prototype shipped the routes
+// (list / enable / disable) and the registries an extension talks to, but
+// nothing that CALLED them -- so an installed extension sat at
+// `enabled: false` with no way to turn it on, which reads as the extension
+// system not being there at all.
+//
+// Deliberately honest about trust: an extension runs in-process with the
+// engine's full access, and phase 1 has no review behind it. The dialog says
+// so at the moment of enabling rather than deferring candour until a reviewed
+// tier exists -- if the phase-1 wording is vague, a later "reviewed" badge
+// means nothing by contrast.
+function extensionTrustNote(ext) {
+  const trust = String(ext.trust || "code");
+  if (trust === "data") {
+    return "Data only — content and settings. Runs no code.";
+  }
+  if (trust === "prompt") {
+    return "Supplies prompt text. Runs no code of its own.";
+  }
+  return "Runs code in the engine's own process: full access to your stories, "
+    + "your world state and your provider keys. Nothing has reviewed it.";
+}
+
+function extensionCapabilitySummary(caps) {
+  const parts = [];
+  const stages = (caps && caps.stages) || [];
+  for (const stage of stages) {
+    parts.push(`pipeline stage “${stage.label || stage.key}” at ${stage.anchor}`);
+  }
+  if (caps && caps.chat_state) parts.push("per-story state");
+  if (caps && Array.isArray(caps.characters) && caps.characters.length) {
+    parts.push(`characters: ${caps.characters.join(", ")}`);
+  }
+  if (caps && caps.routing) parts.push("alters information routing");
+  if (caps && caps.system) parts.push("full pipeline access");
+  if (caps && caps.ui) parts.push("interface");
+  return parts;
+}
+
+async function openExtensionsMenu() {
+  let data;
+  try { data = await api("GET", "/api/extensions"); }
+  catch (e) { return toast(e.message, "err"); }
+
+  modal("Extensions", b => {
+    if (data.safe_mode) {
+      b.append(el("div", { class: "card" },
+        el("b", {}, "Safe mode"),
+        el("div", { class: "small dim", style: "margin-top:4px" },
+          "Every extension is switched off for this run. Restart without the "
+          + "safe-mode flag to load them again.")));
+    }
+
+    for (const err of (data.load_errors || [])) {
+      b.append(el("div", { class: "card" },
+        el("b", {}, `${err.id || "an extension"} failed to load`),
+        el("div", { class: "small err", style: "margin-top:4px;white-space:pre-wrap" },
+          String(err.error || err))));
+    }
+
+    if (!(data.extensions || []).length) {
+      b.append(el("div", { class: "small dim" },
+        "Nothing installed. Extensions live in the ", el("code", {}, "extensions/"),
+        " folder — one directory each, with a manifest.json."));
+    }
+
+    for (const ext of (data.extensions || [])) {
+      const enabled = !!ext.enabled;
+      const caps = extensionCapabilitySummary(ext.capabilities);
+      const toggle = el("button", { class: enabled ? "" : "primary" },
+        enabled ? "Disable" : "Enable");
+      toggle.onclick = async () => {
+        // Enabling is the consent moment, so the warning goes HERE rather
+        // than in a page nobody reads.
+        if (!enabled && !await confirmModal(
+              `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`,
+              { confirmLabel: "Enable" })) return;
+        try {
+          await api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/`
+                    + (enabled ? "disable" : "enable"));
+        } catch (e) { return toast(e.message, "err"); }
+        toast(enabled ? "Extension disabled." : "Extension enabled.", "ok");
+        // The server half is already live -- an enabled stage joins the next
+        // turn's plan. The browser half is not: the page-load bundle is one
+        // `<script>` and a script tag loads once, so a page served while this
+        // extension was off holds ZERO bytes of it. `_load` fetches that one
+        // extension's script and stylesheet now; `_unload` drops its
+        // registrations and its injected elements. This is why enabling no
+        // longer reloads the page.
+        if (window.Sonder) {
+          if (enabled) Sonder._unload(ext.id);
+          else await Sonder._load(ext.id);
+          Sonder.refresh();
+        }
+        openExtensionsMenu();
+      };
+
+      const remove = el("button", { class: "ghost", title: "Remove" }, "🗑");
+      remove.onclick = async () => {
+        if (!await confirmModal(
+              `Remove ${ext.name || ext.id}?\n\nIts files are deleted. Anything `
+              + `it stored in your stories is KEPT, so reinstalling picks them `
+              + `back up where they left off.`,
+              { danger: true, confirmLabel: "Remove" })) return;
+        try { await api("DELETE", `/api/extensions/${encodeURIComponent(ext.id)}`); }
+        catch (e) { return toast(e.message, "err"); }
+        toast("Extension removed.", "ok");
+        // Its panel is still registered in this page until we say otherwise;
+        // the files being gone does not retract a sidebar tab.
+        if (window.Sonder) { Sonder._unload(ext.id); Sonder.refresh(); }
+        openExtensionsMenu();
+      };
+
+      b.append(el("div", { class: "card" },
+        el("div", { class: "row" },
+          el("b", {}, ext.name || ext.id),
+          el("span", { class: "small dim" }, `v${ext.version || "?"}`),
+          el("span", { class: "small dim" },
+            ext.provenance ? String(ext.provenance) : "local"),
+          toggle, remove),
+        ext.description
+          ? el("div", { class: "small dim", style: "margin-top:4px" }, ext.description)
+          : null,
+        caps.length
+          ? el("div", { class: "small", style: "margin-top:6px" },
+              el("span", { class: "dim" }, "Declares: "), caps.join(" · "))
+          : null,
+        el("div", { class: "small dim", style: "margin-top:4px" },
+          extensionTrustNote(ext)),
+        ext.error
+          ? el("div", { class: "small err", style: "margin-top:4px" }, String(ext.error))
+          : null));
+    }
+
+    // Install sits at the BOTTOM: the list is what you came for, and the
+    // install field is the occasional act.
+    const source = el("input", {
+      placeholder: "https://…/extension.zip  or  /path/to/extension",
+      style: "flex:1" });
+    const installBtn = el("button", { class: "primary" }, "Install");
+    installBtn.onclick = async () => {
+      const value = source.value.trim();
+      if (!value) return toast("Paste a URL or a folder path first.", "warn");
+      if (!await confirmModal(
+            `Install from:\n${value}\n\nNothing has reviewed this. Once you `
+            + `enable it, it runs in the engine's own process with full access `
+            + `to your stories, your world state and your provider keys.`,
+            { confirmLabel: "Install" })) return;
+      await backgroundTask("Installing extension",
+        () => api("POST", "/api/extensions/install", { source: value }),
+        { onSuccess: async () => {
+            // A freshly installed extension arrives switched OFF, so there is
+            // nothing to load yet -- only the list to rebuild from the server
+            // rather than from this page's stale copy.
+            openExtensionsMenu();
+          },
+          successMessage: "Extension installed — enable it to switch it on." });
+    };
+    b.append(
+      el("div", { style: "margin-top:14px;border-top:1px solid var(--bd);padding-top:10px" },
+        el("div", { class: "small" }, "Install an extension"),
+        el("div", { class: "row", style: "margin-top:6px" }, source, installBtn),
+        el("div", { class: "small dim", style: "margin-top:4px" },
+          "A zip from a URL, or a folder on this machine. Installed extensions "
+          + "arrive switched off — nothing runs until you enable it.")));
+
+    b.append(el("div", { class: "small dim", style: "margin-top:10px" },
+      "A capability list is what the extension DECLARES, checked against what "
+      + "it registers. It is a statement of intent for you to judge, not a "
+      + "restriction the engine enforces."));
+  });
+}
+
+$("#b-extensions").onclick = openExtensionsMenu;
+
+
+// Called by app.js once boot() has repopulated S.boot. Enabling and disabling
+// no longer reload the page, so the only thing still setting the marker is a
+// language change -- which does reload, and which can land while this menu is
+// open.
+function reopenExtensionsIfRequested() {
+  let wanted = false;
+  try {
+    wanted = !!sessionStorage.getItem(REOPEN_EXTENSIONS_KEY);
+    if (wanted) sessionStorage.removeItem(REOPEN_EXTENSIONS_KEY);
+  } catch (e) { return; }
+  if (wanted) openExtensionsMenu();
+}

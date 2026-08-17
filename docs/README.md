@@ -49,6 +49,9 @@ rather than prose, and everything points at them.
 - [`TESTING.md`](guides/TESTING.md) — test tiers, dependency policy, CI layout.
 - [`LANGUAGE_PACKS.md`](guides/LANGUAGE_PACKS.md) — build and validate a full
   story/UI language pack while preserving canonical English schemas.
+- [`EXTENSIONS.md`](guides/EXTENSIONS.md) — write, install and distribute an
+  extension: the manifest, the Python facade, `window.Sonder`, the four state
+  homes, and what is and is not actually restricted.
 - [`FEATURES.md`](guides/FEATURES.md) — every user-visible feature in plain
   language, one line each. A catalogue, not an argument.
 - [`RESEARCH.md`](guides/RESEARCH.md) — sourced bibliography: the research the
@@ -116,8 +119,10 @@ they answer different questions about it:
 Elsewhere:
 
 - [`EXTENSIONS_DESIGN.md`](design/EXTENSIONS_DESIGN.md) — user-authored
-  extensions. Nothing in it is implemented, and its own §0 file:line anchors
-  have drifted.
+  extensions. Built in 9.0; the note is now the argument for the shape that
+  shipped, including the ruling that the firewall is for minds rather than
+  developers, and the fourteen things building it changed. The reference for
+  *writing* one is [`guides/EXTENSIONS.md`](guides/EXTENSIONS.md).
 - [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md) —
   greeting-seeded openings. Shipped, under a materially different architecture
   than proposed; its header records the deviation.

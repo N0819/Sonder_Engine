@@ -3987,12 +3987,16 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             "against the beat, so say already_true rather than nothing when "
             "that is the answer.")
         try:
-            result = _agent_json(
-                spec["role"], spec["step_key"],
-                specialist_prompt(name, scope, ctx.language), payload,
-                temperature=0.0,
-                max_tokens=None,   # the configured ceiling
-            )
+            if spec.get("ext_id"):
+                result = _extension_specialist_call(
+                    spec, scope, payload, ctx.language)
+            else:
+                result = _agent_json(
+                    spec["role"], spec["step_key"],
+                    specialist_prompt(name, scope, ctx.language), payload,
+                    temperature=0.0,
+                    max_tokens=None,   # the configured ceiling
+                )
         except Aborted:
             raise
         except Exception as exc:
@@ -5109,11 +5113,6 @@ _CATEGORY_CHANNELS = {
 #: disagree). The reconciliation repair router reads this: an omission in a
 #: delegated channel is that channel's OWNER's to repair, at specialist
 #: cost, never the prose author's at full-core cost.
-_CHANNEL_SPECIALISTS = {
-    channel: name
-    for name, spec in SPECIALISTS.items() for channel in spec["channels"]
-}
-
 _LIST_DELEGATED = frozenset({
     "cast_changes", "introductions", "world_facts", "contact_ops",
     "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
@@ -5184,6 +5183,133 @@ _CHANNEL_GATES = {
     "ratified_claims": lambda f: f["unratified_claims_present"],
     "contradicted_claims": lambda f: f["unratified_claims_present"],
 }
+
+
+# ---------------------------------------------------------------- extensions
+#
+# A seventh family, and an eighth, authored outside this tree.
+#
+# Every registry above is one an extension could only reach by mutating a
+# module global, and there are SIX of them (`SPECIALISTS`, `_CHANNEL_GATES`,
+# `_CHANNEL_SPECIALISTS`, `schemas.SPECIALIST_CHANNELS` + a model +
+# `SCHEMA_MAP`, `prompts.SPECIALIST_PROMPT_SPECS`, `providers.ROLES`). Patching
+# five of the six is not a degraded specialist -- `_dispatch_specialists` reads
+# `SPECIALISTS` live and then indexes `_CHANNEL_GATES` by channel, so an
+# unregistered gate is a KeyError inside the Director on every beat. This is
+# the same shape `add_stage` was built to end: the execution half already
+# worked, the REGISTRATION half was the part that forced a third party to edit
+# an engine file.
+#
+# Three deliberate differences from an in-tree specialist, each because the
+# alternative would be a quiet lie:
+#
+# * **Channels are namespaced `ext:<id>:<channel>`.** A family that could claim
+#   `attire` would silently take ownership of the body specialist's channel and
+#   replace it in the merged diff.
+# * **Its channels are EVIDENCE, not causality.** No commit domain reads an
+#   `ext:` channel, so a registered specialist's output lands in `state_diff`
+#   and changes nothing by itself. The extension acts on it from its own commit
+#   domain or stage -- which keeps the engine's own persistence honest and is
+#   the same annotator default `ext:` steps already have.
+# * **No prose-author chunk.** `PROSE_AUTHOR_SHEET` and its one-owner test live
+#   in this tree; an extension cannot add a block to the sheet, so a registered
+#   channel is written to the ledger and NOT narrated. Stated plainly in the
+#   guide, because "it committed but nobody mentioned it" is otherwise a
+#   fifty-beat mystery.
+#
+# The default gate fails open on `physical_beat`, which is the rule
+# `_CHANNEL_GATES` already states: over-dispatch costs one call, under-dispatch
+# silently drops work.
+
+#: Channels a specialist family owns, recomputed rather than frozen at import.
+#: It WAS a module-level comprehension over `SPECIALISTS`, which meant a family
+#: registered afterwards was invisible to `_route_repair_omissions` while being
+#: perfectly visible to dispatch -- a split that routes a repair to nobody.
+_CHANNEL_SPECIALISTS = {
+    channel: name
+    for name, spec in SPECIALISTS.items() for channel in spec["channels"]
+}
+
+
+def _default_channel_gate(facts):
+    return facts["physical_beat"]
+
+
+def _rebuild_channel_owners():
+    _CHANNEL_SPECIALISTS.clear()
+    for name, spec in SPECIALISTS.items():
+        for channel in spec["channels"]:
+            _CHANNEL_SPECIALISTS[channel] = name
+
+
+def register_specialist(ext_id, name, *, channels, prompt, gate=None,
+                        role="default", label=None):
+    """Add a Director specialist family owned by an extension.
+
+    Returns its registered name. Raises on a name or channel that would
+    collide with the engine's own, because a silent collision here transfers
+    ownership of a real channel.
+    """
+    ext_id = str(ext_id or "").strip()
+    name = str(name or "").strip()
+    if not ext_id or not name:
+        raise ValueError("a specialist needs an extension id and a name")
+    full_name = f"ext:{ext_id}:{name}"
+    wanted = [str(channel or "").strip() for channel in (channels or [])]
+    if not wanted or not all(wanted):
+        raise ValueError(f"specialist {full_name!r} declares no channels")
+    if not str(prompt or "").strip():
+        raise ValueError(f"specialist {full_name!r} declares no prompt")
+    owned = [f"ext:{ext_id}:{channel}" for channel in wanted]
+    for channel in owned:
+        existing = _CHANNEL_SPECIALISTS.get(channel)
+        if existing and existing != full_name:
+            raise ValueError(
+                f"channel {channel!r} already belongs to {existing!r}")
+
+    SPECIALISTS[full_name] = {
+        "step_key": full_name,
+        "role": str(role or "default"),
+        "channels": tuple(owned),
+        "ext_id": ext_id,
+        "prompt": str(prompt),
+        "label": str(label or f"Specialist · {ext_id} · {name}"),
+    }
+    for channel in owned:
+        _CHANNEL_GATES[channel] = gate if callable(gate) else _default_channel_gate
+    _rebuild_channel_owners()
+    return full_name
+
+
+def unregister_specialists(ext_id):
+    """Drop every specialist one extension registered. Returns their names."""
+    prefix = f"ext:{str(ext_id or '')}:"
+    dropped = [name for name in SPECIALISTS if name.startswith(prefix)]
+    for name in dropped:
+        for channel in SPECIALISTS[name]["channels"]:
+            _CHANNEL_GATES.pop(channel, None)
+        del SPECIALISTS[name]
+    _rebuild_channel_owners()
+    return dropped
+
+
+def _extension_specialist_call(spec, scope, payload, language=None):
+    """Run an extension-owned specialist. The CALL itself lives elsewhere.
+
+    Deliberately a one-line delegation to `extension_runtime`. An extension
+    owns the shape of its own channels, so its call cannot go through
+    `_agent_json` -- that path validates against `schemas.SCHEMA_MAP`, which
+    only knows this engine's own steps. But the permissive parse that follows
+    from that must not live in THIS file: `test_stage_modules_stay_on_strict_path`
+    forbids `jparse` in a stage module, and the rule is right -- a Director
+    stage's own output reaches `commit.py` and must be strictly validated. The
+    extension's does not (no commit domain reads an `ext:` channel), so the
+    looseness is correct and belongs in the extension package, where it cannot
+    be reached for by a future engine stage.
+    """
+    from extension_runtime import run_specialist_call
+
+    return run_specialist_call(spec, scope, payload)
 
 #: Prose-duty gates for the orchestrated PROSE AUTHOR's own sheet (the same
 #: mechanism as _CHANNEL_GATES, pointed at prompts.PROSE_AUTHOR_SHEET's
@@ -5508,8 +5634,12 @@ def _dispatch_specialists(ctx, sc, facts):
     single backstop below audits shipped content against the same value."""
     dispatch = {}
     for name, spec in SPECIALISTS.items():
+        # `.get` with a fail-open default, not `[]`: a channel whose gate is
+        # missing is a registration bug, and raising KeyError here would turn
+        # it into a dead Director on every beat rather than one specialist
+        # running more often than it needs to.
         scope = [channel for channel in spec["channels"]
-                 if _CHANNEL_GATES[channel](facts)]
+                 if _CHANNEL_GATES.get(channel, _default_channel_gate)(facts)]
         dispatch[name] = {
             "run": bool(scope),
             "scope": scope,
@@ -5882,6 +6012,15 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             token_sink.set(None)
             generation_event_sink.set(None)
             spec = SPECIALISTS[name]
+            if spec.get("ext_id"):
+                # An extension-owned family: same isolation, same fail-open,
+                # same canonical merge below -- only the sheet and the
+                # validation differ, because neither prompts.py nor
+                # schemas.SCHEMA_MAP knows a step key from outside this tree.
+                return _extension_specialist_call(
+                    spec, state["scope"],
+                    _specialist_payload(name, ctx, sc, view, extras),
+                    ctx.language)
             return _agent_json(
                 spec["role"],
                 spec["step_key"],

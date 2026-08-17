@@ -21,6 +21,10 @@ HARM_CHANNELS = ("conditions", "vitals")
 
 DEFAULT_STATE = {"cohesion": 50}
 DELTA_LIMIT = 3
+#: How many readings the story keeps. Bounded because this rides `world` KV,
+#: which is copied wholesale into every checkpoint, branch and archive -- an
+#: unbounded log here would grow every one of them forever.
+HISTORY_LIMIT = 40
 
 
 def pulse(view, api, nonce):
@@ -82,4 +86,35 @@ def register(api):
         score = float(state.get("cohesion", DEFAULT_STATE["cohesion"]))
         state["cohesion"] = max(0.0, min(100.0, score + float(delta)))
         state["last_turn"] = turn.turn_idx
+        history = state.get("history")
+        history = list(history) if isinstance(history, list) else []
+        history.append({"turn": turn.turn_idx, "delta": delta,
+                        "cohesion": state["cohesion"]})
+        state["history"] = history[-HISTORY_LIMIT:]
         turn.state.set(state)
+
+    @api.on_step("character:*")
+    def watch_minds(step_key, content):
+        """Read-only: proof that a step observer sees decisions land.
+
+        This one only counts, because counting is enough to show the seam.
+        Note what it does NOT do -- it has the content of one mind's decision
+        and does not put any of it anywhere another mind can reach.
+        """
+        api.log.debug("cohesion saw %s", step_key)
+
+    def history(request):
+        """`GET /api/extensions/cohesion-demo/x/history?chat_id=N`.
+
+        An extension's own route: the panel reads its history from here rather
+        than from a host endpoint that would have to learn what cohesion is.
+        """
+        chat_id = request.chat_id
+        if chat_id is None:
+            raise ValueError("chat_id is required")
+        state = api.state(chat_id).get(DEFAULT_STATE) or DEFAULT_STATE
+        return {"chat_id": chat_id,
+                "cohesion": state.get("cohesion"),
+                "history": state.get("history") or []}
+
+    api.add_route("/history", history)
