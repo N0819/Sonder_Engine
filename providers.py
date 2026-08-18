@@ -276,38 +276,71 @@ class DegenerateOutput(LLMError):
         )
         self.reason = reason
 
-#: A phrase must repeat back-to-back at least this many times before it counts
-#: as a loop. Three is deliberate: two consecutive identical sentences is
-#: something a writer does (a stammer, a refrain, a character insisting), and
-#: three exactly-identical blocks in a row is something a writer essentially
-#: never does while a stuck sampler does it forever.
-_LOOP_REPEATS = 3
 #: Shortest phrase worth calling a phrase. Below this the 2-16 rule above has
 #: it covered, at a much higher repeat count, which is the right trade at that
 #: length -- "ha ha ha" is prose and "ha" x 80 is not.
 _LOOP_MIN_PERIOD = 24
-#: Longest cycle looked for. A model that has locked on repeats far sooner than
-#: this; the bound is here so the sweep stays cheap.
-_LOOP_MAX_PERIOD = 700
+#: A short phrase must repeat three times; a long one twice. Two consecutive
+#: identical sentences is something a writer does -- a stammer, a refrain, a
+#: character insisting -- so a short cycle has to prove itself. Two identical
+#: blocks of a few hundred characters is not a stylistic choice.
+_LOOP_LONG_PERIOD = 240
+#: The window the loop check reads. Larger than the 4KB the other rules use,
+#: because detecting a cycle of length p needs at least two full copies of it,
+#: and the cycles that actually occur are long: the three seen in play were
+#: 100, 142 and 1,237 characters.
+_LOOP_WINDOW = 16000
+#: How much of the tail is used to FIND the cycle. Long enough that an
+#: accidental match is unlikely, short enough to sit inside any real cycle.
+_LOOP_NEEDLE = 96
 
 
 def _repeating_period(tail: str) -> int:
     """The length of a phrase repeating back-to-back at the END of `tail`, or 0.
 
+    Found by SEARCH rather than by scanning candidate lengths. The first
+    version swept periods from 24 to 700 and compared slices, which meant the
+    longest cycle it could see was a number chosen in advance -- and the very
+    next loop reported from play had a period of 1,237, so it sailed straight
+    through. Raising the bound would only move where the next one hides.
+
+    Instead: take the last `_LOOP_NEEDLE` characters, ask where they last
+    occurred before that, and the distance between the two IS the period. One
+    `str.rfind` over the window, and it finds a cycle of any length up to half
+    of it. Periodic text always matches at exactly one cycle back, so a short
+    needle spanning several cycles still lands on the true period rather than a
+    multiple of it.
+
     Anchored at the end on purpose. A loop is a thing that has STARTED and is
     still going, so the evidence is always the most recent output -- and
-    checking only the tail means legitimate repetition earlier in a long
-    passage (a list, a refrain, a quoted line) can never accumulate into a
-    false positive.
+    reading only the tail means legitimate repetition earlier in a long passage
+    can never accumulate into a false positive.
     """
-    limit = min(_LOOP_MAX_PERIOD, len(tail) // _LOOP_REPEATS)
-    for period in range(_LOOP_MIN_PERIOD, limit + 1):
-        block = tail[-period:]
-        # `all` over slices: each comparison is one memcmp, and the loop stops
-        # at the first period that does not hold.
-        if all(tail[-period * (n + 1):-period * n or None] == block
-               for n in range(1, _LOOP_REPEATS)):
-            return period
+    if len(tail) < _LOOP_NEEDLE * 2:
+        return 0
+    needle = tail[-_LOOP_NEEDLE:]
+    # `end` bounds where a match must FINISH, not where it may start. Passing
+    # `len(tail) - _LOOP_NEEDLE` therefore demanded the whole needle fit before
+    # the final copy, which for a cycle shorter than the needle skips the
+    # nearest recurrence and lands on a MULTIPLE of the period -- 100 instead
+    # of 50 on a five-times-repeated sentence, which then failed its own
+    # three-repeat check and reported no loop at all. `len(tail) - 1` excludes
+    # only the final occurrence, which is the one thing that must be excluded.
+    previous = tail.rfind(needle, 0, len(tail) - 1)
+    if previous < 0:
+        return 0
+    period = len(tail) - _LOOP_NEEDLE - previous
+    if period < _LOOP_MIN_PERIOD:
+        return 0
+    repeats = 2 if period >= _LOOP_LONG_PERIOD else 3
+    if len(tail) < period * repeats:
+        return 0
+    block = tail[-period:]
+    # The needle only proposes a period; these confirm it. Each comparison is
+    # one memcmp, and the first that fails rejects the candidate outright.
+    if all(tail[-period * (n + 1):-period * n or None] == block
+           for n in range(1, repeats)):
+        return period
     return 0
 
 
@@ -370,7 +403,9 @@ class OutputGuard:
         # against a 4KB tail is a backtracking hazard on exactly the input
         # this runs on. Slice comparison is a C-level memcmp per candidate
         # period, so the whole sweep is a few hundred of those.
-        period = _repeating_period(tail)
+        # Its own window: the other rules look at 4KB, and two copies of a
+        # 1,237-character cycle do not fit in that.
+        period = _repeating_period(self.text[-_LOOP_WINDOW:])
         if period:
             raise DegenerateOutput(
                 f"repeating {period}-character phrase"
