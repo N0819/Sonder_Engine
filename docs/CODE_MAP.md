@@ -43,7 +43,7 @@
 | `llm/prompt_cache.py` | 79 |  | `llm.providers` |
 | `llm/prompts.py` | 408 |  | `core.db` |
 | `llm/providers.py` | 3158 |  | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5253 |  | — |
+| `llm/schemas.py` | 5259 |  | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2186 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 360 |  | — |
@@ -61,7 +61,7 @@
 | `persist/commit_entities.py` | 499 |  | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 302 |  | `core.db`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 490 |  | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_mechanics.py` | 348 |  | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
+| `persist/commit_mechanics.py` | 363 |  | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 1486 |  | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.comfort`, `world.survival` |
 | `persist/commit_memory_write.py` | 230 |  | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 274 |  | `world.spatial` |
@@ -79,7 +79,7 @@
 | `story/greetings.py` | 413 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `story.character_schema` |
 | `story/importers.py` | 2618 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema` |
 | `story/lore_structure.py` | 242 |  | — |
-| `story/scene.py` | 1944 |  | `core.db`, `story`, `story.character_schema`, `world.spatial` |
+| `story/scene.py` | 1996 |  | `core.db`, `story`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 5772 |  | `agents`, `core`, `core.db`, `core.frames`, `core.pipeline_context`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 176 |  | `web` |
@@ -512,14 +512,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4094 | 343 lines |
+| `preprocess_llm_output()` | 4100 | 343 lines |
 | `_lenient_coerce()` | 660 | 149 lines |
-| `validate_llm_output_strict()` | 5124 | 130 lines |
-| `semantic_output_errors()` | 4941 | 103 lines |
-| `canonicalize_prose_markup()` | 3899 | 102 lines |
-| `_uncross_concealed_speech()` | 4023 | 69 lines |
+| `validate_llm_output_strict()` | 5130 | 130 lines |
+| `semantic_output_errors()` | 4947 | 103 lines |
+| `canonicalize_prose_markup()` | 3905 | 102 lines |
+| `_uncross_concealed_speech()` | 4029 | 69 lines |
 | `_coerce_list_valued_map()` | 93 | 57 lines |
-| `_coerce_evidence_refs()` | 2504 | 51 lines |
+| `_coerce_evidence_refs()` | 2510 | 51 lines |
 
 ### `mind/affect.py`
 
@@ -712,7 +712,7 @@
 | `commit_transit_sweep()` | 21 | 169 lines |
 | `commit_information_carriers()` | 240 | 85 lines |
 | `commit_world_event_spine()` | 192 | 46 lines |
-| `commit_cast_changes()` | 328 | 21 lines |
+| `commit_cast_changes()` | 328 | 36 lines |
 
 ### `persist/commit_memory.py`
 
@@ -908,14 +908,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `active_disguises()` | 379 | 82 lines |
-| `normalize_transformed_parts()` | 470 | 60 lines |
-| `recent_events_for_observer()` | 1186 | 59 lines |
-| `_positive_presented_appearance()` | 667 | 58 lines |
-| `active_transformations()` | 532 | 54 lines |
-| `director_context()` | 1246 | 53 lines |
-| `conceal_disguised_parts()` | 782 | 48 lines |
-| `awareness_conditions()` | 907 | 47 lines |
+| `active_disguises()` | 431 | 82 lines |
+| `normalize_transformed_parts()` | 522 | 60 lines |
+| `recent_events_for_observer()` | 1238 | 59 lines |
+| `_positive_presented_appearance()` | 719 | 58 lines |
+| `active_transformations()` | 584 | 54 lines |
+| `director_context()` | 1298 | 53 lines |
+| `conceal_disguised_parts()` | 834 | 48 lines |
+| `awareness_conditions()` | 959 | 47 lines |
 
 ### `web/app.py`
 
