@@ -235,6 +235,27 @@ def test_being_told_beats_any_disguise():
         {"the doctor"}, "The Doctor", conceals_identity=True)
 
 
+def test_an_active_disguise_with_no_stated_kind_fails_closed():
+    """The one default in this function that withholds rather than grants.
+
+    `None` is not a disguise's own answer -- `_subject_disguise_context`
+    returns a real bool for every active one -- so it means a body record was
+    built without the flag and the two halves of one fact came apart. That
+    happened: `_composer_outcome` computed the value and dropped it on the
+    same line, and every identity-concealing disguise stopped working between
+    the act view and the outcome view.
+
+    A name withheld for a beat is recoverable. A concealed identity handed to
+    everyone who ever met the wearer is not.
+    """
+    from story.scene import disguise_breaks_recognition
+
+    assert disguise_breaks_recognition({"marta"}, "The Doctor", None) is True
+    # ...and it is genuinely the MISSING case, not a falsy one.
+    assert disguise_breaks_recognition(
+        {"marta"}, "The Doctor", False) is False
+
+
 def test_no_disguise_at_all_never_breaks_recognition():
     from story.scene import disguise_breaks_recognition
 

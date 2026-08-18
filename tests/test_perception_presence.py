@@ -326,6 +326,56 @@ def test_a_disguised_body_arrives_as_its_outward_form(temp_db, monkeypatch):
     assert "pilgrim" in view
 
 
+def _hood_tamamo(temp_db, ctx, cid_suffix):
+    temp_db.qi(
+        "INSERT INTO world_conditions("
+        "condition_id,chat_id,subject_id,kind,started_at,payload,active) "
+        "VALUES(?,?,?,?,?,?,1)",
+        (cid_suffix, ctx.chat["id"], TAMAMO, "physical_disguise", time.time(),
+         json.dumps({
+             "subject_id": TAMAMO,
+             "description": "her fox ears bound flat under a pilgrim's hood",
+             "presented_appearance":
+                 "a hooded pilgrim in travel-stained grey",
+             "concealed_terms": ["fox-eared", "fox"],
+             "conceals_identity": True,
+             "known_to": [PLAYER],
+         })))
+
+
+def test_the_outcome_pass_hides_the_name_the_act_pass_hid(temp_db,
+                                                          monkeypatch):
+    """The same disguise, one stage later, and it used to stop working.
+
+    `_composer_outcome` built its body records without
+    `disguise_conceals_identity` -- it computed the value and dropped it on
+    the same line -- and `disguise_breaks_recognition` reads an absent flag as
+    "does not conceal", which is the correct default for a glamour and the
+    wrong one for a hood. So a disguise that severed the name in pass 1
+    handed it back in pass 2, to every observer who had ever met her.
+
+    Worse than a plain leak, because the two views disagree inside one turn:
+    the Doctor is told a hooded pilgrim is present and then told what Tamamo
+    did, and nothing in either view connects them except the name he was not
+    supposed to have.
+    """
+    ctx, char_ids = _bystander_ctx(temp_db)
+    _hood_tamamo(temp_db, ctx, "dz3")
+    ctx.director_resolve = {
+        "resolved_event": "The hall stands quiet.", "state_diff": {},
+        "dialogue_log": [], "dialogue_order": []}
+    for name in (DOCTOR, TAMAMO):
+        ctx.character_results[char_ids[name]] = {
+            "speech": "Hm.", "action": "", "sequence": []}
+
+    views = _capture_payloads(
+        monkeypatch, lambda p: p.perception_outcome(ctx, nonce="n"))
+    view = (views[str(char_ids[DOCTOR])] or "").casefold()
+
+    assert "tamamo" not in view
+    assert "pilgrim" in view
+
+
 def test_a_disguise_that_hides_only_a_feature_leaves_the_name(temp_db,
                                                               monkeypatch):
     """THE OTHER HALF, and the one the old rule got wrong.

@@ -24,7 +24,7 @@
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1210 | Player-facing narration agent. | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 4383 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/perception.py` | 4393 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/runtime.py` | 1116 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
@@ -79,7 +79,7 @@
 | `story/greetings.py` | 413 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `story.character_schema` |
 | `story/importers.py` | 2618 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema` |
 | `story/lore_structure.py` | 242 |  | — |
-| `story/scene.py` | 1996 |  | `core.db`, `story`, `story.character_schema`, `world.spatial` |
+| `story/scene.py` | 2012 |  | `core.db`, `story`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 5772 |  | `agents`, `core`, `core.db`, `core.frames`, `core.pipeline_context`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 176 |  | `web` |
@@ -331,11 +331,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 4058 | 326 lines |
-| `perception_outcome()` | 2890 | 297 lines |
-| `perception_act()` | 2451 | 251 lines |
+| `_composer_outcome()` | 4061 | 333 lines |
+| `perception_outcome()` | 2891 | 298 lines |
+| `perception_act()` | 2451 | 252 lines |
 | `_observer_scene_payload()` | 808 | 212 lines |
-| `_composer_act()` | 3931 | 125 lines |
+| `_composer_act()` | 3933 | 126 lines |
 | `_previous_open_group_continuity()` | 163 | 117 lines |
 | `_strip_self_narration()` | 1639 | 107 lines |
 | `perception_establish()` | 2343 | 107 lines |
@@ -910,12 +910,12 @@
 |---|---:|---:|
 | `active_disguises()` | 431 | 82 lines |
 | `normalize_transformed_parts()` | 522 | 60 lines |
-| `recent_events_for_observer()` | 1238 | 59 lines |
+| `recent_events_for_observer()` | 1254 | 59 lines |
 | `_positive_presented_appearance()` | 719 | 58 lines |
 | `active_transformations()` | 584 | 54 lines |
-| `director_context()` | 1298 | 53 lines |
+| `director_context()` | 1314 | 53 lines |
 | `conceal_disguised_parts()` | 834 | 48 lines |
-| `awareness_conditions()` | 959 | 47 lines |
+| `awareness_conditions()` | 975 | 47 lines |
 
 ### `web/app.py`
 

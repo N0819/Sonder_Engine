@@ -2491,7 +2491,8 @@ def perception_act(ctx, nonce):
     # p_visible is what is actually SEEN (disguised form when active), fed to
     # both the LLM and the deterministic injection below so a concealed feature
     # is never rendered as perceived.
-    p_visible, p_disguise, p_disguise_known, _ci = _subject_disguise_context(
+    (p_visible, p_disguise, p_disguise_known,
+     p_disguise_conceals) = _subject_disguise_context(
         chat["id"], p_name, p_appearance, known)
     p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
 
@@ -2697,8 +2698,8 @@ def perception_act(ctx, nonce):
 
     return _composer_act(
         ctx, sc, interp, perceivers, known, p_name, p_visible,
-        p_disguise_known, p_disguise_terms, co_present, amap,
-        speech_elems, action)
+        p_disguise_known, p_disguise_conceals, p_disguise_terms, co_present,
+        amap, speech_elems, action)
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):
@@ -2958,7 +2959,8 @@ def perception_outcome(ctx, nonce):
     # view: p_appearance becomes the disguised (visible) form, so present_
     # appearances and the deterministic injection below never expose concealed
     # features. The knowledge layer (who KNOWS the truth) rides the payload.
-    p_appearance, p_disguise, p_disguise_known, _ci = _subject_disguise_context(
+    (p_appearance, p_disguise, p_disguise_known,
+     p_disguise_conceals) = _subject_disguise_context(
         chat["id"], p_name, p_appearance_true, known)
     p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
 
@@ -3181,8 +3183,8 @@ def perception_outcome(ctx, nonce):
 
     return _composer_outcome(
         ctx, sc, prev_scene, diff, interp, res, known, p_name,
-        p_appearance, p_disguise, p_disguise_known, p_disguise_terms,
-        perceivers, appearances, sources, enriched_dlog,
+        p_appearance, p_disguise, p_disguise_known, p_disguise_conceals,
+        p_disguise_terms, perceivers, appearances, sources, enriched_dlog,
         substance_events, amap)
 
 
@@ -3929,8 +3931,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
 
 
 def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
-                  p_disguise_known, p_disguise_terms, co_present, amap,
-                  speech_elems, action):
+                  p_disguise_known, p_disguise_conceals, p_disguise_terms,
+                  co_present, amap, speech_elems, action):
     onset_sequence = list(interp.get("sequence") or [])
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
@@ -3956,6 +3958,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "name": p_name, "room": ctx.get("_player_room"),
         "appearance": p_visible, "aliases": [],
         "disguise_known_to": p_disguise_known,
+        "disguise_conceals_identity": p_disguise_conceals,
     }
     all_bodies = [b for b in co_present if b.get("name") != p_name]
     all_bodies.append(actor_body)
@@ -4057,8 +4060,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
 
 def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       p_appearance, p_disguise, p_disguise_known,
-                      p_disguise_terms, perceivers, appearances, sources,
-                      enriched_dlog, substance_events, amap):
+                      p_disguise_conceals, p_disguise_terms, perceivers,
+                      appearances, sources, enriched_dlog, substance_events,
+                      amap):
     chat = ctx.chat
     chat_id = chat["id"]
     pers = persona_of(chat)
@@ -4118,14 +4122,20 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     for nm, app in appearances.items():
         if nm == p_name:
             visible, known_to = p_appearance, p_disguise_known
+            conceals = p_disguise_conceals
         else:
-            visible, _, known_to, _ci = _subject_disguise_context(
+            visible, _, known_to, conceals = _subject_disguise_context(
                 chat_id, nm, app, known)
         bodies.append({
             "name": nm, "room": cast_room(sc, nm, ctx.cast),
             "appearance": visible,
             "aliases": cast_aliases.get(nm) or [],
             "disguise_known_to": known_to,
+            # Both halves, always. `conceals` was computed here and dropped on
+            # the same line, and an ABSENT flag reads as "does not conceal" --
+            # so every identity-concealing disguise stopped working between
+            # the act view and this one.
+            "disguise_conceals_identity": conceals,
         })
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)

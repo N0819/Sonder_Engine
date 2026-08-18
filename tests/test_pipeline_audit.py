@@ -364,7 +364,8 @@ class TestPerceptionOutcomeMultiplayerSources:
         # the capture point moved to that handoff.
         def capture(ctx_, sc, prev_scene, diff, interp, res, known, p_name,
                     p_appearance, p_disguise, p_disguise_known,
-                    p_disguise_terms, perceivers, *a, **kw):
+                    p_disguise_conceals, p_disguise_terms, perceivers,
+                    *a, **kw):
             all_perceivers.extend(perceivers or [])
             return {"views": {}, "observations": {}, "composer_ledger": {}}
 
