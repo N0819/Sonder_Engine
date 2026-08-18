@@ -64,7 +64,7 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 3777 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_orientation`, `spatial_substance`, `spatial_transit` |
+| `spatial.py` | 3582 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light`, `spatial_orientation`, `spatial_substance`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
 | `spatial_contact_migration.py` | 331 |  | `spatial_contacts`, `spatial_identity` |
 | `spatial_contacts.py` | 1167 |  | `spatial_containment`, `spatial_identity` |
@@ -72,6 +72,7 @@
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_geometry.py` | 951 |  | `spatial_barriers`, `spatial_contacts`, `spatial_containment`, `spatial_identity`, `spatial_orientation` |
 | `spatial_identity.py` | 345 |  | — |
+| `spatial_light.py` | 209 |  | `spatial_barriers`, `spatial_geometry`, `spatial_identity` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `spatial_substance.py` | 602 |  | `spatial_contacts`, `spatial_identity` |
 | `spatial_transit.py` | 414 |  | `spatial_barriers`, `spatial_identity` |
@@ -776,14 +777,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 3430 | 318 lines |
-| `sprint_reach()` | 2478 | 175 lines |
-| `contact_sensation()` | 2043 | 144 lines |
-| `visible_adjacent_rooms()` | 2723 | 143 lines |
-| `hear_level()` | 1264 | 138 lines |
-| `corridor_sightlines()` | 2330 | 85 lines |
-| `spatial_facts()` | 2189 | 84 lines |
-| `contact_phrase()` | 1958 | 83 lines |
+| `merge_scene_with_diff()` | 3235 | 318 lines |
+| `sprint_reach()` | 2283 | 175 lines |
+| `contact_sensation()` | 1848 | 144 lines |
+| `visible_adjacent_rooms()` | 2528 | 143 lines |
+| `hear_level()` | 1069 | 138 lines |
+| `corridor_sightlines()` | 2135 | 85 lines |
+| `spatial_facts()` | 1994 | 84 lines |
+| `contact_phrase()` | 1763 | 83 lines |
 
 ### `spatial_barriers.py`
 
@@ -869,6 +870,19 @@
 | `room_of()` | 10 | 18 lines |
 | `_ci_get()` | 30 | 13 lines |
 | `_entity_named()` | 108 | 10 lines |
+
+### `spatial_light.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `source_light()` | 56 | 51 lines |
+| `light_at()` | 120 | 42 lines |
+| `effective_light()` | 164 | 29 lines |
+| `room_light()` | 41 | 6 lines |
+| `_light_radius()` | 113 | 5 lines |
+| `normalize_light()` | 35 | 4 lines |
+| `light_blocks_sight()` | 195 | 3 lines |
+| `_brighter()` | 52 | 2 lines |
 
 ### `spatial_orientation.py`
 
