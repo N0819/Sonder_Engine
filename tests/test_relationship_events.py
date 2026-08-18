@@ -118,7 +118,9 @@ class TestItRollsBackWithTheStory:
         import inspect
 
         import commit
-        source = inspect.getsource(commit)
+        # The applier call lives in commit_memories (commit_memory_write
+        # since the split); the function source survives the move.
+        source = inspect.getsource(commit.commit_memories)
         assert "apply_relationship_updates(cid, char_id, turn.idx, updates," \
             in source
         assert "frame_id=ctx.turn.frame_id" in source
