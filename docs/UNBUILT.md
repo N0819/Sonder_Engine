@@ -3768,10 +3768,17 @@ Still missing:
   take `role=`, and roles come from `providers.ROLES` — a fixed host list. An
   extension that wants its own configurable model (its own sampler, its own
   provider row in the host's settings) has to borrow a host role instead.
-- **No document storage.** The four namespaced homes are KV. An extension
-  porting from a host with JSON-documents-at-logical-paths has no `list`,
-  `delete` or `verify` to map onto, and a storage-integrity screen has nothing
-  to ask.
+- **No BINARY/blob storage.** `api.documents` (built; JSON documents at
+  logical paths with `list`, `delete`, `verify` and host routes —
+  `tests/test_extension_documents.py`) closed the document-storage gap, but it
+  stores JSON values only and refuses above 128 KiB, because a story document
+  is a `world` row and rides every checkpoint of the story. A large binary
+  asset — an image pack, an audio file, a campaign export measured in
+  megabytes — still has no home that survives an extension update
+  (`data_path` is replaced by re-clone). Deliberately left until an extension
+  actually wants one, because the right shape (content-addressed like
+  `memory_vectors`, or plain files outside story history) depends on whether
+  the asset needs to ride checkpoints at all.
 - **The browser chat lifecycle is not a declared contract.** Creating, binding,
   cloning and opening a chat, and posting an assistant message or a swipe, are
   all reachable through `Sonder.api(...)` against host routes — which is to say
@@ -3816,7 +3823,8 @@ Still missing:
   non-host players: scoped stream and chat reads, `client`-scope tokens. A
   firewall decision, and it deserves its own design note before code.
 - **Frame-scoped extension state.** `ext:<id>` world keys are chat-global (not in
-  `FRAME_SCOPED_WORLD_KEYS`), so they are shared across eras.
+  `FRAME_SCOPED_WORLD_KEYS`), so they are shared across eras. Document rows
+  (`ext:<id>:doc:<path>`) inherit the same property.
 - **`extension_runtime/` is outside the UI catalog's reach.**
   `tools/extract_ui_catalog.py` scans root `*.py` and `agents/*.py`, so the
   dozen-odd extension registration errors that surface in the Extensions menu's

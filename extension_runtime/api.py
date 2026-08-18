@@ -3,11 +3,13 @@
 An extension never receives a `PipelineContext`, a database handle, or another
 character's private view.  It receives one `SonderExtensionAPI` bound to its own
 id, and every durable thing it can touch is namespaced under `ext:<id>` -- world
-KV for per-story state, the settings table for install-scoped config, and a
-single reserved key inside `chat_chars.state` for per-character state.  That
-namespacing is the whole persistence story: all three of those already ride
-checkpoints, archives and branches wholesale, so an extension inherits
-rewind/export/clone without a schema change or a line in DATABASE.md's checklist.
+KV for per-story state, the settings table for install-scoped config, a
+single reserved key inside `chat_chars.state` for per-character state, and
+JSON documents at logical paths (`DocumentStore`) stored as rows in those same
+two KV tables.  That namespacing is the whole persistence story: all of those
+already ride checkpoints, archives and branches wholesale, so an extension
+inherits rewind/export/clone without a schema change or a line in DATABASE.md's
+checklist.
 
 The write gate on per-turn state exists for the reason `docs/design/
 EXTENSIONS_DESIGN.md` section 4 names: a write made mid-pipeline lands OUTSIDE the
@@ -340,6 +342,410 @@ class DirectorBlock:
                 f"phases={sorted(stored)}>")
 
 
+# ---------------------------------------------------------------- documents
+
+#: One logical-path segment. The store never touches a filesystem -- a path is
+#: an exact KV row key, so there is nothing here to traverse -- but paths
+#: round-trip through URLs, integrity panels and OTHER hosts' storage adapters
+#: (the port this was built for keeps JSON documents at logical paths), so the
+#: alphabet is the portable one. Requiring the first character to be
+#: alphanumeric is what makes "." and ".." unspellable as segments: traversal
+#: is refused by construction rather than by a denylist someone extends after
+#: the miss.
+DOCUMENT_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+DOCUMENT_PATH_MAX = 256
+
+#: Per-document ceiling, in bytes of the CANONICAL serialization. A story
+#: document is a `world` row, and checkpoints snapshot the whole world table
+#: on every turn, so a document's real cost is its size times the length of
+#: the story -- the same reasoning as `NARRATION_CONTEXT_MAX`, with the
+#: checkpoint ledger in place of the context window. Refused, never truncated:
+#: a truncated JSON document is not a smaller document, it is a parse error,
+#: and one that `verify` would dutifully report fifty beats after the write
+#: that caused it. The writer must learn at write time.
+DOCUMENT_MAX_BYTES = 131072
+#: Per extension, per scope. The count ceiling exists for the same checkpoint
+#: arithmetic as the size ceiling -- 256 documents at the size ceiling is
+#: already a 32 MiB tax on every checkpoint of the story -- and to keep
+#: `list`/`verify` answerable in one read.
+DOCUMENT_COUNT_MAX = 256
+
+_DOC_INFIX = ":doc:"
+_LIKE_ESCAPE = str.maketrans({"\\": "\\\\", "%": "\\%", "_": "\\_"})
+
+
+def document_path(path) -> str:
+    """Validate one logical document path, or raise with the rule.
+
+    A path is `/`-separated segments, each matching `DOCUMENT_SEGMENT`
+    (letters, digits, then letters/digits/`._-`, 64 chars max), the whole
+    thing at most `DOCUMENT_PATH_MAX` characters. No leading or trailing
+    slash, no empty segment, no backslash, and no segment starting with a
+    dot -- which refuses `.` and `..` and every other traversal spelling.
+    """
+    text = str(path or "")
+    if not text:
+        raise ExtensionError("document path must not be empty")
+    if len(text) > DOCUMENT_PATH_MAX:
+        raise ExtensionError(
+            f"document path is {len(text)} characters; the ceiling is "
+            f"{DOCUMENT_PATH_MAX}")
+    if text.startswith("/") or "\\" in text:
+        raise ExtensionError(
+            f"document path {text!r} must be relative, `/`-separated, and "
+            "backslash-free")
+    for segment in text.split("/"):
+        if not DOCUMENT_SEGMENT.fullmatch(segment):
+            raise ExtensionError(
+                f"document path {text!r} has an invalid segment "
+                f"{segment!r}: each segment must start with a letter or "
+                "digit and contain only letters, digits, '.', '_' and '-' "
+                "(max 64 chars)")
+    return text
+
+
+def _canonical_document(value):
+    """The bytes a document is sized and hashed as.
+
+    Canonical (sorted keys, tight separators) so that two spellings of the
+    same JSON value hash the same and the integrity check verifies CONTENT,
+    not formatting -- a dict reserialized in a different key order is not
+    damage.
+    """
+    import hashlib
+
+    try:
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise ExtensionError(f"document is not JSON-serializable: {exc}")
+    data = text.encode("utf-8")
+    return data, hashlib.sha256(data).hexdigest()
+
+
+class DocumentStore:
+    """JSON documents at logical paths, one KV row per document.
+
+    The fifth persistence home, and deliberately NOT a fifth table. The
+    `world` table already is a namespaced JSON-document store keyed
+    `(chat_id, key)`, and every carriage a durable table would owe --
+    checkpoint snapshot/restore, portable archive export/import, branch
+    cloning, cascade on chat delete -- copies that table WHOLESALE, with no
+    per-key knowledge (`checkpoints.snapshot_state`, `chat_archive`'s
+    `export["world"]`, `app.py`'s branch helper). A story document stored as
+    a `world` row under `ext:<id>:doc:<path>` therefore inherits rewind,
+    export and clone exactly as the four existing homes do, and a new table
+    would re-implement all of that plus a migration to be equivalent --
+    `DATABASE.md`'s checklist exists because tables keep failing to finish
+    that list, and the namespaced homes' entire design argument is that they
+    never start it.
+
+    One ROW per document, not paths inside the `ext:<id>` blob: a put must
+    not rewrite every sibling document, and `list` must not deserialize the
+    whole store to answer with metadata.
+
+    Two scopes, because the two questions Directive's adapter asks are not
+    the same question:
+
+    * **story scope** (`chat_id` given) -- rows in `world`. Campaign
+      progress, mission ledgers, anything computed FROM the story. Rides
+      checkpoints/archives/branches, so a rewound beat takes its documents
+      with it and a branch carries the documents as of the branch point.
+    * **install scope** (`chat_id=None`) -- rows in `settings`, exactly
+      like `api.settings`. A campaign package library, adapter config: it
+      exists before any story does and belongs to the machine, so it
+      deliberately does NOT ride story history -- a reroll must not delete
+      the host's library.
+
+    Writes to story documents are gated to the committed-turn hook exactly
+    as `ExtState.set` is, and for the same measured hazard: a document
+    written mid-pipeline lands outside the turn's transaction, survives the
+    rollback that undid everything it was computed from, and the rerun then
+    replays against a document that never went away. `put_now`/`delete_now`
+    are the named escape hatches for host actions (a panel's Save, a route
+    call), which have no turn transaction to belong to -- the same reasoning
+    that leaves `NarrationBlock` and install-scope writes ungated.
+    """
+
+    def __init__(self, ext_id, chat_id=None, *, gated=None):
+        self.ext_id = str(ext_id)
+        self.chat_id = None if chat_id is None else int(chat_id)
+        # Install scope is ungated like `api.settings`; story scope is gated
+        # like `api.state`. A caller inside the turn's own transaction (a
+        # commit domain's `CommitView`) passes gated=False, because there the
+        # transaction is the guarantee.
+        self._gated = (self.chat_id is not None) if gated is None else bool(
+            gated)
+        self._prefix = f"ext:{self.ext_id}{_DOC_INFIX}"
+
+    # -- raw row access, scope-switched
+
+    def _key(self, path):
+        return self._prefix + path
+
+    def _rows(self, prefix=""):
+        """Every (path, raw value) under this store, RAW on purpose.
+
+        `list` and `verify` must survive a damaged row, so they read the
+        stored text and do their own parsing instead of going through
+        `wget`/`get_setting`+`json.loads`, which would throw on the exact
+        rows they exist to report.
+        """
+        from db import q
+
+        like = self._prefix.translate(_LIKE_ESCAPE) + (
+            prefix.translate(_LIKE_ESCAPE) + "%" if prefix else "%")
+        if self.chat_id is None:
+            rows = q("SELECT key, value FROM settings "
+                     "WHERE key LIKE ? ESCAPE '\\' ORDER BY key", (like,))
+        else:
+            rows = q("SELECT key, value FROM world "
+                     "WHERE chat_id=? AND key LIKE ? ESCAPE '\\' "
+                     "ORDER BY key", (self.chat_id, like))
+        out = []
+        for row in rows:
+            path = row["key"][len(self._prefix):]
+            if prefix and not (path == prefix
+                               or path.startswith(prefix + "/")):
+                continue
+            out.append((path, row["value"]))
+        return out
+
+    def _read_raw(self, path):
+        from db import q
+
+        if self.chat_id is None:
+            row = q("SELECT value FROM settings WHERE key=?",
+                    (self._key(path),), one=True)
+        else:
+            row = q("SELECT value FROM world WHERE chat_id=? AND key=?",
+                    (self.chat_id, self._key(path)), one=True)
+        return row["value"] if row else None
+
+    def _write(self, path, envelope):
+        if self.chat_id is None:
+            from db import set_setting
+
+            set_setting(self._key(path), json.dumps(envelope,
+                                                    ensure_ascii=False))
+        else:
+            from db import wset
+
+            wset(self.chat_id, self._key(path), envelope)
+
+    def _delete_key(self, path):
+        from db import q, qi
+
+        if self.chat_id is None:
+            existed = q("SELECT 1 FROM settings WHERE key=?",
+                        (self._key(path),), one=True)
+            qi("DELETE FROM settings WHERE key=?", (self._key(path),))
+        else:
+            existed = q("SELECT 1 FROM world WHERE chat_id=? AND key=?",
+                        (self.chat_id, self._key(path)), one=True)
+            qi("DELETE FROM world WHERE chat_id=? AND key=?",
+               (self.chat_id, self._key(path)))
+        return bool(existed)
+
+    @staticmethod
+    def _envelope(raw):
+        """Parse one stored row, or raise ExtensionError naming the damage."""
+        try:
+            stored = json.loads(raw)
+        except (TypeError, ValueError) as exc:
+            raise ExtensionError(f"stored document is not JSON: {exc}")
+        if not isinstance(stored, dict) or "doc" not in stored:
+            raise ExtensionError(
+                "stored document has no envelope; something outside this "
+                "store wrote the row")
+        return stored
+
+    @staticmethod
+    def _meta(path, envelope):
+        return {"path": path,
+                "size": int(envelope.get("size") or 0),
+                "sha256": str(envelope.get("sha256") or ""),
+                "revision": int(envelope.get("revision") or 0),
+                "created_at": envelope.get("created_at"),
+                "updated_at": envelope.get("updated_at")}
+
+    def _scope_label(self):
+        return ("the install" if self.chat_id is None
+                else f"chat {self.chat_id}")
+
+    # -- the surface
+
+    def put(self, path, value):
+        """Store one JSON document. Gated for story scope; see `put_now`."""
+        if self._gated and not in_commit_scope():
+            raise ExtensionError(
+                f"extension {self.ext_id!r} documents for "
+                f"{self._scope_label()} may only be written from an "
+                "on_turn_committed hook, where the turn's own writes have "
+                "already landed. Use put_now(...) to write outside one "
+                "anyway.")
+        return self.put_now(path, value)
+
+    def put_now(self, path, value):
+        """Write outside a committed-turn hook, accepting the consequences."""
+        import time
+
+        path = document_path(path)
+        data, digest = _canonical_document(value)
+        if len(data) > DOCUMENT_MAX_BYTES:
+            raise ExtensionError(
+                f"document {path!r} is {len(data)} bytes; the ceiling is "
+                f"{DOCUMENT_MAX_BYTES}. Refused rather than truncated, "
+                "because a truncated JSON document is a parse error, not a "
+                "smaller document -- and a story document is re-stored in "
+                "every checkpoint of the story.")
+        raw = self._read_raw(path)
+        previous = None
+        if raw is not None:
+            try:
+                previous = self._envelope(raw)
+            except ExtensionError:
+                previous = None  # overwriting damage is repair, not loss
+        if previous is None and raw is None:
+            count = len(self._rows())
+            if count >= DOCUMENT_COUNT_MAX:
+                raise ExtensionError(
+                    f"extension {self.ext_id!r} already stores {count} "
+                    f"documents for {self._scope_label()}; the ceiling is "
+                    f"{DOCUMENT_COUNT_MAX}. Delete before adding -- every "
+                    "story document rides every checkpoint of the story.")
+        if previous is not None and previous.get("sha256") == digest:
+            # Same content is not a new revision -- a caller that re-puts on
+            # every beat must not make the number meaningless (the same rule
+            # as NarrationBlock's).
+            return self._meta(path, previous)
+        now = time.time()
+        envelope = {
+            "doc": value,
+            "sha256": digest,
+            "size": len(data),
+            "revision": int((previous or {}).get("revision") or 0) + 1,
+            "created_at": (previous or {}).get("created_at") or now,
+            "updated_at": now,
+        }
+        self._write(path, envelope)
+        return self._meta(path, envelope)
+
+    def get(self, path, default=None):
+        """The stored document, `default` when absent.
+
+        A DAMAGED row raises rather than returning `default`: absence and
+        damage are different answers, and a caller shown `default` for a row
+        `verify` would report as broken has been lied to.
+        """
+        path = document_path(path)
+        raw = self._read_raw(path)
+        if raw is None:
+            return default
+        return self._envelope(raw)["doc"]
+
+    def stat(self, path):
+        """Metadata for one document, or `None` when absent."""
+        path = document_path(path)
+        raw = self._read_raw(path)
+        if raw is None:
+            return None
+        return self._meta(path, self._envelope(raw))
+
+    def list(self, prefix=""):
+        """Every document under `prefix`, as metadata, sorted by path.
+
+        Prefixes are SEGMENT-aware: `missions` matches `missions` and
+        `missions/1`, never `missions2/1` -- a prefix that matched raw
+        characters would make one store's namespace bleed into a sibling's.
+        Total: a damaged row is listed with `"damaged": True` and the error,
+        because an integrity screen's roster must include exactly the rows
+        `verify` will complain about.
+        """
+        prefix = document_path(prefix) if prefix else ""
+        out = []
+        for path, raw in self._rows(prefix):
+            try:
+                out.append(self._meta(path, self._envelope(raw)))
+            except ExtensionError as exc:
+                out.append({"path": path, "damaged": True,
+                            "error": str(exc)})
+        return out
+
+    def delete(self, path):
+        """Remove one document. Gated exactly as `put` is; see `delete_now`."""
+        if self._gated and not in_commit_scope():
+            raise ExtensionError(
+                f"extension {self.ext_id!r} documents for "
+                f"{self._scope_label()} may only be deleted from an "
+                "on_turn_committed hook. Use delete_now(...) to delete "
+                "outside one anyway.")
+        return self.delete_now(path)
+
+    def delete_now(self, path):
+        """Remove one document immediately. True if it existed. Idempotent."""
+        return self._delete_key(document_path(path))
+
+    def delete_prefix(self, prefix=""):
+        """Remove every document under `prefix`. Gated; see the `_now` form."""
+        if self._gated and not in_commit_scope():
+            raise ExtensionError(
+                f"extension {self.ext_id!r} documents for "
+                f"{self._scope_label()} may only be deleted from an "
+                "on_turn_committed hook. Use delete_prefix_now(...) to "
+                "delete outside one anyway.")
+        return self.delete_prefix_now(prefix)
+
+    def delete_prefix_now(self, prefix=""):
+        """Remove every document under `prefix` (`""` = all). Returns count.
+
+        Bounded by the namespace: however wide the prefix, only this
+        extension's rows in this scope can go.
+        """
+        prefix = document_path(prefix) if prefix else ""
+        removed = 0
+        for path, _raw in self._rows(prefix):
+            removed += 1 if self._delete_key(path) else 0
+        return removed
+
+    def verify(self, prefix=""):
+        """Check every stored document is readable, parseable and unaltered.
+
+        The integrity screen's question, answered without throwing: damage
+        is the REPORT, never an exception -- an integrity check that dies on
+        the first broken row cannot tell you about the second. Three checks
+        per row: the stored text parses as JSON, the envelope has a
+        document, and the document's canonical hash matches the recorded
+        `sha256` (a mismatch means the row was altered outside this store,
+        or corrupted at rest).
+        """
+        prefix = document_path(prefix) if prefix else ""
+        damaged = []
+        checked = 0
+        for path, raw in self._rows(prefix):
+            checked += 1
+            try:
+                envelope = self._envelope(raw)
+            except ExtensionError as exc:
+                damaged.append({"path": path, "error": str(exc)})
+                continue
+            try:
+                _data, digest = _canonical_document(envelope.get("doc"))
+            except ExtensionError as exc:
+                damaged.append({"path": path, "error": str(exc)})
+                continue
+            if digest != envelope.get("sha256"):
+                damaged.append({
+                    "path": path,
+                    "error": "content hash mismatch: the row was altered "
+                             "outside this store or corrupted at rest"})
+        return {"ok": not damaged, "checked": checked, "damaged": damaged}
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return (f"<DocumentStore {self.ext_id} "
+                f"scope={self._scope_label()}>")
+
+
 def _settings_state(ext_id):
     from db import get_setting, set_setting
 
@@ -638,6 +1044,15 @@ class CommitView:
 
     def char_state(self, char_id):
         return _char_ext_state(self._api.id, self.chat_id, char_id, gated=False)
+
+    def documents(self):
+        """This story's document store, ungated for the same reason `state`
+        is: a write made here is inside the turn's transaction, so it rolls
+        back with the turn and the ghost-state hazard the gate exists for is
+        already impossible."""
+        if self.chat_id is None:
+            return None
+        return DocumentStore(self._api.id, self.chat_id, gated=False)
 
     def step_content(self, key):
         getter = getattr(self._ctx, "get", None)
@@ -1255,6 +1670,35 @@ class SonderExtensionAPI:
     def char_state(self, chat_id, char_id):
         return _char_ext_state(self.id, chat_id, char_id)
 
+    def documents(self, chat_id=None):
+        """JSON documents at logical paths -- `list`, `delete`, `verify`.
+
+        The fifth persistence home, for the extension whose unit of state is
+        a FILE rather than a value: a storage adapter ported from a host that
+        kept JSON documents at logical paths, a campaign package library, an
+        integrity screen that needs to enumerate and check what it stored.
+
+        ```python
+        docs = api.documents(chat_id)          # story scope
+        docs.put_now("missions/epsilon", {...})  # or put(), gated, in a hook
+        docs.get("missions/epsilon")
+        docs.list("missions")     # [{path, size, sha256, revision, ...}]
+        docs.verify()             # {"ok", "checked", "damaged": [...]}
+        docs.delete_now("missions/epsilon")
+        api.documents().put_now("library/campaign-3", {...})  # install scope
+        ```
+
+        `chat_id` given is STORY scope -- rows in the `world` KV, so the
+        documents ride checkpoints, archives and branches with the rest of
+        your namespace: a rewound beat takes its documents with it.
+        `chat_id=None` is INSTALL scope -- rows in the settings table, like
+        `api.settings`, deliberately outside story history: a campaign
+        library exists before any story does, and a reroll must not delete
+        it. See `DocumentStore` for the gate, the path rules and the
+        ceilings, each with its reason.
+        """
+        return DocumentStore(self.id, chat_id)
+
     def narration_context(self, chat_id):
         """This extension's standing narration block for one story.
 
@@ -1334,8 +1778,8 @@ def _stage_wrapper(api, key, handler, on_error):
 
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
-    "DirectorBlock", "DirectorContext",
+    "DirectorBlock", "DirectorContext", "DocumentStore",
     "ExtState", "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
-    "Request", "SonderExtensionAPI", "StepView", "enter_commit_scope",
-    "in_commit_scope", "leave_commit_scope",
+    "Request", "SonderExtensionAPI", "StepView", "document_path",
+    "enter_commit_scope", "in_commit_scope", "leave_commit_scope",
 ]
