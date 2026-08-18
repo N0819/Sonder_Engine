@@ -544,6 +544,35 @@ ATTEMPTED is fixed in every rung, and the resolve payload's `ABSOLUTE` flag is
 unchanged by hard mode — a hard mode that let the Director rewrite the player's
 words would be a worse violation than the one it set out to fix.
 
+**Played, and what that found.** The first real hard-mode story (2026-08-18,
+five rooms, two characters, three lore entries, `actor_only` throughout) found
+the mode INERT for every assertion in it — three beats, three different shapes,
+all granted. The mode was set correctly and the claims were wrong:
+`_extract_authority_claims` resolves an asserted effect to the declaring actor
+when the action names no targets, and interpret typed each assertion as an
+action with no targets, so every one arrived stamped `subject_id` = the player
+and read as the player's own body, which every rung grants.
+
+Two guards walked into the world; a vault door opened; the player flew. Nothing
+was rolled for and nothing was refused, because a non-rejectable claim never
+reaches the Director's judgement at all.
+
+The fix is that an INFERRED subject is not evidence of a body
+(`subject_inferred` on the claim). Reading the prose instead does not work and
+the two live cases prove it: "Two guards come around the corner" has no first
+person and "I take the west door's handle" has plenty, so any test on the
+wording grants exactly the wrong one. Replayed with the fix, the same beats
+downgrade to contestable intents, the cast contests them (Mireille moved to
+block the vault doorway), and the Director resolves them on its own judgement.
+
+**What the mode does not promise.** On the replay the Director still let the
+player fly. That is not a hard-mode failure: the mode changes WHO decides, not
+what is decided, and `Design.md`'s own wording is "with the director free to
+say no" — free, not obliged. That story's `fiction_model` was
+`genre: unspecified` with an empty ontology, so nothing had ever said the house
+was mundane and "can people fly here" had no authored answer. Physics is the
+fiction model's job; authority is this mode's.
+
 Tests: `tests/test_player_authority_mode.py`.
 
 ---

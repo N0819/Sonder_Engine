@@ -74,6 +74,103 @@ def _commitments(out):
             if e["type"] == "action"]
 
 
+# ------------------------------------------------------- what a played beat found
+
+
+class TestTheInferredSubject:
+    """The hole that the first hard-mode story ever played walked straight into.
+
+    `_extract_authority_claims` resolves an asserted effect to the DECLARING
+    ACTOR when the action named no targets. That fallback is right for its own
+    purpose -- a wave or going rigid stops tripping the resolve seam's 'no
+    resolvable subject' note -- and it is not evidence about whose body an
+    effect is on. "Named no target" is equally what a world assertion looks
+    like once the interpret stage has typed it as an action.
+
+    Both fixtures below are verbatim from that story (2026-08-18, the empty
+    house, `actor_only` throughout), and between them they rule out the
+    obvious wrong fix: the first has no first person and the second has
+    plenty, so any test on the WORDING grants exactly the wrong one.
+    """
+
+    GUARDS = {
+        "claim_id": "claim:0:effect:0", "scope": "effect",
+        "subject_id": PLAYER, "subject_inferred": True,
+        "predicate": "Two guards come around the corner from the stair "
+                     "into the front hall",
+        "source_text": "Two guards come around the corner from the stair "
+                       "into the front hall, boots loud on the stone floor.",
+    }
+    DOOR = {
+        "claim_id": "claim:0:effect:0", "scope": "effect",
+        "subject_id": PLAYER, "subject_inferred": True,
+        "predicate": "west door opens, revealing a vault",
+        "source_text": "Sam takes the west door's handle and forces the lock, "
+                       "causing the vault door to swing open.",
+    }
+
+    def test_a_world_assertion_typed_as_an_action_is_not_the_players_body(self):
+        """Turn 1. Two guards walked into the world unchallenged: the mode was
+        `actor_only`, the claim read subject_id=the player, and the engine
+        granted it as bodily conduct."""
+        beat = {"sequence": [{"type": "action", "targets": [],
+                              "commitment": "asserted"}],
+                "flow": {"authority_claims": [dict(self.GUARDS)]}}
+
+        records = apply_player_authority(beat, "actor_only", PLAYER)
+
+        assert [r["kind"] for r in records] == ["own_effect"]
+        assert beat["flow"]["authority_claims"][0]["scope"] == "intent"
+
+    def test_an_effect_on_a_door_is_not_the_players_body_either(self):
+        """Turn 2, the same fallback, and the reason prose cannot decide it:
+        this one is written in the first person and is still about a door."""
+        beat = {"sequence": [{"type": "action", "targets": [],
+                              "commitment": "asserted"}],
+                "flow": {"authority_claims": [dict(self.DOOR)]}}
+
+        records = apply_player_authority(beat, "actor_only", PLAYER)
+
+        assert [r["kind"] for r in records] == ["own_effect"]
+
+    def test_a_subject_the_model_actually_named_is_still_the_players_body(self):
+        """The fix withholds a GUESS, not the grant. When the model names the
+        player as the effect's target, that is an answer rather than a
+        fallback, and `actor_only` still grants it."""
+        claim = dict(self.GUARDS, subject_inferred=False)
+        beat = {"sequence": [], "flow": {"authority_claims": [claim]}}
+
+        assert apply_player_authority(beat, "actor_only", PLAYER) == []
+
+    def test_the_looser_rungs_are_unchanged_by_it(self):
+        """Only `actor_only` tightens. `own_effect` is granted above it, so a
+        story on the default reads exactly as it did."""
+        for mode in ("explicit_outcomes", "world_author"):
+            beat = {"sequence": [], "flow": {
+                "authority_claims": [dict(self.DOOR)]}}
+            assert apply_player_authority(beat, mode, PLAYER) == [], mode
+
+    def test_the_extractor_marks_what_it_guessed(self):
+        """The flag has to be minted where the guess is made, or the claim
+        layer is back to inferring from prose."""
+        from agents.common import _extract_authority_claims
+
+        sequence = [{
+            "type": "action", "attempt": "force the lock", "targets": [],
+            "commitment": "asserted",
+            "asserted_effects": [{"target_id": None, "kind": "the door opens"},
+                                 {"target_id": "vault_door",
+                                  "kind": "the vault is open"}],
+        }]
+        claims = _extract_authority_claims(sequence, "I force the lock",
+                                           actor_name=PLAYER)
+
+        assert claims[0]["subject_id"] == PLAYER
+        assert claims[0]["subject_inferred"] is True
+        assert claims[1]["subject_id"] == "vault_door"
+        assert claims[1]["subject_inferred"] is False
+
+
 # --------------------------------------------------------------- the ladder
 
 

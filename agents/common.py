@@ -1419,6 +1419,14 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                     "claim_id": f"claim:{i}:effect:{effect_index}",
                     "scope": "effect",
                     "subject_id": eff.get("target_id") or self_subject,
+                    # Whether that subject is the model's answer or this
+                    # function's GUESS. `self_subject` is a fallback for an
+                    # act that named no target, and "named no target" is not
+                    # the same fact as "was about my own body" -- see
+                    # `_claim_authority_kind`, which may not read a guess as a
+                    # grant.
+                    "subject_inferred": not eff.get("target_id")
+                    and bool(self_subject),
                     "predicate": eff.get("kind", ""),
                     "value": eff.get("details"),
                     "commitment": "asserted",
@@ -1436,6 +1444,14 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                     "claim_id": f"claim:{i}:intent:{effect_index}",
                     "scope": "intent",
                     "subject_id": eff.get("target_id") or self_subject,
+                    # Whether that subject is the model's answer or this
+                    # function's GUESS. `self_subject` is a fallback for an
+                    # act that named no target, and "named no target" is not
+                    # the same fact as "was about my own body" -- see
+                    # `_claim_authority_kind`, which may not read a guess as a
+                    # grant.
+                    "subject_inferred": not eff.get("target_id")
+                    and bool(self_subject),
                     "predicate": eff.get("kind", ""),
                     "value": eff.get("details"),
                     "commitment": "contestable",
@@ -3587,12 +3603,49 @@ def _undeclared_world_object(clause, declared_low):
 
 
 def _claim_authority_kind(claim, player_name):
-    """Which grant a claim needs. `None` for a claim no mode restricts."""
+    """Which grant a claim needs. `None` for a claim no mode restricts.
+
+    `subject_id` alone cannot answer this, and a played beat proved it twice in
+    one story. `_extract_authority_claims` resolves an asserted effect to the
+    DECLARING ACTOR when the action named no targets -- a deliberate fallback,
+    so a player's own body acts (a wave, going rigid) stop tripping the resolve
+    seam's 'no resolvable subject' note. But "named no target" is not the same
+    fact as "was about my own body": it is equally what a world assertion the
+    interpret stage typed as an action looks like.
+
+    Live, the first hard-mode story ever played (2026-08-18, the empty house),
+    both on turns where `targets` was empty and the fallback fired:
+
+      * "Two guards come around the corner from the stair" became an ACTION
+        rather than the `event` branch that exists for it, so the claim read
+        subject_id="Wren", `actor_only` granted it as the player's own body,
+        and two guards walked into the world unchallenged.
+      * "I take the west door's handle and force the lock; the vault door
+        swings open" minted the effect `west door opens, revealing a vault`
+        with subject_id="Wren" -- a claim about a DOOR, filed under the
+        player's body.
+
+    Reading the prose instead does not save it: the first has no first person
+    and the second has plenty, so any test on the wording grants exactly the
+    wrong one. What separates them is not in the words at all -- it is that
+    the subject was GUESSED. So an inferred subject is not evidence of a body,
+    and a mode that exists to withhold authorship may not resolve the doubt in
+    the author's favour. It falls to `own_effect`, which `explicit_outcomes`
+    and `world_author` still grant; only `actor_only` tightens, which is the
+    rung where tightening is the point.
+
+    The cost is stated plainly: under `actor_only` a genuine "I raise my hand"
+    is adjudicated rather than true in advance. The declaration still stands
+    verbatim, is still resolved, still narrated -- and nothing in the scene
+    opposes a raised hand, so it goes up. What it no longer does is bind the
+    diff before the Director has read it.
+    """
     if str(claim.get("scope") or "") != "effect":
         return None          # a contestable intent is already the Director's
     subject = str(claim.get("subject_id") or "").strip()
     player = str(player_name or "").strip()
-    if player and subject.casefold() == player.casefold():
+    if (player and subject.casefold() == player.casefold()
+            and not claim.get("subject_inferred")):
         return "own_body"
     if str(claim.get("claim_id") or "").endswith(":event"):
         return "world"
