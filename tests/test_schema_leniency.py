@@ -1355,6 +1355,65 @@ class TestAnUnboundedListIsWhereASamplerLocks:
     def test_an_ordinary_answer_is_untouched(self):
         assert self._serves(["drive", "ia2"]) == ["drive", "ia2"]
 
+    def test_every_free_string_list_is_bounded_not_just_this_one(self):
+        """The class, not the instance.
+
+        `serves` is where it fired; it is not the only field shaped that way.
+        Sweeping SCHEMA_MAP found 40 unbounded free-string lists, and any of
+        them could have been the one -- so the ceiling lives in the coercion
+        layer and covers all of them, rather than being bolted onto whichever
+        field happened to run away first.
+        """
+        import schemas
+
+        limit = schemas.FREE_STRING_LIST_LIMIT
+        out, _w = schemas.validate_llm_output("character", {
+            "considered_responses": ["x"] * 900,
+            "active_state": {"active_concerns": ["y"] * 900}})
+        assert len(out["considered_responses"]) == limit
+        assert len(out["active_state"]["active_concerns"]) == limit
+
+        narrator, _w = schemas.validate_llm_output(
+            "narrator", {"new_specifics": ["z"] * 900})
+        assert len(narrator["new_specifics"]) == limit
+
+        resolve, _w = schemas.validate_llm_output(
+            "director_resolve", {"dialogue_order": ["a"] * 900})
+        assert len(resolve["dialogue_order"]) == limit
+
+    def test_the_ceiling_sits_far_above_anything_real_play_produces(self):
+        """Measured, not guessed: across 26,975 stored variants -- one live
+        install's entire history -- the longest free-string list ever produced
+        was 13, and the largest structure of any kind was a 28-key map. A
+        ceiling that could ever shape legitimate output would be worse than the
+        runaway it prevents."""
+        import schemas
+
+        assert schemas.FREE_STRING_LIST_LIMIT >= 4 * 13
+
+    def test_a_realistically_long_list_is_untouched(self):
+        """A crowded beat's dialogue order was the longest real one seen."""
+        import schemas
+
+        speakers = [f"Speaker {n}" for n in range(13)]
+        out, _w = schemas.validate_llm_output(
+            "director_resolve", {"dialogue_order": speakers})
+        assert out["dialogue_order"] == speakers
+
+    def test_maps_and_object_lists_are_deliberately_left_alone(self):
+        """Dropping the tail of `serves` costs advisory metadata. Dropping the
+        tail of `entities` costs world state commit.py is about to persist --
+        and a model cannot fall into an object list the way it falls into a
+        comma-separated one, because every item needs structure."""
+        import schemas
+
+        entities = {f"thing_{n}": {"name": f"thing {n}"} for n in range(120)}
+        out, _w = schemas.validate_llm_output(
+            "director_establish", {"location": "x", "time": "now",
+                                   "scene_description": "x",
+                                   "entities": entities})
+        assert len(out["entities"]) == 120
+
     def test_the_prompt_now_states_the_vocabulary(self):
         """The reason it ran: `want.serves` and `goal_impacts.serves` both name
         their domain, and this one named nothing."""
