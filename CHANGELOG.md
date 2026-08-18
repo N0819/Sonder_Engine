@@ -1,5 +1,53 @@
 # Changelog
 
+## alpha 9.2 — An extension can change what the story tells you
+
+- **An extension can now put standing context in front of the narrator.** Until
+  now one could add a stage, keep its own record of a story and show it in its
+  own panel, and none of that ever reached a line of prose — it could know
+  everything about your story and say nothing. An extension can now install a
+  block of context for a story: the frame it is being told inside, a fuel
+  emergency three days old, a city under curfew. That block is given to the
+  narrator on every beat until the extension clears it.
+
+- **One block per extension per story, and it replaces rather than piles up.**
+  An extension that could only add would leak everything it had ever said into
+  the story it was describing. Re-installing the same text is not a change, so
+  an extension that reinstalls on every beat does not turn its own version
+  number into a turn counter.
+
+- **What it says is recorded against whoever said it.** The same bargain 9.0
+  made for characters, now for the prose you read: an extension may write
+  anything into what the narrator is told, and every part of it names its
+  author on the turn. A sentence in your story that nothing in your story
+  earned can be traced to the extension that put it there, in one read, instead
+  of looking like the engine inventing things.
+
+- **Setting belongs there; facts the engine already tracks do not.** Who is
+  where and which doors are open are checked against what actually happened,
+  and a block that contradicts them makes the two argue. The guide says so
+  where an author will read it.
+
+- **An extension can now be a real application rather than a panel.** It can
+  put a button in the story toolbar, a control beside the message box, and a
+  full window over the transcript — its own screens, its own navigation. The
+  window covers your story rather than replacing it, so closing it puts you
+  back exactly where you were, mid-turn included. All of it belongs to the
+  engine, which means switching an extension off takes its whole interface away
+  again, and an extension that breaks while its window is open hands you back
+  your story instead of leaving you stuck in a dead one.
+
+- **An extension can be built out of many files.** Previously every extension's
+  browser code was pasted into one script, which is workable for a panel and
+  impossible for anything larger — and one bad line in any of them broke every
+  extension after it. An extension can now ship as a proper module, loaded on
+  its own, with its own files importing each other.
+
+- **A second worked example ships with the engine.** `overlay-demo` is a small
+  extension that does all of it — a launcher, a window of its own, and a frame
+  it installs for the story you have open. It touches no engine file, which is
+  the point.
+
 ## alpha 9.1 — Extensions come from somewhere, and can be told they have moved
 
 - **An extension can be installed straight from its repository.** Paste
