@@ -92,9 +92,11 @@ def test_the_check_is_wired_into_prepare_scene_commit():
     a helper nobody calls warns nobody."""
     import ast
 
-    import commit
+    # prepare_scene_commit lives in commit_scene_state since the split
+    # (commit re-exports it); parse the file that actually holds the def.
+    import commit_scene_state
 
-    tree = ast.parse(open(commit.__file__).read())
+    tree = ast.parse(open(commit_scene_state.__file__).read())
     fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef)
               and n.name == "prepare_scene_commit")

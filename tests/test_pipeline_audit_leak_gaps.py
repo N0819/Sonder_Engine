@@ -396,7 +396,9 @@ class TestDialogueMemoryRecognitionGate:
         """Verify commit.py has the recognition gate code."""
         import inspect
         import commit
-        source = inspect.getsource(commit)
+        # The gate lives in prepare_memory_commit (commit_memory since the
+        # split); the function source survives the move.
+        source = inspect.getsource(commit.prepare_memory_commit)
         # The gate should check the hearer's known map
         assert "_hearer_known" in source
         assert "spk_label" in source

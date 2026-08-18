@@ -177,7 +177,10 @@ class TestTheAnswerCouldNotBeHeardEither:
         import inspect
 
         import commit
-        assert 'own_result.get("project_ops")' in inspect.getsource(commit)
+        # The reader lives in prepare_memory_commit (commit_memory since the
+        # split); the function source survives the move, the module's did not.
+        assert 'own_result.get("project_ops")' \
+            in inspect.getsource(commit.prepare_memory_commit)
 
     def test_an_adopted_project_reaches_the_ledger(self):
         """End to end through the real applier, since every link in this chain

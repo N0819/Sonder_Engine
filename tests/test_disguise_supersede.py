@@ -106,8 +106,10 @@ def test_the_rule_runs_on_the_live_commit_path():
     exist, and this one is invisible until a second disguise appears."""
     from pathlib import Path
 
+    # commit_entities.py since the split carved the entity domain out of
+    # commit.py; the pinned block is commit_world_entities' condition loop.
     src = (Path(__file__).resolve().parents[1]
-           / "commit.py").read_text(encoding="utf-8")
+           / "commit_entities.py").read_text(encoding="utf-8")
     block = src[src.index("for cond_id, cond_list in"):]
     block = block[:block.index("\n    for ", 200)] if "\n    for " in block[200:] \
         else block[:4000]
