@@ -10,9 +10,9 @@
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 927 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3398 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 6058 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 6133 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1717 |  | `agents.common`, `scene`, `spatial` |
-| `agents/director.py` | 7847 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 7922 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1210 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial`, `weather` |
@@ -20,7 +20,7 @@
 | `agents/runtime.py` | 1116 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2090 |  | `backdrops`, `db`, `outofband`, `weather` |
-| `app.py` | 5592 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `dialogue_colors`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
+| `app.py` | 5663 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `dialogue_colors`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
 | `artifacts.py` | 565 |  | `prompts` |
 | `attire.py` | 2619 |  | — |
 | `auth_routes.py` | 176 | Typed host-authentication HTTP routes and cookie transport. | `guest_access` |
@@ -62,11 +62,12 @@
 | `providers.py` | 3132 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
-| `scene.py` | 1858 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
+| `scene.py` | 1931 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5176 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 8434 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
+| `story_view.py` | 356 |  | `db` |
 | `subjects.py` | 449 |  | `canon_provenance`, `db`, `spatial` |
 | `survival.py` | 320 |  | `db` |
 | `theory_of_mind.py` | 703 |  | — |
@@ -118,14 +119,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1815 | 204 lines |
-| `_scrub_invented_dialogue()` | 4740 | 145 lines |
-| `_check_narrator_fidelity()` | 5697 | 125 lines |
-| `observer_body_regions()` | 663 | 117 lines |
-| `_extract_authority_claims()` | 1339 | 106 lines |
-| `_strip_player_echo()` | 4543 | 101 lines |
-| `_perceptible_entities()` | 917 | 98 lines |
-| `_check_presence_knowledge_channel()` | 3368 | 95 lines |
+| `norm_sequence()` | 1816 | 204 lines |
+| `_scrub_invented_dialogue()` | 4815 | 145 lines |
+| `_check_narrator_fidelity()` | 5772 | 125 lines |
+| `observer_body_regions()` | 664 | 117 lines |
+| `_extract_authority_claims()` | 1340 | 106 lines |
+| `_strip_player_echo()` | 4618 | 101 lines |
+| `_perceptible_entities()` | 918 | 98 lines |
+| `_check_presence_knowledge_channel()` | 3369 | 95 lines |
 
 ### `agents/composer.py`
 
@@ -144,14 +145,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 6337 | 1356 lines |
-| `director_interpret()` | 794 | 500 lines |
-| `_reconcile_resolution()` | 4048 | 445 lines |
-| `_reconcile_near_group_positions()` | 2344 | 276 lines |
-| `_evidence_present()` | 3119 | 232 lines |
-| `_run_specialists()` | 5973 | 211 lines |
-| `_specialist_payload()` | 5754 | 133 lines |
-| `_orchestration_scope_backstop()` | 6204 | 131 lines |
+| `director_resolve()` | 6392 | 1376 lines |
+| `director_interpret()` | 815 | 534 lines |
+| `_reconcile_resolution()` | 4103 | 445 lines |
+| `_reconcile_near_group_positions()` | 2399 | 276 lines |
+| `_evidence_present()` | 3174 | 232 lines |
+| `_run_specialists()` | 6028 | 211 lines |
+| `_specialist_payload()` | 5809 | 133 lines |
+| `_orchestration_scope_backstop()` | 6259 | 131 lines |
 
 ### `agents/loops.py`
 
@@ -244,14 +245,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `turn_branch()` | 4464 | 400 lines |
-| `chat_get()` | 2933 | 234 lines |
-| `_remap_cp_blob()` | 846 | 194 lines |
-| `bootstrap()` | 1159 | 92 lines |
-| `_stream()` | 459 | 91 lines |
-| `lore_entry_edit()` | 2637 | 70 lines |
-| `lore_edit()` | 2488 | 68 lines |
-| `_ambience_payload()` | 5374 | 68 lines |
+| `turn_branch()` | 4535 | 400 lines |
+| `chat_get()` | 2936 | 234 lines |
+| `_remap_cp_blob()` | 849 | 194 lines |
+| `bootstrap()` | 1162 | 92 lines |
+| `_stream()` | 462 | 91 lines |
+| `lore_entry_edit()` | 2640 | 70 lines |
+| `lore_edit()` | 2491 | 68 lines |
+| `_ambience_payload()` | 5445 | 68 lines |
 
 ### `artifacts.py`
 
@@ -802,6 +803,19 @@
 | `_find_edge()` | 105 | 8 lines |
 | `opposite_bearing()` | 58 | 2 lines |
 
+### `story_view.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `player_view()` | 294 | 63 lines |
+| `story_view()` | 157 | 51 lines |
+| `_delivered()` | 237 | 24 lines |
+| `viewers()` | 213 | 22 lines |
+| `_viewer_memories()` | 271 | 21 lines |
+| `_cast()` | 108 | 19 lines |
+| `_step_content()` | 88 | 18 lines |
+| `_rooms()` | 129 | 14 lines |
+
 ### `subjects.py`
 
 | Function | Start | Size |
@@ -871,205 +885,210 @@
 
 | Method | Path | Handler | Source |
 |---|---|---|---|
-| GET | `/` | `index()` | `app.py:378` |
-| PUT | `/api/active_preset` | `set_active()` | `app.py:1542` |
-| PUT | `/api/affect_habituation` | `set_affect_habituation()` | `app.py:1748` |
-| PUT | `/api/agent_models` | `put_agent_models()` | `app.py:1253` |
-| PUT | `/api/ambience` | `put_ambience()` | `app.py:1366` |
-| GET | `/api/ambience/library` | `ambience_library()` | `app.py:5532` |
-| GET | `/api/ambience/search` | `ambience_search()` | `app.py:5511` |
-| PUT | `/api/attire_beneath` | `set_attire_beneath()` | `app.py:1767` |
+| GET | `/` | `index()` | `app.py:381` |
+| PUT | `/api/active_preset` | `set_active()` | `app.py:1545` |
+| PUT | `/api/affect_habituation` | `set_affect_habituation()` | `app.py:1751` |
+| PUT | `/api/agent_models` | `put_agent_models()` | `app.py:1256` |
+| PUT | `/api/ambience` | `put_ambience()` | `app.py:1369` |
+| GET | `/api/ambience/library` | `ambience_library()` | `app.py:5603` |
+| GET | `/api/ambience/search` | `ambience_search()` | `app.py:5582` |
+| PUT | `/api/attire_beneath` | `set_attire_beneath()` | `app.py:1770` |
 | POST | `/api/auth/login` | `auth_login()` | `auth_routes.py:109` |
 | POST | `/api/auth/logout` | `auth_logout()` | `auth_routes.py:172` |
 | POST | `/api/auth/setup` | `auth_setup()` | `auth_routes.py:70` |
 | GET | `/api/auth/status` | `auth_status()` | `auth_routes.py:60` |
-| GET | `/api/auto_promote` | `get_auto_promote()` | `app.py:3262` |
-| PUT | `/api/auto_promote` | `set_auto_promote()` | `app.py:3266` |
-| PUT | `/api/backdrops` | `put_backdrops()` | `app.py:1356` |
-| GET | `/api/bootstrap` | `bootstrap()` | `app.py:1159` |
-| POST | `/api/characters` | `char_create()` | `app.py:2223` |
-| POST | `/api/characters/generate` | `char_generate()` | `app.py:2201` |
-| POST | `/api/characters/import` | `char_import()` | `app.py:2244` |
-| DELETE | `/api/characters/{cid}` | `char_del()` | `app.py:2359` |
-| PUT | `/api/characters/{cid}` | `char_edit()` | `app.py:2350` |
-| GET | `/api/characters/{cid}/export` | `char_export()` | `app.py:2342` |
-| POST | `/api/characters/{cid}/fill_appearance` | `char_fill_appearance()` | `app.py:2332` |
-| POST | `/api/characters/{cid}/fill_psychology` | `char_fill_psychology()` | `app.py:2304` |
-| POST | `/api/characters/{cid}/generate_greeting` | `char_generate_greeting()` | `app.py:2288` |
-| POST | `/api/characters/{cid}/recover_greetings` | `char_recover_greetings()` | `app.py:2278` |
-| POST | `/api/characters/{cid}/start` | `character_start_story()` | `app.py:2259` |
-| POST | `/api/chats` | `chat_new()` | `app.py:2716` |
+| GET | `/api/auto_promote` | `get_auto_promote()` | `app.py:3265` |
+| PUT | `/api/auto_promote` | `set_auto_promote()` | `app.py:3269` |
+| PUT | `/api/backdrops` | `put_backdrops()` | `app.py:1359` |
+| GET | `/api/bootstrap` | `bootstrap()` | `app.py:1162` |
+| POST | `/api/characters` | `char_create()` | `app.py:2226` |
+| POST | `/api/characters/generate` | `char_generate()` | `app.py:2204` |
+| POST | `/api/characters/import` | `char_import()` | `app.py:2247` |
+| DELETE | `/api/characters/{cid}` | `char_del()` | `app.py:2362` |
+| PUT | `/api/characters/{cid}` | `char_edit()` | `app.py:2353` |
+| GET | `/api/characters/{cid}/export` | `char_export()` | `app.py:2345` |
+| POST | `/api/characters/{cid}/fill_appearance` | `char_fill_appearance()` | `app.py:2335` |
+| POST | `/api/characters/{cid}/fill_psychology` | `char_fill_psychology()` | `app.py:2307` |
+| POST | `/api/characters/{cid}/generate_greeting` | `char_generate_greeting()` | `app.py:2291` |
+| POST | `/api/characters/{cid}/recover_greetings` | `char_recover_greetings()` | `app.py:2281` |
+| POST | `/api/characters/{cid}/start` | `character_start_story()` | `app.py:2262` |
+| POST | `/api/chats` | `chat_new()` | `app.py:2719` |
 | POST | `/api/chats/import` | `import_chat()` | `chat_archive.py:175` |
-| DELETE | `/api/chats/{cid}` | `chat_del()` | `app.py:2903` |
-| GET | `/api/chats/{cid}` | `chat_get()` | `app.py:2933` |
-| PUT | `/api/chats/{cid}` | `chat_edit()` | `app.py:2807` |
-| POST | `/api/chats/{cid}/abort` | `chat_abort()` | `app.py:4460` |
-| GET | `/api/chats/{cid}/ambience/oneshot/{name}` | `ambience_oneshot()` | `app.py:5541` |
-| DELETE | `/api/chats/{cid}/ambience/pin` | `ambience_pin_delete()` | `app.py:5589` |
-| PUT | `/api/chats/{cid}/ambience/pin` | `ambience_pin_put()` | `app.py:5570` |
-| GET | `/api/chats/{cid}/ambience/pins` | `ambience_pins_get()` | `app.py:5565` |
-| GET | `/api/chats/{cid}/ambience/{signature}.audio` | `ambience_audio()` | `app.py:5495` |
-| GET | `/api/chats/{cid}/attire` | `attire_get()` | `app.py:3940` |
-| PUT | `/api/chats/{cid}/attire` | `attire_put()` | `app.py:3947` |
-| GET | `/api/chats/{cid}/backdrop/{signature}.png` | `backdrop_image()` | `app.py:5342` |
-| GET | `/api/chats/{cid}/background_config` | `bg_cfg_get()` | `app.py:4081` |
-| PUT | `/api/chats/{cid}/background_config` | `bg_cfg_put()` | `app.py:4085` |
-| POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `app.py:3169` |
-| DELETE | `/api/chats/{cid}/characters/{ch}` | `chat_del_char()` | `app.py:3531` |
-| PUT | `/api/chats/{cid}/characters/{ch}/card` | `chat_char_card_put()` | `app.py:3541` |
-| PUT | `/api/chats/{cid}/characters/{ch}/dialogue_color` | `dialogue_color_put()` | `app.py:3830` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories` | `mem_list()` | `app.py:4211` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories` | `mem_add()` | `app.py:4347` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories/backfill` | `mem_backfill()` | `app.py:4317` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories/consolidate` | `mem_consolidate()` | `app.py:4302` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories/coverage` | `mem_coverage()` | `app.py:4338` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories/export` | `mem_export()` | `app.py:4257` |
-| POST | `/api/chats/{cid}/characters/{ch}/memories/import` | `mem_import()` | `app.py:4268` |
-| GET | `/api/chats/{cid}/characters/{ch}/memories/search` | `mem_search()` | `app.py:4232` |
-| GET | `/api/chats/{cid}/characters/{ch}/memory-context` | `memory_context_preview()` | `app.py:4278` |
-| PUT | `/api/chats/{cid}/characters/{ch}/position` | `chat_char_position_put()` | `app.py:3747` |
-| GET | `/api/chats/{cid}/characters/{ch}/private_history` | `ph_get()` | `app.py:3811` |
-| PUT | `/api/chats/{cid}/characters/{ch}/private_history` | `ph_put()` | `app.py:3821` |
-| GET | `/api/chats/{cid}/characters/{ch}/relationships` | `relationships_get()` | `app.py:4291` |
-| GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `app.py:3982` |
-| PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `app.py:3999` |
-| GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `app.py:3223` |
+| DELETE | `/api/chats/{cid}` | `chat_del()` | `app.py:2906` |
+| GET | `/api/chats/{cid}` | `chat_get()` | `app.py:2936` |
+| PUT | `/api/chats/{cid}` | `chat_edit()` | `app.py:2810` |
+| POST | `/api/chats/{cid}/abort` | `chat_abort()` | `app.py:4531` |
+| GET | `/api/chats/{cid}/ambience/oneshot/{name}` | `ambience_oneshot()` | `app.py:5612` |
+| DELETE | `/api/chats/{cid}/ambience/pin` | `ambience_pin_delete()` | `app.py:5660` |
+| PUT | `/api/chats/{cid}/ambience/pin` | `ambience_pin_put()` | `app.py:5641` |
+| GET | `/api/chats/{cid}/ambience/pins` | `ambience_pins_get()` | `app.py:5636` |
+| GET | `/api/chats/{cid}/ambience/{signature}.audio` | `ambience_audio()` | `app.py:5566` |
+| GET | `/api/chats/{cid}/attire` | `attire_get()` | `app.py:3943` |
+| PUT | `/api/chats/{cid}/attire` | `attire_put()` | `app.py:3950` |
+| GET | `/api/chats/{cid}/backdrop/{signature}.png` | `backdrop_image()` | `app.py:5413` |
+| GET | `/api/chats/{cid}/background_config` | `bg_cfg_get()` | `app.py:4084` |
+| PUT | `/api/chats/{cid}/background_config` | `bg_cfg_put()` | `app.py:4088` |
+| POST | `/api/chats/{cid}/characters` | `chat_add_char()` | `app.py:3172` |
+| DELETE | `/api/chats/{cid}/characters/{ch}` | `chat_del_char()` | `app.py:3534` |
+| PUT | `/api/chats/{cid}/characters/{ch}/card` | `chat_char_card_put()` | `app.py:3544` |
+| PUT | `/api/chats/{cid}/characters/{ch}/dialogue_color` | `dialogue_color_put()` | `app.py:3833` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories` | `mem_list()` | `app.py:4282` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories` | `mem_add()` | `app.py:4418` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories/backfill` | `mem_backfill()` | `app.py:4388` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories/consolidate` | `mem_consolidate()` | `app.py:4373` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories/coverage` | `mem_coverage()` | `app.py:4409` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories/export` | `mem_export()` | `app.py:4328` |
+| POST | `/api/chats/{cid}/characters/{ch}/memories/import` | `mem_import()` | `app.py:4339` |
+| GET | `/api/chats/{cid}/characters/{ch}/memories/search` | `mem_search()` | `app.py:4303` |
+| GET | `/api/chats/{cid}/characters/{ch}/memory-context` | `memory_context_preview()` | `app.py:4349` |
+| PUT | `/api/chats/{cid}/characters/{ch}/position` | `chat_char_position_put()` | `app.py:3750` |
+| GET | `/api/chats/{cid}/characters/{ch}/private_history` | `ph_get()` | `app.py:3814` |
+| PUT | `/api/chats/{cid}/characters/{ch}/private_history` | `ph_put()` | `app.py:3824` |
+| GET | `/api/chats/{cid}/characters/{ch}/relationships` | `relationships_get()` | `app.py:4362` |
+| GET | `/api/chats/{cid}/dialogue_config` | `dlg_get()` | `app.py:3985` |
+| PUT | `/api/chats/{cid}/dialogue_config` | `dlg_put()` | `app.py:4002` |
+| GET | `/api/chats/{cid}/dramatic_irony` | `get_dramatic_irony_feed()` | `app.py:3226` |
 | GET | `/api/chats/{cid}/export` | `export_chat()` | `chat_archive.py:169` |
-| GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `app.py:4157` |
-| POST | `/api/chats/{cid}/fixed_points` | `fixed_points_create()` | `app.py:4167` |
-| DELETE | `/api/chats/{cid}/fixed_points/{anchor_id}` | `fixed_points_delete()` | `app.py:4189` |
-| GET | `/api/chats/{cid}/frames` | `frames_list()` | `app.py:4111` |
-| POST | `/api/chats/{cid}/frames` | `frames_create()` | `app.py:4115` |
-| GET | `/api/chats/{cid}/guest_invites` | `list_guest_invites()` | `app.py:3410` |
-| POST | `/api/chats/{cid}/guest_invites` | `create_guest_invite()` | `app.py:3392` |
-| DELETE | `/api/chats/{cid}/guest_invites/{gid}` | `revoke_guest_invite()` | `app.py:3414` |
-| GET | `/api/chats/{cid}/language` | `chat_language_get()` | `app.py:2774` |
-| PUT | `/api/chats/{cid}/language` | `chat_language_put()` | `app.py:2791` |
-| GET | `/api/chats/{cid}/living_world` | `living_world_get()` | `app.py:4046` |
-| PUT | `/api/chats/{cid}/living_world` | `living_world_put()` | `app.py:4069` |
-| DELETE | `/api/chats/{cid}/lorebook` | `detach_lore()` | `app.py:2894` |
-| POST | `/api/chats/{cid}/lorebook` | `bind_lore()` | `app.py:2878` |
-| GET | `/api/chats/{cid}/lorebooks` | `chat_lorebooks_owned()` | `app.py:1852` |
-| POST | `/api/chats/{cid}/lorebooks` | `attach_lore()` | `app.py:2838` |
-| DELETE | `/api/chats/{cid}/lorebooks/{lid}` | `detach_book()` | `app.py:2863` |
-| GET | `/api/chats/{cid}/paradox_policy` | `paradox_policy_get()` | `app.py:4142` |
-| PUT | `/api/chats/{cid}/paradox_policy` | `paradox_policy_put()` | `app.py:4146` |
-| GET | `/api/chats/{cid}/persona_private_history` | `pph_get()` | `app.py:3882` |
-| PUT | `/api/chats/{cid}/persona_private_history` | `pph_put()` | `app.py:3895` |
-| GET | `/api/chats/{cid}/personas` | `chat_list_extra_personas()` | `app.py:3271` |
-| POST | `/api/chats/{cid}/personas` | `chat_add_persona()` | `app.py:3316` |
-| DELETE | `/api/chats/{cid}/personas/{pid}` | `chat_del_persona()` | `app.py:3340` |
-| PUT | `/api/chats/{cid}/personas/{pid}/station` | `chat_persona_station()` | `app.py:3281` |
-| GET | `/api/chats/{cid}/positions` | `chat_positions_get()` | `app.py:3683` |
-| GET | `/api/chats/{cid}/promises` | `get_promise_ledger()` | `app.py:3227` |
-| GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `app.py:3219` |
-| POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `app.py:3245` |
-| POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `app.py:3231` |
-| GET | `/api/chats/{cid}/style_guide` | `style_guide_get()` | `app.py:3965` |
-| PUT | `/api/chats/{cid}/style_guide` | `style_guide_put()` | `app.py:3971` |
-| GET | `/api/chats/{cid}/survival` | `survival_get()` | `app.py:3598` |
-| PUT | `/api/chats/{cid}/survival` | `survival_put()` | `app.py:3603` |
-| POST | `/api/chats/{cid}/turns` | `turn_new()` | `app.py:4400` |
-| POST | `/api/chats/{cid}/turns/{idx}/player_input` | `submit_extra_player_input()` | `app.py:3354` |
-| GET | `/api/chats/{cid}/vitals` | `chat_vitals_get()` | `app.py:3650` |
-| GET | `/api/chats/{cid}/world` | `world_get()` | `app.py:3900` |
-| PUT | `/api/chats/{cid}/world` | `world_put()` | `app.py:3904` |
-| GET | `/api/default_prompts` | `default_prompts()` | `app.py:1480` |
-| PUT | `/api/director_fanout_mode` | `set_director_fanout_mode()` | `app.py:1724` |
-| PUT | `/api/exemplars` | `put_exemplars()` | `app.py:1325` |
-| GET | `/api/extensions` | `extensions_list()` | `app.py:1559` |
-| POST | `/api/extensions/install` | `extension_install()` | `app.py:1574` |
-| GET | `/api/extensions/ui.css` | `extensions_ui_css()` | `app.py:1645` |
-| GET | `/api/extensions/ui.js` | `extensions_ui()` | `app.py:1636` |
-| GET | `/api/extensions/updates` | `extension_updates()` | `app.py:1595` |
-| DELETE | `/api/extensions/{eid}` | `extension_remove()` | `app.py:1616` |
-| GET | `/api/extensions/{eid}/asset/{path:path}` | `extension_asset()` | `app.py:1700` |
-| POST | `/api/extensions/{eid}/disable` | `extension_disable()` | `app.py:1624` |
-| POST | `/api/extensions/{eid}/enable` | `extension_enable()` | `app.py:1566` |
-| GET | `/api/extensions/{eid}/state` | `extension_state()` | `app.py:1629` |
-| GET | `/api/extensions/{eid}/ui.css` | `extension_ui_css_one()` | `app.py:1667` |
-| GET | `/api/extensions/{eid}/ui.js` | `extension_ui_one()` | `app.py:1655` |
-| POST | `/api/extensions/{eid}/update` | `extension_update()` | `app.py:1606` |
-| POST | `/api/guest/input` | `guest_input()` | `app.py:3506` |
-| GET | `/api/guest/state` | `guest_state()` | `app.py:3438` |
-| PUT | `/api/image_model` | `put_image_model()` | `app.py:1303` |
-| POST | `/api/join` | `join_with_code()` | `app.py:3420` |
-| GET | `/api/language-packs` | `language_packs_get()` | `app.py:2734` |
-| GET | `/api/language-packs/{language_id}/ui` | `language_pack_ui()` | `app.py:2751` |
-| DELETE | `/api/lore_entries/{eid}` | `lore_entry_delete()` | `app.py:2709` |
-| PUT | `/api/lore_entries/{eid}` | `lore_entry_edit()` | `app.py:2637` |
-| DELETE | `/api/lore_gen_jobs/{job_id}` | `lorebook_generate_discard()` | `app.py:2008` |
-| POST | `/api/lore_gen_jobs/{job_id}/resume` | `lorebook_generate_resume()` | `app.py:1990` |
-| DELETE | `/api/lorebook_links/{link_id}` | `lorebook_link_delete()` | `app.py:1948` |
-| PUT | `/api/lorebook_links/{link_id}` | `lorebook_link_update()` | `app.py:1934` |
-| POST | `/api/lorebooks` | `lore_create()` | `app.py:2466` |
-| POST | `/api/lorebooks/import` | `lore_import()` | `app.py:2044` |
-| DELETE | `/api/lorebooks/{lid}` | `lore_delete()` | `app.py:2558` |
-| GET | `/api/lorebooks/{lid}` | `lore_get()` | `app.py:2446` |
-| PUT | `/api/lorebooks/{lid}` | `lore_edit()` | `app.py:2488` |
-| POST | `/api/lorebooks/{lid}/apply_plan` | `lorebook_apply_plan()` | `app.py:2017` |
-| POST | `/api/lorebooks/{lid}/entries` | `lore_entry_create()` | `app.py:2608` |
-| GET | `/api/lorebooks/{lid}/export` | `lore_export()` | `app.py:2564` |
-| POST | `/api/lorebooks/{lid}/generate` | `lore_generate()` | `app.py:2594` |
-| GET | `/api/lorebooks/{lid}/generate_job` | `lorebook_generate_job()` | `app.py:1979` |
-| POST | `/api/lorebooks/{lid}/generate_plan` | `lorebook_generate_plan()` | `app.py:1953` |
-| GET | `/api/lorebooks/{lid}/links` | `lorebook_links_get()` | `app.py:1907` |
-| POST | `/api/lorebooks/{lid}/links` | `lorebook_link_create()` | `app.py:1912` |
-| POST | `/api/lorebooks/{lid}/move` | `lorebook_move()` | `app.py:1834` |
-| POST | `/api/lorebooks/{lid}/reinterpret` | `lore_reinterpret_route()` | `app.py:2581` |
-| POST | `/api/lorebooks/{lid}/reorder` | `lorebook_reorder()` | `app.py:1843` |
-| GET | `/api/maintenance/checkpoints` | `maintenance_checkpoints()` | `app.py:1790` |
-| POST | `/api/maintenance/checkpoints/compact` | `maintenance_compact()` | `app.py:1806` |
-| PUT | `/api/max_output_tokens` | `put_max_output_tokens()` | `app.py:1447` |
-| DELETE | `/api/memories/{mid}` | `mem_del()` | `app.py:4394` |
-| PUT | `/api/memories/{mid}` | `mem_edit()` | `app.py:4373` |
-| GET | `/api/memory/embeddings` | `memory_embeddings_status()` | `app.py:1276` |
-| POST | `/api/memory/embeddings/rebuild` | `memory_embeddings_rebuild()` | `app.py:1291` |
-| GET | `/api/nsfw` | `get_nsfw()` | `app.py:1715` |
-| PUT | `/api/nsfw` | `set_nsfw()` | `app.py:1719` |
-| GET | `/api/openrouter/endpoints` | `get_openrouter_endpoints()` | `app.py:1410` |
-| PUT | `/api/openrouter_routing` | `put_openrouter_routing()` | `app.py:1396` |
-| POST | `/api/personas` | `persona_create()` | `app.py:2388` |
-| POST | `/api/personas/generate` | `persona_generate()` | `app.py:2366` |
-| POST | `/api/personas/import` | `persona_import()` | `app.py:2408` |
-| DELETE | `/api/personas/{pid}` | `persona_del()` | `app.py:2440` |
-| PUT | `/api/personas/{pid}` | `persona_edit()` | `app.py:2431` |
-| GET | `/api/personas/{pid}/export` | `persona_export()` | `app.py:2422` |
-| POST | `/api/personas/{pid}/fill_appearance` | `persona_fill_appearance()` | `app.py:2337` |
-| PUT | `/api/prompt_presets` | `save_preset()` | `app.py:1491` |
-| POST | `/api/prompt_presets/import` | `import_preset()` | `app.py:1519` |
-| DELETE | `/api/prompt_presets/{name}` | `del_preset()` | `app.py:1533` |
-| GET | `/api/prompt_presets/{name}/export` | `export_preset()` | `app.py:1510` |
-| POST | `/api/providers` | `add_provider()` | `app.py:2100` |
-| DELETE | `/api/providers/{pid}` | `del_provider()` | `app.py:2179` |
-| PUT | `/api/providers/{pid}` | `put_provider()` | `app.py:2107` |
-| GET | `/api/providers/{pid}/image_models` | `image_models()` | `app.py:2191` |
-| GET | `/api/providers/{pid}/models` | `models()` | `app.py:2184` |
-| PUT | `/api/providers/{pid}/prompt_cache` | `put_provider_prompt_cache()` | `app.py:2134` |
-| PUT | `/api/reasoning_effort` | `put_reasoning_effort()` | `app.py:1422` |
-| POST | `/api/steps/{sid}/activate` | `step_activate()` | `app.py:5173` |
-| POST | `/api/steps/{sid}/edit` | `step_edit()` | `app.py:5163` |
-| POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `app.py:5116` |
-| DELETE | `/api/turns/{tid}` | `turn_del()` | `app.py:5186` |
-| GET | `/api/turns/{tid}/ambience` | `turn_ambience()` | `app.py:5445` |
-| POST | `/api/turns/{tid}/ambience` | `turn_ambience_resolve()` | `app.py:5462` |
-| GET | `/api/turns/{tid}/backdrop` | `turn_backdrop()` | `app.py:5267` |
-| POST | `/api/turns/{tid}/backdrop` | `turn_backdrop_generate()` | `app.py:5315` |
-| POST | `/api/turns/{tid}/branch` | `turn_branch()` | `app.py:4464` |
-| PUT | `/api/turns/{tid}/input` | `edit_input()` | `app.py:4866` |
-| GET | `/api/turns/{tid}/narration` | `turn_narration_variants()` | `app.py:4933` |
-| POST | `/api/turns/{tid}/narration` | `turn_narration_select()` | `app.py:4954` |
-| GET | `/api/turns/{tid}/pipeline` | `pipeline_get()` | `app.py:4978` |
-| PUT | `/api/turns/{tid}/prose` | `edit_prose()` | `app.py:4881` |
-| POST | `/api/turns/{tid}/reroll` | `turn_reroll()` | `app.py:5047` |
-| POST | `/api/turns/{tid}/rerun` | `turn_rerun()` | `app.py:5057` |
-| POST | `/api/turns/{tid}/resume` | `turn_resume()` | `app.py:5084` |
-| GET | `/api/ui` | `ui_catalog_get()` | `app.py:2741` |
-| PUT | `/api/ui-language` | `ui_language_put()` | `app.py:2763` |
-| GET | `/api/updates/check` | `updates_check()` | `app.py:1782` |
-| POST | `/api/updates/install` | `updates_install()` | `app.py:1786` |
-| GET | `/guest` | `guest_page()` | `app.py:370` |
-| GET | `/login` | `login_page()` | `app.py:382` |
+| GET | `/api/chats/{cid}/fixed_points` | `fixed_points_list()` | `app.py:4228` |
+| POST | `/api/chats/{cid}/fixed_points` | `fixed_points_create()` | `app.py:4238` |
+| DELETE | `/api/chats/{cid}/fixed_points/{anchor_id}` | `fixed_points_delete()` | `app.py:4260` |
+| GET | `/api/chats/{cid}/frames` | `frames_list()` | `app.py:4182` |
+| POST | `/api/chats/{cid}/frames` | `frames_create()` | `app.py:4186` |
+| GET | `/api/chats/{cid}/guest_invites` | `list_guest_invites()` | `app.py:3413` |
+| POST | `/api/chats/{cid}/guest_invites` | `create_guest_invite()` | `app.py:3395` |
+| DELETE | `/api/chats/{cid}/guest_invites/{gid}` | `revoke_guest_invite()` | `app.py:3417` |
+| GET | `/api/chats/{cid}/language` | `chat_language_get()` | `app.py:2777` |
+| PUT | `/api/chats/{cid}/language` | `chat_language_put()` | `app.py:2794` |
+| GET | `/api/chats/{cid}/living_world` | `living_world_get()` | `app.py:4049` |
+| PUT | `/api/chats/{cid}/living_world` | `living_world_put()` | `app.py:4072` |
+| DELETE | `/api/chats/{cid}/lorebook` | `detach_lore()` | `app.py:2897` |
+| POST | `/api/chats/{cid}/lorebook` | `bind_lore()` | `app.py:2881` |
+| GET | `/api/chats/{cid}/lorebooks` | `chat_lorebooks_owned()` | `app.py:1855` |
+| POST | `/api/chats/{cid}/lorebooks` | `attach_lore()` | `app.py:2841` |
+| DELETE | `/api/chats/{cid}/lorebooks/{lid}` | `detach_book()` | `app.py:2866` |
+| GET | `/api/chats/{cid}/paradox_policy` | `paradox_policy_get()` | `app.py:4213` |
+| PUT | `/api/chats/{cid}/paradox_policy` | `paradox_policy_put()` | `app.py:4217` |
+| GET | `/api/chats/{cid}/persona_private_history` | `pph_get()` | `app.py:3885` |
+| PUT | `/api/chats/{cid}/persona_private_history` | `pph_put()` | `app.py:3898` |
+| GET | `/api/chats/{cid}/personas` | `chat_list_extra_personas()` | `app.py:3274` |
+| POST | `/api/chats/{cid}/personas` | `chat_add_persona()` | `app.py:3319` |
+| DELETE | `/api/chats/{cid}/personas/{pid}` | `chat_del_persona()` | `app.py:3343` |
+| PUT | `/api/chats/{cid}/personas/{pid}/station` | `chat_persona_station()` | `app.py:3284` |
+| GET | `/api/chats/{cid}/player_authority` | `player_authority_get()` | `app.py:4145` |
+| PUT | `/api/chats/{cid}/player_authority` | `player_authority_put()` | `app.py:4160` |
+| GET | `/api/chats/{cid}/player_view` | `player_view_get()` | `app.py:4129` |
+| GET | `/api/chats/{cid}/positions` | `chat_positions_get()` | `app.py:3686` |
+| GET | `/api/chats/{cid}/promises` | `get_promise_ledger()` | `app.py:3230` |
+| GET | `/api/chats/{cid}/promotable` | `list_promotable_presences()` | `app.py:3222` |
+| POST | `/api/chats/{cid}/promotions/confirm` | `confirm_promotion()` | `app.py:3248` |
+| POST | `/api/chats/{cid}/promotions/draft` | `draft_promotion()` | `app.py:3234` |
+| GET | `/api/chats/{cid}/story_view` | `story_view_get()` | `app.py:4114` |
+| GET | `/api/chats/{cid}/style_guide` | `style_guide_get()` | `app.py:3968` |
+| PUT | `/api/chats/{cid}/style_guide` | `style_guide_put()` | `app.py:3974` |
+| GET | `/api/chats/{cid}/survival` | `survival_get()` | `app.py:3601` |
+| PUT | `/api/chats/{cid}/survival` | `survival_put()` | `app.py:3606` |
+| POST | `/api/chats/{cid}/turns` | `turn_new()` | `app.py:4471` |
+| POST | `/api/chats/{cid}/turns/{idx}/player_input` | `submit_extra_player_input()` | `app.py:3357` |
+| GET | `/api/chats/{cid}/viewers` | `viewers_get()` | `app.py:4139` |
+| GET | `/api/chats/{cid}/vitals` | `chat_vitals_get()` | `app.py:3653` |
+| GET | `/api/chats/{cid}/world` | `world_get()` | `app.py:3903` |
+| PUT | `/api/chats/{cid}/world` | `world_put()` | `app.py:3907` |
+| GET | `/api/default_prompts` | `default_prompts()` | `app.py:1483` |
+| PUT | `/api/director_fanout_mode` | `set_director_fanout_mode()` | `app.py:1727` |
+| PUT | `/api/exemplars` | `put_exemplars()` | `app.py:1328` |
+| GET | `/api/extensions` | `extensions_list()` | `app.py:1562` |
+| POST | `/api/extensions/install` | `extension_install()` | `app.py:1577` |
+| GET | `/api/extensions/ui.css` | `extensions_ui_css()` | `app.py:1648` |
+| GET | `/api/extensions/ui.js` | `extensions_ui()` | `app.py:1639` |
+| GET | `/api/extensions/updates` | `extension_updates()` | `app.py:1598` |
+| DELETE | `/api/extensions/{eid}` | `extension_remove()` | `app.py:1619` |
+| GET | `/api/extensions/{eid}/asset/{path:path}` | `extension_asset()` | `app.py:1703` |
+| POST | `/api/extensions/{eid}/disable` | `extension_disable()` | `app.py:1627` |
+| POST | `/api/extensions/{eid}/enable` | `extension_enable()` | `app.py:1569` |
+| GET | `/api/extensions/{eid}/state` | `extension_state()` | `app.py:1632` |
+| GET | `/api/extensions/{eid}/ui.css` | `extension_ui_css_one()` | `app.py:1670` |
+| GET | `/api/extensions/{eid}/ui.js` | `extension_ui_one()` | `app.py:1658` |
+| POST | `/api/extensions/{eid}/update` | `extension_update()` | `app.py:1609` |
+| POST | `/api/guest/input` | `guest_input()` | `app.py:3509` |
+| GET | `/api/guest/state` | `guest_state()` | `app.py:3441` |
+| PUT | `/api/image_model` | `put_image_model()` | `app.py:1306` |
+| POST | `/api/join` | `join_with_code()` | `app.py:3423` |
+| GET | `/api/language-packs` | `language_packs_get()` | `app.py:2737` |
+| GET | `/api/language-packs/{language_id}/ui` | `language_pack_ui()` | `app.py:2754` |
+| DELETE | `/api/lore_entries/{eid}` | `lore_entry_delete()` | `app.py:2712` |
+| PUT | `/api/lore_entries/{eid}` | `lore_entry_edit()` | `app.py:2640` |
+| DELETE | `/api/lore_gen_jobs/{job_id}` | `lorebook_generate_discard()` | `app.py:2011` |
+| POST | `/api/lore_gen_jobs/{job_id}/resume` | `lorebook_generate_resume()` | `app.py:1993` |
+| DELETE | `/api/lorebook_links/{link_id}` | `lorebook_link_delete()` | `app.py:1951` |
+| PUT | `/api/lorebook_links/{link_id}` | `lorebook_link_update()` | `app.py:1937` |
+| POST | `/api/lorebooks` | `lore_create()` | `app.py:2469` |
+| POST | `/api/lorebooks/import` | `lore_import()` | `app.py:2047` |
+| DELETE | `/api/lorebooks/{lid}` | `lore_delete()` | `app.py:2561` |
+| GET | `/api/lorebooks/{lid}` | `lore_get()` | `app.py:2449` |
+| PUT | `/api/lorebooks/{lid}` | `lore_edit()` | `app.py:2491` |
+| POST | `/api/lorebooks/{lid}/apply_plan` | `lorebook_apply_plan()` | `app.py:2020` |
+| POST | `/api/lorebooks/{lid}/entries` | `lore_entry_create()` | `app.py:2611` |
+| GET | `/api/lorebooks/{lid}/export` | `lore_export()` | `app.py:2567` |
+| POST | `/api/lorebooks/{lid}/generate` | `lore_generate()` | `app.py:2597` |
+| GET | `/api/lorebooks/{lid}/generate_job` | `lorebook_generate_job()` | `app.py:1982` |
+| POST | `/api/lorebooks/{lid}/generate_plan` | `lorebook_generate_plan()` | `app.py:1956` |
+| GET | `/api/lorebooks/{lid}/links` | `lorebook_links_get()` | `app.py:1910` |
+| POST | `/api/lorebooks/{lid}/links` | `lorebook_link_create()` | `app.py:1915` |
+| POST | `/api/lorebooks/{lid}/move` | `lorebook_move()` | `app.py:1837` |
+| POST | `/api/lorebooks/{lid}/reinterpret` | `lore_reinterpret_route()` | `app.py:2584` |
+| POST | `/api/lorebooks/{lid}/reorder` | `lorebook_reorder()` | `app.py:1846` |
+| GET | `/api/maintenance/checkpoints` | `maintenance_checkpoints()` | `app.py:1793` |
+| POST | `/api/maintenance/checkpoints/compact` | `maintenance_compact()` | `app.py:1809` |
+| PUT | `/api/max_output_tokens` | `put_max_output_tokens()` | `app.py:1450` |
+| DELETE | `/api/memories/{mid}` | `mem_del()` | `app.py:4465` |
+| PUT | `/api/memories/{mid}` | `mem_edit()` | `app.py:4444` |
+| GET | `/api/memory/embeddings` | `memory_embeddings_status()` | `app.py:1279` |
+| POST | `/api/memory/embeddings/rebuild` | `memory_embeddings_rebuild()` | `app.py:1294` |
+| GET | `/api/nsfw` | `get_nsfw()` | `app.py:1718` |
+| PUT | `/api/nsfw` | `set_nsfw()` | `app.py:1722` |
+| GET | `/api/openrouter/endpoints` | `get_openrouter_endpoints()` | `app.py:1413` |
+| PUT | `/api/openrouter_routing` | `put_openrouter_routing()` | `app.py:1399` |
+| POST | `/api/personas` | `persona_create()` | `app.py:2391` |
+| POST | `/api/personas/generate` | `persona_generate()` | `app.py:2369` |
+| POST | `/api/personas/import` | `persona_import()` | `app.py:2411` |
+| DELETE | `/api/personas/{pid}` | `persona_del()` | `app.py:2443` |
+| PUT | `/api/personas/{pid}` | `persona_edit()` | `app.py:2434` |
+| GET | `/api/personas/{pid}/export` | `persona_export()` | `app.py:2425` |
+| POST | `/api/personas/{pid}/fill_appearance` | `persona_fill_appearance()` | `app.py:2340` |
+| PUT | `/api/prompt_presets` | `save_preset()` | `app.py:1494` |
+| POST | `/api/prompt_presets/import` | `import_preset()` | `app.py:1522` |
+| DELETE | `/api/prompt_presets/{name}` | `del_preset()` | `app.py:1536` |
+| GET | `/api/prompt_presets/{name}/export` | `export_preset()` | `app.py:1513` |
+| POST | `/api/providers` | `add_provider()` | `app.py:2103` |
+| DELETE | `/api/providers/{pid}` | `del_provider()` | `app.py:2182` |
+| PUT | `/api/providers/{pid}` | `put_provider()` | `app.py:2110` |
+| GET | `/api/providers/{pid}/image_models` | `image_models()` | `app.py:2194` |
+| GET | `/api/providers/{pid}/models` | `models()` | `app.py:2187` |
+| PUT | `/api/providers/{pid}/prompt_cache` | `put_provider_prompt_cache()` | `app.py:2137` |
+| PUT | `/api/reasoning_effort` | `put_reasoning_effort()` | `app.py:1425` |
+| POST | `/api/steps/{sid}/activate` | `step_activate()` | `app.py:5244` |
+| POST | `/api/steps/{sid}/edit` | `step_edit()` | `app.py:5234` |
+| POST | `/api/steps/{sid}/reroll` | `step_reroll()` | `app.py:5187` |
+| DELETE | `/api/turns/{tid}` | `turn_del()` | `app.py:5257` |
+| GET | `/api/turns/{tid}/ambience` | `turn_ambience()` | `app.py:5516` |
+| POST | `/api/turns/{tid}/ambience` | `turn_ambience_resolve()` | `app.py:5533` |
+| GET | `/api/turns/{tid}/backdrop` | `turn_backdrop()` | `app.py:5338` |
+| POST | `/api/turns/{tid}/backdrop` | `turn_backdrop_generate()` | `app.py:5386` |
+| POST | `/api/turns/{tid}/branch` | `turn_branch()` | `app.py:4535` |
+| PUT | `/api/turns/{tid}/input` | `edit_input()` | `app.py:4937` |
+| GET | `/api/turns/{tid}/narration` | `turn_narration_variants()` | `app.py:5004` |
+| POST | `/api/turns/{tid}/narration` | `turn_narration_select()` | `app.py:5025` |
+| GET | `/api/turns/{tid}/pipeline` | `pipeline_get()` | `app.py:5049` |
+| PUT | `/api/turns/{tid}/prose` | `edit_prose()` | `app.py:4952` |
+| POST | `/api/turns/{tid}/reroll` | `turn_reroll()` | `app.py:5118` |
+| POST | `/api/turns/{tid}/rerun` | `turn_rerun()` | `app.py:5128` |
+| POST | `/api/turns/{tid}/resume` | `turn_resume()` | `app.py:5155` |
+| GET | `/api/ui` | `ui_catalog_get()` | `app.py:2744` |
+| PUT | `/api/ui-language` | `ui_language_put()` | `app.py:2766` |
+| GET | `/api/updates/check` | `updates_check()` | `app.py:1785` |
+| POST | `/api/updates/install` | `updates_install()` | `app.py:1789` |
+| GET | `/guest` | `guest_page()` | `app.py:373` |
+| GET | `/login` | `login_page()` | `app.py:385` |
 
 ## Database tables
 

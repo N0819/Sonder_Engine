@@ -339,6 +339,80 @@ of defect that takes fifty beats to notice.
 
 ---
 
+## 7b. The fourth batch: what a campaign layer needs that a mod does not
+
+Written after Directive's author built against 9.2 and produced a gap report
+(`DIRECTIVE_GAP_REPORT.md`; the measurement and the two premises it got wrong
+are in [`DIRECTIVE_HOST_SURFACE.md`](DIRECTIVE_HOST_SURFACE.md) §9). Four
+surfaces landed. The interesting thing is what the four have in common, which
+is not "more access".
+
+**Every earlier seam let an extension participate in a turn. These let it own a
+STORY.** A mod runs inside somebody else's game. A campaign layer supplies the
+game: it starts the story, holds rules that outlive any beat, has to see the
+world between beats to decide anything, and has to show a person only what that
+person has. Those are four different verbs, and the batch is one surface each.
+
+**Ordering the routing seams by consequence was the design decision.** There are
+now three, and they are not variations on a theme:
+
+| Seam | Changes | If it carries too much |
+|---|---|---|
+| `on_character_payload` | what one mind believes | a mind acts wrongly, in fiction, recoverably |
+| `on_narration_payload` | what the reader is told | already said; cannot be taken back |
+| `on_director_payload` | what the engine believes happened | propagates into state, perception and memory, for the rest of the story |
+
+Each row is strictly worse than the one above it, and the Director row is worse
+in kind rather than degree: the other two are wrong *about* the world, and this
+one is wrong *in* it. That is the argument for the phase split
+(`establish`/`interpret`/`resolve`) being mandatory rather than a convenience —
+interpret reads what the player declared and resolve decides what it achieved,
+and an author who cannot tell those apart writes an interpretive constraint that
+silently vetoes outcomes. It is also why the block arrives ATTRIBUTED and
+alongside every other extension's, rather than named in the prompt as
+authority: the report's own safeguard list asked that an extension not be able
+to impersonate an engine-owned instruction, and the way to honour that is to
+give it the same standing as every other contributor rather than to trust it
+less.
+
+**The projection is the first surface where the §1 ruling has an exception, and
+the exception proves it.** §1 says the firewall is for minds, not developers,
+and `story_view` is flatly canonical on that basis. `player_view` is not — but
+not because an extension is untrusted. It is because the extension asked for
+"what does this person have", and that question has exactly one correct answer
+in this engine, held by `agents/perception.py`. The temptation was to compute it
+here from the objective scene. That would be a second implementation, agreeing
+with the first on the day it was written and drifting silently forever after —
+and silently is precise: a projection is never narrated, so no reader would ever
+encounter the leak. So the projection **returns what was already delivered**:
+the perception stage's own view and observations, the viewer's own memories and
+relationships, the identity ledger's own answer about who they can name. It
+decides nothing. It is a different kind of guard from the rest of this engine's
+— not a subtraction, but a refusal to compute.
+
+Its second property is `absent means absent`. A field it cannot answer is
+missing rather than `null`, defaulted, or deduced. A UI renders a guess and a
+fact identically, and the report was right to make this an absolute rather than
+a preference.
+
+**Provisioning was answered by refusing to build it.** The report asked for a
+declarative campaign package. It got the chat archive, because the list a
+campaign needs to be coherent from turn one — story, persona, cast with stable
+ids, rooms, portals, positions, scene, clock, lore on both sides of the
+firewall, relationships — is the same list a branch and a restore already have
+to get right, atomically. A second importer is a second copy of those bugs. What
+was genuinely missing was one thing an archive cannot do: seed the extension's
+own namespaced state inside the SAME transaction, so a story cannot exist with
+no campaign attached and still look playable in the list.
+
+**And the fifth gap was not an extension surface at all.** Hard mode
+(`PlayerAuthorityMode`) had sat in `UNBUILT.md` §2.4 as this engine's own
+long-standing debt, and an outside integrator hit it from the other direction
+and asked for it as a host requirement. That is worth recording as a fact about
+extension work: the surfaces a third party needs are a reasonable proxy for the
+features the engine was already missing, because a third party has no way to
+route around them.
+
 ## 8. What is left
 
 In [`UNBUILT.md`](../UNBUILT.md) §6.2, which is the status list. In short:
@@ -346,4 +420,12 @@ declarative advisor stages; the two admission-side routing hooks (`on_admission`
 `on_view`); a prose-author chunk registry so an extension specialist's channel can
 be narrated (§7a); the `--extension` self-check CLI; the scoped-client work that
 would make third-party frontends real for non-host players; and phase 2's
-registry.
+registry. From the fourth batch (§7b): a notification surface, a settings-section
+mount point, extension-declared model lanes, document storage, and the browser
+chat lifecycle as a declared contract — none of which blocked a first campaign
+integration, on the integrator's own assessment.
+
+What is not a surface and is the next real piece of work: a REFERENCE CAMPAIGN.
+One room change, two characters, one secret, one gated objective and one
+forbidden invented player line exercises all four new contracts plus hard mode
+end to end, and nothing in this tree currently does.

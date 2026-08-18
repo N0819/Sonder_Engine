@@ -1,9 +1,11 @@
 # Hosting a Directive-class extension — design note
 
-Status: **all three named blockers are built.** Written 2026-08-17 against
+Status: **all three named blockers are built, and so are the five gaps the
+report that followed them named** (§9). Written 2026-08-17 against
 [Directive](https://github.com/MentallyQuill/Directive) at `0.1.0-pre-alpha.1`
 and Sonder `main` at 4f33b17; §§3–5 were a study, and the sections marked
-**Built** below landed in the same branch.
+**Built** below landed in the same branch. §9 answers `DIRECTIVE_GAP_REPORT.md`,
+written against 9.2 by Directive's author after building on this tree.
 
 | Blocker | State |
 |---|---|
@@ -12,6 +14,7 @@ and Sonder `main` at 4f33b17; §§3–5 were a study, and the sections marked
 | §5 ES modules | **Built** — `capabilities.ui.module`; `tests/test_extension_modules.py` |
 | §3 prose author | Not built, and deliberately so — see the section |
 | §6 secondary gaps | Not built; registered in [`UNBUILT.md`](../UNBUILT.md) §6.2 |
+| §9 the five gap-report gaps | **Built** — `api.director_context`/`on_director_payload`, `api.story_view`, `api.player_view`, `api.provision_story`, and hard mode (`PlayerAuthorityMode`, enforced) |
 
 What an author needs is [`docs/guides/EXTENSIONS.md`](../guides/EXTENSIONS.md)
 §4, §7.1 and §7.5. This file keeps the measurement and the reasoning.
@@ -327,3 +330,105 @@ update / clear / rebuild / inspect are that block's `set` / `set` / `clear` /
 for it. `ui.mount` maps onto `registerView`. `events` maps onto the five
 `turn:*` stream events. `storage` and `chat` are the two that will bite, and
 both are in §6 rather than in the tree.
+
+---
+
+## 9. The gap report, and the five that answered it
+
+Written 2026-08-17 against alpha 9.2 by Directive's author, after reading this
+tree rather than guessing at it (`DIRECTIVE_GAP_REPORT.md`). Its framing is
+right and worth adopting: **replacement-first, not migration**. Sonder keeps
+world state, time, minds, memory, perception, model access, narration, commits,
+checkpoints, branches and extension lifecycle; Directive becomes a campaign
+layer with authored missions, deterministic mission rules, player-safe views and
+its own interface. Nothing about that requires Sonder to learn what a starship
+is.
+
+Five gaps were named. All five are now built. Two of the report's premises were
+wrong in ways worth recording, because both errors are the same error.
+
+### What the report got right
+
+Four of the five were straightforwardly absent, and each is a real hole rather
+than a preference:
+
+| Gap | Built as |
+|---|---|
+| Director context injection | `api.director_context` (per phase) + `api.on_director_payload` |
+| Read-only canonical story view | `story_view.py` → `api.story_view`, `GET /api/chats/{id}/story_view` |
+| Player-safe projection | `api.player_view`, `api.viewers` |
+| Campaign provisioning | `api.provision_story` over the chat-archive importer |
+
+The ordering it recommended was also right, and for the reason it gave: player
+authority first, because every later integration test is otherwise validating
+against canon that may contain invented player acts.
+
+### Gap 5's premise was wrong, and instructively
+
+The report says Sonder "declares player-authority modes but does not enforce
+them", citing this repository's own unbuilt register. The register is accurate
+about the **enum** and it is not the whole picture, because the enforcement was
+built under other names and never collected under that one:
+
+- `_check_player_act_authority` — physical acts a resolve gives the player that
+  they did not declare;
+- `_check_player_interiority_authority` — what the resolve says the player
+  FEELS;
+- `_check_character_act_authority`, `_check_character_speech_authority`,
+  `_check_prose_quote_authority` — the same boundary from the cast's side;
+- all five behind ONE correction retry in `director_resolve`, kept only if it
+  reduces the total violation count — which is precisely the
+  "validator-and-retry, prompt text alone is not acceptable" mechanism the
+  report asks for;
+- `_scrub_undeclared_player_speech` at the perception layer, and
+  `_check_player_interiority_prose` + `_check_player_person` among the
+  narrator's enforceable fidelity prefixes.
+
+So the engine already refused to invent player conduct. What it had no switch
+for was the **other** direction: Sonder's default is `world_author`, where a
+player's asserted effect is *non-rejectable* — `_player_claim_findings` raises a
+contract violation when a resolve marks one rejected. Directive wants
+`actor_only`, which is that rule inverted. Hard mode is therefore not "add
+enforcement to an unenforced engine"; it is "let the story choose which
+direction the existing enforcement points". Built as §2.4 of `UNBUILT.md`
+specified it, default unchanged.
+
+### Gap 2's premise was the same error, from the other side
+
+The report is careful to frame the canonical facade as needing to avoid "arbitrary
+minds" and "hidden reasoning", and treats objective truth as something to be
+justified. It does not need justifying. The firewall constrains what reaches a
+fictional MIND; a campaign layer is not one, any more than the pipeline
+inspector or `make map` is. That ruling predates the report
+(`EXTENSIONS_DESIGN.md` §1) and is why `story_view` is simply canonical.
+
+The instructive part is that both misreadings run the same way: an outside
+reader sees "information firewall" and infers a general restriction on
+observation. It is worth saying plainly in the guide, and §8 of
+`docs/guides/EXTENSIONS.md` now does.
+
+### What was deliberately not built from it
+
+- **A declarative campaign-package format.** The report asks for "a declarative
+  package or a sequence of supported builder calls". It gets the chat archive,
+  which is already atomic, validated, id-remapping, and exercised on every
+  branch and every restore. A second importer would be a second copy of the bugs
+  the first one has already had. Directive-specific package translation stays
+  inside Directive, exactly as the report proposes.
+- **A prompt clause telling the Director to honour extension context.** The
+  block rides in `payload["extension_context"]`, attributed, alongside every
+  other extension's — the same shape the narration seam ships. Naming it in the
+  prompt as authoritative would violate the report's own safeguard that an
+  extension must not be able to impersonate an engine-owned instruction.
+- **§6's secondary list**, unchanged: notification surface, settings mount
+  point, extension-declared model lanes, document storage, the chat lifecycle as
+  a declared contract. The report agrees none of them blocks a first
+  integration.
+
+### The vertical slice
+
+The report's §5 defines "the gaps are closed" as ten steps ending in a
+checkpointed, branchable campaign. Steps 1–4 and 7–10 are now reachable through
+public API only. What is not yet proven is the whole thing running end to end,
+because that needs a reference campaign to exist — the report's step 5, and the
+right next piece of work on this side.

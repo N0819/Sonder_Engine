@@ -54,6 +54,7 @@ from scene import (
     get_scene,
     is_player_speaker,
     persona_of,
+    player_authority,
     sanitize_attire_items,
     senses_of,
     sheet_state,
@@ -96,6 +97,7 @@ from .common import (
     _dict,
     _dict_list,
     _extract_authority_claims,
+    apply_player_authority,
     _list,
     _normalize_scene_patch,
     _check_character_act_authority,
@@ -617,6 +619,23 @@ def _opening_pose_snapshots(out):
     return poses
 
 
+def _extension_director_payload(ctx, payload, *, phase):
+    """Hand an assembled Director payload to installed extensions, or leave it.
+
+    Lazy-imported and total, the same discipline as the character and narration
+    routing seams and for the same reason: this runs inside the turn's wall
+    clock, so a broken extension must cost the beat nothing. With nothing
+    installed -- the overwhelmingly common case -- this is one attribute lookup.
+    """
+    try:
+        import extension_runtime
+
+        return extension_runtime.dispatch_director_payload(
+            ctx, payload, phase=phase)
+    except Exception:
+        return payload
+
+
 def director_establish(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
@@ -655,6 +674,8 @@ def director_establish(ctx, nonce):
         "player_seed": ctx.get("input") or "",
         "variant_seed": nonce,
     }
+
+    payload = _extension_director_payload(ctx, payload, phase="establish")
 
     out = _agent_json(
         "director",
@@ -942,6 +963,8 @@ def director_interpret(ctx, nonce):
     # assembly, pure output-token latency). One read of the setting serves
     # the prompt and the dispatch below, so they cannot disagree about
     # which path this beat is on.
+    payload = _extension_director_payload(ctx, payload, phase="interpret")
+
     out = _agent_json(
         "director",
         "director_interpret",
@@ -1173,6 +1196,38 @@ def director_interpret(ctx, nonce):
         out.get("sequence"), ctx.input,
         actor_name=(pers.get("name") or persona_name(pers)),
         target_forms=target_forms)
+
+    # PLAYER AUTHORITY MODE, enforced (`Design.md` § Hard mode; UNBUILT §2.4).
+    # `schemas.PlayerAuthorityMode` named the ladder when the vocabulary was
+    # written and was consumed nowhere -- this is the consumer. It runs HERE,
+    # after extraction, because this is the one point where both
+    # representations of the same declaration are on the table: the sequence
+    # element the beat is resolved from, and the claim the resolve seam holds
+    # the diff to. See `apply_player_authority` for why moving one without the
+    # other makes a downgrade invisible.
+    #
+    # `world_author` is the default and grants everything, so an existing story
+    # is byte-identical under it and this costs one dict lookup on every beat
+    # nobody has changed the dial for.
+    _authority_mode = player_authority(chat["id"])["mode"]
+    _downgrades = apply_player_authority(out, _authority_mode, p_name)
+    if _downgrades:
+        # A REFUSED ASSERTION MUST NOT SILENTLY VANISH. The player wrote it for
+        # a reason, and dropping their text is the one thing this engine's
+        # authority contract has never done. Two surfaces, and deliberately not
+        # three: the step record says what the mode moved, and the resolve
+        # payload carries `downgraded_assertions` so the Director can answer it
+        # in THIS beat -- resolve the declaration as the attempt it now is, or
+        # refuse it visibly in the prose where the player can see the refusal.
+        #
+        # `tell_director` is not the third, though it looks like the natural
+        # channel. It lands in `engine_notices` at COMMIT and reaches the NEXT
+        # beat, which is a beat too late for the player reading this one -- and
+        # under a restricted mode it would repeat, every beat, as past-tense
+        # feedback about a beat already resolved.
+        out["authority_downgrades"] = _downgrades
+        out["authority_mode"] = _authority_mode
+        _sync_sequence_mirrors(out)
 
     # Detect contested actions
     seq = out.get("sequence")
@@ -6653,6 +6708,20 @@ def director_resolve(ctx, nonce):
             "contact_assertions": onset_contacts,
             "abilities": persona_abilities(pers),
             "authority_claims": (interp.get("flow") or {}).get("authority_claims") or [],
+            # PLAYER AUTHORITY MODE. `ABSOLUTE` above is unchanged by it and
+            # always will be: what the player SAID and ATTEMPTED is fixed in
+            # every mode, and no mode has ever let this stage rewrite it. What
+            # a restricted mode moves is the part of a declaration that
+            # asserted an OUTCOME -- those arrive here already downgraded to
+            # contestable intents, so the ordinary machinery adjudicates them
+            # with no special case.
+            #
+            # The list is here so the downgrade can be ANSWERED in the same
+            # beat. `tell_director` reaches the next one, which is a beat too
+            # late for the player who is reading this one.
+            **({"authority_mode": interp.get("authority_mode"),
+                "downgraded_assertions": interp.get("authority_downgrades")}
+               if interp.get("authority_downgrades") else {}),
         },
         "other_players_declarations": [
             {
@@ -6779,6 +6848,12 @@ def director_resolve(ctx, nonce):
         _prose_scope = _prose_author_scope(
             ctx, sc, payload, _orch_facts, p_name)
     _resolve_prompt = prose_author_prompt(_prose_scope, ctx.language)
+
+    # AFTER the prose-author scope is computed, deliberately: which conditional
+    # duty blocks this beat can have work for is an engine judgement about the
+    # beat, and an extension that could widen it would be buying prompt chunks
+    # rather than contributing context. The retries below inherit this payload.
+    payload = _extension_director_payload(ctx, payload, phase="resolve")
 
     out = _agent_json(
         "director",

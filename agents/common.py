@@ -31,7 +31,8 @@ from llm_quality import complete_validated_json
 from memory import chat_lorebook_ids, chat_lorebook_weights
 from providers import chat_complete
 from prompts import get_prompt
-from scene import get_scene, persona_of, sheet_state, NON_AWAKE_GATED
+from scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
+                   PLAYER_AUTHORITY_GRANTS)
 from schemas import normalize_speech_volume
 from spatial import (
     _body_interior_holder,
@@ -3583,6 +3584,80 @@ def _undeclared_world_object(clause, declared_low):
             continue
         return noun
     return None
+
+
+def _claim_authority_kind(claim, player_name):
+    """Which grant a claim needs. `None` for a claim no mode restricts."""
+    if str(claim.get("scope") or "") != "effect":
+        return None          # a contestable intent is already the Director's
+    subject = str(claim.get("subject_id") or "").strip()
+    player = str(player_name or "").strip()
+    if player and subject.casefold() == player.casefold():
+        return "own_body"
+    if str(claim.get("claim_id") or "").endswith(":event"):
+        return "world"
+    return "own_effect"
+
+
+def apply_player_authority(out, mode, player_name=None):
+    """Enforce a `PlayerAuthorityMode` on one interpreted beat, in place.
+
+    The enum has existed since the vocabulary was written and was consumed
+    nowhere; this is the consumer. It runs on the interpret output AFTER claim
+    extraction, which is the only place both representations of the same
+    declaration are on the table at once -- the sequence element the beat is
+    resolved from, and the claim the resolve seam holds the diff to. Touching
+    one and not the other is how a downgrade becomes invisible: the claim stops
+    being non-rejectable while the element still says the effect already
+    happened, and the Director reads the element.
+
+    Two things move, and both must:
+
+      * the CLAIM's scope, `effect` -> `intent`, which is what
+        `_player_claim_findings` reads to decide a claim may not be rejected;
+      * the sequence element's `commitment`, `asserted` -> `contestable`, which
+        is what the reaction gate reads to decide whether the character this
+        was done to gets to contest it physically. Hard mode without this is
+        hard mode the cast cannot participate in.
+
+    Nothing is deleted and nothing is rewritten. A downgraded declaration is
+    still the player's words, still resolved, still narrated -- it is merely no
+    longer true in advance. Returns the record of what moved, which the caller
+    puts in front of the Director and on the step, so a refusal is answerable
+    rather than silent.
+    """
+    mode = str(mode or "world_author")
+    granted = PLAYER_AUTHORITY_GRANTS.get(
+        mode, PLAYER_AUTHORITY_GRANTS["world_author"])
+    if not isinstance(out, dict):
+        return []
+    flow = out.get("flow")
+    claims = _dict_list(flow.get("authority_claims")) if isinstance(
+        flow, dict) else []
+    records = []
+    downgraded_elements = set()
+    for claim in claims:
+        kind = _claim_authority_kind(claim, player_name)
+        if kind is None or kind in granted:
+            continue
+        claim["scope"] = "intent"
+        records.append({
+            "claim_id": claim.get("claim_id"),
+            "kind": kind,
+            "mode": mode,
+            "predicate": str(claim.get("predicate") or ""),
+            "source_text": str(claim.get("source_text") or ""),
+        })
+        # `claim:<index>:...` -- the sequence position the claim came from.
+        parts = str(claim.get("claim_id") or "").split(":")
+        if len(parts) >= 2 and parts[1].isdigit():
+            downgraded_elements.add(int(parts[1]))
+    for index, element in enumerate(_dict_list(out.get("sequence"))):
+        if index not in downgraded_elements:
+            continue
+        if element.get("commitment") == "asserted":
+            element["commitment"] = "contestable"
+    return records
 
 
 def _check_player_act_authority(resolved_event, declared_actions, player_name,

@@ -2397,32 +2397,6 @@ pass. The opt-in v3 gap-filler mitigates sparse old cards but does not remove th
 value of a better deterministic first pass.
 `importers.character_import_warnings` exists but fires only on the import path.
 
-### 2.4 Hard mode — enforce `PlayerAuthorityMode`
-
-The most interesting item on the list: it is the one that lets the engine's
-original thesis be played *as written* without taking the dial away from anyone
-who prefers otherwise.
-
-`schemas.PlayerAuthorityMode` exists as an enum and is **consumed nowhere** —
-verified, one site in the whole tree. Wire it: per-chat setting, adjudication of
-assertions in `director_interpret`, and a refusal path.
-
-| Mode | The player controls |
-|---|---|
-| `actor_only` | The protagonist's attempts, speech, and immediate bodily conduct. Assertions become *claims* the director adjudicates and may refuse |
-| `explicit_outcomes` | The above, plus declared completed effects on the protagonist's own actions |
-| `world_author` | The above, plus external events, entities, time, and world assertions (**today's behaviour**) |
-
-Two design notes to settle before building:
-
-1. **A refused assertion must not silently vanish.** The player wrote it for a
-   reason. The honest behaviours are to translate it into an attempt ("you reach
-   for the key") or to surface the refusal explicitly. Silently dropping player
-   text is the one thing the engine's authority contract has never done, and hard
-   mode must not become the exception.
-2. **Mode is per-chat, not global**, and a mid-story change should be recorded,
-   since it changes what earlier turns meant.
-
 ### 2.5 Complete automatic canon lock
 
 Age-based locking is built (`commit.py` locks chat-canon entries older than 20
@@ -3721,6 +3695,37 @@ reference extension. Developer documentation:
 
 The tier ladder (Tier 0–3, story packs as rung 1) was **abandoned**, not
 deferred — design note §2 records why. Do not treat its absence as debt.
+
+A FOURTH batch closed the five gaps Directive's author named after building
+against 9.2 (`docs/design/DIRECTIVE_HOST_SURFACE.md` §8, from
+`DIRECTIVE_GAP_REPORT.md`). Four were extension surfaces and the fifth was a
+Sonder feature the report arrived at from outside — hard mode, §2.4 of this file
+until it landed:
+
+- **Director context injection** — `api.director_context(chat_id)` per phase
+  (`establish`/`interpret`/`resolve`) and `api.on_director_payload`. The
+  narration seam colours a verdict already reached; this shapes the decision,
+  which is the one of the three routing seams that propagates into state,
+  perception and memory. Once per beat, so the resolve's own retries answer the
+  same context. `tests/test_extension_director_context.py`.
+- **A read-only canonical story facade** — `story_view.py`, reached as
+  `api.story_view` and `GET /api/chats/{id}/story_view`. Versioned, plain
+  values, no engine import and no database handle.
+- **The player-safe projection of it** — `api.player_view`, built entirely from
+  what the engine ALREADY DELIVERED to that viewer, so there is no second
+  implementation of the firewall to drift from the first. Omits rather than
+  defaults. `tests/test_story_view.py`.
+- **Atomic campaign provisioning** — `api.provision_story` over the existing
+  chat-archive importer, seeding the extension's namespaced state inside the
+  same transaction and recording package provenance.
+  `tests/test_extension_provisioning.py`.
+
+Deliberately NOT built from that report: a second scenario-package format (the
+chat archive is already atomic, validated, id-remapping and exercised by branch
+and restore), and a prompt clause telling the Director to obey extension
+context — the block arrives attributed, alongside every other extension's, and
+the report's own safeguard list asks that an extension not be able to
+impersonate an engine-owned instruction.
 
 A third batch closed what a TOTAL-CONVERSION extension needs, measured against
 Directive (`docs/design/DIRECTIVE_HOST_SURFACE.md`): ES module entries
