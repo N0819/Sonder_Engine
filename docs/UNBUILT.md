@@ -3739,6 +3739,26 @@ Fixed by registering the extension directory as a package (relative imports,
 sibling `db.py` would shadow the engine's and two extensions' `helper.py` would
 collide. `tests/test_campaign_slice.py` covers the fix and the slice together.
 
+A FIFTH batch answers `docs/design/DIRECTIVE_REMAINING_GAPS.md`, written
+against 9.3 after the four surfaces above were built and used:
+
+- **An extension can refuse a Director result** — `api.on_director_result` +
+  `api.correction`. `director_context` is model input and guides a decision
+  without guaranteeing one; a commit domain can only lose the beat afterwards.
+  A validator judges the MERGED result after every deterministic floor and buys
+  exactly one re-resolution, which re-enters the whole stage so the corrected
+  answer crosses every floor and every validator again. Deterministic code, no
+  model handle, deep-copied result, stable order, `warn` by default and `fail`
+  only for a campaign that would rather lose a turn than be wrong.
+  `tests/test_director_result_validation.py`.
+- **Turn zero arrives whole** — `provision_story` takes `frame_state`,
+  `director_context`, `narration_context` and `documents`, all validated before
+  the archive is touched and applied inside its transaction. The reference
+  campaign provisioned and THEN installed its rules; a failure between the two
+  left a playable story missing the rule that made its sealed wing mean
+  anything. Data rather than a callback, so nothing arbitrary runs inside a
+  database transaction. `tests/test_provision_initialization.py`.
+
 Three more from the same review landed alongside it, each of which was a thing
 an extension could already do by reaching past the facade — working, and one
 refactor from breaking somebody else's build:

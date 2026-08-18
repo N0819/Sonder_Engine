@@ -1148,6 +1148,113 @@ class NarrationContext:
         return f"<NarrationContext {self.scope} chat={self.chat_id}>"
 
 
+#: A violation's `code` is machine-readable and its `message` is what the
+#: Director is asked to fix, so the ceiling belongs on the message: it rides
+#: into a correction payload that already carries the whole beat.
+CORRECTION_MESSAGE_MAX = 600
+
+
+class Correction:
+    """One campaign invariant a Director result broke, and what to do about it.
+
+    Deliberately a VALUE rather than a mutation handle. A validator that could
+    edit the result directly would be a second author of objective causality,
+    and the Director would have no idea its answer had been changed underneath
+    it -- the correction it never saw could not teach it anything, and the next
+    beat would break the same rule again. So a validator states what is wrong
+    and the DIRECTOR fixes it, which is the same bargain every other retry in
+    this stage makes (player-act authority, world pressure, the omission
+    repair): name the violation, hand it back, re-check the answer.
+    """
+
+    def __init__(self, code, message, evidence=None):
+        self.code = str(code or "").strip() or "violation"
+        message = str(message or "").strip()
+        if len(message) > CORRECTION_MESSAGE_MAX:
+            raise ExtensionError(
+                f"correction message is {len(message)} characters; the ceiling "
+                f"is {CORRECTION_MESSAGE_MAX}. It rides a payload that already "
+                "carries the whole beat.")
+        self.message = message
+        # Serialisable or it does not travel: this ends up in a model payload
+        # and on the durable turn, and an object that survives neither is a
+        # violation nobody can read afterwards.
+        try:
+            json.dumps(evidence)
+        except (TypeError, ValueError):
+            raise ExtensionError(
+                f"correction {self.code!r} evidence must be JSON-serialisable")
+        self.evidence = evidence
+
+    def as_dict(self, ext_id="", name=""):
+        out = {"extension": str(ext_id), "validator": str(name),
+               "code": self.code, "message": self.message}
+        if self.evidence is not None:
+            out["evidence"] = self.evidence
+        return out
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return f"<Correction {self.code!r}>"
+
+
+class DirectorResult:
+    """What an `on_director_result` validator receives: the settled beat.
+
+    The MERGED result, after every one of this engine's own deterministic
+    floors has run -- player-act authority, the movement backstop, the
+    passability floor, the reconciliation repair. A validator therefore judges
+    what would actually be committed, not a prose-author draft and not one
+    specialist's fragment.
+
+    Read-only by construction: `resolve` and `interpret` are deep copies, so a
+    validator that edits what it was handed changes nothing. That is not
+    distrust, it is the same reason `StepView` is not a `PipelineContext` --
+    the shape of the object should make the wrong thing hard rather than
+    forbidden.
+
+    No model handle. A validator is deterministic code; a campaign invariant
+    that needs a model call to evaluate is not an invariant, and paying for one
+    inside the beat's wall clock to decide whether the beat may finish is the
+    cost this seam exists to avoid.
+    """
+
+    def __init__(self, api, ctx, result):
+        import copy
+
+        self.api = api
+        chat = getattr(ctx, "chat", None)
+        turn = getattr(ctx, "turn", None)
+        self.chat_id = getattr(chat, "id", None)
+        self.turn_idx = getattr(turn, "idx", None)
+        self.turn_id = getattr(turn, "id", None)
+        self.resolve = copy.deepcopy(result if isinstance(result, dict) else {})
+        try:
+            self.interpret = copy.deepcopy(ctx.get("director_interpret") or {})
+        except Exception:
+            self.interpret = {}
+
+    @property
+    def state_diff(self):
+        value = self.resolve.get("state_diff")
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def resolved_event(self):
+        return str(self.resolve.get("resolved_event") or "")
+
+    @property
+    def positions(self):
+        value = self.state_diff.get("positions")
+        return value if isinstance(value, dict) else {}
+
+    def story_view(self):
+        """The canonical read, for a rule that needs the world around the beat."""
+        return self.api.story_view(self.chat_id)
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return f"<DirectorResult chat={self.chat_id} turn={self.turn_idx}>"
+
+
 class DirectorContext:
     """Identity handed to an `on_director_payload` hook alongside the payload.
 
@@ -1498,6 +1605,54 @@ class SonderExtensionAPI:
         _record_narration_hook(self.id, fn)
         return fn
 
+    def correction(self, code, message, evidence=None):
+        """Build the violation an `on_director_result` validator returns."""
+        return Correction(code, message, evidence)
+
+    def on_director_result(self, fn=None, *, on_error="warn"):
+        """Validate the SETTLED Director result, and ask for one repair.
+
+        `fn(result, info)` runs after every deterministic floor this engine
+        owns, on the merged result that would otherwise be committed. Return
+        `None` to accept it, or an `api.correction(...)` (or a list of them) to
+        refuse it. A refusal buys exactly ONE re-resolution with every
+        extension's violations attached, after which the whole stage -- floors
+        included -- runs again over the new answer.
+
+        The difference from `add_commit_domain` is the question being asked. A
+        commit domain answers "may this transaction finish", and its only move
+        is to roll the beat back: a turn is lost where a corrected turn was
+        possible, and the explanation arrives after the whole pipeline has been
+        paid for. This asks "is this a valid proposal, and can the Director
+        repair it" -- in the retry the Director already understands. Keep the
+        commit domain as the last safety net; do not make it the normal way to
+        enforce a campaign rule.
+
+        `on_error` governs BOTH the validator raising and a violation surviving
+        the correction, and it defaults to `"warn"` for the reason every other
+        seam here does: a broken extension must not cost a beat. `"fail"` opts
+        into losing the turn instead, which is right only when the campaign
+        being wrong is worse than the beat being lost -- and it is the setting a
+        real invariant wants.
+
+        Validators are deterministic code and receive no model handle, cannot
+        mutate the result (`DirectorResult` hands over deep copies), and run in
+        a stable order: by extension id, then by registration order within an
+        extension.
+        """
+        if on_error not in ("warn", "fail"):
+            raise ExtensionError(
+                "on_director_result on_error must be 'warn' or 'fail'")
+        from . import _record_result_validator
+
+        if fn is None:
+            def decorate(func):
+                _record_result_validator(self.id, func, on_error)
+                return func
+            return decorate
+        _record_result_validator(self.id, fn, on_error)
+        return fn
+
     def on_director_payload(self, fn):
         """Alter what the DIRECTOR is about to be given. The earliest seam.
 
@@ -1632,8 +1787,10 @@ class SonderExtensionAPI:
 
     # -- creating a story
 
-    def provision_story(self, package, *, state=None, package_id="",
-                        package_version="", player_authority=None):
+    def provision_story(self, package, *, state=None, frame_state=None,
+                        package_id="", package_version="",
+                        player_authority=None, director_context=None,
+                        narration_context=None, documents=None):
         """Create a whole playable story in one act, or create nothing.
 
         `package` is a chat archive -- the engine's own portable format, the
@@ -1652,6 +1809,25 @@ class SonderExtensionAPI:
         do and the reason this is a method rather than a documentation note: a
         story that exists with no campaign state attached is precisely the
         partial provisioning the whole contract is supposed to make impossible.
+
+        `frame_state`, `director_context`, `narration_context` and `documents`
+        are the rest of turn zero, and they are arguments rather than four
+        calls afterwards because pressing Start must produce either a complete
+        campaign or no campaign. The reference campaign used to provision and
+        THEN install its Director rules; if that second write failed, the story
+        stayed in the player's list -- playable, carrying its campaign state and
+        its authority mode, and missing the one rule that made its sealed wing
+        mean anything. That is not a race, it is failure atomicity, and the only
+        cure is being inside the same transaction.
+
+        Data rather than a callback, deliberately (the report that asked for
+        this recommended the same and the reasoning holds): every value is
+        validated before the archive is touched, nothing arbitrary executes
+        inside a database transaction, and the whole bootstrap stays
+        serialisable and lintable. A callback form can be added if some real
+        campaign turns out to need initialisation that cannot be written down;
+        until then it would be a general transaction handle wearing a narrower
+        name.
 
         `player_authority` declares the rung the campaign needs -- `actor_only`,
         `explicit_outcomes` or `world_author` (`Design.md` § Hard mode). A
@@ -1677,6 +1853,43 @@ class SonderExtensionAPI:
         payload = package
         if not isinstance(payload, dict):
             raise ExtensionError("provision_story needs an archive dict")
+
+        # VALIDATE BEFORE THE ARCHIVE IS TOUCHED. Every one of these has its
+        # own refusal -- an unknown Director phase, an oversized block, a bad
+        # document path, an unserialisable value -- and finding out inside the
+        # transaction would mean the rollback is doing work the caller could
+        # have been told about before anything was created. The errors are also
+        # simply better here: "unknown Director phase 'narrator'" is actionable,
+        # "campaign package refused" is not.
+        blocks = dict(director_context or {})
+        for phase in blocks:
+            DirectorBlock._phase(phase)
+        for phase, text in blocks.items():
+            text = str(text or "").strip()
+            if text and len(text) > DIRECTOR_CONTEXT_MAX:
+                raise ExtensionError(
+                    f"Director {phase} context is {len(text)} characters; the "
+                    f"ceiling is {DIRECTOR_CONTEXT_MAX}")
+        narration = str(narration_context or "").strip()
+        if len(narration) > NARRATION_CONTEXT_MAX:
+            raise ExtensionError(
+                f"narration context is {len(narration)} characters; the "
+                f"ceiling is {NARRATION_CONTEXT_MAX}")
+        docs = dict(documents or {})
+        for path, value in docs.items():
+            document_path(path)
+            try:
+                json.dumps(value)
+            except (TypeError, ValueError):
+                raise ExtensionError(
+                    f"document {path!r} is not JSON-serialisable")
+        for label, value in (("state", state), ("frame_state", frame_state)):
+            if value is None:
+                continue
+            try:
+                json.dumps(value)
+            except (TypeError, ValueError):
+                raise ExtensionError(f"{label} is not JSON-serialisable")
 
         with transaction():
             try:
@@ -1718,6 +1931,17 @@ class SonderExtensionAPI:
                 set_player_authority(chat_id, player_authority, turn_idx=0)
             if state is not None:
                 self.state(chat_id).set_now(state)
+            if frame_state is not None:
+                # Lands on the imported story's ACTIVE frame, which is the one
+                # turn zero will run in -- the same frame every other
+                # frame-scoped key written here would reach.
+                self.frame_state(chat_id).set_now(frame_state)
+            if blocks:
+                self.director_context(chat_id).set(blocks)
+            if narration:
+                self.narration_context(chat_id).set(narration)
+            for path, value in docs.items():
+                self.documents(chat_id).put_now(path, value)
             wset(chat_id, f"ext:{self.id}:provisioned", {
                 "extension": self.id,
                 "package": str(package_id or ""),
@@ -1954,7 +2178,8 @@ def _stage_wrapper(api, key, handler, on_error):
 
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
-    "ChatAccess", "DirectorBlock", "DirectorContext", "DocumentStore",
+    "ChatAccess", "Correction", "DirectorBlock", "DirectorContext",
+    "DirectorResult", "DocumentStore",
     "ExtState", "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
     "Request", "SonderExtensionAPI", "StepView", "document_path",
     "enter_commit_scope", "in_commit_scope", "leave_commit_scope",

@@ -6459,7 +6459,18 @@ def _orchestration_scope_backstop(ctx, out, stage):
     ctx.add_warning(note)
 
 
-def director_resolve(ctx, nonce):
+class CampaignInvariantError(RuntimeError):
+    """An extension's campaign rule the Director could not be made to obey.
+
+    Raised only by a validator registered `on_error="fail"`, and only after the
+    one correction attempt has come back still in violation. It ends the beat
+    before commit opens a transaction, which is the whole point: a campaign
+    whose rules were broken is worse than a beat that did not happen, and a
+    turn that fails here leaves nothing behind to unpick.
+    """
+
+
+def director_resolve(ctx, nonce, _corrections=None):
     chat = ctx.chat
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
@@ -6924,6 +6935,13 @@ def director_resolve(ctx, nonce):
     # beat, and an extension that could widen it would be buying prompt chunks
     # rather than contributing context. The retries below inherit this payload.
     payload = _extension_director_payload(ctx, payload, phase="resolve")
+    # The second pass, when an extension refused the first answer. Delivered on
+    # the channel the stage's own retries already use, so the Director reads a
+    # campaign violation exactly the way it reads a player-authority one --
+    # attributed, specific, and about THIS beat.
+    if _corrections:
+        payload = {**payload, "campaign_violations": _corrections,
+                   "correction_notes": _campaign_correction_note(_corrections)}
 
     out = _agent_json(
         "director",
@@ -7879,7 +7897,77 @@ def director_resolve(ctx, nonce):
     # against a draft.
     _orchestration_scope_backstop(ctx, out, "resolve")
 
+    # EXTENSION RESULT VALIDATION, last of all and deliberately so. A validator
+    # judges the merged result AFTER every deterministic floor this engine owns
+    # has had its say -- player-act authority, the movement backstop, the
+    # passability floor, the reconciliation repair -- so what it is shown is
+    # what would actually be committed rather than a prose-author draft or one
+    # specialist's fragment.
+    #
+    # A refusal buys exactly ONE re-resolution, and it re-enters this whole
+    # function rather than patching the answer in place. That is what makes the
+    # corrected result trustworthy: every floor above runs again over it, in
+    # order, and the validators run again over that. Patching here would give a
+    # campaign rule the last word over the engine's own physics, which is the
+    # wrong way round.
+    #
+    # `_corrections` is the recursion guard and the bound in one: the second
+    # pass carries the violations, and a second pass never validates again.
+    if _corrections is None:
+        _violations, _fatal = _validate_campaign_result(ctx, out)
+        if _violations:
+            for _v in _violations:
+                ctx.add_warning(
+                    f"campaign rule {_v['code']!r} ({_v['extension']}): "
+                    f"{_v['message']}")
+            out = director_resolve(ctx, nonce, _corrections=_violations)
+            _again, _again_fatal = _validate_campaign_result(ctx, out)
+            if _again:
+                out["campaign_violations"] = _again
+                for _v in _again:
+                    ctx.add_warning(
+                        f"campaign rule {_v['code']!r} ({_v['extension']}) "
+                        f"survived correction: {_v['message']}")
+                if _again_fatal:
+                    raise CampaignInvariantError(
+                        "; ".join(f"{v['extension']}:{v['code']}"
+                                  for v in _again))
+
     return out
+
+
+def _campaign_correction_note(violations):
+    """The violations as one instruction, in the Director's own retry idiom."""
+    parts = [
+        "An installed campaign layer refused your previous resolution. These "
+        "are its rules for this story, not suggestions: re-resolve the beat so "
+        "that none of them is broken, keeping every other fact identical."
+    ]
+    for item in violations or []:
+        line = f"[{item.get('extension')}/{item.get('code')}] {item.get('message')}"
+        evidence = item.get("evidence")
+        if evidence is not None:
+            line += f" (evidence: {json.dumps(evidence, ensure_ascii=False)[:200]})"
+        parts.append(line)
+    return " ".join(parts)
+
+
+def _validate_campaign_result(ctx, out):
+    """Ask installed extensions whether this result may stand.
+
+    Total in the way every extension seam here is total: an unreachable or
+    broken registry leaves the beat exactly as the engine resolved it. The one
+    thing that is NOT swallowed is a validator that declared `on_error="fail"`
+    and refused -- that is an extension asking for the beat to be lost rather
+    than for its campaign to be wrong, and honouring it is the whole reason the
+    option exists.
+    """
+    try:
+        import extension_runtime
+
+        return extension_runtime.validate_director_result(ctx, out)
+    except Exception:
+        return [], False
 
 
 def _crowds_view(chat_id, scene):

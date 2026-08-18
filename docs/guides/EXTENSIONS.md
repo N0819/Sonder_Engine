@@ -270,6 +270,8 @@ cannot leave a stale file executing.
 | `api.on_character_payload(fn)` | rewrite what one mind is about to be given |
 | `api.on_narration_payload(fn)` | rewrite what the narrator is about to be given |
 | `api.on_director_payload(fn)` | rewrite what the Director is about to be given |
+| `api.on_director_result(fn, on_error=...)` | validate the settled result; buy one correction |
+| `api.correction(code, message, evidence=...)` | the violation a validator returns |
 | `api.narration_context(chat_id)` | standing context for the narrator |
 | `api.director_context(chat_id)` | standing campaign rules for the Director |
 | `api.story_view(chat_id)` | canonical story state, versioned and read-only |
@@ -724,6 +726,52 @@ Provenance uses the vocabulary the engine already speaks —
 `what_i_experienced` / `what_i_was_told` / `what_i_concluded` — rather than a
 second one invented for the facade.
 
+### Refusing a Director result
+
+`director_context` is model input: it guides a decision and cannot guarantee
+one. This is the other half.
+
+```python
+@api.on_director_result
+def sealed(result, info):
+    if "deck_4" in result.positions.values():
+        return info.api.correction(
+            "sealed-location",
+            "Deck 4 remains sealed; no committed movement may enter it.",
+            evidence={"room_id": "deck_4"})
+    return None
+```
+
+A validator runs **last** — after every deterministic floor the engine owns
+(player-act authority, the movement backstop, the passability floor, the
+reconciliation repair) — so what it judges is what would actually be committed,
+not a prose-author draft or one specialist's channel.
+
+Returning a correction buys **exactly one** re-resolution, with every
+extension's violations attached. That second answer goes back through every
+floor *and* every validator: the correction re-enters the whole stage rather
+than patching the result in place, because a campaign rule must not get the
+last word over the engine's own physics.
+
+**This is not the same question a commit domain asks.** A commit domain answers
+*may this transaction finish*, and its only move is to lose the beat — a turn
+thrown away where a corrected turn was possible, with the explanation arriving
+after the whole pipeline has been paid for. Keep it as the last safety net; do
+not make it the normal way to enforce a campaign rule.
+
+`on_error` governs both a validator raising and a violation surviving the
+correction. It defaults to `"warn"` for the reason every seam here does: a
+broken extension must not cost a beat. `"fail"` opts into losing the turn
+instead, which is right only when the campaign being wrong is worse than the
+beat being lost — and it is what a real invariant wants. A `fail` validator
+that *raises* has not approved the beat either.
+
+Validators are deterministic code with no model handle, cannot mutate the
+result (`DirectorResult` hands over deep copies), and run in a stable order —
+by extension id, then registration order — so two extensions disagreeing about
+one beat produce the same notes every run, rerolls included. A reroll re-runs
+the stage, so it re-runs the contract; there is nothing to register twice.
+
 ### Provisioning a campaign
 
 ```python
@@ -743,6 +791,20 @@ would be a second copy of the bugs the first one has already had.
 the part an archive alone cannot do and the reason this is a method rather than
 a documentation note: a story that exists with no campaign state attached is
 exactly the partial provisioning the contract forbids.
+
+So do `frame_state`, `director_context`, `narration_context` and `documents` —
+the rest of turn zero. They are arguments rather than four calls afterwards
+because pressing Start must produce either a complete campaign or no campaign.
+The reference campaign used to provision and *then* install its Director rules;
+had that second write failed, the story would have stayed in the player's list,
+playable, holding its mission state and its `actor_only` mode, and missing the
+one rule that made its sealed wing mean anything. Not a race — failure
+atomicity.
+
+Data rather than a callback, deliberately: every value is validated **before**
+the archive is touched (so the error names the field rather than saying the
+package was refused), nothing arbitrary runs inside a database transaction, and
+the whole bootstrap stays serialisable and lintable.
 
 Everything or nothing. A validation failure leaves no chat, no characters, no
 lore and no state behind, and raises `ExtensionError` carrying the engine's own

@@ -375,6 +375,7 @@ class _Registration:
     payload_hooks: list[Callable] = field(default_factory=list)
     narration_hooks: list[Callable] = field(default_factory=list)
     director_hooks: list[Callable] = field(default_factory=list)
+    result_validators: list[dict] = field(default_factory=list)
     routes: dict[str, dict] = field(default_factory=dict)
     specialists: list[str] = field(default_factory=list)
     model_lanes: list[dict] = field(default_factory=list)
@@ -426,6 +427,16 @@ def _record_payload_hook(ext_id, fn) -> None:
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.payload_hooks.append(fn)
+
+
+def _record_result_validator(ext_id, fn, on_error) -> None:
+    if not callable(fn):
+        raise ExtensionError("on_director_result needs a callable")
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        record.result_validators.append(
+            {"fn": fn, "on_error": on_error,
+             "name": getattr(fn, "__name__", "") or "validator"})
 
 
 def _record_director_hook(ext_id, fn) -> None:
@@ -967,6 +978,88 @@ def _director_blocks(chat_id, phase) -> list:
     return blocks
 
 
+def validate_director_result(ctx, result):
+    """Run every registered result validator over the settled Director result.
+
+    Returns `(violations, fatal)`. `violations` are dicts carrying the
+    extension id, the validator name, the code, the message and any evidence --
+    ordered by extension id then registration order, so two extensions
+    disagreeing about the same beat produce the same notes in the same order on
+    every run, including a reroll.
+
+    `fatal` is whether any violation came from a validator registered
+    `on_error="fail"`. The caller decides what to do with that; this function
+    never ends a beat, because "which failures cost a turn" is the pipeline's
+    question and not this module's.
+
+    A validator that RAISES is charged the same policy as one that refuses: a
+    `warn` validator's exception becomes a turn warning and is otherwise
+    ignored, and a `fail` validator's exception is a violation like any other.
+    An extension whose rule cannot even be evaluated has not approved the beat.
+    """
+    violations, fatal = [], False
+    try:
+        activate()
+        with _lock:
+            registered = [
+                (record.ext_id, dict(item))
+                for record in _registered.values()
+                for item in record.result_validators
+            ]
+    except Exception:
+        log.exception("extension result validators could not be resolved")
+        return [], False
+    registered.sort(key=lambda row: row[0])
+
+    for ext_id, item in registered:
+        api = _apis.get(ext_id)
+        if api is None:
+            continue
+        from .api import Correction, DirectorContext, DirectorResult
+
+        # `fn(result, info)`, the same two-argument shape every other hook in
+        # this module uses. No arity tolerance on purpose: guessing from a
+        # TypeError would read one raised INSIDE a validator as a signature
+        # mismatch and silently call it again with fewer arguments.
+        try:
+            outcome = item["fn"](DirectorResult(api, ctx, result),
+                                 DirectorContext(api, ctx, phase="result"))
+        except Exception as exc:
+            outcome = _validator_failure(ctx, ext_id, item, exc)
+            if outcome is None:
+                continue
+
+        for correction in (outcome if isinstance(outcome, (list, tuple))
+                           else [outcome]):
+            if not isinstance(correction, Correction):
+                continue
+            violations.append(correction.as_dict(ext_id, item["name"]))
+            if item["on_error"] == "fail":
+                fatal = True
+    return violations, fatal
+
+
+def _validator_failure(ctx, ext_id, item, exc):
+    """What a raising validator produces, under its own declared policy."""
+    from .api import Correction
+
+    log.exception("extension result validator %s/%s failed",
+                  ext_id, item["name"])
+    _observer_failures[ext_id] = _observer_failures.get(ext_id, 0) + 1
+    note = getattr(ctx, "add_warning", None)
+    if callable(note):
+        try:
+            note(f"extension {ext_id}: result validator {item['name']!r} "
+                 f"failed ({exc})")
+        except Exception:
+            pass
+    if item["on_error"] != "fail":
+        return None
+    return Correction(
+        "validator-error",
+        f"{ext_id}'s campaign rule could not be evaluated: {exc}")
+
+
 def dispatch_director_payload(ctx, payload, *, phase):
     """Let installed extensions colour what the DIRECTOR is about to be told.
 
@@ -1498,6 +1591,7 @@ __all__ = [
     "asset_path", "check_update", "check_updates", "disable_extension",
     "disabled_reasons",
     "dispatch_character_payload", "dispatch_director_payload",
+    "validate_director_result",
     "dispatch_narration_payload",
     "dispatch_route", "dispatch_turn_committed", "document_path",
     "enable_extension", "enabled_ids", "extension", "extension_root",

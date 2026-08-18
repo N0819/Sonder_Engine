@@ -26,7 +26,7 @@ import pytest
 import extension_runtime
 
 from tests.test_extensions import (  # noqa: F401 - fixtures are used by name
-    _chat, _enable, _write_extension, ext_root, real_ext_root,
+    _StubCtx, _chat, _enable, _write_extension, ext_root, real_ext_root,
 )
 
 EXT = "campaign-demo"
@@ -257,6 +257,55 @@ class TestTheSlice:
         # And the interpret rule is gone entirely, rather than left standing.
         assert "extension_context" not in extension_runtime.dispatch_director_payload(
             _StubCtx(chat_id=chat_id), {}, phase="interpret")
+
+    def test_a_result_that_breaks_the_seal_is_refused(self, campaign):
+        """Contract three of the remaining-gaps report, demonstrated.
+
+        The Director rule is model input and guides the decision; this is the
+        deterministic half that refuses an answer which broke it. Without it a
+        disregarded rule becomes canonical world state and the only remedy is a
+        commit domain throwing the whole beat away.
+        """
+        chat_id = _start(campaign)["chat_id"]
+        ctx = _StubCtx(chat_id=chat_id)
+
+        violations, fatal = extension_runtime.validate_director_result(
+            ctx, {"state_diff": {"positions": {"The Visitor": "wing"}}})
+
+        assert fatal is False          # the demo warns rather than costing a turn
+        assert [v["code"] for v in violations] == ["sealed-wing"]
+        assert violations[0]["evidence"] == {"room": "wing",
+                                             "bodies": ["The Visitor"]}
+
+    def test_a_result_that_respects_the_seal_passes(self, campaign):
+        chat_id = _start(campaign)["chat_id"]
+
+        assert extension_runtime.validate_director_result(
+            _StubCtx(chat_id=chat_id),
+            {"state_diff": {"positions": {"The Visitor": "hall"}}}) == ([], False)
+
+    def test_the_invariant_stands_down_once_the_wing_is_open(self, campaign):
+        """A rule that kept firing after its own objective opened would make
+        the wing unreachable forever -- the guard outliving its reason."""
+        chat_id = _start(campaign)["chat_id"]
+        _commit(campaign, chat_id, "she nods at the panel")
+
+        assert extension_runtime.validate_director_result(
+            _StubCtx(chat_id=chat_id),
+            {"state_diff": {"positions": {"The Visitor": "wing"}}}) == ([], False)
+
+    def test_the_campaign_starts_in_one_atomic_call(self, campaign):
+        """Contract two. It used to provision and THEN install its rules; a
+        failure in between left a playable story with no rule in it."""
+        import inspect
+        import sys
+
+        source = inspect.getsource(
+            sys.modules["sonder_ext_campaign_demo.extension"])
+        start = source[source.index("def _start("):source.index("def _install_rules(")]
+
+        assert "director_context=" in start
+        assert "_install_rules" not in start
 
     def test_the_panel_reads_the_player_safe_projection(self, campaign):
         """`story_view` would answer more and is the right read for the
