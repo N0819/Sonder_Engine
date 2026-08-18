@@ -64,8 +64,9 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 5588 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contacts`, `spatial_containment`, `spatial_identity`, `spatial_orientation`, `spatial_transit` |
+| `spatial.py` | 5275 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_identity`, `spatial_orientation`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
+| `spatial_contact_migration.py` | 331 |  | `spatial_contacts`, `spatial_identity` |
 | `spatial_contacts.py` | 1167 |  | `spatial_containment`, `spatial_identity` |
 | `spatial_containment.py` | 636 |  | `spatial_identity`, `spatial_transit` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
@@ -773,14 +774,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 5241 | 318 lines |
-| `sprint_reach()` | 4289 | 175 lines |
-| `contact_sensation()` | 3854 | 144 lines |
-| `visible_adjacent_rooms()` | 4534 | 143 lines |
-| `hear_level()` | 1257 | 138 lines |
-| `contacts_from_entity_state()` | 2831 | 137 lines |
-| `_resolved_substance_add()` | 3344 | 122 lines |
-| `derive_scene_stations()` | 2657 | 104 lines |
+| `merge_scene_with_diff()` | 4928 | 318 lines |
+| `sprint_reach()` | 3976 | 175 lines |
+| `contact_sensation()` | 3541 | 144 lines |
+| `visible_adjacent_rooms()` | 4221 | 143 lines |
+| `hear_level()` | 1265 | 138 lines |
+| `_resolved_substance_add()` | 3031 | 122 lines |
+| `derive_scene_stations()` | 2665 | 104 lines |
+| `corridor_sightlines()` | 3828 | 85 lines |
 
 ### `spatial_barriers.py`
 
@@ -791,6 +792,16 @@
 | `normalize_scene_barriers()` | 345 | 21 lines |
 | `unresolved_barrier_words()` | 329 | 15 lines |
 | `_barrier_exact()` | 249 | 9 lines |
+
+### `spatial_contact_migration.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `contacts_from_entity_state()` | 81 | 137 lines |
+| `_lift_valued_contact()` | 235 | 56 lines |
+| `_drop_contradicted_state()` | 293 | 39 lines |
+| `_part_from_key()` | 71 | 8 lines |
+| `_manner_from_fragment()` | 63 | 6 lines |
 
 ### `spatial_contacts.py`
 
