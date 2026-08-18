@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import json
 
-from spatial import (
+from world.spatial import (
     is_alarming,
     sound_bearing,
     sound_path,
     sound_walk_level,
 )
-from spatial_frames import infer_focus
+from world.spatial_frames import infer_focus
 
 
 def _chain(*barriers):

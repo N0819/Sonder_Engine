@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 
-import providers
+from llm import providers
 
 OPENROUTER = {"kind": "openrouter", "name": "openrouter",
               "api_key": "k", "base_url": "https://openrouter.ai/api/v1"}
@@ -101,7 +101,7 @@ def test_no_configuration_means_no_field():
 def test_routing_reaches_the_wire(monkeypatch, temp_db):
     """Drives chat_complete and inspects the outgoing body — the only thing
     that proves a real call carries the routing block."""
-    import db
+    from core import db
     from tests.test_prompt_cache_block import _FakeSession, OPENAI_REPLY
 
     db.set_setting("openrouter_routing", json.dumps(
@@ -121,7 +121,7 @@ def test_routing_reaches_the_wire(monkeypatch, temp_db):
 
 
 def test_settings_change_applies_without_restart(temp_db):
-    import db
+    from core import db
 
     assert providers.openrouter_routing() == {}
     db.set_setting("openrouter_routing", json.dumps({"only": ["amazon-bedrock"]}))

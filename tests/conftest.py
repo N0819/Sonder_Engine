@@ -70,7 +70,7 @@ def _redirect_default_database():
     The fixture below still runs, and still owns teardown. This only moves the
     moment the default stops being `engine.db` to the earliest one available.
     """
-    import db
+    from core import db
 
     fd, path = tempfile.mkstemp(suffix=".db", dir=_TMP_DIR)
     os.close(fd)
@@ -109,7 +109,7 @@ def _never_the_real_database():
     disposable instead of in a story someone is playing. `temp_db` still
     swaps in its own file per test and restores this one afterwards.
     """
-    import db
+    from core import db
 
     path = _SESSION_DB
     # A module imported during collection may have opened it already; keep the
@@ -135,7 +135,7 @@ def temp_db():
     os.close(fd)
     os.remove(db_path)
 
-    import db
+    from core import db
 
     old_path = db.DB
     db.configure(db_path)
@@ -297,8 +297,8 @@ def _no_learned_rate_limit_between_tests():
     Reset on the way IN as well as out, so a test is protected from whatever
     ran before it even if that test predates this file.
     """
-    import providers
-    import memory
+    from llm import providers
+    from mind import memory
     providers._EMBED_PACE.update({"interval": 0.0, "next_at": 0.0})
     providers._COALESCE_QUEUE[:] = []
     providers._COALESCE_INFLIGHT = False

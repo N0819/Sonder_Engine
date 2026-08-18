@@ -25,7 +25,7 @@ from __future__ import annotations
 import pytest
 
 from agents.perception import _behind_rooms, _visible_rooms_for
-from spatial import visible_adjacent_rooms
+from world.spatial import visible_adjacent_rooms
 
 
 def _plaza_and_lane(facing="e", came_from="fountain_plaza"):

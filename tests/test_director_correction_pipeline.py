@@ -26,8 +26,8 @@ import time
 import pytest
 
 import extension_runtime
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 from tests.conftest import fanout_resolve_agent
 from tests.test_extensions import (  # noqa: F401 - fixtures are used by name
@@ -237,7 +237,7 @@ class TestFailClosed:
         after this stage, so a beat that dies here never opened a transaction.
         Pinned by observing the scene is untouched."""
         from agents.director import CampaignInvariantError
-        from scene import get_scene
+        from story.scene import get_scene
 
         _seal(campaign, policy="fail")
         ctx = _ctx(temp_db)

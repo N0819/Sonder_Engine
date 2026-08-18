@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_ctx(temp_db, character_results):
@@ -99,7 +99,7 @@ def test_line_matching_the_characters_own_declaration_is_kept(temp_db, monkeypat
 def _make_player_ctx(temp_db, declared_speech):
     """Chat with a player persona 'Hinami' and a declared player speech line,
     for the player-speech-authority backstop."""
-    from character_schema import default_persona_data
+    from story.character_schema import default_persona_data
     persona_id = temp_db.qi(
         "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
         ("Hinami", json.dumps(default_persona_data("Hinami")), "{}"),

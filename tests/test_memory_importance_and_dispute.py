@@ -25,8 +25,8 @@ import time
 
 import pytest
 
-import memory
-from memory import (
+from mind import memory
+from mind.memory import (
     _IMPORTANCE_CEILING,
     add_memory,
     effective_importance,
@@ -310,7 +310,7 @@ def test_they_survive_a_character_bank_export(temp_db):
 # --- character-marked dialogue --------------------------------------------
 
 def test_a_marked_line_is_matched_loosely_in_both_directions():
-    from commit import _marked_for_memory
+    from persist.commit import _marked_for_memory
     own = {"remember_lines": [{"quote": "the seal drops at midnight",
                                "why": "I have to be gone by then"}]}
     assert _marked_for_memory(own, "the seal drops at midnight")
@@ -320,7 +320,7 @@ def test_a_marked_line_is_matched_loosely_in_both_directions():
 
 
 def test_an_empty_or_malformed_mark_marks_nothing():
-    from commit import _marked_for_memory
+    from persist.commit import _marked_for_memory
     assert not _marked_for_memory({}, "anything")
     assert not _marked_for_memory({"remember_lines": []}, "anything")
     assert not _marked_for_memory({"remember_lines": ["not a dict"]}, "anything")
@@ -329,7 +329,7 @@ def test_an_empty_or_malformed_mark_marks_nothing():
 
 
 def test_the_schema_keeps_marks_and_disputes_and_drops_the_useless():
-    from schemas import validate_llm_output
+    from llm.schemas import validate_llm_output
     out, _w = validate_llm_output("character", {
         "sequence": [],
         "remember_lines": [
@@ -352,7 +352,7 @@ def test_the_schema_keeps_marks_and_disputes_and_drops_the_useless():
 
 
 def test_both_fields_default_empty():
-    from schemas import validate_llm_output
+    from llm.schemas import validate_llm_output
     out, _w = validate_llm_output("character", {"sequence": []})
     assert out["remember_lines"] == []
     assert out["memory_disputes"] == []
@@ -362,7 +362,7 @@ def test_only_belief_evidence_counts_as_a_citation():
     """Bare observations_used deliberately does not: citing a memory while
     describing the beat is not building a belief on it, and the weaker signal
     fires on nearly every turn."""
-    from commit import _cited_memory_ids
+    from persist.commit import _cited_memory_ids
     assert _cited_memory_ids({
         "observations_used": [{"event_id": "event:abc123", "fact": "x"}],
     }) == []
@@ -384,7 +384,7 @@ def test_a_citation_is_an_event_key_not_a_row_id():
     wrong thing, the test agreed with it, and 3733 tests passed over a feature
     that could never fire.
     """
-    from commit import _cited_memory_ids
+    from persist.commit import _cited_memory_ids
     assert _cited_memory_ids({
         "mind_model_updates": [{"evidence": [{"event_id": "41"}]}],
     }) == [], "a bare number is not a memory handle"

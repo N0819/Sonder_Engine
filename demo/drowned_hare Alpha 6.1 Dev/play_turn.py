@@ -58,7 +58,7 @@ def _sheet(name, pronouns, summary, essence, expression, taboo, values, traits,
     purpose: CLAUDE.md is explicit that an empty `drive` reads as complete and
     is not, and that the failure shows up fifty beats later looking like a
     model problem."""
-    from character_schema import default_character_data
+    from story.character_schema import default_character_data
     d = default_character_data()
     d["identity"]["name"] = name
     d["identity"]["pronouns"] = pronouns
@@ -116,7 +116,7 @@ def cast():
 
 
 def build(db_path, source_db):
-    import db
+    from core import db
     db.configure(db_path)
     db.init()
 
@@ -124,8 +124,8 @@ def build(db_path, source_db):
     n_set, n_prov = carry_model_config(source_db, db_path)
     print(f"  carried {n_set} settings and {n_prov} provider connections")
 
-    from db import qi, wset
-    from character_schema import character_name, normalize_persona_data
+    from core.db import qi, wset
+    from story.character_schema import character_name, normalize_persona_data
 
     persona = normalize_persona_data({
         "name": "Corwin Ash",
@@ -182,7 +182,7 @@ def build(db_path, source_db):
 
 
 def play(chat_id, turns):
-    from db import q, qi
+    from core.db import q, qi
     from agents.runtime import run_pipeline
 
     for i, text in enumerate(PLAYER_TURNS[:turns]):
@@ -203,7 +203,7 @@ def play(chat_id, turns):
 
 def measure(chat_id):
     """The four things today's fixes were about, plus the memory regression."""
-    from db import q
+    from core.db import q
     from agents.character import _self_line_refrain, _first_verbatim_repeat
 
     print("\n" + "=" * 72)
@@ -247,7 +247,7 @@ def measure(chat_id):
         print(f"  {str(row['kind']):12} n={row['n']:<4} "
               f"avg confidence={row['avg_conf']}{extra}")
 
-    from db import wget
+    from core.db import wget
     scene = wget(chat_id, "scene", {}) or {}
     contacts = scene.get("contacts") or []
     print(f"\nCONTACTS  {len(contacts)} standing at end "
@@ -283,7 +283,7 @@ def main():
     print(f"  chat {chat_id}, cast: {', '.join(names)}")
 
     if args.dry_run:
-        from db import wget
+        from core.db import wget
         scene = wget(chat_id, "scene", {})
         print(f"  scene rooms: {list(scene.get('rooms') or {})}")
         print(f"  positions:   {scene.get('positions')}")

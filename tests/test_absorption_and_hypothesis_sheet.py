@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from psychology_runtime import cognitive_absorption
-from theory_of_mind import (
+from mind.psychology_runtime import cognitive_absorption
+from mind.theory_of_mind import (
     absorbed_cap,
     apply_mind_model_updates,
     due_for_reappraisal,
@@ -289,11 +289,11 @@ class TestDeclaredKindIsNotTrusted:
         ("Vorne is really the harbourmaster's son", "identity"),
     ])
     def test_a_mislabelled_claim_is_re_kinded_down(self, claim, expected):
-        from theory_of_mind import effective_kind
+        from mind.theory_of_mind import effective_kind
         assert effective_kind("observation", claim) == expected
 
     def test_a_genuine_observation_keeps_its_ceiling(self):
-        from theory_of_mind import effective_kind
+        from mind.theory_of_mind import effective_kind
         assert effective_kind(
             "observation", "Vorne is standing by the door") == "observation"
 
@@ -302,7 +302,7 @@ class TestDeclaredKindIsNotTrusted:
         something to build an information boundary on -- but this is confidence
         calibration, not a boundary, and it is arranged so a misfire makes a
         character less sure, never more."""
-        from theory_of_mind import _TOM_CONFIDENCE_CAPS, effective_kind
+        from mind.theory_of_mind import _TOM_CONFIDENCE_CAPS, effective_kind
         claims = [
             "Vorne is standing by the door", "Vorne wants the letter",
             "Vorne always lies", "Vorne told me he would come",
@@ -327,7 +327,7 @@ class TestDeclaredKindIsNotTrusted:
         assert hyp["confidence"] <= 0.45
 
     def test_both_entry_points_agree(self):
-        from theory_of_mind import cap_mind_model_updates
+        from mind.theory_of_mind import cap_mind_model_updates
         raw = [{"about_entity": "Vorne", "kind": "observation",
                 "claim": "Vorne wants the letter", "confidence": 1.0}]
         capped = cap_mind_model_updates(raw)
@@ -368,7 +368,7 @@ class TestPlaceClaimsDoNotCompete:
     ROOMS = ["Chamber 0505", "Chamber 0805", "Private Bedroom"]
 
     def _rekey(self, updates, protected=()):
-        from theory_of_mind import rekey_place_claims
+        from mind.theory_of_mind import rekey_place_claims
         return rekey_place_claims(updates, self.ROOMS, protected=protected)
 
     def test_two_rooms_become_two_entities(self):
@@ -398,7 +398,7 @@ class TestPlaceClaimsDoNotCompete:
         assert got[0]["about_entity"] == "maze layout"
 
     def test_longer_room_names_are_not_shadowed(self):
-        from theory_of_mind import rekey_place_claims
+        from mind.theory_of_mind import rekey_place_claims
         got = rekey_place_claims(
             [{"about_entity": "x", "claim": "Chamber 0505 is lit"}],
             ["Chamber 05", "Chamber 0505"])
@@ -407,7 +407,7 @@ class TestPlaceClaimsDoNotCompete:
     def test_different_rooms_no_longer_suppress_each_other(self):
         """The property that matters: independent rooms keep independent
         confidence."""
-        from theory_of_mind import apply_mind_model_updates
+        from mind.theory_of_mind import apply_mind_model_updates
         raw = [
             {"about_entity": "maze layout", "kind": "observation",
              "claim": "Chamber 0505 has a toppled bench", "confidence": 0.7},
@@ -427,7 +427,7 @@ class TestPlaceClaimsDoNotCompete:
     def test_the_same_room_still_revises(self):
         """Belief change over time must survive: a later claim about the SAME
         place still competes with the earlier one."""
-        from theory_of_mind import apply_mind_model_updates
+        from mind.theory_of_mind import apply_mind_model_updates
         state = apply_mind_model_updates({}, self._rekey(
             [{"about_entity": "maze layout", "kind": "observation",
               "claim": "Chamber 0505 has a toppled bench", "confidence": 0.8}]), 1)
@@ -452,20 +452,20 @@ class TestSubjectIsNotEvidenceOfSameness:
     """
 
     def test_two_facts_about_one_room_are_not_the_same_belief(self):
-        from theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
+        from mind.theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
         a = "Chamber 0505 has a toppled bench"
         b = "Chamber 0505 is empty and swept"
         assert claim_similarity(a, b) >= _SIMILARITY_THRESHOLD, "the old behaviour"
         assert claim_similarity(a, b, ignore="Chamber 0505") < _SIMILARITY_THRESHOLD
 
     def test_two_facts_about_one_person_are_not_the_same_belief(self):
-        from theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
+        from mind.theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
         a, b = "Vorne is afraid of the dark", "Vorne wants to leave the city"
         assert claim_similarity(a, b, ignore="Vorne") < _SIMILARITY_THRESHOLD
 
     def test_a_genuine_restatement_still_matches(self):
         """The point is not to stop matching -- reinforcement must survive."""
-        from theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
+        from mind.theory_of_mind import claim_similarity, _SIMILARITY_THRESHOLD
         assert claim_similarity(
             "Vorne is hiding something",
             "Vorne seems to be hiding something about the letter",
@@ -474,5 +474,5 @@ class TestSubjectIsNotEvidenceOfSameness:
     def test_dropping_the_subject_never_empties_a_claim(self):
         """A claim that is ONLY its subject must still compare, not divide by
         zero."""
-        from theory_of_mind import claim_similarity
+        from mind.theory_of_mind import claim_similarity
         assert claim_similarity("Vorne", "Vorne", ignore="Vorne") == 1.0

@@ -17,7 +17,7 @@ import threading
 import time
 import types
 
-import offscreen
+from world import offscreen
 
 _EPOCH = "epoch_agent_test"
 
@@ -97,7 +97,7 @@ _VERDICT = {"outcome": "success", "moved_to": "gate", "consequence": None,
 
 def _stub_models(monkeypatch, attempt=None, verdict=None, capture=None):
     """One dispatcher for both calls, keyed on each call's own system text."""
-    import providers
+    from llm import providers
 
     calls = capture if capture is not None else []
 
@@ -117,7 +117,7 @@ def _stub_models(monkeypatch, attempt=None, verdict=None, capture=None):
 
 def _run_scheduled(monkeypatch, cid, ctx=None, epoch=None):
     """Schedule, then run the captured producer exactly as jobs._run would."""
-    import jobs
+    from core import jobs
 
     captured = {}
 
@@ -505,8 +505,8 @@ class TestRerollAndRestoreCannotDoubleLand:
         state["offscreen_agent"].pop("last_epoch_id")
         temp_db.qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
                    (json.dumps(state), cid, char_id))
-        from memory import prepare_memories_batch
-        from mechanics import stable_event_key
+        from mind.memory import prepare_memories_batch
+        from world.mechanics import stable_event_key
 
         prepared = prepare_memories_batch([{
             "chat_id": cid, "char_id": char_id, "turn_id": 1, "turn_idx": 5,
@@ -579,8 +579,8 @@ class TestTheTierIsReachable:
         """`character_agent` marked unbuilt would clamp every story that
         asked for it back to the floor (`effective_depth`), and the tier
         would be another mechanism that reads correct and cannot fire."""
-        from living_world import LIVING_WORLD_BUILT
-        from scene import OFFSCREEN_LIFE_BUILT
+        from world.living_world import LIVING_WORLD_BUILT
+        from story.scene import OFFSCREEN_LIFE_BUILT
 
         assert "character_agent" in OFFSCREEN_LIFE_BUILT
         assert "ceiling" in LIVING_WORLD_BUILT["antagonist_ladder"]

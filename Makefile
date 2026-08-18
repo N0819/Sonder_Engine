@@ -21,13 +21,13 @@ RELOAD_DELAY := $(shell $(PYTHON) -c "import watchfiles" >/dev/null 2>&1 && echo
 SHUTDOWN := --timeout-graceful-shutdown 3
 
 run:
-	uvicorn app:app --host 127.0.0.1 --port 8008 --reload --reload-delay $(RELOAD_DELAY) $(SHUTDOWN)
+	uvicorn web.app:app --host 127.0.0.1 --port 8008 --reload --reload-delay $(RELOAD_DELAY) $(SHUTDOWN)
 
 # The same server without the watcher: nothing is reloaded, and nothing is
 # spent noticing that nothing changed. This is the one to use for PLAYING, as
 # opposed to working on the code.
 serve:
-	uvicorn app:app --host 127.0.0.1 --port 8008 $(SHUTDOWN)
+	uvicorn web.app:app --host 127.0.0.1 --port 8008 $(SHUTDOWN)
 
 test: test-full
 
@@ -62,7 +62,8 @@ structure:
 	$(PYTHON) tools/project_check.py
 
 compile:
-	$(PYTHON) -m compileall -q *.py agents tools tests browser_tests
+	$(PYTHON) -m compileall -q core llm world mind story dressing persist web \
+		 agents tools tests browser_tests
 
 # Both tiers now run every test. The difference is `map`: `check` regenerates
 # docs/CODE_MAP.md, `check-fast` only verifies the copy on disk is current.

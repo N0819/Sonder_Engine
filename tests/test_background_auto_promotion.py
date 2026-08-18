@@ -24,15 +24,15 @@ import time
 
 import pytest
 
-import importers
-from commit import (
+from story import importers
+from persist.commit import (
     auto_promote_background_characters,
     pick_background_reactor,
     pick_background_reactors,
     promote_background_character,
 )
-from pipeline_context import ChatData, PipelineContext, TurnData
-from schemas import validate_llm_output
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from llm.schemas import validate_llm_output
 
 
 def _make_chat(db, name="Enterprise-D"):

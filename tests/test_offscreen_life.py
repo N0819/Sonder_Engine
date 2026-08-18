@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import time
 
-from commit import normalize_offscreen_events
-from scene import (
+from persist.commit import normalize_offscreen_events
+from story.scene import (
     OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER, dialogue_config,
     normalize_offscreen_life, offscreen_life_allows,
 )
@@ -29,7 +29,7 @@ class TestTheLadder:
         """The rungs are not new vocabulary — `schemas.BehaviorController` has
         declared them since before anything read them, and two spellings of the
         same idea would diverge and then disagree."""
-        from schemas import BehaviorController
+        from llm.schemas import BehaviorController
 
         declared = {c.value for c in BehaviorController}
         for rung in OFFSCREEN_LIFE_LADDER:
@@ -78,13 +78,13 @@ class TestTheDefaultPreservesWhatTheEngineAlreadyDid:
         """Turning a setting on must not silently change a running story, and
         the ungated behaviour was exactly this rung: seeded ticks for dormant
         actors at meaningful world boundaries."""
-        from scene import OFFSCREEN_LIFE_DEFAULT
+        from story.scene import OFFSCREEN_LIFE_DEFAULT
 
         assert OFFSCREEN_LIFE_DEFAULT == "stochastic"
         assert offscreen_life_allows(OFFSCREEN_LIFE_DEFAULT, "stochastic")
 
     def test_a_stored_nonsense_value_does_not_survive_a_read(self, temp_db):
-        from db import wset
+        from core.db import wset
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -96,7 +96,7 @@ class TestTheDefaultPreservesWhatTheEngineAlreadyDid:
         assert config["max_offscreen_actors"] == 3
 
     def test_the_cap_is_bounded_on_read_as_well_as_on_write(self, temp_db):
-        from db import wset
+        from core.db import wset
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -151,7 +151,7 @@ class TestTheModelIsOutOfTheTickBusiness:
         wearing a payload field."""
         import inspect
 
-        import commit
+        from persist import commit
 
         src = inspect.getsource(commit.prepare_mapping_commit)
         assert "dormant_actors" not in src
@@ -161,7 +161,7 @@ class TestTheModelIsOutOfTheTickBusiness:
         """A prompt clause that survives its wiring is an instruction the
         model can still obey into a field nobody reads — or worse, one
         somebody still writes."""
-        from prompts import get_prompt
+        from llm.prompts import get_prompt
 
         text = get_prompt("mapping_commit")
         assert "OFF-SCREEN LIFE" not in text
@@ -172,7 +172,7 @@ class TestTheModelIsOutOfTheTickBusiness:
         about the world to enforce a setting."""
         import inspect
 
-        import commit
+        from persist import commit
 
         src = inspect.getsource(commit.prepare_mapping_commit)
         assert '"scene_changed": bool(ctx.director_establish),' in src
@@ -183,7 +183,7 @@ class TestTheModelIsOutOfTheTickBusiness:
         unadjudicated authoring channel whatever the setting says."""
         import inspect
 
-        import commit
+        from persist import commit
 
         src = inspect.getsource(commit.commit_mapping)
         assert "normalize_offscreen_events" in src
@@ -195,9 +195,9 @@ class TestTheModelIsOutOfTheTickBusiness:
         because the ticks became cheap."""
         import inspect
 
-        import commit
+        from persist import commit
 
-        import offscreen
+        from world import offscreen
 
         mapping_src = inspect.getsource(commit.commit_mapping)
         epoch_src = inspect.getsource(offscreen.advance_epoch)
@@ -210,7 +210,7 @@ class TestTheModelIsOutOfTheTickBusiness:
         domain so a turn with no new lore still gets a real epoch."""
         import inspect
 
-        import commit
+        from persist import commit
 
         src = inspect.getsource(commit._commit_all_locked)
         assert '"offscreen_epoch"' in src
@@ -228,7 +228,7 @@ class TestFullRungDocumentationStaysHonest:
         against. Both must survive edits to this block."""
         import inspect
 
-        import scene
+        from story import scene
 
         source = inspect.getsource(scene)
         marker = source[source.index("What the cast is allowed to do"):
@@ -262,7 +262,7 @@ class TestFullRungDocumentationStaysHonest:
 
 
 def test_the_api_round_trips_the_setting(temp_db):
-    import app
+    from web import app
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -275,7 +275,7 @@ def test_the_api_round_trips_the_setting(temp_db):
 
 
 def test_the_api_normalizes_rather_than_rejecting(temp_db):
-    import app
+    from web import app
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -287,7 +287,7 @@ def test_the_api_normalizes_rather_than_rejecting(temp_db):
 def test_a_cap_of_zero_silences_ticks_without_losing_the_level(temp_db):
     """The bound and the permission are separate answers, and a cap of zero is
     a legitimate way to say "not right now"."""
-    import app
+    from web import app
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

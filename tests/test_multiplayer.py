@@ -8,7 +8,7 @@ import json
 import time
 
 from agents.runtime import _chat_has_extra_players, _load_extra_players, build_plan
-from character_schema import default_persona_data
+from story.character_schema import default_persona_data
 
 
 def _make_chat(db):

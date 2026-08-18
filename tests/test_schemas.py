@@ -1,6 +1,6 @@
 """Tests for LLM output preprocessing/validation in schemas.py."""
 
-from schemas import validate_llm_output_strict
+from llm.schemas import validate_llm_output_strict
 
 def _base_character_output(considered_responses):
     return {

@@ -21,8 +21,8 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 from agents.background import (
     _audience_map,
@@ -34,7 +34,7 @@ from agents.background import (
     _withheld_bodies,
     managed_presences,
 )
-from commit import _append_manager_conduct, _persist_blurbs
+from persist.commit import _append_manager_conduct, _persist_blurbs
 
 COMMON = "tavern_common_room"
 CELLAR = "tavern_cellar"
@@ -331,7 +331,7 @@ def test_ref_dedup_drops_a_scanned_fragment_of_a_declared_ref(temp_db):
 def test_long_declared_ref_is_truncated_to_a_matchable_key(temp_db):
     """A ref is a ratification key, not a summary."""
     from agents.background import _claimed_refs
-    from background_claims import MAX_REF_WORDS
+    from world.background_claims import MAX_REF_WORDS
     entry = {"asserts": ["EPS relay feeding the tactical console's deck-nine "
                          "junction suffered real hardware damage from the short"]}
     refs = _claimed_refs(entry, "The damage is real.", {"The Barkeep"})

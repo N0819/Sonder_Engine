@@ -24,13 +24,13 @@ os.chdir(REPO)
 DB = os.path.join(tempfile.mkdtemp(), "pose.db")
 os.environ["ENGINE_DB"] = DB
 
-import db  # noqa: E402
+from core import db  # noqa: E402
 db.configure(DB)
 db.init()
-from db import q, qi, wget, wset  # noqa: E402
-from character_schema import default_character_data, default_persona_data  # noqa: E402
-from pipeline_context import ChatData, PipelineContext, TurnData  # noqa: E402
-from spatial import merge_scene_with_diff, normalize_scene_poses  # noqa: E402
+from core.db import q, qi, wget, wset  # noqa: E402
+from story.character_schema import default_character_data, default_persona_data  # noqa: E402
+from core.pipeline_context import ChatData, PipelineContext, TurnData  # noqa: E402
+from world.spatial import merge_scene_with_diff, normalize_scene_poses  # noqa: E402
 import agents.perception as perception  # noqa: E402
 import agents.common as common  # noqa: E402
 

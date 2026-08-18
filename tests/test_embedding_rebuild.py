@@ -3,9 +3,9 @@ import json, time
 import numpy as np
 import pytest
 
-import memory
-import providers
-from character_schema import default_character_data
+from mind import memory
+from llm import providers
+from story.character_schema import default_character_data
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def _seed(bank, n=5, who=0):
 
 
 def _strand(model="ancient:model", dim=99):
-    from db import qi
+    from core.db import qi
     qi("UPDATE memories SET embedding_model=?, embedding_dim=?", (model, dim))
 
 
@@ -87,7 +87,7 @@ def test_a_provider_failure_never_writes_fallback_over_real_vectors(bank, monkey
     """The one outcome worse than not running: rows stamped migrated while
     silently downgraded to the crc32 hash."""
     _seed(bank, 4)
-    from db import qi
+    from core.db import qi
     qi("UPDATE memories SET embedding_model=?, embedding_dim=?", ("ancient:model", 99))
 
     real = providers.EmbeddingBatch(
@@ -107,7 +107,7 @@ def test_a_provider_failure_never_writes_fallback_over_real_vectors(bank, monkey
     assert report["stopped_early"]
     assert "connection refused" in report["error"]
     assert report["memories"] == 0
-    from db import q
+    from core.db import q
     assert q("SELECT COUNT(*) AS n FROM memories WHERE embedding_model='cheap:crc32:256'",
              (), one=True)["n"] == 0
 
@@ -115,7 +115,7 @@ def test_a_provider_failure_never_writes_fallback_over_real_vectors(bank, monkey
 def test_summaries_are_rebuilt_too(bank):
     memory.save_memory_summary(bank["chat"], bank["chars"][0], "She has been crossing bridges for weeks.",
                                key_phrases=["bridge"], unresolved_threads=["who follows her"])
-    from db import qi
+    from core.db import qi
     qi("UPDATE memory_summaries SET embedding_model=?, embedding_dim=?", ("ancient", 9))
     assert memory.embedding_bank_status()["memory_summaries"]["stranded"] == 1
     assert memory.rebuild_embeddings()["summaries"] == 1
@@ -208,7 +208,7 @@ class TestARestoreDoesNotUndoARebuild:
     def test_restore_hands_the_bank_back_to_the_reconciler(self):
         import inspect
 
-        import checkpoints
+        from persist import checkpoints
         # restore_checkpoint delegates to _restore_checkpoint_body,
         # which is where the work (and the reconciliation) lives.
         src = inspect.getsource(checkpoints._restore_checkpoint_body)
@@ -218,7 +218,7 @@ class TestARestoreDoesNotUndoARebuild:
         """A maintenance task must not be able to break a reroll."""
         import inspect
 
-        import checkpoints
+        from persist import checkpoints
         src = inspect.getsource(checkpoints._restore_checkpoint_body)
         i = src.index("start_rebuild_if_needed")
         assert "try:" in src[max(0, i - 300):i]
@@ -243,7 +243,7 @@ class TestCarryingARebuildBackThroughSavedStates:
     def test_the_join_key_is_the_content_and_the_character(self):
         """Two minds can hold word-identical memories that are still different
         rows, and a dump carries no row id to join on."""
-        import memory
+        from mind import memory
         def mem(char_id, content):
             return {"char_id": char_id, "content": content}
         a = memory._memory_vector_key(mem(1, "she crossed the bridge"))
@@ -263,7 +263,7 @@ class TestCarryingARebuildBackThroughSavedStates:
         "You are in Ten Forward." at turn 42 and again at turn 44, same
         character, two different embedding payloads.
         """
-        import memory
+        from mind import memory
         base = {"char_id": 1, "content": "You are in Ten Forward.",
                 "category": "episode", "location": "Ten Forward"}
         assert (memory._memory_vector_key({**base, "turn_idx": 42})
@@ -276,7 +276,7 @@ class TestCarryingARebuildBackThroughSavedStates:
         """`upsert_memory_summary` embeds `_summary_retrieval_text` -- the
         summary WITH its key phrases and unresolved threads -- so keying on the
         `summary` field alone had the same collision."""
-        import memory
+        from mind import memory
         base = {"char_id": 1, "summary": "The courier never arrived."}
         assert (memory._summary_vector_key({**base, "key_phrases": ["dock"]})
                 != memory._summary_vector_key({**base,
@@ -286,13 +286,13 @@ class TestCarryingARebuildBackThroughSavedStates:
                     {**base, "unresolved_threads": ["who sent him"]}))
 
     def test_a_dry_run_writes_nothing(self, bank):
-        import memory
+        from mind import memory
         r = memory.rebuild_checkpoint_embeddings(dry_run=True)
         assert r["dry_run"] is True and r["rewritten"] == 0
 
     def test_a_bank_with_nothing_rebuilt_is_a_noop(self, bank):
         """Nothing to substitute FROM means nothing to do — never a blanking."""
-        import memory
+        from mind import memory
         r = memory.rebuild_checkpoint_embeddings(dry_run=False)
         assert r["rewritten"] == 0 and r["memories_repaired"] == 0
 
@@ -302,7 +302,7 @@ class TestCarryingARebuildBackThroughSavedStates:
         history to tidy a number."""
         import inspect
 
-        import memory
+        from mind import memory
         src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
         # The unmatched branch increments the counter and moves on; nothing
         # between the miss and the next row touches the saved vector.
@@ -314,7 +314,7 @@ class TestCarryingARebuildBackThroughSavedStates:
     def test_a_blob_is_proven_before_it_replaces_history(self):
         import inspect
 
-        import memory
+        from mind import memory
         src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
         assert "check = json.loads(text)" in src
         assert "!= len(blob.get(\"memories\")" in src
@@ -333,7 +333,7 @@ class TestStartupHandsTheBankBackToo:
     def test_startup_reconciles_the_embedding_bank(self):
         import inspect
 
-        import app
+        from web import app
         src = inspect.getsource(app._startup_engine)
         assert "_reconcile_embedding_bank" in src
 
@@ -343,7 +343,7 @@ class TestStartupHandsTheBankBackToo:
         -- the same rule the checkpoint path follows."""
         import inspect
 
-        import app
+        from web import app
         src = inspect.getsource(app._reconcile_embedding_bank)
         assert "Thread(" in src and "daemon=True" in src
         # The CALL, not the docstring's mention of it.

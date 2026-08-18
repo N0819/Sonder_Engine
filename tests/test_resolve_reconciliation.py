@@ -28,9 +28,9 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import contact_sensation, merge_scene_with_diff, spatial_rel
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import contact_sensation, merge_scene_with_diff, spatial_rel
 
 import agents.director as director
 from agents.director import (
@@ -946,7 +946,7 @@ def test_tripwire_escalates_to_deep_audit_when_opted_in(
 ):
     """resolve_deep_audit='tripwire' wires the retained standalone audit to
     the tripwire; its findings flow into the normal repair path."""
-    from db import set_setting
+    from core.db import set_setting
     set_setting("resolve_deep_audit", "tripwire")
     try:
         interp = _action_interp()

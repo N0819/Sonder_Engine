@@ -36,9 +36,9 @@ from __future__ import annotations
 
 from agents.common import _inject_dialogue
 from agents.director import _stamp_dialogue_articulation
-from prompts import DEFAULT_PROMPTS
-from schemas import DialogueLogEntry
-from spatial import speech_articulation_impediment
+from llm.prompts import DEFAULT_PROMPTS
+from llm.schemas import DialogueLogEntry
+from world.spatial import speech_articulation_impediment
 
 
 def _scene(contacts):

@@ -126,7 +126,7 @@ def cmd_sweep(args):
 
 def _replay_priority(result):
     """Every serves key this beat cites reads as an established intention."""
-    import affect
+    from mind import affect
 
     cited = set()
     asv = result.get("active_state") or {}
@@ -178,7 +178,7 @@ def _checkpoint_states(con, chat_id, char_id):
 
 
 def cmd_replay(args):
-    import affect
+    from mind import affect
 
     con = _connect(args.db)
     beats = _character_beats(con, chat_id=args.chat).get(

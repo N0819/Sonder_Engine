@@ -23,7 +23,7 @@ import json
 
 import agents.loops as loops
 from agents.common import cut_short_speech, norm_sequence
-from character_schema import default_character_data
+from story.character_schema import default_character_data
 
 
 class TestWhereTheLineBreaks:

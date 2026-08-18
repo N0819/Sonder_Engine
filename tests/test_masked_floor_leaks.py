@@ -41,13 +41,13 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 from agents.background import _audience_map
 from agents.loops import deterministic_micro_perception
 from agents.perception import _dialogue_hear_level, _source_channels
-from spatial import hear_level, visible_adjacent_rooms
+from world.spatial import hear_level, visible_adjacent_rooms
 
 
 OCCUPANT = "Wren"

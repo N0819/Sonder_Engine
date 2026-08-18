@@ -18,14 +18,14 @@ import time
 
 import pytest
 
-import app
-import memory
-import paradox
-import spatial_frames
-from character_schema import default_character_data
-from db import active_frame_id, wget, wget_for_frame, wset, wset_for_frame
-from frames import create_frame, get_frame, is_memory_visible
-from pipeline_context import ChatData, PipelineContext, TurnData
+from web import app
+from mind import memory
+from world import paradox
+from world import spatial_frames
+from story.character_schema import default_character_data
+from core.db import active_frame_id, wget, wget_for_frame, wset, wset_for_frame
+from core.frames import create_frame, get_frame, is_memory_visible
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_chat(db):
@@ -178,7 +178,7 @@ class TestPerformSplit:
         )
         assert persona_row["frame_id"] == new_frame_id
 
-        from scene import active_cast
+        from story.scene import active_cast
         parent_cast_ids = {r["id"] for r in active_cast(chat_id, None)}
         child_cast_ids = {r["id"] for r in active_cast(chat_id, new_frame_id)}
         assert nova in parent_cast_ids and nova not in child_cast_ids
@@ -351,7 +351,7 @@ class TestZoneFieldSurvivesSchemaValidation:
     it all day and it would never survive to reach the scene blob."""
 
     def test_director_resolves_room_zone_is_not_stripped(self):
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
 
         raw = {
             "resolved_event": "x", "summary": "x",

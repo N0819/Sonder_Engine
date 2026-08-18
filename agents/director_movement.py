@@ -13,8 +13,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 
 import re
 
-from character_schema import character_name_from_text
-from spatial import (
+from story.character_schema import character_name_from_text
+from world.spatial import (
     egocentric_frame,
     merge_scene_with_diff,
     normalize_bearing,
@@ -472,7 +472,7 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
     may choose to chase or stop on their next decision. Actor-owned stop ops
     take effect before any carry.
     """
-    from spatial import apply_following_ops
+    from world.spatial import apply_following_ops
 
     ops = list(state_diff.get("following_ops") or [])
     relation_scene = merge_scene_with_diff(scene, {"following_ops": ops})

@@ -46,7 +46,7 @@ class TestTheSheetHasAFloor:
     beat his goals decay. The drive is the floor goals decay onto."""
 
     def test_the_sheet_authors_a_nonempty_drive(self):
-        from character_schema import effective_drive
+        from story.character_schema import effective_drive
         sheet = M.character_sheet("Vesk")
         drive = effective_drive(sheet.get("psychology") or {}, {})
         assert drive["essence"].strip(), (
@@ -164,7 +164,7 @@ class TestRearmCommission:
         """The engine caps active intentions; a harness that minted past the
         cap would hand the character a goal ledger the engine itself refuses
         to build."""
-        from affect import _INTENT_CAP
+        from mind.affect import _INTENT_CAP
         filler = [{"id": f"i{n}", "intent": f"unrelated pursuit {n}",
                    "status": "active", "progress": 0.1}
                   for n in range(1, _INTENT_CAP + 1)]

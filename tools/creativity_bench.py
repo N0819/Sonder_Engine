@@ -147,7 +147,7 @@ def _lines_of(parsed, step):
 
 
 def _post(prov, model, system, user, timeout, max_tokens, seed_note):
-    import providers
+    from llm import providers
     t0 = time.perf_counter()
     r = providers._session().post(
         prov["base_url"].rstrip("/") + "/chat/completions",
@@ -181,12 +181,12 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
-    import db
+    from core import db
     db.configure(args.db)
-    import llm_quality
-    import prompts
-    import schemas
-    from theory_of_mind import claim_similarity
+    from llm import llm_quality
+    from llm import prompts
+    from llm import schemas
+    from mind.theory_of_mind import claim_similarity
     from agents.character import _self_line_refrain
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",

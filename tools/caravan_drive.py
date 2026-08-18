@@ -99,12 +99,12 @@ def build_story(db, positions, *, market_talk=False):
         # character's line for the telling, and rightly refuses to). What
         # this drive plays is everything DOWNSTREAM of that state: the
         # pickup, the dwell, the delivery.
-        import crowds
+        from world import crowds
 
         crowd = crowds.new_crowd(cid, MARKET, band="a few dozen",
                                  composition="market traders and mill hands",
                                  since_turn=0, mood="busy")
-        import degradation
+        from world import degradation
 
         crowd = crowds.add_hearsay(crowd, {
             "world_event_id": "event:grain", "source_event_id": "",
@@ -338,7 +338,7 @@ def who_knows(db, cid):
 
 
 def hook_author(author):
-    import llm_quality
+    from llm import llm_quality
 
     llm_quality.complete_validated_json = author
     for mod in list(sys.modules.values()):
@@ -423,7 +423,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.parse_args()
     _require_scratch()
-    import db as db_module
+    from core import db as db_module
 
     db_module.init()
     carried = run_caravan(db_module)

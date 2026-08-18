@@ -40,7 +40,7 @@ from __future__ import annotations
 import json
 
 import agents.loops as loops
-from character_schema import default_character_data
+from story.character_schema import default_character_data
 
 
 class _Chat:
@@ -312,7 +312,7 @@ def test_the_beat_opens_with_one_character_so_causality_can_build():
     fidelity check caught it as dialogue rendered out of order.
 
     The knob stays, for a beat where the room really does react as a room."""
-    from scene import DEFAULT_INTERACTION_CONFIG
+    from story.scene import DEFAULT_INTERACTION_CONFIG
 
     assert DEFAULT_INTERACTION_CONFIG["initial_parallel_reactors"] == 1
 
@@ -594,6 +594,6 @@ class TestTheIsolatedException:
         assert wave == [1, 2]   # C is in the hall with A and waits its turn
 
     def test_it_is_off_by_default(self):
-        from scene import DEFAULT_INTERACTION_CONFIG
+        from story.scene import DEFAULT_INTERACTION_CONFIG
 
         assert DEFAULT_INTERACTION_CONFIG["parallel_isolated_reactors"] is False

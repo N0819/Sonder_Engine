@@ -86,7 +86,7 @@ SHORT_KEYS = ("room", "occupants", "exits")
 
 
 def _post(prov, model, system, user, max_tokens, timeout):
-    import providers
+    from llm import providers
     base = prov["base_url"].rstrip("/")
     body = {
         "model": model,
@@ -200,9 +200,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
-    import db
+    from core import db
     db.configure(args.db)
-    import providers
+    from llm import providers
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))

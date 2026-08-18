@@ -15,7 +15,7 @@ class TestBlankRowsFollowDefault:
     """
 
     def test_no_role_has_a_hidden_parent(self):
-        from providers import ROLE_FALLBACKS
+        from llm.providers import ROLE_FALLBACKS
 
         assert ROLE_FALLBACKS == {}, (
             "a role with a non-default parent is invisible in the panel "
@@ -26,7 +26,7 @@ class TestBlankRowsFollowDefault:
     def test_every_unset_role_resolves_to_the_default_model(self, monkeypatch):
         """The behavioural claim, not just the map's contents: with only
         `default` configured, every role in the panel lands on it."""
-        import providers
+        from llm import providers
 
         monkeypatch.setattr(
             providers, "provider",
@@ -47,7 +47,7 @@ class TestBlankRowsFollowDefault:
     def test_setting_the_director_does_not_move_the_specialists(self, monkeypatch):
         """The reported defect, pinned. A host who configures `director` and
         leaves the specialists blank keeps them on `default`."""
-        import providers
+        from llm import providers
 
         monkeypatch.setattr(
             providers, "provider",
@@ -69,7 +69,7 @@ class TestBlankRowsFollowDefault:
         assert (prov["name"], model) == ("frontier", "big")
 
     def test_an_explicit_row_still_wins(self, monkeypatch):
-        import providers
+        from llm import providers
 
         monkeypatch.setattr(
             providers, "provider",
@@ -87,7 +87,7 @@ class TestBlankRowsFollowDefault:
         """Kept published even while empty: the panel renders the label from
         it, so a future non-default parent shows up without the client
         learning a second copy of the rule."""
-        src = open("app.py", encoding="utf-8").read()
+        src = open("web/app.py", encoding="utf-8").read()
         boot = src[src.index("def bootstrap"):]
         assert '"role_fallbacks":' in boot
 

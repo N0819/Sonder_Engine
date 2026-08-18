@@ -34,7 +34,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from affect import goal_slot_currency
+from mind.affect import goal_slot_currency
 from agents.character import (_GOAL_HELD_AFTER, _annotate_goal_currency,
                               _destination_from_goals)
 

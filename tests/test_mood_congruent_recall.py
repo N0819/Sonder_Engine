@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-import memory
-from character_schema import default_character_data
+from mind import memory
+from story.character_schema import default_character_data
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def bank(temp_db):
 def _lean(bank, mood, k=4):
     """Net valence of the TOP k, by rank — congruence reorders, it does not
     change what is eligible."""
-    from db import q
+    from core.db import q
     hits = memory.search_memories(
         bank["chat"], bank["char"], "waiting by the lantern", k=k,
         aspects=[("how you are feeling", mood)] if mood else None)

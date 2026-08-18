@@ -93,7 +93,7 @@ echo.
 REM  --timeout-graceful-shutdown: closing this window must actually close it.
 REM  Uvicorn otherwise waits forever for a browser that has not finished
 REM  reading a response, and a tab buffering an ambience bed is exactly that.
-"%VENV_PY%" -m uvicorn app:app --host %HOST% --port %PORT% --timeout-graceful-shutdown 3
+"%VENV_PY%" -m uvicorn web.app:app --host %HOST% --port %PORT% --timeout-graceful-shutdown 3
 
 echo.
 echo Server stopped.

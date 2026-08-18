@@ -12,9 +12,9 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
-import memory
-from character_schema import default_character_data
+from web import app
+from mind import memory
+from story.character_schema import default_character_data
 
 
 def _make_chat(db):

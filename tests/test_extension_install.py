@@ -465,7 +465,7 @@ class TestGitSources:
 
     def test_an_update_keeps_the_extension_enabled(self, tmp_path, monkeypatch,
                                                    temp_db):
-        from db import set_setting
+        from core.db import set_setting
 
         root = tmp_path / "extensions"
         root.mkdir()

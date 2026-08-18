@@ -1,7 +1,7 @@
 # Dialogue attribution (who said this line)
 
 **Status: not built.** This is the argument, not the change. Current behaviour
-is in [`dialogue_colors.py`](../../dialogue_colors.py) (colour derivation and
+is in [`story/dialogue_colors.py`](../../dialogue_colors.py) (colour derivation and
 the render-time lookup), with `agents/composer.speech_percept` as the
 already-existing per-observer, per-line seam this proposal would key off.
 

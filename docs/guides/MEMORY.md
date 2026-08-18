@@ -1,8 +1,8 @@
 # Memory
 
 How a character remembers: what gets written, what comes back, and what
-decides. Every claim here is against source — `memory.py`, `commit.py`'s
-memory domain, `agents/character.py`'s retrieval seam, and `providers.py`'s
+decides. Every claim here is against source — `mind/memory.py`, `persist/commit.py`'s
+memory domain, `agents/character.py`'s retrieval seam, and `llm/providers.py`'s
 embedding role.
 
 Memory is **per character**, never per chat. There is no shared pool a mind can
@@ -36,7 +36,7 @@ it meant, and using it well remain measurable engineering problems.
 
 ## 1. The shape of a memory
 
-One row in `memories` (`db.py`). The fields that do work:
+One row in `memories` (`core/db.py`). The fields that do work:
 
 | Field | What it is |
 |---|---|
@@ -75,7 +75,7 @@ summary scopes:
 
 Consolidation writes a separate `memory_summaries` row per scope, and
 `build_character_memory_context` hands them back under three distinct keys.
-The reason is stated in `memory.py` and worth repeating: a single melted
+The reason is stated in `mind/memory.py` and worth repeating: a single melted
 summary made a belief the character *inferred* come back a few turns later
 indistinguishable from something they had *witnessed*. That is belief
 laundering into knowledge inside one mind — the same layer collapse the engine
@@ -87,7 +87,7 @@ tag inside prose is a convention the model can drop; a separate row cannot be.
 
 ## 2. Writing — what a turn mints
 
-All minting is in `commit.py`'s `prepare_memory_commit`, which builds the batch
+All minting is in `persist/commit.py`'s `prepare_memory_commit`, which builds the batch
 without touching the database, and `commit_memories`, which writes it inside
 the turn's transaction. Nothing else creates memories on the turn path.
 
@@ -1010,7 +1010,7 @@ It is a condition to be reconciled whenever it holds.
 Where it actually runs, which is narrower than the module comment above it
 suggests:
 
-- **after a checkpoint restore** (`checkpoints.py`), automatically — a restore
+- **after a checkpoint restore** (`persist/checkpoints.py`), automatically — a restore
   writes old vectors back over rebuilt ones, so this is repair, not a new
   decision;
 - **on `POST /api/memory/embeddings/rebuild`**, i.e. when a host asks.
@@ -1073,7 +1073,7 @@ index — all of which keep the pre-ranking filters that a global index cannot.
 
 ## 11. Neighbours in the same module
 
-`memory.py` also owns lore and relationships, which are *not* character memory
+`mind/memory.py` also owns lore and relationships, which are *not* character memory
 and follow different rules:
 
 - **Lorebooks** — `resolve_lorebook_graph`, `search_lore`,
@@ -1145,7 +1145,7 @@ machinery for them did not measurably help. Recorded here because the idea is
 an obvious one to have twice.
 
 What is true today: there is **no modality anywhere in memory** — no column, no
-tag — and `sensory_events` never reach `commit.py` at all. They are read in one
+tag — and `sensory_events` never reach `persist/commit.py` at all. They are read in one
 place, the *establishment* path in `agents/perception.py`, and folded into view
 prose. The structured channel is also thin and unnormalised: across the live
 corpus the Director emitted 26 `smell` events under a `kind` vocabulary that
@@ -1438,13 +1438,13 @@ already archived the window.
 Both columns are carried by `dump_chat_memories` / `prepare_chat_memory_restore`
 (checkpoints and branches), `dump_character_memories` /
 `import_character_memories` (portable character banks), and
-`chat_archive.py`'s import. Importance/dispute migration is v20→v21;
+`persist/chat_archive.py`'s import. Importance/dispute migration is v20→v21;
 before/after affect is v23→v24. Both are additive. `NULL` importance reads as
 salience, empty dispute is undisputed, and old encoding axes remain neutral
 instead of fabricating a retrospective emotional change.
 
 `memory_summaries.support` is v24→v25, additive, and carried by
 `dump_memory_summaries` / `apply_memory_summary_restore` — which is every path
-summaries travel, since checkpoints and `chat_archive.py` both go through
+summaries travel, since checkpoints and `persist/chat_archive.py` both go through
 them. Because its refs are `event_key`s rather than row ids, branch and clone
 need no remapping.

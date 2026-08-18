@@ -55,7 +55,7 @@ class TestTheMergeKeepsEveryAccumulatingField:
         """The general rule, so the next field added does not repeat this.
         Any `*_ops`/`*_updates` field a character may emit accumulates across
         rounds; dropping one loses a mind's work with no warning anywhere."""
-        import schemas
+        from llm import schemas
 
         model = schemas.SCHEMA_MAP["character"]
         fields = list(getattr(model, "model_fields", None)
@@ -77,7 +77,7 @@ class TestAReactingMindIsStillAMind:
         nothing of what it worked out."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.prepare_character_commits) \
             if hasattr(commit, "prepare_character_commits") else ""
         # The merge lives in prepare_memory_commit (commit_memory since the

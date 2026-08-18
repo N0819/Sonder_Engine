@@ -40,7 +40,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import backdrops  # noqa: E402
+from dressing import backdrops  # noqa: E402
 
 
 def _connect(db_path):

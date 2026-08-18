@@ -8,8 +8,8 @@ import json
 import time
 
 from agents.character import _recent_self_lines, _recent_self_moves
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _chat(db):

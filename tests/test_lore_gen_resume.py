@@ -26,8 +26,8 @@ import math
 import httpx
 import pytest
 
-import importers
-import providers
+from story import importers
+from llm import providers
 
 
 # ---- harness --------------------------------------------------------------

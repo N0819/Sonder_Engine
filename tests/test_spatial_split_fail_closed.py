@@ -21,10 +21,10 @@ import time
 
 import pytest
 
-import app
-import spatial_frames
-from db import wget_for_frame, wset, wset_for_frame
-from frames import create_frame, is_memory_visible
+from web import app
+from world import spatial_frames
+from core.db import wget_for_frame, wset, wset_for_frame
+from core.frames import create_frame, is_memory_visible
 
 
 def _make_chat(db):

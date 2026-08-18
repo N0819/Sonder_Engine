@@ -17,8 +17,8 @@ import json
 
 import pytest
 
-import providers
-from providers import token_sink
+from llm import providers
+from llm.providers import token_sink
 
 PROV = {"id": 7, "kind": "generic", "base_url": "http://x/v1",
         "api_key": "k", "name": "lmstudio-local"}
@@ -55,7 +55,7 @@ def _clear_json_object_memo():
 
 @pytest.fixture
 def _reasoning_off(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", json.dumps({"default": "off"}))
     return temp_db
 

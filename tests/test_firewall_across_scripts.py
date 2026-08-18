@@ -42,7 +42,7 @@ def language(request):
     ("Hinami", "彼はHinamiに近づく", True, "Latin name in Japanese prose"),
 ])
 def test_a_name_is_recognised_in_its_own_script(form, text, matches, why):
-    from character_schema import name_boundary_regex
+    from story.character_schema import name_boundary_regex
 
     assert bool(name_boundary_regex(form, re.IGNORECASE).search(text)) is matches, why
 

@@ -511,7 +511,7 @@ def _vesk_sheet(name="Vesk"):
     fluently, never to studying it in place. Learning the maze is framed as
     something that happens BY walking it, which is also what is true.
     """
-    from character_schema import default_character_data, normalize_character_data
+    from story.character_schema import default_character_data, normalize_character_data
     sheet = default_character_data(name)
     sheet["identity"]["pronouns"] = {
         "subject": "he", "object": "him", "possessive": "his"}
@@ -640,7 +640,7 @@ def _orrin_sheet(name="Orrin"):
     same class of error as the very first arm's "notice and remember what
     makes each chamber different", one drive-weight louder.
     """
-    from character_schema import default_character_data, normalize_character_data
+    from story.character_schema import default_character_data, normalize_character_data
     sheet = default_character_data(name)
     sheet["identity"]["pronouns"] = {
         "subject": "he", "object": "him", "possessive": "his"}
@@ -796,7 +796,7 @@ def carry_model_config(source_db, db_path):
         return 0, 0
     src = sqlite3.connect(f"file:{source_db}?mode=ro", uri=True)
     src.row_factory = sqlite3.Row
-    from db import qi
+    from core.db import qi
     n_set = 0
     for row in src.execute("SELECT key,value FROM settings"):
         if row["key"] not in _SETTINGS_TO_CARRY:
@@ -826,7 +826,7 @@ def ablate_affordances():
     so a difference between the arms is attributable to these.
     """
     import agents.character as ch
-    import memory as mem
+    from mind import memory as mem
     # **kw so the stub survives the annotator growing keyword inputs
     # (known_exits/here_rid/place_graph/...) -- ablation means "mark nothing",
     # not "crash on the inputs you would have marked from".
@@ -848,7 +848,7 @@ def set_reasoning_effort(spec):
     contributes to a navigation experiment is a room description.
     """
     import json as _json
-    from db import q, qi
+    from core.db import q, qi
     row = q("SELECT value FROM settings WHERE key='reasoning_effort'", one=True)
     cfg = _json.loads(row["value"]) if row and row["value"] else {}
     if "=" not in str(spec):
@@ -927,7 +927,7 @@ def force_single_model(spec, roles=None):
     attributable.
     """
     import json as _json
-    from db import q, qi
+    from core.db import q, qi
     provider_id, _, model = str(spec).partition(":")
     if not model:
         raise SystemExit("--model must be '<provider_id>:<model>'")
@@ -946,7 +946,7 @@ def force_single_model(spec, roles=None):
 
 
 def setup(db_path, walls, source_db=None, model=None, reasoning=None):
-    import db
+    from core import db
     db.configure(db_path)
     db.init()
     if source_db:
@@ -958,8 +958,8 @@ def setup(db_path, walls, source_db=None, model=None, reasoning=None):
             print(f"  model[{role}] -> {applied}")
     if reasoning:
         print(f"  reasoning effort -> {set_reasoning_effort(reasoning)}")
-    from db import qi, wset
-    from character_schema import character_name
+    from core.db import qi, wset
+    from story.character_schema import character_name
 
     chat_id = qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                  ("maze-experiment", "A stone maze with a shrine at its heart.",
@@ -983,7 +983,7 @@ def setup(db_path, walls, source_db=None, model=None, reasoning=None):
 
 
 def reset_position(chat_id, name):
-    from db import wget, wset
+    from core.db import wget, wset
     sc = wget(chat_id, "scene", {}) or {}
     sc.setdefault("positions", {})[name] = _rid(START)
     sc.pop("crossings", None)
@@ -1038,7 +1038,7 @@ def rearm_commission(state, name, turn_idx):
     """
     # Engine helpers used deliberately: minting ids any other way would fork
     # the id namespace the engine's dedupe and serves-resolution key on.
-    from affect import _INTENT_CAP, _next_intent_id
+    from mind.affect import _INTENT_CAP, _next_intent_id
 
     interior = state.setdefault("interior", {})
     intentions = interior.get("intentions")
@@ -1148,7 +1148,7 @@ def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
         valence, arousal, salience = 0.3, 0.35, 0.8
 
     try:
-        from memory import add_memory
+        from mind.memory import add_memory
         add_memory(chat_id, char_id, turn_id, "episodic", "experienced",
                    salience, body, category="event",
                    gist=("Finished a run, was fed, and was carried back to "
@@ -1165,7 +1165,7 @@ def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
     # integrating it as unresolved drive is the failure DESIGN_SURFACE_COMFORT
     # names (a saturated body manufactured out of contentment).
     try:
-        from db import q, qi
+        from core.db import q, qi
         import json as _json
         # chat_chars is keyed on (chat_id, char_id) -- it has no `id`.
         row = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
@@ -1207,7 +1207,7 @@ def run_interlude(chat_id, char_id, name, run_no, reached, turn_id):
 
 
 def position_of(chat_id, name):
-    from db import wget
+    from core.db import wget
     return ((wget(chat_id, "scene", {}) or {}).get("positions") or {}).get(name)
 
 
@@ -1257,7 +1257,7 @@ def install_scripted_models(name, walls):
     real stage code, so this exercises director_resolve -> commit for free."""
     import agents.character as ch, agents.perception as pc
     import agents.director as dr, agents.mapping as mp
-    import providers
+    from llm import providers
     rng = random.Random(99)
 
     def _fake(role, step, prompt, payload, **kw):
@@ -1296,10 +1296,10 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
              collect_trace=False, think_path=None, run_no=0,
              resume_from=0, resume_visited=None, checkpoint=None):
     """One traversal. Returns the ordered list of rooms occupied."""
-    import db as _db
-    from db import qi, wget, wset
-    from pipeline_context import PipelineContext, ChatData, TurnData
-    from scene import active_cast
+    from core import db as _db
+    from core.db import qi, wget, wset
+    from core.pipeline_context import PipelineContext, ChatData, TurnData
+    from story.scene import active_cast
     import agents.runtime as runtime
 
     # On resume the position is already in the DB -- it is where he stopped,
@@ -1373,7 +1373,7 @@ def run_once(chat_id, char_id, name, walls, *, agent, max_steps, turn_base,
                 # it was always empty, which looked like the model not
                 # exposing a trace rather than us reading the wrong moment.
                 try:
-                    from providers import last_reasoning as _lr
+                    from llm.providers import last_reasoning as _lr
                     char_reasoning = str(_lr.get() or "")
                 except Exception:
                     char_reasoning = ""
@@ -1503,13 +1503,13 @@ def reward_on_contact(chat_id, char_id, name):
     keeps its meal, which is a real reward for finishing; it simply stops
     being the ONLY thing that ever felt good.
     """
-    from db import q, qi
+    from core.db import q, qi
     import json as _json
     try:
         row = q("SELECT id FROM turns WHERE chat_id=? ORDER BY idx DESC "
                 "LIMIT 1", (chat_id,), one=True)
         if row:
-            from memory import add_memory
+            from mind.memory import add_memory
             # salience is POSITIONAL, before the body -- same call shape the
             # interlude uses. Passing the body into that slot and salience as
             # a keyword raises, and the guard below then swallows the whole
@@ -1844,14 +1844,14 @@ def main():
     # this file is built in code -- which is exactly how A11 ran 150 beats
     # against an empty `drive` with nothing anywhere objecting (CLAUDE.md).
     try:
-        from importers import character_import_warnings
+        from story.importers import character_import_warnings
         for warning in character_import_warnings(character_sheet()) or []:
             print(f"  SHEET WARNING: {warning}")
     except Exception as exc:                            # pragma: no cover
         print(f"  sheet warnings unavailable ({exc})")
 
     if resume:
-        import db as _db
+        from core import db as _db
         _db.configure(db_path)
         row = _db.q("SELECT id FROM chats ORDER BY id LIMIT 1", one=True)
         crow = _db.q("SELECT id,name FROM characters ORDER BY id LIMIT 1",
@@ -1985,7 +1985,7 @@ def main():
         # it again" would be a lie, and the point of the interlude is that he
         # is not told things that are not so.
         if run < args.runs:
-            import db as _db
+            from core import db as _db
             _last = _db.q("SELECT id FROM turns WHERE chat_id=? "
                           "ORDER BY idx DESC LIMIT 1", (chat_id,), one=True)
             run_interlude(chat_id, char_id, name, run, m["reached"],

@@ -24,12 +24,12 @@ import time
 
 import pytest
 
-import checkpoints
-import memory
-from checkpoints import (checkpoint_storage_status, compact_checkpoints,
+from persist import checkpoints
+from mind import memory
+from persist.checkpoints import (checkpoint_storage_status, compact_checkpoints,
                          ensure_checkpoint, restore_checkpoint,
                          start_compaction)
-from checkpoints import _verify_no_loss
+from persist.checkpoints import _verify_no_loss
 
 
 def _story(temp_db, name, n=6):
@@ -144,7 +144,7 @@ def _corrupt_candidate_for(monkeypatch, chat_name):
     ORIGINAL way (two memories sharing content but not vectors) is now handled
     rather than refused: addresses are the vector's own bytes.
     """
-    import checkpoints as C
+    from persist import checkpoints as C
     real = C._candidate_blob
 
     def fake(blob):

@@ -127,7 +127,7 @@ it gets. Player views are deltas and do not repeat. That figure needs
 re-measuring split by mode before anyone changes rendering to chase it.
 
 ### R1 — mapping stops transcribing lore back to the engine
-`prompts.py`, `agents/mapping.py::_join_relevant_lore`
+`llm/prompts.py`, `agents/mapping.py::_join_relevant_lore`
 
 The ask is now `relevant_lore:[{id, why_relevant}]`; content, keys,
 category and book_id are joined engine-side from `hits` by id. An id the
@@ -140,7 +140,7 @@ measured steps. Latency second: ~485 tok/call, 38% of mapping's
 model-written output, ~0.06–0.09 s/turn at 1000 tps and ~7.6 s/call at 64.
 
 ### R2 — the resolve contract stops asking for what the engine overwrites
-`prompts.py`
+`llm/prompts.py`
 
 `volume`/`visibility`/`conceal_from` are re-stamped on every declared line
 from the declaration itself (`director.py:4880-4890`, `:4949-4950`). The
@@ -212,7 +212,7 @@ nothing left in it that could reach a model, which
 behaviourally (a behavioural test passes while a model call sits on a path it
 did not happen to take).
 
-**Deliberately kept:** the `perception` prompt text in `prompts.py`, with a
+**Deliberately kept:** the `perception` prompt text in `llm/prompts.py`, with a
 comment saying nothing sends it. Stored steps, archives and pipeline traces
 still resolve through the `perception` step key, and deleting the entry would
 break replay and reroll of every pre-change turn — the same reasoning that

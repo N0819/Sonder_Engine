@@ -10,12 +10,12 @@ import json
 import time
 
 import agents.background as background
-from commit import (
+from persist.commit import (
     pick_background_reactors,
     track_background_presences,
     _background_fired_reactions,
 )
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _setup(temp_db, presences, *, max_reactors=2, player_input="", turn_idx=5):

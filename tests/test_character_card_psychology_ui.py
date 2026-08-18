@@ -30,7 +30,7 @@ def test_generation_and_import_prompts_emit_v3_fields():
         (ROOT / "language_packs/en/cards/system_prompts.json").read_text(
             encoding="utf-8"))
     prompts = json.dumps(prompt_card)
-    importers = (ROOT / "importers.py").read_text(encoding="utf-8")
+    importers = (ROOT / "story" / "importers.py").read_text(encoding="utf-8")
 
     for token in (
         r"activation_cues",

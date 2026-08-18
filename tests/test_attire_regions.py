@@ -12,7 +12,7 @@ Deliberately database-free: everything here is a pure function over dicts.
 
 from __future__ import annotations
 
-import attire
+from story import attire
 
 
 # --- where a garment goes ---------------------------------------------------
@@ -709,7 +709,7 @@ class TestAStateWordIsNotAGarment:
     """
 
     def test_a_bare_state_never_becomes_a_garment(self):
-        import commit
+        from persist import commit
         worn = ["fitted tank top", "travel shorts"]
         for text in ("removed", "worn", "off", "shed", "gone", "loosened", "open"):
             out = commit.interpret_attire_notes({"notes": {"cloak": text}}, worn, {})
@@ -717,14 +717,14 @@ class TestAStateWordIsNotAGarment:
             assert text not in added, f"{text!r} became a garment"
 
     def test_a_removal_note_takes_the_handle_off(self):
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"cloak": "removed"}}, ["fitted tank top"], {})
         assert out.get("remove") == ["cloak"]
         assert not out.get("add")
 
     def test_a_wear_note_puts_the_handle_on(self):
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"corset": "worn"}}, ["fitted tank top"], {})
         assert out.get("add") == ["corset"]
@@ -733,7 +733,7 @@ class TestAStateWordIsNotAGarment:
     def test_a_real_description_still_names_the_garment(self):
         """Reading 3 is why authored detail reaches the ledger at all; the
         guard must not cost it."""
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"shift": "linen shift, hem rucked up"}}, ["travel shorts"], {})
         assert out.get("add") == ["linen shift"]
@@ -741,7 +741,7 @@ class TestAStateWordIsNotAGarment:
     def test_a_garment_whose_name_contains_a_state_word_survives(self):
         """The guard is on the WHOLE text, not a substring -- 'a worn leather
         jerkin' is a jerkin."""
-        import attire
+        from story import attire
         assert not attire.is_bare_garment_state("a worn leather jerkin")
         out = attire.rederive_entry({"wearing": ["a worn leather jerkin"], "regions": {}})
         assert out["wearing"] == ["a worn leather jerkin"]
@@ -750,7 +750,7 @@ class TestAStateWordIsNotAGarment:
         """No migration: the stories already carrying one heal the next time
         the ledger is normalised. Both doors -- the authored regions and the
         flat `wearing` list it also landed in."""
-        import attire
+        from story import attire
         healed = attire.rederive_entry({
             "wearing": ["corset", "worn", "skirt"],
             "regions": {"torso": {"garments": [
@@ -774,7 +774,7 @@ class TestDerivedStateDoesNotAccumulate:
     """
 
     def test_only_the_current_undress_note_survives(self):
-        import attire
+        from story import attire
         out = attire.rederive_entry({
             "state": ["bare at the head, arms, waist, groin, legs, feet",
                       "bare at the head, groin, legs", "bare at the groin"],
@@ -785,7 +785,7 @@ class TestDerivedStateDoesNotAccumulate:
 
     def test_authored_prose_still_survives(self):
         """The whole point of keeping a `state` list."""
-        import attire
+        from story import attire
         out = attire.rederive_entry({
             "state": ["bare at the groin", "her hair is still damp"],
             "regions": {"groin": {"garments": [
@@ -793,7 +793,7 @@ class TestDerivedStateDoesNotAccumulate:
         assert "her hair is still damp" in out["state"]
 
     def test_a_loosened_note_is_ours_too(self):
-        import attire
+        from story import attire
         assert attire.is_derived_state_note("silk robe loosened")
         assert attire.is_derived_state_note("bare at the torso")
         assert not attire.is_derived_state_note("she is shivering")
@@ -839,7 +839,7 @@ class TestTheViewsReadThroughNormalisation:
     def test_what_other_observers_are_told_is_normalised_too(self):
         """`appearance_of` is the string handed to everyone who can see this
         body -- a garment named "worn" there is one they can see."""
-        from scene import appearance_of
+        from story.scene import appearance_of
         text = appearance_of("Elyndra", "a woman",
                              {"attire": {"Elyndra": self._corrupt()}})
         assert ", worn," not in text and not text.endswith(", worn")
@@ -875,7 +875,7 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
         return ["lightweight travel jacket", "travel shorts"]
 
     def test_the_shift_case_still_works(self):
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"shift": "linen shift, hem rucked up where her hand slipped"}},
             self._worn(), {"wearing": self._worn()},
@@ -883,7 +883,7 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
         assert out.get("add") == ["linen shift"]
 
     def test_a_garment_the_prose_never_mentions_is_refused(self):
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"corset": "corset, unlaced and hanging open"}},
             self._worn(), {"wearing": self._worn()},
@@ -891,7 +891,7 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
         assert not out.get("add")
 
     def test_the_director_is_told_what_was_ignored_and_how_to_mean_it(self):
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"corset": "corset, unlaced"}},
             self._worn(), {"wearing": self._worn()},
@@ -901,7 +901,7 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
 
     def test_the_head_noun_is_enough(self):
         """A note introduces "linen shift"; prose says "your shift"."""
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"x": "linen shift, rucked"}}, self._worn(),
             {"wearing": self._worn()}, prose="the hem of your shift")
@@ -909,7 +909,7 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
 
     def test_an_explicit_add_is_never_gated(self):
         """The gate is on NOTES. A Director that means it says so."""
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"add": ["corset"]}, self._worn(), {"wearing": self._worn()},
             prose="nothing about clothing here")
@@ -918,7 +918,7 @@ class TestANoteMayOnlyIntroduceWhatTheStorySaid:
     def test_omitting_prose_leaves_behaviour_unchanged(self):
         """Every existing caller, and the rerun-from-stage path that replays
         diffs stored before this existed."""
-        import commit
+        from persist import commit
         out = commit.interpret_attire_notes(
             {"notes": {"shift": "linen shift, rucked"}},
             self._worn(), {"wearing": self._worn()})

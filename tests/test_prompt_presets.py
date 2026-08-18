@@ -10,9 +10,9 @@ import json
 
 import pytest
 
-from db import get_setting, set_setting
+from core.db import get_setting, set_setting
 from language_runtime import DEFAULT_LANGUAGE, LanguagePackError
-import prompts
+from llm import prompts
 
 
 JA = "ja"
@@ -188,8 +188,8 @@ def test_import_never_overwrites_a_saved_preset():
 @pytest.fixture
 def client(temp_db):
     from fastapi.testclient import TestClient
-    import app as app_module
-    import guest_access as guest
+    from web import app as app_module
+    from web import guest_access as guest
 
     guest.reset_host_account()
     with TestClient(app_module.app) as c:

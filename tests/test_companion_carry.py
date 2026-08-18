@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import time
 
-import spatial_frames
+from world import spatial_frames
 
 
 def _base_scene():

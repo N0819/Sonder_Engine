@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 @pytest.fixture(autouse=True)
@@ -144,7 +144,7 @@ def test_act_pass_records_the_company_the_people_projection_reads(temp_db):
 
     # Persist the step the way the runtime does, and read it back through
     # the facade: the write shape and the read shape must be one contract.
-    import story_view
+    from web import story_view
 
     step_id = temp_db.qi(
         "INSERT INTO steps(turn_id,key,label,ord) VALUES(?,?,?,?)",
@@ -324,7 +324,7 @@ def test_look_intent_rerenders_player_standing_state(temp_db):
 
 
 def test_commit_mints_composed_episode_with_typed_entities(temp_db):
-    from commit import prepare_memory_commit
+    from persist.commit import prepare_memory_commit
 
     ctx, char_id = _make_ctx(temp_db)
     ctx.director_resolve = {"resolved_event": "", "dialogue_log": [],
@@ -347,7 +347,7 @@ def test_commit_mints_composed_episode_with_typed_entities(temp_db):
 
 
 def test_commit_mints_nothing_for_a_composed_non_event(temp_db):
-    from commit import prepare_memory_commit
+    from persist.commit import prepare_memory_commit
 
     ctx, char_id = _make_ctx(temp_db)
     ctx.director_resolve = {"resolved_event": "", "dialogue_log": [],

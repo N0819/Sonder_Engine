@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-import providers
+from llm import providers
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -77,7 +77,7 @@ def test_saved_setting_wins_and_applies_without_restart(temp_db, monkeypatch):
     """Read per call, not cached at import — a change in the settings UI takes
     effect on the next turn."""
     monkeypatch.delenv("FICTION_ENGINE_MAX_OUTPUT_TOKENS", raising=False)
-    import db
+    from core import db
 
     assert providers.max_output_tokens() == providers.MAX_OUTPUT_TOKENS_DEFAULT
 
@@ -95,7 +95,7 @@ def test_saved_setting_wins_and_applies_without_restart(temp_db, monkeypatch):
 
 def test_env_override_is_the_fallback_when_unset(temp_db, monkeypatch):
     """What a headless/CI run has; the saved setting still outranks it."""
-    import db
+    from core import db
 
     monkeypatch.setenv("FICTION_ENGINE_MAX_OUTPUT_TOKENS", "12000")
     assert providers.max_output_tokens() == 12000
@@ -138,7 +138,7 @@ def test_endpoint_saves_and_bootstrap_reports_it(temp_db, monkeypatch):
     Calls the route functions directly — the HTTP layer's auth is covered by
     tests/test_guest_middleware.py and isn't what's under test here."""
     monkeypatch.delenv("FICTION_ENGINE_MAX_OUTPUT_TOKENS", raising=False)
-    import app as app_module
+    from web import app as app_module
 
     boot = app_module.bootstrap()
     assert boot["max_output_tokens"] == providers.MAX_OUTPUT_TOKENS_DEFAULT

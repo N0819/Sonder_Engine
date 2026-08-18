@@ -9,8 +9,8 @@ import random
 import re
 from concurrent.futures import ThreadPoolExecutor
 
-import attire as attire_model
-from character_schema import (
+from story import attire as attire_model
+from story.character_schema import (
     character_abilities,
     character_appearance,
     character_extra_parts,
@@ -26,11 +26,11 @@ from character_schema import (
     persona_name,
     persona_public_history,
 )
-from db import get_setting, q, wget
-from memory import lorebook_manifest
-from paradox import paradox_visible_to
+from core.db import get_setting, q, wget
+from mind.memory import lorebook_manifest
+from world.paradox import paradox_visible_to
 from language_runtime import apply_prompt_policy
-from prompts import (
+from llm.prompts import (
     PROSE_DUTY_CHUNKS,
     get_prompt,
     get_prompt_body,
@@ -38,7 +38,7 @@ from prompts import (
     prose_author_prompt,
     specialist_prompt,
 )
-from scene import (
+from story.scene import (
     IMMOBILIZING_RESTRAINTS,
     NON_AWAKE_GATED,
     apply_restraint_diff,
@@ -61,11 +61,11 @@ from scene import (
     simulation_clock,
     style_guide,
 )
-from providers import Aborted, generation_event_sink, token_sink
-import schemas
-from schemas import validate_llm_output
-from survival import survival_enabled, vitals_of
-from spatial import (
+from llm.providers import Aborted, generation_event_sink, token_sink
+from llm import schemas
+from llm.schemas import validate_llm_output
+from world.survival import survival_enabled, vitals_of
+from world.spatial import (
     apply_contact_ops,
     contact_motion,
     contacts_of,
@@ -442,7 +442,7 @@ def director_interpret(ctx, nonce):
     # Authored future events the player scheduled on a prior beat and that are
     # due NOW (P4). Delivered with a resolve-now contract; commit_authored_events
     # re-queues any the resolution fails to enact rather than dropping them.
-    from authored_events import due_authored_events
+    from story.authored_events import due_authored_events
     _due_authored = due_authored_events(chat["id"], ctx.turn.idx)
 
     world_books = [
@@ -670,7 +670,7 @@ def director_interpret(ctx, nonce):
     ))
     _iparts = scene_extra_parts(ctx.cast, pers, p_name)
     try:
-        from living_world import living_world_allows, living_world_config
+        from world.living_world import living_world_allows, living_world_config
         _iplanning = {
             "enabled": bool(living_world_allows(
                 living_world_config(chat["id"]),
@@ -1807,7 +1807,7 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
     state and the payload ledgers only; no prose anywhere."""
 
     def bodiless():
-        from scene import ubiquitous_speaker_names
+        from story.scene import ubiquitous_speaker_names
         return ubiquitous_speaker_names(sc)
 
     def minds_apart():
@@ -1859,7 +1859,7 @@ def _prose_gate_facts(ctx, sc, payload, facts, p_name):
         # The engine's own sight semantics (spatial.effective_light: absent
         # means lit, spill lifts dark to dim): the light block is dead
         # weight only when EVERY room provably offers ordinary sight.
-        from spatial import effective_light
+        from world.spatial import effective_light
         rooms = sc.get("rooms") or {}
         if not rooms:
             return True
@@ -2327,7 +2327,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # payload view is built there so the flag the prompt's hard rule keys
     # on and the flag commit warns on can never disagree. world_pressure_view
     # rides the same convention (F5).
-    from commit import pending_obligation_view, world_pressure_view
+    from persist.commit import pending_obligation_view, world_pressure_view
     _mv_for_context = interp.get("movement")
     _mv_target = _mv_for_context.get("to_room") if isinstance(_mv_for_context, dict) else None
 
@@ -2341,7 +2341,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     _destination_residue = None
     _offscreen_planning = {"enabled": False, "plans": []}
     try:
-        from living_world import living_world_allows, living_world_config
+        from world.living_world import living_world_allows, living_world_config
         _living_cfg = living_world_config(chat["id"])
         _offscreen_planning["enabled"] = living_world_allows(
             _living_cfg, "antagonist_ladder", "floor")
@@ -2354,7 +2354,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         try:
             if living_world_allows(_living_cfg,
                                    "routine_residue", "floor"):
-                from routines import residue_for
+                from world.routines import residue_for
                 _destination_residue = residue_for(
                     chat["id"], sc, _mv_target,
                     frame_id=ctx.turn.frame_id,
@@ -3325,7 +3325,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             # for anyone already in `dialogue_log`, so removing the line hands
             # them to the stage that gives them their own call, their own
             # perception object and their own recognition of the room.
-            from commit import _presence_speech_verdict
+            from persist.commit import _presence_speech_verdict
             if (not director_may_voice(speaker, sc, _rec)
                     and _presence_speech_verdict(sc, speaker, _rec) != "thing"):
                 # Only a possible PERSON is re-homed to the background stage.

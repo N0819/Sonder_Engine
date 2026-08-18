@@ -71,7 +71,7 @@ def _post(**over):
 
 
 def _run(ctx, scene, ops):
-    from artifacts import run_artifacts
+    from story.artifacts import run_artifacts
 
     return run_artifacts(ctx, scene, list(ops))
 
@@ -131,7 +131,7 @@ def test_a_bill_posted_from_a_rumor_carries_the_rumor_not_the_truth(temp_db):
     that story's already-faded wording at its faded count -- never the
     original the poster no longer holds, and never one fainter than what
     the poster would say aloud."""
-    import degradation
+    from world import degradation
 
     faded = degradation.degrade(THE_NEWS, 2, places=("the square",))
     cid, chars, scene, ctx = _world(temp_db, retellings=2, claim=faded)
@@ -216,7 +216,7 @@ def test_checkpoint_restore_takes_the_bill_off_the_wall(temp_db):
     """New durable state must rewind with the story: a bill that survived a
     rollback would inform readers of a posting that no longer happened, and
     a restored removal would resurrect one already torn down."""
-    from checkpoints import ensure_checkpoint, restore_checkpoint
+    from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
     cid, chars, scene, ctx = _world(temp_db)
     ensure_checkpoint(cid, 4)
@@ -238,7 +238,7 @@ def test_checkpoint_restore_takes_the_bill_off_the_wall(temp_db):
 def test_the_archive_carries_the_wall(temp_db):
     """Archive export/import must move artifacts with the chat, or an
     imported story would arrive with every notice quietly gone."""
-    from chat_archive import ChatArchiveService
+    from persist.chat_archive import ChatArchiveService
 
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_post()])
@@ -251,7 +251,7 @@ def test_the_floor_is_whole_with_no_model_and_no_ceiling_setting(temp_db):
     and the ceiling off, `text` stays empty, nothing schedules, and every
     verb above still worked -- which is what 'build the floor first' means.
     """
-    from artifacts import schedule_artifact_wording
+    from story.artifacts import schedule_artifact_wording
 
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_post()])
@@ -268,8 +268,8 @@ def test_the_ceiling_schedules_a_job_and_stops_paying_after_failures(temp_db):
     the unworded bill -- and once the mint has failed its capped attempts,
     nothing schedules again, so a dead provider costs two cheap failures
     rather than a retry per beat for the rest of the story."""
-    import jobs
-    from artifacts import schedule_artifact_wording
+    from core import jobs
+    from story.artifacts import schedule_artifact_wording
 
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_post()])
@@ -303,7 +303,7 @@ def test_wording_lands_only_while_the_bill_still_stands(temp_db):
     returns after the player rewound past the posting, or tore the bill
     down, must discard its text -- and a failed mint counts toward the cap
     so a dead provider stops being paid for."""
-    from artifacts import land_artifact_wording
+    from story.artifacts import land_artifact_wording
 
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_post()])

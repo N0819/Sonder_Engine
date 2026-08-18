@@ -71,7 +71,7 @@ class TestRouteRecording:
     """commit records the route from the character's committed position."""
 
     def test_the_cap_is_bounded(self):
-        import commit
+        from persist import commit
         assert 0 < commit.VISITED_ROOMS_CAP <= 200
 
 
@@ -97,7 +97,7 @@ class TestLocationCuedRecall:
         return chat_id, char_id
 
     def test_being_here_lifts_what_happened_here(self, temp_db):
-        from memory import search_memories
+        from mind.memory import search_memories
         chat_id, char_id = self._seed(temp_db)
         got = search_memories(chat_id, char_id, "a hinge shrieked", k=8,
                               chronological=False, here="Chamber 21")
@@ -108,14 +108,14 @@ class TestLocationCuedRecall:
     def test_it_is_additive_not_a_filter(self, temp_db):
         """Being somewhere makes a memory easier to reach; it must not make
         everything elsewhere unreachable."""
-        from memory import search_memories
+        from mind.memory import search_memories
         chat_id, char_id = self._seed(temp_db)
         got = search_memories(chat_id, char_id, "a hinge shrieked", k=8,
                               chronological=False, here="Chamber 21")
         assert {m["location"] for m in got} == {"Chamber 01", "Chamber 21"}
 
     def test_no_location_cue_changes_nothing(self, temp_db):
-        from memory import search_memories
+        from mind.memory import search_memories
         chat_id, char_id = self._seed(temp_db)
         got = search_memories(chat_id, char_id, "a hinge shrieked", k=8,
                               chronological=False)
@@ -206,7 +206,7 @@ class TestCorridorSight:
         return rooms
 
     def test_a_dead_end_is_seen_from_down_the_corridor(self):
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         sc = self._scene(self._corridor(4, []))
         line = corridor_sightlines(sc, "r0")[0]
         assert line["terminus"] == "dead_end"
@@ -214,7 +214,7 @@ class TestCorridorSight:
 
     def test_distance_is_reported_vaguely(self):
         """'some way north the passage ends', not 'three rooms north'."""
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         near = corridor_sightlines(self._scene(self._corridor(2, [])), "r0")[0]
         far = corridor_sightlines(self._scene(self._corridor(5, [])), "r0")[0]
         assert near["vagueness"] == "just ahead"
@@ -223,7 +223,7 @@ class TestCorridorSight:
 
     def test_sight_stops_at_a_bend(self):
         """The passage turns; what is round the corner is not seen."""
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         rooms = self._corridor(3, [{"to": "east1", "barrier": "open", "dir": "e"}])
         rooms["east1"] = {"name": "East", "light": "lit",
                           "adjacent": [{"to": "r2", "barrier": "open", "dir": "w"}]}
@@ -232,13 +232,13 @@ class TestCorridorSight:
         assert line["distance"] < 3
 
     def test_sight_stops_at_darkness(self):
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         rooms = self._corridor(4, [])
         rooms["r2"]["light"] = "dark"
         assert corridor_sightlines(self._scene(rooms), "r0")[0]["terminus"] == "darkness"
 
     def test_a_junction_reads_as_an_opening_not_an_end(self):
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         rooms = self._corridor(3, [
             {"to": "w1", "barrier": "open", "dir": "w"},
             {"to": "e1", "barrier": "open", "dir": "e"}])
@@ -249,7 +249,7 @@ class TestCorridorSight:
     def test_no_direction_means_no_sightline(self):
         """Without `dir` there is no line to follow, and guessing one would
         invent a sense the character does not have."""
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         rooms = self._corridor(3, [])
         for r in rooms.values():
             for e in r["adjacent"]:
@@ -260,7 +260,7 @@ class TestCorridorSight:
         """The near chamber is read plainly, the next by its one memorable
         feature, past that only that the passage runs on. Both what sight does
         and what keeps this from being a page of prose every beat."""
-        from spatial import corridor_sightlines, _CORRIDOR_NAMED
+        from world.spatial import corridor_sightlines, _CORRIDOR_NAMED
         line = corridor_sightlines(self._scene(self._corridor(5, [])), "r0")[0]
         along = line["along"]
         assert len(along) == _CORRIDOR_NAMED, "far rooms must not be named"
@@ -270,7 +270,7 @@ class TestCorridorSight:
     def test_the_payload_stays_small(self):
         """Four directions of graded sight must not rival the view itself."""
         import json
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         rooms = self._corridor(6, [])
         blob = json.dumps(corridor_sightlines(self._scene(rooms), "r0"))
         assert len(blob) < 600, f"sightline payload grew to {len(blob)} chars"
@@ -278,7 +278,7 @@ class TestCorridorSight:
     def test_a_distant_room_is_named_so_it_can_be_recognised(self):
         """The real payoff: matching a landmark two rooms off against memory,
         without walking there."""
-        from spatial import corridor_sightlines
+        from world.spatial import corridor_sightlines
         line = corridor_sightlines(self._scene(self._corridor(4, [])), "r0")[0]
         assert [a["room"] for a in line["along"]] == ["Room 1", "Room 2"]
 
@@ -314,7 +314,7 @@ class TestOnwardBearings:
         })
 
     def test_the_way_on_is_named_not_merely_counted(self):
-        from spatial import visible_adjacent_rooms
+        from world.spatial import visible_adjacent_rooms
         seen = {r["room_id"]: r for r in visible_adjacent_rooms(
             self._elbow(), "here")}
         assert seen["corner"]["onward_exits"] == 1
@@ -322,13 +322,13 @@ class TestOnwardBearings:
             "one way on, and it is north -- not a continuation eastward")
 
     def test_the_way_back_is_never_offered_as_a_way_on(self):
-        from spatial import visible_adjacent_rooms
+        from world.spatial import visible_adjacent_rooms
         seen = {r["room_id"]: r for r in visible_adjacent_rooms(
             self._elbow(), "here")}
         assert "w" not in seen["corner"]["onward_bearings"]
 
     def test_a_visible_dead_end_names_no_bearing_at_all(self):
-        from spatial import visible_adjacent_rooms
+        from world.spatial import visible_adjacent_rooms
         sc = self._scene({
             "here": {"name": "Here", "light": "lit", "desc": "Here.",
                      "adjacent": [
@@ -344,7 +344,7 @@ class TestOnwardBearings:
     def test_a_scene_without_directions_invents_none(self):
         """No `dir` on the edges means no bearings to give. Guessing one
         would be inventing a sense the character does not have."""
-        from spatial import visible_adjacent_rooms
+        from world.spatial import visible_adjacent_rooms
         sc = self._scene({
             "here": {"name": "Here", "light": "lit", "desc": "Here.",
                      "adjacent": [{"to": "corner", "barrier": "open"}]},
@@ -366,7 +366,7 @@ class TestOnwardBearings:
         movement and cannot possibly carry which wall a doorway is in.
         `corridor_sightlines` already refuses to read a terminus through
         gloom; these two must not disagree."""
-        from spatial import effective_light, visible_adjacent_rooms
+        from world.spatial import effective_light, visible_adjacent_rooms
         sc = self._elbow()
         sc["rooms"]["corner"]["light"] = "dark"
         assert effective_light(sc, "corner") == "dim", "spill, not blackness"
@@ -379,7 +379,7 @@ class TestOnwardBearings:
         a visibly closed chamber reachable only by a reverse-declared edge
         reported nothing -- and absent reads as 'cannot tell', so it had to
         be walked into to be ruled out."""
-        from spatial import visible_adjacent_rooms
+        from world.spatial import visible_adjacent_rooms
         sc = self._scene({
             "here": {"name": "Here", "light": "lit", "desc": "Here.",
                      "adjacent": []},
@@ -421,7 +421,7 @@ class TestNavigationMarkersAreDocumented:
 
     def test_every_marker_is_explained_in_the_character_prompt(self):
         import re
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         src = open("agents/character.py", encoding="utf-8").read()
         # The keys _annotate_known_exits actually writes onto an exit.
         emitted = set(re.findall(r'entry\["([a-z_]+)"\]', src))
@@ -439,7 +439,7 @@ class TestNavigationMarkersAreDocumented:
         """The single most dangerous misreading: absent as 'none'. Every
         one of these keys is omitted when it cannot be determined, and a
         character that reads omission as a clear way will walk into things."""
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"].upper()
         assert "CANNOT TELL" in prompt or "COULD NOT TELL" in prompt
 
@@ -740,7 +740,7 @@ class TestASeenCulDeSacIsNotFrontier:
 
     def test_commit_records_what_he_could_see(self, temp_db):
         """The read side is useless if the write side never fills it."""
-        from spatial import visible_adjacent_rooms
+        from world.spatial import visible_adjacent_rooms
         seen = {str(i["room_id"]) for i in visible_adjacent_rooms(
             self.SCENE, "rMid") or [] if i.get("onward_exits") == 0}
         assert "rPocket" in seen, (
@@ -860,7 +860,7 @@ class TestEachExitCarriesItsBearing:
     }, "positions": {"V": "rA"}, "entities": {}}
 
     def test_the_bearing_is_on_every_exit(self):
-        from spatial import spatial_digest
+        from world.spatial import spatial_digest
         got = spatial_digest(self.SCENE, "V")
         by = {e["room"]: e for edges in got.values()
               if isinstance(edges, list) for e in edges}
@@ -869,7 +869,7 @@ class TestEachExitCarriesItsBearing:
 
     def test_two_different_exits_never_share_a_bearing(self):
         """The exact confusion observed: one bearing on two exits."""
-        from spatial import spatial_digest
+        from world.spatial import spatial_digest
         got = spatial_digest(self.SCENE, "V")
         bearings = [e["bearing"] for edges in got.values()
                     if isinstance(edges, list) for e in edges]
@@ -878,14 +878,14 @@ class TestEachExitCarriesItsBearing:
     def test_it_survives_the_first_beat_with_no_movement_history(self):
         """The case that motivated it: no history, so every exit is
         unclassified and the bucket says nothing."""
-        from spatial import spatial_digest
+        from world.spatial import spatial_digest
         got = spatial_digest(self.SCENE, "V")
         flat = [e for edges in got.values() if isinstance(edges, list)
                 for e in edges]
         assert flat and all("bearing" in e for e in flat)
 
     def test_a_scene_without_directions_invents_none(self):
-        from spatial import spatial_digest
+        from world.spatial import spatial_digest
         scene = {"rooms": {"rA": {"name": "A", "adjacent": [
             {"to": "rB", "barrier": "open"}]}, "rB": {"name": "B"}},
             "positions": {"V": "rA"}, "entities": {}}

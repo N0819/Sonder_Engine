@@ -8,8 +8,8 @@ location's name into perception/narration.
 
 from __future__ import annotations
 
-import commit
-from spatial import merge_scene_with_diff, _dedup_duplicate_position_keys
+from persist import commit
+from world.spatial import merge_scene_with_diff, _dedup_duplicate_position_keys
 
 
 # ---- DW-4: duplicate position keys ----
@@ -49,9 +49,9 @@ def test_entity_without_a_name_is_ignored():
 # ---- DW-1: stale location label on relocation ----
 
 def _ctx(monkeypatch, player="Ellie Marsh"):
-    import scene
+    from story import scene
 
-    import commit_room_registry
+    from persist import commit_room_registry
     monkeypatch.setattr(scene, "persona_of",
                         lambda c: {"identity": {"name": player}}, raising=False)
     # _refresh_relocated_location resolves persona_name in ITS module's

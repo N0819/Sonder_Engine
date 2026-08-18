@@ -17,9 +17,9 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import (
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import (
     HEARING_LEVELS,
     SCENT_LEVELS,
     SIGHT_LEVELS,

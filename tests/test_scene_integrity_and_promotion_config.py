@@ -11,9 +11,9 @@ import time
 
 import pytest
 
-from commit import prune_dangling_exits, promotion_thresholds
-from schemas import _entity_name_from_key, validate_llm_output_strict
-from scene import promotion_config
+from persist.commit import prune_dangling_exits, promotion_thresholds
+from llm.schemas import _entity_name_from_key, validate_llm_output_strict
+from story.scene import promotion_config
 
 
 @pytest.fixture
@@ -91,7 +91,7 @@ def test_semantic_keys_still_derive_properly():
 # --- promotion thresholds as authorial settings ----------------------------
 
 def test_defaults_match_the_historical_constants(temp_db, chat):
-    import commit
+    from persist import commit
     cid = chat
     limits = promotion_config(cid)
     assert limits["dialogue"] == commit.BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD
@@ -109,7 +109,7 @@ def test_thresholds_are_overridable_per_chat(temp_db, chat):
 
 
 def test_partial_override_keeps_other_defaults(temp_db, chat):
-    import commit
+    from persist import commit
     temp_db.wset(chat, "promotion_thresholds", {"dialogue": 9})
     limits = promotion_config(chat)
     assert limits["dialogue"] == 9
@@ -117,7 +117,7 @@ def test_partial_override_keeps_other_defaults(temp_db, chat):
 
 
 def test_nonsense_values_fall_back_rather_than_break_promotion(temp_db, chat):
-    import commit
+    from persist import commit
     temp_db.wset(chat, "promotion_thresholds",
                  {"dialogue": "loads", "mention": None})
     limits = promotion_config(chat)
@@ -136,7 +136,7 @@ def test_thresholds_are_clamped_to_something_reachable(temp_db, chat):
 
 def test_raised_threshold_actually_suppresses_promotion(temp_db, chat):
     """End-to-end through the real reader, not just the config helper."""
-    from commit import promotable_background_presences
+    from persist.commit import promotable_background_presences
     temp_db.wset(chat, "background_presences",
                  {"Guinan": {"dialogue_turns": [1, 2], "mention_turns": []}})
     assert promotable_background_presences(chat)[0]["promotable"] is True

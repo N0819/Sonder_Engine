@@ -24,8 +24,8 @@ import os
 
 import pytest
 
-import ambience
-from ambience import (_safe_relative, acoustic_signature, candidate_key,
+from dressing import ambience
+from dressing.ambience import (_safe_relative, acoustic_signature, candidate_key,
                       compose_query, library_files, resolve_local,
                       room_soundscape, search_local)
 
@@ -65,7 +65,7 @@ def test_people_moving_does_not_invalidate_ambience():
 def test_light_changes_the_picture_but_not_the_sound():
     """The one deliberate divergence from `backdrops.visual_signature`, and
     most of why ambience gets cache hits on beats where a backdrop pays."""
-    from backdrops import visual_signature
+    from dressing.backdrops import visual_signature
     sc = _scene()
     sound_before = acoustic_signature(sc, "ten_forward")
     picture_before = visual_signature(sc, "ten_forward")
@@ -880,8 +880,8 @@ def model_says(monkeypatch):
     """
     def install(answer):
         import agents.common
-        import prompts
-        import providers
+        from llm import prompts
+        from llm import providers
         monkeypatch.setattr(providers, "resolve_role_candidates",
                             lambda role: [("x", "y")])
         monkeypatch.setattr(prompts, "get_prompt", lambda *a, **kw: "stub")
@@ -936,7 +936,7 @@ def test_a_failed_call_leaves_the_plan_alone(model_says):
 def test_no_model_configured_means_the_deterministic_plan(monkeypatch):
     """The feature has to work with no extra model call at all -- and with no
     model there is nobody to judge a room silent."""
-    import providers
+    from llm import providers
     monkeypatch.setattr(providers, "resolve_role_candidates",
                         lambda role: (_ for _ in ()).throw(RuntimeError("none")))
     assert ambience.refine_layers(_draft(), {"name": "Hall"}) == (_draft(), {})
@@ -1012,8 +1012,8 @@ def test_local_library_default_is_inside_the_repo():
 def test_weather_is_its_own_layer_at_its_own_level():
     """The reason layering earns its keep: rain heard two rooms in is a QUIET
     rain layer over an UNDIMINISHED room tone. One clip cannot say that."""
-    from ambience import compose_layers
-    from weather import weather_for_room
+    from dressing.ambience import compose_layers
+    from world.weather import weather_for_room
     scene = {
         "weather": {"precipitation": "rain", "intensity": "heavy"},
         "rooms": {"parlour": {"name": "Parlour", "desc": "A fire and old chairs.",
@@ -1033,7 +1033,7 @@ def test_weather_is_its_own_layer_at_its_own_level():
 
 
 def test_a_room_with_no_weather_is_a_single_layer():
-    from ambience import compose_layers
+    from dressing.ambience import compose_layers
     scene = {"rooms": {"hall": {"name": "Hall", "desc": "Panelled walls."}}}
     layers = compose_layers(room_soundscape(scene, "hall"))
     assert len(layers) == 1 and layers[0]["role"] == "tone"
@@ -1043,7 +1043,7 @@ def test_old_single_track_manifests_still_play():
     """Written before layering existed, still on disk in every install that ran
     the first version -- and in branch ancestors, which are read in place and
     never rewritten."""
-    from ambience import _as_layered
+    from dressing.ambience import _as_layered
     old = {"source": "local", "path": "rain.ogg", "title": "rain.ogg",
            "query": "rain ambience"}
     layered = _as_layered(old)
@@ -1056,7 +1056,7 @@ def test_old_single_track_manifests_still_play():
 def test_a_mix_can_be_pinned_with_its_levels(tmp_path, monkeypatch):
     """"This hall is a room tone at full and a fountain at a third" is
     something a host must be able to state and keep."""
-    import ambience as amb
+    from dressing import ambience as amb
     saved = {}
     monkeypatch.setattr(amb, "wget", lambda cid, key, default=None: saved.get(key, default))
     monkeypatch.setattr(amb, "wset", lambda cid, key, value: saved.__setitem__(key, value))
@@ -1071,7 +1071,7 @@ def test_a_mix_can_be_pinned_with_its_levels(tmp_path, monkeypatch):
 
 def test_a_single_sound_pin_is_still_accepted():
     """The shape the first version wrote, still in live saves."""
-    import ambience as amb
+    from dressing import ambience as amb
     saved = {}
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(amb, "wget", lambda cid, key, default=None: saved.get(key, default))
@@ -1084,7 +1084,7 @@ def test_a_single_sound_pin_is_still_accepted():
 def test_a_mix_is_capped():
     """Past three the layers stop being a place and start being a noise floor,
     and every one is another fetch and another decoder."""
-    import ambience as amb
+    from dressing import ambience as amb
     saved = {}
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(amb, "wget", lambda cid, key, default=None: saved.get(key, default))
@@ -1115,7 +1115,7 @@ class TestAPinResolvesTheSoundItPinned:
         ]}
 
     def test_each_layer_fetches_its_own_sound(self, tmp_path, monkeypatch):
-        import ambience as amb
+        from dressing import ambience as amb
 
         by_id = {
             852349: {"id": 852349, "title": "canal ambience",
@@ -1151,7 +1151,7 @@ class TestAPinResolvesTheSoundItPinned:
             self, tmp_path, monkeypatch):
         """Better to fail than to quietly substitute something else -- which is
         precisely what the text-search fallback did."""
-        import ambience as amb
+        from dressing import ambience as amb
         import pytest
 
         monkeypatch.setattr(amb, "AMBIENCE_DIR", str(tmp_path))
@@ -1167,7 +1167,7 @@ class TestTheFetchRefusesTheWrongSound:
     indistinguishable from a badly chosen one."""
 
     def test_a_preview_url_names_its_own_sound(self):
-        import ambience as amb
+        from dressing import ambience as amb
 
         assert amb.preview_sound_id(
             "https://cdn.freesound.org/previews/341/341802_1511977-hq.mp3") == 341802
@@ -1177,14 +1177,14 @@ class TestTheFetchRefusesTheWrongSound:
     def test_a_url_that_does_not_say_is_not_evidence(self):
         """An unrecognised preview format must not take the feature down the
         day Freesound changes its CDN paths."""
-        import ambience as amb
+        from dressing import ambience as amb
 
         assert amb.preview_sound_id("https://example.com/whatever.mp3") is None
         assert amb.preview_sound_id("") is None
         assert amb.preview_sound_id(None) is None
 
     def test_a_mismatched_preview_is_refused(self, tmp_path, monkeypatch):
-        import ambience as amb
+        from dressing import ambience as amb
         import pytest
 
         monkeypatch.setattr(amb, "AMBIENCE_DIR", str(tmp_path))
@@ -1197,7 +1197,7 @@ class TestTheFetchRefusesTheWrongSound:
         assert not list(tmp_path.rglob("*.mp3"))
 
     def test_an_unknown_url_shape_is_still_fetched(self, tmp_path, monkeypatch):
-        import ambience as amb
+        from dressing import ambience as amb
 
         monkeypatch.setattr(amb, "AMBIENCE_DIR", str(tmp_path))
 
@@ -1212,7 +1212,7 @@ class TestTheFetchRefusesTheWrongSound:
         assert name == "sig-1.mp3"
 
     def test_the_by_id_endpoint_is_held_to_its_answer(self, monkeypatch):
-        import ambience as amb
+        from dressing import ambience as amb
         import pytest
 
         class _Response:
@@ -1237,7 +1237,7 @@ class TestTheResolutionLockTable:
     """
 
     def test_it_does_not_grow_with_the_number_of_room_states_seen(self):
-        import ambience as amb
+        from dressing import ambience as amb
 
         for i in range(500):
             with amb._resolution_lock((1, "sig%04d" % i)):
@@ -1251,7 +1251,7 @@ class TestTheResolutionLockTable:
         """
         import threading
 
-        import ambience as amb
+        from dressing import ambience as amb
 
         order = []
         holding = threading.Event()
@@ -1292,7 +1292,7 @@ class TestErrorKind:
     def _fail_with(self, exc):
         import time
 
-        import ambience as amb
+        from dressing import ambience as amb
 
         amb._QUEUE.reset()
         sig = "kind-test-signature"
@@ -1319,7 +1319,7 @@ class TestErrorKind:
         assert kind == "failed"
 
     def test_no_failure_on_record_is_no_kind(self):
-        import ambience as amb
+        from dressing import ambience as amb
 
         amb._QUEUE.reset()
         assert amb.ambience_error_kind("never-seen") is None

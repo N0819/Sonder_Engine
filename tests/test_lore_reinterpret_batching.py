@@ -14,7 +14,7 @@ import logging
 
 import pytest
 
-import importers
+from story import importers
 
 
 def test_batches_split_by_character_volume_not_entry_count():

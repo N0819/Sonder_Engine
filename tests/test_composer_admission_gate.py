@@ -32,8 +32,8 @@ import time
 
 import pytest
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 # --- the quote-safe floor, as a unit -------------------------------------

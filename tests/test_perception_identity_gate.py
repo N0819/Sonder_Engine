@@ -35,8 +35,8 @@ import json
 import re
 import time
 
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 HINAMI_APPEARANCE = (
     "Hinami, a fox-eared young woman with amber eyes and a white-tipped tail."
@@ -227,7 +227,7 @@ def test_outcome_payload_previews_attire_and_delivers_exposed_region_detail(
     """Chat 68's two missing seams together: perception must see commit's
     canonicalized removal, and the body detail it exposes must enter only the
     observer-scoped payload rather than the shared omniscient context."""
-    import attire
+    from story import attire
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(
@@ -264,7 +264,7 @@ def test_outcome_payload_withholds_exposed_body_detail_in_darkness(
     """A hostile marker must be absent from the actual model payload when
     the observer has no visual channel, even though the garment came off and
     the observer recognizes the body."""
-    import attire
+    from story import attire
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(
@@ -294,7 +294,7 @@ def test_outcome_payload_previews_partial_midriff_coverage_without_chest_leak(
         temp_db, monkeypatch):
     """The live Hinami case: commit and perception read the same structured
     coverage diff while the still-worn top protects the covered zone."""
-    import attire
+    from story import attire
     import agents.perception as perception
 
     ctx, moon_id, _ = _make_ctx(
@@ -449,7 +449,7 @@ def test_micro_perception_gates_actor_name_by_recognition(temp_db):
     """loops.py's deterministic NPC-to-NPC delivery had NO recognition check
     at all -- canonical names flowed between mutually-unknown characters."""
     from agents.loops import deterministic_micro_perception
-    from scene import get_scene
+    from story.scene import get_scene
 
     ctx, moon_id, kessler_id = _make_ctx(
         temp_db, known={}, extra_char="Kessler")

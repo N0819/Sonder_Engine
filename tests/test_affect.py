@@ -10,7 +10,7 @@ from itertools import product
 
 import pytest
 
-from affect import (
+from mind.affect import (
     AFFECT_LEXICON,
     _va_pair,
     appraise,
@@ -850,7 +850,7 @@ def test_a_sustained_appetite_no_longer_drains_below_baseline():
     the deactivated quadrant while the character was at the height of their
     strongest appetite.
     """
-    from affect import resolve_affect
+    from mind.affect import resolve_affect
 
     dims = {"novelty": 0.6, "intrinsic_pleasantness": 0.9,
             "self_congruence": 0.9,

@@ -1,6 +1,6 @@
 """Tests for pure memory helper functions."""
 
-from memory import (
+from mind.memory import (
     _default_category,
     _extract_entities,
     _extract_key_phrases,
@@ -82,7 +82,7 @@ class TestStrandedEmbeddingsAreAnnounced:
     def _capture(self, monkeypatch):
         import logging
 
-        import memory
+        from mind import memory
         seen = []
 
         class _H(logging.Handler):
@@ -151,7 +151,7 @@ class TestRelevanceCanOutrankRecency:
     """
 
     def test_the_four_rankings_together_outweigh_the_recency_bonus(self):
-        import memory
+        from mind import memory
         best = sum(w * memory._RRF_SCALE / 61.0 for w in (1.25, 1.15, 1.1, 1.0))
         # The bonuses, at their individual maxima, from search_memories.
         recency, salience, here = 0.12, 0.08, 0.09
@@ -160,14 +160,14 @@ class TestRelevanceCanOutrankRecency:
             "that matches nothing")
 
     def test_a_single_top_ranked_signal_outweighs_recency_alone(self):
-        import memory
+        from mind import memory
         assert 1.0 * memory._RRF_SCALE / 61.0 > 0.12
 
     def test_the_bonuses_still_decide_between_comparable_matches(self):
         """Scaled, not silenced. Salience and recency are what should choose
         between two memories the query fits equally well — the failure being
         fixed is them choosing between memories it does NOT fit."""
-        import memory
+        from mind import memory
         one_signal_mid_rank = 1.0 * memory._RRF_SCALE / 70.0
         assert 0.12 < one_signal_mid_rank * 2, (
             "the bonus band must stay within reach of a ranking difference, "
@@ -184,21 +184,21 @@ class TestHowManyMemoriesReachACharacter:
     """
 
     def test_the_limit_is_the_one_that_was_measured(self):
-        import memory
+        from mind import memory
         assert memory._RECALL_LIMIT == 16
 
     def test_the_default_is_taken_from_the_constant(self):
         """So tuning it is one edit, not a hunt through call sites."""
         import inspect
 
-        import memory
+        from mind import memory
         sig = inspect.signature(memory.build_character_memory_context)
         assert sig.parameters["recall_limit"].default == memory._RECALL_LIMIT
 
     def test_it_stops_short_of_where_the_payload_stops_paying(self):
         """24 recalls more but flattens on relevance while the payload keeps
         growing; the attention budget is real (docs/UNBUILT.md 1.12)."""
-        import memory
+        from mind import memory
         assert 8 < memory._RECALL_LIMIT <= 16
 
 
@@ -219,7 +219,7 @@ class TestAnAbsenceIsNotAnEpisode:
     """
 
     def test_the_engines_own_placeholders_are_recognised(self):
-        from commit import _is_empty_view
+        from persist.commit import _is_empty_view
         assert _is_empty_view("You are in an unspecified area.")
         assert _is_empty_view("you register nothing new this beat.")
         assert _is_empty_view("   ")
@@ -227,7 +227,7 @@ class TestAnAbsenceIsNotAnEpisode:
 
     def test_a_view_that_goes_on_to_say_something_is_kept(self):
         """Matched on the placeholder, not on prose containing it."""
-        from commit import _is_empty_view
+        from persist.commit import _is_empty_view
         assert not _is_empty_view(
             "You are in an unspecified area. The Doctor circles the console "
             "and the light shifts across his face.")
@@ -254,7 +254,7 @@ class TestAMemoryCarriesTheMoodItWasFormedIn:
     def test_the_resolved_affect_is_preferred_over_the_self_report(self):
         import inspect
 
-        import commit
+        from persist import commit
         src = inspect.getsource(commit.prepare_memory_commit)
         i_resolved = src.index('_surface = (((st.get("active_state")')
         i_raw = src.index('_surface = (active_state.get("affect")')
@@ -266,6 +266,6 @@ class TestAMemoryCarriesTheMoodItWasFormedIn:
         """A character with no resolved affect yet has only their own report."""
         import inspect
 
-        import commit
+        from persist import commit
         src = inspect.getsource(commit.prepare_memory_commit)
         assert "if not _surface:" in src

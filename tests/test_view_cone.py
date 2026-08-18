@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import itertools
 
-from spatial import (
+from world.spatial import (
     _LIGHT_SIGHT,
     _sight_line,
     crossing_visible_from,

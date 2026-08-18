@@ -356,7 +356,7 @@ Note 02 §3 established this is fully derivable; specification:
   (`_observer_scene_payload`'s F6 blind-edge rule,
   `agents/perception.py:869-885`) — so a bearing **never names an unseen
   room** and grants no layout knowledge the payload did not already carry.
-- **Classification: derived.** No fields, one pure function in `spatial.py`,
+- **Classification: derived.** No fields, one pure function in `world/spatial.py`,
   delivered beside `hear_level` grades in the payload and consumed by the
   composer/perception prompt symmetrically.
 - This is the best benefit-per-line item in the note: every fragment/full

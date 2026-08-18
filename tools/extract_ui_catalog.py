@@ -20,8 +20,14 @@ ROOT = Path(__file__).resolve().parent.parent
 UI_PATH = ROOT / "language_packs" / "en" / "ui.json"
 HTML_FILES = tuple(sorted((ROOT / "static").glob("*.html")))
 JS_FILES = tuple(sorted((ROOT / "static" / "js").glob("*.js")))
+#: The engine's own modules, which since the 2026-08-18 layout change live in
+#: subsystem packages rather than at the repository root.
+SUBSYSTEM_PACKAGES = ("core", "llm", "world", "mind", "story",
+                      "dressing", "persist", "web")
 PY_FILES = tuple(sorted(
-    path for path in ROOT.glob("*.py")
+    path
+    for pkg in SUBSYSTEM_PACKAGES
+    for path in (ROOT / pkg).glob("*.py")
     if path.name not in {"prompts.py"}
 )) + tuple(sorted((ROOT / "agents").glob("*.py")))
 ATTRS = frozenset(("title", "aria-label", "placeholder", "alt"))
@@ -253,9 +259,9 @@ def _python_text(node) -> str | None:
 #: Each entry here is a promise that the table's values are interface copy.
 READER_FACING_TABLES = {
     "agents/runtime.py": {"FRIENDLY_STEP_LABELS", "STEP_LABELS"},
-    "living_world.py": {"LIVING_WORLD_DESCRIPTIONS"},
-    "scene.py": {"OFFSCREEN_LIFE_DESCRIPTIONS"},
-    "affect.py": {"CAPACITY_DESCRIPTIONS"},
+    "world/living_world.py": {"LIVING_WORLD_DESCRIPTIONS"},
+    "story/scene.py": {"OFFSCREEN_LIFE_DESCRIPTIONS"},
+    "mind/affect.py": {"CAPACITY_DESCRIPTIONS"},
 }
 
 

@@ -81,7 +81,7 @@ class TestCommitDomains:
 
         assert seen == {"chat_id": chat_id, "turn_idx": 6}
         assert results["ext:seams:counter"] == {"ok": True}
-        from db import wget
+        from core.db import wget
         assert wget(chat_id, "ext:seams") == {"count": 1}
 
     def test_state_is_ungated_here_because_the_transaction_is_the_guarantee(
@@ -413,7 +413,7 @@ class TestExtensionRoutes:
     def test_the_demo_serves_its_own_history(self, temp_db, real_ext_root):
         _enable(DEMO)
         chat_id = _chat(temp_db)
-        from db import wset
+        from core.db import wset
         wset(chat_id, f"ext:{DEMO}",
              {"cohesion": 61.0, "history": [{"turn": 1, "delta": 3}]})
 
@@ -665,7 +665,7 @@ class TestDirectorSpecialists:
         this engine's steps, so a registered family must take the parse and not
         the schema -- the same split `api.llm_json` makes.
         """
-        import schemas
+        from llm import schemas
         from agents import director
 
         full = bare.add_director_specialist(
@@ -678,7 +678,7 @@ class TestDirectorSpecialists:
             captured.update({"role": role, "system": system})
             return '{"ext:seams:ops": [{"note": "steady"}]}'
 
-        monkeypatch.setattr("providers.chat_complete", fake_complete)
+        monkeypatch.setattr("llm.providers.chat_complete", fake_complete)
         out = director._extension_specialist_call(
             director.SPECIALISTS[full], ["ext:seams:ops"], {"beat": "x"})
         # The permissive parse lives in extension_runtime, not in the Director:

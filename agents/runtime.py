@@ -8,20 +8,20 @@ import logging
 import queue
 import threading
 
-from character_schema import (character_name, character_name_from_text,
+from story.character_schema import (character_name, character_name_from_text,
                               normalize_persona_data, persona_appearance)
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from commit import commit_all
-from db import active_frame_id, q, qi, wset
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from persist.commit import commit_all
+from core.db import active_frame_id, q, qi, wset
 from language_runtime import current_language_id, story_language
-from pipeline_context import (
+from core.pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
     current_warning_sink,
 )
-from providers import (
+from llm.providers import (
     Aborted, call_ledger_sink, cancel_event, generation_event_sink, token_sink,
 )
-from scene import (
+from story.scene import (
     NON_AWAKE_GATED,
     active_cast,
     awareness_map,
@@ -363,7 +363,7 @@ def _stream_one(bus, key, fn, holder):
             # carries a value the worker produced back out, and a ContextVar
             # cannot. So it rides `holder`, which is what `holder` is for.
             try:
-                from providers import last_reasoning
+                from llm.providers import last_reasoning
 
                 holder["reasoning"] = last_reasoning.get() or ""
             except Exception:
@@ -646,7 +646,7 @@ def _background_stage_label(chat_id):
     invisible in the pipeline UI even when it was doing all the work.
     """
     try:
-        from scene import background_config
+        from story.scene import background_config
         level = str(background_config(chat_id).get("scene_life") or "off").casefold()
     except Exception:
         level = "off"

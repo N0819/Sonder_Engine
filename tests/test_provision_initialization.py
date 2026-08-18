@@ -161,7 +161,7 @@ class TestNothingPartialSurvives:
 
 class TestItSurvivesTheStoryPlumbing:
     def test_the_whole_bootstrap_rides_an_export(self, temp_db, campaign):
-        import app
+        from web import app
 
         chat_id = campaign.provision_story(
             PACKAGE, state={"mission": "survey"},

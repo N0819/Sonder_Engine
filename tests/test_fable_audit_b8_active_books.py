@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import time
 
-import db
-from db import active_frame_id, wget, wset
-from frames import create_frame
+from core import db
+from core.db import active_frame_id, wget, wset
+from core.frames import create_frame
 
 
 def _make_chat(db_module):

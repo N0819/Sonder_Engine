@@ -19,9 +19,9 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
-import memory
-from character_schema import default_character_data
+from web import app
+from mind import memory
+from story.character_schema import default_character_data
 
 
 def _make_chat(db):
@@ -239,7 +239,7 @@ class TestBranchResetsFramesToPresent:
         )
         future = app.frames_create(chat_id, {"label": "Future", "ordinal": 10, "kind": "future"})
 
-        from db import active_frame_id
+        from core.db import active_frame_id
         token = active_frame_id.set(future["id"])
         try:
             temp_db.wset(chat_id, "scene", {"location": "Alien planet"})
@@ -262,7 +262,7 @@ class TestBranchResetsFramesToPresent:
 class TestExistenceMaskingBackstop:
     def test_character_step_strips_relationship_with_a_not_yet_existing_castmate(self, temp_db, monkeypatch):
         import agents.character as character_module
-        from pipeline_context import ChatData, PipelineContext, TurnData
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
 
         chat_id = _make_chat(temp_db)
         tamamo = _make_char(temp_db, "Tamamo")

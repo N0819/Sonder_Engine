@@ -24,10 +24,10 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
-import importers
-from memory import chat_lorebook_ids
+from web import app as app_module
+from web import guest_access as guest
+from story import importers
+from mind.memory import chat_lorebook_ids
 
 
 @pytest.fixture

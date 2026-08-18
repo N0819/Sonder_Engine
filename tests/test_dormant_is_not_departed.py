@@ -26,9 +26,9 @@ from __future__ import annotations
 import json
 import time
 
-import commit
-from character_schema import normalize_character_data
-from scene import active_cast, extant_cast
+from persist import commit
+from story.character_schema import normalize_character_data
+from story.scene import active_cast, extant_cast
 
 
 def _chat(db, name="A story"):

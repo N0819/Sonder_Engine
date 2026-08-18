@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import time
 
-from memory import recent_memory_buffer
+from mind.memory import recent_memory_buffer
 
 
 def _insert_memory(temp_db, chat_id, char_id, turn_idx, content):

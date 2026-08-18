@@ -73,7 +73,7 @@ fallible speaker.
 
 All five steps are in the tree; see
 [`DESIGN_CROWDS.md`](DESIGN_CROWDS.md) §7a for what the building
-corrected in the design. `crowds.py` is pure; `StateDiff.crowd_ops` is how a
+corrected in the design. `world/crowds.py` is pure; `StateDiff.crowd_ops` is how a
 Director says it; `commit.commit_crowds` is the persistence boundary;
 `agents.common.crowds_for_room` is the per-observer surface;
 `tools/crowd_drive.py` walks the chain. Crowds are also the first anonymous
@@ -109,7 +109,7 @@ absorb authored cast or create persistent strangers nobody interacted with.
 
 Built: explicit copying (`state_diff.telling_ops`, refused unless the speaker
 holds the report, spoke this beat and shares the room); deterministic
-subtractive degradation at each copy (`degradation.py` — count, then place,
+subtractive degradation at each copy (`world/degradation.py` — count, then place,
 then name, with the name last so a rumor stays useful near its source);
 bounded fan-out (`carriers.TELL_FANOUT_CAP`) and an exhaustion cap so a claim
 with nothing left stops travelling; durable claimant and provenance on told
@@ -117,7 +117,7 @@ reports; anonymous crowd carriers that move because the crowd moves; and
 malicious or invented claims entering through the same physics, keyed `claim:`
 so they never reach `world_events`.
 
-Couriers landed (2026-08-10): `couriers.py` puts a held report on an anonymous
+Couriers landed (2026-08-10): `story/couriers.py` puts a held report on an anonymous
 body with a POSITION on a route computed over `spatial.passable_path` (the one
 graph everyone walks), advanced on the simulation clock inside the
 `information_carriers` commit domain — never a `due_seconds` fuse wearing a
@@ -135,7 +135,7 @@ route, clock, perception surface and interception ops — that DWELLS at each
 stop (charged in simulation time) and trades news both ways there: it tells
 the standing crowd what it carries and picks up the crowd's talk, standing
 public surfaces and posted notices, each through the ordinary degradation.
-An artifact (`artifacts.py`, `StateDiff.artifact_ops`) is a claim made
+An artifact (`story/artifacts.py`, `StateDiff.artifact_ops`) is a claim made
 physical: posted where the poster's body is from what the poster holds (an
 invented claim posts like a spoken lie), acquired ONLY by explicit reading
 (verbatim, provenance `read` — a copy is not a mouth), and destructible —
@@ -202,7 +202,7 @@ claim.
 ### 5. Build the full `character_agent` rung — **BUILT** (2026-08-10)
 
 The paid producer and the landing path landed beside the candidate selector.
-`offscreen.schedule_agent_ticks` runs from the commit tail (`commit.py`, next
+`offscreen.schedule_agent_ticks` runs from the commit tail (`persist/commit.py`, next
 to `schedule_profile_ticks`) after the turn's facts are durable; a turn
 starting never cancels the job, and a failure is a warning rather than a
 rollback. One reduced off-screen turn per selected candidate: the fail-closed

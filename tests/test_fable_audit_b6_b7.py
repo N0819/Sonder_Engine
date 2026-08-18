@@ -26,9 +26,9 @@ from __future__ import annotations
 import json
 import time
 
-import app
-from character_schema import default_character_data
-from frames import create_frame
+from web import app
+from story.character_schema import default_character_data
+from core.frames import create_frame
 
 
 def _make_chat(db):
@@ -49,7 +49,7 @@ class TestDirectorContextIsFrameFiltered:
     def test_a_future_frames_turn_does_not_leak_into_the_present_directors_context(
         self, temp_db,
     ):
-        from scene import director_context
+        from story.scene import director_context
 
         chat_id = _make_chat(temp_db)
         future = create_frame(chat_id, label="Future", ordinal=10, kind="future")
@@ -72,7 +72,7 @@ class TestDirectorContextIsFrameFiltered:
 
 class TestNarratorRhythmContextIsFrameFiltered:
     def test_narrator_previous_prose_query_excludes_other_frames(self, temp_db):
-        from db import q as db_q
+        from core.db import q as db_q
 
         chat_id = _make_chat(temp_db)
         future = create_frame(chat_id, label="Future", ordinal=10, kind="future")

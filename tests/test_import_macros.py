@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-import importers
-from db import q
+from story import importers
+from core.db import q
 
 
 @pytest.fixture(autouse=True)

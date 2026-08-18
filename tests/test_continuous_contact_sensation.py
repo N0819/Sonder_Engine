@@ -30,8 +30,8 @@ from __future__ import annotations
 from agents.perception import (_deliver_standing_sensations,
                                _observations_from_clean_views,
                                _standing_contacts_for)
-from prompts import DEFAULT_PROMPTS
-from spatial import (apply_contact_ops, contact_manner_kind, contact_motion,
+from llm.prompts import DEFAULT_PROMPTS
+from world.spatial import (apply_contact_ops, contact_manner_kind, contact_motion,
                      contact_relation, contact_sensation)
 
 # Two bodies, two contacts: one across a surface, one interior. Both stand at
@@ -453,7 +453,7 @@ class TestMomentaryResidue:
         resting beat that followed and was saved with the scene, so the
         aftercare view reported gushing as current. A spray is an event; the
         matter it moved persists in the substance ledger."""
-        from spatial import contact_is_momentary
+        from world.spatial import contact_is_momentary
         spray = {"actor": "Reya", "actor_part": "hand", "target": "Bram",
                  "target_part": "shoulder", "manner": "spray",
                  "relation": "surface", "motion": "moving"}
@@ -465,7 +465,7 @@ class TestMomentaryResidue:
         """A live ledger held manner `dripping fluid` -- the act with its
         object narrated into the slot -- and the exact-match read it as a
         durable hold."""
-        from spatial import contact_is_momentary
+        from world.spatial import contact_is_momentary
 
         assert contact_is_momentary({"manner": "dripping fluid"})
         assert not contact_is_momentary({"manner": "press"})
@@ -502,7 +502,7 @@ class TestACavityNamedByItsWallIsStillACavity:
     }
 
     def test_the_roles_are_folded_to_the_true_direction(self):
-        import spatial
+        from world import spatial
 
         out = spatial._clean_contact(dict(self.RAW), scene={})
         assert out["actor"] == "Hinami" and out["actor_part"] == "hand"
@@ -510,7 +510,7 @@ class TestACavityNamedByItsWallIsStillACavity:
         assert out["relation"] == "interior"
 
     def test_neither_party_is_told_a_vagina_encloses_a_vagina(self):
-        import spatial
+        from world import spatial
 
         out = spatial._clean_contact(dict(self.RAW), scene={})
         hers = spatial.contact_sensation(out, you="Elyra Voss", scene={})
@@ -524,7 +524,7 @@ class TestACavityNamedByItsWallIsStillACavity:
         assert "enclosing it" in theirs
 
     def test_the_other_wall_and_canal_spellings_fold_too(self):
-        import spatial
+        from world import spatial
 
         for part in ("vaginal canal", "anal canal", "rectal wall",
                      "throat wall"):
@@ -536,7 +536,7 @@ class TestACavityNamedByItsWallIsStillACavity:
         """The guard must not reach a record already stated from the entering
         side -- a tongue or a finger enters far more often than it encloses,
         which is why neither is in the cavity vocabulary."""
-        import spatial
+        from world import spatial
 
         raw = dict(self.RAW, actor="Hinami", actor_part="tongue",
                    target="Elyra Voss", target_part="outer labia",
@@ -562,7 +562,7 @@ def test_mutual_penetration_survives_as_two_contacts():
     Elyra spent the beat registering nothing about being inside Hinami,
     because the contact had been deleted.
     """
-    import spatial
+    from world import spatial
 
     scene = {"contacts": [], "positions": {"Elyra Voss": "r", "Hinami": "r"}}
     spatial.apply_contact_ops(scene, [
@@ -595,7 +595,7 @@ def test_a_body_with_both_anatomies_registers_both_at_once():
     opposite ways between two bodies, plus a surface contact. The engine
     just has to keep the directions straight.
     """
-    import spatial
+    from world import spatial
 
     scene = {"contacts": [], "positions": {"Elyra Voss": "r", "Hinami": "r"}}
     spatial.apply_contact_ops(scene, [

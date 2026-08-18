@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from memory import add_lore, knowledge_for_character
+from mind.memory import add_lore, knowledge_for_character
 
 
 @pytest.fixture

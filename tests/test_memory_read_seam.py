@@ -29,8 +29,8 @@ import time
 
 import pytest
 
-import memory
-from memory import (
+from mind import memory
+from mind.memory import (
     HOST_SCOPE_READERS,
     contrast_memory,
     list_memories,

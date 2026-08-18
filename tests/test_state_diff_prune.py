@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 
-from schemas import validate_llm_output_strict as validate
+from llm.schemas import validate_llm_output_strict as validate
 
 GOOD_PROSE = {"resolved_event": "Hinami stows the broom.", "summary": "s"}
 
@@ -104,5 +104,5 @@ class TestWhatMustStillFail:
     def test_other_steps_are_unaffected(self, temp_db):
         """Only the resolve steps encode an adjudication this way. A mapping
         or perception step losing a field silently would be a real loss."""
-        from schemas import _DIFF_PRUNABLE_STEPS
+        from llm.schemas import _DIFF_PRUNABLE_STEPS
         assert set(_DIFF_PRUNABLE_STEPS) == {"director_resolve", "resolve_repair"}

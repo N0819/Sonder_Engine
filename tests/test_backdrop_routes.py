@@ -20,10 +20,10 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import backdrops
-import guest_access as guest
-from providers import image_model
+from web import app as app_module
+from dressing import backdrops
+from web import guest_access as guest
+from llm.providers import image_model
 
 
 @pytest.fixture
@@ -233,7 +233,7 @@ def test_generate_returns_immediately_and_finishes_in_the_background(
         client, story, backdrop_dir, temp_db, monkeypatch):
     import time as _time
 
-    import providers
+    from llm import providers
     started = []
 
     def slow_image(prompt, *a, **k):
@@ -272,7 +272,7 @@ def test_two_requests_for_one_picture_share_a_worker(
         client, story, backdrop_dir, temp_db, monkeypatch):
     import time as _time
 
-    import providers
+    from llm import providers
     calls = []
 
     def slow_image(prompt, *a, **k):
@@ -295,7 +295,7 @@ def test_a_failed_generation_is_reported_not_swallowed(
         client, story, backdrop_dir, temp_db, monkeypatch):
     """Out-of-band work that fails silently is worse than work that fails
     loudly: the reader would sit in front of a picture that never arrives."""
-    import providers
+    from llm import providers
 
     def broken(prompt, *a, **k):
         raise RuntimeError("insufficient credit")
@@ -315,7 +315,7 @@ def test_asking_again_after_a_failure_retries(
         client, story, backdrop_dir, temp_db, monkeypatch):
     """The error clears when someone asks again, rather than expiring on a
     timer -- topping up credit and pressing the button should just work."""
-    import providers
+    from llm import providers
     attempts = []
 
     def flaky(prompt, *a, **k):
@@ -341,7 +341,7 @@ def test_continuity_is_off_until_explicitly_switched_on(client):
     """It changes how every picture after a room's first one is MADE, and a
     provider with a poor edit endpoint would quietly degrade every backdrop in
     the story. That is not something to discover from a default."""
-    import backdrops
+    from dressing import backdrops
 
     assert backdrops._continuity_enabled() is False
     boot = client.get("/api/bootstrap").json()

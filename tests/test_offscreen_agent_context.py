@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-import offscreen
+from world import offscreen
 
 
 def _subject(state=None, sheet=None):

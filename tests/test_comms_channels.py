@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-import spatial as sp
+from world import spatial as sp
 from agents import composer
 
 
@@ -409,7 +409,7 @@ class TestItRidesTheEngine:
         assert merged["comms"]["net"]["name"] == "ship comm"
 
     def test_the_schema_carries_the_channel(self):
-        import schemas
+        from llm import schemas
 
         out, _warnings = schemas.validate_llm_output("director_spatial", {
             "comms_ops": [{"id": "pa", "rooms": ["observation", "cell"],
@@ -421,7 +421,7 @@ class TestItRidesTheEngine:
         """A scene BUILT around an intercom -- an observation room, a bridge, a
         control booth -- must have one on beat zero, which is the beat it was
         needed for."""
-        import schemas
+        from llm import schemas
 
         out, _warnings = schemas.validate_llm_output("director_establish", {
             "location": "Site-17", "time": "now", "scene_description": "x",
@@ -437,7 +437,7 @@ class TestItRidesTheEngine:
 
     def test_the_specialist_sheet_can_teach_it(self):
         """An owned channel with no chunk loads nothing when granted."""
-        import prompts
+        from llm import prompts
 
         chunks = prompts.SPECIALIST_PROMPT_SPECS["spatial"]["chunks"]
         assert "comms_ops" in chunks
@@ -540,7 +540,7 @@ class TestOneWayWindow:
         the Director is not told about cannot be chosen, and the nearest
         wrong one gets picked instead.
         """
-        from prompts import get_prompt
+        from llm.prompts import get_prompt
 
         for key in ("director_establish", "resolve_repair",
                     "greeting_interpret"):
@@ -551,7 +551,7 @@ class TestOneWayWindow:
     def test_every_valid_barrier_is_offered_somewhere(self):
         """The list in the prompt and the list in the engine are two spellings
         of one vocabulary, and they had drifted."""
-        from prompts import get_prompt
+        from llm.prompts import get_prompt
 
         text = get_prompt("director_establish")
         for barrier in sp._VALID_BARRIERS - {"separated", "unknown"}:

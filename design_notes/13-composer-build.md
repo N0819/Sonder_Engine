@@ -132,7 +132,7 @@ the micro-append seam), `_action_already_rendered` / `_contact_already_felt`
 `_redact_concealed_from_event` / `_surface_translate_event` (no omniscient
 prose to redact). On the model path everything is untouched.
 
-### The memory change (`commit.py`, coupled per 00-PLAN Phase 3)
+### The memory change (`persist/commit.py`, coupled per 00-PLAN Phase 3)
 
 `perception_outcome` (composer path) emits `episodes` + `episode_meta`
 (gist, typed entities) per character, minted by `render_episode` from the
@@ -140,7 +140,7 @@ SAME fidelity-degraded percepts the view rendered — subset-checked by test
 (`test_episode_never_exceeds_the_view`). `prepare_memory_commit` prefers the
 composed episode over the view when present; a composed `""` is a non-event
 and mints no row; typed `entities`/`gist` ride the pending memory so
-`memory.py`'s `_extract_entities` prose-scraping fallback is bypassed.
+`mind/memory.py`'s `_extract_entities` prose-scraping fallback is bypassed.
 Entities are the observer's own display labels (a stranger's descriptor,
 never an unearned canonical name), generic labels ("a voice", "the
 unfamiliar person") excluded. Absent keys fall back to view prose exactly as

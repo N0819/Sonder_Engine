@@ -4,7 +4,7 @@ Agent implementations are separated by role. Importing from ``agents`` remains
 supported for the application and third-party extensions.
 """
 
-from scene import active_cast, is_player_speaker
+from story.scene import active_cast, is_player_speaker
 
 from .character import character_step
 from .common import (

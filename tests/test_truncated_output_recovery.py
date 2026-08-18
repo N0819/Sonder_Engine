@@ -26,8 +26,8 @@ import json
 
 import pytest
 
-import llm_quality
-import providers
+from llm import llm_quality
+from llm import providers
 
 
 # A cut-off object in each of the two shapes json.decoder produces, both taken

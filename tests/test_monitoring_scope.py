@@ -13,8 +13,8 @@ scope-by-nesting-depth (movement/space Phase 1, item 5).
 
 import time
 
-from memory import monitoring_subtree
-from spatial import ambient_scope, apply_transit_dock_edges
+from mind.memory import monitoring_subtree
+from world.spatial import ambient_scope, apply_transit_dock_edges
 
 
 def _nested_scene(van_phase="docked", van_hatch="open"):
@@ -156,7 +156,7 @@ def _make_books(db):
 
 
 def test_monitoring_walk_enumerates_nested_contents(temp_db):
-    import commit
+    from persist import commit
 
     chat_id, port, ferry, van, crew_log = _make_books(temp_db)
     scene = _nested_scene()
@@ -183,7 +183,7 @@ def test_monitoring_walk_enumerates_nested_contents(temp_db):
 
 
 def test_monitoring_walk_is_cycle_safe(temp_db):
-    from memory import add_lorebook_link
+    from mind.memory import add_lorebook_link
 
     chat_id, port, ferry, van, _ = _make_books(temp_db)
     add_lorebook_link(ferry, port, "currently_within")

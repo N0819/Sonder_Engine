@@ -21,7 +21,7 @@ identity was sitting unread beside it.
 
 from __future__ import annotations
 
-import providers
+from llm import providers
 
 
 def _reset():
@@ -83,7 +83,7 @@ def test_the_metrics_line_names_the_model_that_answered(monkeypatch):
     """The point of the whole change: a metrics row must describe the call
     that HAPPENED, or per-model timings cannot be separated after the fact."""
     logged = {}
-    monkeypatch.setattr("logging_utils.log_llm_call",
+    monkeypatch.setattr("core.logging_utils.log_llm_call",
                         lambda role, model, **kw: logged.update(
                             role=role, model=model, **kw))
     monkeypatch.setattr(providers._logger, "warning", lambda *a, **k: None)
@@ -97,7 +97,7 @@ def test_the_metrics_line_names_the_model_that_answered(monkeypatch):
 
 def test_without_a_served_name_the_requested_one_stands(monkeypatch):
     logged = {}
-    monkeypatch.setattr("logging_utils.log_llm_call",
+    monkeypatch.setattr("core.logging_utils.log_llm_call",
                         lambda role, model, **kw: logged.update(model=model))
     _reset()
     providers._log_usage("narrator", "asked-for", 0.0, {}, served=None)

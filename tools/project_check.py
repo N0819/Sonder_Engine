@@ -84,8 +84,7 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
     the false-positive guard on player-speech authority, whose whole job is to
     stop the check crying wolf on ordinary narration.
     """
-    for path in sorted(list(ROOT.glob("*.py"))
-                       + list((ROOT / "agents").rglob("*.py"))
+    for path in sorted(engine_python_paths()
                        + list((ROOT / "tests").glob("test_*.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         symbols: dict[str, list[int]] = defaultdict(list)
@@ -101,7 +100,7 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
 
 
 def check_patch_debris(errors: list[str]) -> None:
-    paths = (list(ROOT.glob("*.py")) + list((ROOT / "agents").rglob("*.py"))
+    paths = (engine_python_paths()
              + list((ROOT / "static" / "js").glob("*.js")))
     for path in sorted(paths):
         text = path.read_text(encoding="utf-8")
@@ -210,8 +209,8 @@ def check_prompt_schema_ops(errors: list[str]) -> None:
     """
     sys.path.insert(0, str(ROOT))
     try:
-        import prompts
-        import schemas
+        from llm import prompts
+        from llm import schemas
     except Exception as exc:  # pragma: no cover - import failure is its own error
         errors.append(f"could not check prompt/schema ops drift: {exc}")
         return
@@ -258,8 +257,8 @@ def check_specialist_prompt_chunks(errors: list[str]) -> None:
     """
     sys.path.insert(0, str(ROOT))
     try:
-        import prompts
-        import schemas
+        from llm import prompts
+        from llm import schemas
         from agents import director
     except Exception as exc:  # pragma: no cover - import failure is its own error
         errors.append(f"could not check specialist prompt chunks: {exc}")
@@ -360,7 +359,7 @@ def check_prose_author_chunks(errors: list[str]) -> None:
     CORE -- the firewall is an invariant, not an optimization target."""
     sys.path.insert(0, str(ROOT))
     try:
-        import prompts
+        from llm import prompts
         from agents import director
     except Exception as exc:  # pragma: no cover - import failure is its own error
         errors.append(f"could not check prose author chunks: {exc}")
@@ -418,7 +417,7 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
     """English is the reference inventory every other complete pack matches."""
     try:
         from language_runtime import installed_language_packs
-        import prompts
+        from llm import prompts
         packs = installed_language_packs(refresh=True)
     except Exception as exc:
         errors.append(f"could not load language packs: {exc}")
@@ -628,12 +627,12 @@ def check_no_dead_prompts(errors: list[str]) -> None:
     if str(ROOT) not in _sys.path:
         _sys.path.insert(0, str(ROOT))
     from language_runtime import installed_language_packs
-    import prompts as _prompts
+    from llm import prompts as _prompts
 
     ids = set(installed_language_packs()["en"].card("system_prompts")["prompts"])
     used = set(_prompts.SPECIALISTS_BY_NAME.values())
     used.add("director_resolve_lean")  # assembled, not fetched by id
-    for path in sorted(ROOT.glob("*.py")) + sorted((ROOT / "agents").rglob("*.py")):
+    for path in engine_python_paths():
         used.update(_re.findall(
             r'get_prompt(?:_body)?\(\s*["\']([a-z_0-9]+)["\']',
             path.read_text(encoding="utf-8")))
@@ -644,19 +643,34 @@ def check_no_dead_prompts(errors: list[str]) -> None:
             + ", ".join(dead))
 
 
-EXTENSION_DEEP_IMPORTS = (
-    "db", "commit", "pipeline_context", "agents", "providers", "prompts",
-    "schemas", "scene", "memory", "affect",
-    # The commit.py split (docs/experiments/AUDIT_COMMIT.md): the matcher
-    # below compares the FIRST dotted path component, so every commit_*
-    # sibling must be named here or `import commit_memory` from an
-    # extension bypasses this guard entirely.
-    "commit_common", "commit_place_graph", "commit_destruction",
-    "commit_room_registry", "commit_attire", "commit_entities",
-    "commit_ledgers", "commit_mapping", "commit_background",
-    "commit_scene_state", "commit_mechanics", "commit_memory",
-    "commit_memory_write",
-)
+#: The subsystem packages the engine's own modules live in
+#: (docs/design/DESIGN_MODULE_LAYOUT.md). Enumerated rather than rglob'd:
+#: ROOT also contains .claude/worktrees/ and .venv-browser/.
+SUBSYSTEM_PACKAGES = ("core", "llm", "world", "mind", "story", "dressing", "persist", "web")
+
+
+def engine_python_paths():
+    """Every .py file the engine itself owns, packages plus agents."""
+    out = []
+    for pkg in SUBSYSTEM_PACKAGES:
+        out.extend((ROOT / pkg).glob("*.py"))
+    out.extend((ROOT / "agents").rglob("*.py"))
+    return sorted(out)
+
+
+EXTENSION_DEEP_IMPORTS = SUBSYSTEM_PACKAGES + ("agents",)
+#: WHOLE PACKAGES, not a list of module names. Until the 2026-08-18 layout
+#: change this was ten hand-kept names, and the matcher below compares the
+#: FIRST dotted component -- so `import commit_memory` walked straight past it
+#: the moment commit.py was split, and thirteen siblings had to be added by
+#: hand to close that. A list of internals cannot be finished: the set of
+#: modules an engine can grow has no end, which is the same argument that
+#: retired the animate/inert kind lists in alpha 9.5.
+#:
+#: Deliberately BROADER than what it replaced. Every module inside these
+#: packages is engine internals, and the rule extensions are being held to is
+#: "use the api facade" -- so the package IS the boundary, and an extension
+#: that genuinely needs the coupling still declares "system": true.
 
 
 def _extension_dirs() -> list[Path]:
@@ -710,8 +724,7 @@ def check_undefined_names(errors: list[str]) -> None:
     # whole-tree walk therefore scans the engine seven times over and takes
     # minutes. These are the directories the engine actually ships from.
     paths = (
-        list(ROOT.glob("*.py"))
-        + list((ROOT / "agents").glob("*.py"))
+        engine_python_paths()
         + list((ROOT / "tools").glob("*.py"))
         + list((ROOT / "tests").glob("*.py"))
         + list((ROOT / "extension_runtime").glob("*.py"))
@@ -891,11 +904,72 @@ def check_extension_imports(errors: list[str]) -> None:
                             f'"system": true to accept the coupling.')
 
 
+def check_facade_import_direction(errors: list[str]) -> None:
+    """A split family's facade must stay the only way in, and the only way out.
+
+    `agents/director.py` and `commit.py` were split into sibling modules that
+    they re-export (docs/design/DESIGN_MODULE_LAYOUT.md). Two directions keep
+    that arrangement honest, and nothing else enforces either:
+
+    OUTSIDE-IN. A caller reaching past the facade to a sibling gets a name the
+    facade never promised, so the facade stops being a contract anyone can
+    read — and the split's whole claim was that no caller changed.
+
+    INSIDE-OUT. A sibling importing its own facade is an import cycle, and it
+    is the one this arrangement is built to prevent: the facade imports every
+    sibling at module scope, so a sibling that imports it back is a partially
+    initialised module for whoever loses the race.
+
+    Not a style rule. Both are silent until they are not: the first fails when
+    somebody later moves a symbol between siblings, the second when an
+    unrelated import order changes.
+    """
+    families = {
+        "agents.director": (ROOT / "agents", "director"),
+        "commit": (ROOT / "persist", "commit"),
+    }
+    for facade, (home, stem) in families.items():
+        pkg = home.name if home.name != "agents" else "agents"
+        siblings = {p.stem for p in home.glob("%s_*.py" % stem)}
+        if not siblings:
+            continue
+        facade_mod = facade if "." in facade else "%s.%s" % (pkg, facade)
+        for path in engine_python_paths() + sorted((ROOT / "tests").glob("*.py")):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            rel = path.relative_to(ROOT).as_posix()
+            inside = path.parent == home and (
+                path.stem == stem or path.stem in siblings)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.level == 0:
+                    name = node.module or ""
+                elif isinstance(node, ast.Import):
+                    name = node.names[0].name
+                else:
+                    continue
+                head, _, tail = name.rpartition(".")
+                if tail in siblings and head in (pkg, ""):
+                    if not inside:
+                        errors.append(
+                            f"{rel}:{node.lineno}: imports {name!r}, a sibling "
+                            f"behind the {facade_mod!r} facade. Import the "
+                            f"facade instead — it re-exports every name.")
+                elif name == facade_mod and path.stem in siblings and path.parent == home:
+                    errors.append(
+                        f"{rel}:{node.lineno}: imports its own facade "
+                        f"{facade_mod!r}. That is the import cycle the facade "
+                        f"exists to prevent; import the sibling that defines "
+                        f"the name, or move the name down.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
     check_extension_manifests(errors)
     check_extension_imports(errors)
+    check_facade_import_direction(errors)
     check_duplicate_python_symbols(errors)
     check_no_dead_prompts(errors)
     check_patch_debris(errors)

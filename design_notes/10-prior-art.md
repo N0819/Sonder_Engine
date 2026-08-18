@@ -134,7 +134,7 @@ rebuilt from structured data (`_strip_onset_rendering` /
 `hear_level`/`sight_level`/`visual_level_between`/`scent_level`, the light
 stack, `entity_arc`, `containment_conceals`, `crossing_visible_from`,
 `corridor_sightlines`, `proximity_rel`, all behind one gate `_delivery_ok`;
-163 top-level functions in `spatial.py`.
+163 top-level functions in `world/spatial.py`.
 
 So the open problem is **surface realisation from a typed IR, per observer, in
 second person** — and any prior-art system must be judged on that, not on its
@@ -1056,7 +1056,7 @@ top genus has one member. Renders as
 `"a hydra, 2 liches and an orc come into view."` **And never merge individuals
 with proper names** — the source comment is *"Don't merge named monsters (ghosts
 and the like). They're exciting!"* Sonder's analogue is crowds and background
-presences; `crowds.py` exists and this is the rule it wants.
+presences; `world/crowds.py` exists and this is the rule it wants.
 
 **R8 — N=1 and N>1 want different sentences AND different detail passes.**
 DCSS emits the individual message verbatim for N=1 and a condensed list

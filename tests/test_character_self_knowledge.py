@@ -12,8 +12,8 @@ its own context.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 def test_character_payload_includes_own_public_history(temp_db, monkeypatch):
     import agents.character as character_module
@@ -178,14 +178,14 @@ class TestACharacterKnowsWhatItIsWearing:
     """
 
     def test_the_prompt_tells_the_character_the_field_exists(self):
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"]
         assert "self.attire" in prompt
 
     def test_it_names_the_three_parts_the_payload_actually_carries(self):
         """`attire_view` returns wearing/regions/state. A prompt that only said
         'you have clothes' would leave the structure unusable."""
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"]
         for part in ("wearing", "regions", "state"):
             assert f"`{part}`" in prompt, part
@@ -194,14 +194,14 @@ class TestACharacterKnowsWhatItIsWearing:
         """`scene.attire` is the mutable story ledger, not `initial_outfit`.
         A character reading it as 'what I put on this morning' would contradict
         anything the story has since changed."""
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         assert "LEDGER" in DEFAULT_PROMPTS["character"]
 
     def test_it_keeps_the_firewall(self):
         """Own clothing is interoception; another body's is perception's to
         deliver or withhold. The prompt must not invite reading someone else's
         off this field."""
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"]
         assert "do not describe another person's clothing" in prompt.lower()
 
@@ -278,7 +278,7 @@ class TestSilenceIsSomethingThePlayerDid:
             self._sh(), "") == {}
 
     def test_the_prompt_forbids_answering_an_older_line(self):
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"]
         assert "decision.player_said_nothing" in prompt
         assert "player_name" in prompt
@@ -286,5 +286,5 @@ class TestSilenceIsSomethingThePlayerDid:
     def test_the_prompt_frames_silence_as_an_act(self):
         """"No input" invites reaching backwards; "they chose not to speak"
         does not."""
-        from prompts import DEFAULT_PROMPTS
+        from llm.prompts import DEFAULT_PROMPTS
         assert "Silence is something they DID" in DEFAULT_PROMPTS["character"]

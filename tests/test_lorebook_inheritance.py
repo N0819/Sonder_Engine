@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 
-import memory
+from mind import memory
 
 
 def _make_book(db, name, parent_id=None, inheritance_mode="inherit", chat_id=None):

@@ -6,8 +6,8 @@ content)."""
 
 from __future__ import annotations
 
-import providers
-from providers import _is_placeholder_json, token_sink
+from llm import providers
+from llm.providers import _is_placeholder_json, token_sink
 
 
 def test_all_placeholder_strings_is_a_skeleton():

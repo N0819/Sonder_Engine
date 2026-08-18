@@ -11,11 +11,11 @@ from __future__ import annotations
 import json
 import time
 
-import app
-from checkpoints import restore_checkpoint, snapshot_state
-from pipeline_context import ChatData, PipelineContext, TurnData
-from scene import active_cast, private_knowledge_for, set_char_state, set_char_status
-from commit import commit_cast_changes
+from web import app
+from persist.checkpoints import restore_checkpoint, snapshot_state
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from story.scene import active_cast, private_knowledge_for, set_char_state, set_char_status
+from persist.commit import commit_cast_changes
 
 
 def _make_chat(db):

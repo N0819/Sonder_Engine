@@ -10,7 +10,7 @@ import hashlib
 
 import pytest
 
-from providers import DegenerateOutput, OutputGuard, _GUARD_CHECK_STRIDE
+from llm.providers import DegenerateOutput, OutputGuard, _GUARD_CHECK_STRIDE
 
 
 def test_incremental_small_deltas_still_detect_repetition():

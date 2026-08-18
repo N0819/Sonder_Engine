@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import pytest
 
-import app as app_module
-import guest_access as guest
+from web import app as app_module
+from web import guest_access as guest
 
 
 @pytest.fixture

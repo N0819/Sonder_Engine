@@ -138,7 +138,7 @@ Cards carry typed senses `{channel, acuity, range, notes}`
 vision `absent` produces a fully sighted composed view. With a model in the
 loop the prompt caught this; pure code will not.
 - Computation (no new authored data): `sense_adjusted(level, senses, channel)`
-  in `spatial.py` or `agents/common.py` — vision absent → sight `none`,
+  in `world/spatial.py` or `agents/common.py` — vision absent → sight `none`,
   impaired → cap at `shapes`; hearing absent → `none`, keen → rescue one grade
   at `near` proximity; scent keen → `muffled`→`full` at same room. Free-text
   `notes` ("echolocation") stays uninterpreted — the deterministic floor

@@ -26,7 +26,7 @@
 > three cadences** rather than two features.
 >
 > One precedent that did not exist when this was written:
-> `background_claims.py` is exactly the "commit invention as claims, not facts"
+> `world/background_claims.py` is exactly the "commit invention as claims, not facts"
 > mechanism decision 3 asks for, built for background presences.
 
 ## The problem
@@ -79,7 +79,7 @@ evaluation structurally cannot deliver it.
 
 ## The ladder
 
-`schemas.py` already declares the exact tiering and **consumes it nowhere**:
+`llm/schemas.py` already declares the exact tiering and **consumes it nowhere**:
 
 ```python
 class BehaviorController(str, Enum):
@@ -93,7 +93,7 @@ class BehaviorController(str, Enum):
 | Controller | Off-screen behaviour | Cost |
 |---|---|---|
 | `inert` | Nothing happened. Gap generated at re-contact, or not at all | Free |
-| `deterministic` | Scheduled effects only — arrival, expiry, news latency | Free (already built, `mechanics.py`) |
+| `deterministic` | Scheduled effects only — arrival, expiry, news latency | Free (already built, `world/mechanics.py`) |
 | `reactive` | Fires bounded authored stages on typed time/event triggers; no autonomous invention | Near-free; built, gated |
 | `stochastic` | Seeded draw against standing intentions at world epochs | Cheap, no LLM |
 | `character_agent` | Real agent tick advancing a plan and writing consequences into the world | Paid — bounded count only |
@@ -112,13 +112,13 @@ More leverage than the feature's size suggests:
   the director into both `director_interpret` and `director_resolve` (capped at
   12). Off-screen intent is *already plumbed into the director's context*.
   Nothing advances it. That is the entire gap.
-- **`mechanics.py`** — the deterministic half is built: timed arrivals, expiry,
+- **`world/mechanics.py`** — the deterministic half is built: timed arrivals, expiry,
   dock edges, **news latency**, seeded and idempotent via `stable_event_key`.
 - **`world_events`** — the frame-scoped objective happened-event spine.
   `scheduled_events` remains the due queue; commit promotes only mechanics-fired
   rows, and the spine is checkpointed, archived, branch-remapped, and consumed
   by gaps. Existence in this ledger is truth, not delivery to a mind.
-- **`pick_background_reactor` (`commit.py`)** — the exact gating pattern to
+- **`pick_background_reactor` (`persist/commit.py`)** — the exact gating pattern to
   copy: a deterministic, LLM-free check returning `None` for the large majority
   of turns, so the expensive path is entered only when something earned it.
 - **Seeded-draw pattern (`director_resolve`)** — `random.Random(composite_seed)`
@@ -142,7 +142,7 @@ failure mode — the spookily prescient antagonist — and it will read as the
 engine cheating, because it is.
 
 A ticking character advances on **its own** knowledge, updated only through
-legitimate channels. `mechanics.py`'s news latency is exactly that pipe: the
+legitimate channels. `world/mechanics.py`'s news latency is exactly that pipe: the
 villain learns the player burned their outpost three days late, the way they
 actually would. An antagonist who is genuinely working against you, sometimes
 wrong about where you are, and occasionally beaten by information arriving too
@@ -223,7 +223,7 @@ and negotiation can trail well behind.
 - Does a ticking character accrue **memory** of its off-screen actions, or only
   world consequences? (Memory is the honest answer and the expensive one.)
 - How does a tick interact with **frames**? A villain in a past era ticking
-  forward is either a paradox source or a very good feature; `paradox.py` should
+  forward is either a paradox source or a very good feature; `world/paradox.py` should
   probably have an opinion before this ships.
 - Should the player be able to *see* the tick log in god-mode? Consistent with
   "omniscience relocated outside the diegesis to the user", the answer is

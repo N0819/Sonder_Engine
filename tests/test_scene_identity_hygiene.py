@@ -26,8 +26,8 @@ from __future__ import annotations
 import json
 
 from agents.common import _perceptible_entities
-from commit import _heal_attire_identity_keys
-from spatial import is_derived_room_name, merge_scene_with_diff
+from persist.commit import _heal_attire_identity_keys
+from world.spatial import is_derived_room_name, merge_scene_with_diff
 
 
 # --- 1. attire ------------------------------------------------------------

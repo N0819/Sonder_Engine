@@ -98,7 +98,7 @@ def make_ctx(db, cid, turn_idx, ops, cast=(), dialogue=()):
 
 def beat(db, cid, turn_idx, ops, cast=(), dialogue=()):
     """One Director declaration through the real commit domain."""
-    from commit import commit_crowds
+    from persist.commit import commit_crowds
 
     ctx = make_ctx(db, cid, turn_idx, ops, cast=cast, dialogue=dialogue)
     with db.transaction():
@@ -114,7 +114,7 @@ def observed(cid, room):
 
 
 def drive(report):
-    import db
+    from core import db
 
     cid = build_story(db)
     report["chat_id"] = cid
@@ -272,7 +272,7 @@ def main():
     args = parser.parse_args()
 
     path = _require_scratch()
-    import db
+    from core import db
 
     db.init()
     report = {"database": path}

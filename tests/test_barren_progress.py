@@ -26,7 +26,7 @@ already applied at the ceiling, for reasons its own docstring gives.
 
 from __future__ import annotations
 
-import affect
+from mind import affect
 
 PROGRESS = [{"op": "progress", "id": "ia1", "why": "we are getting somewhere"}]
 
@@ -151,7 +151,7 @@ class TestTheSignalIsAlreadyMeasured:
     def test_commit_passes_it_to_the_ledger(self):
         import inspect
 
-        import commit
+        from persist import commit
 
         # The pass-through lives in prepare_memory_commit (commit_memory
         # since the split); the function source survives the move.
@@ -202,6 +202,6 @@ class TestTheCharacterIsTold:
 
     def test_the_prompt_already_names_it(self):
         """No second vocabulary for the same fact."""
-        from prompts import get_prompt
+        from llm.prompts import get_prompt
 
         assert "barren_attempts" in get_prompt("character", "en")

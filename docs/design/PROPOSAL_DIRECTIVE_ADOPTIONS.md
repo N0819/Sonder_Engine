@@ -7,7 +7,7 @@ and a firewall verdict per item, so this can be picked up cold.
 
 Directive is MIT, so implementation is reusable with attribution and not only
 ideas. Its central boundary — model proposes, deterministic runtime commits,
-narrator continues — is Sonder's `commit.py` boundary reached independently.
+narrator continues — is Sonder's `persist/commit.py` boundary reached independently.
 Everything below is Directive holding that boundary somewhere Sonder does not.
 
 Nothing here is a defect. Each is a capability Sonder lacks, so none of it
@@ -52,7 +52,7 @@ accepted → materialised, bound to an exact source. Invalidate the source and
 the knowledge and everything derived from it rebuild.
 
 Sonder has the transport half, and better: a report is a BODY on a road
-(`carriers.py`, `couriers.py`, `artifacts.py`). What it cannot say is *this
+(`story/carriers.py`, `story/couriers.py`, `story/artifacts.py`). What it cannot say is *this
 fact must reach someone, and here is the legitimate mouth*.
 
 *Answers:* §1.16 residual 5, "the seed asserts a conclusion whose channel does

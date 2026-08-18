@@ -162,7 +162,7 @@ class TestNamespacing:
         """`ext:<id>:doc:narration` and `ext:<id>:narration` are different
         rows: a document may be named after any sibling surface without
         shadowing it."""
-        from db import wget
+        from core.db import wget
 
         alpha, _ = pair
         chat_id = _chat(temp_db)
@@ -412,7 +412,7 @@ class TestVerify:
                    (json.dumps(envelope), chat_id,
                     "ext:alpha:doc:tampered"))
         # A bare value written around the store has no envelope.
-        from db import wset
+        from core.db import wset
         wset(chat_id, "ext:alpha:doc:bare", {"no": "envelope"})
 
         report = docs.verify()
@@ -473,7 +473,7 @@ class TestPersistenceRides:
         snapshots the world table wholesale, so a rewound beat takes its
         documents with it -- writes after the checkpoint are undone, and a
         document created after it is GONE, not orphaned."""
-        from checkpoints import ensure_checkpoint, restore_checkpoint
+        from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
         alpha, _ = pair
         chat_id = _chat(temp_db, "Rewind")
@@ -492,7 +492,7 @@ class TestPersistenceRides:
     def test_install_documents_survive_a_story_restore(self, temp_db, pair):
         """The other half of the scope decision: the install's library is
         host configuration, and rewinding one story must not touch it."""
-        from checkpoints import ensure_checkpoint, restore_checkpoint
+        from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
         alpha, _ = pair
         chat_id = _chat(temp_db)
@@ -504,8 +504,8 @@ class TestPersistenceRides:
         assert alpha.documents().get("library/pack") == {"v": 3}
 
     def test_story_documents_ride_export_and_import(self, temp_db, pair):
-        import app
-        from checkpoints import ensure_checkpoint
+        from web import app
+        from persist.checkpoints import ensure_checkpoint
 
         alpha, _ = pair
         chat_id = _chat(temp_db, "Rides")
@@ -522,8 +522,8 @@ class TestPersistenceRides:
         """Branching copies the checkpoint blob's world dict wholesale, so
         the branch holds the documents AS OF the branch point -- and a write
         on the branch afterwards must not reach back into the source."""
-        import app
-        from checkpoints import ensure_checkpoint
+        from web import app
+        from persist.checkpoints import ensure_checkpoint
 
         alpha, _ = pair
         chat_id = temp_db.qi(
@@ -557,7 +557,7 @@ class TestRoutes:
     Python route of its own."""
 
     def test_put_get_list_verify_delete_over_http(self, temp_db, pair):
-        import app
+        from web import app
 
         chat_id = _chat(temp_db)
         meta = app.extension_document_put(
@@ -582,7 +582,7 @@ class TestRoutes:
                 "deleted": True}
 
     def test_the_routes_speak_400_for_a_refused_path(self, temp_db, pair):
-        import app
+        from web import app
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as err:
@@ -591,7 +591,7 @@ class TestRoutes:
         assert err.value.status_code == 400
 
     def test_a_body_without_the_doc_envelope_is_refused(self, temp_db, pair):
-        import app
+        from web import app
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as err:
@@ -600,7 +600,7 @@ class TestRoutes:
         assert err.value.status_code == 400
 
     def test_prefix_delete_over_http_reports_the_count(self, temp_db, pair):
-        import app
+        from web import app
 
         alpha, _ = pair
         chat_id = _chat(temp_db)
@@ -610,7 +610,7 @@ class TestRoutes:
             "alpha", prefix="m", chat_id=chat_id) == {"deleted": 2}
 
     def test_install_scope_is_the_absent_chat_id(self, temp_db, pair):
-        import app
+        from web import app
 
         app.extension_document_put("alpha", "library/pack", {"doc": {"v": 1}})
         assert app.extension_document_get(

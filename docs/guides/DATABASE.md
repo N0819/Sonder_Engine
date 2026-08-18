@@ -1,8 +1,8 @@
 # Database and State Map
 
-The engine uses SQLite. The schema is defined in `db.py`; access is intentionally lightweight through `q`, `qi`, `qtx`, `transaction`, `wget`, and `wset` (plus the frame-scoped `wget_for_frame`/`wset_for_frame`).
+The engine uses SQLite. The schema is defined in `core/db.py`; access is intentionally lightweight through `q`, `qi`, `qtx`, `transaction`, `wget`, and `wset` (plus the frame-scoped `wget_for_frame`/`wset_for_frame`).
 
-Housekeeping tables not described below: `schema_meta` (the migration version), and `guest_grants` / `host_sessions` (see `guest_access.py` and `auth_routes.py`).
+Housekeeping tables not described below: `schema_meta` (the migration version), and `guest_grants` / `host_sessions` (see `web/guest_access.py` and `web/auth_routes.py`).
 
 ## Resource tables
 
@@ -32,7 +32,7 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   `PLACE_GRAPH_NODE_CAP` eviction) beside the windowed `visited_rooms` and the
   legacy `known_exits`/`known_dead_ends` views of it. Deliberate persistence
   decision: no schema, remap, or archive change — checkpoints snapshot/restore
-  `state` whole, `chat_archive.py` exports/imports it verbatim, and the branch
+  `state` whole, `persist/chat_archive.py` exports/imports it verbatim, and the branch
   path copies the row; room ids are frame-scoped scene rids preserved as-is by
   all three.
 - `chat_char_frames`: per-frame status/state override for a cast member, so one
@@ -80,7 +80,7 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
 ## Structured world tables
 
 - `world_entities`: normalized projection of the scene's entities, derived at commit (`commit_world_entities(prepared=...)`). Read at runtime only for fixed-point existence checks (`paradox._entity_exists`) and book-anchor alias resolution (`commit._entity_alias_map`). **Which** entities a beat touched comes from the post-dedup diff; **what** they now are comes from the merged scene, and taking the second from the diff too is how this projection drifted: `spatial._merge_entity` sits between the diff and the blob, reading a schema default as silence and refusing a name `schemas._fill_entity_names` derived from the dict key. Writing the raw diff skipped all of it, so a pose-only beat left the blob saying "Blue Police Box"/vehicle and the row saying "Tardis 001"/object — 15 of 480 live rows named literally `Object`, 19 disagreeing with the blob about `name`, 24 about `kind`. A row heals the next time a beat touches that entity; `tools/reproject_world_entities.py` sweeps the ones nothing will touch again (read-only without `--apply`, and it skips an entity whose frames disagree, since `scene` is frame-scoped and this table is not).
-- `world_placements`: DECOMMISSIONED (Phase 3a) — nothing inserts or reads it; kept only so old snapshots/exports restore. The two surviving runtime writers are deletes (legacy cleanup in `commit_world_entities`, and `paradox.py`). Positions live solely in the frame-scoped `scene.positions`.
+- `world_placements`: DECOMMISSIONED (Phase 3a) — nothing inserts or reads it; kept only so old snapshots/exports restore. The two surviving runtime writers are deletes (legacy cleanup in `commit_world_entities`, and `world/paradox.py`). Positions live solely in the frame-scoped `scene.positions`.
 - `world_events`, `world_conditions`, `scheduled_events`: objective event timeline, active conditions, and future events (`transit_arrival`, `news_arrival`, `consequence`). `scheduled_events` is the due queue; `commit_world_event_spine` promotes only mechanically fired rows into `world_events`. Both event tables are keyed `(chat_id,event_id)`; `world_events.frame_id` is an explicit FK and its `turn_id` names the commit that observed the occurrence. The payload retains `source_event_id`, so readers can suppress the legacy queue row rather than report one occurrence twice.
 - `room_registry`: the sole cross-frame ledger of room identity/existence-over-time/retirement, keyed `(chat_id, room_uid)` and scoped to an owning lorebook. It is a deterministic projection of every scene write: `commit_scene` maintains it in the same commit domain, and the manual world editor (`world_put`) reconciles it through `commit.sync_room_registry_with_scene`. Rooms and lorebooks are retired (`retired_turn_id`), never deleted, on removal/destruction.
 - `fiction_worlds`, `fiction_locations`, `transit_edges`: DEPRECATED dead macro schema (nothing in the runtime pipeline reads or writes them; kept only so old imports restore — removal is planned).
@@ -137,12 +137,12 @@ Use `qtx` for a multi-statement invariant that must roll back together. Nested d
 
 A durable field or table change is incomplete until all applicable paths are updated:
 
-1. `SCHEMA` and `SCHEMA_VERSION`/migration logic in `db.py`.
+1. `SCHEMA` and `SCHEMA_VERSION`/migration logic in `core/db.py`.
 2. Creation/default behavior.
 3. Read and commit code.
 4. Export/import payloads.
 5. Checkpoint snapshot and restore.
-6. Branch/clone ID remapping in `app.py` when IDs are embedded.
+6. Branch/clone ID remapping in `web/app.py` when IDs are embedded.
 7. Cleanup behavior under foreign keys.
 8. Regression tests using the temporary database fixture.
 
@@ -178,4 +178,4 @@ rerolled.
 
 ## Runtime database selection
 
-`DB` defaults to `engine.db` and can be overridden with `ENGINE_DB` before importing `db.py`. Tests use `db.configure(path)` to switch connections safely.
+`DB` defaults to `engine.db` and can be overridden with `ENGINE_DB` before importing `core/db.py`. Tests use `db.configure(path)` to switch connections safely.

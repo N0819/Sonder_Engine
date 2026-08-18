@@ -76,7 +76,7 @@ def test_v13_to_v14_migration_preserves_data_and_repartitions_pk():
     os.close(fd)
     os.remove(path)
 
-    import db
+    from core import db
 
     old = db.DB
     try:

@@ -21,10 +21,10 @@ from __future__ import annotations
 import json
 import time
 
-import memory
+from mind import memory
 from agents.character import _ground_observation_citations
-from character_schema import default_character_data
-from schemas import EvidenceRef
+from story.character_schema import default_character_data
+from llm.schemas import EvidenceRef
 
 
 def _chat_and_char(db, name="Alice"):
@@ -103,7 +103,7 @@ def test_the_prompt_states_the_past_rule_and_names_the_row_marker():
     started collecting memory_refs that grounding then dropped. The rule is
     stated in the contract AND the marker names itself on the row; the two are
     not alternatives."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
     source = DEFAULT_PROMPTS["character"]
     assert "MEMORY IS PAST" in source
     assert "is REMEMBERED PAST -- without exception" in source
@@ -116,7 +116,7 @@ def test_the_prompt_states_the_past_rule_and_names_the_row_marker():
 def test_the_prompt_says_which_one_to_cite():
     """The payload change alone is not enough -- the model reached for real
     ids because they looked authoritative, so the rule is stated too."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
     source = DEFAULT_PROMPTS["character"]
     assert "EVIDENCE HAS TWO LANES" in source
     assert "ids from perception.observations" in source

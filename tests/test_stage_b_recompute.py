@@ -15,8 +15,8 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
-from frames import create_frame
+from web import app
+from core.frames import create_frame
 
 
 def _make_chat(db):

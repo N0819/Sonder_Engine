@@ -137,7 +137,7 @@ def build_story(db):
 # --------------------------------------------------------------- the model
 
 def _base(stage):
-    from schemas import OUTPUT_EXAMPLES
+    from llm.schemas import OUTPUT_EXAMPLES
 
     return copy.deepcopy(OUTPUT_EXAMPLES.get(stage) or {})
 
@@ -216,7 +216,7 @@ class Author:
         domains directly. A harness that skipped validation would prove the
         commit path works on data no model could ever send.
         """
-        from schemas import validate_llm_output_strict
+        from llm.schemas import validate_llm_output_strict
 
         if self.capture_dir:
             self._capture(step_key, system, payload)
@@ -347,7 +347,7 @@ def standing_uid(cid):
     and `crowds.apply_ops` refuses any id the engine did not mint. The script
     has to do the same or it is testing a Director that cheats.
     """
-    import db
+    from core import db
 
     for crowd in db.wget(cid, "crowds", []) or []:
         if isinstance(crowd, dict) and crowd.get("uid"):
@@ -554,13 +554,13 @@ def main():
     args = ap.parse_args()
 
     path = _require_scratch()
-    import db as db_module
-    import providers
+    from core import db as db_module
+    from llm import providers
 
     db_module.init()
     author = Author()
     author.capture_dir = args.capture
-    import llm_quality
+    from llm import llm_quality
     llm_quality.complete_validated_json = author
     # Every stage imports it by name at module load, so the already-bound
     # references have to be replaced too.

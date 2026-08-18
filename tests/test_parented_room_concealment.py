@@ -13,7 +13,7 @@ been, and not felt when they should have been.
 
 from __future__ import annotations
 
-import spatial
+from world import spatial
 from agents.perception import _touch_only_sources
 
 

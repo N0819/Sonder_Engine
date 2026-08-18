@@ -52,7 +52,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     derive_contained_positions,
     hear_level,
     merge_scene_with_diff,

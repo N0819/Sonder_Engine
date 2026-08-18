@@ -16,8 +16,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 import json
 import re
 
-import schemas
-from spatial import _merge_entity, _merge_room
+from llm import schemas
+from world.spatial import _merge_entity, _merge_room
 
 from .common import (
     _contextual_rooms,
@@ -855,7 +855,7 @@ def _fold_derived_manifest_events(items):
     deliberately not in this family -- those are three different facts
     about a body, not three descriptions of one.
     """
-    from attire import resolve_garment
+    from story.attire import resolve_garment
 
     attire_items = [i for i in items if i["category"] == "attire"]
     if not attire_items:

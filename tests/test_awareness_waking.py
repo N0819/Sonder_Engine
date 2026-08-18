@@ -43,7 +43,7 @@ from agents.director import (
     _sleep_elapsed,
     _STAY_UNDER_CUE,
 )
-from scene import NON_AWAKE_GATED, apply_awareness_diff, awareness_of
+from story.scene import NON_AWAKE_GATED, apply_awareness_diff, awareness_of
 
 PLAYER = "Hinami"
 SLEEPER = "Tamamo"
@@ -321,7 +321,7 @@ class TestAtTheReconciliationSeam:
     ending has to land for the diff that reaches commit."""
 
     def _ctx(self, temp_db, player_input):
-        from pipeline_context import ChatData, PipelineContext, TurnData
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
 
         persona = temp_db.qi(
             "INSERT INTO personas(name,sheet) VALUES(?,?)",
@@ -432,8 +432,8 @@ def test_an_ending_for_an_unknown_id_inserts_inactive(temp_db):
     under."""
     import time as _time
 
-    from commit import commit_world_entities
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from persist.commit import commit_world_entities
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     cid = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

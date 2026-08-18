@@ -7,7 +7,7 @@ import json
 import time
 import types
 
-import crowds
+from world import crowds
 
 
 class _Chat(dict):
@@ -78,7 +78,7 @@ def _state(db, cid, char_id):
 
 
 def test_only_the_colocated_character_acquires_the_public_surface(temp_db):
-    from carriers import advance_carriers
+    from story.carriers import advance_carriers
 
     cid, chars, scene, ctx = _world(temp_db)
     result = advance_carriers(
@@ -92,7 +92,7 @@ def test_only_the_colocated_character_acquires_the_public_surface(temp_db):
 
 
 def test_an_unwitnessed_event_emits_nothing(temp_db):
-    from carriers import advance_carriers
+    from story.carriers import advance_carriers
 
     cid, chars, scene, ctx = _world(temp_db)
     temp_db.qi("UPDATE world_events SET payload='{}' WHERE chat_id=?", (cid,))
@@ -103,7 +103,7 @@ def test_an_unwitnessed_event_emits_nothing(temp_db):
 
 
 def test_the_setting_gates_acquisition(temp_db):
-    from carriers import advance_carriers
+    from story.carriers import advance_carriers
 
     cid, chars, scene, ctx = _world(temp_db, enabled=False)
     result = advance_carriers(
@@ -113,7 +113,7 @@ def test_the_setting_gates_acquisition(temp_db):
 
 
 def test_the_envelope_moves_with_its_holder_and_is_not_broadcast(temp_db):
-    from carriers import advance_carriers
+    from story.carriers import advance_carriers
 
     cid, chars, scene, ctx = _world(temp_db)
     advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
@@ -127,8 +127,8 @@ def test_the_envelope_moves_with_its_holder_and_is_not_broadcast(temp_db):
 
 
 def test_checkpoint_restore_rewinds_acquisition_and_route(temp_db):
-    from carriers import advance_carriers
-    from checkpoints import ensure_checkpoint, restore_checkpoint
+    from story.carriers import advance_carriers
+    from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
     cid, chars, scene, ctx = _world(temp_db)
     advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
@@ -141,7 +141,7 @@ def test_checkpoint_restore_rewinds_acquisition_and_route(temp_db):
 
 
 def test_private_projection_is_bounded_and_has_no_hidden_payload():
-    from carriers import PAYLOAD_CAP, reports_for_state
+    from story.carriers import PAYLOAD_CAP, reports_for_state
 
     rows = [{"world_event_id": f"e{i}", "claim": f"surface {i}",
              "secret": "never project"} for i in range(PAYLOAD_CAP + 3)]
@@ -152,7 +152,7 @@ def test_private_projection_is_bounded_and_has_no_hidden_payload():
 
 
 def test_carrier_floor_has_no_model_or_provider_call():
-    import carriers
+    from story import carriers
     import agents.character as character
 
     source = inspect.getsource(carriers)
@@ -217,7 +217,7 @@ class TestACrowdCarriesTalk:
         that said so rather than knowledge by proximity."""
         import inspect
 
-        import carriers
+        from story import carriers
         body = inspect.getsource(carriers.apply_tellings)
         gate = body[body.index("said nothing this beat")]
         assert 'speaker.get("crowd") is None and speaker_key not in spoke' \
@@ -246,7 +246,7 @@ class TestALieTravelsLikeTheTruth:
         import inspect
         import types
 
-        import carriers
+        from story import carriers
         ctx = types.SimpleNamespace(chat=types.SimpleNamespace(id=1),
                                     turn=types.SimpleNamespace(idx=3))
         made_up = carriers._invented_claim("the duke is dead", ctx,
@@ -264,7 +264,7 @@ class TestALieTravelsLikeTheTruth:
         deception the fiction cannot support."""
         import inspect
 
-        import carriers
+        from story import carriers
         source = inspect.getsource(carriers.apply_tellings)
         # The copy handed to a listener is built in exactly one place, and it
         # is the same dict whether the claim is true or invented.
@@ -277,7 +277,7 @@ class TestALieTravelsLikeTheTruth:
         it — an assertion no mind can be held to and no player can chase."""
         import inspect
 
-        import carriers
+        from story import carriers
         assert "a crowd repeats what it heard; it does not start things" \
             in inspect.getsource(carriers.apply_tellings)
 
@@ -288,7 +288,7 @@ class TestALieTravelsLikeTheTruth:
         interesting thing that ever happens to one."""
         import types
 
-        import carriers
+        from story import carriers
         ctx = types.SimpleNamespace(
             chat={"id": 1}, turn=types.SimpleNamespace(idx=3))
         ctx.chat = types.SimpleNamespace(id=1)
@@ -318,7 +318,7 @@ class TestAftermathIsMetOnArrival:
     def test_a_body_reads_what_is_still_standing_in_the_room(self):
         import inspect
 
-        import carriers
+        from story import carriers
         body = inspect.getsource(carriers.advance_carriers)
         assert "standing_rows" in body
         assert "event_rows + here" in body
@@ -326,7 +326,7 @@ class TestAftermathIsMetOnArrival:
     def test_it_is_arrival_and_not_archaeology(self):
         """Walking in and seeing the barred gate, not inheriting every event
         the room has ever hosted."""
-        import carriers
+        from story import carriers
 
         assert carriers.ARRIVAL_SURFACES <= 3
 
@@ -335,7 +335,7 @@ class TestAftermathIsMetOnArrival:
         teach nothing — the firewall is structural, not instructed."""
         import inspect
 
-        import carriers
+        from story import carriers
         body = inspect.getsource(carriers.advance_carriers)
         gathered = body[body.index("standing_rows = []"):body.index("public_surfaces =")]
         assert "if witnessed:" in gathered
@@ -359,7 +359,7 @@ class TestTimeDoesNotRunBackwards:
     def test_the_clock_never_moves_backward(self):
         import inspect
 
-        import commit
+        from persist import commit
         # Function sources, not the module's: the split moved the guard into
         # commit_common and the warning's caller into commit_scene_state, and
         # the facade re-exports the same function objects either way.
@@ -372,7 +372,7 @@ class TestTimeDoesNotRunBackwards:
         discarded for disagreeing about where it started."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit._monotonic_elapsed)
         guard = body[body.index("if claimed < was:"):]
         assert "duration_seconds" in guard.split("clock[")[0]
@@ -396,7 +396,7 @@ class TestACrowdWitnessesItsOwnRoom:
         return crowd
 
     def test_the_colocated_crowd_takes_up_the_public_surface(self, temp_db):
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = _world(temp_db)
         self._crowd_in(temp_db, cid, "square")
@@ -414,7 +414,7 @@ class TestACrowdWitnessesItsOwnRoom:
     def test_a_crowd_elsewhere_learns_nothing(self, temp_db):
         """Same physics as a body: no timer, no broadcast — co-location with
         the surface or silence."""
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = _world(temp_db)
         self._crowd_in(temp_db, cid, "road")
@@ -426,7 +426,7 @@ class TestACrowdWitnessesItsOwnRoom:
     def test_it_does_not_take_the_same_surface_twice(self, temp_db):
         """A rerun or a later beat over the same standing surface must fold,
         not stack — the same stable-id discipline every commit writer keeps."""
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = _world(temp_db)
         self._crowd_in(temp_db, cid, "square")
@@ -437,7 +437,7 @@ class TestACrowdWitnessesItsOwnRoom:
         assert len(held) == 1
 
     def test_the_setting_gates_crowd_acquisition_too(self, temp_db):
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = _world(temp_db, enabled=False)
         self._crowd_in(temp_db, cid, "square")
@@ -489,7 +489,7 @@ class TestADormantBodyCanBeTold:
         return cid, chars, scene, ctx
 
     def test_a_dormant_listener_in_the_room_receives_the_copy(self, temp_db):
-        from carriers import apply_tellings
+        from story.carriers import apply_tellings
 
         cid, chars, scene, ctx = self._story(temp_db)
         applied, rejected = apply_tellings(
@@ -505,7 +505,7 @@ class TestADormantBodyCanBeTold:
         """The widening is listener-side only by construction: a dormant mind
         the engine did not run said nothing, so the spoke-this-beat gate — 
         which reads the dialogue_log — has no line to find."""
-        from carriers import apply_tellings
+        from story.carriers import apply_tellings
 
         cid, chars, scene, ctx = self._story(temp_db)
         applied, rejected = apply_tellings(
@@ -526,7 +526,7 @@ class TestEveryClockReaderSharesTheMonotonicRule:
     """
 
     def test_a_backwards_claim_advances_by_its_duration(self):
-        from commit import _monotonic_elapsed
+        from persist.commit import _monotonic_elapsed
 
         elapsed, backwards = _monotonic_elapsed(
             {"elapsed_seconds": 5400.0},
@@ -535,7 +535,7 @@ class TestEveryClockReaderSharesTheMonotonicRule:
         assert backwards == (30.0, 5400.0)
 
     def test_an_honest_claim_is_taken_at_its_word(self):
-        from commit import _monotonic_elapsed
+        from persist.commit import _monotonic_elapsed
 
         elapsed, backwards = _monotonic_elapsed(
             {"elapsed_seconds": 5400.0},
@@ -543,7 +543,7 @@ class TestEveryClockReaderSharesTheMonotonicRule:
         assert (elapsed, backwards) == (9000.0, None)
 
     def test_a_diff_with_no_claim_holds_the_clock(self):
-        from commit import _monotonic_elapsed
+        from persist.commit import _monotonic_elapsed
 
         elapsed, backwards = _monotonic_elapsed(
             {"elapsed_seconds": 5400.0}, {"display_advance": "later"})
@@ -554,7 +554,7 @@ class TestEveryClockReaderSharesTheMonotonicRule:
         how the two disagreed in the first place."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.prepare_memory_commit)
         assert "_monotonic_elapsed(_clock, _time_diff)" in body
         assert 'get("end_seconds"' not in body
@@ -588,13 +588,13 @@ class TestThePlayerStandsWhereItLands:
         return cid, chars, scene, ctx
 
     def _held(self, db, cid):
-        from carriers import PERSONA_STATE_KEY
+        from story.carriers import PERSONA_STATE_KEY
 
         return (db.wget(cid, PERSONA_STATE_KEY, {}) or {}).get(
             "carried_reports") or []
 
     def test_the_player_witnesses_their_own_room(self, temp_db):
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = self._played(temp_db)
         result = advance_carriers(
@@ -612,7 +612,7 @@ class TestThePlayerStandsWhereItLands:
         """The arrival window is shared code, not a second one: the surfaces
         `standing_rows` gathers and the `ARRIVAL_SURFACES` slice that bounds
         them are the same objects the cast is offered."""
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = self._played(temp_db)
         result = advance_carriers(ctx, scene, {"events": []})
@@ -621,7 +621,7 @@ class TestThePlayerStandsWhereItLands:
             "the warning bell rang twice"
 
     def test_the_envelope_moves_because_the_player_walked(self, temp_db):
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = self._played(temp_db)
         advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
@@ -634,7 +634,7 @@ class TestThePlayerStandsWhereItLands:
     def test_the_player_elsewhere_learns_nothing(self, temp_db):
         """No timer and no broadcast for the player either: co-location with
         the surface, or silence."""
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = self._played(temp_db, at="road",
                                                others="square")
@@ -644,7 +644,7 @@ class TestThePlayerStandsWhereItLands:
         assert self._held(temp_db, cid) == []
 
     def test_the_same_surface_is_not_taken_twice(self, temp_db):
-        from carriers import advance_carriers
+        from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = self._played(temp_db)
         advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
@@ -657,8 +657,8 @@ class TestThePlayerStandsWhereItLands:
         `chat_chars` snapshot; the player's ride the `world` one, and a
         restore that rewound only the first would leave the player holding a
         report of an event the story has un-happened."""
-        from carriers import advance_carriers
-        from checkpoints import ensure_checkpoint, restore_checkpoint
+        from story.carriers import advance_carriers
+        from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
         cid, _chars, scene, ctx = self._played(temp_db)
         ensure_checkpoint(cid, 4)
@@ -671,7 +671,7 @@ class TestThePlayerStandsWhereItLands:
         """Failing toward fewer carriers is the safe direction. `_world`
         without a persona builds the chat object the rest of this file uses,
         and the beat must land exactly as it did before."""
-        from carriers import PERSONA_STATE_KEY, advance_carriers
+        from story.carriers import PERSONA_STATE_KEY, advance_carriers
 
         cid, chars, scene, ctx = _world(temp_db)
         result = advance_carriers(
@@ -687,7 +687,7 @@ class TestThePlayerStandsWhereItLands:
         one place carriers are enumerated, because a player admitted beside
         their namesake would acquire the surface twice, into two homes, and
         count the room's one opportunity as two."""
-        from carriers import PERSONA_STATE_KEY, advance_carriers
+        from story.carriers import PERSONA_STATE_KEY, advance_carriers
 
         cid, _chars, scene, ctx = _world(temp_db, persona="Mora")
         result = advance_carriers(
@@ -700,8 +700,8 @@ class TestThePlayerStandsWhereItLands:
         Corin saw in the square is held where a persona can hold it, and
         `run_couriers` finds it there through the same `_hold_report` a
         registered sender is checked with."""
-        from carriers import advance_carriers
-        from couriers import run_couriers
+        from story.carriers import advance_carriers
+        from story.couriers import run_couriers
 
         cid, _chars, scene, ctx = self._played(temp_db)
         advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})

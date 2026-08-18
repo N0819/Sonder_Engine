@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-import outofband
+from core import outofband
 
 
 def _wait(pred, timeout=3.0):

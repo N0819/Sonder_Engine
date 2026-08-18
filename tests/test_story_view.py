@@ -20,8 +20,8 @@ import time
 
 import pytest
 
-import story_view
-from story_view import STORY_VIEW_SCHEMA, player_view, viewers
+from web import story_view
+from web.story_view import STORY_VIEW_SCHEMA, player_view, viewers
 
 from tests.test_extensions import _character, _chat, _turn
 
@@ -29,7 +29,7 @@ from tests.test_extensions import _character, _chat, _turn
 @pytest.fixture
 def story(temp_db):
     """A chat with a scene, a turn, a cast and one delivered perception step."""
-    from db import wset
+    from core.db import wset
 
     chat_id = _chat(temp_db, "Facade")
     persona_id = temp_db.qi(
@@ -115,7 +115,7 @@ class TestStoryView:
         assert json.loads(json.dumps(view))["schema"] == STORY_VIEW_SCHEMA
 
     def test_mutating_the_result_cannot_reach_the_story(self, temp_db, story):
-        from scene import get_scene
+        from story.scene import get_scene
 
         view = story_view.story_view(story["chat_id"])
         view["scene"]["positions"]["Sam"] = "vault"
@@ -125,7 +125,7 @@ class TestStoryView:
     def test_it_carries_the_player_authority_mode(self, temp_db, story):
         """Which rung the story is on changes what a declaration MEANS, so a
         campaign that adjudicates player intent has to be able to read it."""
-        from scene import set_player_authority
+        from story.scene import set_player_authority
 
         set_player_authority(story["chat_id"], "actor_only", turn_idx=4)
         view = story_view.story_view(story["chat_id"])
@@ -233,7 +233,7 @@ class TestPlayerView:
         """Not the cast list. A body a viewer can SEE but cannot name is in
         their observations under whatever label the composer gave it, and is
         deliberately not resolved to a name here."""
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
 
@@ -321,7 +321,7 @@ class TestPeople:
         """The Directive report's core acceptance test: a crew UI can key on
         `id` and render host-owned public facts without joining canonical
         cast data to known-name strings."""
-        from db import wset
+        from core.db import wset
 
         _author_public(temp_db, story["char_id"],
                        appearance="a silver-haired astronomer in a long coat",
@@ -348,7 +348,7 @@ class TestPeople:
         """A UI keyed on a display name breaks the first time somebody is
         renamed, and in this engine the STORY renames people. The id must
         not be derived from the label."""
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
         before, = player_view(story["chat_id"], "player")["people"]
@@ -406,7 +406,7 @@ class TestPeople:
         well-known name a stranger, and a ledger re-check here would undo the
         disguise. The two entries of a disguised acquaintance deliberately do
         not join."""
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
         _deliver(temp_db, story["turn_id"], {"player": "A veiled figure."},
@@ -425,7 +425,7 @@ class TestPeople:
 
     def test_a_recognised_body_delivered_this_beat_dates_the_entry(
             self, temp_db, story):
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
         _deliver(temp_db, story["turn_id"], {"player": "Ilse is here."},
@@ -442,7 +442,7 @@ class TestPeople:
         """No `facts: {}`, no `facts: null`: a UI cannot tell an empty claim
         from a missing one, and an empty dict invites a renderer to fill the
         gap with a default of its own."""
-        from db import wset
+        from core.db import wset
 
         _author_public(temp_db, story["char_id"], appearance="", history="")
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
@@ -457,7 +457,7 @@ class TestPeople:
         """The report's acceptance test: what each viewer gets for the same
         human being is that viewer's own disclosure state, not a shared
         directory row."""
-        from db import wset
+        from core.db import wset
 
         ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
         wset(story["chat_id"], "known", {"Sam": ["Ruth"]})
@@ -483,7 +483,7 @@ class TestPeople:
         projection must not merely rename these, it must have no path to them
         at all, and the only way to prove that is to look at every byte it
         produces."""
-        from db import wset
+        from core.db import wset
 
         row = temp_db.q("SELECT sheet FROM characters WHERE id=?",
                         (story["char_id"],), one=True)
@@ -513,7 +513,7 @@ class TestPeople:
         a UI could key on, and inventing one here would be this module
         holding an identity scheme of its own -- the exact thing it exists
         not to do."""
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["The Fishmonger"]})
 
@@ -524,7 +524,7 @@ class TestPeople:
         """Stories older than the delivery record still get their recognised
         roster -- and get NO observed entries, rather than entries guessed
         from the scene."""
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
         _deliver(temp_db, story["turn_id"], {"player": "The dome is dark."})
@@ -535,7 +535,7 @@ class TestPeople:
 
     def test_the_viewer_is_not_listed_among_their_own_people(self, temp_db,
                                                              story):
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Ilse": ["Ilse", "Sam"]})
 
@@ -562,7 +562,7 @@ class TestImmutableIdentity:
         exact failure the report opens with. Each bearer of a granted name
         is their own person, on their own immutable id, with their own
         facts."""
-        from db import wset
+        from core.db import wset
 
         twin_id = _character(temp_db, story["chat_id"], "Ilse", "uid-ilse-2")
         _author_public(temp_db, story["char_id"],
@@ -586,7 +586,7 @@ class TestImmutableIdentity:
         people share canonical name, appearance and history -- every label
         is identical, so only the immutable id can tell them apart, and it
         must."""
-        from db import wset
+        from core.db import wset
 
         twin_id = _character(temp_db, story["chat_id"], "Ilse", "uid-ilse-2")
         for cid in (story["char_id"], twin_id):
@@ -609,7 +609,7 @@ class TestImmutableIdentity:
         two people bear; the projection cannot affirm WHICH body it was, and
         a date it cannot attribute is a guess. Absent means absent, applied
         to a field: both people appear, neither is dated."""
-        from db import wset
+        from core.db import wset
 
         _character(temp_db, story["chat_id"], "Ilse", "uid-ilse-2")
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
@@ -677,7 +677,7 @@ class TestImmutableIdentity:
         changes, the person does not. `display_name` is a mutable projection
         hung off the id, so campaign state keyed on the id survives the
         reveal untouched."""
-        from db import wset
+        from core.db import wset
 
         wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
         before, = player_view(story["chat_id"], "player")["people"]
@@ -722,7 +722,7 @@ class TestImmutableIdentity:
         secret namespace itself. Any one of them surviving would let a
         caller join this projection against canonical data it has not
         earned."""
-        from db import wget
+        from core.db import wget
 
         ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
         row = temp_db.q("SELECT sheet FROM characters WHERE id=?", (ruth_id,),
@@ -748,7 +748,7 @@ class TestImmutableIdentity:
         level: Sam knows Ruth and gets her id and name; Ilse only saw a body
         and gets a projection carrying no canonical name, no canonical id,
         no uid -- nothing that would let her panel be joined to Sam's."""
-        from db import wset
+        from core.db import wset
 
         ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
         row = temp_db.q("SELECT sheet FROM characters WHERE id=?", (ruth_id,),

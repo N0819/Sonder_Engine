@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-import importers
-from character_schema import normalize_character_data
-from greetings import _greeting_record
+from story import importers
+from story.character_schema import normalize_character_data
+from story.greetings import _greeting_record
 
 
 @pytest.fixture(autouse=True)
@@ -123,7 +123,7 @@ class TestRecoverGreetings:
     before capture existed / via the reinterpret path, from the stored card."""
 
     def _legacy_row(self):
-        from db import qi
+        from core.db import qi
         card = {
             "spec": "chara_card_v2", "spec_version": "2.0",
             "data": {
@@ -152,7 +152,7 @@ class TestRecoverGreetings:
         assert again == first
 
     def test_recover_returns_none_when_no_card_greetings(self, temp_db):
-        from db import qi
+        from core.db import qi
         import json
         rid = qi("INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
                  ("Hand-made", json.dumps({"identity": {"name": "Hand-made"},
@@ -167,7 +167,7 @@ class TestQuickStartLorebook:
     stays deterministic and offline."""
 
     def _stub_launch(self, monkeypatch):
-        import greetings
+        from story import greetings
         monkeypatch.setattr(greetings, "extract_greeting",
                             lambda sheet, prose: {"knowledge_seeds": [], "time": "now"})
         monkeypatch.setattr(greetings, "_run_pipeline",
@@ -175,7 +175,7 @@ class TestQuickStartLorebook:
         return greetings
 
     def _fixtures(self):
-        from db import qi
+        from core.db import qi
         cid_char, _ = importers.import_character(_card(), reinterpret=False)
         pid, _ = importers.import_persona({"name": "Dana"}, reinterpret=False)
         lb = qi("INSERT INTO lorebooks(name,book_type,summary) VALUES(?,?,?)",
@@ -183,7 +183,7 @@ class TestQuickStartLorebook:
         return cid_char, pid, lb
 
     def test_attaches_selected_lorebook_as_chat_copy(self, temp_db, monkeypatch):
-        from db import q
+        from core.db import q
         greetings = self._stub_launch(monkeypatch)
         cid_char, pid, lb = self._fixtures()
 
@@ -200,7 +200,7 @@ class TestQuickStartLorebook:
         assert rows[0]["book_chat"] == chat_id
 
     def test_no_lorebook_attaches_nothing(self, temp_db, monkeypatch):
-        from db import q
+        from core.db import q
         greetings = self._stub_launch(monkeypatch)
         cid_char, pid, _lb = self._fixtures()
 
@@ -209,7 +209,7 @@ class TestQuickStartLorebook:
         assert rows == []
 
     def test_bad_lorebook_id_aborts_before_creating_a_chat(self, temp_db, monkeypatch):
-        from db import q
+        from core.db import q
         greetings = self._stub_launch(monkeypatch)
         cid_char, pid, _lb = self._fixtures()
 
@@ -218,7 +218,7 @@ class TestQuickStartLorebook:
         assert q("SELECT COUNT(*) AS n FROM chats", one=True)["n"] == 0
 
     def test_already_known_default_seeds_mutual_recognition(self, temp_db, monkeypatch):
-        from db import wget
+        from core.db import wget
         greetings = self._stub_launch(monkeypatch)
         cid_char, pid, _lb = self._fixtures()
 
@@ -228,7 +228,7 @@ class TestQuickStartLorebook:
                                               "Dana": ["Dr. Moon"]}
 
     def test_stranger_start_seeds_no_recognition(self, temp_db, monkeypatch):
-        from db import wget
+        from core.db import wget
         greetings = self._stub_launch(monkeypatch)
         cid_char, pid, _lb = self._fixtures()
 
@@ -249,7 +249,7 @@ class TestKnowledgeSeedRouting:
     """
 
     def _launch(self, monkeypatch, seeds):
-        import greetings
+        from story import greetings
         monkeypatch.setattr(greetings, "extract_greeting",
                             lambda sheet, prose: {"knowledge_seeds": seeds,
                                                   "time": "now"})
@@ -259,7 +259,7 @@ class TestKnowledgeSeedRouting:
         return greetings.start_story(cid_char, pid, greeting_index=0)
 
     def test_a_seed_reaches_the_characters_own_memory(self, temp_db, monkeypatch):
-        from db import q
+        from core.db import q
         chat_id, _tid = self._launch(monkeypatch, [
             {"content": "I have been waiting three nights for a courier.",
              "salience": 0.6, "revealed_in_prose": False}])
@@ -279,7 +279,7 @@ class TestKnowledgeSeedRouting:
         exactly as a STORED extraction on a character card does. Nothing here
         passes `GreetingKnowledgeSeed`, which is precisely why the ceiling
         cannot live in the schema alone."""
-        from db import q
+        from core.db import q
         chat_id, _tid = self._launch(monkeypatch, [
             {"content": "The Doctor has a deep-seated fear of Daleks.",
              "salience": 1.0, "revealed_in_prose": False}])
@@ -291,7 +291,7 @@ class TestKnowledgeSeedRouting:
     def test_the_schema_is_where_the_ceiling_lives(self, temp_db):
         """Both routing sites read the validated model, so the cap belongs
         there rather than at one call site that the other can bypass."""
-        from schemas import GreetingKnowledgeSeed
+        from llm.schemas import GreetingKnowledgeSeed
         assert GreetingKnowledgeSeed(content="x", salience=1.0).salience == 0.7
         assert GreetingKnowledgeSeed(content="x", salience=0.5).salience == 0.5
         # Still tolerant of nonsense, like every other lenient field.
@@ -300,7 +300,7 @@ class TestKnowledgeSeedRouting:
     def test_seeds_carry_a_stable_identity(self, temp_db, monkeypatch):
         """`add_memory` upserts on (chat, character, event_key). Without one,
         routing the same seed twice writes it twice."""
-        from db import q
+        from core.db import q
         chat_id, _tid = self._launch(monkeypatch, [
             {"content": "I have been waiting three nights for a courier.",
              "salience": 0.6, "revealed_in_prose": False}])
@@ -310,8 +310,8 @@ class TestKnowledgeSeedRouting:
 
     def test_routing_the_same_seed_twice_updates_one_row(self, temp_db,
                                                          monkeypatch):
-        from db import q
-        from memory import add_memory
+        from core.db import q
+        from mind.memory import add_memory
         chat_id, _tid = self._launch(monkeypatch, [
             {"content": "I have been waiting three nights for a courier.",
              "salience": 0.6, "revealed_in_prose": False}])
@@ -327,7 +327,7 @@ class TestKnowledgeSeedRouting:
             {"content": "", "salience": 0.6},
             {"content": "I know the harbour road floods at spring tide.",
              "salience": 0.6}])
-        from db import q
+        from core.db import q
         rows = q("SELECT content FROM memories WHERE chat_id=?", (chat_id,))
         assert [r["content"] for r in rows] == [
             "I know the harbour road floods at spring tide."]
@@ -344,7 +344,7 @@ class TestKnowledgeSeedRouting:
         impossible; it makes it one failure instead of six, and that one is
         retried inside the provider seam.
         """
-        import memory
+        from mind import memory
         calls = []
         real = memory.embed_texts_meta
         monkeypatch.setattr(memory, "embed_texts_meta",
@@ -354,7 +354,7 @@ class TestKnowledgeSeedRouting:
             {"content": f"I remember the {word} well.", "salience": 0.5}
             for word in ("harbour", "chandler", "toll", "ferry", "vault",
                          "signal")])
-        from db import q
+        from core.db import q
         assert len(q("SELECT id FROM memories WHERE chat_id=?", (chat_id,))) == 6
         assert len(calls) == 1
         assert len(calls[0]) == 12  # document + cues per seed
@@ -364,7 +364,7 @@ class TestKnowledgeSeedRouting:
         chat_id, _tid = self._launch(monkeypatch, [
             {"content": "I know the harbour road floods.", "salience": 0.5},
             {"content": "I know the chandler waters his oil.", "salience": 0.5}])
-        from db import q
+        from core.db import q
         rows = q("SELECT embedding_model, embedding_dim, embedding FROM "
                  "memories WHERE chat_id=?", (chat_id,))
         assert len(rows) == 2

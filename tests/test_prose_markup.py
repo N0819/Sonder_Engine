@@ -16,7 +16,7 @@ before this runs, and it stays that way.
 from __future__ import annotations
 
 from agents.common import strip_prose_markup, _contains_quote
-from schemas import canonicalize_prose_markup, preprocess_llm_output
+from llm.schemas import canonicalize_prose_markup, preprocess_llm_output
 
 
 def test_the_canonical_set_survives_with_one_spelling_each():

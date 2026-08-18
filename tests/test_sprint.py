@@ -32,7 +32,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from spatial import SPRINT_BUDGET, sprint_reach
+from world.spatial import SPRINT_BUDGET, sprint_reach
 
 
 def _room(name, adjacent, **kw):
@@ -470,7 +470,7 @@ class TestRunningIsRemembered:
         return _corridor(4)
 
     def test_the_rooms_run_through_are_recorded(self):
-        from commit import record_spatial_experience
+        from persist.commit import record_spatial_experience
         sc = self._sc()
         st = {}
         record_spatial_experience(st, sc, "start", 1)
@@ -478,7 +478,7 @@ class TestRunningIsRemembered:
         assert st["visited_rooms"] == ["start", "c1", "c2", "c3"]
 
     def test_the_walked_edges_span_the_whole_run(self):
-        from commit import record_spatial_experience
+        from persist.commit import record_spatial_experience
         sc = self._sc()
         st = {}
         record_spatial_experience(st, sc, "start", 1)
@@ -491,7 +491,7 @@ class TestRunningIsRemembered:
         """No passable route means carried, teleported, or shipped. A
         character learns a place by being carried through it about as well as
         a parcel does."""
-        from commit import record_spatial_experience
+        from persist.commit import record_spatial_experience
         sc = _scene({
             "here": _room("Here", []),
             "far": _room("Far", []),
@@ -505,7 +505,7 @@ class TestRunningIsRemembered:
     def test_an_ordinary_step_is_unchanged(self):
         """One room is a one-element path, so a walk needs no special case --
         and must not gain one."""
-        from commit import record_spatial_experience
+        from persist.commit import record_spatial_experience
         sc = self._sc()
         st = {}
         record_spatial_experience(st, sc, "start", 1)

@@ -35,10 +35,10 @@ import time
 
 import pytest
 
-import memory
+from mind import memory
 from agents.character import _ground_observation_citations
-from memory import add_memory, effective_importance, record_dispute
-from schemas import CharacterOutput
+from mind.memory import add_memory, effective_importance, record_dispute
+from llm.schemas import CharacterOutput
 
 
 # --- the occasion ----------------------------------------------------------
@@ -241,7 +241,7 @@ def test_commit_collects_every_field_record_dispute_needs():
     reading and nothing anywhere objects."""
     import inspect
 
-    import commit
+    from persist import commit
     # Function sources, not the module's: the collector lives in
     # commit_memory.prepare_memory_commit and the writer in
     # commit_memory_write.commit_memories since the split; the facade
@@ -271,7 +271,7 @@ def test_the_prompt_states_an_occasion_and_not_only_prohibitions():
     names concrete occasions. A model that has never seen an example of when
     to do a thing does not do it.
     """
-    import prompts
+    from llm import prompts
 
     block = prompts.DEFAULT_PROMPTS["character"]
     line = next(l for l in block.splitlines()

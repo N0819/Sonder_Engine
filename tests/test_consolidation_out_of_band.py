@@ -27,14 +27,14 @@ import time
 
 import pytest
 
-import commit
+from persist import commit
 # The consolidation producers resolve maybe_consolidate_character_memory in
 # THEIR module's globals -- commit_memory_write since the split; patching
 # the commit facade would be inert.
-import commit_memory_write
-import jobs
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit_memory_write
+from core import jobs
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 @pytest.fixture(autouse=True)
@@ -197,7 +197,7 @@ def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
     that job -- to stop. The offscreen ticks beside it are deliberately
     left running (their landings are provisional; a turn starting must
     never cancel them)."""
-    import checkpoints
+    from persist import checkpoints
 
     ctx = _make_ctx(temp_db)
     temp_db.wset(ctx.chat.id, "scene", {"rooms": {}, "positions": {},
@@ -237,7 +237,7 @@ def test_utility_is_configured_not_inherited(monkeypatch):
     Load-bearing consequence: if a background lane is ever moved back onto
     the turn's critical path, it needs its own role SET, not a fallback
     re-added under it."""
-    import providers
+    from llm import providers
 
     monkeypatch.setattr(providers, "provider",
                         lambda name: {"name": name, "kind": "openai",

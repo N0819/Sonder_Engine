@@ -304,7 +304,7 @@ def who_knows(db, cid):
 
 def run_once(db, intercept):
     author = RoadAuthor()
-    import llm_quality
+    from llm import llm_quality
 
     llm_quality.complete_validated_json = author
     for mod in list(sys.modules.values()):
@@ -363,7 +363,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.parse_args()
     _require_scratch()
-    import db as db_module
+    from core import db as db_module
 
     db_module.init()
     delivered = run_once(db_module, intercept=False)

@@ -24,10 +24,10 @@ import contextvars
 import threading
 import time
 
-import providers
+from llm import providers
 from agents.runtime import _with_engine_notes
 from agents.storage import ENGINE_NOTES_KEY
-from pipeline_context import (
+from core.pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
 )
 
@@ -231,7 +231,7 @@ def test_a_reasoning_only_reply_is_a_retryable_failure_not_a_keyerror():
     parser bug, and the message must say what actually happened."""
     import pytest
 
-    import providers
+    from llm import providers
 
     parsed = {"choices": [{"message": {
         "reasoning": "1. Analyze the request. " * 40}}]}
@@ -244,7 +244,7 @@ def test_a_reasoning_only_reply_is_a_retryable_failure_not_a_keyerror():
 
 
 def test_an_ordinary_reply_still_comes_straight_back():
-    import providers
+    from llm import providers
 
     parsed = {"choices": [{"message": {"content": '{"ok": true}'}}]}
     assert providers._message_content(parsed, "nano", "m") == '{"ok": true}'

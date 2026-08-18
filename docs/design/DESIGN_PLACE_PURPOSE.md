@@ -1,11 +1,11 @@
 # Design: what a place is FOR
 
-**Status: v1 built** (`place_purpose.py`; commit writers wired beside
+**Status: v1 built** (`world/place_purpose.py`; commit writers wired beside
 `record_spatial_experience` and after `apply_mind_model_updates` in
-`commit.py`; payload wiring in `agents/character.py`
+`persist/commit.py`; payload wiring in `agents/character.py`
 (`perception.here_affords`, `memory.recalled_places`); PLACES AND WHAT THEY
 ARE FOR prompt block; tests in `tests/test_place_purpose.py`). Build
-decisions beyond this doc, each argued in `place_purpose.py`'s module
+decisions beyond this doc, each argued in `world/place_purpose.py`'s module
 docstring:
 
 - **`assumed` is derived at read time from the character's own place-graph
@@ -50,7 +50,7 @@ entities carry `kind`/`description`/`state` (`_ENTITY_DEFAULT_FIELDS`,
 `spatial.py:2734`), and nothing anywhere says what a place is good for.
 
 The consequence is that a hungry character has no way to turn hunger into a
-destination. `survival.py` already gives them the feeling — "very hungry" at
+destination. `world/survival.py` already gives them the feeling — "very hungry" at
 `nourishment <= 0.4` (`survival.py:98-107`), delivered as `self.body_state`
 (`agents/character.py:711`) — and then the feeling has nowhere to go.
 
@@ -86,7 +86,7 @@ home. It goes on the place-graph node:
   engine can know reliably, it should say the answer rather than make the model
   re-derive it.
 - **Not a new `mind_models` kind.** Hypotheses within a group explain each other
-  away (`theory_of_mind.py`), which is right for rival beliefs about a person
+  away (`mind/theory_of_mind.py`), which is right for rival beliefs about a person
   and wrong here: "the Boar serves food" and "the Boar has a back door" are not
   competitors. This is the same reason place claims had to be rekeyed off the
   umbrella entity in the first place (`rekey_place_claims`).

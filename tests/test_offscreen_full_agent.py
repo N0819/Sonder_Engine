@@ -26,7 +26,7 @@ def _chat(db):
 
 
 def test_card_opt_in_defaults_false_and_round_trips():
-    from character_schema import (character_offscreen_agent,
+    from story.character_schema import (character_offscreen_agent,
                                   normalize_character_data)
 
     assert not character_offscreen_agent({"identity": {"name": "Mora"}})
@@ -40,7 +40,7 @@ def test_card_opt_in_defaults_false_and_round_trips():
 
 def test_only_opted_in_dormant_character_with_new_private_evidence_is_selected(
         temp_db):
-    from offscreen import full_agent_candidates
+    from world.offscreen import full_agent_candidates
 
     cid = _chat(temp_db)
     private = {"carried_reports": [{
@@ -56,7 +56,7 @@ def test_only_opted_in_dormant_character_with_new_private_evidence_is_selected(
 
 
 def test_stale_evidence_without_a_plan_spends_nothing(temp_db):
-    from offscreen import full_agent_candidates
+    from world.offscreen import full_agent_candidates
 
     cid = _chat(temp_db)
     state = {"carried_reports": [{"world_event_id": "evt", "claim": "x",
@@ -67,7 +67,7 @@ def test_stale_evidence_without_a_plan_spends_nothing(temp_db):
 
 
 def test_an_active_authored_plan_is_a_selection_reason(temp_db):
-    from offscreen import full_agent_candidates
+    from world.offscreen import full_agent_candidates
 
     cid = _chat(temp_db)
     _char(temp_db, cid, "Mora", "mora_uid", opted=True)
@@ -80,7 +80,7 @@ def test_an_active_authored_plan_is_a_selection_reason(temp_db):
 
 
 def test_cap_and_database_order_are_deterministic(temp_db):
-    from offscreen import full_agent_candidates
+    from world.offscreen import full_agent_candidates
 
     cid = _chat(temp_db)
     for i in range(3):

@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-import updates
+from core import updates
 
 
 class FakeGit:

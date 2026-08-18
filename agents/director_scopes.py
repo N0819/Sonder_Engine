@@ -19,8 +19,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
-from db import q
-from survival import survival_enabled
+from core.db import q
+from world.survival import survival_enabled
 
 from .director_views import (
     _artifacts_view,
@@ -402,7 +402,7 @@ def _shipped_transit_state(sd):
 
 
 def _shipped_darkened_room(sd):
-    from spatial import normalize_light
+    from world.spatial import normalize_light
     return any(
         isinstance(room, dict) and room.get("light") is not None
         and normalize_light(room.get("light")) in ("dim", "dark")
@@ -410,7 +410,7 @@ def _shipped_darkened_room(sd):
 
 
 def _shipped_bodiless_definition(sd):
-    from scene import is_ubiquitous_entity
+    from story.scene import is_ubiquitous_entity
     return any(is_ubiquitous_entity(entity)
                for entity in (sd.get("entities") or {}).values()
                if isinstance(entity, dict))
@@ -483,7 +483,7 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False):
     except Exception:
         unratified = True
     try:
-        from living_world import living_world_allows, living_world_config
+        from world.living_world import living_world_allows, living_world_config
         planning = bool(living_world_allows(
             living_world_config(chat_id), "antagonist_ladder", "floor"))
     except Exception:

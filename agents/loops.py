@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import random
 
-from character_schema import (character_appearance, character_name,
+from story.character_schema import (character_appearance, character_name,
                               character_name_from_text, character_senses)
-from db import wget
+from core.db import wget
 from language_runtime import compositor_text
-from scene import (
+from story.scene import (
     NON_AWAKE_GATED,
     awareness_map,
     awareness_of,
@@ -17,7 +17,7 @@ from scene import (
     get_scene,
     reaction_config,
 )
-from spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
+from world.spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
                      sound_bearing, spatial_rel, spatial_rel_between,
                      visual_level_between)
 

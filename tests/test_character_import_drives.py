@@ -27,9 +27,9 @@ from __future__ import annotations
 
 import json
 
-from character_schema import (default_character_data, effective_drive,
+from story.character_schema import (default_character_data, effective_drive,
                               normalize_character_data, repair_character_shape)
-from importers import REINT_CHAR_SYS, character_import_warnings
+from story.importers import REINT_CHAR_SYS, character_import_warnings
 
 
 # --- A: the prompt asks for it -------------------------------------------
@@ -167,7 +167,7 @@ def test_a_reinterpreted_import_never_takes_the_models_uid(temp_db, monkeypatch)
     character's own name for it -- GLM answers "tamamo" -- so two imports of
     one card became THE SAME ENTITY: two characters sharing one position, one
     set of clothes, one owner of the memories."""
-    import importers
+    from story import importers
 
     sheet = {"identity": {"uid": "tamamo", "name": "Tamamo"},
              "psychology": {"drive": {"essence": "Guard the seal",
@@ -189,8 +189,8 @@ def test_a_native_reimport_still_round_trips_its_own_uid(temp_db):
     """The fix is scoped to sheets a model reconstructed. Re-importing this
     app's own export must keep the identity it exported, or every round trip
     would fork the character."""
-    import importers
-    from character_schema import default_character_data
+    from story import importers
+    from story.character_schema import default_character_data
 
     native = default_character_data("Tamamo")
     native["identity"]["uid"] = "char_deadbeefdeadbeefdeadbeefdeadbeef"

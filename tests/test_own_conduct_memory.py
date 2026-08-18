@@ -23,11 +23,11 @@ tests/test_memory_affect.py.
 import json
 import time
 
-import commit
-import memory
-from character_schema import default_character_data
-from commit import _durable_dialogue_category, prepare_memory_commit
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from mind import memory
+from story.character_schema import default_character_data
+from persist.commit import _durable_dialogue_category, prepare_memory_commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _story(temp_db, name="Sarel"):
@@ -58,7 +58,7 @@ def _capture_batch(monkeypatch):
     # prepare_memory_commit resolves prepare_memories_batch in ITS
     # module's globals -- commit_memory since the split; patching the
     # commit facade would be inert.
-    import commit_memory
+    from persist import commit_memory
     monkeypatch.setattr(commit_memory, "prepare_memories_batch", fake_batch)
     return captured
 

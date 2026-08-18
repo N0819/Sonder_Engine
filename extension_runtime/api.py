@@ -97,7 +97,7 @@ def _world_state(ext_id, chat_id, *, gated=True, frame_scoped=False):
     remapping) already handles it: those paths parse the frame off a key
     generically rather than checking it against a list.
     """
-    from db import wget, wset
+    from core.db import wget, wset
 
     key = f"{'extf' if frame_scoped else 'ext'}:{ext_id}"
     cid = int(chat_id)
@@ -163,13 +163,13 @@ class NarrationBlock:
         self._key = f"ext:{self.ext_id}:{NARRATION_CONTEXT_KEY}"
 
     def _read(self):
-        from db import wget
+        from core.db import wget
 
         stored = wget(self.chat_id, self._key)
         return stored if isinstance(stored, dict) else None
 
     def _write(self, value):
-        from db import wset
+        from core.db import wset
 
         wset(self.chat_id, self._key, value)
 
@@ -257,13 +257,13 @@ class DirectorBlock:
         self._key = f"ext:{self.ext_id}:{DIRECTOR_CONTEXT_KEY}"
 
     def _read(self):
-        from db import wget
+        from core.db import wget
 
         stored = wget(self.chat_id, self._key)
         return stored if isinstance(stored, dict) else {}
 
     def _write(self, value):
-        from db import wset
+        from core.db import wset
 
         wset(self.chat_id, self._key, value or None)
 
@@ -500,7 +500,7 @@ class DocumentStore:
         `wget`/`get_setting`+`json.loads`, which would throw on the exact
         rows they exist to report.
         """
-        from db import q
+        from core.db import q
 
         like = self._prefix.translate(_LIKE_ESCAPE) + (
             prefix.translate(_LIKE_ESCAPE) + "%" if prefix else "%")
@@ -521,7 +521,7 @@ class DocumentStore:
         return out
 
     def _read_raw(self, path):
-        from db import q
+        from core.db import q
 
         if self.chat_id is None:
             row = q("SELECT value FROM settings WHERE key=?",
@@ -533,17 +533,17 @@ class DocumentStore:
 
     def _write(self, path, envelope):
         if self.chat_id is None:
-            from db import set_setting
+            from core.db import set_setting
 
             set_setting(self._key(path), json.dumps(envelope,
                                                     ensure_ascii=False))
         else:
-            from db import wset
+            from core.db import wset
 
             wset(self.chat_id, self._key(path), envelope)
 
     def _delete_key(self, path):
-        from db import q, qi
+        from core.db import q, qi
 
         if self.chat_id is None:
             existed = q("SELECT 1 FROM settings WHERE key=?",
@@ -756,7 +756,7 @@ class DocumentStore:
 
 
 def _settings_state(ext_id):
-    from db import get_setting, set_setting
+    from core.db import get_setting, set_setting
 
     key = f"ext:{ext_id}"
 
@@ -779,7 +779,7 @@ def _settings_state(ext_id):
 
 def _read_char_state(chat_id, char_id):
     """The character's whole engine-owned state dict, frame override first."""
-    from db import active_frame_id, q
+    from core.db import active_frame_id, q
 
     frame_id = active_frame_id.get()
     row = q(
@@ -807,8 +807,8 @@ def _write_char_state(chat_id, char_id, mutate):
     stance, the tell ledgers and the spatial memory, and a blind overwrite would
     delete a mind's whole history to store one extension's counter.
     """
-    from db import active_frame_id
-    from scene import set_char_state
+    from core.db import active_frame_id
+    from story.scene import set_char_state
 
     state = _read_char_state(chat_id, char_id)
     mutate(state)
@@ -856,7 +856,7 @@ class CharacterHandle:
 
     def step_output(self, turn_idx=None):
         """This character's own decision step, latest or for one turn."""
-        from db import q
+        from core.db import q
 
         key = f"character:{self.char_id}"
         params = [self.chat_id, key]
@@ -917,8 +917,8 @@ class CharacterAccess:
         self._api = api
 
     def _rows(self, chat_id):
-        from character_schema import character_name_from_text
-        from db import q
+        from story.character_schema import character_name_from_text
+        from core.db import q
 
         rows = q(
             "SELECT ch.id AS id, ch.name AS name, "
@@ -1376,7 +1376,7 @@ class ChatAccess:
 
     def create(self, name="", scenario="", language=None):
         """A new empty story. For a whole campaign use `provision_story`."""
-        from db import q, qi, transaction
+        from core.db import q, qi, transaction
         import time as _time
 
         with transaction():
@@ -1399,7 +1399,7 @@ class ChatAccess:
         reads the provenance written at provisioning time, so it can only ever
         return stories that are actually yours.
         """
-        from db import q, wget
+        from core.db import q, wget
 
         found = []
         for row in q("SELECT id, name FROM chats ORDER BY id DESC"):
@@ -1411,7 +1411,7 @@ class ChatAccess:
 
     def turns(self, chat_id, limit=20):
         """Recent committed turns of one story, oldest last."""
-        from db import q
+        from core.db import q
 
         rows = q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
                  "ORDER BY idx DESC LIMIT ?", (int(chat_id), int(limit)))
@@ -1744,7 +1744,7 @@ class SonderExtensionAPI:
         name = str(name or "").strip()
         if not _STAGE_KEY.fullmatch(name):
             raise ExtensionError(f"invalid model lane name: {name!r}")
-        from providers import ROLES
+        from llm.providers import ROLES
         if name in ROLES:
             raise ExtensionError(
                 f"model lane {name!r} is a host role; a lane needs a name of "
@@ -1767,7 +1767,7 @@ class SonderExtensionAPI:
         did not.
         """
         from agents.common import jparse
-        from providers import chat_complete
+        from llm.providers import chat_complete
 
         raw = chat_complete(
             role, str(system or ""),
@@ -1779,7 +1779,7 @@ class SonderExtensionAPI:
     def llm_text(self, system, user, *, role="utility", temperature=None,
                  max_tokens=8000):
         """The same call, unparsed, for an extension that wants prose."""
-        from providers import chat_complete
+        from llm.providers import chat_complete
 
         return chat_complete(role, str(system or ""), str(user or ""),
                              temperature=temperature, json_mode=False,
@@ -1848,7 +1848,7 @@ class SonderExtensionAPI:
         """
         import time
 
-        from db import transaction, wset
+        from core.db import transaction, wset
 
         payload = package
         if not isinstance(payload, dict):
@@ -1893,7 +1893,7 @@ class SonderExtensionAPI:
 
         with transaction():
             try:
-                import app
+                from web import app
 
                 chat = app._chat_archive_service.import_chat({"data": payload})
             except ExtensionError:
@@ -1911,12 +1911,12 @@ class SonderExtensionAPI:
             # the rename with everything else.
             wanted = str((payload.get("chat") or {}).get("name") or "").strip()
             if wanted and wanted != chat.get("name"):
-                from db import qi
+                from core.db import qi
 
                 qi("UPDATE chats SET name=? WHERE id=?", (wanted, chat_id))
                 chat = dict(chat, name=wanted)
             if player_authority is not None:
-                from scene import (PLAYER_AUTHORITY_MODES,
+                from story.scene import (PLAYER_AUTHORITY_MODES,
                                    set_player_authority)
 
                 # Refused rather than normalized, for the reason the host route
@@ -1958,7 +1958,7 @@ class SonderExtensionAPI:
         started by hand and later installed you into, which is a different
         situation from a campaign of yours and should not be mistaken for one.
         """
-        from db import wget
+        from core.db import wget
 
         stored = wget(int(chat_id), f"ext:{self.id}:provisioned")
         return dict(stored) if isinstance(stored, dict) else None
@@ -1987,7 +1987,7 @@ class SonderExtensionAPI:
         could break, and consumers of this live outside this repository and
         cannot be migrated in the same commit.
         """
-        import story_view as facade
+        from web import story_view as facade
 
         if events is None:
             return facade.story_view(chat_id)
@@ -2020,13 +2020,13 @@ class SonderExtensionAPI:
 
         `api.viewers(chat_id)` lists the ids this accepts.
         """
-        import story_view as facade
+        from web import story_view as facade
 
         return facade.player_view(chat_id, viewer, memories=memories)
 
     def viewers(self, chat_id):
         """Who this story can be projected for, as `{id, name, kind}`."""
-        import story_view as facade
+        from web import story_view as facade
 
         return facade.viewers(chat_id)
 

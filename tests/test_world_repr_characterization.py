@@ -31,11 +31,11 @@ import copy
 import json
 import time
 
-import commit
+from persist import commit
 from agents.common import character_room
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import (
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import (
     ambient_scope,
     containment_chain,
     hear_level,
@@ -631,7 +631,7 @@ class TestPersistenceRoundTrips:
         assert _world_dump(temp_db, cid) == before
 
     def test_export_import_reproduces_canonical_world(self, temp_db):
-        import app
+        from web import app
         ids = _build_rich_chat(temp_db)
         source = _canonical_world(temp_db, ids["chat_id"])
 
@@ -646,7 +646,7 @@ class TestPersistenceRoundTrips:
             _dumps(temp_db.wget(ids["chat_id"], "scene", None))
 
     def test_branch_reproduces_canonical_world(self, temp_db):
-        import app
+        from web import app
         ids = _build_rich_chat(temp_db)
         cid = ids["chat_id"]
         source = _canonical_world(temp_db, cid)

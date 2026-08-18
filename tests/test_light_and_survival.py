@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     effective_light,
     has_visual,
     hear_level,
@@ -112,7 +112,7 @@ class TestLight:
         assert effective_light(scene, "b") == "dim"
 
     def test_darkness_is_stated_as_ground_truth(self):
-        from spatial import spatial_facts
+        from world.spatial import spatial_facts
 
         # Sealed: an open edge to a lit room would (correctly) spill enough
         # light to make this dim rather than pitch black.
@@ -121,13 +121,13 @@ class TestLight:
         assert any("pitch dark" in f for f in facts)
 
     def test_a_dim_room_is_stated_differently(self):
-        from spatial import spatial_facts
+        from world.spatial import spatial_facts
 
         scene = _rooms(light_a="dim", barrier="closed_door")
         assert any("dim" in f for f in spatial_facts(scene, "Watcher", []))
 
     def test_light_survives_schema_validation(self):
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         diff = StateDiff(rooms={"cellar": {"name": "Cellar", "light": "dark"}})
         assert diff.dict()["rooms"]["cellar"]["light"] == "dark"
@@ -135,7 +135,7 @@ class TestLight:
 
 class TestLightInBackdrops:
     def test_the_prompt_says_how_to_paint_it(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         scene = {"rooms": {"c": {"name": "Cellar", "desc": "Stone.",
                                  "light": "dark"}}}
@@ -143,7 +143,7 @@ class TestLightInBackdrops:
         assert "darkness" in prompt
 
     def test_a_normally_lit_room_says_nothing_extra(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         scene = {"rooms": {"c": {"name": "Hall", "desc": "Wood.",
                                  "light": "lit"}}}
@@ -151,7 +151,7 @@ class TestLightInBackdrops:
 
     def test_the_cache_key_changes_when_the_lights_go_out(self):
         """Without this a room that goes dark keeps serving its lit picture."""
-        from backdrops import visual_signature
+        from dressing.backdrops import visual_signature
 
         lit = {"rooms": {"c": {"name": "Cellar", "desc": "Stone.", "light": "lit"}}}
         dark = {"rooms": {"c": {"name": "Cellar", "desc": "Stone.", "light": "dark"}}}
@@ -216,13 +216,13 @@ class TestSoundThroughMaterial:
 
 class TestRestraint:
     def test_the_readers_exist_and_fail_open(self, temp_db):
-        from scene import restraint_map, restraint_of
+        from story.scene import restraint_map, restraint_of
 
         assert restraint_map(1) == {}
         assert restraint_of({}, "Anyone") is None
 
     def test_a_binding_this_beat_is_in_force_this_beat(self):
-        from scene import apply_restraint_diff, restraint_of
+        from story.scene import apply_restraint_diff, restraint_of
 
         diff = {"conditions": {"c1": [{
             "condition_id": "c1", "subject_id": "Hinami", "kind": "restraint",
@@ -233,7 +233,7 @@ class TestRestraint:
         assert restraint_of(rmap, "Hinami")["by"] == "Tamamo"
 
     def test_releasing_frees_them(self):
-        from scene import apply_restraint_diff, restraint_of
+        from story.scene import apply_restraint_diff, restraint_of
 
         held = apply_restraint_diff({}, {"conditions": {"c1": [{
             "subject_id": "Hinami", "kind": "restraint",
@@ -245,7 +245,7 @@ class TestRestraint:
         assert restraint_of(freed, "Hinami") is None
 
     def test_an_unknown_level_degrades_to_the_mildest(self):
-        from scene import apply_restraint_diff, restraint_of
+        from story.scene import apply_restraint_diff, restraint_of
 
         rmap = apply_restraint_diff({}, {"conditions": {"c1": [{
             "subject_id": "X", "kind": "restraint",
@@ -253,7 +253,7 @@ class TestRestraint:
         assert restraint_of(rmap, "X")["level"] == "held"
 
     def test_an_awareness_condition_is_not_a_restraint(self):
-        from scene import apply_restraint_diff
+        from story.scene import apply_restraint_diff
 
         rmap = apply_restraint_diff({}, {"conditions": {"c1": [{
             "subject_id": "X", "kind": "awareness",
@@ -267,7 +267,7 @@ class TestSurvivalIsOffByDefault:
     def test_the_setting_defaults_off(self, temp_db):
         import time
 
-        from survival import survival_enabled
+        from world.survival import survival_enabled
 
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                          ("Fresh", "", time.time()))
@@ -282,20 +282,20 @@ class TestSurvivalIsOffByDefault:
         assert "vitals" not in scene
 
     def test_nothing_ticks_without_a_table(self):
-        from survival import tick_vitals
+        from world.survival import tick_vitals
 
         scene = {"rooms": {}, "positions": {}}
         assert tick_vitals(scene, 86400) is scene
         assert "vitals" not in scene
 
     def test_no_facts_without_a_table(self):
-        from survival import vitals_facts
+        from world.survival import vitals_facts
         assert vitals_facts({"positions": {}}, "P") == []
 
     def test_the_toggle_round_trips(self, temp_db):
         import time
 
-        from survival import set_survival_enabled, survival_enabled
+        from world.survival import set_survival_enabled, survival_enabled
 
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                          ("Story", "", time.time()))
@@ -353,17 +353,17 @@ class TestVitals:
         ("injury", 0.9, "critically injured"),
     ])
     def test_labels(self, vital, value, expected):
-        from survival import vital_label
+        from world.survival import vital_label
         assert vital_label(vital, value) == expected
 
     def test_a_healthy_body_says_nothing(self):
-        from survival import vitals_facts
+        from world.survival import vitals_facts
 
         scene = merge_scene_with_diff(self._scene(), {"vitals": {"P": {}}})
         assert vitals_facts(scene, "P") == []
 
     def test_a_failing_body_is_ground_truth(self):
-        from spatial import spatial_facts
+        from world.spatial import spatial_facts
 
         scene = merge_scene_with_diff(
             self._scene(), {"vitals": {"P": {"stamina": 0.05}}})
@@ -475,7 +475,7 @@ class TestCarriedLight:
         assert effective_light(scene, "cellar") == "dark"
 
     def test_light_source_survives_schema_validation(self):
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         diff = StateDiff(entities={"t": {"name": "Lantern",
                                          "light_source": "lit"}})
@@ -497,13 +497,13 @@ class TestLightIsGradedNotBinary:
         ("dark", "none"), ("dim", "shapes"), ("lit", "full"), ("bright", "full"),
     ])
     def test_sight_levels(self, light, level):
-        from spatial import sight_level
+        from world.spatial import sight_level
 
         scene = self._rooms_at(light)
         assert sight_level(spatial_rel(scene, "a", "a")) == level
 
     def test_a_blocked_line_is_none_whatever_the_light(self):
-        from spatial import sight_level
+        from world.spatial import sight_level
 
         scene = {"rooms": {
             "a": {"name": "A", "light": "bright",
@@ -534,11 +534,11 @@ class TestLightIsLocalNotRoomWide:
         }
 
     def test_the_bearer_is_lit(self):
-        from spatial import light_at
+        from world.spatial import light_at
         assert light_at(self._hall(), "Bearer") == "lit"
 
     def test_someone_across_the_room_is_only_a_shape(self):
-        from spatial import light_at
+        from world.spatial import light_at
         assert light_at(self._hall(), "Far") == "dim"
 
     def test_the_room_itself_is_not_declared_lit(self):
@@ -546,7 +546,7 @@ class TestLightIsLocalNotRoomWide:
         assert effective_light(self._hall(), "hall") == "dark"
 
     def test_a_room_filling_source_does_light_everyone(self):
-        from spatial import light_at
+        from world.spatial import light_at
 
         scene = self._hall()
         scene["entities"]["torch"]["light_radius"] = "room"
@@ -554,14 +554,14 @@ class TestLightIsLocalNotRoomWide:
         assert effective_light(scene, "hall") == "lit"
 
     def test_a_hearth_defaults_to_filling_the_room(self):
-        from spatial import light_at
+        from world.spatial import light_at
 
         scene = self._hall()
         scene["entities"]["torch"].pop("portable")       # fixed, not carried
         assert light_at(scene, "Far") == "lit"
 
     def test_graded_sight_between_bodies_uses_local_light(self):
-        from spatial import visual_level_between
+        from world.spatial import visual_level_between
 
         scene = self._hall()
         # The bearer is in their own light; the far figure is only a shape.
@@ -603,7 +603,7 @@ class TestAnyWayOfMakingLight:
 
 class TestLightSourcesInBackdrops:
     def test_a_fire_lights_the_picture_and_is_named(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         scene = {"rooms": {"cave": {"name": "Cave", "desc": "Wet stone.",
                                     "light": "dark", "adjacent": []}},
@@ -616,7 +616,7 @@ class TestLightSourcesInBackdrops:
         assert "darkness" not in prompt      # it is not a dark room any more
 
     def test_the_cache_key_follows_the_fire(self):
-        from backdrops import visual_signature
+        from dressing.backdrops import visual_signature
 
         dark = {"rooms": {"cave": {"name": "Cave", "desc": "S.", "light": "dark"}},
                 "positions": {}, "entities": {}}
@@ -643,14 +643,14 @@ class TestBackdropFollowsTheLightYouCarry:
         }
 
     def test_a_carried_light_lights_the_picture(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         prompt = compose_prompt(room_projection(self._cave(), "cave", viewer="P"))
         assert "lit by Torch" in prompt
         assert "darkness" not in prompt
 
     def test_turning_it_off_returns_to_dark(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         prompt = compose_prompt(
             room_projection(self._cave(lit=False), "cave", viewer="P"))
@@ -659,14 +659,14 @@ class TestBackdropFollowsTheLightYouCarry:
 
     def test_that_counts_as_a_room_change_for_the_cache(self):
         """Or the dark cave keeps serving the torchlit picture."""
-        from backdrops import visual_signature
+        from dressing.backdrops import visual_signature
 
         on = visual_signature(self._cave(), "cave", viewer="P")
         off = visual_signature(self._cave(lit=False), "cave", viewer="P")
         assert on != off
 
     def test_intensity_changes_the_picture(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         candle = compose_prompt(room_projection(
             self._cave(emits="dim"), "cave", viewer="P"))
@@ -678,25 +678,25 @@ class TestBackdropFollowsTheLightYouCarry:
         assert candle != flood
 
     def test_a_hand_light_says_the_rest_of_the_room_is_dark(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         prompt = compose_prompt(room_projection(self._cave(), "cave", viewer="P"))
         assert "only illumination" in prompt
 
     def test_a_room_filling_source_does_not(self):
-        from backdrops import compose_prompt, room_projection
+        from dressing.backdrops import compose_prompt, room_projection
 
         prompt = compose_prompt(room_projection(
             self._cave(emits="lit", portable=False), "cave", viewer="P"))
         assert "only illumination" not in prompt
 
     def test_without_a_viewer_it_falls_back_to_room_ambient(self):
-        from backdrops import room_projection
+        from dressing.backdrops import room_projection
 
         assert room_projection(self._cave(), "cave")["light"] == "dark"
 
     def test_a_torch_in_another_room_does_not_light_the_picture(self):
-        from backdrops import room_projection
+        from dressing.backdrops import room_projection
 
         scene = self._cave()
         scene["rooms"]["hall"] = {"name": "Hall", "adjacent": []}
@@ -711,7 +711,7 @@ class TestSurvivalSurvivesBranchingAndRerolls:
     before you were starving and you are not starving."""
 
     def test_it_uses_the_same_mechanism_as_genre_and_dialogue(self):
-        from checkpoints import PRESERVED_SETTING_KEYS
+        from persist.checkpoints import PRESERVED_SETTING_KEYS
 
         assert "survival_enabled" in PRESERVED_SETTING_KEYS
         # The company it keeps is the argument for it being there.
@@ -721,8 +721,8 @@ class TestSurvivalSurvivesBranchingAndRerolls:
     def test_a_restore_carries_the_setting_across(self, temp_db):
         import time
 
-        from checkpoints import _preserved_settings
-        from survival import set_survival_enabled
+        from persist.checkpoints import _preserved_settings
+        from world.survival import set_survival_enabled
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -734,7 +734,7 @@ class TestSurvivalSurvivesBranchingAndRerolls:
     def test_it_is_per_story_not_per_install(self, temp_db):
         import time
 
-        from survival import set_survival_enabled, survival_enabled
+        from world.survival import set_survival_enabled, survival_enabled
 
         a = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                        ("Ordeal", "", time.time()))
@@ -748,7 +748,7 @@ class TestSurvivalSurvivesBranchingAndRerolls:
     def test_the_default_is_off_for_a_fresh_story(self, temp_db):
         import time
 
-        from survival import survival_enabled
+        from world.survival import survival_enabled
 
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                          ("Fresh", "", time.time()))
@@ -787,7 +787,7 @@ class TestAuthoringSettingsSurviveARestore:
         "survival_enabled",
     ])
     def test_it_is_preserved(self, key):
-        from checkpoints import PRESERVED_SETTING_KEYS
+        from persist.checkpoints import PRESERVED_SETTING_KEYS
         assert key in PRESERVED_SETTING_KEYS
 
     @pytest.mark.parametrize("key", [
@@ -810,14 +810,14 @@ class TestAuthoringSettingsSurviveARestore:
     ])
     def test_story_state_is_not(self, key):
         """The other half of the contract: rewinding must actually rewind."""
-        from checkpoints import PRESERVED_SETTING_KEYS
+        from persist.checkpoints import PRESERVED_SETTING_KEYS
         assert key not in PRESERVED_SETTING_KEYS
 
     def test_a_persona_history_edit_survives_a_rewind(self, temp_db):
         import time
 
-        from checkpoints import _preserved_settings
-        from db import wset
+        from persist.checkpoints import _preserved_settings
+        from core.db import wset
 
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                          ("Story", "", time.time()))
@@ -829,8 +829,8 @@ class TestAuthoringSettingsSurviveARestore:
     def test_a_declared_fixed_point_survives_a_rewind(self, temp_db):
         import time
 
-        from checkpoints import _preserved_settings
-        from paradox import add_fixed_point
+        from persist.checkpoints import _preserved_settings
+        from world.paradox import add_fixed_point
 
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                          ("Story", "", time.time()))

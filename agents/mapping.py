@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from character_schema import (
+from story.character_schema import (
     persona_appearance,
     persona_name,
     persona_public_history,
 )
-from db import wget
-from memory import lorebook_manifest, search_lore, resolve_lorebook_graph
-from prompts import get_prompt
-from scene import (
+from core.db import wget
+from mind.memory import lorebook_manifest, search_lore, resolve_lorebook_graph
+from llm.prompts import get_prompt
+from story.scene import (
     cast_scene_context,
     director_context,
     fiction_model,
@@ -63,7 +63,7 @@ def mapping_stage(ctx, nonce):
     # consumer -- the place's debt surfaces where the place itself is
     # generated, never in any mind's payload; arrival is the earning event.
     try:
-        from living_world import attach_owed_history
+        from world.living_world import attach_owed_history
         hits = attach_owed_history(chat["id"], hits)
     except Exception as exc:
         ctx.add_warning(f"owed history not attached: {exc}")

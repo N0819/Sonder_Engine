@@ -12,9 +12,9 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
-from character_schema import character_name_from_text
-from db import get_setting, wget
-from survival import survival_enabled, vitals_of
+from story.character_schema import character_name_from_text
+from core.db import get_setting, wget
+from world.survival import survival_enabled, vitals_of
 
 from .common import scene_compact_attire
 from .director_evidence import _manifest_items

@@ -10,20 +10,20 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-import app
+from web import app
 import language_runtime
 from agents.composer import Percept, RenderedView, render_episode, render_view
 from agents.common import (
     _compose_residue_view, _inject_dialogue,
     _is_autonomous_response, _is_mental_action,
 )
-from checkpoints import PRESERVED_SETTING_KEYS, ensure_checkpoint, restore_checkpoint
+from persist.checkpoints import PRESERVED_SETTING_KEYS, ensure_checkpoint, restore_checkpoint
 from language_runtime import (
     LanguagePackError, apply_common_prompt_policy, current_language_id,
     installed_language_packs, language_pack, linguistic,
     require_language_pack, story_language,
 )
-from prompts import DEFAULT_PROMPTS, character_prompt, get_prompt
+from llm.prompts import DEFAULT_PROMPTS, character_prompt, get_prompt
 
 
 ROOT = Path(__file__).resolve().parents[1]

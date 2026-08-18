@@ -24,8 +24,8 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_director_ctx(temp_db, character_results=None):
@@ -93,7 +93,7 @@ def _make_corrupted_open_group_ctx(
         follow_stop=False):
     """A pre-fix reroll: last beat began together and resolved split+near."""
     import agents.perception as perception
-    from checkpoints import snapshot_state
+    from persist.checkpoints import snapshot_state
 
     ctx, char_id = _make_director_ctx(temp_db)
     start_scene = {
@@ -515,7 +515,7 @@ def test_an_originated_line_with_no_tags_is_taken_as_normal_and_overt(
 
 
 def test_the_resolve_contract_no_longer_requires_the_re_stamped_tags():
-    from prompts import get_prompt
+    from llm.prompts import get_prompt
     text = get_prompt("director_resolve_lean")   # the prose author owns dialogue_log
     assert "exact_quote,volume,intended_target" not in text
     assert "ONLY on lines you originate" in text
@@ -628,7 +628,7 @@ def test_no_internal_raw_keys_leak_into_output():
 # weaker model emitted an out-of-enum volume like "quiet"/"low"/"softly";
 # these now coerce via normalize_speech_volume instead of ValidationError.
 
-from schemas import validate_llm_output_strict as _vlos, SpeechElement, DialogueLogEntry
+from llm.schemas import validate_llm_output_strict as _vlos, SpeechElement, DialogueLogEntry
 
 
 def test_speech_element_coerces_unknown_volume():
@@ -656,7 +656,7 @@ def test_director_interpret_out_of_enum_volume_does_not_crash():
 # ear -- and no words. Four stored beats across two branches, out of the
 # thirteen in the corpus that conceal speech at all.
 
-from schemas import preprocess_llm_output as _pp
+from llm.schemas import preprocess_llm_output as _pp
 
 
 def _interpret(sequence, addressed_to):

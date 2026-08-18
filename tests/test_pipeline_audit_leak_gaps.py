@@ -21,10 +21,10 @@ import time
 
 import pytest
 
-import memory
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from schemas import preprocess_llm_output
+from mind import memory
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from llm.schemas import preprocess_llm_output
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ class TestDeliveryGate:
     }
 
     def _rel(self, a="r1", b="r1"):
-        from spatial import spatial_rel
+        from world.spatial import spatial_rel
         return spatial_rel(self.SCENE, a, b)
 
     def test_delivery_ok_exists(self):
@@ -366,7 +366,7 @@ class TestDeliveryGate:
         """F4: hear_level was called without proximity everywhere, so a mutter
         carried to an arbitrarily large room at full volume."""
         from agents.common import _delivery_ok
-        from spatial import hear_level
+        from world.spatial import hear_level
         rel = self._rel()
         assert hear_level(rel, "mutter", proximity="within_reach") != "none"
         assert _delivery_ok(rel, self.SCENE, "Alice", "Bob", "hearing",
@@ -395,7 +395,7 @@ class TestDialogueMemoryRecognitionGate:
     def test_recognition_gate_in_commit(self):
         """Verify commit.py has the recognition gate code."""
         import inspect
-        import commit
+        from persist import commit
         # The gate lives in prepare_memory_commit (commit_memory since the
         # split); the function source survives the move.
         source = inspect.getsource(commit.prepare_memory_commit)
@@ -689,7 +689,7 @@ class TestEntityStateStalenessSignal:
             "rooms": {}, "positions": {}, "entities": prior_entities,
             "attire": {}, "overlays": {},
         })
-        from pipeline_context import PipelineContext, ChatData, TurnData
+        from core.pipeline_context import PipelineContext, ChatData, TurnData
         ctx = PipelineContext(
             chat=ChatData(id=chat_id, name="T", persona_id=None,
                           lorebook_id=None, scenario="", created=time.time()),
@@ -706,7 +706,7 @@ class TestEntityStateStalenessSignal:
         """The projection must never silently lose a row: world_entities is a
         derived view of the scene commit, and a missing row is durable
         corruption, not a closed leak."""
-        import commit
+        from persist import commit
         ctx, chat_id = self._ctx_and_chat(
             temp_db,
             prior_entities={},
@@ -719,7 +719,7 @@ class TestEntityStateStalenessSignal:
         assert [r["entity_id"] for r in rows] == ["vial"]
 
     def test_copy_forward_of_a_named_entity_is_reported(self, temp_db):
-        import commit
+        from persist import commit
         ctx, chat_id = self._ctx_and_chat(
             temp_db,
             prior_entities={"cot": {"kind": "object", "name": "cot",
@@ -735,7 +735,7 @@ class TestEntityStateStalenessSignal:
         assert [r["entity_id"] for r in rows] == ["cot"]
 
     def test_an_updated_clause_is_not_reported(self, temp_db):
-        import commit
+        from persist import commit
         ctx, _ = self._ctx_and_chat(
             temp_db,
             prior_entities={"cot": {"kind": "object", "name": "cot",
@@ -748,7 +748,7 @@ class TestEntityStateStalenessSignal:
 
     def test_an_entity_this_beat_never_mentions_is_not_reported(self, temp_db):
         """An untouched entity legitimately carries its state forward."""
-        import commit
+        from persist import commit
         ctx, _ = self._ctx_and_chat(
             temp_db,
             prior_entities={"lamp": {"kind": "object", "name": "lamp",
@@ -803,7 +803,7 @@ class TestEventsRowPerObserverRedaction:
     def test_concealed_from_observer_loses_name_and_quote(self, temp_db):
         """The observer the line was concealed from must get neither the
         concealed speaker's name nor the content of what he said."""
-        from scene import recent_events_for_observer
+        from story.scene import recent_events_for_observer
         chat_id = self._row(temp_db, ["Alice"])
 
         results = recent_events_for_observer(chat_id, "Alice", n=5)
@@ -817,7 +817,7 @@ class TestEventsRowPerObserverRedaction:
     def test_entitled_observer_keeps_the_beat(self, temp_db):
         """An observer the line was NOT concealed from is entitled to it --
         redaction must be per-observer, not blanket."""
-        from scene import recent_events_for_observer
+        from story.scene import recent_events_for_observer
         chat_id = self._row(temp_db, ["Alice"])
 
         results = recent_events_for_observer(chat_id, "Cara", n=5)
@@ -831,7 +831,7 @@ class TestEventsRowPerObserverRedaction:
     def test_overt_sentences_survive_for_concealed_observer(self, temp_db):
         """Redaction is sentence-level (D1/D2): what Alice did in the open is
         still hers to remember."""
-        from scene import recent_events_for_observer
+        from story.scene import recent_events_for_observer
         chat_id = self._row(temp_db, ["Alice"])
 
         text = recent_events_for_observer(chat_id, "Alice", n=5)[0]
@@ -841,7 +841,7 @@ class TestEventsRowPerObserverRedaction:
     def test_globally_concealed_line_hidden_from_everyone(self, temp_db):
         """An empty conceal_from means concealed from all, so even an
         unnamed observer must not receive it."""
-        from scene import recent_events_for_observer
+        from story.scene import recent_events_for_observer
         chat_id = self._row(temp_db, [])
 
         text = recent_events_for_observer(chat_id, "Cara", n=5)[0]
@@ -852,7 +852,7 @@ class TestEventsRowPerObserverRedaction:
     def test_no_observer_is_entitled_to_nothing(self, temp_db):
         """A stage with no vantage (lore routing) gets every concealed entry
         redacted, including ones targeted at a named third party."""
-        from scene import recent_events_for_observer
+        from story.scene import recent_events_for_observer
         chat_id = self._row(temp_db, ["Alice"])
 
         text = recent_events_for_observer(chat_id, None, n=5)[0]
@@ -864,7 +864,7 @@ class TestEventsRowPerObserverRedaction:
     def test_mapping_recent_events_is_scrubbed(self, temp_db):
         """X18's middle hop: recent_events feeds mapping's search_lore query,
         and mapping is not entitled to the omniscient row."""
-        from scene import recent_events
+        from story.scene import recent_events
         chat_id = self._row(temp_db, ["Alice"])
 
         results = recent_events(chat_id, n=5)
@@ -876,7 +876,7 @@ class TestEventsRowPerObserverRedaction:
     def test_unconcealed_row_is_returned_verbatim(self, temp_db):
         """No concealment, no change: the scrub must not cost ordinary beats
         their text (recent_events' long-standing contract)."""
-        from scene import recent_events, recent_events_for_observer
+        from story.scene import recent_events, recent_events_for_observer
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
             ("T", "", time.time()),

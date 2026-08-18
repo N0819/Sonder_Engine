@@ -239,12 +239,12 @@ def providers_reasoning_effort(role):
     point of the fix below is that this is no longer implicitly 'whatever the
     model defaults to'; printing it is how a reader knows which regime the
     numbers came from."""
-    import providers
+    from llm import providers
     return providers.reasoning_effort_for(role)
 
 
 def _post(prov, model, system, user, max_tokens, timeout, role, step):
-    import providers
+    from llm import providers
     base = prov["base_url"].rstrip("/")
     body = {"model": model,
             "messages": [{"role": "system", "content": system},
@@ -263,7 +263,7 @@ def _post(prov, model, system, user, max_tokens, timeout, role, step):
     # is honoured only sometimes (narrator: 0/5 valid) while the engine's real
     # path is enforced (5/5). Benching the weaker of the two would rank models
     # on a failure mode production no longer has.
-    import llm_quality
+    from llm import llm_quality
     providers._apply_json_mode(body, prov, model, True,
                                llm_quality._step_json_schema(step))
     start = time.perf_counter()
@@ -282,8 +282,8 @@ def _post(prov, model, system, user, max_tokens, timeout, role, step):
 
 
 def bench(prov, model, step, payload, system, trials, timeout, max_tokens):
-    import llm_quality
-    import schemas
+    from llm import llm_quality
+    from llm import schemas
     role = STEP_ROLE.get(step, "default")
     passes, times, outs, errors = 0, [], [], []
     for _ in range(trials):
@@ -327,9 +327,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
-    import db
+    from core import db
     db.configure(args.db)
-    import prompts
+    from llm import prompts
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))

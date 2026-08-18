@@ -1,7 +1,7 @@
 """Tests for pure spatial reasoning functions."""
 
 import pytest
-from spatial import (
+from world.spatial import (
     room_of,
     has_visual,
     spatial_rel,
@@ -39,7 +39,7 @@ def test_merge_dedupes_duplicate_adjacency_in_untouched_room():
 
 
 def test_none_barrier_is_normalized_to_open():
-    from spatial import spatial_rel, has_visual, hear_level
+    from world.spatial import spatial_rel, has_visual, hear_level
 
     scene = {
         "rooms": {
@@ -78,7 +78,7 @@ def test_common_barrier_synonyms_resolve_correctly():
     # mechanical cause) narrated an unrelated in-fiction reason. Movement
     # and perception must not silently break on ordinary word-choice
     # variation for well-understood barrier concepts.
-    from spatial import normalize_barrier
+    from world.spatial import normalize_barrier
 
     assert normalize_barrier("open_doorway") == "open"
     assert normalize_barrier("open counter") == "open"
@@ -89,7 +89,7 @@ def test_common_barrier_synonyms_resolve_correctly():
     assert normalize_barrier("sealed_door") == "wall"
 
 def test_unknown_barrier_fails_closed():
-    from spatial import spatial_rel, has_visual
+    from world.spatial import spatial_rel, has_visual
 
     scene = {
         "rooms": {

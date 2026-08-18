@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import pytest
 
-from memory import _rank_normalized_importance
+from mind.memory import _rank_normalized_importance
 
 
 def _bank(*values):
@@ -157,7 +157,7 @@ def test_ranking_reads_the_respaced_value_not_the_raw_one():
     well-tested function nothing calls."""
     import inspect
 
-    import memory
+    from mind import memory
     src = inspect.getsource(memory.search_memories)
     assert "ranked_importance = _rank_normalized_importance(memories)" in src
     assert "fused[mid] += 0.08 * ranked_importance[mid]" in src

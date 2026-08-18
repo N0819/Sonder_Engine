@@ -14,10 +14,10 @@ the ledger, and the in-window rupture prompt with its worked example.
 import json
 import time
 
-import affect
-from character_schema import default_character_data
-from commit import RECENT_TELLS_CAP, prepare_memory_commit
-from pipeline_context import ChatData, PipelineContext, TurnData
+from mind import affect
+from story.character_schema import default_character_data
+from persist.commit import RECENT_TELLS_CAP, prepare_memory_commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _story(temp_db, cstate, *, name="Advocate Vorne"):

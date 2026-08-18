@@ -12,7 +12,7 @@ These pin the properties that argument depends on.
 
 from __future__ import annotations
 
-import degradation
+from world import degradation
 
 CLAIM = "Mora killed thirty-seven raiders at the Gate Passage"
 NAMES = ["Mora"]
@@ -182,8 +182,10 @@ class TestDiagnosticsAreNotDelivered:
         than a mind that had merely heard a vague story."""
         import pathlib
 
-        root = pathlib.Path(degradation.__file__).parent
-        for path in list(root.glob("*.py")) + list((root / "agents").glob("*.py")):
+        root = pathlib.Path(degradation.__file__).resolve().parents[1]
+        packages = ("core", "llm", "world", "mind", "story",
+                    "dressing", "persist", "web", "agents")
+        for path in [p for pkg in packages for p in (root / pkg).glob("*.py")]:
             if path.name == "degradation.py":
                 continue
             assert "lost_at" not in path.read_text(encoding="utf-8"), \

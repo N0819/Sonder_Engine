@@ -19,9 +19,9 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import ambience
-import app as app_module
-import guest_access as guest
+from dressing import ambience
+from web import app as app_module
+from web import guest_access as guest
 
 
 @pytest.fixture

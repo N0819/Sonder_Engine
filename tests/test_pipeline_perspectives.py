@@ -32,7 +32,7 @@ def _between(source: str, start: str, end: str) -> str:
 
 class TestTheApiNamesThePerceivers:
     def test_ids_resolve_to_the_names_a_reader_knows(self, temp_db):
-        import app
+        from web import app
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -53,7 +53,7 @@ class TestTheApiNamesThePerceivers:
         """A turn is read long after it ran. A character dormant or detached
         today still has views on the beats they were present for, and an
         unresolvable id is exactly the friction this removes."""
-        import app
+        from web import app
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -71,7 +71,7 @@ class TestTheApiNamesThePerceivers:
         """`chat_chars.sheet` is the per-story authored card and is what
         `scene.active_cast` resolves; the drawer must not label a mind with a
         name the story stopped using."""
-        import app
+        from web import app
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -88,7 +88,7 @@ class TestTheApiNamesThePerceivers:
         assert app._perceiver_names(chat_id)[str(char_id)] == "Per-story"
 
     def test_the_route_hands_the_map_to_the_drawer(self):
-        import app
+        from web import app
 
         src = inspect.getsource(app.pipeline_get)
         assert '"perceivers": _perceiver_names(' in src

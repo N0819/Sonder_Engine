@@ -25,7 +25,7 @@ repeat check compares question against question.
 
 from __future__ import annotations
 
-import affect
+from mind import affect
 from agents.character import _first_repeated_move, _REPEATED_ASK_THRESHOLD
 
 T152 = "Tell us, Doctor. What does it seem to you?"

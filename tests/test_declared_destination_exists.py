@@ -24,9 +24,9 @@ import time
 
 import pytest
 
-from commit import prepare_scene_commit
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import spatial_rel
+from persist.commit import prepare_scene_commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import spatial_rel
 
 
 def _ctx(temp_db, to_room, *, staged_layout=None, start="alley_room"):

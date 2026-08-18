@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-import crowds
+from world import crowds
 
 
 class TestTheCountIsABand:
@@ -70,7 +70,7 @@ class TestDensityIsDerivedFromTheRoom:
         """`spatial._ROOM_COST` looks like this rank and is not: it collapses
         tiny, small, "" and medium all to 1 because it prices WALKING. Reusing
         it would make a crush in a broom cupboard read like one in a hall."""
-        from spatial import _ROOM_COST
+        from world.spatial import _ROOM_COST
         assert _ROOM_COST["tiny"] == _ROOM_COST["medium"]
         assert crowds.room_size_rank("tiny") != crowds.room_size_rank("medium")
 
@@ -169,7 +169,7 @@ class TestACrowdIsVisibleWithoutCostingASlot:
 
     def test_the_ledger_is_frame_scoped(self):
         """A branch that never went to the market must not inherit its throng."""
-        from db import FRAME_SCOPED_WORLD_KEYS
+        from core.db import FRAME_SCOPED_WORLD_KEYS
         assert "crowds" in FRAME_SCOPED_WORLD_KEYS
 
     def test_a_crowd_is_not_a_managed_presence(self, temp_db):
@@ -206,7 +206,7 @@ class TestAFixtureMayBeReMet:
         a shut door silent."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.pick_background_reactors)
         assert "at_post" in body
         assert "_at_post_within_earshot" in body
@@ -219,7 +219,7 @@ class TestAFixtureMayBeReMet:
         — just standing where they work."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.pick_background_reactors)
         gate = body[body.index("if not (flow_addressed"):]
         assert "or at_post)" in gate.split("continue")[0]
@@ -228,7 +228,7 @@ class TestAFixtureMayBeReMet:
         """A fixture must not outrank someone the player just spoke to."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.pick_background_reactors)
         priority = body[body.index("priority = ("):body.index("candidates.append")]
         assert "at_post" not in priority.split("bool(addressed)")[0]
@@ -251,7 +251,7 @@ class TestDensityIsTerrain:
         """No new passability class. `membrane` is already passable and
         already absent from `_SIGHT_BARRIERS` — push through, cannot see
         across — and its own comment glosses it as "a body's soft wall"."""
-        import spatial
+        from world import spatial
 
         assert crowds.terrain("a few dozen", "small") == "membrane"
         assert crowds.terrain("a throng", "large") == "membrane"
@@ -440,7 +440,7 @@ class TestACrowdWalksTheGraphEveryoneElseWalks:
         the two can never disagree about what is adjacent."""
         import inspect
 
-        import spatial
+        from world import spatial
         assert "passable_neighbors(scene)" in \
             inspect.getsource(spatial.passable_route_exists)
 
@@ -454,7 +454,7 @@ class TestTheDirectorCanActuallySayIt:
         """Pydantic drops what the model has no field for. `project_ops` is
         promised in the character prompt, absent from `CharacterOutput`, and
         has been held by 0 of 26 characters ever."""
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         diff = StateDiff(**{"crowd_ops": [
             {"op": "set", "room": "square", "band": "a throng",
@@ -469,7 +469,7 @@ class TestTheDirectorCanActuallySayIt:
         """The lore generator shipped `entry_ops` in the prompt and `entries`
         in the reader, and alpha 7.2 users got "no usable entries". The same
         drift is checked here on the field this feature depends on."""
-        import prompts
+        from llm import prompts
 
         text = prompts.DEFAULT_PROMPTS["director_offscreen"]
         assert "crowd_ops" in text
@@ -488,7 +488,7 @@ class TestTheDirectorCanActuallySayIt:
         """The `required_json_example` is handed to the repair attempt too. A
         field described in prose and absent from the example is one a repair
         can never converge on — `state_diff.time` died that way."""
-        import schemas
+        from llm import schemas
 
         example = schemas.OUTPUT_EXAMPLES["director_resolve"]
         assert "crowd_ops" in example["state_diff"]
@@ -498,7 +498,7 @@ class TestTheDirectorCanActuallySayIt:
         in miniature. There is one constant and both sides import it."""
         import inspect
 
-        import commit
+        from persist import commit
         from agents.common import CROWDS_KEY
 
         assert CROWDS_KEY == crowds.CROWDS_WORLD_KEY
@@ -511,7 +511,7 @@ class TestTheDirectorCanActuallySayIt:
         object exists."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.commit_crowds)
         assert "background_presences" not in body
         assert "max_managed" not in body
@@ -528,7 +528,7 @@ class TestTheDirectorCanActuallySayIt:
         """
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.commit_crowds)
         assert body.index("advance_crowds") < body.index("apply_ops")
 
@@ -542,7 +542,7 @@ class TestTheDirectorCanActuallySayIt:
         """
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.commit_crowds)
         assert '"headed":' in body
         assert body.index("headed = ") < body.index("advance_crowds(")
@@ -635,7 +635,7 @@ class TestEmergenceProducesStrangers:
         to answer about itself."""
         import inspect
 
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.commit_crowds)
         assert "dialogue_log" in body
         assert "_registered_name_roster" in body
@@ -662,8 +662,8 @@ class TestEmergenceProducesStrangers:
         """
         import inspect
 
-        import commit
-        from schemas import DirectorEstablish
+        from persist import commit
+        from llm.schemas import DirectorEstablish
 
         kept = DirectorEstablish(**{"crowd_ops": [
             {"op": "set", "room": "square", "band": "a throng",

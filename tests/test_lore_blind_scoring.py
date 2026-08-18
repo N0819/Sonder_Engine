@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import numpy as np
 
-import memory
+from mind import memory
 
 
 def _book(db, name="Tamamo's Shrine"):
@@ -134,7 +134,7 @@ def test_an_unembedded_entry_is_not_called_stale(temp_db, monkeypatch):
 
 def _live_embedder(monkeypatch, dims=2560):
     """A provider that answers, at `dims` wide."""
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
 
     def meta(texts, **_k):
         v = np.ones(dims, dtype=np.float32) / np.sqrt(dims)
@@ -179,7 +179,7 @@ def test_a_rebuild_uses_the_same_document_update_lore_builds(temp_db,
                       "VALUES(?,?,?)", ("A story", book, 1.0))
     _entry(temp_db, book, "Third Floor", "the roost", 256, keys="roost, third")
     seen = []
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
 
     def meta(texts, **_k):
         seen.extend(texts)
@@ -207,7 +207,7 @@ def test_a_provider_hiccup_never_writes_a_fallback_over_lore(temp_db,
     chat = temp_db.qi("INSERT INTO chats(name,lorebook_id,created) "
                       "VALUES(?,?,?)", ("A story", book, 1.0))
     stale = _entry(temp_db, book, "Third Floor", "the roost", 256)
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
 
     def degraded(texts, **_k):
         v = np.ones(256, dtype=np.float32) / np.sqrt(256)
@@ -273,7 +273,7 @@ def test_an_entry_written_during_an_outage_says_it_was(temp_db, monkeypatch):
     happens rather than 165 turns later, when the only evidence left is a
     lorebook the agents appear to ignore.
     """
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
     book = _book(temp_db)
     monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
@@ -296,7 +296,7 @@ def test_the_backfill_identifies_the_fallback_from_the_bytes(temp_db):
     Verified against the live corpus this way: 40 of 40 sampled 1024-byte
     entries were byte-identical to `cheap_embed` of their own text.
     """
-    from providers import cheap_embed
+    from llm.providers import cheap_embed
     book = _book(temp_db)
     text_keys, text_content = "roost", "Tamamo's quarters on the third floor"
     fallback_vec = np.asarray(
@@ -433,7 +433,7 @@ def test_a_narrower_live_model_does_not_invert_the_reference(temp_db,
     and reports every correct row as needing repair. The healthy probe is
     authoritative precisely so that cannot happen.
     """
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
     book = _book(temp_db)
     narrow_but_live = _entry(temp_db, book, "Current", "text", 1024)
     temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
@@ -459,7 +459,7 @@ def test_a_degraded_probe_is_not_mistaken_for_the_live_model(temp_db,
     degraded probe is how an earlier version of this reported the corpus
     backwards and would have overwritten every good vector in it.
     """
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
     book = _book(temp_db)
     good = _entry(temp_db, book, "Real", "text", 2560)
     temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "

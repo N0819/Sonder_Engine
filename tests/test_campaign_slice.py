@@ -125,8 +125,8 @@ class TestTheSlice:
         TIER -- `common`/`scholarly`/`esoteric` -- which answers how obscure a
         fact is, not who holds it.
         """
-        from character_schema import character_name_from_text
-        from db import q
+        from story.character_schema import character_name_from_text
+        from core.db import q
 
         chat_id = _start(campaign)["chat_id"]
         sheets = {
@@ -152,8 +152,8 @@ class TestTheSlice:
         motivation having been left in goals, which are built to be completed.
         A reference campaign shipping that would teach it.
         """
-        from character_schema import character_name_from_text
-        from db import q
+        from story.character_schema import character_name_from_text
+        from core.db import q
 
         chat_id = _start(campaign)["chat_id"]
         for row in q("SELECT c.sheet FROM chat_chars cc "
@@ -353,7 +353,7 @@ class TestTheSlice:
         """Step 10: refreshing, checkpointing or branching preserves a coherent
         campaign. `ext:<id>` lives in the `world` KV, so it travels with the
         story and needs no line in the archive schema."""
-        import app
+        from web import app
 
         chat_id = _start(campaign)["chat_id"]
         _commit(campaign, chat_id, "behind the panel")

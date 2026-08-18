@@ -20,9 +20,9 @@ to prove the graph never quietly becomes the objective map.
 from __future__ import annotations
 
 from agents.character import _annotate_known_exits
-from commit import (PLACE_GRAPH_NODE_CAP, VISITED_ROOMS_CAP,
+from persist.commit import (PLACE_GRAPH_NODE_CAP, VISITED_ROOMS_CAP,
                     record_spatial_experience, update_place_graph)
-from spatial import visible_adjacent_rooms
+from world.spatial import visible_adjacent_rooms
 
 
 def _edge(to, dir=None, barrier="open"):

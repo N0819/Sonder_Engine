@@ -32,8 +32,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from spatial import merge_scene_with_diff, sprint_reach
-from spatial_orientation import normalize_scene_bearings
+from world.spatial import merge_scene_with_diff, sprint_reach
+from world.spatial_orientation import normalize_scene_bearings
 
 
 def _scene(rooms):

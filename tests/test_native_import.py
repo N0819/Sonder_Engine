@@ -1,5 +1,5 @@
 import json
-from character_schema import (
+from story.character_schema import (
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
     default_character_data,
@@ -7,13 +7,13 @@ from character_schema import (
 )
 
 def test_native_character_imports_without_ai(temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("AI must not be called for native imports")
 
     monkeypatch.setattr(
-        "importers.chat_complete",
+        "story.importers.chat_complete",
         fail_if_called,
     )
 
@@ -38,13 +38,13 @@ def test_native_character_imports_without_ai(temp_db, monkeypatch):
     assert imported["psychology"]["traits"][0]["name"] == "patient"
 
 def test_native_persona_imports_without_ai(temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("AI must not be called for native imports")
 
     monkeypatch.setattr(
-        "importers.chat_complete",
+        "story.importers.chat_complete",
         fail_if_called,
     )
 

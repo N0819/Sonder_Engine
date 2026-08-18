@@ -27,9 +27,9 @@ for suffix in ("", "-wal", "-shm"):
 os.environ["ENGINE_DB"] = RUN_DB
 sys.path.insert(0, WORKTREE)
 
-import db
-from db import q, qi, set_setting, wset
-from character_schema import normalize_character_data, character_name
+from core import db
+from core.db import q, qi, set_setting, wset
+from story.character_schema import normalize_character_data, character_name
 
 db.configure(RUN_DB)
 db.init()

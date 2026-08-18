@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import time
 
-import memory
-from character_schema import default_character_data
+from mind import memory
+from story.character_schema import default_character_data
 
 
 def _make_chat(db):

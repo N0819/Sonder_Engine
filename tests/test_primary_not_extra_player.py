@@ -17,7 +17,7 @@ from agents.runtime import _load_extra_players, _chat_has_extra_players
 
 
 def _persona(temp_db, name):
-    from character_schema import default_persona_data
+    from story.character_schema import default_persona_data
     return temp_db.qi("INSERT INTO personas(name,sheet,resource_uid) VALUES(?,?,?)",
                       (name, json.dumps(default_persona_data(name)), name))
 

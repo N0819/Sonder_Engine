@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import pytest
 
-from greetings import _substitute_player_slot, player_handle_for
+from story.greetings import _substitute_player_slot, player_handle_for
 
 
 PERSONA = {

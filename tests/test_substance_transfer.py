@@ -16,10 +16,10 @@ from agents.director import (_character_material_effects, _evidence_present,
                              _normalize_diff_shape)
 from agents.perception import (_deliver_substance_events,
                                _observer_scene_payload)
-from character_schema import character_embodiment_capabilities
-from prompts import DEFAULT_PROMPTS
-from schemas import CharacterOutput, StateDiff, validate_llm_output_strict
-from spatial import (apply_substance_ops, merge_scene_with_diff,
+from story.character_schema import character_embodiment_capabilities
+from llm.prompts import DEFAULT_PROMPTS
+from llm.schemas import CharacterOutput, StateDiff, validate_llm_output_strict
+from world.spatial import (apply_substance_ops, merge_scene_with_diff,
                      resolve_substance_ops, substance_event_clause,
                      substances_for)
 

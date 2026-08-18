@@ -6,7 +6,7 @@ import time
 import pytest
 
 from agents import _join_text, _assert_plan_materialized, save_step
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 class TestJoinText:
     def test_discards_booleans(self):
@@ -174,7 +174,7 @@ def test_completion_invariant_accepts_complete_plan(temp_db):
 
 class TestRecentEventsSafety:
     def test_returns_only_strings(self, temp_db):
-        from scene import recent_events
+        from story.scene import recent_events
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -209,7 +209,7 @@ class TestRecentEventsSafety:
         assert all(isinstance(event, str) for event in events)
 
     def test_skips_non_dict_payload(self, temp_db):
-        from scene import recent_events
+        from story.scene import recent_events
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -234,7 +234,7 @@ class TestRecentEventsSafety:
         assert recent_events(chat_id, n=5) == []
 
     def test_skips_invalid_json(self, temp_db):
-        from scene import recent_events
+        from story.scene import recent_events
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -259,7 +259,7 @@ class TestRecentEventsSafety:
         assert recent_events(chat_id, n=5) == []
 
     def test_skips_non_string_summary(self, temp_db):
-        from scene import recent_events
+        from story.scene import recent_events
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -291,7 +291,7 @@ class TestRecentEventsSafety:
         assert recent_events(chat_id, n=5) == []
 
     def test_handles_empty_summary(self, temp_db):
-        from scene import recent_events
+        from story.scene import recent_events
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -335,7 +335,7 @@ class TestCommitFailure:
         )
 
     def test_commit_all_raises_on_failure(self, temp_db, monkeypatch):
-        import commit as commit_module
+        from persist import commit as commit_module
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -362,7 +362,7 @@ class TestCommitFailure:
     def test_late_failure_rolls_back_earlier_domain_writes(
         self, temp_db, monkeypatch,
     ):
-        import commit as commit_module
+        from persist import commit as commit_module
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

@@ -239,7 +239,7 @@ class TestWhoeverOwesAnAnswerHasTheFloor:
 
 
 def test_the_prompt_says_what_both_fields_mean():
-    from prompts import get_prompt
+    from llm.prompts import get_prompt
 
     text = get_prompt("character")
     assert "awaiting_your_answer" in text

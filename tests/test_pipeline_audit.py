@@ -34,8 +34,8 @@ from agents.runtime import (
     StaleStepError, _chat_has_extra_players, _run_pipeline, build_plan,
 )
 from agents.storage import active_content, mark_steps_stale, save_step, variant_count
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 # ---- shared setup helpers ----
@@ -658,7 +658,7 @@ class TestNarrationPersonDeferredToCommit:
         assert out["narration_person_writes"] == {"narration_person": "first"}
 
     def test_commit_applies_the_deferred_writes(self, temp_db):
-        from commit import commit_narration_person
+        from persist.commit import commit_narration_person
 
         chat_id = _make_chat(temp_db)
         turn_id = _make_turn(temp_db, chat_id, idx=1)
@@ -678,7 +678,7 @@ class TestNarrationPersonDeferredToCommit:
         assert temp_db.wget(chat_id, "narration_person:extra:7", None) == "third"
 
     def test_commit_rejects_unknown_keys_and_values(self, temp_db):
-        from commit import commit_narration_person
+        from persist.commit import commit_narration_person
 
         chat_id = _make_chat(temp_db)
         turn_id = _make_turn(temp_db, chat_id, idx=1)
@@ -696,7 +696,7 @@ class TestNarrationPersonDeferredToCommit:
     def test_commit_all_wires_the_domain(self):
         import inspect
 
-        import commit
+        from persist import commit
         source = inspect.getsource(commit._commit_all_locked)
         assert "commit_narration_person" in source
 

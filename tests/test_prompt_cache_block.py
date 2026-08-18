@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib
 import json
 
-import providers
+from llm import providers
 
 
 def test_system_prompt_marked_cacheable_when_enabled():

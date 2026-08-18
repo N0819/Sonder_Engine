@@ -39,8 +39,8 @@ import time
 
 import pytest
 
-import memory
-from memory import (derive_summary_support, save_memory_summary,
+from mind import memory
+from mind.memory import (derive_summary_support, save_memory_summary,
                     summary_support)
 
 

@@ -23,7 +23,7 @@ import copy
 import pytest
 
 from agents.common import apply_player_authority
-from scene import (PLAYER_AUTHORITY_GRANTS, PLAYER_AUTHORITY_MODES,
+from story.scene import (PLAYER_AUTHORITY_GRANTS, PLAYER_AUTHORITY_MODES,
                    normalize_player_authority, player_authority,
                    set_player_authority)
 
@@ -375,7 +375,7 @@ class TestTheSetting:
 
     def test_an_unreadable_stored_value_falls_back_rather_than_raising(
             self, temp_db):
-        from db import wset
+        from core.db import wset
 
         from tests.test_extensions import _chat
 
@@ -392,7 +392,7 @@ class TestTheSetting:
 
     def test_the_enum_and_the_config_name_the_same_rungs(self):
         """Two lists of modes is one list that disagrees with itself."""
-        from schemas import PlayerAuthorityMode
+        from llm.schemas import PlayerAuthorityMode
 
         assert (sorted(m.value for m in PlayerAuthorityMode)
                 == sorted(PLAYER_AUTHORITY_MODES)
@@ -460,8 +460,8 @@ class TestTheHostControl:
     def test_the_route_serves_the_ladder_and_records_a_change(self, temp_db):
         from fastapi.testclient import TestClient
 
-        import app as app_module
-        import guest_access as guest
+        from web import app as app_module
+        from web import guest_access as guest
 
         from tests.test_extensions import _chat
 

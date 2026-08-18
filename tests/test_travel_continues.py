@@ -1,6 +1,6 @@
 """The next step of a walk somebody already declared."""
 
-from spatial import passable_route_next_step
+from world.spatial import passable_route_next_step
 
 SCENE = {"rooms": {
     "forecourt": {"name": "Forecourt", "adjacent": [
@@ -81,8 +81,8 @@ def test_the_hop_is_deterministic_when_two_routes_tie():
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 from tests.conftest import fanout_resolve_agent
 
 WALK_SCENE = {

@@ -25,8 +25,8 @@ from __future__ import annotations
 import json
 import time
 
-import commit
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_chat(db, scene, *, books=()):
@@ -173,7 +173,7 @@ def test_world_put_syncs_room_registry_with_manual_scene_edit(temp_db):
     """The manual world editor is a scene writer: a hand-added room must
     register and a hand-removed room must retire, exactly like a committed
     removal. Pre-consolidation world_put bypassed the registry entirely."""
-    import app
+    from web import app
     ids = _make_chat(temp_db, _two_ship_scene(),
                      books=[("The Aurora", "ship_a")])
     ctx = _make_ctx(temp_db, ids, {})
@@ -200,7 +200,7 @@ def test_world_put_without_turns_registers_but_never_retires(temp_db):
     """With no turns yet there is no meaningful retirement stamp: the sync
     still registers new rooms but leaves the retire pass alone (a NULL
     stamp would silently read as 'live')."""
-    import app
+    from web import app
     ids = _make_chat(temp_db, None)
     cid = ids["chat_id"]
     app.world_put(cid, {"scene": {

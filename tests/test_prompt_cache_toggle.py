@@ -22,10 +22,10 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
-import providers
-from db import get_setting, set_setting
+from web import app as app_module
+from web import guest_access as guest
+from llm import providers
+from core.db import get_setting, set_setting
 
 
 @pytest.fixture

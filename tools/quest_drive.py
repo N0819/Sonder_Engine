@@ -130,12 +130,12 @@ def build_story(db):
 # ------------------------------------------------------------------- beats
 
 def _room_of(cid):
-    import db
+    from core import db
     return ((db.wget(cid, "scene", {}) or {}).get("positions") or {}).get("Corin")
 
 
 def crowd_uid(cid, room=None):
-    import db
+    from core import db
     for crowd in db.wget(cid, "crowds", []) or []:
         if isinstance(crowd, dict) and crowd.get("uid"):
             if room is None or str(crowd.get("room_uid")) == room:
@@ -769,9 +769,9 @@ def main():
     args = ap.parse_args()
 
     _require_scratch()
-    import db as db_module
-    import llm_quality
-    import providers
+    from core import db as db_module
+    from llm import llm_quality
+    from llm import providers
 
     db_module.init()
     author = QuestAuthor()
@@ -796,7 +796,7 @@ def main():
     knowledge = who_knows_what(db_module, cid)
 
     os.makedirs(args.out, exist_ok=True)
-    from chat_archive import ChatArchiveService
+    from persist.chat_archive import ChatArchiveService
 
     story_path = os.path.join(args.out, "story.json")
     with open(story_path, "w") as fh:

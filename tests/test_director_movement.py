@@ -10,8 +10,8 @@ teleport the player through a wall.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 from tests.conftest import fanout_resolve_agent
 
 def _make_ctx(temp_db, to_room):
@@ -575,7 +575,7 @@ def test_npc_can_choose_to_start_following_and_travels_with_target(
     """The NPC owns the start decision; ordinary open-route travel then keeps
     the new group together in the same beat."""
     import agents.director as director
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
 
     ctx = _make_ctx(temp_db, "trail_b")
     scene = _following_scene()
@@ -599,7 +599,7 @@ def test_npc_can_choose_to_start_following_and_travels_with_target(
 def test_npc_can_stop_following_before_target_moves(temp_db, monkeypatch):
     """An NPC's stop decision takes effect before carry; agency wins."""
     import agents.director as director
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
 
     following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
     scene = _following_scene(following)
@@ -625,7 +625,7 @@ def test_following_does_not_grant_speed_when_target_runs(temp_db, monkeypatch):
     """A sprint breaks automatic group travel. The follower is left behind,
     but the durable relation remains so they can choose whether to chase."""
     import agents.director as director
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
 
     following = {"Mara": {"target": "The Stranger", "since_turn": 1}}
     scene = _following_scene(following)
@@ -653,7 +653,7 @@ def test_player_is_not_auto_carried_when_npc_target_runs_away(
     """The inverse direction matters too: following an NPC gives the player
     no automatic pursuit when that NPC chooses to bolt."""
     import agents.director as director
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
 
     following = {"The Stranger": {"target": "Mara", "since_turn": 1}}
     scene = _following_scene(following)
@@ -722,7 +722,7 @@ def test_player_incompatible_movement_stops_following(temp_db, monkeypatch):
     """Even if interpret omits the stop op, resolved contradictory player
     movement is a deterministic agency floor that ends the relation."""
     import agents.director as director
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
 
     following = {"The Stranger": {"target": "Mara", "since_turn": 1}}
     scene = _following_scene(following)

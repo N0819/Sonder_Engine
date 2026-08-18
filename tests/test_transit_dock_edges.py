@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import copy
 
-from spatial import (
+from world.spatial import (
     apply_transit_dock_edges,
     merge_scene_with_diff,
     spatial_rel,

@@ -1,6 +1,6 @@
 # 17 — Displacement: what a worn garment no longer covers
 
-STATUS: built with this note. Method: source read of `attire.py`/`commit.py`
+STATUS: built with this note. Method: source read of `story/attire.py`/`persist/commit.py`
 (file:line cited), corpus measured read-only against `engine.db` (63 chats,
 387 stored attire diffs across all resolves, 336 live worn-garment records,
 the chat 68/69/70 incident beats read directly). The enumeration was designed
@@ -41,7 +41,7 @@ The ledger has two axes and the fiction has three:
 - **A structured displacement channel already exists and models already
   reach for it.** `state_diff.attire.<body>.coverage`
   (`{garment: {region: [zones still covered]}}`) is prompt-taught
-  (`prompts.py` PARTIAL TORSO COVERAGE), coerced (`attire.coerce_diff_shape`),
+  (`llm/prompts.py` PARTIAL TORSO COVERAGE), coerced (`attire.coerce_diff_shape`),
   and committed (`commit.py apply_attire_diff` →
   `attire.apply_coverage_changes`) — but its vocabulary stops at
   `REGION_ZONES = {"torso": ("chest","midriff")}`. 8 coverage emissions exist
@@ -99,7 +99,7 @@ Why not the alternatives:
   already reached for at region grain 4 times. Generalizing the field the
   model already writes beats introducing a third spelling of coverage.
 - **Zones for every region** (extending `REGION_ZONES` everywhere): rejected;
-  `attire.py` says at the definition why zones are "deliberately not a second
+  `story/attire.py` says at the definition why zones are "deliberately not a second
   anatomy". Region grain suffices for every enumerated case; only the torso
   has measured play needing finer grain.
 - **Making condition prose executable** (deriving coverage from "pushed off

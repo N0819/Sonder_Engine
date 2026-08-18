@@ -24,7 +24,7 @@ import json
 
 import pytest
 
-from scene import (
+from story.scene import (
     SINGULAR_BODY_CONDITIONS,
     active_transformations,
     conceal_disguised_parts,
@@ -177,7 +177,7 @@ def test_a_transformation_is_singular_like_a_disguise():
 def test_ending_one_ends_every_transformation_on_that_body():
     """"You let the shape go" is a statement about the body. The Director
     cannot name ids it was never shown, so an ending clears them all."""
-    from commit import _supersede_disguises
+    from persist.commit import _supersede_disguises
 
     calls = []
 
@@ -208,7 +208,7 @@ def test_ending_one_ends_every_transformation_on_that_body():
     "may ALSO be disguised",
 ])
 def test_the_director_is_told_the_distinction(clause):
-    import prompts
+    from llm import prompts
 
     assert clause in json.dumps(prompts.DEFAULT_PROMPTS)
 

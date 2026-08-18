@@ -10,8 +10,8 @@ import json
 import time
 import types
 
-import app
-from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state
+from web import app
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state
 
 
 def _story(db):
@@ -51,8 +51,8 @@ def _events(db, cid):
 
 
 def test_fired_mechanics_event_is_promoted_once(temp_db):
-    from commit import commit_world_event_spine
-    from db import transaction
+    from persist.commit import commit_world_event_spine
+    from core.db import transaction
 
     cid, frame_id, turn_id = _story(temp_db)
     ctx = types.SimpleNamespace(

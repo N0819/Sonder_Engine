@@ -229,7 +229,7 @@ Everything that reads it, and what each needs under `beat_events`. (Tests and
 | 13 | `agents/director.py` internal: fallback synthesis `:4702-4717`, authority checks `:4325-4502`, awareness/restraint/destruction scans `:1479-2199`, reconciliation `:3309` | regex over own prose | authority checks become field checks on events (actor ≠ declarer = violation) — the five regex detectors and their retry loop shrink to structural validation; scans per §1.5 |
 | 14 | `director_establish` alias `agents/director.py:696` | opening turn's `resolved_event` | establish emits typed `world` events or an adapter does |
 | 15 | UI: `static/js/chat.js:954,1107` (step inspector renders `resolved_event` specially) | display | render `beat_events`; small JS change |
-| 16 | `pipeline_trace.py`, `chat_archive.py` | opaque step content | no schema knowledge; replay of OLD traces still carries prose — the perception stage must keep a legacy path or traces predating the change replay against the adapter |
+| 16 | `persist/pipeline_trace.py`, `persist/chat_archive.py` | opaque step content | no schema knowledge; replay of OLD traces still carries prose — the perception stage must keep a legacy path or traces predating the change replay against the adapter |
 | 17 | Prompts referencing `resolved_event` by name across stages (`prompts.py:586,753,809` perception; `:2009-2916` resolve itself; `:3697` promote_character) | instruction text | rewritten with their stages |
 
 Blast radius verdict: two consumers are the surgery this branch exists to
@@ -419,7 +419,7 @@ the output contract so the model still narrates the beat to itself before
 typing it; excluded from every payload (perception, background,
 mapping_commit gets events instead), excluded from the events row's consumed
 fields (stored for the author's benefit only, like `reasoning` on the
-variants row, `db.py` variants schema); consumed by zero code paths. The
+variants row, `core/db.py` variants schema); consumed by zero code paths. The
 branch's goal holds fully — perception never sees it — while the model keeps
 the substrate it demonstrably reasons in.
 

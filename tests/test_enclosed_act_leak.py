@@ -37,13 +37,13 @@ import time
 
 import pytest
 
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 from agents.common import _ensure_environment, _inject_action, _perceptible_entities
 from agents.perception import _in_plain_view, _source_channels
-from prompts import DEFAULT_PROMPTS
-from spatial import containment_conceals
+from llm.prompts import DEFAULT_PROMPTS
+from world.spatial import containment_conceals
 
 
 HOLDER = "Satchel"

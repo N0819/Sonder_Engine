@@ -20,9 +20,9 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
-import importers
+from web import app as app_module
+from web import guest_access as guest
+from story import importers
 
 
 @pytest.fixture
@@ -264,7 +264,7 @@ class TestTimeoutTravelsFromTheRequest:
             json={"timeout": 10 ** 9},
         ).json()
 
-        import providers
+        from llm import providers
         assert plan["_job"]["params"]["timeout"] == providers.READ_TIMEOUT_MAX
 
     def test_a_resume_can_raise_it(self, client, book, monkeypatch):

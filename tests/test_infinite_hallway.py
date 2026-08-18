@@ -37,7 +37,7 @@ from __future__ import annotations
 import copy
 
 from agents.director import _egocentric_exits
-from spatial import normalize_scene_bearings
+from world.spatial import normalize_scene_bearings
 
 
 def _corridor():

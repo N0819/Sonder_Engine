@@ -18,10 +18,10 @@ from __future__ import annotations
 import json
 import time
 
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from commit import commit_scene, commit_transit_sweep, prepare_scene_commit
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import spatial_rel
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from persist.commit import commit_scene, commit_transit_sweep, prepare_scene_commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import spatial_rel
 
 
 def _elevator_scene(transit):
@@ -206,7 +206,7 @@ def test_companion_carry_applies_to_the_prepared_scene(temp_db):
     """Pass (e) must be visible on the PREPARED scene: memory preparation
     reads it before the write transaction opens, so a carried companion's
     episodic memories this beat are located at the new position."""
-    from character_schema import default_character_data
+    from story.character_schema import default_character_data
 
     chat_id, persona_id = _make_chat(temp_db, persona_name="Vera")
     scene = {

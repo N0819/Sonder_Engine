@@ -31,7 +31,7 @@ import time
 
 import pytest
 
-from commit import _names_heard_in
+from persist.commit import _names_heard_in
 
 
 ROSTER = ["Hinami", "The Doctor", "Tamamo"]
@@ -100,7 +100,7 @@ class TestItReachesTheLedger:
 
     def test_prepare_returns_learned_names_and_commit_writes_them(
             self, temp_db, monkeypatch):
-        import commit as commit_module
+        from persist import commit as commit_module
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -143,7 +143,7 @@ class TestItReachesTheLedger:
         silently stop teaching names rather than fail."""
         import inspect
 
-        import commit as commit_module
+        from persist import commit as commit_module
 
         source = inspect.getsource(commit_module.prepare_memory_commit)
         assert '"names_learned": _names_learned' in source

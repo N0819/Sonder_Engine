@@ -24,8 +24,8 @@ open/open_door. A route requiring a still-closed door remains blocked.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 from tests.conftest import fanout_resolve_agent
 
 

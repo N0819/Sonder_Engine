@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import time
 
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 import agents.background as background
 from agents.background import _beat_for_presence, _filtered_player_declaration
@@ -120,7 +120,7 @@ def test_a_half_heard_line_is_not_quotable():
         "positions": {"Guard": "yard", "Doc": "bar"},
         "entities": {}, "attire": {}, "overlays": {},
     }
-    from spatial import hear_level, spatial_rel
+    from world.spatial import hear_level, spatial_rel
     level = hear_level(spatial_rel(sc, "yard", "bar"), "normal")
     dr = {"resolved_event": "", "dialogue_log": [
         {"speaker": "Guard", "exact_quote": "Move along.", "visibility": "overt"}]}

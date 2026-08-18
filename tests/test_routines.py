@@ -13,8 +13,8 @@ from __future__ import annotations
 import json
 import time
 
-import routines
-from routines import (
+from world import routines
+from world.routines import (
     DAY_SECONDS, RESIDUE_CAP, entropy_facts, occupancy_fact, residue_for,
     routine_band,
 )
@@ -103,7 +103,7 @@ class TestResidueIsContactOnly:
                            now_seconds=90000.0) is None
 
     def test_a_round_trip_is_not_an_absence(self, temp_db):
-        from db import wset
+        from core.db import wset
 
         cid = _make_chat(temp_db)
         wset(cid, "subject_last_seen",
@@ -119,7 +119,7 @@ class TestResidueIsContactOnly:
         as a diff report, and the cap ships with the mechanism rather
         than after it."""
         cid = _make_chat(temp_db)
-        from db import qi, wset
+        from core.db import qi, wset
 
         wset(cid, "subject_last_seen",
              {"hearth_room": {"turn": 3, "room": "hearth_room",

@@ -218,7 +218,7 @@ def test_a_language_that_costs_more_tokens_gets_a_wider_output_budget():
     cap and the route 502'd.
     """
     from language_runtime import language_scope
-    from providers import _scale_for_language
+    from llm.providers import _scale_for_language
 
     with language_scope("en"):
         assert _scale_for_language(5000) == 5000
@@ -240,7 +240,7 @@ def test_an_unset_or_absent_budget_never_narrows_a_call():
     """Scaling may only ever RAISE. A pack with no declaration, or a lookup
     that fails, must leave the caller's own budget alone."""
     from language_runtime import language_scope
-    from providers import _scale_for_language
+    from llm.providers import _scale_for_language
 
     with language_scope("en"):
         assert _scale_for_language(None) is None
@@ -256,7 +256,7 @@ def test_chatless_authoring_follows_the_interface_language(temp_db):
     everything to Japanese still got English cards, because the only thing
     carrying their choice was whichever frontend remembered to send it.
     """
-    import app
+    from web import app
     from language_runtime import set_ui_language
 
     assert app._default_authoring_language() == "en"
@@ -270,7 +270,7 @@ def test_chatless_authoring_follows_the_interface_language(temp_db):
 def test_an_uninstallable_interface_language_falls_back_rather_than_raising(
         temp_db, monkeypatch):
     """This runs on the authoring path, so it must degrade, not 500."""
-    import app
+    from web import app
     from language_runtime import LanguagePackError
 
     monkeypatch.setattr(app, "ui_language", lambda: "zz")

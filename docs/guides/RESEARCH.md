@@ -16,7 +16,7 @@ named symbol if a line has moved. A verification note appears at the end.
 
 ## 1. Explicitly referenced research
 
-### 1.1 Belief revision — `theory_of_mind.py`
+### 1.1 Belief revision — `mind/theory_of_mind.py`
 
 The module docstring (`theory_of_mind.py:9-25`) names five findings from the
 psychology of how minds revise beliefs about other people. They drive the
@@ -53,7 +53,7 @@ The epistemic confidence-cap ladder (`observation` 1.0 → `identity` 0.35,
 `theory_of_mind.py:49-52`; mirrored in `Design.md`) is an original design
 device, not a cited result.
 
-### 1.2 Time travel and paradox — `paradox.py`
+### 1.2 Time travel and paradox — `world/paradox.py`
 
 - **Novikov self-consistency principle** — Friedman, J., Morris, M. S.,
   Novikov, I. D., Echeverria, F., Klinkhammer, G., Thorne, K. S., & Yurtsever,
@@ -65,7 +65,7 @@ device, not a cited result.
   `paradox.py:6-8` as the reference beat for a violated fixed point (fiction,
   not research).
 
-### 1.3 Information-retrieval algorithms implemented in `memory.py`
+### 1.3 Information-retrieval algorithms implemented in `mind/memory.py`
 
 The hybrid memory retriever names and implements four standard IR techniques.
 
@@ -117,7 +117,7 @@ The hybrid memory retriever names and implements four standard IR techniques.
 ### 1.4 Interoperability specs and infrastructure (industry prior art)
 
 - **SillyTavern character-card spec V2/V3** — PNG cards with base64 JSON in
-  `chara`/`ccv3` tEXt chunks (`importers.py`), plus World Info import
+  `chara`/`ccv3` tEXt chunks (`story/importers.py`), plus World Info import
   (`static/js/editors.js`).
   [V2](https://github.com/malfoyslastname/character-card-spec-v2) ·
   [V3](https://github.com/kwaroran/character-card-spec-v3).
@@ -137,7 +137,7 @@ The hybrid memory retriever names and implements four standard IR techniques.
   against an LLM call in the same beat measured in seconds. Correctness
   constraints, not scale, decided it. See `docs/UNBUILT.md` §1.4.
 - **Prompt caching** — Anthropic `cache_control` breakpoints and OpenAI
-  prefix caching (`prompt_cache.py`).
+  prefix caching (`llm/prompt_cache.py`).
   [Anthropic](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching)
   · [OpenAI](https://platform.openai.com/docs/guides/prompt-caching).
 
@@ -244,7 +244,7 @@ Everything in Part 2 is a reconstructed mapping.
 Established work the architecture instantiates without citing it.
 
 ### 2.1 Agent memory streams with reflection
-`memory.py` — episodic rows scored by salience + confidence + recency, with
+`mind/memory.py` — episodic rows scored by salience + confidence + recency, with
 autobiographical-summary consolidation archiving low-salience memories.
 - Park, J. S., et al. (2023). *Generative Agents: Interactive Simulacra of
   Human Behavior.* UIST 2023. <https://arxiv.org/abs/2304.03442>
@@ -252,7 +252,7 @@ autobiographical-summary consolidation archiving low-salience memories.
   <https://arxiv.org/abs/2310.08560>
 
 ### 2.2 Retrieval-augmented generation
-`agents/mapping.py` + `memory.py` — semantic + cue + lexical + exact retrieval
+`agents/mapping.py` + `mind/memory.py` — semantic + cue + lexical + exact retrieval
 fused and injected into prompts; lorebook activation follows the World Info
 pattern.
 - Lewis, P., et al. (2020). *Retrieval-Augmented Generation for
@@ -269,7 +269,7 @@ boundaries in `AGENTS.md`).
   Hong, S., et al. *MetaGPT.* <https://arxiv.org/abs/2308.00352>
 
 ### 2.4 Theory of mind and false belief
-`theory_of_mind.py`; the `second_order` belief kind; characters may hold false
+`mind/theory_of_mind.py`; the `second_order` belief kind; characters may hold false
 beliefs legitimate only relative to their evidence.
 - Premack, D. & Woodruff, G. (1978). *Does the chimpanzee have a theory of
   mind?* Behavioral and Brain Sciences, 1(4), 515–526.
@@ -288,8 +288,8 @@ firewall").
 
 ### 2.6 Partial observability
 Perception as a per-observer filter over objective state
-(`agents/perception.py`, sense gating in `spatial.py`, zone splits in
-`spatial_frames.py`).
+(`agents/perception.py`, sense gating in `world/spatial.py`, zone splits in
+`world/spatial_frames.py`).
 - Kaelbling, L. P., Littman, M. L., & Cassandra, A. R. (1998). *Planning and
   acting in partially observable stochastic domains.* Artificial Intelligence,
   101(1–2), 99–134. (The game-design analogue is fog-of-war.)
@@ -312,27 +312,27 @@ mechanically.
 
 ### 2.9 Appraisal-based emotion
 Characters emit appraisals; emotional reads are volatile, appraisal-linked
-states (`theory_of_mind.py`, `Design.md`).
+states (`mind/theory_of_mind.py`, `Design.md`).
 - Ortony, A., Clore, G. L., & Collins, A. (1988). *The Cognitive Structure of
   Emotions.* Cambridge University Press (OCC model).
 - Gratch, J. & Marsella, S. (2004). *A domain-independent framework for
   modeling emotion.* Cognitive Systems Research, 5(4), 269–306 (EMA).
 
 ### 2.10 Tabletop RPG resolution
-`schemas.py` (`DiceSpec`, `ResolutionCheck`: actor/ability/difficulty/opposed
+`llm/schemas.py` (`DiceSpec`, `ResolutionCheck`: actor/ability/difficulty/opposed
 rolls, seeded); the Director mirrors GM adjudication.
 - Wizards of the Coast, *D&D 5th Edition SRD 5.1*, CC-BY-4.0.
   <https://www.dndbeyond.com/srd>
 
 ### 2.11 Structured output with repair loops
-`llm_quality.py` (strict JSON, semantic validation, repair retries), Pydantic
-schemas (`schemas.py`), provisional-until-committed (`commit.py`). Established
+`llm/llm_quality.py` (strict JSON, semantic validation, repair retries), Pydantic
+schemas (`llm/schemas.py`), provisional-until-committed (`persist/commit.py`). Established
 industry practice (Instructor, Guardrails-AI, provider structured-output
 features); no single canonical paper.
 
 ### 2.12 Transactions as the coherence substrate
 One outer transaction per turn with savepoints and whole-turn rollback on
-domain failure (`commit.py`).
+domain failure (`persist/commit.py`).
 - Gray, J. & Reuter, A. (1992). *Transaction Processing: Concepts and
   Techniques.* Morgan Kaufmann. Applied via SQLite
   (<https://www.sqlite.org/transactional.html>).

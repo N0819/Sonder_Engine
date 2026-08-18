@@ -6,7 +6,7 @@ stop a later tidy-up closing something that was left open on purpose.
 
 import pytest
 
-from canon_provenance import (
+from mind.canon_provenance import (
     ADJUDICATED_DISPOSITIONS,
     KNOWN_SUBJECT_KINDS,
     PROVISIONAL,

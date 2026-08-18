@@ -18,9 +18,9 @@ import time
 
 import pytest
 
-import commit
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _ship_scene():

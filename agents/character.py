@@ -7,12 +7,12 @@ import re
 import time
 from collections import deque
 
-import affect
-from affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
+from mind import affect
+from mind.affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
-from db import q, wget
+from core.db import q, wget
 from language_runtime import compositor_text, linguistic
-from character_schema import (
+from story.character_schema import (
     cast_entity_id,
     character_name_from_text,
     character_abilities,
@@ -33,9 +33,9 @@ from character_schema import (
     character_voice,
     senses_as_text,
 )
-from frames import is_recognized_in_frame
-from gaps import interim_for
-from memory import (
+from core.frames import is_recognized_in_frame
+from world.gaps import interim_for
+from mind.memory import (
     build_character_memory_context,
     contrast_memory,
     knowledge_for_character,
@@ -43,8 +43,8 @@ from memory import (
     provenance_context_label,
     relationships_for_payload,
 )
-from prompts import character_prompt, get_prompt
-from scene import (
+from llm.prompts import character_prompt, get_prompt
+from story.scene import (
     NON_AWAKE_GATED,
     active_transformations,
     all_cast_name_to_id,
@@ -56,15 +56,15 @@ from scene import (
     private_knowledge_for,
     sheet_state,
 )
-from schemas import validate_llm_output
-from spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
+from llm.schemas import validate_llm_output
+from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
                      spatial_digest, speech_articulation_impediment,
                      sprint_reach, visible_adjacent_rooms)
-from survival import vitals_of
-from place_purpose import (affords_here, felt_needs, here_affords,
+from world.survival import vitals_of
+from world.place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
-from psychology_runtime import cognitive_absorption
-from theory_of_mind import mind_models_for_payload, sheet_capacity
+from mind.psychology_runtime import cognitive_absorption
+from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 
 from .common import (
     _agent_json,
@@ -1846,7 +1846,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     seen_onward, seen_bearings = {}, {}
     if here_rid:
         try:
-            from spatial import visible_adjacent_rooms
+            from world.spatial import visible_adjacent_rooms
             for item in visible_adjacent_rooms(scene, here_rid) or []:
                 if isinstance(item, dict) and "onward_exits" in item:
                     rid_seen = str(item.get("room_id"))
@@ -3112,7 +3112,7 @@ def character_step(ctx, cid, nonce):
     # character receives it. A listener can learn it only if the holder speaks
     # on-page and ordinary perception/memory carries that speech across.
     try:
-        from carriers import reports_for_state
+        from story.carriers import reports_for_state
         _carried_reports = reports_for_state(stored_state)
     except Exception as exc:
         _carried_reports = []

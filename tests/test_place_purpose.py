@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from place_purpose import (RECALL_AT, affords_here, assumed_affords,
+from world.place_purpose import (RECALL_AT, affords_here, assumed_affords,
                            felt_needs, here_affords, mirror_told_affords,
                            place_options, witness_affords)
 

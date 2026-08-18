@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from commit import pick_background_reactor
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from persist.commit import pick_background_reactor
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_ctx(temp_db, background_presences=None, cast_names=None, player_input=""):
@@ -263,7 +263,7 @@ def test_a_presence_minted_this_beat_is_forced_into_the_picks(temp_db):
     """The routed name has no record yet, by construction. Requiring one is
     requiring the presence to have existed before the beat that created it.
     """
-    from commit import pick_background_reactors
+    from persist.commit import pick_background_reactors
 
     ctx = _make_ctx(temp_db, background_presences={},
                     player_input="I ring the bell until someone comes.")
@@ -297,7 +297,7 @@ def test_a_presence_minted_this_beat_is_forced_into_the_picks(temp_db):
 def test_a_routed_presence_forces_past_the_cap_like_an_address(temp_db):
     """Same rule the flow-addressed presence gets: the Director already
     judged them worth speaking for, so they do not compete for a slot."""
-    from commit import pick_background_reactors
+    from persist.commit import pick_background_reactors
 
     ctx = _make_ctx(temp_db, background_presences={
         "Reya": {"first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 2, 3],
@@ -318,7 +318,7 @@ def test_a_routed_name_that_is_registered_cast_is_not_minted(temp_db):
     this is the floor under that: a sheeted character's dropped line is a
     different failure (director-invented dialogue) and must never arrive
     here as a background presence with the same name."""
-    from commit import pick_background_reactors
+    from persist.commit import pick_background_reactors
 
     ctx = _make_ctx(temp_db, background_presences={}, cast_names=["Mara"])
     dr_output = {
@@ -378,7 +378,7 @@ def _hotel_ctx(temp_db, station, player_input="I ring the bell."):
 
 def test_a_presence_at_their_post_next_door_can_be_picked(temp_db):
     """One open doorway. He can hear the bell, so he can answer it."""
-    from commit import pick_background_reactors
+    from persist.commit import pick_background_reactors
 
     ctx = _hotel_ctx(temp_db, "office")
     dr = {"resolved_event": "The bell rings out across the empty lobby.",
@@ -393,7 +393,7 @@ def test_a_shut_door_still_means_nobody_comes(temp_db):
     `fragment`, and at-post is the weakest claim any presence has on a beat.
     A muffled thump through a shut door must not summon a body; where the
     beat warrants one, the stronger signals fire regardless of room."""
-    from commit import pick_background_reactors
+    from persist.commit import pick_background_reactors
 
     ctx = _hotel_ctx(temp_db, "vault")
     dr = {"resolved_event": "The bell rings out across the empty lobby.",
@@ -406,7 +406,7 @@ def test_a_presence_with_no_station_is_still_not_picked_on_post(temp_db):
     """Not knowing where somebody stands is a reason to deliver nothing --
     the rule `_beat_for_presence` already follows. An unplaced presence has
     no post to be at."""
-    from commit import pick_background_reactors
+    from persist.commit import pick_background_reactors
 
     ctx = _make_ctx(temp_db, background_presences={
         "Someone": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],

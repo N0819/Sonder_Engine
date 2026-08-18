@@ -180,7 +180,7 @@ def accept_plan(db, cid, cast, report):
     fire -- which is exactly what the first version of this harness showed, and
     it was the harness that was wrong, not the engine.
     """
-    from offscreen import apply_plan_ops
+    from world.offscreen import apply_plan_ops
 
     # THE PLAN MUST BE GROUNDED IN THE ACTOR'S OWN DECLARATION. `apply_plan_ops`
     # refuses an op whose actor said nothing this beat -- "made no plan
@@ -275,7 +275,7 @@ def carry_a_report(db, cid, cast, report):
         a witness, and `rumor_ledger` must be at `floor` or `advance_carriers`
         declines before it looks at anything.
     """
-    from commit import commit_information_carriers, commit_world_event_spine
+    from persist.commit import commit_information_carriers, commit_world_event_spine
 
     ctx = make_ctx(cid, cast, 6, db)
     scene = carrier_scene()
@@ -325,9 +325,9 @@ def tell_a_report(db, cid, cast, report):
     them is a firewall rather than tidiness -- a telling the engine waves
     through is a mind knowing something nobody delivered.
     """
-    from carriers import STATE_KEY, reports_for_state
-    from commit import commit_information_carriers
-    from scene import active_cast
+    from story.carriers import STATE_KEY, reports_for_state
+    from persist.commit import commit_information_carriers
+    from story.scene import active_cast
 
     scene = telling_scene()
     event_id = report.get("event_id") or ""
@@ -410,7 +410,7 @@ def a_lie_travels_like_the_truth(db, cid, cast, report, held_by):
     the source: the speaker's own row says `invented`, and there is no world
     event behind it that anything in the fiction can query.
     """
-    from commit import commit_information_carriers
+    from persist.commit import commit_information_carriers
 
     scene = _two_rooms({"Mora": "hall", "Rem": "hall", "Otto": "hall",
                         "Ram": "hall", "Beako": "hall"})
@@ -455,7 +455,7 @@ def rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by):
     declaration, and co-location, holding and fan-out all still apply. Catching
     a rumor in a market is knowledge by a beat that said so, not by proximity.
     """
-    from commit import commit_crowds, commit_information_carriers
+    from persist.commit import commit_crowds, commit_information_carriers
 
     def crowd_beat(turn_idx, crowd_ops, telling_ops=(), scene=None,
                    dialogue=()):
@@ -512,7 +512,7 @@ def rumor_rides_a_crowd(db, cid, cast, report, event_id, held_by):
 
 
 def drive(db):
-    from offscreen import advance_epoch
+    from world.offscreen import advance_epoch
 
     cid, cast = build_story(db)
     report = {"chat_id": cid, "beats": []}
@@ -642,7 +642,7 @@ def main():
     args = ap.parse_args()
 
     _require_scratch()
-    import db as db_module
+    from core import db as db_module
     db_module.init()
     report = drive(db_module)
 

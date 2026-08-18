@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import time
 
-import attire
+from story import attire
 import pytest
 
 
@@ -308,7 +308,7 @@ def _off_the_card(sc, who, garment):
 
 
 def _ctx(temp_db, player_input="wait"):
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
         ("Displacement", "", time.time()))
@@ -412,7 +412,7 @@ class TestAConditionCannotOutliveTheBody:
 
 class TestCommitSeam:
     def test_the_jacket_beat_lands_on_the_coverage_axis(self, temp_db):
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {
@@ -439,7 +439,7 @@ class TestCommitSeam:
         """The chat 70 defect itself: vivid condition, no coverage change —
         the engine now says so instead of silently holding the body
         covered."""
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {"resolved_event": "The jacket slides back."}
@@ -458,7 +458,7 @@ class TestCommitSeam:
         assert "torso" in attire.concealing_garments(regions)
 
     def test_a_rung_word_in_condition_prose_is_fed_back(self, temp_db):
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {"resolved_event": "The top is hauled up."}
@@ -475,7 +475,7 @@ class TestCommitSeam:
         """The clamp's one remaining removal trigger, and it is no longer
         silent: prose still in progress holds the removal at `loosened` AND
         tells the Director, so the fiction and the ledger reconverge."""
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {
@@ -498,7 +498,7 @@ class TestCommitSeam:
         vocabulary missed. Under the inverted clamp the resolved removal
         lands on the Director's authority alone; no wordlist is on the
         critical path."""
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {
@@ -576,7 +576,7 @@ class TestCommitSeam:
         removal, then an unrelated act on bare skin. The second one is what
         broke it, and a beat this ordinary must not be able to.
         """
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {
@@ -596,7 +596,7 @@ class TestCommitSeam:
     def test_the_chat_68_removal_now_lands_in_one_beat(self, temp_db):
         """With the vocabulary gap closed, the same beat reaches `removed`
         at once, undamaged, and the shed garment is minted."""
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {
@@ -616,7 +616,7 @@ class TestCommitSeam:
 
     def test_a_decisive_removal_filed_as_coverage_is_escalated(
             self, temp_db):
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {
@@ -635,7 +635,7 @@ class TestCommitSeam:
     def test_a_legacy_blob_without_displacement_is_untouched(self, temp_db):
         """A scene from before the change loads and behaves: no coverage op,
         no override, byte-stable coverage answers."""
-        import commit
+        from persist import commit
         ctx = _ctx(temp_db)
         ctx.director_interpret = {}
         ctx.director_resolve = {"resolved_event": "Nothing changes."}

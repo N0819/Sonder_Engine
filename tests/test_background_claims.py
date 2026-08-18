@@ -13,7 +13,7 @@ being designed out is "the engine forgot it said this."
 
 from __future__ import annotations
 
-from background_claims import (
+from world.background_claims import (
     CLAIM_TTL_TURNS,
     claimant_credence,
     novel_proper_nouns,
@@ -21,7 +21,7 @@ from background_claims import (
     settle_claims,
     unratified_claims,
 )
-from db import wget
+from core.db import wget
 
 KNOWN = {"The Barkeep", "Ysolde Marr", "Bran Holt", "Kessa Vane",
          "The Moorside", "common room"}
@@ -158,7 +158,7 @@ def test_ratifying_a_claim_writes_it_into_canon(temp_db):
     into a prompt, and it had nothing to find. The prompt promised canon
     ("it becomes canon and the world must honour it") and the code set a flag.
     """
-    from memory import chat_lorebook_weights, search_lore
+    from mind.memory import chat_lorebook_weights, search_lore
     cid = _chat(temp_db)
     record_claims(cid, 2, [{"claimant": "Old Man by the Hearth",
                             "text": "That'd be Tam Briddock's boy",
@@ -174,7 +174,7 @@ def test_canon_write_survives_a_chat_that_never_wrote_lore_before(temp_db):
     Only `commit_mapping` minted the chat's canon lorebook, and it is skipped
     on any beat with no staged lore / world_facts / introductions -- so a
     ratification landing on such a beat had no book to be written into."""
-    from db import q
+    from core.db import q
     cid = _chat(temp_db)
     assert q("SELECT lorebook_id FROM chats WHERE id=?",
              (cid,), one=True)["lorebook_id"] is None
@@ -190,7 +190,7 @@ def test_ratifying_the_same_claim_twice_does_not_duplicate_canon(temp_db):
     """A rerun replays commit. The canon row is keyed by the claim's own
     content hash so a second settle of the same beat cannot mint a second
     entry -- the same stable-identifier rule memories already live under."""
-    from db import q
+    from core.db import q
     cid = _chat(temp_db)
     record_claims(cid, 1, [{"claimant": "Old Man", "text": "Tam Briddock's boy",
                             "refs": ["Tam Briddock"]}])
@@ -198,7 +198,7 @@ def test_ratifying_the_same_claim_twice_does_not_duplicate_canon(temp_db):
     stored = wget(cid, "background_claims", {})
     for rec in stored.values():
         rec["status"] = "unratified"
-    from db import wset
+    from core.db import wset
     wset(cid, "background_claims", stored)
     settle_claims(cid, 2, "", ratified_refs=["Tam Briddock"])
     rows = q("SELECT id FROM lore_entries WHERE content LIKE ?",
@@ -234,7 +234,7 @@ def test_a_contradicted_claim_never_reaches_canon(temp_db):
     """Ratification is a one-way door into `lore_entries`. A claim named in
     both lists is the Director disagreeing with itself, and the safe reading of
     a disagreement is the one that does not write."""
-    from db import q
+    from core.db import q
     cid = _chat(temp_db)
     record_claims(cid, 1, [{"claimant": "Old Man", "text": "Tam Briddock's boy",
                             "refs": ["Tam Briddock"]}])
@@ -255,9 +255,9 @@ def test_the_commit_path_carries_both_verdicts_end_to_end(temp_db):
     -- and the canon write has to survive the real `track_background_presences`
     call, embeddings prepared ahead of the transaction and all."""
     import time
-    from commit import prepare_background_claims, track_background_presences
-    from memory import chat_lorebook_weights, search_lore
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from persist.commit import prepare_background_claims, track_background_presences
+    from mind.memory import chat_lorebook_weights, search_lore
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     cid = _chat(temp_db)
     record_claims(cid, 1, [
@@ -331,7 +331,7 @@ def test_credence_reads_the_frozen_blurb():
 def test_bare_rank_is_not_an_invented_name():
     """"...engagement profiles, Captain." addresses someone; it does not name a
     new person. The Enterprise run recorded "Captain" as lore and ratified it."""
-    from background_claims import is_title_only
+    from world.background_claims import is_title_only
     assert is_title_only("Captain")
     assert is_title_only("Number One")
     assert not is_title_only("Tam Briddock")

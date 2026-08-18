@@ -14,8 +14,8 @@ import inspect
 import json
 import time
 
-import gaps
-from gaps import LAST_SEEN_KEY, gap_for
+from world import gaps
+from world.gaps import LAST_SEEN_KEY, gap_for
 
 
 def _make_chat(db):
@@ -178,7 +178,7 @@ class TestTheFrameGate:
         the present one, on a producer thread -- and the frame's own fired
         events silently vanished from its gaps."""
         _no_model(monkeypatch)
-        from db import wset_for_frame
+        from core.db import wset_for_frame
 
         cid = _make_chat(temp_db)
         _attach_character(temp_db, cid, "Elyndra", uid=SID)

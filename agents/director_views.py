@@ -14,12 +14,12 @@ Import direction: nothing outside `agents/director*.py` may import an
 import copy
 import json
 
-from character_schema import (
+from story.character_schema import (
     character_appearance,
     character_name,
     persona_appearance,
 )
-from scene import persona_of
+from story.scene import persona_of
 
 from .common import (
     _dict,
@@ -221,7 +221,7 @@ def _unratified_background_claims(chat_id, turn_idx):
     degrades to no claims rather than raising.
     """
     try:
-        from background_claims import unratified_claims
+        from world.background_claims import unratified_claims
         return unratified_claims(chat_id, turn_idx)
     except Exception:
         return []
@@ -307,8 +307,8 @@ def _crowds_view(chat_id, scene):
     is anything that would let it narrate them into a room nobody is near --
     which is why this is bounded to the rooms in the current scene.
     """
-    import crowds as crowds_model
-    from db import wget
+    from world import crowds as crowds_model
+    from core.db import wget
 
     rooms = (scene or {}).get("rooms") or {}
     out = []
@@ -349,8 +349,8 @@ def _couriers_view(chat_id, scene):
     never need the claim text, and a payload field nothing needs is a leak
     waiting for a prompt to quote it.
     """
-    import couriers as couriers_model
-    from db import wget
+    from story import couriers as couriers_model
+    from core.db import wget
 
     rooms = (scene or {}).get("rooms") or {}
     out = []
@@ -384,7 +384,7 @@ def _artifacts_view(chat_id, scene):
     what it says. The minted `text`, when the ceiling has worded it, is
     what the prose may quote; the claim is what a reader acquires.
     """
-    import artifacts as artifacts_model
+    from story import artifacts as artifacts_model
 
     rooms = (scene or {}).get("rooms") or {}
     out = []
@@ -423,9 +423,9 @@ def _carried_reports_view(ctx):
     """
     import json
 
-    from carriers import STATE_KEY
-    from character_schema import normalize_character_data
-    from scene import active_cast
+    from story.carriers import STATE_KEY
+    from story.character_schema import normalize_character_data
+    from story.scene import active_cast
 
     out = []
     for row in active_cast(ctx.chat.id, ctx.turn.frame_id) or []:

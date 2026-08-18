@@ -41,7 +41,7 @@ from __future__ import annotations
 import json
 import time
 
-import affect
+from mind import affect
 
 
 BASE = {"valence": 0.4, "arousal": 0.45}
@@ -165,9 +165,9 @@ def test_the_commit_seam_reads_the_setting(temp_db, monkeypatch):
     commit.py -- affect.py deliberately imports no db -- and the release
     flag handed to resolve_affect is the character's own declared hedonic
     discharge, the same one resolve_hedonic receives."""
-    import commit
-    from character_schema import default_character_data
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from persist import commit
+    from story.character_schema import default_character_data
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -239,12 +239,12 @@ class TestTheSwitchIsFindable:
     put it back."""
 
     def test_the_flag_is_exposed_to_the_client(self):
-        src = open("app.py", encoding="utf-8").read()
+        src = open("web/app.py", encoding="utf-8").read()
         boot = src[src.index("def bootstrap"):]
         assert '"affect_habituation":' in boot
 
     def test_the_flag_has_an_endpoint(self):
-        src = open("app.py", encoding="utf-8").read()
+        src = open("web/app.py", encoding="utf-8").read()
         assert '@app.put("/api/affect_habituation")' in src
 
     def test_the_panel_says_it_is_not_retroactive(self):

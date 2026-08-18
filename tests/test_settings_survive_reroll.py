@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import time
 
-from checkpoints import (PRESERVED_SETTING_KEYS, ensure_checkpoint,
+from persist.checkpoints import (PRESERVED_SETTING_KEYS, ensure_checkpoint,
                          restore_checkpoint, _preserved_settings)
 
 

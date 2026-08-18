@@ -27,7 +27,7 @@ import time
 
 import pytest
 
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 #: What `_prepare_turn_commit` hands the domains. The tail is under test, so
@@ -59,8 +59,8 @@ def commit_tail(temp_db, monkeypatch):
     Everything before the tail is stubbed -- the tail is what is under test,
     and preparing a full scene would test the preparation instead.
     """
-    import commit as commit_module
-    import offscreen as offscreen_module
+    from persist import commit as commit_module
+    from world import offscreen as offscreen_module
 
     monkeypatch.setattr(commit_module, "_prepare_turn_commit", lambda ctx: {
             "scene": {"scene": {}, "clock": None}, "mapping": {},
@@ -102,7 +102,7 @@ def test_the_blocking_twin_is_not_used_by_the_tail(temp_db, monkeypatch):
     The tail must not reach for it -- measured live, the first consolidation
     of a chat was 29.5s of a 45.8s commit, inside the player's wait.
     """
-    import commit as commit_module
+    from persist import commit as commit_module
 
     monkeypatch.setattr(commit_module, "_prepare_turn_commit", lambda ctx: {
             "scene": {"scene": {}, "clock": None}, "mapping": {},
@@ -118,7 +118,7 @@ def test_the_blocking_twin_is_not_used_by_the_tail(temp_db, monkeypatch):
     # commit_memories resolves this name in commit_memory_write's globals
     # since the split; patched on the facade, this stub is INERT and the
     # test goes green while proving nothing (it asserts by absence).
-    import commit_memory_write
+    from persist import commit_memory_write
     monkeypatch.setattr(commit_memory_write,
                         "_consolidate_committed_memories", blocking)
     commit_module.commit_all(_context(temp_db), nonce=0)
@@ -128,7 +128,7 @@ def test_a_failing_producer_warns_and_does_not_roll_the_turn_back(
         temp_db, monkeypatch):
     """Every one of the three is wrapped: a failure is a warning, never a
     rollback, and never silence."""
-    import commit as commit_module
+    from persist import commit as commit_module
 
     monkeypatch.setattr(commit_module, "_prepare_turn_commit", lambda ctx: {
             "scene": {"scene": {}, "clock": None}, "mapping": {},

@@ -32,7 +32,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from lore_structure import derive_knowledge, parse_structure  # noqa: E402
+from story.lore_structure import derive_knowledge, parse_structure  # noqa: E402
 
 
 _WORD_RE = re.compile(r"[a-z0-9']{3,}")

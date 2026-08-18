@@ -7,7 +7,7 @@ suppress but don't erase each other, decay differs by kind, and stale
 beliefs are pruned rather than accumulating forever.
 """
 
-from theory_of_mind import (
+from mind.theory_of_mind import (
     apply_mind_model_updates,
     claim_similarity,
     decayed_confidence,

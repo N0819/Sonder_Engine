@@ -100,9 +100,9 @@ def test_no_perception_prompt_survives_anywhere():
     changed anything, ride every bootstrap response, and cost 28,467
     characters of translation in each language pack.
     """
-    import schemas
+    from llm import schemas
     from language_runtime import installed_language_packs
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     assert "perception" not in DEFAULT_PROMPTS
     for language_id, pack in installed_language_packs().items():

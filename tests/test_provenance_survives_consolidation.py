@@ -20,8 +20,8 @@ import time
 
 import pytest
 
-import memory
-from memory import (
+from mind import memory
+from mind.memory import (
     SUMMARY_SCOPE_FIRSTHAND,
     SUMMARY_SCOPE_HEARSAY,
     SUMMARY_SCOPE_SURMISE,

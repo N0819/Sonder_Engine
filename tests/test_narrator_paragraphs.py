@@ -49,10 +49,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
-import prompts
-from schemas import preprocess_llm_output, validate_llm_output
+from web import app as app_module
+from web import guest_access as guest
+from llm import prompts
+from llm.schemas import preprocess_llm_output, validate_llm_output
 
 
 def _pre(raw):
@@ -164,7 +164,7 @@ def test_the_count_survives_validation_into_the_stored_variant():
 def test_the_repair_example_matches_the_live_contract():
     """It is handed to the model on every repair and fallback call, so a stale
     shape here teaches the old contract back to the model that just failed."""
-    from schemas import output_example
+    from llm.schemas import output_example
 
     assert "<p>" in output_example("narrator")["prose"]
 

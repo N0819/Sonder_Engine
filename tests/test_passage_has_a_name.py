@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import copy
 
-from backdrops import room_projection
-from prompts import DEFAULT_PROMPTS
+from dressing.backdrops import room_projection
+from llm.prompts import DEFAULT_PROMPTS
 
 STAIR = {"to": "shrine_interior_upstairs", "barrier": "open_door",
          "distance": "near", "dir": "n", "vertical": "up",

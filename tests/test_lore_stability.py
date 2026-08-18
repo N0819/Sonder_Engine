@@ -1,9 +1,9 @@
 import json
-from memory import add_lore, restore_lorebook
-from db import q
+from mind.memory import add_lore, restore_lorebook
+from core.db import q
 
 def test_restore_lorebook_preserves_entry_id(temp_db, monkeypatch):
-    import memory
+    from mind import memory
 
     # Mock embeddings to avoid needing an API key
     monkeypatch.setattr(

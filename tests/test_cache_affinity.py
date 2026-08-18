@@ -21,7 +21,7 @@ letting a host that rejects it cost the turn.
 
 from __future__ import annotations
 
-import providers
+from llm import providers
 
 FIREWORKS = {"kind": "generic", "name": "Fireworks",
              "api_key": "k", "base_url": "https://api.fireworks.ai/inference/v1"}

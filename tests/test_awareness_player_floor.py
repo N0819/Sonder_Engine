@@ -29,7 +29,7 @@ from agents.director import (
     _awareness_support_in_beat,
     _unsupported_player_awareness,
 )
-from scene import NON_AWAKE_GATED, apply_awareness_diff, awareness_of
+from story.scene import NON_AWAKE_GATED, apply_awareness_diff, awareness_of
 
 PLAYER = "Hinami"
 
@@ -222,7 +222,7 @@ class TestAtTheReconciliationSeam:
         import json
         import time
 
-        from pipeline_context import ChatData, PipelineContext, TurnData
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
 
         persona = temp_db.qi(
             "INSERT INTO personas(name,sheet) VALUES(?,?)",

@@ -1,6 +1,6 @@
 # 18 — Dim light is a rendering fact up close, an admission fact at range
 
-STATUS: built with this note. Method: source read (`spatial.py`,
+STATUS: built with this note. Method: source read (`world/spatial.py`,
 `agents/common.py`, `agents/composer.py`, file:line cited), the incident
 beat read from the corpus read-only (chat 70), light values across live
 rooms measured by the tracer (349 of 395 rooms author no light, 40 `dim`,

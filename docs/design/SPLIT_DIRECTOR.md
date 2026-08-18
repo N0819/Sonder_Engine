@@ -97,7 +97,7 @@ concert and `_dispatch_specialists` reads `SPECIALISTS` live then indexes
 Director on **every beat**. The comment at 5330 says so explicitly.
 
 **There are no prompt constants in this file.** Every prompt string is fetched at
-call time from `prompts.py`, inside functions that stay. No new module needs to
+call time from `llm/prompts.py`, inside functions that stay. No new module needs to
 import `prompts` — a clean pre-existing boundary the split must not disturb.
 
 ## Import graph

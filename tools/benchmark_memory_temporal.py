@@ -15,9 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import memory
-from db import q
-from providers import EmbeddingBatch, chat_complete, cheap_embed
+from mind import memory
+from core.db import q
+from llm.providers import EmbeddingBatch, chat_complete, cheap_embed
 
 
 CASES = [

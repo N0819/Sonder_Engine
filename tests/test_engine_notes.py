@@ -19,7 +19,7 @@ import time
 
 from agents.runtime import _with_engine_notes
 from agents.storage import ENGINE_NOTES_KEY, active_content, save_step
-from pipeline_context import (
+from core.pipeline_context import (
     ChatData, PipelineContext, StepTaggedWarnings, TurnData, current_step_key,
 )
 

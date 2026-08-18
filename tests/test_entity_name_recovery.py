@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from schemas import _entity_name_from_key, validate_llm_output_strict
+from llm.schemas import _entity_name_from_key, validate_llm_output_strict
 
 
 @pytest.mark.parametrize("key,expected", [

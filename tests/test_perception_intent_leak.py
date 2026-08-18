@@ -33,8 +33,8 @@ from agents.common import (
     norm_sequence,
     observable_action_text,
 )
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 # The intent/purpose/cognition terms that must NEVER reach an observer's view.
 FORBIDDEN = ["slow and soften", "divine heritage", "remember the rune",

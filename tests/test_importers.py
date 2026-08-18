@@ -7,7 +7,7 @@ import zlib
 
 import pytest
 
-from character_schema import (
+from story.character_schema import (
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
     default_character_data,
@@ -27,7 +27,7 @@ def _fake_png(chunks):
     return body
 
 def test_native_character_imports_without_ai(temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError(
@@ -75,7 +75,7 @@ def test_native_character_imports_without_ai(temp_db, monkeypatch):
     assert row["name"] == "Test Character"
 
 def test_native_persona_imports_without_ai(temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError(
@@ -122,7 +122,7 @@ def test_native_character_import_ignores_reinterpret_flag(temp_db, monkeypatch):
     # formats), but a payload already in this project's native schema must
     # still round-trip exactly and deterministically -- reimporting your
     # own export should never depend on remembering to untick a checkbox.
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError(
@@ -144,7 +144,7 @@ def test_native_character_import_ignores_reinterpret_flag(temp_db, monkeypatch):
 
 
 def test_native_persona_import_ignores_reinterpret_flag(temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError(
@@ -168,7 +168,7 @@ def test_native_persona_import_ignores_reinterpret_flag(temp_db, monkeypatch):
 def test_native_lorebook_export_round_trips_without_ai_or_reguessing(
     temp_db, monkeypatch,
 ):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError(
@@ -229,7 +229,7 @@ def test_native_lorebook_export_round_trips_without_ai_or_reguessing(
 
 
 def test_extract_png_card_reads_v2_chara_text_chunk():
-    import importers
+    from story import importers
 
     card = {
         "name": "Ada",
@@ -247,7 +247,7 @@ def test_extract_png_card_reads_v2_chara_text_chunk():
 
 
 def test_extract_png_card_prefers_ccv3_ztxt_over_legacy_chara():
-    import importers
+    from story import importers
 
     v3_card = {"spec": "chara_card_v3", "data": {"name": "Ada V3"}}
     v3_b64 = base64.b64encode(json.dumps(v3_card).encode("utf-8")).decode("ascii")
@@ -264,7 +264,7 @@ def test_extract_png_card_prefers_ccv3_ztxt_over_legacy_chara():
 
 
 def test_extract_png_card_strips_data_url_prefix():
-    import importers
+    from story import importers
 
     card = {"name": "Ada"}
     card_b64 = base64.b64encode(json.dumps(card).encode("utf-8")).decode("ascii")
@@ -275,7 +275,7 @@ def test_extract_png_card_strips_data_url_prefix():
 
 
 def test_extract_png_card_returns_none_without_card_chunk():
-    import importers
+    from story import importers
 
     png_bytes = _fake_png([(b"tEXt", b"Comment\x00just a normal picture")])
     png_b64 = base64.b64encode(png_bytes).decode("ascii")
@@ -284,7 +284,7 @@ def test_extract_png_card_returns_none_without_card_chunk():
 
 
 def test_resolve_import_card_raises_clear_error_for_cardless_png():
-    import importers
+    from story import importers
 
     png_bytes = _fake_png([])
     png_b64 = base64.b64encode(png_bytes).decode("ascii")
@@ -294,14 +294,14 @@ def test_resolve_import_card_raises_clear_error_for_cardless_png():
 
 
 def test_resolve_import_card_passes_through_plain_dict():
-    import importers
+    from story import importers
 
     card = {"name": "Ada"}
     assert importers.resolve_import_card(card) == card
 
 
 def test_png_character_card_imports_end_to_end(temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     def fail_if_called(*args, **kwargs):
         raise AssertionError("AI must not be called for a native-shaped PNG card")

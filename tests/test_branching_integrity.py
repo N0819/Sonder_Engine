@@ -18,8 +18,8 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
-import db
+from web import app
+from core import db
 from agents.runtime import ABORTS, _run_pipeline, begin_pipeline, resume_key_for_turn
 from agents.storage import clear_steps_stale, mark_steps_stale, save_step, step_is_stale, variant_count
 

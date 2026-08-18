@@ -10,8 +10,8 @@ NPCs observing the player.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 def _make_chat_and_cast(temp_db):
     chat_id = temp_db.qi(
