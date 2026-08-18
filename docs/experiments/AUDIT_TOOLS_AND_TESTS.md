@@ -24,7 +24,7 @@ function actually lives in now, and the line that reads it.
 |---|---|
 | `tools/` findings | 12 (F1–F12: 3 broken, 1 silently degraded, 8 stale) |
 | `project_check.py` checks narrower than the rule they state | 6 (S1–S6) |
-| test-suite findings | 9 (T1–T9) |
+| test-suite findings | 10 (T1–T10) |
 | verified-clean sweeps (reported as negative results) | 5 |
 
 The three most serious, in order:
@@ -756,6 +756,62 @@ cannot mask missing initialization." `core/db.py:95` reads `ENGINE_DB` at
 import — and then `_redirect_default_database()` overrides it unconditionally
 with its own temp path and initialises it. The prescribed procedure cannot
 surface a missing initialization, because conftest supplies one either way.
+
+---
+
+**T10. `tests/conftest.py` is imported twice under two module names, and the
+second copy's session database is leaked on every run. 157 of them are on this
+machine right now.**
+
+`conftest.py` has no `__init__.py` beside it and `pyproject.toml:26` sets
+`pythonpath = ["."]`, so the file is reachable under two names, and both are
+used:
+
+- pytest loads it as the top-level module **`conftest`** (import mode
+  `prepend`, no `tests/__init__.py`);
+- five test files import it as **`tests.conftest`** —
+  `test_director_correction_pipeline.py:32`, `test_director_movement.py`,
+  `test_director_movement_routes.py:29`, `test_movement_mover.py`,
+  `test_travel_continues.py` — to reach `fanout_resolve_agent`, which is
+  defined at `conftest.py:158` as a plain module-level helper rather than a
+  fixture, and so cannot be reached the way a fixture would be.
+
+Verified directly:
+
+```
+$ python -c "import sys; sys.path[:0]=['tests','.']; import conftest, tests.conftest as tc; ..."
+same module object: False
+conftest._SESSION_DB       : /dev/shm/tmp_ak0ze_i.db
+tests.conftest._SESSION_DB : /dev/shm/tmpadg_9eb1.db
+db.DB now points at        : /dev/shm/tmpadg_9eb1.db
+```
+
+Two module objects, so `_redirect_default_database()` (`:55`, executed at
+import) runs **twice**: two `mkstemp` files, two full `db.init()` runs, and
+`db.configure()` called a second time. Only the `conftest` copy is a registered
+plugin, so only its `_SESSION_DB` has an owner —
+`_never_the_real_database`'s `finally` (`:122-126`) removes that one. The
+`tests.conftest` copy's file is owned by nothing and is never removed.
+
+The evidence that this is not theoretical: **`/dev/shm` on this machine holds
+157 leftover `.db` files, every one of them exactly 516,096 bytes** — the size
+of a freshly `db.init()`'d schema with no rows, which is the signature of the
+session database and not of a `temp_db` file (those carry test rows). Dated
+Aug 17 (35) and Aug 18 (124), i.e. entirely since the redirect was added.
+~80 MB of RAM, growing by one file per suite run.
+
+Two lesser consequences of the same double execution, recorded because they are
+the ones that could produce a wrong result rather than a leak. First, between
+the second import and the first test, `db.DB` points at copy B; the session
+fixture then reconfigures to copy A (`:117-119`, `if db.DB != path`) and
+teardown deletes A — so any module-level state a test module captured during
+collection was captured against a database that is not the one the tests then
+run on. Second, `db.init()` is the fsync-bound call `:28-38` documents as
+having been the whole suite's dominant cost, and it is being paid twice per
+run for nothing.
+
+None of this is visible from a green suite, which is why it has been
+accumulating for two days.
 
 ---
 

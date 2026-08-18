@@ -47,13 +47,14 @@ CROWDS_WORLD_KEY = "crowds"
 #: How many, coarsely. Ordered; the index is the rank.
 BANDS = ("a handful", "a dozen or so", "a few dozen", "a throng")
 
-#: How big the room is. Ordered; the index is the rank. `RoomDef.size` is a
-#: free string and 66 of the live corpus's rooms leave it unset, so an unknown
-#: size is treated as `medium` rather than refused -- an unsized room is the
-#: commonest room, and a crowd that vanished in one would be a worse answer
-#: than a crowd of ordinary density.
-ROOM_SIZES = ("tiny", "small", "medium", "large", "huge", "vast")
-DEFAULT_ROOM_SIZE = "medium"
+#: How big the room is. Ordered; the index is the rank. Imported rather than
+#: restated: `RoomDef.size` is a free string and 66 of the live corpus's rooms
+#: leave it unset, so an unknown size is treated as `medium` rather than
+#: refused -- an unsized room is the commonest room, and a crowd that vanished
+#: in one would be a worse answer than a crowd of ordinary density. That rule
+#: is `effective_room_size`'s to state, and this module had a second copy of
+#: the vocabulary it graded against.
+from world.spatial_geometry import DEFAULT_ROOM_SIZE, ROOM_SIZES  # noqa: E402
 
 #: `spatial._ROOM_COST` looks like this rank and is NOT: it collapses tiny,
 #: small, "" and medium all to 1, because it prices WALKING rather than

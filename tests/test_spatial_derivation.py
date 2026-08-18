@@ -15,6 +15,7 @@ from world.spatial import (
     effective_anchors,
     effective_facing,
     effective_room_size,
+    ROOM_SIZES,
     effective_station,
     entity_side,
     hear_level,
@@ -287,6 +288,32 @@ def test_hallway_is_not_a_hall():
     del sc["rooms"]["hall"]["size"]
     sc["rooms"]["hall"]["name"] = "a narrow hallway"
     assert effective_room_size(sc, "hall") == "medium"
+
+
+def test_a_size_outside_the_vocabulary_is_not_a_size():
+    """`enormous` is not in `ROOM_SIZES`, and every consumer already treated it
+    as medium -- `_ROOM_COST.get(...)` defaults to 1, `proximity_rel` tests
+    membership in a literal tuple, `crowds.room_size_rank` folds it. So the
+    room graded exactly like an unauthored one while `effective_room_size`
+    handed the unknown word back as though it meant something.
+
+    Now it falls through to the same path an unset size takes, which is what
+    it was silently getting anyway -- except the name hint gets its chance.
+    """
+    sc = _scene()
+    sc["rooms"]["hall"]["size"] = "enormous"
+    sc["rooms"]["hall"]["name"] = "the Feasting Hall"
+    assert effective_room_size(sc, "hall") == "large"
+
+    sc["rooms"]["hall"]["name"] = "a small office"
+    assert effective_room_size(sc, "hall") == "medium"
+
+
+def test_every_word_in_the_vocabulary_is_returned_verbatim():
+    sc = _scene()
+    for size in ROOM_SIZES:
+        sc["rooms"]["hall"]["size"] = size
+        assert effective_room_size(sc, "hall") == size
 
 
 def test_unnamed_room_defaults_medium():

@@ -44,6 +44,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from story import attire  # noqa: E402
+from world.spatial import ROOM_SIZES  # noqa: E402
 from persist import commit  # noqa: E402
 
 
@@ -418,6 +419,18 @@ def check_story(conn, chat_id, sc):
     out = []
     rooms = set((sc or {}).get("rooms") or {})
     entities = set((sc or {}).get("entities") or {})
+
+    # An authored `size` outside the vocabulary grades as `medium` everywhere
+    # and is otherwise indistinguishable from an unsized room. Reported here
+    # because the grader has no channel to warn on: it is a pure function of
+    # the scene, called from the middle of view composition.
+    for rid, room in ((sc or {}).get("rooms") or {}).items():
+        if not isinstance(room, dict):
+            continue
+        size = str(room.get("size") or "").strip().casefold()
+        if size and size not in ROOM_SIZES:
+            out.append((f"room size {size!r} is not one of "
+                        f"{'/'.join(ROOM_SIZES)}; it grades as medium", rid))
 
     # room_registry is the cross-frame ledger of room identity; the scene is
     # the live truth. AGENTS.md: every scene writer must keep the registry
