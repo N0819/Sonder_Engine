@@ -59,7 +59,7 @@
 | `place_purpose.py` | 532 |  | `comfort`, `spatial`, `survival`, `theory_of_mind` |
 | `prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `providers` |
 | `prompts.py` | 408 | Default system prompts and prompt preset access. | `db` |
-| `providers.py` | 3097 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
+| `providers.py` | 3132 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `db`, `logging_utils` |
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1858 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
@@ -705,14 +705,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2011 | 274 lines |
-| `async _chat_complete_async_once()` | 2406 | 103 lines |
-| `chat_complete()` | 1772 | 91 lines |
-| `async chat_complete_async()` | 2315 | 90 lines |
-| `_sse_openai()` | 1644 | 78 lines |
-| `async _sse_openai_async()` | 2510 | 63 lines |
-| `_embed_request()` | 2827 | 58 lines |
-| `resolve_role_candidates()` | 1366 | 54 lines |
+| `_chat_complete_once()` | 2046 | 274 lines |
+| `async _chat_complete_async_once()` | 2441 | 103 lines |
+| `chat_complete()` | 1807 | 91 lines |
+| `async chat_complete_async()` | 2350 | 90 lines |
+| `_sse_openai()` | 1679 | 78 lines |
+| `async _sse_openai_async()` | 2545 | 63 lines |
+| `_embed_request()` | 2862 | 58 lines |
+| `resolve_role_candidates()` | 1401 | 54 lines |
 
 ### `psychology_runtime.py`
 
