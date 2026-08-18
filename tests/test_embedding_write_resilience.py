@@ -509,3 +509,40 @@ def test_a_measurement_never_queues_behind_a_turn(monkeypatch):
     _wire(monkeypatch, [_Resp(200, _vectors(1))])
     providers.embed_texts_meta(["status"], retry=None)
     assert providers._EMBED_STATS["callers"] == 0
+
+
+# ---- Coalescing: woken is not the same as served ----
+#
+# Found 2026-08-18 as an intermittent failure of the burst test above: one of
+# the eight callers came back holding `None` rather than a batch. The leader
+# drops leadership the moment the queue first reads empty and only drains the
+# queue afterwards, so a caller arriving between those two points elects
+# itself leader and is then drained by the outgoing one -- woken, with no
+# result, by a leader that never served it. Both callers then returned
+# `waiter.result` on the strength of the event alone.
+#
+# Two changes came out of it. The floor below is the one with teeth and is
+# tested here. The other -- the leader holding leadership until it has
+# drained, rather than dropping it when the queue first reads empty -- closes
+# the window that produced the empty wake in the first place, and is NOT
+# covered by a test of its own: the window is one statement wide and any test
+# that claimed to hit it would in fact pass against the old code too. With the
+# floor in place its remaining cost is lost coalescing, not a lost row.
+
+def test_a_woken_caller_with_no_result_serves_itself(monkeypatch):
+    """The drain wakes a queued caller; it does not answer it.
+
+    `embed_texts_meta` returns a batch or it degrades to the hash. It must
+    never return `None` -- every writer above it stores `.vectors` and
+    stamps `.model_key` without asking whether there was a batch at all.
+    """
+    _wire(monkeypatch, [_Resp(200, _vectors(1))] * 4)
+
+    def _wake_without_serving(group, config):
+        for waiter in group:
+            waiter.done.set()
+
+    monkeypatch.setattr(providers, "_serve_embed_group", _wake_without_serving)
+    got = providers.embed_texts_meta(["a memory"])
+    assert got is not None, "a caller may be woken empty, never answered empty"
+    assert not got.fallback
