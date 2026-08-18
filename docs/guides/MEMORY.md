@@ -108,12 +108,26 @@ third of one story's — were that single sentence at salience 0.47, all
 identical, all eligible to be handed to a character instead of something that
 happened.
 
-**Own acts fallback** — `category: self`, `provenance: remembered`. The normal
-episode already contains this character's resolved action and speech in the
-correct order, so a second self row is not written when a usable view exists.
-Only a character who acted but received no usable view gets this fallback. It
-is rendered as grammatical chronological first person (`"I said … Then I tried
-to …"`), never the former `"I chose to attempted …"` fragment.
+**Own conduct** — `category: self`, `provenance: remembered`. The only
+durable record of what this character themselves said and did. The episode
+cannot carry it: deterministic perception structurally excludes a mind's own
+speech and acts from its own view (the `speaker == name` / `actor == name`
+skips in `agents/perception.py`, plus `_strip_self_narration`) — that is the
+firewall working, and it means a view is never "the first-person episode" of
+the character's own conduct. Rendered by `_own_sequence_memory` as
+grammatical chronological first person in decision framing (`"I said … Then
+I tried to …"`), never the former `"I chose to attempted …"` fragment,
+which replayed an attempt as a second resolved event beside the episode.
+Bounded: every spoken beat mints one; a silent act mints only at the
+character's own `salience >= 0.7` — idle motion keeps its 12-turn
+`_recent_self_moves` window and the episode of its consequences instead.
+
+This row was suppressed whenever a view existed between 2026-08-10
+(d290ca4) and the repair — a premise true under model-composed perception,
+false the day after, when 3a82657 made every view deterministic. Measured:
+chat 67 holds 20 self rows over 51 turns; chats 69–80 hold 0 over 240
+turns, and those eight days of play are not backfilled (see
+`docs/UNBUILT.md`).
 
 **Dialogue** — `provenance: heard`, salience 0.82, or 0.9 for a promise. Gated
 hard by `_durable_dialogue_category`: only quotes containing a promise marker
@@ -1343,7 +1357,9 @@ constraints. Whether that changes the rate is a question for
 `_durable_dialogue_category` is a fixed phrase list — promises, "my name is", a
 few confessions — which is why the corpus holds 145 dialogue rows against 2,601
 episodes. Warnings, instructions, codes, indirect threats and newly established
-facts all fail it.
+facts all fail it. Each marker must begin at a word boundary (inflections
+still match): bare substring matching had filed "compromised" as a promise,
+and 3 of the corpus's 5 promise rows were that one word.
 
 Measured (`tools/remember_lines.py`, 1,633 turns, 146 marks): **0 of the 125
 marks that became rows would have been caught by the phrase list**, and marked

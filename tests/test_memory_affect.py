@@ -103,7 +103,17 @@ def test_memory_affect_defaults_to_zero_without_surface(temp_db, monkeypatch):
     assert own and own[0]["valence"] == 0.0 and own[0]["arousal"] == 0.0
 
 
-def test_witnessed_episode_replaces_duplicate_self_fragment(temp_db, monkeypatch):
+def test_self_row_is_minted_beside_the_witnessed_episode(temp_db, monkeypatch):
+    """A view and a self row carry DIFFERENT halves of a beat, so both mint.
+
+    This test's predecessor pinned the opposite: d290ca4 suppressed the self
+    row whenever a view existed, on the premise that the view "already
+    contains this character's resolved action and speech". 3a82657's
+    deterministic composer made that premise structurally false (a mind's own
+    conduct is excluded from its own view -- the firewall), and the
+    suppression silently ended all self memory: 0 self rows across chats
+    69-80's 240 turns, against 20 over chat 67's 51.
+    """
     chat_id, char_id, cast = _story(temp_db)
     captured = _capture_batch(monkeypatch)
     ctx = PipelineContext(
@@ -119,15 +129,17 @@ def test_witnessed_episode_replaces_duplicate_self_fragment(temp_db, monkeypatch
         "sequence": [{"type": "action", "attempt": "pull away from the kiss"}],
         "active_state": {"mood": "resolved"},
     }}
+    # A composer view of the beat's OUTCOME, own conduct absent -- the only
+    # shape deterministic perception produces for a mind's own view.
     ctx.perception_outcome = {"views": {
-        str(char_id): "You pull away from the kiss and draw a clean breath."}}
+        str(char_id): "The stranger steps back, startled."}}
 
     prepare_memory_commit(ctx)
     mems = captured["memories"]
 
-    assert [m["category"] for m in mems] == ["episode"]
-    assert mems[0]["content"] == (
-        "You pull away from the kiss and draw a clean breath.")
+    assert [m["category"] for m in mems] == ["episode", "self"]
+    assert mems[0]["content"] == "The stranger steps back, startled."
+    assert mems[1]["content"] == "I tried to pull away from the kiss."
 
 
 def test_inference_memory_omits_empty_evidence_and_duplicate_subject(

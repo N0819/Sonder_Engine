@@ -51,14 +51,20 @@ def _phrase_list_would_keep(text):
     it. Kept in sync by test_remember_lines_telemetry.py, which asserts the two
     agree on every phrase."""
     lowered = (text or "").lower()
-    if any(w in lowered for w in ("promise", "i swear", "i vow",
-                                  "you have my word", "i'll return",
-                                  "i will return")):
+
+    def _spoken(marker):
+        # Word boundary at the marker's start, inflection allowed at its end
+        # -- "I promised" matches, "compromised" does not. Mirrors commit.py.
+        return re.search(r"\b" + re.escape(marker), lowered) is not None
+
+    if any(_spoken(w) for w in ("promise", "i swear", "i vow",
+                                "you have my word", "i'll return",
+                                "i will return")):
         return "promise"
-    if any(w in lowered for w in ("my name is", "call me", "i confess",
-                                  "the truth is", "i killed", "i betrayed",
-                                  "i love you", "i hate you", "i'll kill",
-                                  "i will kill")):
+    if any(_spoken(w) for w in ("my name is", "call me", "i confess",
+                                "the truth is", "i killed", "i betrayed",
+                                "i love you", "i hate you", "i'll kill",
+                                "i will kill")):
         return "dialogue"
     return None
 
