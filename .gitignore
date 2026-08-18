@@ -7,6 +7,11 @@ venv/
 *.db
 *.db-wal
 *.db-shm
+# A backup taken before an edit to live story data is still live story
+# data, and it is two gigabytes of it. `*.db` does not match
+# `engine.db.backup-...`, so `git add -A` spent its time hashing one.
+*.db.backup*
+*.db.bak
 *.sqlite
 *.sqlite3
 .env

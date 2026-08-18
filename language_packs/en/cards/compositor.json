@@ -290,6 +290,7 @@
     "pose_self_present": "You are",
     "pose_support": "on {support}",
     "posture": "You are {value}.",
+    "presence_in_room": "in {room}",
     "residue_content": "{lead} {body}.",
     "room": "You are in {room}.",
     "side": " on your {side}",

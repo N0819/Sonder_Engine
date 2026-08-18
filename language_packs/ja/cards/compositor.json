@@ -222,6 +222,7 @@
     "pose_support": "{support}の上に",
     "posture": "あなたは{value}。",
     "presence": "{label}がいる。",
+    "presence_in_room": "{room}に",
     "presence_placed": "{label}は{side}{tier}にいる。",
     "residue_content": "{lead}{body}。",
     "room": "あなたは{room}にいる。",

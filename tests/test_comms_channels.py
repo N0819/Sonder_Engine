@@ -556,3 +556,82 @@ class TestOneWayWindow:
         text = get_prompt("director_establish")
         for barrier in sp._VALID_BARRIERS - {"separated", "unknown"}:
             assert barrier in text, barrier
+
+
+class TestSeeingSomeoneInAnotherRoom:
+    """A body you can see is present to you, whatever room it is standing in.
+
+    `presence_percepts` dropped anyone `proximity_rel` gave no tier for, on the
+    comment "co-located only". But `proximity_rel` measures WITHIN a room --
+    None means "not in this one", not "not visible". So the engine handed a
+    mind the adjacent ROOM and never anyone standing in it: an interviewer
+    watching through observation glass received the cell and not the woman in
+    it, which is the whole content of looking through it.
+
+    `visual_level_between` had always answered the sight question properly for
+    cross-room pairs, caps and all. The only thing missing was somewhere to put
+    the distance, and the room's own name is the one phrasing that stays true
+    through a doorway, a grille and a pane of glass alike.
+    """
+
+    def _scene_with(self, barrier):
+        return {
+            "rooms": {
+                "obs": {"name": "Observation Room",
+                        "adjacent": [{"to": "cell", "barrier": barrier}]},
+                "cell": {"name": "Interview Cell",
+                         "adjacent": [{"to": "obs", "barrier": "wall"}]},
+            },
+            "positions": {"Moon": "obs", "Ward": "obs", "Hinami": "cell"},
+        }
+
+    def _seen(self, scene, observer):
+        bodies = [{"name": n, "room": r} for n, r in scene["positions"].items()]
+        return {p.source_label: p.data for p in composer.presence_percepts(
+            scene, observer, bodies, {n["name"]: n["name"] for n in bodies})}
+
+    def test_a_body_through_the_glass_is_present(self):
+        seen = self._seen(self._scene_with("one_way_window"), "Moon")
+        assert "Hinami" in seen
+        assert seen["Hinami"]["tier"] == "beyond"
+        assert seen["Hinami"]["room"] == "Interview Cell"
+
+    def test_the_blind_side_still_sees_nobody(self):
+        assert self._seen(self._scene_with("one_way_window"), "Hinami") == {}
+
+    def test_the_room_is_named_rather_than_a_distance_guessed(self):
+        """"close by" and "across the room" are both false through a wall, and
+        the room's name is true for every barrier."""
+        scene = self._scene_with("one_way_window")
+        bodies = [{"name": n, "room": r} for n, r in scene["positions"].items()]
+        clauses = [composer._presence_clause(p) for p in
+                   composer.presence_percepts(
+                       scene, "Moon", bodies,
+                       {b["name"]: b["name"] for b in bodies})]
+        assert "Hinami is in Interview Cell" in clauses
+        assert "Ward is close by" in clauses
+
+    @pytest.mark.parametrize("barrier", ["open", "open_door", "window", "bars"])
+    def test_it_holds_for_every_see_through_barrier(self, barrier):
+        """Not a one-way-mirror special case: an open doorway had the same
+        hole, and someone standing in the next room through it was equally
+        invisible."""
+        assert "Hinami" in self._seen(self._scene_with(barrier), "Moon")
+
+    @pytest.mark.parametrize("barrier", ["wall", "membrane", "closed_door"])
+    def test_and_never_through_one_that_stops_sight(self, barrier):
+        assert "Hinami" not in self._seen(self._scene_with(barrier), "Moon")
+
+    def test_a_dark_room_is_still_dark(self):
+        """Sight is decided by `visual_level_between`, which this defers to
+        entirely -- so every existing subtraction still subtracts."""
+        scene = self._scene_with("window")
+        scene["rooms"]["cell"]["light"] = "dark"
+        assert "Hinami" not in self._seen(scene, "Moon")
+
+    def test_co_located_bodies_keep_their_measured_tier(self):
+        """The within-room answer must not be replaced by the room's name for
+        people who are actually in the room with you."""
+        seen = self._seen(self._scene_with("window"), "Moon")
+        assert seen["Ward"]["tier"] == "near"
+        assert "room" not in seen["Ward"]
