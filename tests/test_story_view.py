@@ -376,10 +376,14 @@ class TestPeople:
         view = player_view(story["chat_id"], "player")
 
         person, = view["people"]
-        assert person == {"id": "body:ab12cd34ef", "kind": "presence",
+        assert person == {"id": person["id"], "kind": "presence",
                           "display_name": "the grey-eyed courier",
                           "identity_status": "observed",
                           "last_observed_turn": 4}
+        assert person["id"].startswith("body:")
+        # Not the composer's own ledger key either: that key is a canonical-
+        # name hash shared by every viewer, i.e. a correlation handle.
+        assert person["id"] != "body:ab12cd34ef"
         assert "Ruth" not in json.dumps(view)
         assert str(ruth_id) not in [p["id"] for p in view["people"]]
 
@@ -415,7 +419,8 @@ class TestPeople:
         by_status = {p["identity_status"]: p for p in view["people"]}
         assert by_status["recognized"]["id"] == str(story["char_id"])
         assert "last_observed_turn" not in by_status["recognized"]
-        assert by_status["observed"]["id"] == "body:dd11"
+        assert by_status["observed"]["id"].startswith("body:")
+        assert by_status["observed"]["id"] != by_status["recognized"]["id"]
         assert by_status["observed"]["display_name"] == "the veiled figure"
 
     def test_a_recognised_body_delivered_this_beat_dates_the_entry(
@@ -468,7 +473,8 @@ class TestPeople:
         assert sam_person["id"] == str(ruth_id)
         assert sam_person["display_name"] == "Ruth"
         assert "facts" in sam_person
-        assert ilse_person["id"] == "body:ff33"
+        assert ilse_person["id"].startswith("body:")
+        assert ilse_person["id"] != str(ruth_id)
         assert ilse_person["display_name"] == "the grey-eyed courier"
         assert "facts" not in ilse_person
 
@@ -537,6 +543,231 @@ class TestPeople:
                              str(story["char_id"]))["people"]
 
         assert [p["id"] for p in people] == ["player"]
+
+
+class TestImmutableIdentity:
+    """Names are labels, not identities: they collide and they change while
+    the person stays the same. The Directive hardening report
+    (docs/design/DIRECTIVE_HARDENING_REPORT.md §1) named the three story
+    cases the old name-keyed join broke -- a shared name, a recurring
+    stranger, a rename -- and every test here is one of its acceptance
+    tests. The projection now keys every stage on immutable identity and
+    hands an unrecognising viewer only a viewer-scoped opaque derivative
+    of it."""
+
+    def test_two_people_sharing_a_name_are_distinct_entries(
+            self, temp_db, story):
+        """A dict keyed by name collapses two same-named people into one
+        entry, or hangs one person's public facts on the other's id -- the
+        exact failure the report opens with. Each bearer of a granted name
+        is their own person, on their own immutable id, with their own
+        facts."""
+        from db import wset
+
+        twin_id = _character(temp_db, story["chat_id"], "Ilse", "uid-ilse-2")
+        _author_public(temp_db, story["char_id"],
+                       appearance="a silver-haired astronomer")
+        _author_public(temp_db, twin_id,
+                       appearance="a scarred deckhand with silver hair")
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+
+        people = player_view(story["chat_id"], "player")["people"]
+
+        by_id = {p["id"]: p for p in people}
+        assert set(by_id) == {str(story["char_id"]), str(twin_id)}
+        assert by_id[str(story["char_id"])]["facts"]["appearance"] \
+            == "a silver-haired astronomer"
+        assert by_id[str(twin_id)]["facts"]["appearance"] \
+            == "a scarred deckhand with silver hair"
+
+    def test_a_transporter_duplicate_stays_separately_trackable(
+            self, temp_db, story):
+        """The report's hard case: at the moment of duplication the two
+        people share canonical name, appearance and history -- every label
+        is identical, so only the immutable id can tell them apart, and it
+        must."""
+        from db import wset
+
+        twin_id = _character(temp_db, story["chat_id"], "Ilse", "uid-ilse-2")
+        for cid in (story["char_id"], twin_id):
+            _author_public(temp_db, cid,
+                           appearance="a silver-haired astronomer",
+                           history="Keeper of the observatory.")
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+
+        people = player_view(story["chat_id"], "player")["people"]
+
+        assert len(people) == 2
+        assert {p["id"] for p in people} == {str(story["char_id"]),
+                                             str(twin_id)}
+        assert all(p["display_name"] == "Ilse" for p in people)
+        assert people[0]["facts"] == people[1]["facts"]
+
+    def test_a_shared_name_delivered_this_beat_dates_nobody(
+            self, temp_db, story):
+        """A recognised body arrives from the delivery record under a name
+        two people bear; the projection cannot affirm WHICH body it was, and
+        a date it cannot attribute is a guess. Absent means absent, applied
+        to a field: both people appear, neither is dated."""
+        from db import wset
+
+        _character(temp_db, story["chat_id"], "Ilse", "uid-ilse-2")
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        _deliver(temp_db, story["turn_id"], {"player": "Ilse is here."},
+                 company={"player": [
+                     {"key": "aa00", "name": "Ilse", "label": "Ilse",
+                      "recognized": True}]})
+
+        people = player_view(story["chat_id"], "player")["people"]
+
+        assert len(people) == 2
+        assert all("last_observed_turn" not in p for p in people)
+
+    def test_a_recurring_stranger_keeps_one_id_across_encounters(
+            self, temp_db, story):
+        """'The same injured stranger from Engineering' is a property of the
+        PERSON, not an accident of this beat's label. Two separated
+        encounters -- different turns, different composer labels -- must
+        surface the same opaque id, or a crew UI tracks one continuing
+        person as two."""
+        _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        _deliver(temp_db, story["turn_id"], {"player": "Someone limps past."},
+                 company={"player": [
+                     {"key": "ab12cd34ef", "name": "Ruth",
+                      "label": "the injured stranger", "recognized": False}]})
+        first, = player_view(story["chat_id"], "player")["people"]
+
+        later_turn = _turn(temp_db, story["chat_id"], idx=9)
+        _deliver(temp_db, later_turn, {"player": "The stranger returns."},
+                 company={"player": [
+                     {"key": "ab12cd34ef", "name": "Ruth",
+                      "label": "the limping figure", "recognized": False}]})
+        second, = player_view(story["chat_id"], "player")["people"]
+
+        assert first["display_name"] == "the injured stranger"
+        assert second["display_name"] == "the limping figure"
+        assert second["id"] == first["id"]
+        assert second["last_observed_turn"] == 9
+
+    def test_the_opaque_id_survives_a_canonical_rename(self, temp_db, story):
+        """Under the old scheme the id was a hash of the canonical name, so
+        renaming the person split them into two unrelated panel entries.
+        The id now rides the card's immutable uid: the name moves, the
+        person does not."""
+        ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        _deliver(temp_db, story["turn_id"], {"player": "Someone limps past."},
+                 company={"player": [
+                     {"key": "ab12cd34ef", "name": "Ruth",
+                      "label": "the injured stranger", "recognized": False}]})
+        first, = player_view(story["chat_id"], "player")["people"]
+
+        _author_public(temp_db, ruth_id, name="Ruthanna")
+        later_turn = _turn(temp_db, story["chat_id"], idx=9)
+        _deliver(temp_db, later_turn, {"player": "The stranger returns."},
+                 company={"player": [
+                     {"key": "99ffee0011", "name": "Ruthanna",
+                      "label": "the injured stranger", "recognized": False}]})
+        second, = player_view(story["chat_id"], "player")["people"]
+
+        assert second["id"] == first["id"]
+
+    def test_an_adopted_alias_changes_display_name_and_never_id(
+            self, temp_db, story):
+        """An identity reveal mid-story: the viewer's word for the person
+        changes, the person does not. `display_name` is a mutable projection
+        hung off the id, so campaign state keyed on the id survives the
+        reveal untouched."""
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        before, = player_view(story["chat_id"], "player")["people"]
+
+        _author_public(temp_db, story["char_id"], name="Selene Var")
+        wset(story["chat_id"], "known", {"Sam": ["Selene Var"]})
+        after, = player_view(story["chat_id"], "player")["people"]
+
+        assert before["display_name"] == "Ilse"
+        assert after["display_name"] == "Selene Var"
+        assert after["id"] == before["id"] == str(story["char_id"])
+
+    def test_the_opaque_id_is_no_cross_viewer_correlation_key(
+            self, temp_db, story):
+        """The composer's `key` is a canonical-name hash, identical in every
+        viewer's record -- serialise two projections of one stranger and
+        they join on it. The viewer-scoped id must not: two viewers who both
+        see the same unnamed body get ids that share nothing, so nobody
+        holding both projections can prove they watched the same person."""
+        _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        record = {"key": "ab12cd34ef", "name": "Ruth",
+                  "label": "the grey-eyed courier", "recognized": False}
+        _deliver(temp_db, story["turn_id"],
+                 {"player": "Someone.", str(story["char_id"]): "Someone."},
+                 company={"player": [dict(record)],
+                          str(story["char_id"]): [dict(record)]})
+
+        sam_person, = player_view(story["chat_id"], "player")["people"]
+        ilse_person, = player_view(
+            story["chat_id"], str(story["char_id"]))["people"]
+
+        assert sam_person["id"] != ilse_person["id"]
+        assert sam_person["id"] != "body:ab12cd34ef"
+        assert ilse_person["id"] != "body:ab12cd34ef"
+
+    def test_continuity_costs_no_identity_material_at_all(self, temp_db,
+                                                          story):
+        """The whole point of a viewer-scoped derivative: continuity without
+        disclosure. Serialise the projection and assert the absence of every
+        identity the id is derived from -- canonical name, canonical row id,
+        the card's uid, the composer's shared ledger key, and the story's
+        secret namespace itself. Any one of them surviving would let a
+        caller join this projection against canonical data it has not
+        earned."""
+        from db import wget
+
+        ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        row = temp_db.q("SELECT sheet FROM characters WHERE id=?", (ruth_id,),
+                        one=True)
+        uid = json.loads(row["sheet"])["identity"]["uid"]
+        _deliver(temp_db, story["turn_id"], {"player": "Someone limps past."},
+                 company={"player": [
+                     {"key": "ab12cd34ef", "name": "Ruth",
+                      "label": "the injured stranger", "recognized": False}]})
+
+        rendered = json.dumps(player_view(story["chat_id"], "player"))
+        namespace = wget(story["chat_id"], "presence_id_namespace")
+
+        assert "people" in json.loads(rendered)
+        # The row id would ride as a JSON string, so the quoted token is the
+        # precise thing to look for -- a bare small integer is everywhere.
+        for material in ("Ruth", f'"{ruth_id}"', uid, "ab12cd34ef", namespace):
+            assert material and material not in rendered
+
+    def test_one_viewers_recognition_leaks_nothing_to_the_other(
+            self, temp_db, story):
+        """The report's two-viewer acceptance test, proved at the byte
+        level: Sam knows Ruth and gets her id and name; Ilse only saw a body
+        and gets a projection carrying no canonical name, no canonical id,
+        no uid -- nothing that would let her panel be joined to Sam's."""
+        from db import wset
+
+        ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        row = temp_db.q("SELECT sheet FROM characters WHERE id=?", (ruth_id,),
+                        one=True)
+        uid = json.loads(row["sheet"])["identity"]["uid"]
+        wset(story["chat_id"], "known", {"Sam": ["Ruth"]})
+        _deliver(temp_db, story["turn_id"], {str(story["char_id"]): "Someone."},
+                 company={str(story["char_id"]): [
+                     {"key": "ab12cd34ef", "name": "Ruth",
+                      "label": "the grey-eyed courier", "recognized": False}]})
+
+        sam_person, = player_view(story["chat_id"], "player")["people"]
+        ilse_rendered = json.dumps(
+            player_view(story["chat_id"], str(story["char_id"])))
+
+        assert sam_person["id"] == str(ruth_id)
+        for material in ("Ruth", f'"{ruth_id}"', uid):
+            assert material not in ilse_rendered
+        assert f'"{sam_person["id"]}"' not in ilse_rendered
 
 
 class TestTheExtensionSurface:

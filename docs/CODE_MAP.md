@@ -67,7 +67,7 @@
 | `spatial.py` | 8451 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
-| `story_view.py` | 522 |  | `db` |
+| `story_view.py` | 670 |  | `db` |
 | `subjects.py` | 449 |  | `canon_provenance`, `db`, `spatial` |
 | `survival.py` | 320 |  | `db` |
 | `theory_of_mind.py` | 703 |  | — |
@@ -807,14 +807,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `player_view()` | 450 | 73 lines |
-| `_people()` | 390 | 58 lines |
-| `story_view()` | 163 | 51 lines |
-| `_public_facts()` | 331 | 46 lines |
-| `_delivered()` | 243 | 24 lines |
-| `viewers()` | 219 | 22 lines |
-| `_viewer_memories()` | 277 | 21 lines |
-| `_cast()` | 114 | 19 lines |
+| `_people()` | 515 | 77 lines |
+| `player_view()` | 594 | 77 lines |
+| `story_view()` | 174 | 51 lines |
+| `_public_facts()` | 342 | 46 lines |
+| `_person_refs()` | 432 | 36 lines |
+| `_delivered()` | 254 | 24 lines |
+| `_presence_ref()` | 470 | 24 lines |
+| `viewers()` | 230 | 22 lines |
 
 ### `subjects.py`
 
