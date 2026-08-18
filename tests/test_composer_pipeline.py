@@ -119,6 +119,67 @@ def test_act_pass_composes_with_zero_model_calls(temp_db):
     assert isinstance(out.get("composer_ledger"), dict)
 
 
+def test_act_pass_records_the_company_the_people_projection_reads(temp_db):
+    """The delivered-company record rides the perception step beside the
+    views it was composed with: same admitted percepts, so it cannot list a
+    body the rendered view did not carry. Without this write-side proof,
+    `story_view._delivered_company` is a reader of a field nothing produces
+    -- the guard that cannot fire."""
+    from agents.perception import perception_act
+
+    ctx, char_id = _make_ctx(temp_db)
+    ctx.director_interpret = _interp(char_id, [
+        {"type": "action", "attempt": "raises the lantern",
+         "observable": "raises the lantern", "visibility": "overt"},
+    ])
+    out = perception_act(ctx, "n0")
+
+    body, = out["company"][str(char_id)]
+    # Reya does not recognize the player: the record carries the composer's
+    # verdict and label, and the canonical name only engine-side.
+    assert body["name"] == "The Stranger"
+    assert body["recognized"] is False
+    assert body["label"] and "Stranger" not in body["label"]
+    assert body["key"] and "Stranger" not in body["key"]
+
+    # Persist the step the way the runtime does, and read it back through
+    # the facade: the write shape and the read shape must be one contract.
+    import story_view
+
+    step_id = temp_db.qi(
+        "INSERT INTO steps(turn_id,key,label,ord) VALUES(?,?,?,?)",
+        (ctx.turn.id, "perception_act", "act", 2))
+    temp_db.qi(
+        "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+        (step_id, json.dumps(out), time.time()))
+
+    view = story_view.player_view(ctx.chat.id, str(char_id))
+    person, = view["people"]
+    assert person["id"] == "body:" + body["key"]
+    assert person["display_name"] == body["label"]
+    assert person["identity_status"] == "observed"
+    assert "The Stranger" not in json.dumps(view)
+
+
+def test_a_recognising_observer_is_recorded_under_the_earned_name(temp_db):
+    """`recognized` in the company record is `observer_display_map`'s own
+    verdict -- a recognised body maps to its own name -- not a downstream
+    ledger re-check, which a disguise would make wrong."""
+    from agents.perception import perception_act
+
+    ctx, char_id = _make_ctx(temp_db, known={"Reya": ["The Stranger"]})
+    ctx.director_interpret = _interp(char_id, [
+        {"type": "action", "attempt": "raises the lantern",
+         "observable": "raises the lantern", "visibility": "overt"},
+    ])
+    out = perception_act(ctx, "n0")
+
+    body, = out["company"][str(char_id)]
+    assert body["name"] == "The Stranger"
+    assert body["label"] == "The Stranger"
+    assert body["recognized"] is True
+
+
 def test_concealed_line_absent_and_episode_minted_from_ir(temp_db):
     from agents.perception import perception_outcome
 

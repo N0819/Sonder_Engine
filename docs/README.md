@@ -135,6 +135,12 @@ Elsewhere:
 - [`DIRECTIVE_GAP_REPORT.md`](design/DIRECTIVE_GAP_REPORT.md) — the report
   itself, written against 9.2 by Directive's author. Kept verbatim as received;
   it is evidence, and the response belongs beside it rather than inside it.
+- [`DIRECTIVE_REMAINING_GAPS.md`](design/DIRECTIVE_REMAINING_GAPS.md) — the
+  follow-up, written against 9.3 after the five gaps closed: three residual
+  contracts exposed by how the new capabilities compose. Kept verbatim, same
+  ruling. Its §2 (the structured people projection) is built as
+  `player_view["people"]`; §1 and §3 are registered in
+  [`UNBUILT.md`](UNBUILT.md) §6.2.
 - [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md) —
   greeting-seeded openings. Shipped, under a materially different architecture
   than proposed; its header records the deviation.

@@ -50,16 +50,37 @@ def story(temp_db):
             "turn_id": turn_id}
 
 
-def _deliver(temp_db, turn_id, views, observations=None, key="perception_outcome"):
+def _deliver(temp_db, turn_id, views, observations=None, company=None,
+             key="perception_outcome"):
     """Store one perception step the way the pipeline stores it."""
+    content = {"views": views, "observations": observations or {}}
+    if company is not None:
+        content["company"] = company
     step_id = temp_db.qi(
         "INSERT INTO steps(turn_id,key,label,ord) VALUES(?,?,?,?)",
         (turn_id, key, key, 3))
     temp_db.qi(
         "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
-        (step_id, json.dumps({"views": views,
-                              "observations": observations or {}}), time.time()))
+        (step_id, json.dumps(content), time.time()))
     return step_id
+
+
+def _author_public(temp_db, char_id, *, appearance=None, history=None,
+                   name=None):
+    """Edit the card's genuinely public surfaces, and only those."""
+    row = temp_db.q("SELECT sheet FROM characters WHERE id=?", (char_id,),
+                    one=True)
+    sheet = json.loads(row["sheet"])
+    if appearance is not None:
+        sheet.setdefault("embodiment", {}).setdefault(
+            "visible", {})["summary"] = appearance
+    if history is not None:
+        sheet.setdefault("knowledge", {})["public_history"] = history
+    if name is not None:
+        sheet.setdefault("identity", {})["name"] = name
+    temp_db.qi("UPDATE characters SET sheet=? WHERE id=?",
+               (json.dumps(sheet), char_id))
+    return sheet
 
 
 # --------------------------------------------------------------- canonical
@@ -286,6 +307,236 @@ class TestPlayerView:
         ]
         for entry in listed:
             assert player_view(story["chat_id"], entry["id"])["viewer"] == entry
+
+
+class TestPeople:
+    """`player_view["people"]` -- the structured roster, still deciding
+    nothing. Its two admissions are the identity ledger and the perception
+    stage's own delivered-company record; every test here is about one of
+    those being the ONLY authority, because the failure this projection
+    invites is a UI-friendly join that quietly re-implements disclosure."""
+
+    def test_a_known_person_carries_a_stable_id_and_public_facts(
+            self, temp_db, story):
+        """The Directive report's core acceptance test: a crew UI can key on
+        `id` and render host-owned public facts without joining canonical
+        cast data to known-name strings."""
+        from db import wset
+
+        _author_public(temp_db, story["char_id"],
+                       appearance="a silver-haired astronomer in a long coat",
+                       history="Keeper of the observatory for thirty years.")
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+
+        view = player_view(story["chat_id"], "player")
+
+        person, = view["people"]
+        assert person["id"] == str(story["char_id"])
+        assert person["kind"] == "character"
+        assert person["display_name"] == "Ilse"
+        assert person["identity_status"] == "recognized"
+        assert person["facts"] == {
+            "appearance": "a silver-haired astronomer in a long coat",
+            "public_history": "Keeper of the observatory for thirty years.",
+        }
+        assert person["fact_sources"] == {
+            "appearance": "authored_public",
+            "public_history": "authored_public",
+        }
+
+    def test_a_rename_changes_display_name_and_never_id(self, temp_db, story):
+        """A UI keyed on a display name breaks the first time somebody is
+        renamed, and in this engine the STORY renames people. The id must
+        not be derived from the label."""
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        before, = player_view(story["chat_id"], "player")["people"]
+
+        _author_public(temp_db, story["char_id"], name="Countess Ilse")
+        wset(story["chat_id"], "known", {"Sam": ["Countess Ilse"]})
+        after, = player_view(story["chat_id"], "player")["people"]
+
+        assert before["display_name"] == "Ilse"
+        assert after["display_name"] == "Countess Ilse"
+        assert after["id"] == before["id"] == str(story["char_id"])
+
+    def test_a_stranger_appears_under_a_label_and_leaks_no_canonical_name(
+            self, temp_db, story):
+        """The label is the composer's, the key is opaque, and the canonical
+        name and canonical id appear NOWHERE in the serialised view -- a
+        stranger entry that carried either would hand a joining UI the
+        identity the viewer has not earned."""
+        ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        _deliver(temp_db, story["turn_id"], {"player": "Someone is here."},
+                 company={"player": [
+                     {"key": "ab12cd34ef", "name": "Ruth",
+                      "label": "the grey-eyed courier", "recognized": False}]})
+
+        view = player_view(story["chat_id"], "player")
+
+        person, = view["people"]
+        assert person == {"id": "body:ab12cd34ef", "kind": "presence",
+                          "display_name": "the grey-eyed courier",
+                          "identity_status": "observed",
+                          "last_observed_turn": 4}
+        assert "Ruth" not in json.dumps(view)
+        assert str(ruth_id) not in [p["id"] for p in view["people"]]
+
+    def test_a_person_neither_known_nor_delivered_is_absent(self, temp_db,
+                                                            story):
+        """Absent means absent: this projection has no opinion of its own
+        about who exists. A cast member the viewer never met and never saw
+        would only appear here through a deduction, which is the one thing
+        the facade is forbidden to make."""
+        _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+
+        view = player_view(story["chat_id"], "player")
+
+        assert "people" not in view
+
+    def test_the_composers_verdict_outranks_the_ledger_on_a_disguised_body(
+            self, temp_db, story):
+        """`recognized` is the delivery record's verdict, never re-derived
+        from the identity ledger -- a disguise that conceals identity makes a
+        well-known name a stranger, and a ledger re-check here would undo the
+        disguise. The two entries of a disguised acquaintance deliberately do
+        not join."""
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        _deliver(temp_db, story["turn_id"], {"player": "A veiled figure."},
+                 company={"player": [
+                     {"key": "dd11", "name": "Ilse",
+                      "label": "the veiled figure", "recognized": False}]})
+
+        view = player_view(story["chat_id"], "player")
+
+        by_status = {p["identity_status"]: p for p in view["people"]}
+        assert by_status["recognized"]["id"] == str(story["char_id"])
+        assert "last_observed_turn" not in by_status["recognized"]
+        assert by_status["observed"]["id"] == "body:dd11"
+        assert by_status["observed"]["display_name"] == "the veiled figure"
+
+    def test_a_recognised_body_delivered_this_beat_dates_the_entry(
+            self, temp_db, story):
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        _deliver(temp_db, story["turn_id"], {"player": "Ilse is here."},
+                 company={"player": [
+                     {"key": "ee22", "name": "Ilse", "label": "Ilse",
+                      "recognized": True}]})
+
+        person, = player_view(story["chat_id"], "player")["people"]
+
+        assert person["id"] == str(story["char_id"])
+        assert person["last_observed_turn"] == 4
+
+    def test_missing_public_fields_stay_absent(self, temp_db, story):
+        """No `facts: {}`, no `facts: null`: a UI cannot tell an empty claim
+        from a missing one, and an empty dict invites a renderer to fill the
+        gap with a default of its own."""
+        from db import wset
+
+        _author_public(temp_db, story["char_id"], appearance="", history="")
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+
+        person, = player_view(story["chat_id"], "player")["people"]
+
+        assert "facts" not in person
+        assert "fact_sources" not in person
+
+    def test_two_viewers_receive_different_projections_of_one_person(
+            self, temp_db, story):
+        """The report's acceptance test: what each viewer gets for the same
+        human being is that viewer's own disclosure state, not a shared
+        directory row."""
+        from db import wset
+
+        ruth_id = _character(temp_db, story["chat_id"], "Ruth", "uid-ruth")
+        wset(story["chat_id"], "known", {"Sam": ["Ruth"]})
+        _deliver(temp_db, story["turn_id"], {str(story["char_id"]): "Someone."},
+                 company={str(story["char_id"]): [
+                     {"key": "ff33", "name": "Ruth",
+                      "label": "the grey-eyed courier", "recognized": False}]})
+
+        sam_person, = player_view(story["chat_id"], "player")["people"]
+        ilse_person, = player_view(
+            story["chat_id"], str(story["char_id"]))["people"]
+
+        assert sam_person["id"] == str(ruth_id)
+        assert sam_person["display_name"] == "Ruth"
+        assert "facts" in sam_person
+        assert ilse_person["id"] == "body:ff33"
+        assert ilse_person["display_name"] == "the grey-eyed courier"
+        assert "facts" not in ilse_person
+
+    def test_no_private_field_survives_serialisation(self, temp_db, story):
+        """Psychology, private history, goals, another mind's memories: the
+        projection must not merely rename these, it must have no path to them
+        at all, and the only way to prove that is to look at every byte it
+        produces."""
+        from db import wset
+
+        row = temp_db.q("SELECT sheet FROM characters WHERE id=?",
+                        (story["char_id"],), one=True)
+        sheet = json.loads(row["sheet"])
+        sheet["psychology"]["self_model"]["summary"] = "SECRET-SELF"
+        sheet["knowledge"]["private_history"] = [
+            {"summary": "SECRET-HEIR", "known_to": []}]
+        sheet["initial_state"]["goals"] = [{"text": "SECRET-GOAL"}]
+        temp_db.qi("UPDATE characters SET sheet=? WHERE id=?",
+                   (json.dumps(sheet), story["char_id"]))
+        temp_db.qi(
+            "INSERT INTO memories(chat_id,char_id,turn_idx,kind,category,"
+            "provenance,content,gist) VALUES(?,?,?,?,?,?,?,?)",
+            (story["chat_id"], story["char_id"], 3, "episodic", "episode",
+             "witnessed", "SECRET-MEMORY", "SECRET-MEMORY"))
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+
+        rendered = json.dumps(player_view(story["chat_id"], "player"))
+
+        for secret in ("SECRET-SELF", "SECRET-HEIR", "SECRET-GOAL",
+                       "SECRET-MEMORY"):
+            assert secret not in rendered
+        assert "trust" not in rendered   # Ilse's relationship state
+
+    def test_a_known_name_with_no_stable_id_is_omitted(self, temp_db, story):
+        """A ledger name that resolves to no cast member or persona has no id
+        a UI could key on, and inventing one here would be this module
+        holding an identity scheme of its own -- the exact thing it exists
+        not to do."""
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Sam": ["The Fishmonger"]})
+
+        assert "people" not in player_view(story["chat_id"], "player")
+
+    def test_the_ledger_roster_survives_a_beat_with_no_company_record(
+            self, temp_db, story):
+        """Stories older than the delivery record still get their recognised
+        roster -- and get NO observed entries, rather than entries guessed
+        from the scene."""
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        _deliver(temp_db, story["turn_id"], {"player": "The dome is dark."})
+
+        people = player_view(story["chat_id"], "player")["people"]
+
+        assert [p["identity_status"] for p in people] == ["recognized"]
+
+    def test_the_viewer_is_not_listed_among_their_own_people(self, temp_db,
+                                                             story):
+        from db import wset
+
+        wset(story["chat_id"], "known", {"Ilse": ["Ilse", "Sam"]})
+
+        people = player_view(story["chat_id"],
+                             str(story["char_id"]))["people"]
+
+        assert [p["id"] for p in people] == ["player"]
 
 
 class TestTheExtensionSurface:

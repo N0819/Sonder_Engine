@@ -3888,6 +3888,36 @@ Still missing:
   listener survives a disable. Inherent to the no-sandbox posture; stated in the
   guide so an author can compensate.
 
+Directive's author reviewed how the fourth batch COMPOSES and named three
+residual contracts
+([`docs/design/DIRECTIVE_REMAINING_GAPS.md`](design/DIRECTIVE_REMAINING_GAPS.md),
+against alpha 9.3). Its §2 — the structured player-safe people projection — is
+**built**: `player_view["people"]` (schema 2), riding the identity ledger, the
+perception stages' new per-observer delivered-company record, and the card's
+authored-public surfaces; `tests/test_story_view.py::TestPeople` and the
+write-side proof in `tests/test_composer_pipeline.py`. The other two stand:
+
+- **§1 Director-result validation and correction** — a deterministic extension
+  validator over the merged Director result, with one attributed, bounded
+  correction attempt before commit. The enforcement machinery it wants to ride
+  already exists (`director_resolve`'s five authority checks behind one
+  correction retry); the extension seam into it does not. Commit-domain
+  rollback remains the only extension-reachable enforcement, which loses the
+  beat where a corrected turn was possible.
+- **§3 Transactional campaign initialization** — Director/narration context,
+  frame-scoped state and initial documents inside the SAME transaction as
+  `provision_story` (the report's Option A, declarative). Today the reference
+  campaign provisions and then installs its rules as a second write, so a
+  failure between the two leaves a playable story whose sealed wing is not
+  sealed.
+
+And two residuals of the people projection itself, both "absent means absent"
+edges rather than defects: a fact can only carry `authored_public` provenance
+today — nothing mines memories to affirm a `what_i_was_told` role, so
+experience-sourced facts stay absent rather than deduced — and a ledger name
+that resolves to no cast member or persona is omitted, because an unregistered
+presence has no stable id until promotion makes one.
+
 ### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md)
 
 About 60% shipped in alpha 1.4, under a materially different architecture — the
