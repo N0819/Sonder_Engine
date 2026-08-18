@@ -98,7 +98,7 @@
 | `world/place_purpose.py` | 532 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 200 |  | — |
 | `world/spatial.py` | 166 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
-| `world/spatial_barriers.py` | 411 |  | — |
+| `world/spatial_barriers.py` | 414 |  | — |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1167 |  | `world.spatial_containment`, `world.spatial_identity` |
 | `world/spatial_containment.py` | 636 |  | `world.spatial_identity`, `world.spatial_transit` |
@@ -1106,11 +1106,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_barrier()` | 260 | 67 lines |
-| `_barrier_against_its_own_name()` | 379 | 27 lines |
-| `normalize_scene_barriers()` | 345 | 21 lines |
-| `unresolved_barrier_words()` | 329 | 15 lines |
-| `_barrier_exact()` | 249 | 9 lines |
+| `normalize_barrier()` | 263 | 67 lines |
+| `_barrier_against_its_own_name()` | 382 | 27 lines |
+| `normalize_scene_barriers()` | 348 | 21 lines |
+| `unresolved_barrier_words()` | 332 | 15 lines |
+| `_barrier_exact()` | 252 | 9 lines |
 
 ### `world/spatial_contact_migration.py`
 

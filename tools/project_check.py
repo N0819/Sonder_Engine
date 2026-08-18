@@ -99,6 +99,48 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
                 )
 
 
+def check_duplicate_dict_keys(errors: list[str]) -> None:
+    """A dict literal binding the same key twice keeps only the LAST one.
+
+    Python does not warn, and the earlier entry is not a syntax error -- it is
+    a line of code that reads as live, is unreachable, and disagrees with the
+    one that wins. `world/spatial_barriers.py` bound `one_way_mirror` to
+    `window` at line 63 and to `one_way_window` at 87: two contradictory
+    readings of the same authored word, with a 20-line comment directly under
+    the second carefully arguing about a NEIGHBOURING key and never noticing
+    the collision. Which one won was source order.
+
+    Alias tables are where this lands, because they are long, alphabetically
+    unsorted and edited by appending -- exactly the shape a reader cannot
+    check by eye. Tests are included: a duplicated key in a fixture is a case
+    silently deleted from the fixture.
+    """
+    for path in sorted(engine_python_paths()
+                       + list((ROOT / "tests").glob("test_*.py"))):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Dict):
+                continue
+            seen: dict[tuple, int] = {}
+            for key in node.keys:
+                # `**spread` gives a None key, and a non-constant key cannot be
+                # compared without evaluating it. Both are skipped: this check
+                # reports only what is provably the same literal twice.
+                if not isinstance(key, ast.Constant):
+                    continue
+                try:
+                    marker = (type(key.value).__name__, key.value)
+                    first = seen.get(marker)
+                except TypeError:
+                    continue
+                if first is not None:
+                    errors.append(
+                        f"{path.relative_to(ROOT)}:{key.lineno} binds dict key "
+                        f"{key.value!r} again; line {first} is dead")
+                else:
+                    seen[marker] = key.lineno
+
+
 def check_patch_debris(errors: list[str]) -> None:
     paths = (engine_python_paths()
              + list((ROOT / "static" / "js").glob("*.js")))
@@ -971,6 +1013,7 @@ def main() -> int:
     check_extension_imports(errors)
     check_facade_import_direction(errors)
     check_duplicate_python_symbols(errors)
+    check_duplicate_dict_keys(errors)
     check_no_dead_prompts(errors)
     check_patch_debris(errors)
     check_empty_tests(errors)
