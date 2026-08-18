@@ -64,8 +64,9 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 8451 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
+| `spatial.py` | 8126 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_identity`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
+| `spatial_identity.py` | 345 |  | — |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `story_view.py` | 670 |  | `db` |
 | `subjects.py` | 449 |  | `canon_provenance`, `db`, `spatial` |
@@ -768,14 +769,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 5126 | 318 lines |
-| `merge_scene_with_diff()` | 8089 | 318 lines |
-| `sprint_reach()` | 6724 | 175 lines |
-| `apply_transit_dock_edges()` | 7463 | 165 lines |
-| `contact_sensation()` | 6289 | 144 lines |
-| `visible_adjacent_rooms()` | 6969 | 143 lines |
-| `hear_level()` | 1613 | 138 lines |
-| `contacts_from_entity_state()` | 4441 | 137 lines |
+| `apply_contact_ops()` | 4811 | 318 lines |
+| `merge_scene_with_diff()` | 7766 | 318 lines |
+| `sprint_reach()` | 6409 | 175 lines |
+| `apply_transit_dock_edges()` | 7140 | 165 lines |
+| `contact_sensation()` | 5974 | 144 lines |
+| `visible_adjacent_rooms()` | 6654 | 143 lines |
+| `hear_level()` | 1603 | 138 lines |
+| `contacts_from_entity_state()` | 4341 | 137 lines |
 
 ### `spatial_frames.py`
 
@@ -789,6 +790,19 @@
 | `infer_facing()` | 623 | 71 lines |
 | `perform_merge()` | 971 | 69 lines |
 | `detect_split()` | 753 | 44 lines |
+
+### `spatial_identity.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `normalize_scene_subjects()` | 253 | 80 lines |
+| `canonical_subject_map()` | 176 | 66 lines |
+| `_live_subject_spellings()` | 127 | 47 lines |
+| `_position_of()` | 75 | 31 lines |
+| `same_subject()` | 45 | 28 lines |
+| `room_of()` | 10 | 18 lines |
+| `_ci_get()` | 30 | 13 lines |
+| `_entity_named()` | 108 | 10 lines |
 
 ### `spatial_orientation.py`
 
