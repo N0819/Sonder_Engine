@@ -772,8 +772,9 @@ by extension id, then registration order — so two extensions disagreeing about
 one beat produce the same notes every run, rerolls included. A reroll re-runs
 the stage, so it re-runs the contract; there is nothing to register twice.
 
-**`people` (schema 2)** is the structured roster a persistent crew or people
-interface renders from, and it keeps the same two rules. Each entry:
+**`people` (schema 2, re-keyed in schema 3)** is the structured roster a
+persistent crew or people interface renders from, and it keeps the same two
+rules. Each entry:
 
 ```python
 {"id": "17", "kind": "character", "display_name": "Ilse",
@@ -786,25 +787,38 @@ interface renders from, and it keeps the same two rules. Each entry:
 
 Two admissions, neither decided by the facade. A **recognised** person is the
 identity ledger's own answer (the same read as `knows`) joined to the stable
-ids `viewers()` already speaks — so a rename changes `display_name` and never
-`id`, and there is one id scheme per person across the whole surface. An
-**observed** body is the perception stage's own per-beat record of who the
-delivered view was composed about: it appears as
-`{"id": "body:<opaque>", "kind": "presence", "display_name": <composer
-label>, "identity_status": "observed"}`, and its canonical name and canonical
-id appear nowhere — the recognition verdict is the composer's (a disguise that
-conceals identity makes a well-known name a stranger), so the two entries of a
-disguised acquaintance deliberately do not join. `facts` is a schema
-allowlist of the card's genuinely authored-public surfaces
-(`embodiment.visible.summary`, `knowledge.public_history`; source
+ids `viewers()` already speaks — so a rename or an identity reveal changes
+`display_name` and never `id`, and there is one id scheme per person across
+the whole surface. The ledger speaks names and a name is a label, not an
+identity: every roster member bearing a granted name is a distinct entry
+with its own id and its own facts, so two people who legitimately share a
+name — including a deliberate duplicate who shares everything — stay
+separately selectable and trackable. An **observed** body is the perception
+stage's own per-beat record of who the delivered view was composed about: it
+appears as `{"id": "body:<opaque>", "kind": "presence", "display_name":
+<composer label>, "identity_status": "observed"}`, and its canonical name and
+canonical id appear nowhere — the recognition verdict is the composer's (a
+disguise that conceals identity makes a well-known name a stranger), so the
+two entries of a disguised acquaintance deliberately do not join. Since
+schema 3 the `body:` id is a **viewer-scoped derivative of the person's
+immutable identity** (salted with a per-story secret): it is stable for that
+viewer across encounters, label changes and canonical renames — "the same
+injured stranger from Engineering" keeps one id — while being useless for
+anything else: two viewers' projections of one stranger never share an id,
+and the hash cannot be inverted or confirmed against canonical data. Do not
+persist schema-2 `body:` ids across the upgrade; they change exactly once.
+`facts` is a schema allowlist of the card's genuinely authored-public
+surfaces (`embodiment.visible.summary`, `knowledge.public_history`; source
 `authored_public`); everything else — psychology, private history, goals,
 undisclosed relationships, other minds' memories — is not filtered out, it is
 never read. A person the viewer has neither come to know nor been shown is
 absent, `identity_status` has no "provisional" tier because the engine has no
-such ledger, and missing facts are missing keys. Key your UI on `id` and join
-Directive-style campaign state in your own namespace; the moment you find
-yourself joining `knows` strings to `story_view` cast rows instead, you are
-re-implementing disclosure outside the engine.
+such ledger, and missing facts are missing keys — including
+`last_observed_turn` when a delivered name is borne by several people, since
+a date the facade cannot attribute to one person would be a guess. Key your
+UI on `id` and join Directive-style campaign state in your own namespace; the
+moment you find yourself joining `knows` strings to `story_view` cast rows
+instead, you are re-implementing disclosure outside the engine.
 
 ### Provisioning a campaign
 

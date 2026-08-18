@@ -32,9 +32,11 @@ Provenance uses the vocabulary the engine already speaks --
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 
-from db import q, wget
+from db import q, wget, wset
 
 #: Bump when a consumer could break. Callers are outside this repository and
 #: cannot be migrated in the same commit, which is the whole reason a read this
@@ -45,7 +47,16 @@ from db import q, wget
 #: "nobody this viewer can be shown" -- and on schema 1 the same absence means
 #: "not supported". A version is the only thing that lets a consumer tell a
 #: silent engine from an empty roster.
-STORY_VIEW_SCHEMA = 2
+#:
+#: 3: every anonymous `body:` id is re-keyed. Schema 2 derived it from a hash
+#: of the body's canonical NAME (`composer.body_key`), which changed when the
+#: person was renamed and was identical across viewers -- a correlation key.
+#: Schema 3 derives it from the person's immutable identity, namespaced per
+#: story and per viewer (`_viewer_presence_id`). A consumer that stored
+#: schema-2 ids for continuity will see every anonymous id change exactly
+#: once, which is a break worth a version: silence would look like every
+#: stranger in the story being replaced.
+STORY_VIEW_SCHEMA = 3
 
 #: How many committed world events a view carries by default. Bounded because
 #: this is a per-render read from a UI, and an unbounded history turns a panel
@@ -387,6 +398,120 @@ def _recognized_person(chat_id, entry):
     return person
 
 
+#: World key holding this story's presence-id namespace: random hex minted
+#: once and never serialised into any projection. It exists because every
+#: OTHER input to an anonymous id is canonical data a `story_view` caller can
+#: read for itself -- a derivative computed only from canonical values is
+#: invertible by enumeration no matter how it is hashed, and "cannot confirm
+#: a guessed identity" is the property the id is for. Deliberately NOT in
+#: `db.FRAME_SCOPED_WORLD_KEYS`: an unidentified person is the same person
+#: in every era, so their per-viewer continuity must span frames the way the
+#: person does. As a plain world row it rides checkpoints, archives and
+#: branches with no carriage code of its own -- the same argument as
+#: `api.documents`.
+PRESENCE_NAMESPACE_KEY = "presence_id_namespace"
+
+
+def _presence_namespace(chat_id):
+    """This story's secret presence-id namespace, minted on first need.
+
+    The one write in this read-only module, and it writes no story state: a
+    nonce is bookkeeping for the projection itself, like a session id. Minted
+    lazily rather than at chat creation so every existing story gains one the
+    first time an anonymous body is projected, with no migration. The
+    read-after-write is for two concurrent first calls: both re-read, so both
+    return whichever mint won rather than each keeping its own loser.
+    """
+    namespace = wget(chat_id, PRESENCE_NAMESPACE_KEY)
+    if isinstance(namespace, str) and namespace:
+        return namespace
+    wset(chat_id, PRESENCE_NAMESPACE_KEY, secrets.token_hex(16))
+    return wget(chat_id, PRESENCE_NAMESPACE_KEY)
+
+
+def _person_refs(chat_id):
+    """Each roster id's IMMUTABLE identity ref -- the hash input that keeps a
+    viewer-scoped presence id still while every label around it moves.
+
+    Internal only, never serialised: a ref is (or contains) the card's own
+    uid, which an unrecognising viewer has not earned. Cast refs come from
+    `character_schema.cast_entity_id` -- the one id-shaped spelling a cast
+    member is already live under, reading the RAW sheet because normalization
+    mints a fresh uid per call for a uid-less sheet (its docstring carries the
+    argument). Personas get the mirror-image read for the mirror-image
+    reason, with `persona:<row id>` as the stable fallback.
+    """
+    from character_schema import cast_entity_id
+
+    def persona_ref(row):
+        sheet = _json(row["sheet"], {})
+        identity = sheet.get("identity") if isinstance(sheet, dict) else None
+        uid = (identity or {}).get("uid")
+        return str(uid or f"persona:{int(row['id'])}")
+
+    refs = {}
+    persona = q("SELECT p.id, p.sheet FROM personas p JOIN chats c "
+                "ON c.persona_id=p.id WHERE c.id=?", (int(chat_id),), one=True)
+    if persona:
+        refs["player"] = persona_ref(persona)
+    for row in q("SELECT p.id, p.sheet FROM chat_personas cp "
+                 "JOIN personas p ON p.id=cp.persona_id WHERE cp.chat_id=? "
+                 "ORDER BY cp.persona_id", (int(chat_id),)):
+        refs[f"extra:{row['id']}"] = persona_ref(row)
+    for row in q("SELECT cc.char_id, cc.sheet AS chat_sheet, "
+                 "c.sheet AS base_sheet FROM chat_chars cc "
+                 "JOIN characters c ON c.id=cc.char_id WHERE cc.chat_id=?",
+                 (int(chat_id),)):
+        refs[str(row["char_id"])] = cast_entity_id(
+            _json(row["chat_sheet"] or row["base_sheet"], {}), row["char_id"])
+    return refs
+
+
+def _presence_ref(name, key, by_name, refs):
+    """The most durable identity the engine holds for one delivered body.
+
+    Best case the canonical name resolves to exactly one roster member and
+    the ref is that person's immutable id -- a rename then moves the name,
+    not the person. A name shared by several roster members cannot pick one
+    (and the scene, which keys bodies by name, cannot have delivered two of
+    them at once), so it degrades to the name itself -- which is also the
+    honest ref for an unregistered background presence, whose tracked name
+    IS its identity in this engine: `commit._fold_duplicate_presences` keys
+    one record per body under its first-seen spelling and folds every later
+    spelling into it. The composer's own opaque key is the last resort, for
+    a record that carried no name at all.
+    """
+    entries = by_name.get(name) or []
+    if len(entries) == 1:
+        ref = refs.get(entries[0]["id"])
+        if ref:
+            return ref
+    if name:
+        return "name:" + name.strip().casefold()
+    if key:
+        return "record:" + key
+    return None
+
+
+def _viewer_presence_id(namespace, viewer_id, ref):
+    """Viewer-scoped opaque id for a body this viewer cannot name.
+
+    Stable for THIS viewer across encounters and label changes, because the
+    inputs are all identity-stable: the story's secret namespace, the
+    viewer's own stable id, and the immutable ref. Useless for anything
+    else, by construction: the viewer id in the input means two viewers'
+    projections of one person never share an id (no cross-viewer join), and
+    the secret namespace means the hash cannot be inverted or confirmed by
+    a caller enumerating canonical ids -- which any `story_view` caller
+    could otherwise do, since every non-secret input here is canonical data
+    that read already exposes.
+    """
+    digest = hashlib.sha1("\x1f".join(
+        ("story_view.presence", str(namespace), str(viewer_id), str(ref))
+    ).encode("utf-8")).hexdigest()[:12]
+    return f"body:{digest}"
+
+
 def _people(chat_id, identity, turn):
     """The structured people projection for one viewer. Ledgers only.
 
@@ -394,50 +519,69 @@ def _people(chat_id, identity, turn):
 
       * `recognized` -- the identity ledger's own answer about who this
         viewer can name, the same read `knows` is, joined to the stable ids
-        `viewers()` already speaks. A known name that resolves to no cast
-        member or persona has no stable id to key a UI on and is omitted.
+        `viewers()` already speaks. The ledger speaks NAMES and a name is a
+        label, not an identity, so the join is name-to-entries rather than
+        name-to-entry: every roster member bearing a granted name is a
+        distinct person with their own id and their own facts (two people
+        may legitimately share a name -- a transporter duplicate shares
+        everything at the moment of duplication). A known name that resolves
+        to no cast member or persona has no stable id to key a UI on and is
+        omitted.
       * `observed` -- the perception stage's own per-beat record of the
         bodies this viewer's delivered view was composed about
         (`_delivered_company`). An unrecognised body appears under the label
-        the composer gave it and an opaque `body:` key, never its canonical
-        name or canonical id: the recognition verdict is the COMPOSER's, not
-        re-derived from the ledger, because a disguise that conceals identity
-        makes a well-known name a stranger, and a ledger re-check here would
-        undo the disguise. For the same reason the two entries of a disguised
-        acquaintance -- the name known, the body observed -- deliberately do
-        not join.
+        the composer gave it and an opaque viewer-scoped `body:` key
+        (`_viewer_presence_id`), never its canonical name or canonical id:
+        the recognition verdict is the COMPOSER's, not re-derived from the
+        ledger, because a disguise that conceals identity makes a well-known
+        name a stranger, and a ledger re-check here would undo the disguise.
+        For the same reason the two entries of a disguised acquaintance --
+        the name known, the body observed -- deliberately do not join.
 
     A person in both (recognised and delivered this beat) is one entry with
-    `last_observed_turn`; a person in neither is absent, which is the
-    acceptance test that matters most: this function has no opinion of its
-    own about who exists.
+    `last_observed_turn`; a delivered name that several roster members share
+    dates NOBODY, because a date this cannot attribute to one person is a
+    guess (absent means absent, applied to a field); a person in neither is
+    wholly absent, which is the acceptance test that matters most: this
+    function has no opinion of its own about who exists.
     """
     people = {}
     known = (wget(chat_id, "known", {}) or {}).get(identity["name"]) or []
-    roster = {entry["name"]: entry for entry in viewers(chat_id)}
+    by_name = {}
+    for entry in viewers(chat_id):
+        by_name.setdefault(entry["name"], []).append(entry)
     for name in sorted(str(item) for item in known):
-        entry = roster.get(name)
-        if not entry or entry["id"] == identity["id"]:
-            continue
-        people[entry["id"]] = _recognized_person(chat_id, entry)
+        for entry in by_name.get(name) or []:
+            if entry["id"] == identity["id"]:
+                continue
+            people[entry["id"]] = _recognized_person(chat_id, entry)
     delivered = _delivered_company(turn["id"], identity["id"]) if turn else None
+    refs = _person_refs(chat_id) if delivered else {}
+    namespace = None
     for body in delivered or []:
         if not isinstance(body, dict):
             continue
         label = str(body.get("label") or "")
+        name = str(body.get("name") or "")
         if body.get("recognized"):
-            entry = roster.get(str(body.get("name") or ""))
-            if not entry or entry["id"] == identity["id"]:
-                continue
+            entries = [entry for entry in by_name.get(name) or []
+                       if entry["id"] != identity["id"]]
+            if len(entries) != 1:
+                continue     # several bearers or none: attributable to nobody
+            entry = entries[0]
             person = people.get(entry["id"]) \
                 or _recognized_person(chat_id, entry)
             person["last_observed_turn"] = turn["idx"]
             people[entry["id"]] = person
             continue
-        key = str(body.get("key") or "")
-        if not key or not label:
+        if not label:
             continue
-        pid = f"body:{key}"
+        ref = _presence_ref(name, str(body.get("key") or ""), by_name, refs)
+        if not ref:
+            continue
+        if namespace is None:
+            namespace = _presence_namespace(chat_id)
+        pid = _viewer_presence_id(namespace, identity["id"], ref)
         people[pid] = {"id": pid, "kind": "presence", "display_name": label,
                        "identity_status": "observed",
                        "last_observed_turn": turn["idx"]}
@@ -457,12 +601,16 @@ def player_view(chat_id, viewer="player", *, memories=12):
       * `knows` -- the identity ledger's list of who they can name. A body they
         can see but not name is in `observations` under whatever label the
         composer gave it, and is NOT resolved here;
-      * `people` -- the same two ledgers joined into a structured roster with
-        STABLE ids (`_people`): the identity ledger's names carrying the ids
-        `viewers()` already speaks, plus the perception stage's own per-beat
-        record of observed bodies under composer labels and opaque `body:`
-        keys. A rename changes `display_name` and never `id`; a stranger's
-        canonical name and canonical id appear nowhere;
+      * `people` -- the same two ledgers joined into a structured roster
+        keyed on IMMUTABLE identity (`_people`): the identity ledger's names
+        joined to every roster member bearing them under the ids `viewers()`
+        already speaks, plus the perception stage's own per-beat record of
+        observed bodies under composer labels and viewer-scoped opaque
+        `body:` keys (`_viewer_presence_id`). A rename or alias changes
+        `display_name` and never `id`; two people sharing a name are two
+        entries; a stranger's canonical name and canonical id appear
+        nowhere, and their opaque id neither survives into another viewer's
+        projection nor confirms a guessed identity;
       * `memories` and `relationships` -- their own, by construction;
       * `location` -- where their own body is, which a body always knows.
 

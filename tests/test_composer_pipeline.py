@@ -155,7 +155,12 @@ def test_act_pass_records_the_company_the_people_projection_reads(temp_db):
 
     view = story_view.player_view(ctx.chat.id, str(char_id))
     person, = view["people"]
-    assert person["id"] == "body:" + body["key"]
+    # Since schema 3 the facade re-keys the body onto a viewer-scoped
+    # derivative of the immutable identity: the composer's `key` is a
+    # canonical-name hash shared by every viewer, i.e. a correlation key,
+    # so it must not surface as the id itself.
+    assert person["id"].startswith("body:")
+    assert person["id"] != "body:" + body["key"]
     assert person["display_name"] == body["label"]
     assert person["identity_status"] == "observed"
     assert "The Stranger" not in json.dumps(view)
