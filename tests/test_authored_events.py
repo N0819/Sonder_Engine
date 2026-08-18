@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 
-from authored_events import (
+from story.authored_events import (
     MAX_REQUEUES,
     due_authored_events,
     mint_authored_events,

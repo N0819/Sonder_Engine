@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import time
 
-import app
-from character_schema import default_character_data, default_persona_data
+from web import app
+from story.character_schema import default_character_data, default_persona_data
 
 
 def _make_chat_with_persona(db, persona_name):

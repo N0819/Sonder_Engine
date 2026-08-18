@@ -357,7 +357,7 @@ def language_pack(language_id: Any = DEFAULT_LANGUAGE) -> LanguagePack:
 
 
 def story_language(chat_id: int) -> str:
-    from db import wget
+    from core.db import wget
     stored = wget(chat_id, STORY_LANGUAGE_KEY, DEFAULT_LANGUAGE)
     try:
         return require_language_pack(stored, capability="story").id
@@ -366,14 +366,14 @@ def story_language(chat_id: int) -> str:
 
 
 def set_story_language(chat_id: int, language_id: Any) -> str:
-    from db import wset
+    from core.db import wset
     selected = require_language_pack(language_id, capability="story").id
     wset(chat_id, STORY_LANGUAGE_KEY, selected)
     return selected
 
 
 def ui_language() -> str:
-    from db import get_setting
+    from core.db import get_setting
     stored = get_setting(UI_LANGUAGE_SETTING) or DEFAULT_LANGUAGE
     try:
         return require_language_pack(stored, capability="ui").id
@@ -382,7 +382,7 @@ def ui_language() -> str:
 
 
 def set_ui_language(language_id: Any) -> str:
-    from db import set_setting
+    from core.db import set_setting
     selected = require_language_pack(language_id, capability="ui").id
     set_setting(UI_LANGUAGE_SETTING, selected)
     return selected

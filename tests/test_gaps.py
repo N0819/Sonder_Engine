@@ -19,8 +19,8 @@ import time
 
 import pytest
 
-import gaps
-from gaps import LAST_SEEN_KEY, gap_for, interim_for, last_seen_update
+from world import gaps
+from world.gaps import LAST_SEEN_KEY, gap_for, interim_for, last_seen_update
 
 
 def _make_chat(db):
@@ -445,7 +445,7 @@ class TestTheCommitRecorder:
         (section 1.2 step 2), and a recorder nothing calls is the
         built-and-never-fired class. It must run where the final merged
         scene exists: commit_scene."""
-        import commit
+        from persist import commit
         src = inspect.getsource(commit.commit_scene)
         assert "_record_subject_last_seen" in src
 
@@ -455,7 +455,7 @@ class TestTheCommitRecorder:
         generator exists to describe."""
         import types
 
-        import commit
+        from persist import commit
         cid = _make_chat(temp_db)
         temp_db.wset(cid, LAST_SEEN_KEY,
                      {"away_one": {"turn": 1, "room": "garden",

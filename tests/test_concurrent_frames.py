@@ -15,10 +15,10 @@ import time
 
 import pytest
 
-import db as db_module
+from core import db as db_module
 from agents.runtime import ABORTS, _run_pipeline
-from db import q, qi, wget, wset
-from frames import create_frame
+from core.db import q, qi, wget, wset
+from core.frames import create_frame
 
 
 def _make_chat(db):

@@ -72,8 +72,8 @@ aftermath, present perception, investigation, or a fallible speaker.
 
 ### 2.4 One persistence boundary
 
-Primary facts commit through `commit.py` under the turn transaction. Slow model
-work runs out of band through `jobs.py`, carries a base turn/frame/epoch, and
+Primary facts commit through `persist/commit.py` under the turn transaction. Slow model
+work runs out of band through `core/jobs.py`, carries a base turn/frame/epoch, and
 lands only after rollback and idempotence checks. No background job may hold a
 database transaction across a provider call.
 

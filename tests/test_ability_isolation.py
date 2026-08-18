@@ -3,12 +3,12 @@
 import json
 from types import SimpleNamespace
 
-from character_schema import default_character_data, default_persona_data
-from scene import _ability_mod
+from story.character_schema import default_character_data, default_persona_data
+from story.scene import _ability_mod
 
 def test_actor_cannot_borrow_another_characters_ability(monkeypatch):
     monkeypatch.setattr(
-        "scene.persona_of",
+        "story.scene.persona_of",
         lambda chat: default_persona_data("Player"),
     )
 

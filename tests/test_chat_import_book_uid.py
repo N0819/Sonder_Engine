@@ -13,7 +13,7 @@ when it is free (cross-install import), it is kept for portability.
 
 import time
 
-import app
+from web import app
 
 
 def _make_chat_with_books(temp_db):

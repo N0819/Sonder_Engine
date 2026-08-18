@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-import guest_access as ga
+from web import guest_access as ga
 
 
 @pytest.fixture(autouse=True)

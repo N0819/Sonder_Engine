@@ -21,12 +21,12 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
-import paradox
-from character_schema import default_character_data
-from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state, refresh_checkpoint
-from db import wget, wset
-from frames import create_frame
+from web import app
+from world import paradox
+from story.character_schema import default_character_data
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state, refresh_checkpoint
+from core.db import wget, wset
+from core.frames import create_frame
 
 
 def _make_chat(db, name="Story", persona_id=None):
@@ -273,7 +273,7 @@ def test_export_import_round_trips_roster_inputs_and_links(temp_db):
     for b in (b1, b2):
         temp_db.qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,enabled) VALUES(?,?,1)",
                    (chat_id, b))
-    from memory import add_lorebook_link, get_lorebook_links
+    from mind.memory import add_lorebook_link, get_lorebook_links
     add_lorebook_link(b1, b2, "related")
 
     exported = app.chat_export(chat_id)
@@ -358,7 +358,7 @@ def test_branch_records_its_source_chat(temp_db):
     in are the rooms the source already paid to draw. Recording the ancestry
     is what lets backdrops.py read those images where they lie instead of
     regenerating the inheritance room by room."""
-    import backdrops
+    from dressing import backdrops
 
     chat_id = _make_chat(temp_db, "Elevator Adventure")
     tid = _make_turn(temp_db, chat_id, idx=0)
@@ -377,14 +377,14 @@ def test_branch_records_its_source_chat(temp_db):
 
 def test_a_fresh_chat_inherits_no_backdrops(temp_db):
     """Reuse follows the branch lineage and nothing else."""
-    import backdrops
+    from dressing import backdrops
     assert backdrops.branch_lineage(_make_chat(temp_db, "New story")) == []
 
 
 def test_import_does_not_carry_branch_lineage(temp_db):
     """The lineage holds raw chat ids, which name a directory of backdrops in
     the database they were written in and an unrelated chat's in any other."""
-    import backdrops
+    from dressing import backdrops
 
     chat_id = _make_chat(temp_db, "Elevator Adventure")
     temp_db.qi("UPDATE chats SET branched_from=? WHERE id=?", ("[41]", chat_id))

@@ -18,9 +18,9 @@ import json
 
 import pytest
 
-import importers
-import prompts
-from character_schema import default_character_data
+from story import importers
+from llm import prompts
+from story.character_schema import default_character_data
 
 
 CARD_PROMPTS = (

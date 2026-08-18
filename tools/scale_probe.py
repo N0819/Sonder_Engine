@@ -103,7 +103,7 @@ def _director_payload(n):
 
 
 def _post(prov, model, system, user, max_tokens, timeout):
-    import providers
+    from llm import providers
     body = {"model": model,
             "messages": [{"role": "system", "content": system},
                          {"role": "user", "content": user}],
@@ -186,11 +186,11 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
-    import db
+    from core import db
     db.configure(args.db)
-    import llm_quality
-    import prompts
-    import schemas
+    from llm import llm_quality
+    from llm import prompts
+    from llm import schemas
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))

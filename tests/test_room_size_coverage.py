@@ -15,7 +15,7 @@ knows the committed scene, and only where there is somebody to mis-grade.
 
 from __future__ import annotations
 
-from spatial import guessed_room_sizes
+from world.spatial import guessed_room_sizes
 
 
 def _scene(rooms, positions):
@@ -94,7 +94,7 @@ def test_the_check_is_wired_into_prepare_scene_commit():
 
     # prepare_scene_commit lives in commit_scene_state since the split
     # (commit re-exports it); parse the file that actually holds the def.
-    import commit_scene_state
+    from persist import commit_scene_state
 
     tree = ast.parse(open(commit_scene_state.__file__).read())
     fn = next(n for n in ast.walk(tree)

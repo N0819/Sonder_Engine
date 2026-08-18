@@ -17,7 +17,7 @@ already audible is never altered."""
 from __future__ import annotations
 
 from agents.perception import _addresses, _dialogue_hear_level
-from spatial import hear_level
+from world.spatial import hear_level
 
 
 REMOTE = {"same_room": False, "barrier": "separated", "distance": "remote"}

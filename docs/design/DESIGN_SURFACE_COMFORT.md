@@ -1,9 +1,9 @@
 # Design: comfort from surfaces
 
-**Status:** built — `comfort.py` (derivation), `resolve_hedonic`'s
-`ambient_comfort` argument (`psychology_runtime.py`), the `tick_vitals` rest
-derivation (`survival.py`), wired at the single hedonic call site in
-`commit.py`; pinned by `tests/test_surface_comfort.py`. §5's remembered warm
+**Status:** built — `world/comfort.py` (derivation), `resolve_hedonic`'s
+`ambient_comfort` argument (`mind/psychology_runtime.py`), the `tick_vitals` rest
+derivation (`world/survival.py`), wired at the single hedonic call site in
+`persist/commit.py`; pinned by `tests/test_surface_comfort.py`. §5's remembered warm
 corner is built too, as of place purpose v1: `place_purpose.witness_affords`
 reads `comfort.rest_affording` and writes `affords.rest {basis: witnessed}`
 onto the character's own place-graph node, surfaced later through

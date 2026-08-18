@@ -30,7 +30,7 @@ import time
 
 import pytest
 
-import attire
+from story import attire
 from agents.common import (merge_player_state_assertions,
                            preview_player_state_assertions,
                            validated_player_state_assertions)
@@ -83,7 +83,7 @@ class TestTheSameAuthorityAsResolve:
     def test_the_shape_is_the_directors_own(self):
         """Not "a subset of StateDiff" -- StateDiff. If resolve grows a
         channel, interpret has it the same day, with no list to update."""
-        from schemas import DirectorInterpret, StateDiff
+        from llm.schemas import DirectorInterpret, StateDiff
         assert "state_assertions" in DirectorInterpret.__fields__
         for channel in ("rooms", "entities", "poses", "attire", "destruction",
                         "world_facts", "containment", "overlays"):
@@ -217,7 +217,7 @@ class TestPassOneSeesIt:
     """The end of the road: the scene pass 1 builds every view from."""
 
     def _ctx(self, temp_db, player_input):
-        from pipeline_context import ChatData, PipelineContext, TurnData
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
             ("Assert", "", time.time()))

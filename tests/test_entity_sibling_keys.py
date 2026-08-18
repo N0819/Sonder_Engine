@@ -15,8 +15,8 @@ and get_scene tolerates a stored scene that still carries the keys.
 
 from __future__ import annotations
 
-from schemas import NON_ENTITY_FIELD_KEYS, preprocess_llm_output
-from spatial import merge_scene_with_diff
+from llm.schemas import NON_ENTITY_FIELD_KEYS, preprocess_llm_output
+from world.spatial import merge_scene_with_diff
 
 _CHAIR = {
     "name": "Interview Chair", "kind": "furniture",
@@ -111,7 +111,7 @@ def test_merge_refuses_field_named_entities_and_heals_standing_ones():
 def test_get_scene_reads_stored_junk_keys_out(temp_db):
     """Every reader between now and the next commit goes through the stored
     blob; get_scene must not hand them six phantom chairs."""
-    from scene import get_scene
+    from story.scene import get_scene
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

@@ -3,15 +3,15 @@
 import json
 import time
 
-from character_schema import default_character_data
-from commit import commit_memories
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from persist.commit import commit_memories
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 def test_episode_does_not_append_dialogue_again(
     temp_db,
     monkeypatch,
 ):
-    import commit
+    from persist import commit
 
     chat_id = temp_db.qi(
         """
@@ -129,7 +129,7 @@ def test_episode_does_not_append_dialogue_again(
 
     # commit_memories resolves both names in commit_memory_write's
     # globals since the split; patching the commit facade would be inert.
-    import commit_memory_write
+    from persist import commit_memory_write
     monkeypatch.setattr(
         commit_memory_write,
         "add_memories_batch",
@@ -168,7 +168,7 @@ def test_embedding_fallback_is_surfaced_as_a_warning(temp_db):
     EmbeddingBatch and read by nobody -- an audited live corpus had 100% of
     rows on the fallback with no signal anywhere. prepare_memory_commit must
     say so through the same warning channel every other turn anomaly uses."""
-    import commit
+    from persist import commit
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

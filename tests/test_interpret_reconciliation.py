@@ -11,8 +11,8 @@ first-class actor-less environmental events.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 # ---- gap (A): _extract_authority_claims raw_input fallback ---------------

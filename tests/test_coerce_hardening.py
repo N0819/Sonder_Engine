@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from schemas import (
+from llm.schemas import (
     validate_llm_output_strict, MindHypothesis, RelationshipUpdate,
     InteractionControl, OUTPUT_EXAMPLES,
 )
@@ -90,7 +90,7 @@ def test_other_players_null_tolerated():
 # ---- character-sheet tolerant floats (was: 500 on import / crash every turn) ----
 
 def test_normalize_character_data_tolerates_nonnumeric():
-    from character_schema import normalize_character_data, character_temperature, character_name
+    from story.character_schema import normalize_character_data, character_temperature, character_name
     sheet = {
         "identity": {"name": "Bad"},
         "simulation": {"temperature": "warm"},
@@ -105,7 +105,7 @@ def test_normalize_character_data_tolerates_nonnumeric():
 # ---- strict_json_parse recovers prose-wrapped JSON ----
 
 def test_strict_json_parse_recovers_prose_wrapped():
-    from llm_quality import strict_json_parse
+    from llm.llm_quality import strict_json_parse
     assert strict_json_parse('Here is the JSON: {"a": 1} hope that helps') == {"a": 1}
     assert strict_json_parse('{"a": {"b": 2}}\n\nlet me know') == {"a": {"b": 2}}
 
@@ -113,7 +113,7 @@ def test_strict_json_parse_recovers_prose_wrapped():
 # ---- ToM cap consistency for off-enum kinds ----
 
 def test_tom_cap_offenum_kind_uses_default_kind():
-    from theory_of_mind import cap_mind_model_updates, _kind_or_default, _TOM_CONFIDENCE_CAPS
+    from mind.theory_of_mind import cap_mind_model_updates, _kind_or_default, _TOM_CONFIDENCE_CAPS
     out = cap_mind_model_updates([{"about_entity": "a", "kind": "suspicion", "claim": "c", "confidence": 1.0}])
     assert out[0]["confidence"] == _TOM_CONFIDENCE_CAPS[_kind_or_default("suspicion")]
 
@@ -122,7 +122,7 @@ def test_tom_cap_offenum_kind_uses_default_kind():
 
 def test_requests_network_errors_classified_retryable():
     import requests.exceptions as rex
-    from providers import _classify_error, _should_retry, DEFAULT_RETRY
+    from llm.providers import _classify_error, _should_retry, DEFAULT_RETRY
     for exc in (rex.ConnectionError("x"), rex.ReadTimeout("x"),
                 rex.ChunkedEncodingError("x"), rex.ConnectTimeout("x")):
         e = _classify_error(exc)
@@ -138,7 +138,7 @@ def test_background_react_output_example_present():
 
 
 def test_latent_string_and_custom_summary_separates_outfit():
-    from character_schema import normalize_character_data
+    from story.character_schema import normalize_character_data
     sheet = {"identity": {"name": "Merc"}, "embodiment": {
         "visible": {"summary": "A scarred mercenary."},
         "hair": "silver", "clothing": "red cloak", "latent": ["telepathy", {"capability": "x"}]}}
@@ -163,7 +163,7 @@ class TestCandidateResponseShape:
     """
 
     def _one(self, raw_response):
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("character", {
             "name": "V", "sequence": [],
             "response_candidates": [{"response": raw_response}]})
@@ -194,7 +194,7 @@ class TestCandidateResponseShape:
 
     def test_the_rest_of_the_turn_survives(self):
         """The point of the coercion: the beat lives."""
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("character", {
             "name": "V",
             "sequence": [{"type": "action", "attempt": "walk on",
@@ -217,7 +217,7 @@ class TestEmptyChoicesIsTransport:
     """
 
     def test_it_is_flagged_retryable(self):
-        import providers
+        from llm import providers
         err = providers.LLMError("x: response carried no choices ({})", 200, True)
         assert err.retryable is True
 
@@ -235,7 +235,7 @@ class TestEmptyChoicesIsTransport:
         """
         import inspect
 
-        import providers
+        from llm import providers
 
         src = inspect.getsource(providers)
         assert '["message"]["content"]' not in src, (
@@ -256,14 +256,14 @@ class TestLenientStrFields:
     """
 
     def test_a_dict_reduces_to_the_prose_it_contains(self):
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("director_resolve", {
             "resolved_event": {"text": "Vesk walks on."},
             "dialogue_log": [], "state_diff": {}})
         assert out["resolved_event"] == "Vesk walks on."
 
     def test_a_list_joins(self):
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("director_resolve", {
             "resolved_event": "x", "summary": ["A step", "deeper"],
             "dialogue_log": [], "state_diff": {}})
@@ -271,7 +271,7 @@ class TestLenientStrFields:
 
     def test_the_last_open_crash_of_the_family(self):
         """changes_asserted.change was still failing live when this landed."""
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("director_resolve", {
             "resolved_event": "x", "dialogue_log": [], "state_diff": {},
             "changes_asserted": [
@@ -279,13 +279,13 @@ class TestLenientStrFields:
         assert out["changes_asserted"][0]["change"] == "door opened"
 
     def test_a_dict_with_no_prose_key_still_yields_something(self):
-        from schemas import _flatten_to_text
+        from llm.schemas import _flatten_to_text
         assert _flatten_to_text({"kind": "moved", "n": 3}) == "moved; 3"
 
     def test_it_only_fires_on_str_fields(self):
         """A structured value bound for a structured field must pass through
         untouched, or this masks real type errors instead of fixing one."""
-        from schemas import validate_llm_output
+        from llm.schemas import validate_llm_output
         out, _ = validate_llm_output("director_resolve", {
             "resolved_event": "x", "dialogue_log": [], "state_diff": {},
             "obligations": [{"id": "o1", "text": "return the letter"}]})
@@ -293,6 +293,6 @@ class TestLenientStrFields:
         assert isinstance(out["obligations"], list)
 
     def test_plain_strings_are_untouched(self):
-        from schemas import _flatten_to_text
+        from llm.schemas import _flatten_to_text
         assert _flatten_to_text("already prose") == "already prose"
         assert _flatten_to_text(7) == 7

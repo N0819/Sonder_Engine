@@ -25,7 +25,7 @@ import time
 import pytest
 
 from agents.common import observer_label_fn
-from spatial import spatial_digest
+from world.spatial import spatial_digest
 
 
 PERSONA = {

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     containment_broken_by_scale_change,
     carrier_chain,
     containment_facts,
@@ -179,7 +179,7 @@ class TestHygiene:
         assert scene["contained"] == {}
 
     def test_the_table_is_bounded(self):
-        from spatial import _MAX_CONTAINED
+        from world.spatial import _MAX_CONTAINED
 
         positions = {"Tamamo": "hall"}
         containment = {}
@@ -287,14 +287,14 @@ class TestGroundTruth:
 
 class TestSchema:
     def test_containment_survives_state_diff_validation(self):
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         diff = StateDiff(containment={"Hinami": {"in": "Tamamo",
                                                  "mode": "pocket"}})
         assert diff.dict()["containment"]["Hinami"]["in"] == "Tamamo"
 
     def test_a_null_release_survives_validation(self):
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         assert StateDiff(containment={"Hinami": None}).dict()["containment"] \
             == {"Hinami": None}

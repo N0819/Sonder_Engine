@@ -15,7 +15,7 @@ entity ids still remap freely.
 
 from __future__ import annotations
 
-from app import _build_world_id_remap, _deep_remap_ids
+from web.app import _build_world_id_remap, _deep_remap_ids
 
 
 def _blob():

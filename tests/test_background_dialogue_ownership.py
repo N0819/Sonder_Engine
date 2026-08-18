@@ -68,7 +68,7 @@ class TestTheHandOff:
         """`pick_background_reactors` skips anyone already in `dialogue_log`.
         The routed name must be subtracted from that set or the hand-off dies
         exactly where it starts."""
-        import commit
+        from persist import commit
         src = commit.__dict__["pick_background_reactors"].__doc__ or ""
         import inspect
         body = inspect.getsource(commit.pick_background_reactors)
@@ -81,7 +81,7 @@ class TestTheHandOff:
         construction, so it must force like a flow address rather than compete
         for a slot -- otherwise `max_reactors: 1` silently drops it."""
         import inspect
-        import commit
+        from persist import commit
         body = inspect.getsource(commit.pick_background_reactors)
         assert "flow_addressed or routed" in body
 
@@ -89,7 +89,7 @@ class TestTheHandOff:
         """Unknown keys are dropped by the model dump. Undeclared, the hand-off
         would vanish between the two stages and a re-homed line would simply be
         a deleted one."""
-        from schemas import DirectorResolve
+        from llm.schemas import DirectorResolve
         dumped = DirectorResolve(**{"routed_to_background": ["patron2"]}).dict()
         assert dumped["routed_to_background"] == ["patron2"]
 
@@ -98,7 +98,7 @@ def test_the_prompt_names_the_occasion_rather_than_only_forbidding(temp_db):
     """CLAUDE.md: "Bare prohibitions invert. A prompt clause that only forbids
     gets read as a suggestion of the thing it forbids. Name concrete occasions
     instead." So the clause has to say what the Director DOES voice."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
     text = DEFAULT_PROMPTS["director_resolve_lean"]
     assert "SIMPLE CREATURES" in text
     assert "write the action and omit the line" in text

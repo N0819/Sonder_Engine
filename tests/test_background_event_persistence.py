@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import time
 
-from commit import prepare_memory_commit, track_background_presences
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist.commit import prepare_memory_commit, track_background_presences
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_chat(db):

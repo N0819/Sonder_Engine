@@ -15,7 +15,7 @@ Each stage is a separate model call over a separate context. The Director owns
 objective causality; Perception decides what each observer legitimately
 receives; character agents choose behaviour from private context and never
 their own success; the Narrator renders only the player-facing slice; and
-`commit.py` is the sole boundary where model output becomes persistent state.
+`persist/commit.py` is the sole boundary where model output becomes persistent state.
 
 ```text
 director_interpret → mapping → perception_act

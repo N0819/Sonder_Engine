@@ -1,11 +1,13 @@
 # Module layout: splitting the monoliths, then grouping the tree
 
-Status: PROPOSED — nothing in this note has been executed.
+Status: **LANDED 2026-08-18.** Both jobs are done: the three monoliths were
+split behind facades, then the tree was regrouped. What follows is the plan
+as argued plus, at the end, what executing it actually cost.
 
 Two jobs are described here, and the argument of this note is that they are
 **two jobs and must not be one commit**:
 
-1. **Split the three monoliths** (`spatial.py`, `commit.py`,
+1. **Split the three monoliths** (`world/spatial.py`, `persist/commit.py`,
    `agents/director.py` — 24,783 lines between them) behind re-export facades,
    so no import path anywhere changes.
 2. **Group the tree** into subsystem packages, so the repository root stops
@@ -26,11 +28,11 @@ Counted, not estimated, on 2026-08-18 (alpha 9.5, `418ab5b`):
 | --- | --- |
 | `.py` files at the repository root | 55 |
 | Lines in those files | 73,104 |
-| `spatial.py` / `commit.py` / `agents/director.py` | 8,451 / 8,197 / 8,135 |
+| `world/spatial.py` / `persist/commit.py` / `agents/director.py` | 8,451 / 8,197 / 8,135 |
 | Top-level defs in those three | 199 / 132 / 114 |
 | Import statements naming a root module | **2,544**, across **473 files** |
 | Most-imported: `db` / `schemas` / `commit` / `character_schema` / `spatial` | 349 / 209 / 207 / 196 / 160 |
-| Markdown files naming a `.py` path | 59 (`commit.py` alone appears in 48) |
+| Markdown files naming a `.py` path | 59 (`persist/commit.py` alone appears in 48) |
 
 The facade contract, extracted by AST (`from X import name`, whole repo):
 
@@ -49,7 +51,7 @@ and worth fixing after it — not during.
 ## Job 1: split behind facades
 
 The pattern already exists in this repo and is the one to follow:
-`spatial_orientation.py` was carved out of `spatial.py` and is re-exported
+`world/spatial_orientation.py` was carved out of `world/spatial.py` and is re-exported
 through it (`spatial.py:11`); `agents/__init__.py` is an explicit
 compatibility facade. Each monolith keeps its filename, keeps every name it
 exports today — **including the private ones** — and becomes a module whose
@@ -76,8 +78,8 @@ Measured, per file:
 | file | patch sites | on a move they… |
 | --- | --- | --- |
 | `agents/director.py` | **106** `setattr(director, "_agent_json", …)` across 17 test files, plus 5 others | 4 of 9 affected functions fail **silently** |
-| `commit.py` | 6 test files patch `commit.<name>` | 5 fail loudly; 1 passes for the wrong reason, permanently |
-| `spatial.py` | **zero** | nothing to do |
+| `persist/commit.py` | 6 test files patch `commit.<name>` | 5 fail loudly; 1 passes for the wrong reason, permanently |
+| `world/spatial.py` | **zero** | nothing to do |
 
 Silent is the word that matters. `tests/test_commit_tail_producers.py:118`
 installs a raising stub and asserts *by absence* that it never runs; after the
@@ -303,3 +305,48 @@ For each module extracted, in this order:
 Steps 2 and 4 are deliberately far apart. Everything that makes this refactor
 safe depends on step 3 containing nothing but renames.
 
+
+## What it cost, measured
+
+The tree move landed as one codemod, verified by `make check` (7,274 tests).
+Numbers at execution, which differ from the numbers this note was planned
+against because the splits ran first and added 27 modules:
+
+| | planned | actual |
+| --- | --- | --- |
+| root `.py` files moved | 55 | **81** |
+| import statements rewritten | 2,544 | **2,714** across 506 files |
+| markdown files updated | 59 | 54 (living docs only) |
+
+Four classes of reference an import-only codemod does not see, all found by
+running the suite rather than by reading:
+
+1. **String-form patch targets.** `monkeypatch.setattr("scene.dialogue_config",
+   …)` — 13 sites. These are invisible to an AST import walk and fail loudly.
+2. **Filesystem path literals.** 18 sites reading a module's own source
+   (`root / "app.py"`). A naive regex over these is WRONG in two ways it took a
+   red suite to notice: `path.name` never carries a directory, and a plain
+   string used as a dict key is not a `Path`, so `"world" / "living_world.py"`
+   is `str / str`.
+3. **Root derived from a module's `__file__`.** `Path(degradation.__file__)
+   .parent` was the repository root and is now a package directory, so a sweep
+   that used it silently narrowed to one package instead of failing.
+4. **Dynamic imports by literal name.** `__import__("providers")`.
+
+One near-miss worth recording: `web/story_view.py` builds a viewer-scoped
+presence id by hashing the literal `"story_view.presence"`. It is a namespace
+coordinate, not a module path. Rewriting it would have silently re-keyed every
+stranger's identity in every existing story — the same class of mistake as the
+language-pack key in `agents/director_lingua.py`. **A dotted name inside a
+string is not necessarily an import.**
+
+The move also let one guard finally be finished rather than extended.
+`tools/project_check.py`'s `EXTENSION_DEEP_IMPORTS` matches the FIRST dotted
+component, so as a list of module names it had to grow by thirteen the moment
+`commit.py` was split. Scoped to packages it is complete by construction — the
+same argument that retired the animate/inert kind lists in alpha 9.5.
+
+Two new checks guard the arrangement, both proven to fire before being kept
+(`check_facade_import_direction`): nothing outside a split family may import a
+sibling behind its facade, and no sibling may import its own facade — the
+import cycle the facade exists to prevent.

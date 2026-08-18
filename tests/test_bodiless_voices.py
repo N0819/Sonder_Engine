@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import pytest
 
-from scene import (UBIQUITOUS_KINDS, is_ubiquitous_entity,
+from story.scene import (UBIQUITOUS_KINDS, is_ubiquitous_entity,
                    ubiquitous_speaker_names)
-from spatial import hear_level, spatial_rel
+from world.spatial import hear_level, spatial_rel
 
 
 def _scene():
@@ -68,8 +68,8 @@ def test_the_silence_trap_is_real():
 def test_bodiless_voice_is_never_tracked_as_a_presence(temp_db):
     """Tracking one pinned it to a room and made it promotable."""
     import time
-    from commit import track_background_presences
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from persist.commit import track_background_presences
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                      ("Trek", "", time.time()))
@@ -118,7 +118,7 @@ def test_a_stale_position_does_not_disable_the_exemption():
 
 
 def test_merge_removes_the_position_a_bodiless_voice_should_never_have():
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
 
     scene = _scene()
     scene["positions"]["Computer"] = "ten_forward"
@@ -131,7 +131,7 @@ def test_merge_removes_the_position_a_bodiless_voice_should_never_have():
 
 
 def test_pruning_reports_what_it_dropped_and_is_idempotent():
-    from spatial import prune_bodiless_positions
+    from world.spatial import prune_bodiless_positions
 
     scene = _scene()
     scene["positions"]["Computer"] = "ten_forward"
@@ -141,7 +141,7 @@ def test_pruning_reports_what_it_dropped_and_is_idempotent():
 
 
 def test_pruning_is_total_on_a_scene_without_either_table():
-    from spatial import prune_bodiless_positions
+    from world.spatial import prune_bodiless_positions
 
     assert prune_bodiless_positions({}) == []
     assert prune_bodiless_positions({"positions": "junk"}) == []

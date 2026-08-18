@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import pytest
 
-from prompts import DEFAULT_PROMPTS
+from llm.prompts import DEFAULT_PROMPTS
 
 CLAUSE_START = "TIME:"
 CLAUSE_END = "WEATHER:"

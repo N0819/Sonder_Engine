@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData
 
 from agents.common import _asks_player
 

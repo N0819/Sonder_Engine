@@ -32,11 +32,11 @@ inherits schemas-free persistence, one-active-variant, reroll, branches and the
 pipeline drawer on its own. See [`docs/guides/EXTENSIONS.md`](../docs/guides/EXTENSIONS.md).
 
 1. Put the implementation in the closest role module, or create a new focused module.
-2. Add its structured output contract to `schemas.py` (including `SCHEMA_MAP`, keyed by step id) and prompt to `prompts.py`.
+2. Add its structured output contract to `llm/schemas.py` (including `SCHEMA_MAP`, keyed by step id) and prompt to `llm/prompts.py`.
 3. Register the fixed step in `runtime.STEP_HANDLERS`.
 4. Insert it into `runtime.build_plan()` and/or `runtime.establishment_plan()`.
-5. Give it a field on `PipelineContext` (`pipeline_context.py`) if later stages read its output.
-6. Add persistence logic in `commit.py` only when the stage owns durable output.
+5. Give it a field on `PipelineContext` (`core/pipeline_context.py`) if later stages read its output.
+6. Add persistence logic in `persist/commit.py` only when the stage owns durable output.
 7. Re-export it from `agents/__init__.py` when external callers need it.
 8. Add a focused regression test, then run `make check`.
 
@@ -46,7 +46,7 @@ worth defending. Role modules importing each other is discouraged rather than
 prevented, and `loops.py → character.py` and `background.py → perception.py`
 already do. `runtime.py` should stay the only module that knows the plan;
 step ids themselves are also named in `schemas.SCHEMA_MAP` and
-`pipeline_context.py`, which is why steps 2 and 5 exist. Keep plan placement
+`core/pipeline_context.py`, which is why steps 2 and 5 exist. Keep plan placement
 explicit even when dispatch is registered dynamically.
 
 One consequence of the extension splice hook that is easy to miss: **the anchor

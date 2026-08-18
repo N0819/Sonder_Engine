@@ -9,9 +9,9 @@ import time
 
 import pytest
 
-from character_schema import default_character_data
-from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state
-from frames import create_frame
+from story.character_schema import default_character_data
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state
+from core.frames import create_frame
 
 
 def _chat_char_persona(db):

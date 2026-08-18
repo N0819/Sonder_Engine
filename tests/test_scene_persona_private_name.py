@@ -11,8 +11,8 @@ import time
 
 import pytest
 
-import scene
-from character_schema import default_persona_data
+from story import scene
+from story.character_schema import default_persona_data
 
 
 def test_persona_private_knowledge_is_labeled_with_the_persona_name(temp_db):

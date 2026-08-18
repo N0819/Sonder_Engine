@@ -10,14 +10,14 @@ Scope discipline held throughout: everything below is **derived or
 defaulted, never a new authoring obligation**; nothing below stores a single
 new field anywhere (no commit path, no restore path, no archive handling, no
 branch remap — the persistence table in note 07 §7 stands with every row
-"none"). `agents/perception.py`, `agents/composer.py`, `commit.py` and
-`memory.py` were not touched (composer agent's seam).
+"none"). `agents/perception.py`, `agents/composer.py`, `persist/commit.py` and
+`mind/memory.py` were not touched (composer agent's seam).
 
 ---
 
 ## 1. What landed
 
-### S1 — the read-time derivation layer (`spatial.py`)
+### S1 — the read-time derivation layer (`world/spatial.py`)
 
 - **S1a `effective_anchors(scene, room_id)`** — authored anchors plus one
   implicit `door:<to>` pseudo-anchor per adjacency edge, declared from
@@ -87,7 +87,7 @@ placement × size × light × distance × barrier × crossing asserting
 post-cone ≤ pre-cone against an inline reimplementation of the pre-S2a
 function.
 
-### G4 — the senses gate (`sense_adjusted` + friends, `spatial.py`)
+### G4 — the senses gate (`sense_adjusted` + friends, `world/spatial.py`)
 
 - `sense_entry` / `sense_acuity_offset` / `sense_range_class` /
   `sense_adjusted(level, channel, senses)`. Acuity is an integer ladder
@@ -119,7 +119,7 @@ function.
   observers lose actions but keep speech; ordinary cards are pinned
   byte-identical through the loop.
 
-### S3a — `sound_bearing(scene, observer, source)` (`spatial.py`)
+### S3a — `sound_bearing(scene, observer, source)` (`world/spatial.py`)
 
 Same room → egocentric sector ("behind you"); adjacent → the connecting
 edge rendered against barrier and facing ("through the doorway to your
@@ -147,7 +147,7 @@ asserts it on the serialized output).
   loudness or the event targets the perceiver. The composer's
   rear-arc/periphery bypass consumes this predicate; the engine-side
   consumer landed now is **`infer_focus`'s salience snap**
-  (`spatial_frames.py`): a raised dialogue volume snaps the focus of any
+  (`world/spatial_frames.py`): a raised dialogue volume snaps the focus of any
   perceiver it reaches — the shouter if co-located, else the edge the sound
   arrived through (first edge of the sound path, never the unseen source
   room; an unreachable shout snaps nothing). Ranked below
@@ -223,7 +223,7 @@ data already exists live:
   The one G5 precondition in this layer is done for free:
   `effective_station` preserves unknown keys, so `cover` will survive it.
 - **G6 coverage warnings** — the denominator-honest warning belongs at the
-  mapping/commit seam (`commit.py` off-limits this session). The size hint
+  mapping/commit seam (`persist/commit.py` off-limits this session). The size hint
   shipped without its warning; flagging rooms sized by keyword is one
   `effective_room_size`-vs-authored comparison when the seam owner wires it.
 - **S3c further consumers** (`corridor_sightlines` vertical headings,
@@ -269,6 +269,6 @@ data already exists live:
 - Microbenchmark: 26,400 `proximity_rel`+`visual_level_between` pair calls
   on a 40-room/12-body scene in 0.40 s (~15 µs/pair) — the derivation
   layer's room scans do not move the needle.
-- Uncommitted by instruction; diff: `spatial.py`, `spatial_frames.py`,
+- Uncommitted by instruction; diff: `world/spatial.py`, `world/spatial_frames.py`,
   `agents/common.py`, `agents/loops.py`, `docs/CODE_MAP.md` (regenerated),
   four new test files, this note.

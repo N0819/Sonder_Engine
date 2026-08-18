@@ -10,8 +10,8 @@ import json
 import time
 
 from agents.perception import perception_establish
-from character_schema import default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def test_opening_turn_uses_real_persona_name_and_appearance(

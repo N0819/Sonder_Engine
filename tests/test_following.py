@@ -3,9 +3,9 @@
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import apply_following_ops, merge_scene_with_diff
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import apply_following_ops, merge_scene_with_diff
 
 
 def _scene():
@@ -69,7 +69,7 @@ def test_departed_target_prunes_following_relation():
 
 
 def test_following_fields_survive_schema_validation():
-    from schemas import validate_llm_output_strict
+    from llm.schemas import validate_llm_output_strict
 
     interpreted = validate_llm_output_strict("director_interpret", {
         "follow_op": {"op": "start", "target": "B", "reason": "go together"},
@@ -141,7 +141,7 @@ def test_character_knows_its_own_following_state(temp_db, monkeypatch):
 
 
 def test_prompts_define_following_as_voluntary_and_speed_bounded():
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     assert "player.following" in DEFAULT_PROMPTS["director_interpret"]
     character_prompt = DEFAULT_PROMPTS["character"]

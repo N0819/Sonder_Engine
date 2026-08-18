@@ -20,11 +20,11 @@ import time
 
 import pytest
 
-import commit
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from mechanics import (NEWS_HOP_LATENCY_SECONDS,
+from persist import commit
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from world.mechanics import (NEWS_HOP_LATENCY_SECONDS,
                        NEWS_UNREACHABLE_LATENCY_SECONDS)
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _district_scene():

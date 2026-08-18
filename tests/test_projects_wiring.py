@@ -29,8 +29,8 @@ from __future__ import annotations
 import json
 import time
 
-from affect import apply_project_ops
-from character_schema import default_character_data
+from mind.affect import apply_project_ops
+from story.character_schema import default_character_data
 
 SHRINE = "Every run ends at the shrine"
 CRITERION = "the shrine road is walked end to end by someone other than me"
@@ -80,7 +80,7 @@ def test_the_character_payload_carries_what_they_adopted(temp_db, monkeypatch):
     the mind is actually handed on the beat after it committed to
     something."""
     import agents.character as character
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     adopted, _f, _w = apply_project_ops(
         [], [], [{"op": "adopt", "project": SHRINE, "about": "world",

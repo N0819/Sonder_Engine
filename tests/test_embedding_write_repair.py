@@ -25,9 +25,9 @@ import time
 import numpy as np
 import pytest
 
-import memory
-from providers import EmbeddingBatch
-from character_schema import default_character_data
+from mind import memory
+from llm.providers import EmbeddingBatch
+from story.character_schema import default_character_data
 
 
 REAL = "openrouter:3:perplexity/pplx-embed-v1-4b"
@@ -68,7 +68,7 @@ def _write(bank, text, turn_idx=0):
 
 
 def _stamp(mid):
-    from db import q
+    from core.db import q
     return q("SELECT embedding_model FROM memories WHERE id=?", (mid,),
              one=True)["embedding_model"]
 
@@ -98,7 +98,7 @@ def test_it_touches_only_the_rows_that_failed(bank, monkeypatch):
     change, an import, a restore. Those are a migration the host chooses.
     This pass re-does the write it just fumbled and stops.
     """
-    from db import q, qi
+    from core.db import q, qi
     monkeypatch.setattr(memory, "embed_texts_meta", _real_batch)
     old = _write(bank, "A memory from an earlier era.", turn_idx=1)
     qi("UPDATE memories SET embedding_model='cheap:crc32:256',embedding_dim=256 "
@@ -122,7 +122,7 @@ def test_it_touches_only_the_rows_that_failed(bank, monkeypatch):
 def test_a_row_already_fixed_is_not_re_embedded(bank, monkeypatch):
     """A rebuild or a restore may have got there first; spending a request to
     change nothing is the kind of waste this whole change exists to avoid."""
-    from db import qi
+    from core.db import qi
     monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)
     mid = _write(bank, "Queued, then fixed by other means.")
     qi("UPDATE memories SET embedding_model=?,embedding_dim=? WHERE id=?",
@@ -173,7 +173,7 @@ def test_the_backlog_is_bounded(bank, monkeypatch):
 
 
 def test_summaries_are_finished_too(bank, monkeypatch):
-    from db import q
+    from core.db import q
     monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)
     memory.save_memory_summary(bank["chat"], bank["char"], "She chose a route.",
                                scope="autobiographical", end_turn_idx=3)
@@ -247,7 +247,7 @@ def test_a_model_change_is_not_adopted(bank, monkeypatch):
     model's key is a host who changed embedding model — a migration nobody
     asked this code to start, and the one case the rebuild prompt is for.
     """
-    from db import qi
+    from core.db import qi
     monkeypatch.setattr(memory, "embed_texts_meta", _real_batch)
     mid = _write(bank, "embedded by the previous provider")
     qi("UPDATE memories SET embedding_model='openai:1:text-embedding-3-small',"
@@ -342,7 +342,7 @@ def test_a_rebuild_never_writes_the_hash_over_real_vectors(bank, monkeypatch):
     hashes and stamped them migrated. Whether the host has an embeddings
     provider is a settings fact, not a fact about one request.
     """
-    from db import q
+    from core.db import q
     monkeypatch.setattr(memory, "embed_texts_meta", _real_batch)
     mid = _write(bank, "a real vector worth keeping")
     monkeypatch.setattr(memory, "embed_texts_meta", _fallen_back)

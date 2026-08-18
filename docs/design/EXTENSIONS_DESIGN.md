@@ -434,7 +434,7 @@ prevented the mistake and no test could have caught it, because the mistake is
 in the reader's model, not in the code.
 
 **There is no way to post prose, permanently.** A seam for injected assistant
-text would make `commit.py`'s persistence boundary advisory. The instructive
+text would make `persist/commit.py`'s persistence boundary advisory. The instructive
 part is that a refusal nobody can find reads as a missing feature — and an
 author who reads it that way goes looking for the internal that does it anyway,
 which this design cannot stop them doing. So the refusal is documented where

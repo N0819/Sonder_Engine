@@ -20,8 +20,8 @@ import os
 
 import pytest
 
-import backdrops
-from backdrops import _setting_only, visual_signature
+from dressing import backdrops
+from dressing.backdrops import _setting_only, visual_signature
 
 
 def _scene():
@@ -132,7 +132,7 @@ def test_projection_excludes_occupants_by_construction():
     cannot appear in a backdrop built from a projection that has no concept of
     occupants. This is a whitelist, so a NEW scene field cannot silently start
     leaking people either."""
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     sc = _scene()
     sc["entities"] = {"grue": {"name": "Lurking Grue", "kind": "monster"}}
     sc["positions"]["Lurking Grue"] = "ten_forward"
@@ -147,7 +147,7 @@ def test_projection_excludes_occupants_by_construction():
 
 
 def test_projection_keeps_what_makes_a_picture():
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     sc = _scene()
     sc["rooms"]["ten_forward"]["adjacent"] = [
         {"to": "deck10", "barrier": "open_door", "dir": "n"}]
@@ -163,14 +163,14 @@ def test_projection_keeps_what_makes_a_picture():
 
 def test_person_overlays_cannot_reach_the_projection():
     """Overlays are keyed by room OR by person; only the room lookup is used."""
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     sc = _scene()
     sc["overlays"] = {"Hinami": ["bleeding from a head wound"]}
     assert "bleeding" not in repr(room_projection(sc, "ten_forward"))
 
 
 def test_unknown_room_yields_a_harmless_stub():
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     out = room_projection(_scene(), "nowhere")
     assert out["room"] == "nowhere"
     assert "desc" not in out
@@ -180,7 +180,7 @@ def test_notes_are_excluded_because_they_carry_people():
     """Real leak found by dry-running a live chat: a room's freeform `notes`
     read "The TARDIS materializes in this room... Hinami and the Doctor are
     outside it now." A whitelist that admits a freeform field is not one."""
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     sc = _scene()
     sc["rooms"]["ten_forward"]["notes"] = \
         "Hinami and the Doctor are outside it now."
@@ -196,7 +196,7 @@ def test_global_location_is_excluded():
     still reads "Back Alley, City". A wrong one-line label would render a
     starship cupboard as a city alley, and the room desc already carries the
     setting."""
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     sc = _scene()
     sc["location"] = "Back Alley, City"
     assert "Back Alley" not in repr(room_projection(sc, "ten_forward"))
@@ -207,7 +207,7 @@ def test_global_location_is_excluded():
 def test_narrative_time_flavour_is_bucketed():
     """scene.time is freeform prose, not a clock. Live values seen include
     "Night", "a few seconds", "a few seconds pass", "moments pass"."""
-    from backdrops import time_bucket
+    from dressing.backdrops import time_bucket
     assert time_bucket("Night") == "night"
     assert time_bucket("late afternoon") == "day"
     assert time_bucket("dawn") == "morning"
@@ -247,7 +247,7 @@ def test_concurrent_requests_for_one_room_generate_one_image(temp_db, tmp_path,
     import threading
     import time
 
-    import backdrops as bd
+    from dressing import backdrops as bd
 
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
     monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
@@ -268,7 +268,7 @@ def test_concurrent_requests_for_one_room_generate_one_image(temp_db, tmp_path,
         time.sleep(0.15)
         return b"\x89PNG fake"
 
-    monkeypatch.setattr(__import__("providers"), "generate_image",
+    monkeypatch.setattr(__import__("llm.providers", fromlist=["providers"]), "generate_image",
                         fake_generate_image)
 
     results = []
@@ -292,7 +292,7 @@ def test_concurrent_requests_for_one_room_generate_one_image(temp_db, tmp_path,
 def test_no_half_written_image_is_ever_visible(temp_db, tmp_path, monkeypatch):
     """Readers hit the PNG route while generation is in flight; a partially
     written file would be served as a corrupt image."""
-    import backdrops as bd
+    from dressing import backdrops as bd
 
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
     monkeypatch.setattr(bd, "build_backdrop_request", lambda *a, **k: {
@@ -308,7 +308,7 @@ def test_no_half_written_image_is_ever_visible(temp_db, tmp_path, monkeypatch):
         seen.append(bd.cached_backdrop(9, "b" * 24))
         return b"\x89PNG fake"
 
-    monkeypatch.setattr(__import__("providers"), "generate_image",
+    monkeypatch.setattr(__import__("llm.providers", fromlist=["providers"]), "generate_image",
                         fake_generate_image)
 
     bd.generate_backdrop(9, 0)
@@ -331,7 +331,7 @@ _TEN_FORWARD = (
 
 
 def test_occupants_in_a_room_desc_never_reach_the_prompt():
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     scene = {"rooms": {"ten_forward": {"name": "Ten Forward",
                                        "desc": _TEN_FORWARD}}}
     desc = room_projection(scene, "ten_forward")["desc"]
@@ -345,7 +345,7 @@ def test_occupants_in_a_room_desc_never_reach_the_prompt():
 def test_a_desc_that_is_nothing_but_occupants_yields_no_desc():
     """No raw-text fallback: an empty description is a thinner prompt, which
     is the acceptable failure. Handing the occupants back is not."""
-    from backdrops import room_projection
+    from dressing.backdrops import room_projection
     scene = {"rooms": {"mess": {"name": "Mess Hall",
                                 "desc": "Crew members gather here."}}}
     projection = room_projection(scene, "mess")
@@ -356,7 +356,7 @@ def test_a_desc_that_is_nothing_but_occupants_yields_no_desc():
 def test_architecture_that_merely_mentions_a_people_word_survives():
     """Both of these are real strings from the same chat, and both are things
     to DRAW -- which is why the filter matches "crew members" and not "crew"."""
-    from backdrops import _setting_only
+    from dressing.backdrops import _setting_only
     for line in (
         "Along the north and south walls, several standard doors lead to crew "
         "quarters, labs, and utility spaces.",
@@ -407,7 +407,7 @@ def _write_backdrop(tmp_path, chat_id, signature, data=b"\x89PNG source"):
 
 
 def test_a_branch_reads_the_source_chats_backdrops(temp_db, tmp_path, monkeypatch):
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     src = _chat(temp_db, "Elevator Adventure")
@@ -423,7 +423,7 @@ def test_an_inherited_backdrop_is_not_copied_into_the_branch(temp_db, tmp_path,
     """The point of the feature is that a branch costs no bytes. Reading the
     ancestor's file in place is what keeps it that way -- copying would turn
     every branch into a full second set of images."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     src = _chat(temp_db, "Elevator Adventure")
@@ -440,7 +440,7 @@ def test_a_branch_of_a_branch_still_reaches_the_original(temp_db, tmp_path,
     """Rerolling repeatedly from the same story is the normal way this engine
     is used, so lineage has to be transitive -- the picture lives in the
     original chat and the third branch has never met it directly."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     first = _chat(temp_db, "Elevator Adventure")
@@ -455,7 +455,7 @@ def test_a_branch_of_a_branch_still_reaches_the_original(temp_db, tmp_path,
 def test_an_unrelated_chat_sees_none_of_them(temp_db, tmp_path, monkeypatch):
     """Reuse follows the branch lineage and nothing else: a different story
     that happens to hash a room the same way still draws its own."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     src = _chat(temp_db, "Elevator Adventure")
@@ -471,7 +471,7 @@ def test_inherited_backdrops_survive_the_source_chats_deletion(temp_db, tmp_path
     """Why the lineage is a denormalized id list and not a parent_chat_id
     foreign key. Deleting a chat removes its rows and leaves its pictures on
     disk, so a cascade-nulled pointer would lose files that are still there."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     src = _chat(temp_db, "Elevator Adventure")
@@ -486,7 +486,7 @@ def test_inherited_backdrops_survive_the_source_chats_deletion(temp_db, tmp_path
 def test_a_branchs_own_backdrop_wins_over_the_inherited_one(temp_db, tmp_path,
                                                             monkeypatch):
     """Regenerating in a branch must not reach back and repaint the source."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     src = _chat(temp_db, "Elevator Adventure")
@@ -501,7 +501,7 @@ def test_a_branchs_own_backdrop_wins_over_the_inherited_one(temp_db, tmp_path,
 def test_a_damaged_lineage_degrades_to_generating(temp_db, tmp_path, monkeypatch):
     """A hand-edited or truncated value must not take the chat's backdrops
     down with it -- worst case is the pre-lineage behaviour."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     src = _chat(temp_db, "Elevator Adventure")
@@ -517,7 +517,7 @@ def test_a_damaged_lineage_degrades_to_generating(temp_db, tmp_path, monkeypatch
 def test_a_chat_is_never_its_own_ancestor(temp_db, tmp_path, monkeypatch):
     """A self-reference would make the lineage walk re-stat the directory the
     lookup just missed on; a cycle between two chats would do it forever."""
-    import backdrops as bd
+    from dressing import backdrops as bd
     monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
 
     chat = _chat(temp_db, "Elevator Adventure")
@@ -534,7 +534,7 @@ def test_a_chat_is_never_its_own_ancestor(temp_db, tmp_path, monkeypatch):
 # anyway, since generators render colour and texture far more reliably than
 # they render abstractions.
 
-from backdrops import place_desc, to_visual_register
+from dressing.backdrops import place_desc, to_visual_register
 
 
 class TestVisualRegister:
@@ -740,8 +740,8 @@ def test_a_failed_edit_is_no_longer_indistinguishable_from_never_trying(
     present, and every edit failing, and the only visible symptom was a room
     with several images -- which is also what correct behaviour looks like.
     """
-    import backdrops as bd
-    import providers
+    from dressing import backdrops as bd
+    from llm import providers
     _stub_request(bd, monkeypatch, tmp_path)
     anchor = tmp_path / "anchor.png"
     anchor.write_bytes(b"\x89PNG anchor")
@@ -771,8 +771,8 @@ def test_a_working_edit_says_it_edited(temp_db, tmp_path, monkeypatch):
     """The other half of the control. If a success looked the same as a
     failure the fields would answer nothing.
     """
-    import backdrops as bd
-    import providers
+    from dressing import backdrops as bd
+    from llm import providers
     _stub_request(bd, monkeypatch, tmp_path, sig="d" * 24)
     anchor = tmp_path / "anchor.png"
     anchor.write_bytes(b"\x89PNG anchor")
@@ -799,8 +799,8 @@ def test_continuity_switched_off_reports_no_attempt_rather_than_a_failure(
     reading these fields to debug a provider when the setting is simply off.
     `backdrop_continuity` defaults off, so this is the common case.
     """
-    import backdrops as bd
-    import providers
+    from dressing import backdrops as bd
+    from llm import providers
     _stub_request(bd, monkeypatch, tmp_path, sig="e" * 24)
     monkeypatch.setattr(bd, "_continuity_enabled", lambda: False)
     monkeypatch.setattr(providers, "generate_image",
@@ -824,7 +824,7 @@ class TestTheGenerationLockTable:
     """
 
     def test_it_does_not_grow_with_the_number_of_room_states_seen(self):
-        import backdrops as bd
+        from dressing import backdrops as bd
 
         for i in range(500):
             with bd._generation_lock((1, "sig%04d" % i)):
@@ -839,7 +839,7 @@ class TestTheGenerationLockTable:
         """
         import threading
 
-        import backdrops as bd
+        from dressing import backdrops as bd
 
         inside = []
         holding = threading.Event()
@@ -955,7 +955,7 @@ def test_the_read_path_does_not_walk_the_checkpoint_history(temp_db, monkeypatch
     to the one caller that needs it took those seventeen calls from 1203ms to
     312ms and made the per-call cost flat.
     """
-    import backdrops as bd
+    from dressing import backdrops as bd
 
     walked = []
     real = bd.arrival_turn_for_room

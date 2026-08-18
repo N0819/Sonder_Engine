@@ -125,7 +125,7 @@ twice rather than three times. Measured today: 28.8% of beats had omissions,
 
 Blast radius is enumerated in note 04 — 17 consumers with file:line. The
 narrator is untouched (it renders views + `event_order`, and never consumed
-`resolved_event`). Seven `commit.py` text-matching sites become subject checks
+`resolved_event`). Seven `persist/commit.py` text-matching sites become subject checks
 and get *more* reliable.
 
 ### Phase 2 — The composer

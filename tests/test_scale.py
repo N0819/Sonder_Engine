@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     clamp_scale,
     contacts_broken_by_scale_change,
     merge_scene_with_diff,
@@ -108,7 +108,7 @@ class TestRecordingSize:
         assert scale_of(scene, "Hinami") == 1.0
 
     def test_the_table_is_bounded(self):
-        from spatial import _MAX_SCALES
+        from world.spatial import _MAX_SCALES
 
         positions = {f"P{i}": "hall" for i in range(_MAX_SCALES + 20)}
         scales = {f"P{i}": 0.5 for i in range(_MAX_SCALES + 20)}
@@ -343,7 +343,7 @@ class TestHygieneIsSafe:
 
 class TestSchema:
     def test_scales_survive_state_diff_validation(self):
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         assert StateDiff(scales={"Hinami": 0.1}).dict()["scales"] == {"Hinami": 0.1}
 

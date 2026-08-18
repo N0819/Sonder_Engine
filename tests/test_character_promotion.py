@@ -9,8 +9,8 @@ import time
 
 import pytest
 
-import importers
-from character_schema import CHARACTER_SCHEMA
+from story import importers
+from story.character_schema import CHARACTER_SCHEMA
 
 
 def _make_chat(db):

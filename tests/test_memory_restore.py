@@ -3,8 +3,8 @@
 import json
 import time
 
-from character_schema import default_character_data
-from memory import restore_chat_memories
+from story.character_schema import default_character_data
+from mind.memory import restore_chat_memories
 
 def _chat_and_character(db):
     chat_id = db.qi(
@@ -43,8 +43,8 @@ def test_restore_preserves_archived_without_event_key(
     temp_db,
     monkeypatch,
 ):
-    import memory
-    from providers import EmbeddingBatch
+    from mind import memory
+    from llm.providers import EmbeddingBatch
 
     chat_id, character_id = _chat_and_character(temp_db)
 
@@ -89,8 +89,8 @@ def test_restore_replaces_existing_chat_memories(
     temp_db,
     monkeypatch,
 ):
-    import memory
-    from providers import EmbeddingBatch
+    from mind import memory
+    from llm.providers import EmbeddingBatch
 
     chat_id, character_id = _chat_and_character(temp_db)
 

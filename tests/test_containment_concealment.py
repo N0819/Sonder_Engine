@@ -17,7 +17,7 @@ Two rules here, and the second is the one that is easy to forget:
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     containment_conceals,
     containment_hides,
     hear_level,

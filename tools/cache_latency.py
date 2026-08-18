@@ -71,7 +71,7 @@ def build(base, layout, name):
 
 
 def _call(prov, model, messages, timeout, max_tokens):
-    import providers
+    from llm import providers
     t0 = time.perf_counter()
     r = providers._session().post(
         prov["base_url"].rstrip("/") + "/chat/completions",
@@ -105,9 +105,9 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
-    import db
+    from core import db
     db.configure(args.db)
-    import prompts
+    from llm import prompts
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))

@@ -27,12 +27,12 @@ import pytest
 
 import agents.loops
 import agents.runtime as runtime
-import memory
+from mind import memory
 from agents.runtime import _rehydrate_loop_results, _run_pipeline
 from agents.storage import active_content, save_step
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from scene import get_scene
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from story.scene import get_scene
 
 
 # ---- shared setup helpers ----

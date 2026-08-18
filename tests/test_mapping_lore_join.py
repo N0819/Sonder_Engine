@@ -91,7 +91,7 @@ def test_string_and_int_ids_are_the_same_entry():
 
 
 def test_the_prompt_no_longer_asks_for_the_entry_text():
-    from prompts import get_prompt
+    from llm.prompts import get_prompt
     text = get_prompt("mapping_stage")
     assert "relevant_lore:[{id,why_relevant}]" in text
     assert "relevant_lore:[{id,book_id,keys,content" not in text

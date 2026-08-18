@@ -39,7 +39,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import remember_lines  # noqa: E402
 
-from commit import _durable_dialogue_category  # noqa: E402
+from persist.commit import _durable_dialogue_category  # noqa: E402
 
 # Every trigger in commit._durable_dialogue_category, plus the shapes that must
 # NOT trigger it -- the ones the feature exists to catch.
@@ -129,7 +129,7 @@ def test_no_budget_or_novelty_gate_was_added():
     a gate would throttle the highest-retrieval rows in the bank."""
     import inspect
 
-    import commit
+    from persist import commit
     src = inspect.getsource(commit._marked_for_memory)
     for gate in ("MAX_REMEMBER", "remember_budget", "novelty"):
         assert gate not in src, gate

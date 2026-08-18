@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import time
 
-from db import q, qi, wget, wset
+from core.db import q, qi, wget, wset
 
 
 def _make_chat(db, name="Restore Chat"):
@@ -41,7 +41,7 @@ def _make_chat(db, name="Restore Chat"):
 
 
 def _attach_character(db, chat_id, name, state=None):
-    from character_schema import default_character_data
+    from story.character_schema import default_character_data
 
     char_id = db.qi(
         "INSERT INTO characters(name,sheet,source,created,resource_uid) "
@@ -60,7 +60,7 @@ def test_background_presences_roll_back_with_the_timeline(temp_db):
     """A presence's conduct tail/blurb/pending_reply written by a discarded
     run must not survive into the rerun -- they are story bookkeeping, not a
     reader preference (audit P3/X22)."""
-    from checkpoints import ensure_checkpoint, restore_checkpoint
+    from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
     chat_id = _make_chat(temp_db)
     pre = {"Barkeep": {"mentions": 1, "conduct": ["polishes a glass"]}}
@@ -88,7 +88,7 @@ def test_membership_added_after_the_checkpoint_is_removed(temp_db):
     """A character auto-promoted during the discarded run must not survive
     restore as a hollow active cast member (audit P4).  The reusable library
     row survives -- only this chat's membership is rolled back."""
-    from checkpoints import ensure_checkpoint, restore_checkpoint
+    from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
     chat_id = _make_chat(temp_db)
     kept = _attach_character(temp_db, chat_id, "Alice")
@@ -121,7 +121,7 @@ def test_rerun_cast_state_is_the_restored_state(temp_db):
         (chat_id, 1, "I wave.", time.time()),
     )
     # The pre-turn checkpoint captures mood "calm".
-    from checkpoints import ensure_checkpoint
+    from persist.checkpoints import ensure_checkpoint
     ensure_checkpoint(chat_id, 1)
 
     # The turn "ran" and committed: one materialized step, and the commit
@@ -182,7 +182,7 @@ class TestRestoreMembershipGuards:
         return char_id
 
     def test_auto_promoted_member_is_removed(self, temp_db):
-        import checkpoints
+        from persist import checkpoints
         chat_id = self._chat_with_snapshot(temp_db, {"world": {}, "chars": {}})
         promoted = self._attach(temp_db, chat_id, "Promoted")
         checkpoints.restore_checkpoint(chat_id, 1)
@@ -196,7 +196,7 @@ class TestRestoreMembershipGuards:
         """`b.get("chars") or {}` reads identically for 'no cast' and 'no such
         key', so an unguarded sweep deleted every cast member of any chat whose
         checkpoint predates the chars field."""
-        import checkpoints
+        from persist import checkpoints
         chat_id = self._chat_with_snapshot(temp_db, {"world": {}})
         kept = self._attach(temp_db, chat_id, "Established")
         checkpoints.restore_checkpoint(chat_id, 1)
@@ -207,7 +207,7 @@ class TestRestoreMembershipGuards:
     def test_an_authored_per_story_card_is_not_destroyed(self, temp_db):
         """chat_chars.sheet is Cast-tab authoring, is not in the snapshot, and
         DELETE has nothing to restore it from."""
-        import checkpoints
+        from persist import checkpoints
         chat_id = self._chat_with_snapshot(temp_db, {"world": {}, "chars": {}})
         carded = self._attach(
             temp_db, chat_id, "Carded", sheet='{"identity": {"name": "Carded"}}')

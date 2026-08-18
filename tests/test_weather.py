@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from weather import (advance_weather, normalize_weather, room_exposure,
+from world.weather import (advance_weather, normalize_weather, room_exposure,
                      weather_depth, weather_for_room, weather_words)
 
 
@@ -242,7 +242,7 @@ def test_freezing_turns_rain_to_snow():
 def test_indoor_rooms_keep_their_cached_backdrop_through_a_storm():
     """The economics: a cellar is not a new picture because it started raining
     over the city, but the courtyard is."""
-    from backdrops import visual_signature
+    from dressing.backdrops import visual_signature
     dry = _scene()
     wet = _scene({"sky": "storm", "precipitation": "rain", "intensity": "heavy"})
     assert visual_signature(dry, "cellar") == visual_signature(wet, "cellar")
@@ -251,15 +251,15 @@ def test_indoor_rooms_keep_their_cached_backdrop_through_a_storm():
 
 def test_audible_weather_does_move_the_ambience_key_indoors():
     """...and the sound bed is the opposite case, because the cellar hears it."""
-    from ambience import acoustic_signature
+    from dressing.ambience import acoustic_signature
     dry = _scene()
     wet = _scene({"sky": "storm", "precipitation": "rain", "intensity": "heavy"})
     assert acoustic_signature(dry, "cellar") != acoustic_signature(wet, "cellar")
 
 
 def test_weather_reaches_the_image_prompt_and_the_sound_query():
-    from ambience import compose_query, room_soundscape
-    from backdrops import compose_prompt, room_projection
+    from dressing.ambience import compose_query, room_soundscape
+    from dressing.backdrops import compose_prompt, room_projection
     wet = _scene({"sky": "storm", "precipitation": "rain", "intensity": "heavy"})
     assert "rain" in compose_prompt(room_projection(wet, "yard"))
     assert "rain" in compose_query(room_soundscape(wet, "yard"))
@@ -360,8 +360,8 @@ def test_a_sealed_room_hears_nothing():
 def test_depth_changes_the_ambience_key_but_not_the_backdrop_key():
     """Two rooms at different depths under one downpour want different sound
     and the same (weatherless) picture."""
-    from ambience import acoustic_signature
-    from backdrops import visual_signature
+    from dressing.ambience import acoustic_signature
+    from dressing.backdrops import visual_signature
     house = _house()
     assert acoustic_signature(house, "hall") != acoustic_signature(house, "vault")
     # Neither indoor room shows weather, so the depth difference must leave the
@@ -384,7 +384,7 @@ def test_a_starship_never_acquires_weather():
     """No sky was established, so there is nothing to drift, nothing to hear
     and nothing to draw. Stellar weather would be its own phenomenon, not this
     one wearing a different word."""
-    from ambience import compose_query, room_soundscape
+    from dressing.ambience import compose_query, room_soundscape
     ship = {
         "rooms": {
             "d10": {"name": "Corridor, Deck 10", "desc": "Deck plating.",
@@ -489,7 +489,7 @@ class TestGroundState:
                        "intensity": intensity, "temperature": temperature})
 
     def test_rain_walks_the_ground_down_its_ladder(self):
-        from weather import ground_after
+        from world.weather import ground_after
         scene = self._yard()
         state, seen = {}, []
         for _ in range(6):
@@ -502,7 +502,7 @@ class TestGroundState:
     def test_it_dries_slower_than_it_soaks(self):
         """A puddle that vanished the moment the rain stopped would read as a
         bug, not as weather."""
-        from weather import ground_after
+        from world.weather import ground_after
         wet, dry = self._yard(), _scene({"precipitation": "none"})
         state = {}
         for _ in range(6):
@@ -513,7 +513,7 @@ class TestGroundState:
         assert state["state"]                      # still something underfoot
 
     def test_snow_has_its_own_ladder(self):
-        from weather import ground_after
+        from world.weather import ground_after
         scene = self._yard(precipitation="snow", intensity="moderate",
                            temperature="freezing")
         state, seen = {}, []
@@ -525,14 +525,14 @@ class TestGroundState:
         assert not any("mud" in s for s in seen)
 
     def test_freezing_rain_lays_ice_not_water(self):
-        from weather import ground_after
+        from world.weather import ground_after
         scene = self._yard(temperature="freezing")
         state = ground_after({}, weather_for_room(scene, "yard"), "seasonal")
         assert state["kind"] == "ice"
 
     def test_a_sheltered_floor_stays_dry_under_a_downpour(self):
         """What matters is whether anything is landing HERE."""
-        from weather import ground_after
+        from world.weather import ground_after
         scene = self._yard()
         assert ground_after({}, weather_for_room(scene, "porch"), "seasonal",
                             exposed=False) == {}
@@ -542,7 +542,7 @@ class TestGroundState:
     def test_calm_weather_leaves_no_mark_at_all(self):
         """The host's choice: weather as scenery. And anything already on the
         ground drains rather than being stranded mid-puddle."""
-        from weather import ground_after
+        from world.weather import ground_after
         scene = self._yard()
         assert ground_after({}, weather_for_room(scene, "yard"), "calm") == {}
         stranded = {"kind": "wet", "level": 6, "state": "churned mud"}
@@ -550,7 +550,7 @@ class TestGroundState:
         assert after["level"] < 6
 
     def test_severity_only_caps_the_sky_when_calm(self):
-        from weather import severity_intensity_cap
+        from world.weather import severity_intensity_cap
         assert severity_intensity_cap("calm") == "light"
         for other in ("seasonal", "harsh", "catastrophic"):
             assert severity_intensity_cap(other) == "heavy"
@@ -572,14 +572,14 @@ class TestABlizzardIsNotAThunderstorm:
                 "wind": "gale", "temperature": "freezing"}
 
     def test_the_blizzard_does_not_flash(self):
-        from weather import has_lightning
+        from world.weather import has_lightning
         assert not has_lightning(self.BLIZZARD)
 
     def test_but_thundersnow_does(self):
         """Rare, not forbidden. Derived from the precipitation, every blizzard
         flashes; forbidden outright, none ever can -- so it is a property of
         the sky, rolled by the drift or declared by a beat."""
-        from weather import has_lightning, normalize_weather
+        from world.weather import has_lightning, normalize_weather
         lit = normalize_weather(dict(self.BLIZZARD, thundersnow=True))
         assert lit["thundersnow"] is True
         assert has_lightning(lit)
@@ -588,7 +588,7 @@ class TestABlizzardIsNotAThunderstorm:
         """On a rainstorm it is redundant, on a clear sky meaningless -- and
         left to linger it would keep lightning over a sky that stopped
         snowing."""
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         for sky, falling in (("storm", "rain"), ("clear", "none"),
                              ("overcast", "rain")):
             out = normalize_weather(
@@ -596,7 +596,7 @@ class TestABlizzardIsNotAThunderstorm:
             assert out["thundersnow"] is False, (sky, falling)
 
     def test_thundersnow_is_heard_as_well_as_seen(self):
-        from weather import weather_words
+        from world.weather import weather_words
         scoped = dict(self.BLIZZARD, thundersnow=True, exposure="open",
                       audible=True, falls_on_you=True, weather_visible=True)
         assert "thunder" in weather_words(scoped, channel="sound")
@@ -604,7 +604,7 @@ class TestABlizzardIsNotAThunderstorm:
     def test_the_drift_makes_it_rare_and_repeatable(self):
         """Seeded like every other drift: a reroll cannot conjure it and a
         replay cannot lose it."""
-        from weather import advance_weather, DRIFT_SECONDS, THUNDERSNOW_ODDS
+        from world.weather import advance_weather, DRIFT_SECONDS, THUNDERSNOW_ODDS
         lit = [step for step in range(1, 91)
                if advance_weather(self.BLIZZARD, DRIFT_SECONDS * step,
                                   seed="blizzard:46").get("thundersnow")]
@@ -621,7 +621,7 @@ class TestABlizzardIsNotAThunderstorm:
         assert other != lit
 
     def test_a_rainstorm_is_never_marked_thundersnow_by_the_drift(self):
-        from weather import advance_weather, DRIFT_SECONDS
+        from world.weather import advance_weather, DRIFT_SECONDS
         rainy = dict(self.BLIZZARD, precipitation="rain", temperature="cool")
         for step in range(1, 40):
             after = advance_weather(rainy, DRIFT_SECONDS * step, seed="s")
@@ -629,30 +629,30 @@ class TestABlizzardIsNotAThunderstorm:
                 assert not after["thundersnow"], after
 
     def test_sleet_does_not_either(self):
-        from weather import has_lightning
+        from world.weather import has_lightning
         assert not has_lightning(dict(self.BLIZZARD, precipitation="sleet"))
 
     def test_rain_and_hail_still_do(self):
         """Hail comes out of exactly the convective storms that throw
         lightning, so it is deliberately not on the unlit list."""
-        from weather import has_lightning
+        from world.weather import has_lightning
         for falling in ("rain", "hail", "none"):
             assert has_lightning(dict(self.BLIZZARD, precipitation=falling)), falling
 
     def test_a_sky_that_is_not_a_storm_never_does(self):
-        from weather import has_lightning
+        from world.weather import has_lightning
         for sky in ("clear", "fair", "overcast", "fog"):
             assert not has_lightning({"sky": sky, "precipitation": "rain"})
 
     def test_junk_is_not_a_storm(self):
-        from weather import has_lightning
+        from world.weather import has_lightning
         assert not has_lightning(None)
         assert not has_lightning({})
 
     def test_nobody_hears_thunder_in_a_blizzard(self):
         """The audible half of the same mistake: `weather_words` put "thunder"
         into the sound of any storm sky, through walls and into cellars."""
-        from weather import weather_words
+        from world.weather import weather_words
         scoped = dict(self.BLIZZARD, exposure="open", audible=True,
                       falls_on_you=True, weather_visible=True)
         assert "thunder" not in weather_words(scoped, channel="sound")
@@ -664,7 +664,7 @@ class TestABlizzardIsNotAThunderstorm:
         already right, pinned so it stays that way. Storm's own precipitation
         table offers rain and hail, and only the freezing conversion keeps a
         blizzard from turning into a downpour an hour in."""
-        from weather import advance_weather
+        from world.weather import advance_weather
         after = advance_weather(self.BLIZZARD, 60 * 60 * 6, seed="blizzard:1")
         assert after["precipitation"] in ("snow", "sleet", "none")
         assert after["temperature"] == "freezing"
@@ -695,19 +695,19 @@ class TestTheDirectorWritesTheVividWord:
                "wind": "gale", "temperature": "freezing"}
 
     def test_the_blizzard_survives_being_described(self):
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         assert normalize_weather(self.DECLARED) == \
             dict(self.BLOWING, thundersnow=False)
 
     def test_and_survives_being_written_over_itself(self):
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         assert normalize_weather(self.DECLARED, self.BLOWING) == \
             dict(self.BLOWING, thundersnow=False)
 
     def test_a_declaration_is_a_report_not_a_restatement(self):
         """A beat that noticed the wind rise says so and says nothing else.
         Replacing the sky wholesale made every partial report a forecast."""
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         risen = normalize_weather({"wind": "gale"},
                                   dict(self.BLOWING, wind="breeze"))
         assert risen == dict(self.BLOWING, thundersnow=False)
@@ -715,7 +715,7 @@ class TestTheDirectorWritesTheVividWord:
     def test_the_storm_can_still_actually_end(self):
         """The point is not that weather never clears -- it is that clearing
         has to be something a beat SAID, not something a vocabulary miss did."""
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         cleared = normalize_weather(
             {"sky": "clear", "precipitation": "none", "wind": "still"},
             self.BLOWING)
@@ -730,14 +730,14 @@ class TestTheDirectorWritesTheVividWord:
     def test_the_earliest_word_in_the_phrase_wins(self):
         """"gale-force wind" names a gale and qualifies it with the noun.
         Scanning the vocabulary in its own order instead answered `wind`."""
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         assert normalize_weather({"wind": "gale-force wind"})["wind"] == "gale"
         both = normalize_weather({"precipitation": "heavy snow",
                                   "intensity": "heavy snow"})
         assert both["precipitation"] == "snow" and both["intensity"] == "heavy"
 
     def test_a_beat_reporting_the_wind_does_not_put_the_lightning_out(self):
-        from weather import normalize_weather
+        from world.weather import normalize_weather
         lit = dict(self.BLOWING, thundersnow=True)
         assert normalize_weather({"wind": "gale"}, lit)["thundersnow"] is True
 
@@ -854,7 +854,7 @@ def test_thunder_arrives_at_the_distance_it_travelled():
     reported `faint rain` and a full-strength `thunder` in the same breath --
     two distances at once. Thunder does carry where the weather does not, which
     is why it is never silenced; it is graded one rung softer instead."""
-    from weather import weather_for_room, weather_words
+    from world.weather import weather_for_room, weather_words
     scene = {
         "weather": {"sky": "storm", "precipitation": "rain", "intensity": "heavy"},
         "rooms": {
@@ -879,7 +879,7 @@ def test_thunder_arrives_at_the_distance_it_travelled():
 
 
 def test_a_snowing_storm_still_says_nothing_at_any_depth():
-    from weather import weather_for_room, weather_words
+    from world.weather import weather_for_room, weather_words
     scene = {
         "weather": {"sky": "storm", "precipitation": "snow", "intensity": "heavy",
                     "temperature": "freezing"},

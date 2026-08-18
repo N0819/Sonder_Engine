@@ -10,7 +10,7 @@ one of these becomes a live information leak or a hole in perception.
 
 Method: every threshold, tier, absolute exclusion, and enum in the perception
 prompt was enumerated and traced to the code that should implement it
-(`spatial.py`, `agents/perception.py`, `agents/common.py`, `agents/loops.py`,
+(`world/spatial.py`, `agents/perception.py`, `agents/common.py`, `agents/loops.py`,
 `agents/background.py`). Every finding cites both halves — prompt line and
 code line. "Confirmed" means confirmed by reading the code end-to-end;
 "suspected" means a test is needed. Corpus figures are aggregates from the
@@ -378,7 +378,7 @@ station data cannot check. Needs a design ruling more than a fix.
 
 Five separate mechanisms (L1 whisper, L2 enclosure directions, L3 outcome
 proximity, L4 dazed, L5 graded sight) share one anatomy: **the graded fact is
-computed somewhere in `spatial.py`, and the delivery site consumes a coarser
+computed somewhere in `world/spatial.py`, and the delivery site consumes a coarser
 projection of it** — a missing enum member, a missing parameter, a boolean
 where a tier exists, a missing flag-setter call. And in three of them
 (L1, L3, L4) the injection floors convert the model's correct behaviour back

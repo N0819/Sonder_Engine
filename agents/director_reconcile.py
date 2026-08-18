@@ -14,9 +14,9 @@ Import direction: nothing outside `agents/director*.py` may import an
 
 import copy
 
-import attire as attire_model
-from db import get_setting
-from spatial import (
+from story import attire as attire_model
+from core.db import get_setting
+from world.spatial import (
     ARTICULATION_STIFLED,
     apply_contact_ops,
     speech_articulation_impediment,

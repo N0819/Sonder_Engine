@@ -25,7 +25,7 @@ import json
 
 import pytest
 
-from commit import _supersede_disguises
+from persist.commit import _supersede_disguises
 
 
 class _Cursor:
@@ -109,7 +109,7 @@ def test_the_rule_runs_on_the_live_commit_path():
     # commit_entities.py since the split carved the entity domain out of
     # commit.py; the pinned block is commit_world_entities' condition loop.
     src = (Path(__file__).resolve().parents[1]
-           / "commit_entities.py").read_text(encoding="utf-8")
+           / "persist" / "commit_entities.py").read_text(encoding="utf-8")
     block = src[src.index("for cond_id, cond_list in"):]
     block = block[:block.index("\n    for ", 200)] if "\n    for " in block[200:] \
         else block[:4000]
@@ -120,7 +120,7 @@ def test_the_reader_side_picks_the_newest_rather_than_whichever(temp_db):
     """Belt and braces for rows that predate the rule: with several already
     active, the read must be deterministic and must prefer the most recent
     declaration -- what the reader just watched happen."""
-    from scene import active_disguises
+    from story.scene import active_disguises
 
     # world_conditions.chat_id is a real foreign key.
     chat_id = temp_db.qi(
@@ -162,7 +162,7 @@ def test_knowing_the_truth_survives_a_row_losing(temp_db):
     by rowid, and the row that won carried an empty `known_to` while the
     other named The Doctor. He had been told, and was the only one fooled.
     """
-    from scene import active_disguises
+    from story.scene import active_disguises
 
     chat_id = temp_db.qi("INSERT INTO chats(name,created) VALUES('t',0.0)")
     _insert(temp_db, chat_id, "told", 1057.0, "an older form", ["The Doctor"])
@@ -178,7 +178,7 @@ def test_knowing_the_truth_survives_a_row_losing(temp_db):
 def test_an_inactive_row_contributes_nothing(temp_db):
     """Accumulating from ENDED rows would make a disguise unusable against
     anyone who ever saw through an earlier one."""
-    from scene import active_disguises
+    from story.scene import active_disguises
 
     chat_id = temp_db.qi("INSERT INTO chats(name,created) VALUES('t',0.0)")
     _insert(temp_db, chat_id, "old", 100.0, "gone", ["Marta"], active=0)

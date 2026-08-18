@@ -10,15 +10,15 @@ import time
 
 import numpy as np
 
-import memory
-from character_schema import default_character_data
-from memory import (
+from mind import memory
+from story.character_schema import default_character_data
+from mind.memory import (
     add_lore, add_memory, dump_chat_memories, dump_lorebook,
     dump_memory_summaries, duplicate_lorebook_tree_for_chat,
     restore_chat_memories, restore_lorebook, restore_memory_summaries,
     save_memory_summary,
 )
-from providers import EmbeddingBatch
+from llm.providers import EmbeddingBatch
 
 REAL_MODEL = "openai:1:text-embedding-real"
 DIM = 8

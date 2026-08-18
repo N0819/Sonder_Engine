@@ -9,7 +9,7 @@ def test_the_narrator_is_told_which_bodies_have_which_parts():
 
     Same fact and same failure as `cast_pronouns`, which exists because
     guessing flipped a character's pronouns across beats."""
-    from prompts import get_prompt
+    from llm.prompts import get_prompt
 
     sheet = get_prompt("narrator")
     assert "authored_body_parts" in sheet

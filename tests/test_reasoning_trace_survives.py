@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import queue
 
-import providers
+from llm import providers
 from agents.runtime import _stream_one
 from agents.storage import save_step
 
@@ -109,7 +109,7 @@ def test_the_reader_can_actually_get_at_it():
     import pathlib
 
     root = pathlib.Path(__file__).resolve().parents[1]
-    assert "reasoning FROM variants" in (root / "app.py").read_text(
+    assert "reasoning FROM variants" in (root / "web" / "app.py").read_text(
         encoding="utf-8")
     chat_js = (root / "static" / "js" / "chat.js").read_text(encoding="utf-8")
     assert "variant.reasoning" in chat_js

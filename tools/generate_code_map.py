@@ -65,7 +65,10 @@ HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 
 
 def source_paths() -> list[Path]:
-    paths = list(ROOT.glob("*.py"))
+    paths = []
+    for pkg in ("core", "llm", "world", "mind", "story",
+                "dressing", "persist", "web"):
+        paths.extend((ROOT / pkg).glob("*.py"))
     agents_dir = ROOT / "agents"
     if agents_dir.exists():
         paths.extend(agents_dir.rglob("*.py"))
@@ -221,7 +224,7 @@ def parse_module(path: Path, local_modules: set[str]) -> dict:
 
 
 def database_tables() -> list[tuple[str, list[str]]]:
-    text = (ROOT / "db.py").read_text(encoding="utf-8")
+    text = (ROOT / "core" / "db.py").read_text(encoding="utf-8")
     match = re.search(r'SCHEMA\s*=\s*"""(.*?)"""', text, re.S)
     if not match:
         return []

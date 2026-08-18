@@ -28,8 +28,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
+from web import app as app_module
+from web import guest_access as guest
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 

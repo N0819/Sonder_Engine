@@ -3,7 +3,7 @@ proximity tiers, co-located left/right, whisper gating, and station hygiene
 through the scene merge."""
 from __future__ import annotations
 
-from spatial import (proximity_rel, entity_side, entity_arc, room_layout,
+from world.spatial import (proximity_rel, entity_side, entity_arc, room_layout,
                      normalize_scene_stations, merge_scene_with_diff, hear_level)
 
 
@@ -208,13 +208,13 @@ def test_room_layout_no_facing_gives_topological_anchors():
 # database contained one the schema had thrown away.
 
 def test_state_diff_carries_stations_through_validation():
-    from schemas import StateDiff, _dump
+    from llm.schemas import StateDiff, _dump
     out = _dump(StateDiff(**{"stations": {"Hinami": {"at": "bed", "near": []}}}))
     assert out["stations"] == {"Hinami": {"at": "bed", "near": []}}
 
 
 def test_scene_patch_carries_stations_through_validation():
-    from schemas import ScenePatch, _dump
+    from llm.schemas import ScenePatch, _dump
     out = _dump(ScenePatch(**{"stations": {"Barkeep": {"at": "bar"}}}))
     assert out["stations"] == {"Barkeep": {"at": "bar"}}
 
@@ -233,13 +233,13 @@ def test_a_diff_touching_only_at_keeps_the_standing_near_list():
 def test_an_explicit_null_at_survives_validation():
     """The only way to say "stepped away from the fixture". `_dump` uses
     exclude_none, which would have deleted a typed Optional field."""
-    from schemas import StateDiff, _dump
+    from llm.schemas import StateDiff, _dump
     assert _dump(StateDiff(**{"stations": {"P": {"at": None}}}))["stations"] \
         == {"P": {"at": None}}
 
 
 def test_a_bare_string_station_reads_as_its_anchor():
-    from schemas import StateDiff, _dump
+    from llm.schemas import StateDiff, _dump
     assert _dump(StateDiff(**{"stations": {"P": "bar"}}))["stations"] \
         == {"P": {"at": "bar"}}
 
@@ -377,7 +377,7 @@ def test_a_room_def_carries_anchors_and_size_through_validation():
     """Undeclared until now, so the round-trip stripped them from every
     Director-authored room -- the only anchors any story had came in through
     the mapping stage's untyped patch dicts."""
-    from schemas import RoomDef, _dump
+    from llm.schemas import RoomDef, _dump
     out = _dump(RoomDef(**{"name": "Bedroom", "size": "small",
                            "anchors": {"bed": {"desc": "a wide bed", "dir": "s"}}}))
 
@@ -388,7 +388,7 @@ def test_a_room_def_carries_anchors_and_size_through_validation():
 def test_an_unmentioned_anchors_table_is_absent_rather_than_empty():
     """Why `anchors` is Optional and not default_factory=dict: silence has to
     stay silence through the dump, or every room echo carries an eraser."""
-    from schemas import RoomDef, _dump
+    from llm.schemas import RoomDef, _dump
     assert "anchors" not in _dump(RoomDef(**{"name": "Bedroom"}))
 
 

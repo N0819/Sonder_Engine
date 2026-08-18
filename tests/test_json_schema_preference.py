@@ -23,7 +23,7 @@ import json
 
 import pytest
 
-import providers
+from llm import providers
 
 PROV = {"id": 7, "kind": "generic", "base_url": "http://x/v1",
         "api_key": "k", "name": "lmstudio-local"}
@@ -62,7 +62,7 @@ def _clear_memos():
 
 @pytest.fixture
 def _reasoning_off(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", json.dumps({"default": "off"}))
     return temp_db
 
@@ -184,8 +184,8 @@ def test_a_schema_rejection_is_remembered(_reasoning_off, monkeypatch):
 def test_every_pipeline_step_can_offer_a_schema():
     """complete_validated_json derives this from the step's own Pydantic model,
     which is the same one it validates the reply against."""
-    import llm_quality
-    import schemas
+    from llm import llm_quality
+    from llm import schemas
 
     for step in ("narrator", "character", "director_interpret", "director_body"):
         assert step in schemas.SCHEMA_MAP
@@ -195,6 +195,6 @@ def test_every_pipeline_step_can_offer_a_schema():
 
 def test_an_unknown_step_offers_none_rather_than_raising():
     """None is a first-class answer -- the caller then sends the flag."""
-    import llm_quality
+    from llm import llm_quality
 
     assert llm_quality._step_json_schema("not_a_real_step") is None

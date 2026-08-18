@@ -11,10 +11,10 @@ import time
 
 import pytest
 
-import db as db_module
-import paradox
-from db import q, qi, wget, wset
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core import db as db_module
+from world import paradox
+from core.db import q, qi, wget, wset
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 @contextlib.contextmanager
@@ -249,8 +249,8 @@ class TestEscalation:
         assert before == after
 
     def test_toll_mode_decays_a_traveler_memory_confidence_in_radius(self, temp_db):
-        import memory
-        from character_schema import default_character_data
+        from mind import memory
+        from story.character_schema import default_character_data
         import json as _json
 
         chat_id = _make_chat(temp_db)
@@ -262,7 +262,7 @@ class TestEscalation:
             "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
             (chat_id, hinami, "active", "{}"),
         )
-        from frames import create_frame
+        from core.frames import create_frame
         past_frame = create_frame(chat_id, label="Past", ordinal=-1, kind="past", travelers=[hinami])
 
         paradox.set_policy(chat_id, mode="toll")
@@ -294,8 +294,8 @@ class TestEscalation:
         (which should still be freshly perceived, not fading). Only
         memories from OTHER frames -- the timeline being destabilized --
         should decay."""
-        import memory
-        from character_schema import default_character_data
+        from mind import memory
+        from story.character_schema import default_character_data
         import json as _json
 
         chat_id = _make_chat(temp_db)
@@ -307,7 +307,7 @@ class TestEscalation:
             "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
             (chat_id, hinami, "active", "{}"),
         )
-        from frames import create_frame
+        from core.frames import create_frame
         past_frame = create_frame(chat_id, label="Past", ordinal=-1, kind="past", travelers=[hinami])
 
         paradox.set_policy(chat_id, mode="toll")
@@ -348,7 +348,7 @@ class TestFrameScopedVisibilityAndLockouts:
 
     def test_paradox_visible_only_in_its_own_frame(self, temp_db):
         chat_id = _make_chat(temp_db)
-        from frames import create_frame
+        from core.frames import create_frame
 
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
         future = create_frame(chat_id, label="Future", ordinal=10, kind="future")
@@ -368,7 +368,7 @@ class TestFrameScopedVisibilityAndLockouts:
 
     def test_director_payload_omits_paradox_for_an_unrelated_frame(self, temp_db, monkeypatch):
         import agents.director as director_module
-        from frames import create_frame
+        from core.frames import create_frame
 
         chat_id = _make_chat(temp_db)
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
@@ -414,8 +414,8 @@ class TestFrameScopedVisibilityAndLockouts:
         assert captured["payload"]["paradox"] is None
 
     def test_restationing_between_unrelated_frames_is_unaffected_by_a_paradox_elsewhere(self, temp_db):
-        import app
-        from frames import create_frame
+        from web import app
+        from core.frames import create_frame
 
         chat_id = _make_chat(temp_db)
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
@@ -438,8 +438,8 @@ class TestFrameScopedVisibilityAndLockouts:
         assert result["frame_id"] == other
 
     def test_restationing_into_the_paradoxs_own_frame_is_blocked(self, temp_db):
-        import app
-        from frames import create_frame
+        from web import app
+        from core.frames import create_frame
 
         chat_id = _make_chat(temp_db)
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
@@ -462,8 +462,8 @@ class TestFrameScopedVisibilityAndLockouts:
         assert exc_info.value.status_code == 409
 
     def test_branching_an_unrelated_frames_turn_is_unaffected(self, temp_db):
-        import app
-        from frames import create_frame
+        from web import app
+        from core.frames import create_frame
 
         chat_id = _make_chat(temp_db)
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
@@ -498,7 +498,7 @@ class TestTickOwnership:
 
     def test_an_unrelated_frames_commit_does_not_advance_the_other_frames_paradox(self, temp_db):
         chat_id = _make_chat(temp_db)
-        from frames import create_frame
+        from core.frames import create_frame
 
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
         future = create_frame(chat_id, label="Future", ordinal=10, kind="future")
@@ -552,7 +552,7 @@ class TestTickOwnership:
         check_and_apply_paradox short-circuited on ANY active record
         regardless of which frame it belonged to."""
         chat_id = _make_chat(temp_db)
-        from frames import create_frame
+        from core.frames import create_frame
 
         frame_a = create_frame(chat_id, label="A", ordinal=-1, kind="past")
         frame_b = create_frame(chat_id, label="B", ordinal=10, kind="future")
@@ -600,7 +600,7 @@ class TestTickOwnership:
 
     def test_the_owning_frames_commit_can_still_advance_it(self, temp_db):
         chat_id = _make_chat(temp_db)
-        from frames import create_frame
+        from core.frames import create_frame
 
         past = create_frame(chat_id, label="Past", ordinal=-1, kind="past")
         paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=past,

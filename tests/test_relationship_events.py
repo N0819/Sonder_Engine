@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from memory import (apply_relationship_updates, get_relationships,
+from mind.memory import (apply_relationship_updates, get_relationships,
                     relationship_history)
 
 
@@ -42,7 +42,7 @@ class TestTheReasonSurvives:
         """THE defect. `salient_event` holds only the most recent trigger, so
         "she lied about the gate" — the reason trust fell at all — is gone from
         the scalar state the moment anything else happens."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
         notes = [e["note"] for e in _history(db_module, cid)]
         assert "she lied about the gate" in notes
@@ -55,14 +55,14 @@ class TestTheReasonSurvives:
         """"Trust fell and fear rose" and "trust fell" are different events
         with different consequences. A single blended row could never be read
         back into either."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
         first_turn = [e for e in _history(db_module, cid) if e["turn_idx"] == 12]
         assert sorted(e["axis"] for e in first_turn) == ["fear", "trust"]
         assert all(e["note"] == "she lied about the gate" for e in first_turn)
 
     def test_the_ledger_is_ordered_oldest_first(self):
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
         turns = [e["turn_idx"] for e in _history(db_module, cid)]
         assert turns == sorted(turns)
@@ -73,7 +73,7 @@ class TestTheProjectionStillAgrees:
         """The ledger is added BESIDE the graph, not instead of it, so the two
         must not drift. If this ever fails, one of them is lying about the
         same relationship."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
         events = _history(db_module, cid)
         graph = get_relationships(cid, 7).get("Mora")
@@ -93,7 +93,7 @@ class TestEvidenceIsMarkedRatherThanDemanded:
         countable. 66 of 5,704 live movements have no recorded reason, so this
         is a rare case worth measuring rather than a common one worth
         blocking."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
         apply_relationship_updates(cid, 7, 3, [{
             "target_entity": "Mora", "warmth_delta": -0.05,
@@ -103,7 +103,7 @@ class TestEvidenceIsMarkedRatherThanDemanded:
 
     def test_a_movement_of_zero_is_not_an_event(self):
         """A stance that did not move is not a reason for anything."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
         apply_relationship_updates(cid, 7, 3, [{
             "target_entity": "Mora", "trust_delta": 0.0,
@@ -117,7 +117,7 @@ class TestItRollsBackWithTheStory:
         it happened."""
         import inspect
 
-        import commit
+        from persist import commit
         # The applier call lives in commit_memories (commit_memory_write
         # since the split); the function source survives the move.
         source = inspect.getsource(commit.commit_memories)
@@ -143,7 +143,7 @@ class TestItSurvivesTheThingsTheGateRequires:
     """
 
     def test_a_rewind_takes_the_reason_with_it(self, temp_db):
-        from checkpoints import insert_world_tables, snapshot_state
+        from persist.checkpoints import insert_world_tables, snapshot_state
 
         cid = _chat(temp_db)
         before = snapshot_state(cid)
@@ -159,7 +159,7 @@ class TestItSurvivesTheThingsTheGateRequires:
         assert relationship_history(cid, 7, "Mora") == []
 
     def test_a_snapshot_carries_it_back(self, temp_db):
-        from checkpoints import insert_world_tables, snapshot_state
+        from persist.checkpoints import insert_world_tables, snapshot_state
 
         cid = _chat(temp_db)
         apply_relationship_updates(cid, 7, 12, [{
@@ -178,14 +178,14 @@ class TestItSurvivesTheThingsTheGateRequires:
         """An undeclared field validates cleanly and is then silently dropped
         by `extra="ignore"` — the failure that kept `stations` inert for 45
         scenes. The model's own comment says so."""
-        from chat_archive import ChatArchiveData
+        from persist.chat_archive import ChatArchiveData
 
         assert "relationship_events" in ChatArchiveData.__fields__
 
     def test_the_archive_exports_and_imports_it(self):
         import inspect
 
-        import chat_archive
+        from persist import chat_archive
         source = inspect.getsource(chat_archive)
         # Present in both table tuples, not just one.
         assert source.count('"relationship_events",') >= 2

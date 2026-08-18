@@ -41,7 +41,7 @@ rather than *"Vorne"*. Address by name resolves reliably (turn 5 → `[27]`, tur
 6–7 *"Mr. Data"* → `[29]`); address by title did not. This is partly defensible —
 there are **two** doctors on the bridge (Dr. Vorne and Dr. Beverly Crusher), so a
 bare *"Doctor"* is literally ambiguous and the ADDRESSEE PRIORITY rule
-(`prompts.py`) does say to leave the field empty when address is ambiguous.
+(`llm/prompts.py`) does say to leave the field empty when address is ambiguous.
 But the same rule also licenses *"unambiguous surrounding context"*, and the
 entire preceding exchange is with Vorne — including the player naming him in the
 same breath as *"thirty years"*, his own stated tenure. The context was available

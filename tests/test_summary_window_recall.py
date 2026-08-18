@@ -31,8 +31,8 @@ import time
 
 import pytest
 
-import memory
-from character_schema import default_character_data
+from mind import memory
+from story.character_schema import default_character_data
 
 
 @pytest.fixture
@@ -294,7 +294,7 @@ def test_a_mismatched_batch_is_re_embedded_rather_than_trusted(bank):
     with the aspects, those are not the vectors the ranking thinks they are.
     Ranking against the wrong facet silently would be worse than the round
     trip it saves."""
-    from providers import EmbeddingBatch
+    from llm.providers import EmbeddingBatch
 
     wrong = EmbeddingBatch(vectors=[], model_key="nonsense", dimensions=0)
     hits = memory.search_memories(

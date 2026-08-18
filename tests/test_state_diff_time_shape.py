@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import pytest
 
-from schemas import output_example, validate_llm_output_strict
+from llm.schemas import output_example, validate_llm_output_strict
 
 # What the resolve prompt tells the model to emit, and therefore what the
 # example has to show. Named here so a change to either has to change this

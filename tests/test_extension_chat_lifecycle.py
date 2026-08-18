@@ -135,7 +135,7 @@ class TestFrameState:
     def test_chat_global_state_is_shared_across_eras(self, temp_db, bare):
         """What an installation IS does not change because the player walked
         into a different century."""
-        from db import active_frame_id
+        from core.db import active_frame_id
 
         chat_id = _chat(temp_db)
         bare.state(chat_id).set_now({"installed": True})
@@ -149,7 +149,7 @@ class TestFrameState:
     def test_frame_state_is_per_era(self, temp_db, bare):
         """A mission advanced in one era was advanced in EVERY era before this,
         and a rewind that took the room back left the objective ticked."""
-        from db import active_frame_id
+        from core.db import active_frame_id
 
         chat_id = _chat(temp_db)
         state = bare.frame_state(chat_id)
@@ -176,7 +176,7 @@ class TestFrameState:
         """So checkpoints, archives and branch/clone frame remapping already
         handle it: those paths parse the frame off a key generically rather
         than checking it against a list of names."""
-        import db
+        from core import db
 
         assert db._is_frame_scoped_world_key("extf:demo")
         assert not db._is_frame_scoped_world_key("ext:demo")
@@ -187,8 +187,8 @@ class TestFrameState:
         assert not "extf:x".startswith("ext:")
 
     def test_per_era_state_rides_an_export(self, temp_db, bare):
-        import app
-        from db import active_frame_id
+        from web import app
+        from core.db import active_frame_id
 
         chat_id = _chat(temp_db)
         token = active_frame_id.set(3)

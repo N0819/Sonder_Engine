@@ -17,8 +17,8 @@ import time
 
 import pytest
 
-import living_world
-from living_world import (
+from world import living_world
+from world.living_world import (
     LIVING_WORLD_APPROACHES, LIVING_WORLD_BUILT, LIVING_WORLD_DEPTHS,
     LIVING_WORLD_DESCRIPTIONS, effective_depth, living_world_allows,
     living_world_levels, mint_consequences, normalize_living_world,
@@ -260,7 +260,7 @@ class TestTheFiring:
         """An event with no witness still happened. A world that only
         moves where the player is looking is a stage set, and the truth a
         later rumour distorts must exist before the rumour does."""
-        from mechanics import _fire_due_events
+        from world.mechanics import _fire_due_events
 
         ops, notices, counts, _ = _fire_due_events(
             {}, 200.0, None, [_fuse_row()], turn_idx=5, player_room=None)
@@ -272,7 +272,7 @@ class TestTheFiring:
         """The one legitimate tell-surface is walking in on it (§0.2's
         in-progress event). Anywhere else, a notice would be the engine
         narrating an offscreen event — the exact class the design kills."""
-        from mechanics import _fire_due_events
+        from world.mechanics import _fire_due_events
 
         _, notices_elsewhere, _, _ = _fire_due_events(
             {}, 200.0, None, [_fuse_row()], turn_idx=5,
@@ -285,7 +285,7 @@ class TestTheFiring:
         assert "the patrol is doubled" in notices_here[0]
 
     def test_an_undue_fuse_stays_pending(self):
-        from mechanics import _fire_due_events
+        from world.mechanics import _fire_due_events
 
         ops, _, counts, _ = _fire_due_events(
             {}, 50.0, None, [_fuse_row(due_at=100.0)], turn_idx=5,
@@ -293,7 +293,7 @@ class TestTheFiring:
         assert ops == [] and counts["consequences_fired"] == 0
 
     def test_another_frames_fuse_does_not_fire_on_this_clock(self):
-        from mechanics import _fire_due_events
+        from world.mechanics import _fire_due_events
 
         ops, _, _, _ = _fire_due_events(
             {}, 200.0, 7, [_fuse_row(frame_id=3)], turn_idx=5,
@@ -305,7 +305,7 @@ class TestTheFiring:
         the story no longer contains describes a future whose cause
         un-happened. Cancelled loudly at fire time — the
         land_profile_ticks discipline, applied to the delay line."""
-        from mechanics import _fire_due_events
+        from world.mechanics import _fire_due_events
 
         ops, notices, counts, _ = _fire_due_events(
             {}, 200.0, None, [_fuse_row(base_turn=9)], turn_idx=5,
@@ -323,7 +323,7 @@ class TestTheObligationLedger:
     distortion of, and arrival could never contradict the rumour."""
 
     def test_obligations_accumulate_before_anyone_arrives(self, temp_db):
-        from db import wget
+        from core.db import wget
 
         cid = _make_chat(temp_db)
         record_obligations(cid, [_fuse_row(where="entry_cd34",
@@ -339,7 +339,7 @@ class TestTheObligationLedger:
         assert row["origin"]["room"] == "tavern_main"
 
     def test_a_rerun_folds_instead_of_stacking(self, temp_db):
-        from db import wget
+        from core.db import wget
 
         cid = _make_chat(temp_db)
         row = _fuse_row(where="entry_cd34", where_kind="place")
@@ -351,7 +351,7 @@ class TestTheObligationLedger:
         """Rooms deliver their history through re-entry residue; only the
         ungenerated (amendment 8's `place`) bank against the lore entry.
         Both at once would honour the same event twice at arrival."""
-        from db import wget
+        from core.db import wget
 
         cid = _make_chat(temp_db)
         record_obligations(cid, [_fuse_row()])
@@ -411,7 +411,7 @@ class TestArrivalIsTheEarningEvent:
         """Truth accumulates regardless (record_obligations is ungated);
         the SURFACE is what the setting owns. Off means the mapping payload
         carries no debt, not that the debt stopped existing."""
-        from living_world import attach_owed_history
+        from world.living_world import attach_owed_history
 
         cid = _make_chat(temp_db)
         record_obligations(cid, [_fuse_row(where="entry_cd34",
@@ -425,7 +425,7 @@ class TestArrivalIsTheEarningEvent:
         assert on[0]["owed_history"][0]["what"] == "the patrol is doubled"
 
     def test_a_place_without_debt_is_not_annotated(self, temp_db):
-        from living_world import attach_owed_history
+        from world.living_world import attach_owed_history
 
         cid = _make_chat(temp_db)
         hits = [{"entry_uid": "entry_zz99", "category": "location"},
@@ -442,10 +442,10 @@ class TestTheRoute:
 
     @pytest.fixture
     def client(self, temp_db):
-        import guest_access as guest
+        from web import guest_access as guest
         from fastapi.testclient import TestClient
 
-        import app as app_module
+        from web import app as app_module
 
         guest.reset_host_account()
         with TestClient(app_module.app) as c:
@@ -511,8 +511,8 @@ class TestOneAuthorityCeiling:
         unbuilt-ceiling-as-floor runs exactly as before composition
         existed. And every depth of every approach must name a real rung,
         or a mechanism would be ungoverned the moment it is built."""
-        import scene
-        from living_world import LIVING_WORLD_REQUIRES
+        from story import scene
+        from world.living_world import LIVING_WORLD_REQUIRES
 
         for approach in ("routine_residue", "scheduled_consequence",
                          "place_obligations"):
@@ -531,8 +531,8 @@ class TestOneAuthorityCeiling:
         granted plans; and the DEFAULT ladder level must not include it,
         so E landing built stays opt-in twice: the mechanism switched on,
         the ceiling deliberately raised."""
-        from scene import OFFSCREEN_LIFE_DEFAULT, offscreen_life_allows
-        from living_world import LIVING_WORLD_REQUIRES
+        from story.scene import OFFSCREEN_LIFE_DEFAULT, offscreen_life_allows
+        from world.living_world import LIVING_WORLD_REQUIRES
 
         assert LIVING_WORLD_REQUIRES["antagonist_ladder"] == {
             "floor": "reactive", "ceiling": "character_agent"}
@@ -545,7 +545,7 @@ class TestOneAuthorityCeiling:
         forgotten (the canonical_url rule): the config the gates already
         fetch must carry the chat's own ceiling, so commit's mint gate and
         the Director's residue gate compose both axes without changing."""
-        from living_world import living_world_config
+        from world.living_world import living_world_config
 
         cid = _make_chat(temp_db)
         temp_db.wset(cid, "living_world", {"scheduled_consequence": "floor"})
@@ -563,8 +563,8 @@ class TestOneAuthorityCeiling:
         identity failure waiting: a stale copy under the living_world key
         would shadow the live dialogue_config. The write path must strip
         it however it arrives."""
-        import app
-        from living_world import OFFSCREEN_CEILING_KEY
+        from web import app
+        from world.living_world import OFFSCREEN_CEILING_KEY
 
         cid = _make_chat(temp_db)
         app.living_world_put(cid, {"living_world": {

@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import db
-from pipeline_trace import (
+from core import db
+from persist.pipeline_trace import (
     PipelineTraceError,
     dump_pipeline_trace,
     export_pipeline_trace,

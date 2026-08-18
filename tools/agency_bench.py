@@ -215,7 +215,7 @@ def _post(prov, model, system, user, timeout, max_tokens):
     the model or the contract, so it is retried, and only a persistent one is
     reported as `err` and counted as bad.
     """
-    import providers
+    from llm import providers
     last = None
     for attempt in range(3):
         t0 = time.perf_counter()
@@ -258,11 +258,11 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     os.environ["ENGINE_DB"] = args.db
-    import db
+    from core import db
     db.configure(args.db)
-    import llm_quality
-    import prompts
-    import schemas
+    from llm import llm_quality
+    from llm import prompts
+    from llm import schemas
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))

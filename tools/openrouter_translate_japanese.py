@@ -25,7 +25,7 @@ import requests
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import db  # noqa: E402  (the project root has to be importable first)
+from core import db  # noqa: E402  (the project root has to be importable first)
 
 
 EN = ROOT / "language_packs" / "en"

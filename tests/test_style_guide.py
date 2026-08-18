@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import json
 
-import scene
-from scene import STYLE_GUIDE_FIELDS, normalize_style_guide, style_guide
+from story import scene
+from story.scene import STYLE_GUIDE_FIELDS, normalize_style_guide, style_guide
 
 
 # ---- Normalization ----
@@ -98,7 +98,7 @@ def test_json_string_from_storage_is_accepted():
 # ---- Storage ----
 
 def test_unset_guide_reads_empty(temp_db):
-    import db
+    from core import db
     chat_id = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                     ("t", "", 0))
     assert style_guide(chat_id) == {}
@@ -106,7 +106,7 @@ def test_unset_guide_reads_empty(temp_db):
 
 def test_stored_guide_is_normalized_on_read(temp_db):
     """A guide written by an older build, or by hand, is still cleaned."""
-    import db
+    from core import db
     chat_id = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                     ("t", "", 0))
     db.wset(chat_id, "style_guide",
@@ -117,8 +117,8 @@ def test_stored_guide_is_normalized_on_read(temp_db):
 # ---- Reaches generators only ----
 
 def test_endpoints_round_trip(temp_db):
-    import app as app_module
-    import db
+    from web import app as app_module
+    from core import db
 
     chat_id = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                     ("t", "", 0))

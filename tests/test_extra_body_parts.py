@@ -28,7 +28,7 @@ from agents.common import (
     extra_parts_lines,
     observer_body_regions,
 )
-from character_schema import (
+from story.character_schema import (
     EXTRA_PART_ASPECTS,
     character_extra_parts,
     default_character_data,
@@ -36,7 +36,7 @@ from character_schema import (
     normalize_persona_data,
     persona_extra_parts,
 )
-from spatial import apply_contact_ops, contacts_of
+from world.spatial import apply_contact_ops, contacts_of
 
 
 # --- the card field ----------------------------------------------------------

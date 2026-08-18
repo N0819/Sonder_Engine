@@ -1,9 +1,9 @@
-# Split plan — `commit.py`
+# Split plan — `persist/commit.py`
 
 Status: PROPOSED. Companion to [`DESIGN_MODULE_LAYOUT.md`](DESIGN_MODULE_LAYOUT.md).
 
 8,197 lines · 132 top-level defs · 30 module-level constants. 14 new modules
-plus `commit.py`; every line accounted for exactly once (ranges sum to 8,197,
+plus `persist/commit.py`; every line accounted for exactly once (ranges sum to 8,197,
 verified).
 
 ## The section markers are 12 seams and 2 lies
@@ -24,36 +24,36 @@ load-bearing mistakes:
 
 | module | lines | owns |
 | --- | --- | --- |
-| `commit_common.py` | 370 | Leaf helpers used by more than one domain: scalar utilities, entity-id canonicalisation, the name/address roster. Under target deliberately — this is the module that makes the graph acyclic. |
-| `commit_place_graph.py` | 264 | The durable per-mind place graph and the route/dead-end experience it records. |
-| `commit_destruction.py` | 400 | Single- and multi-book destruction cascades: what a destruction dooms, who hears, when. |
-| `commit_room_registry.py` | 431 | Room identity across frames — the `room_registry` projection, mint dedup, renames, retirement, dangling-exit pruning. |
-| `commit_attire.py` | 851 | The mutable clothing ledger: authored notes, shed/worn garment entities, the validated attire diff. |
-| `commit_scene_state.py` | 682 | The prepared post-turn scene — book anchoring, ground/weather advance, the pre-lock build, the scene commit. |
-| `commit_mechanics.py` | 331 | In-transaction sweeps over time and channel: transit/news arrivals and expiry, the world-event spine, carriers, cast changes. |
-| `commit_entities.py` | 486 | The `world_entities` projection, the awareness gate, disguise supersession. |
-| `commit_background.py` | 1457 | Unregistered presences: identity folding, per-beat tracking, deterministic reactor selection, promotion to cast. |
-| `commit_mapping.py` | 472 | Lore/book mapping commit: proposed book ops, canon fallback ops, the off-screen event normaliser feeding it. |
-| `commit_ledgers.py` | 293 | The two world-KV debt ledgers — pending obligations and world pressure. Same shape, same overdue/stall discipline. |
-| `commit_memory.py` | 1452 | Pre-lock memory preparation: what each mind may remember, and the psychology/relationship/mind-model deltas riding with it. |
-| `commit_memory_write.py` | 212 | The durable memory write and its out-of-band consolidation twin. |
-| `commit.py` (stays) | ~580 | Facade, the per-turn commit lock, four thin tail domains, and the top-level atomic commit orchestrator. |
+| `persist/commit_common.py` | 370 | Leaf helpers used by more than one domain: scalar utilities, entity-id canonicalisation, the name/address roster. Under target deliberately — this is the module that makes the graph acyclic. |
+| `persist/commit_place_graph.py` | 264 | The durable per-mind place graph and the route/dead-end experience it records. |
+| `persist/commit_destruction.py` | 400 | Single- and multi-book destruction cascades: what a destruction dooms, who hears, when. |
+| `persist/commit_room_registry.py` | 431 | Room identity across frames — the `room_registry` projection, mint dedup, renames, retirement, dangling-exit pruning. |
+| `persist/commit_attire.py` | 851 | The mutable clothing ledger: authored notes, shed/worn garment entities, the validated attire diff. |
+| `persist/commit_scene_state.py` | 682 | The prepared post-turn scene — book anchoring, ground/weather advance, the pre-lock build, the scene commit. |
+| `persist/commit_mechanics.py` | 331 | In-transaction sweeps over time and channel: transit/news arrivals and expiry, the world-event spine, carriers, cast changes. |
+| `persist/commit_entities.py` | 486 | The `world_entities` projection, the awareness gate, disguise supersession. |
+| `persist/commit_background.py` | 1457 | Unregistered presences: identity folding, per-beat tracking, deterministic reactor selection, promotion to cast. |
+| `persist/commit_mapping.py` | 472 | Lore/book mapping commit: proposed book ops, canon fallback ops, the off-screen event normaliser feeding it. |
+| `persist/commit_ledgers.py` | 293 | The two world-KV debt ledgers — pending obligations and world pressure. Same shape, same overdue/stall discipline. |
+| `persist/commit_memory.py` | 1452 | Pre-lock memory preparation: what each mind may remember, and the psychology/relationship/mind-model deltas riding with it. |
+| `persist/commit_memory_write.py` | 212 | The durable memory write and its out-of-band consolidation twin. |
+| `persist/commit.py` (stays) | ~580 | Facade, the per-turn commit lock, four thin tail domains, and the top-level atomic commit orchestrator. |
 
 `normalize_offscreen_events` (1043–1077) sits inside the registry block and
-belongs to mapping — moving it is correct and makes `commit_room_registry.py`
+belongs to mapping — moving it is correct and makes `persist/commit_room_registry.py`
 two non-contiguous ranges.
 
 ## The transaction boundary
 
 The outer transaction opens at `commit.py:7920` and closes at 8025.
 `db.transaction()` is re-entrant, with depth in `db._local.tx_depth` — a
-**thread-local in `db.py`**, not a global of `commit.py`. Outermost acquires the
+**thread-local in `core/db.py`**, not a global of `persist/commit.py`. Outermost acquires the
 write lock and `BEGIN IMMEDIATE`; nested becomes `SAVEPOINT`.
 
 **Module identity is irrelevant to this mechanism.** Moving a function to
 another file cannot change its depth, its ordering, or whether it is inside the
 block — only the call site can, and no call site moves. `_prepare_turn_commit`
-and `_commit_all_locked` both stay in `commit.py`, unchanged, calling the same
+and `_commit_all_locked` both stay in `persist/commit.py`, unchanged, calling the same
 function objects in the same order; the only difference is that names resolve
 through facade imports instead of local defs.
 
@@ -66,7 +66,7 @@ through facade imports instead of local defs.
   mapping, offscreen plans, crowds, offscreen epoch, memories, carriers,
   background presences, narration person, obligations, world pressure, authored
   events, pending, extensions — in that exact order.
-- **After, out of band**: `schedule_memory_consolidation` → `jobs.py`,
+- **After, out of band**: `schedule_memory_consolidation` → `core/jobs.py`,
   `auto_promote_background_characters`, offscreen ticks, artifact wording,
   `dispatch_turn_committed`, and the blocking `_consolidate_committed_memories`
   twin.
@@ -83,7 +83,7 @@ a verbatim move untouched.
 **Only one genuinely mutable global exists**: `_COMMIT_LOCKS` (321, a
 `WeakValueDictionary`) with its `_COMMIT_LOCKS_GUARD`, written only by
 `_commit_lock`, whose only caller is `commit_all`. All three stay in
-`commit.py`. **No boundary touches them.**
+`persist/commit.py`. **No boundary touches them.**
 
 Everything else module-level is a frozen constant, verified by regex sweep for
 `.add(`/`.append(`/subscript-assignment against each name. **No global is
@@ -95,20 +95,20 @@ Acyclic, six tiers. `commit_common` and `commit_place_graph` are leaves; nine
 modules import only `commit_common`; `commit_scene_state` adds attire,
 destruction and room registry; `commit_mechanics` adds scene state;
 `commit_memory` adds background and place graph; `commit_memory_write` adds
-memory; `commit.py` imports all fourteen.
+memory; `persist/commit.py` imports all fourteen.
 
-**No extracted module references any symbol retained in `commit.py`** — the
+**No extracted module references any symbol retained in `persist/commit.py`** — the
 dependency is strictly `commit.py → extracted`, never back.
 
 `commit.py:43` imports the private `_merge_entity` from `spatial`; under the
-split it goes to `commit_entities.py` alone. The 46 deferred function-body
+split it goes to `persist/commit_entities.py` alone. The 46 deferred function-body
 imports travel **with their functions, verbatim** — they are the existing
-cycle-breakers, and hoisting `from agents.common import …` in `commit_memory.py`
-or `commit_attire.py` would create a real cycle.
+cycle-breakers, and hoisting `from agents.common import …` in `persist/commit_memory.py`
+or `persist/commit_attire.py` would create a real cycle.
 
 ## Facade
 
-`commit.py` keeps its **entire existing top-level import block (1–56)
+`persist/commit.py` keeps its **entire existing top-level import block (1–56)
 unchanged** — `_is_empty_view` is a contract name reachable only through it,
 several tests monkeypatch `commit.<imported-name>`, and pruning it is a
 "while I'm here" cleanup the rules forbid. It leaves ~40 now-unused imports;
@@ -151,7 +151,7 @@ commit_memory` from an extension bypasses the deep-import guard entirely until
 `EXTENSION_DEEP_IMPORTS` (line 648) lists the 14 new names. The split otherwise
 opens a hole in an existing invariant. Also: a `MODULE_PURPOSES` entry per
 module in `tools/generate_code_map.py:34`, the `AGENTS.md` routing table, and
-the `commit.py` sentence in `CLAUDE.md`'s architecture section.
+the `persist/commit.py` sentence in `CLAUDE.md`'s architecture section.
 
 ## Resistance
 
@@ -164,9 +164,9 @@ the `commit.py` sentence in `CLAUDE.md`'s architecture section.
    for. This is a general hazard: any future test patching `commit.<anything>`
    will silently miss.
 2. **`prepare_memory_commit` is 1,264 lines in one function** — 15% of the file,
-   indivisible under the verbatim rule. It is what forces `commit_memory.py` to
+   indivisible under the verbatim rule. It is what forces `persist/commit_memory.py` to
    1,452 lines and forces memory into two modules.
-3. **`commit_background.py` will not divide.** Tracking and promotion look like
+3. **`persist/commit_background.py` will not divide.** Tracking and promotion look like
    two modules; nine helpers are called from both halves. Any split needs a
    third module and still leaves boundaries no reader would predict.
 4. **Two title lists with a comment insisting they stay distinct**

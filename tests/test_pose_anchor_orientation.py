@@ -18,8 +18,8 @@ a direction and "not that way" is not one.
 
 from __future__ import annotations
 
-from spatial import normalize_scene_poses
-from spatial_frames import infer_facing, infer_focus
+from world.spatial import normalize_scene_poses
+from world.spatial_frames import infer_facing, infer_focus
 
 ROOMS = {
     "room_312": {

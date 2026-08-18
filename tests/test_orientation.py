@@ -5,12 +5,12 @@ list they must invent geometry from."""
 
 from __future__ import annotations
 
-from spatial import (egocentric_frame, rooms_adjacent, spatial_digest,
+from world.spatial import (egocentric_frame, rooms_adjacent, spatial_digest,
                      normalize_bearing, opposite_bearing, relative_bearing,
                      lateral_of, travel_bearing, normalize_scene_bearings,
                      merge_scene_with_diff)
-from spatial_frames import infer_came_from, infer_focus, infer_facing
-import spatial_orientation
+from world.spatial_frames import infer_came_from, infer_focus, infer_facing
+from world import spatial_orientation
 
 
 def _scene(positions, orientation, rooms):

@@ -30,7 +30,7 @@ from __future__ import annotations
 import pytest
 
 from agents.common import _appearance_as_prose, _inject_visible_actor
-from scene import appearance_of
+from story.scene import appearance_of
 
 BASE = "A tall figure in a grey travelling coat, hood raised."
 
@@ -121,7 +121,7 @@ class TestAppearanceIsNotHandedOverUnseen:
     def test_a_sealed_interior_has_no_visual_to_the_room_outside(self):
         """The live geometry: an interior room with no adjacency to the room
         its owner stands in. Nothing should see through that."""
-        from spatial import has_visual, spatial_rel
+        from world.spatial import has_visual, spatial_rel
 
         scene = {"rooms": {
             "bedroom": {"name": "Bedroom", "adjacent": []},
@@ -134,7 +134,7 @@ class TestAppearanceIsNotHandedOverUnseen:
     def test_touch_is_untouched_by_the_sight_gate(self):
         """The report was precise: she should not SEE them, though she might
         feel them. Contact is a separate channel and stays open."""
-        from spatial import contacts_of, merge_scene_with_diff
+        from world.spatial import contacts_of, merge_scene_with_diff
 
         scene = merge_scene_with_diff({
             "rooms": {"inside": {"name": "Inside"}},

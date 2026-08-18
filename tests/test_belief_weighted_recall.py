@@ -18,13 +18,13 @@ import time
 
 import pytest
 
-from memory import (
+from mind.memory import (
     _ABANDONED_BELIEF_DECAY,
     _ABANDONED_BELIEF_FLOOR,
     _abandoned_confidence,
     reconcile_inference_confidence,
 )
-from theory_of_mind import apply_mind_model_updates, belief_credence
+from mind.theory_of_mind import apply_mind_model_updates, belief_credence
 
 
 def _chat_and_char(temp_db):
@@ -153,7 +153,7 @@ def test_reconciliation_never_consults_the_objective_record(temp_db):
     events row, the resolved event, or another mind's state could reach it.
     """
     import inspect
-    import memory
+    from mind import memory
     src = inspect.getsource(memory.reconcile_inference_confidence)
     for forbidden in ("resolved_event", "director_", "FROM events",
                       "dialogue_log", "ctx."):
@@ -168,7 +168,7 @@ def test_reconciliation_never_consults_the_objective_record(temp_db):
 def test_recall_prefers_the_belief_the_character_still_holds(temp_db):
     """The point of the whole mechanism: two inferences about the same subject
     that a query matches equally, ranked by what the character believes now."""
-    from memory import search_memories
+    from mind.memory import search_memories
     chat_id, char_id = _chat_and_char(temp_db)
     held = _inference(temp_db, chat_id, char_id, "Vorne",
                       "Vorne is protecting his sister", 0.9, turn_idx=1)
@@ -271,7 +271,7 @@ def test_an_abandoned_inference_stays_retrievable_at_k8(temp_db):
     carries any more, when it is the memory that best answers the query,
     must still surface in a k=8 recall against a bank of unrelated
     higher-confidence witnessed rows. At the compounding floor it did not."""
-    from memory import add_memory, search_memories
+    from mind.memory import add_memory, search_memories
     chat_id, char_id = _chat_and_char(temp_db)
     fillers = [
         "The kettle boiled over on the old stove",

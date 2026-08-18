@@ -30,7 +30,7 @@ that stops it noticing a new entry that CONTRADICTS an old one.
 
 from __future__ import annotations
 
-from prompts import DEFAULT_PROMPTS
+from llm.prompts import DEFAULT_PROMPTS
 
 
 def _mapping_prompt():

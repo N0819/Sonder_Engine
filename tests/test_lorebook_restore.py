@@ -1,9 +1,9 @@
 """Tests for lorebook snapshot restoration."""
 
-from memory import add_lore, restore_lorebook
+from mind.memory import add_lore, restore_lorebook
 
 def test_restore_lorebook_preserves_entry_id(temp_db, monkeypatch):
-    import memory
+    from mind import memory
 
     monkeypatch.setattr(
         memory,
@@ -63,7 +63,7 @@ def test_restore_lorebook_deletes_entries_missing_from_snapshot(
     temp_db,
     monkeypatch,
 ):
-    import memory
+    from mind import memory
 
     monkeypatch.setattr(
         memory,

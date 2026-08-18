@@ -27,9 +27,9 @@ import time
 
 import pytest
 
-import memory
-import checkpoints
-from db import q, qi
+from mind import memory
+from persist import checkpoints
+from core.db import q, qi
 
 
 @pytest.fixture

@@ -24,10 +24,10 @@ import sys
 import time
 from pathlib import Path
 
-import commit
-from pipeline_context import ChatData, PipelineContext, TurnData
-from schemas import is_derived_entity_name, validate_llm_output_strict
-from spatial import merge_scene_with_diff
+from persist import commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from llm.schemas import is_derived_entity_name, validate_llm_output_strict
+from world.spatial import merge_scene_with_diff
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import reproject_world_entities as reproject  # noqa: E402

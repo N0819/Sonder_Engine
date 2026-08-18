@@ -20,10 +20,10 @@ import time
 
 import pytest
 
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from commit import commit_transit_sweep, prepare_scene_commit
-from pipeline_context import ChatData, PipelineContext, TurnData
-from spatial import spatial_rel
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from persist.commit import commit_transit_sweep, prepare_scene_commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.spatial import spatial_rel
 
 
 def _elevator_scene(transit):
@@ -324,7 +324,7 @@ def test_branch_clone_mints_fresh_event_ids_and_remaps_frames():
     """scheduled_events rows survive branch/clone with FRESH event ids
     (global TEXT PK -- collisions would silently drop rows) and payload
     frame ids remapped to the clone's own frames."""
-    from app import _build_world_id_remap, _remap_scheduled_event_frames
+    from web.app import _build_world_id_remap, _remap_scheduled_event_frames
 
     blob = {"scheduled_events": [{
         "event_id": "evt_original", "due_at": 100.0,

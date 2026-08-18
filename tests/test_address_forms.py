@@ -26,7 +26,7 @@ stay empty regardless, because nothing backfills.
 
 from __future__ import annotations
 
-import commit
+from persist import commit
 
 SHRINE = ["Hinami", "Tamamo", "The Doctor"]
 SCENE = {"positions": {"Hinami": "hall", "Tamamo": "hall",

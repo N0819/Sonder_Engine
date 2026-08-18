@@ -1,6 +1,6 @@
 """Live stress, hedonic, belief, and association state."""
 
-import psychology_runtime as psych
+from mind import psychology_runtime as psych
 
 
 def test_pain_and_pleasure_work_without_survival_vitals():

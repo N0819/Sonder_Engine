@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import time
 
-import attire
-import character_schema
-import scene
+from story import attire
+from story import character_schema
+from story import scene
 
 
 # --- the card can carry it ---------------------------------------------------
@@ -232,7 +232,7 @@ class TestAppearanceFill:
         }
 
     def test_it_proposes_a_whole_body_and_outfit(self, temp_db, monkeypatch):
-        import importers
+        from story import importers
 
         char_id = self._card(temp_db)
         monkeypatch.setattr(importers, "chat_complete",
@@ -250,7 +250,7 @@ class TestAppearanceFill:
         """The switch in Settings decides whether `beneath` is USED. This
         decides whether it is ever put on the card -- a model that answered a
         question nobody asked must not leave it there."""
-        import importers
+        from story import importers
 
         char_id = self._card(temp_db)
         monkeypatch.setattr(importers, "chat_complete",
@@ -262,7 +262,7 @@ class TestAppearanceFill:
     def test_it_writes_nothing(self, temp_db, monkeypatch):
         """A generation request is "show me one", not "replace my card". The
         author's ordinary Save is still what commits it."""
-        import importers
+        from story import importers
 
         char_id = self._card(temp_db)
         monkeypatch.setattr(importers, "chat_complete",
@@ -278,7 +278,7 @@ class TestAppearanceFill:
             self, temp_db, monkeypatch):
         """Generating from the SAVED copy would ignore the two lines they just
         wrote, which is exactly when anyone presses the button."""
-        import importers
+        from story import importers
 
         char_id = self._card(temp_db)
         seen = {}
@@ -295,7 +295,7 @@ class TestAppearanceFill:
         assert seen["include_beneath"] is False
 
     def test_a_persona_uses_the_same_generator(self, temp_db, monkeypatch):
-        import importers
+        from story import importers
 
         pid = temp_db.qi(
             "INSERT INTO personas(name,sheet,source,resource_uid) "
@@ -312,7 +312,7 @@ class TestAppearanceFill:
         """The first thing this feature did in real use was fail with "Raw
         output:" and then nothing, because the raw output WAS nothing. An
         empty response and an unparseable one have different causes."""
-        import importers
+        from story import importers
         import pytest
 
         char_id = self._card(temp_db)
@@ -322,7 +322,7 @@ class TestAppearanceFill:
 
     def test_a_non_json_response_still_shows_what_came_back(
             self, temp_db, monkeypatch):
-        import importers
+        from story import importers
         import pytest
 
         char_id = self._card(temp_db)
@@ -337,7 +337,7 @@ class TestAppearanceFill:
         tokens is spent deliberating and the call returns an empty string --
         which is exactly how this failed. None means "the configured ceiling"
         (providers._clamp_max_tokens)."""
-        import importers
+        from story import importers
 
         char_id = self._card(temp_db)
         seen = {}
@@ -355,7 +355,7 @@ class TestAppearanceFill:
         """`_jparse` closes the open braces of a truncated response, which is
         right for a pipeline beat that must not die and wrong here: it hands
         back half an outfit looking exactly like a whole one."""
-        import importers
+        from story import importers
         import pytest
 
         char_id = self._card(temp_db)
@@ -374,7 +374,7 @@ class TestAppearanceFill:
     def test_no_truncation_point_slips_through(self):
         """Ending in `}` is not the test: a cut lands right after a closing
         brace often enough, and then the tail of the object is just missing."""
-        import importers
+        from story import importers
 
         whole = json.dumps(self._proposal())
         assert not [n for n in range(40, len(whole))
@@ -384,7 +384,7 @@ class TestAppearanceFill:
             self, temp_db, monkeypatch):
         """Fences and chatter around a whole object are a complete answer with
         packaging, not a cut-off one."""
-        import importers
+        from story import importers
 
         char_id = self._card(temp_db)
         whole = json.dumps(self._proposal())
@@ -397,7 +397,7 @@ class TestAppearanceFill:
             assert sheet["initial_outfit"]["wearing"]
 
     def test_a_missing_card_is_a_missing_card(self, temp_db):
-        import importers
+        from story import importers
         import pytest
 
         with pytest.raises(ValueError):
@@ -409,7 +409,7 @@ class TestAShedGarmentIsARealObject:
     turning one into a thing in the room is the commit path's job."""
 
     def test_it_lands_in_the_scene_and_in_the_projection(self):
-        import commit
+        from persist import commit
 
         sc = {"positions": {"Mira": "room_a"}}
         diff = {}
@@ -423,7 +423,7 @@ class TestAShedGarmentIsARealObject:
         assert diff["entities"][key] is sc["entities"][key]
 
     def test_the_same_garment_is_not_minted_twice(self):
-        import commit
+        from persist import commit
 
         sc, diff = {"positions": {"Mira": "room_a"}}, {}
         commit._mint_shed_garments(sc, [("Mira", "silk sash")], diff)
@@ -438,8 +438,8 @@ class TestAShedGarmentIsARealObject:
         The resolver already knew the answer; commit's exact ``in`` check was
         the one bypass that left the garment worn beside its floor object.
         """
-        import commit
-        from pipeline_context import ChatData, PipelineContext, TurnData
+        from persist import commit
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -504,8 +504,8 @@ class TestAShedGarmentIsARealObject:
             self, temp_db):
         """Coverage is standing state, separate from a descriptive condition:
         a rucked tank remains worn while only its midriff zone becomes bare."""
-        import commit
-        from pipeline_context import ChatData, PipelineContext, TurnData
+        from persist import commit
+        from core.pipeline_context import ChatData, PipelineContext, TurnData
 
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -558,8 +558,8 @@ class TestTheRoutes:
         import pytest
         from fastapi.testclient import TestClient
 
-        import app as app_module
-        import guest_access as guest
+        from web import app as app_module
+        from web import guest_access as guest
 
         guest.reset_host_account()
         client = TestClient(app_module.app)
@@ -570,7 +570,7 @@ class TestTheRoutes:
         return client
 
     def test_the_fill_route_returns_a_proposal(self, temp_db, monkeypatch):
-        import importers
+        from story import importers
 
         monkeypatch.setattr(importers, "chat_complete", lambda *a, **k: json.dumps({
             "embodiment": {"visible": {"summary": "Rangy.", "build": "rangy"}},
@@ -653,7 +653,7 @@ def test_both_card_editors_offer_regions_and_the_generator():
 
 
 def test_the_generator_prompt_states_the_rules_it_has_to_state():
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["fill_appearance"]
     # Every garment must land somewhere, or the region model has nothing to
@@ -686,7 +686,7 @@ def test_the_generator_sees_the_whole_card_and_the_unsaved_draft(
     """The complaint this answers: a generated body unrelated to the character
     it is for. Everything the prompt is told to derive from has to actually be
     in the payload."""
-    import importers
+    from story import importers
 
     card = character_schema.default_character_data("Mira")
     card["competence"]["abilities"] = [
@@ -721,7 +721,7 @@ def test_the_director_is_told_damage_lands_on_both_and_heals_differently():
     """A slash across the chest cuts the coat and the chest. The two are not
     the same kind of fact: a cut coat stays cut until mended, a wound heals.
     Neither may be written into the body's stable appearance."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_body"]
     assert "A BLOW LANDS ON BOTH" in prompt
@@ -733,7 +733,7 @@ def test_the_director_is_told_damage_lands_on_both_and_heals_differently():
 
 
 def test_the_director_is_told_a_garments_condition_belongs_to_the_garment():
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_body"]
     assert "WHAT HAPPENS TO A GARMENT BELONGS TO THE GARMENT" in prompt
@@ -755,7 +755,7 @@ def test_the_middle_states_are_offered_without_being_urged():
     So the resolution leads and the middle states follow as what they are: for
     an act genuinely mid-flight, evidenced by the Director's OWN prose.
     """
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_body"]
     assert "`remove` IS YOUR RESOLUTION AND THE ENGINE HONOURS IT" in prompt
@@ -789,7 +789,7 @@ class TestOneCharactersAliasIsAnothersName:
         ]
 
     def test_each_body_keeps_its_own_clothes(self):
-        import commit
+        from persist import commit
 
         scene = {"attire": {
             "Yuki": {"wearing": ["a plain yukata"], "state": []},
@@ -799,7 +799,7 @@ class TestOneCharactersAliasIsAnothersName:
         assert scene["attire"]["Hana"]["wearing"] == ["nothing at all"]
 
     def test_a_registered_name_outranks_somebody_elses_alias_for_it(self):
-        import commit
+        from persist import commit
 
         canonical = commit._heal_attire_identity_keys({}, self._cast())
         assert canonical("Yuki") == "Yuki"
@@ -810,7 +810,7 @@ class TestOneCharactersAliasIsAnothersName:
         Dr. Moon held two records, one under her uid with all her clothes and
         one under her name with none, so she rendered as wearing nothing while
         her clothing state still read "lab coat ripped at the hem"."""
-        import commit
+        from persist import commit
 
         cast = [{"id": 1, "name": "Dr. Moon", "sheet": json.dumps(
             {"identity": {"name": "Dr. Moon", "uid": "char_f0ef",
@@ -886,7 +886,7 @@ class TestAnOffSchemaDiffIsReadNotDiscarded:
     """
 
     def _read(self, diff, worn, entry=None):
-        from commit import interpret_attire_notes
+        from persist.commit import interpret_attire_notes
         return interpret_attire_notes(
             attire.coerce_diff_shape(diff), worn,
             entry if entry is not None else {"wearing": list(worn), "state": []})
@@ -954,7 +954,7 @@ class TestAuthoredRegionsSurviveTheOpeningTurn:
     and its `beneath` text on beat 0."""
 
     def test_the_schema_keeps_them(self):
-        from schemas import AttireState, _dump
+        from llm.schemas import AttireState, _dump
         regions = {"torso": {"garments": [{"name": "robe",
                                            "description": "black silk"}],
                              "beneath": "warm skin"}}
@@ -1054,7 +1054,7 @@ class TestOneGarmentIsOneRecord:
     never checked against what the MODEL had already written."""
 
     def test_a_model_authored_record_is_adopted_not_duplicated(self):
-        import commit
+        from persist import commit
 
         # What the objects specialist wrote for the same garment, under its
         # own id, in the same beat.
@@ -1079,7 +1079,7 @@ class TestOneGarmentIsOneRecord:
         assert sc["positions"]["travel_shorts"] == "room_a"
 
     def test_an_unrelated_object_is_never_folded_in(self):
-        import commit
+        from persist import commit
 
         sc = {
             "positions": {"Mira": "room_a"},
@@ -1092,7 +1092,7 @@ class TestOneGarmentIsOneRecord:
         assert "lantern" in sc["entities"]
 
     def test_a_garment_worn_by_someone_else_is_never_folded_in(self):
-        import commit
+        from persist import commit
 
         sc = {
             "positions": {"Mira": "room_a"},
@@ -1108,7 +1108,7 @@ class TestOneGarmentIsOneRecord:
         The live `hinami_shorts` -- minted by a specialist that could not
         otherwise name a worn garment -- claimed `worn_by` with no `shed`
         and read as still worn beside a ledger that had the body bare."""
-        import commit
+        from persist import commit
 
         class _Ctx(dict):
             def __init__(self):
@@ -1150,7 +1150,7 @@ class TestOneGarmentIsOneRecord:
     def test_a_shed_record_is_left_alone_by_the_fold(self):
         """A shed garment IS an object in the world. Only the worn claim is
         the wardrobe's."""
-        import commit
+        from persist import commit
 
         sc = {
             "attire": {"Hinami": {"wearing": ["travel shorts"]}},
@@ -1167,7 +1167,7 @@ class TestOneGarmentIsOneRecord:
         scene that already accumulated duplicates keeps them forever
         otherwise. Chat 71's live shape: the model's record from resolve,
         the model's record from interpret, and the commit seam's mint."""
-        import commit
+        from persist import commit
 
         sc = {
             "entities": {
@@ -1192,7 +1192,7 @@ class TestOneGarmentIsOneRecord:
         assert sc == before
 
     def test_two_different_shed_garments_are_not_merged(self):
-        import commit
+        from persist import commit
 
         sc = {"entities": {
             "sash": {"name": "utility sash",

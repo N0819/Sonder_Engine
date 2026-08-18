@@ -8,10 +8,10 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
-from character_schema import default_character_data
-from scene import active_cast
+from web import app as app_module
+from web import guest_access as guest
+from story.character_schema import default_character_data
+from story.scene import active_cast
 
 
 @pytest.fixture

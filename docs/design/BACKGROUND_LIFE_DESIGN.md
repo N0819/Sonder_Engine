@@ -4,7 +4,7 @@ Status: **mostly built.** Most of §3 shipped in alpha 4.0 as the scene manager 
 the batched voicing (§3.3), unbatched writing (§3.2), the single stage (§3.4),
 the `place` block (§3.7), frozen personality blurbs (§3.8), the opt-in tiered
 config (§3.10), the I/O contract (§3.11), co-DM-not-co-author (§3.12), and
-claims-not-facts (§3.13, as `background_claims.py`).
+claims-not-facts (§3.13, as `world/background_claims.py`).
 
 What is **not** built: the whole digest lifecycle (§3.5), promotion conversion
 and the `ambient_turns` guard (§3.6 — an active defect, not just backlog),
@@ -193,7 +193,7 @@ So the entire location-theming budget for a background line is 160 characters of
 cyberpunk dive and a barkeep in a Regency inn receive functionally identical
 context. This is the single biggest lever available and it is nearly free.
 
-Note the style-guide exclusion in `scene.py` (`STYLE_GUIDE_FIELDS` reaches only
+Note the style-guide exclusion in `story/scene.py` (`STYLE_GUIDE_FIELDS` reaches only
 the Director and mapping; character agents are excluded so that "every mind in
 the world" doesn't sound like the narrator). That rationale protects *authored*
 characters with their own voice. A background presence has no authored voice —
@@ -574,7 +574,7 @@ on the road. The blurb schema should be able to say so:
 "canon_ref": "Ferengi barkeep, Quark register — acquisitive, obsequious, sly"
 ```
 
-This is deliberately in tension with a standing engine rule. `prompts.py` tells
+This is deliberately in tension with a standing engine rule. `llm/prompts.py` tells
 both the greeting interpreter and the mapping agent to treat names as opaque and
 *"Do NOT import facts, identities, technology"* from outside canon. That rule is
 right and should stay — but read what it protects against: the engine **drifting
@@ -612,7 +612,7 @@ Treat `canon_ref` as a strong signal the presence deserves a mind:
   intended figure rather than a generic barkeep who happens to share a room with
   the memory of one;
 - route it through the **existing review surface** — `/api/chats/{cid}/
-  promotions/draft` → `/confirm` (`app.py`) already lets a human read and edit a
+  promotions/draft` → `/confirm` (`web/app.py`) already lets a human read and edit a
   drafted sheet before it attaches. That is precisely where borrowed canonical
   facts should enter: deliberately, once, under authorial review — not
   accumulated turn by turn into a digest nobody approved.
@@ -954,7 +954,7 @@ barrier, just impoverished.
 
 ### 3.13 Keeping the invention: claims, not facts
 
-**Implemented** — `background_claims.py`, driven by a live result rather than a
+**Implemented** — `world/background_claims.py`, driven by a live result rather than a
 hypothesis. See `demo/tavern_scene_life/findings.md`.
 
 The tavern run showed the manager inventing small world facts through its

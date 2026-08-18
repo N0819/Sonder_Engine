@@ -25,7 +25,7 @@ from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from app import SelectiveGZipMiddleware
+from web.app import SelectiveGZipMiddleware
 
 
 CHUNKS = 6
@@ -91,7 +91,7 @@ def test_the_real_turn_stream_declares_a_streamed_content_type():
     """The exclusion is keyed on this, so it is worth pinning."""
     import inspect
 
-    import app as app_module
+    from web import app as app_module
 
     source = inspect.getsource(app_module._stream)
     assert "application/x-ndjson" in source
@@ -124,7 +124,7 @@ def test_the_middleware_owns_no_private_starlette_api():
     import pathlib
 
     tree = ast.parse(
-        (pathlib.Path(__file__).resolve().parents[1] / "app.py")
+        (pathlib.Path(__file__).resolve().parents[1] / "web" / "app.py")
         .read_text(encoding="utf-8"))
 
     used = {node.attr for node in ast.walk(tree)

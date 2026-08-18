@@ -71,7 +71,7 @@ def _world(db):
 
 
 def _market_crowd(db, cid, *, reports=()):
-    import crowds
+    from world import crowds
 
     crowd = crowds.new_crowd(cid, MARKET, band="a few dozen",
                              composition="market traders", since_turn=1)
@@ -97,7 +97,7 @@ def _caravan_send(**over):
 
 
 def _run(ctx, scene, ops=(), names=(), places=()):
-    from couriers import run_couriers
+    from story.couriers import run_couriers
 
     return run_couriers(ctx, scene, list(ops), names=names, places=places)
 
@@ -190,7 +190,7 @@ def test_a_caravan_tells_the_market_what_it_carries(temp_db):
     the wagon must be put down where it dwells, into the CROWD -- the
     market's own mouth -- one retelling fainter, so the town between the
     endpoints hears the news too."""
-    import crowds
+    from world import crowds
 
     cid, chars, scene, ctx = _world(temp_db)
     _market_crowd(temp_db, cid)
@@ -266,7 +266,7 @@ def test_a_standing_bill_boards_the_wagon_and_a_torn_one_does_not(temp_db):
     reads it and carries it on -- and tearing the bill down BEFORE the
     caravan rolls in must stop that spread, exactly as silencing a courier
     stops a delivery."""
-    from artifacts import run_artifacts
+    from story.artifacts import run_artifacts
 
     cid, chars, scene, ctx = _world(temp_db)
 
@@ -301,7 +301,7 @@ def test_checkpoint_restore_rewinds_the_caravan_and_its_cargo(temp_db):
     """New durable state must rewind with the story: a caravan that
     survived a rollback would deliver news gathered on a road that no
     longer happened."""
-    from checkpoints import ensure_checkpoint, restore_checkpoint
+    from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
     cid, chars, scene, ctx = _world(temp_db)
     _market_crowd(temp_db, cid, reports=[_witnessed()])

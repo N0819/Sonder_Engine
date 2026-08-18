@@ -356,7 +356,7 @@ than a preference:
 | Gap | Built as |
 |---|---|
 | Director context injection | `api.director_context` (per phase) + `api.on_director_payload` |
-| Read-only canonical story view | `story_view.py` → `api.story_view`, `GET /api/chats/{id}/story_view` |
+| Read-only canonical story view | `web/story_view.py` → `api.story_view`, `GET /api/chats/{id}/story_view` |
 | Player-safe projection | `api.player_view`, `api.viewers` |
 | Campaign provisioning | `api.provision_story` over the chat-archive importer |
 
@@ -450,7 +450,7 @@ hit this before it hit anything else here.
 Fixed by registering the extension's directory as a PACKAGE — relative imports,
 `sonder_ext_<id>.<module>` — rather than by putting it on `sys.path`, which
 would make every sibling importable under its bare name: an extension shipping
-`db.py` would shadow the engine's for whatever imported next, and two extensions
+`core/db.py` would shadow the engine's for whatever imported next, and two extensions
 each shipping `helper.py` would get whichever loaded first. Disabling now
 forgets every submodule, so an update cannot leave a stale file executing.
 
@@ -488,7 +488,7 @@ an adapter turned out not to be missing code at all.
 
   **There is no way to post prose, and there will not be.** Narration is
   produced by the pipeline from state the Director committed. A seam for
-  injected assistant text would make `commit.py`'s persistence boundary
+  injected assistant text would make `persist/commit.py`'s persistence boundary
   advisory, which is the one thing this engine cannot trade. The three
   legitimate routes are in the guide; the first — make it true and let
   perception distribute it — is the only one that survives a reroll, because

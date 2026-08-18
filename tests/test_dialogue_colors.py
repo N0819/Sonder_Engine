@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-from dialogue_colors import (
+from story.dialogue_colors import (
     AUTO_LIGHTNESS,
     MIN_HUE_SEPARATION,
     auto_dialogue_color,

@@ -12,7 +12,7 @@ import contextvars
 
 import pytest
 
-import jobs
+from core import jobs
 
 
 @pytest.fixture(autouse=True)
@@ -149,8 +149,8 @@ def test_background_jobs_do_not_inherit_the_turns_streaming_sinks(temp_db):
     import queue as queue_module
 
     from language_runtime import current_language_id
-    from pipeline_context import current_step_key, current_warning_sink
-    from providers import (call_ledger_sink, cancel_event,
+    from core.pipeline_context import current_step_key, current_warning_sink
+    from llm.providers import (call_ledger_sink, cancel_event,
                            generation_event_sink, token_sink)
 
     bus = queue_module.Queue()

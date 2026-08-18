@@ -9,7 +9,7 @@ the first live consumer and partial-coverage case landed.
 are derived. `agents.common.observer_body_regions` is now their production
 consumer: every perception pass receives only observer-safe body surfaces, and
 adversarial tests prove concealed authored markers never enter the model
-payload. `attire.py` still carries the four-state
+payload. `story/attire.py` still carries the four-state
 ladder this note argues against; collapsing it is step 4 and is gated on the
 re-measurement in step 1.
 
@@ -126,8 +126,8 @@ behind you cannot see your front, and the engine already computes facing,
 
 ## What is genuinely missing
 
-**There is no spatial `cover` concept.** Grep across `spatial.py` and
-`scene.py` finds none. A body behind a table, a counter, a thrown cloak is not
+**There is no spatial `cover` concept.** Grep across `world/spatial.py` and
+`story/scene.py` finds none. A body behind a table, a counter, a thrown cloak is not
 expressible today. That is the one new piece, and it is what "world objects can
 cover" needs.
 

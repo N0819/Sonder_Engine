@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from lore_structure import (classify_title, clean_title, derive_knowledge,
+from story.lore_structure import (classify_title, clean_title, derive_knowledge,
                             parse_structure)
 
 
@@ -136,7 +136,7 @@ class TestWhatTheTreeSaysAboutKnowledge:
 def test_the_import_carries_all_of_it_through(temp_db):
     """End to end, on the shape the live book actually has. Before this, an
     imported book had a title on 0 of 310 rows."""
-    import importers
+    from story import importers
     book = {"entries": {str(i): e for i, e in enumerate(_book())}}
     lb, _n = importers.import_lorebook(book, name="tree", reinterpret=False)
     rows = temp_db.q("SELECT * FROM lore_entries WHERE lorebook_id=?", (lb,))
@@ -158,7 +158,7 @@ def test_the_child_tree_lands_as_refines_entry_ids(temp_db):
     """
     import json
 
-    import importers
+    from story import importers
     book = {"entries": {str(i): e for i, e in enumerate(_book())}}
     lb, _n = importers.import_lorebook(book, name="tree", reinterpret=False)
     rows = {r["id"]: r for r in
@@ -175,7 +175,7 @@ def test_a_leaf_has_no_parent_link(temp_db):
     preceded it would invent a hierarchy the author did not draw."""
     import json
 
-    import importers
+    from story import importers
     book = {"entries": {str(i): e for i, e in enumerate(_book())}}
     lb, _n = importers.import_lorebook(book, name="tree", reinterpret=False)
     rows = temp_db.q("SELECT * FROM lore_entries WHERE lorebook_id=?", (lb,))

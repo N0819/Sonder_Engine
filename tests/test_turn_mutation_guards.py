@@ -10,7 +10,7 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
+from web import app
 from agents.runtime import ABORTS
 
 

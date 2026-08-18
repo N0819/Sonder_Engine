@@ -40,18 +40,18 @@ import json
 import logging
 import re
 
-from character_schema import (
+from story.character_schema import (
     character_appearance,
     character_name,
     persona_appearance,
     persona_name,
 )
-from db import wget
-from schemas import validate_llm_output
-from prompts import get_prompt
-from spatial import hear_level, spatial_rel_between
+from core.db import wget
+from llm.schemas import validate_llm_output
+from llm.prompts import get_prompt
+from world.spatial import hear_level, spatial_rel_between
 
-from commit import (
+from persist.commit import (
     name_in_roster,
     pick_background_reactors,
     _background_name_mentioned,
@@ -65,14 +65,14 @@ from commit import (
     _valid_pending_reply,
 )
 
-from background_claims import (
+from world.background_claims import (
     MAX_REF_WORDS,
     claimant_credence,
     is_title_only,
     novel_proper_nouns,
 )
 
-from scene import persona_of
+from story.scene import persona_of
 
 from .common import _agent_json, _unknown_actor_label
 
@@ -215,7 +215,7 @@ def _result(selected, reactions, mode="background_react", agent_calls=None):
 def background_react(ctx, nonce):
     dr = ctx.get("director_resolve") or {}
     try:
-        from scene import background_config
+        from story.scene import background_config
         cfg = background_config(ctx.chat.id)
     except Exception:
         cfg = {}
@@ -336,7 +336,7 @@ def _place_block(ctx, room_id):
     except Exception:
         block["world_knowledge"] = ""
     try:
-        from scene import fiction_model, style_guide
+        from story.scene import fiction_model, style_guide
         block["genre"] = (fiction_model(ctx.chat.id).get("genre") or {}).get("primary") or ""
         sg = style_guide(ctx.chat.id) or {}
         block["style"] = {k: sg[k] for k in ("genre", "tone", "avoid") if sg.get(k)}
@@ -378,7 +378,7 @@ def _presence_room(sc, name, rec, name_ids=None):
 
 def _player_room(ctx, sc):
     try:
-        from scene import persona_of, persona_name
+        from story.scene import persona_of, persona_name
         pers = persona_of(ctx.chat)
         pname = pers.get("name") or persona_name(pers) if isinstance(pers, dict) else None
         if pname:
@@ -412,7 +412,7 @@ def managed_presences(ctx, cap):
     scope = None
     if p_room:
         try:
-            from spatial import ambient_scope
+            from world.spatial import ambient_scope
             scope, _ = ambient_scope(sc, p_room)
             scope = set(scope or [])
         except Exception:
@@ -664,7 +664,7 @@ def _known_world_names(ctx, sc, managed_names):
     for p in _present_others(ctx):
         known.add(p)
     try:
-        from db import wget as _wget
+        from core.db import wget as _wget
         for rec in (_wget(ctx.chat.id, "background_claims", {}) or {}).values():
             known |= {str(r) for r in (rec.get("refs") or [])}
     except Exception:

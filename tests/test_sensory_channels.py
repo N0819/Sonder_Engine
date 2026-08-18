@@ -242,7 +242,7 @@ def test_narrator_wiring_and_prompt_license():
     import inspect
 
     from agents import narration
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     src = inspect.getsource(narration.narrator)
     assert "_sensory_channels_manifest" in src

@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 
 import agents.loops as loops
-from character_schema import default_character_data
+from story.character_schema import default_character_data
 
 
 class _Chat:

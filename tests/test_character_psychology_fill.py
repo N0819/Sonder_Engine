@@ -6,7 +6,7 @@ import time
 
 def test_fill_psychology_preserves_authored_fields_and_fills_nested_gaps(
         temp_db, monkeypatch):
-    import importers
+    from story import importers
 
     stored = {
         "identity": {"name": "Mara"},
@@ -91,7 +91,7 @@ def test_fill_prompt_is_specific_and_non_destructive():
     # and the NSFW flag from the settings table, and this is a fast-tier test
     # about what the prompt SAYS. Overriding the text in a preset is a separate
     # behaviour from having written it correctly.
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["fill_character_psychology"]
     assert "merges only empty fields" in prompt

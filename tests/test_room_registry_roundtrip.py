@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 import time
 
-import app
-from checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state
-from db import q
+from web import app
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint, snapshot_state
+from core.db import q
 
 
 def _make_chat(db, name="Story"):

@@ -67,7 +67,7 @@ def _write_extension(root, ext_id, manifest, files=None):
 
 
 def _enable(*ext_ids):
-    from db import set_setting
+    from core.db import set_setting
     extension_runtime.installed_extensions(refresh=True)
     set_setting(extension_runtime.ENABLED_SETTING, json.dumps(list(ext_ids)))
     extension_runtime.activate(refresh=True)
@@ -85,7 +85,7 @@ def _turn(db, chat_id, idx=1):
 
 
 def _character(db, chat_id, name, uid, state="{}"):
-    from character_schema import default_character_data
+    from story.character_schema import default_character_data
 
     char_id = db.qi(
         "INSERT INTO characters(name,sheet,source,created,resource_uid) "
@@ -473,7 +473,7 @@ class TestStateRidesTheEngine:
 
         assert report["errors"] == {}
         assert DEMO in report["ran"]
-        from db import wget
+        from core.db import wget
         assert wget(chat_id, f"ext:{DEMO}") == {
             "cohesion": 53.0,
             "last_turn": 4,
@@ -515,9 +515,9 @@ class TestStateRidesTheEngine:
 
     def test_extension_state_rides_export_and_import(self, temp_db,
                                                      real_ext_root):
-        import app
-        from checkpoints import ensure_checkpoint
-        from db import wget, wset
+        from web import app
+        from persist.checkpoints import ensure_checkpoint
+        from core.db import wget, wset
 
         _enable(DEMO)
         chat_id = _chat(temp_db, "Rides")
@@ -529,8 +529,8 @@ class TestStateRidesTheEngine:
 
     def test_extension_state_rides_a_checkpoint_restore(self, temp_db,
                                                         real_ext_root):
-        from checkpoints import ensure_checkpoint, restore_checkpoint
-        from db import wget, wset
+        from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+        from core.db import wget, wset
 
         _enable(DEMO)
         chat_id = _chat(temp_db, "Rewind")
@@ -724,7 +724,7 @@ class TestHostSurface:
 
     def test_bootstrap_carries_extensions_and_their_errors(self, temp_db,
                                                            ext_root):
-        import app
+        from web import app
 
         _write_extension(ext_root, "listed", {
             "id": "listed", "version": "1", "ext_api": 1})
@@ -735,7 +735,7 @@ class TestHostSurface:
         assert payload["extension_errors"][0]["dir"] == "broken"
 
     def test_the_routes_exist_and_are_host_gated(self):
-        import app
+        from web import app
 
         paths = {route.path for route in app.app.routes}
         assert {"/api/extensions",

@@ -46,7 +46,7 @@ Six consequences run through everything below:
 1. **Stages are separate model calls.** Not sections of one prompt.
 2. **Perception is per observer.** Two characters in a room get two calls,
    because one call producing two views can leak between them.
-3. **Model output is provisional.** `commit.py` decides what becomes true.
+3. **Model output is provisional.** `persist/commit.py` decides what becomes true.
 4. **Structured output is re-derived, not trusted.** Perception's observation
    objects are rebuilt from its own scrubbed prose, so the second
    representation cannot widen the information budget.
@@ -80,7 +80,7 @@ flowchart BT
 
 ## 2. Process and request lifecycle
 
-The application is a single FastAPI process (`app.py`) over one SQLite
+The application is a single FastAPI process (`web/app.py`) over one SQLite
 database. There is no job queue and no external service: a turn runs inside the
 request that submitted it, streaming events back as it goes.
 
@@ -109,7 +109,7 @@ partially-written transaction.
 
 A turn is a sequence of **stages**, each a model call plus deterministic pre-
 and post-processing, executed by `agents/runtime.py` over a `PipelineContext`
-(`pipeline_context.py`).
+(`core/pipeline_context.py`).
 
 `STEP_HANDLERS` maps a stage key to its handler:
 
@@ -215,7 +215,7 @@ re-derived from the final scrubbed prose.
 
 **Character agents** (`agents/character.py`, `agents/loops.py`) — behaviour
 declared from private perception, memory, relationships and own-body state.
-A character never decides its own success. `psychology_runtime.py` then
+A character never decides its own success. `mind/psychology_runtime.py` then
 persists bounded state from those permitted inputs only.
 
 **Background** (`agents/background.py`) — at most one named, unregistered
@@ -228,7 +228,7 @@ real character.
 cannot originate player conduct or reveal unperceived facts, and it is required
 to render quoted dialogue verbatim.
 
-**Commit** (`commit.py`) — the sole persistence boundary. Detail in §8.
+**Commit** (`persist/commit.py`) — the sole persistence boundary. Detail in §8.
 
 ### Diagram 4 — Who may see what
 
@@ -374,7 +374,7 @@ no snapshot. This is uncertainty metadata, never persisted pose; action-onset
 scrubs unsupported static claims against it and later re-injects structured
 declared actions.
 
-**Frames** (`frames.py`, `spatial_frames.py`) give a chat concurrent
+**Frames** (`core/frames.py`, `world/spatial_frames.py`) give a chat concurrent
 timelines — separate scenes, separate memory visibility — sharing one global
 play order.
 
@@ -436,7 +436,7 @@ character's interior, never the raw Director event.
 
 Cap of two projects. Drive weight is earned by service, never by adoption.
 
-**The deterministic half.** After the model declares behaviour, `commit.py`
+**The deterministic half.** After the model declares behaviour, `persist/commit.py`
 resolves state through pure functions:
 
 - `affect.appraise` — OCC-style appraisal of goal impacts into a valence/arousal
@@ -596,7 +596,7 @@ the same as concluding you were wrong.
 
 ## 9. Persistence, recovery and history
 
-**One boundary.** Model output is provisional until `commit.py` validates and
+**One boundary.** Model output is provisional until `persist/commit.py` validates and
 persists it. Slow preparation — lore, memory bodies, embeddings — happens
 *before* the write lock; then all primary turn mutations commit inside one
 outer transaction. Any domain failure rolls the whole turn back. Only
@@ -607,11 +607,11 @@ same transaction that creates the turn row, so a failure cannot leave a turn
 that blocks the frame.
 
 **Branching** clones a chat at a turn, remapping ids across scene, memory,
-knowledge and registry. **Archives** (`chat_archive.py`) export and import a
-portable chat. **Traces** (`pipeline_trace.py`) export persisted history for
+knowledge and registry. **Archives** (`persist/chat_archive.py`) export and import a
+portable chat. **Traces** (`persist/pipeline_trace.py`) export persisted history for
 replay, privacy-consciously.
 
-Any new persistent field needs all of it: schema and migration in `db.py`,
+Any new persistent field needs all of it: schema and migration in `core/db.py`,
 read and commit code, archive handling, checkpoint snapshot and restore,
 branch/clone id remapping, and a regression test. The checklist is in
 [`DATABASE.md`](DATABASE.md) and it is not optional — a field that survives
@@ -656,11 +656,11 @@ flowchart TB
 
 ## 10. Talking to models
 
-`providers.py` owns provider connections, streaming, retries, timeouts and
+`llm/providers.py` owns provider connections, streaming, retries, timeouts and
 embeddings. Routing is per role, so the Director and the character agents can
 sit on different models — a measured, meaningful split.
 
-`schemas.py` defines accepted output. Every model inherits `LenientModel`,
+`llm/schemas.py` defines accepted output. Every model inherits `LenientModel`,
 which accepts a structured value where a field is declared `str` and reduces it
 to the prose inside; five separate crashes were this one shape, each discarding
 an entire stage output. It fires *only* on a `str`-typed field receiving a
@@ -670,8 +670,8 @@ Validation runs strictly inside the generation call with a bounded repair loop,
 then again warning-only afterwards. A stage that cannot produce valid output
 raises rather than silently substituting.
 
-`prompt_cache.py` places cache breakpoints so the stable prefix of a prompt is
-reused. **Whether a given call gets one is decided in `providers.py`, in a
+`llm/prompt_cache.py` places cache breakpoints so the stable prefix of a prompt is
+reused. **Whether a given call gets one is decided in `llm/providers.py`, in a
 single predicate both request paths ask** — `prompt_cache_enabled_for`, over
 `_cache_denied` and `_cache_passthrough_allowed`. Native Anthropic
 (`_anthropic_system`) and aggregator passthrough (`_openai_system_message`) are
@@ -732,8 +732,8 @@ make check-fast # the same, minus database-backed slow tests
 
 `make check` treats a stale `CODE_MAP.md`, a duplicated top-level symbol, or
 leftover patch-debris markers as hard failures. Reproduce a bug with a focused
-test before fixing it. Avoid broad rewrites of `agents/runtime.py`, `app.py` or
-`memory.py` without dedicated tests — they are orchestration seams affecting
+test before fixing it. Avoid broad rewrites of `agents/runtime.py`, `web/app.py` or
+`mind/memory.py` without dedicated tests — they are orchestration seams affecting
 reruns, variants, streaming and commits.
 
 Psychology changes carry a specific warning worth repeating: an unfilled field

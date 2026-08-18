@@ -25,9 +25,9 @@ import time
 import numpy as np
 import pytest
 
-import memory
-import providers
-from character_schema import default_character_data
+from mind import memory
+from llm import providers
+from story.character_schema import default_character_data
 
 
 @pytest.fixture
@@ -54,7 +54,7 @@ def _window(bank, text, start, end, who=0, **kw):
 def test_two_windows_coexist_where_one_row_used_to_win(bank):
     _window(bank, "She crossed the bridge and met the ferryman.", 0, 10)
     _window(bank, "She reached the city and lost the letter.", 11, 20)
-    from db import q
+    from core.db import q
     rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=?",
              (bank["chat"], bank["chars"][0]))
     assert len(rows) == 2
@@ -64,7 +64,7 @@ def test_two_windows_coexist_where_one_row_used_to_win(bank):
 def test_rewriting_the_same_window_updates_in_place(bank):
     _window(bank, "First telling.", 0, 10)
     _window(bank, "Corrected telling.", 0, 10)
-    from db import q
+    from core.db import q
     rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=?",
              (bank["chat"], bank["chars"][0]))
     assert len(rows) == 1
@@ -157,7 +157,7 @@ def test_another_characters_windows_are_never_returned(bank):
 def test_a_window_embedded_by_another_model_is_skipped_not_compared(bank):
     _window(bank, "The bridge and the ferryman.", 0, 10)
     _window(bank, "The city and the lost letter.", 11, 20)
-    from db import qi
+    from core.db import qi
     qi("UPDATE memory_summaries SET embedding_model='ancient:model' "
        "WHERE end_turn_idx=10")
     hits = memory.search_memory_summaries(
@@ -268,7 +268,7 @@ def test_consolidation_accumulates_windows_instead_of_overwriting(
     memory.consolidate_character_memory(bank["chat"], bank["chars"][0],
                                         through_turn_idx=8, archive_old=False)
 
-    from db import q
+    from core.db import q
     rows = q("SELECT * FROM memory_summaries WHERE chat_id=? AND char_id=? "
              "AND scope='autobiographical' ORDER BY end_turn_idx",
              (bank["chat"], bank["chars"][0]))

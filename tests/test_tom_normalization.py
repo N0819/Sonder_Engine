@@ -47,7 +47,7 @@ def test_observation_confidence_is_preserved():
 # hard-failed the whole character step ("alternatives.0: str type expected"),
 # crashing the turn. It must now normalize instead, preserving the text.
 
-from schemas import validate_llm_output_strict, _coerce_str_list, MindHypothesis
+from llm.schemas import validate_llm_output_strict, _coerce_str_list, MindHypothesis
 
 
 def _character_payload(alternatives):

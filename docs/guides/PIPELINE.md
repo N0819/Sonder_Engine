@@ -445,7 +445,7 @@ handed to the prose author as `travel_in_flight`, so the scenery changes on
 the page rather than behind it. An INTERRUPTION is what must be established,
 not continuation: the Director asserts it in `travel_interrupted`, under a
 deterministic floor (no passable route, carried, already arrived) it cannot
-argue with. `out['travel']` records what happened and `commit.py` retires or
+argue with. `out['travel']` records what happened and `persist/commit.py` retires or
 keeps each standing `scene.approach` record from it, so the ledger and the
 committed position are written from one answer.
 
@@ -480,12 +480,12 @@ record (granted vs served vs produced) persists on the step under
 
 ### `background_react`
 
-Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`scene.py`) key `scene_life`:
+Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`story/scene.py`) key `scene_life`:
 
-- **`off` (default) — one presence.** `commit.py`'s `pick_background_reactor` is a deterministic, LLM-free check that returns `None` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is raisable to 3, so "one presence" is the default rather than an invariant.
+- **`off` (default) — one presence.** `persist/commit.py`'s `pick_background_reactor` is a deterministic, LLM-free check that returns `None` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is raisable to 3, so "one presence" is the default rather than an invariant.
 - **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](../design/BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](../UNBUILT.md) §6.1.
 
-Neither path grants persistent memory, psychology, or mind-models — that is what character promotion is for. This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
+Neither path grants persistent memory, psychology, or mind-models — that is what character promotion is for. This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `llm/prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
 
 Its output is merged into `perception_outcome`'s dialogue processing rather than mutating `director_resolve`'s already-persisted step/variant, so a rerun/resume from this point onward stays consistent with what was actually rendered.
 
@@ -560,7 +560,7 @@ Domains 5 and 6 run deliberately after the scene/entity/cast writes so they
 inspect this turn's projected world, while staying inside the same rollback
 boundary.
 
-A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist.
+A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `core/jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist.
 
 ## Streaming
 
@@ -606,7 +606,7 @@ When rerunning from a stage:
 ## Portable diagnostic traces
 
 Completed stage outputs already live in immutable `steps` / `variants` rows.
-`pipeline_trace.py` can export that record as a versioned, canonical JSON
+`persist/pipeline_trace.py` can export that record as a versioned, canonical JSON
 artifact and replay the saved `step_start` / `step` / `done` event sequence
 offline. Replay never imports the runtime dispatcher and never calls a model;
 it reproduces persisted outputs, not the original computations.
@@ -646,12 +646,12 @@ model stream.
 | NPC reacts to an outcome before it happens | `perception_act` / reaction planning |
 | Action result is implausible | `director_resolve` or deterministic spatial/state support |
 | Correct result is narrated incorrectly | `perception_outcome`, then `narrator` |
-| Correct turn disappears after reload | `commit.py`, checkpoints, or database restore |
+| Correct turn disappears after reload | `persist/commit.py`, checkpoints, or database restore |
 | Reroll leaves mixed old/new state | stale-step propagation, active variants, or resume logic |
-| Character knows a concealed action from a prior turn | `recent_events_for_observer` in `scene.py` (Pattern 4), `_redact_concealed_from_event` in `agents/perception.py` |
-| Character remembers something from a rerolled turn | `current_turn_idx` cutoff in `memory.py` `search_memories` (F1) |
-| Character keeps recalling a belief they have since revised | `reconcile_inference_confidence` in `memory.py`, `belief_credence` in `theory_of_mind.py` |
-| Character theorises lucidly about others while in agony or ecstasy | `cognitive_absorption` in `psychology_runtime.py`, `absorbed_cap`/`formation_floor`/`sheet_capacity` in `theory_of_mind.py` |
-| Character treats its own guesses as established fact | `active_hypotheses` (`i_suspect` keys) in `agents/character.py`, ACTIVE HYPOTHESES block in `prompts.py` |
+| Character knows a concealed action from a prior turn | `recent_events_for_observer` in `story/scene.py` (Pattern 4), `_redact_concealed_from_event` in `agents/perception.py` |
+| Character remembers something from a rerolled turn | `current_turn_idx` cutoff in `mind/memory.py` `search_memories` (F1) |
+| Character keeps recalling a belief they have since revised | `reconcile_inference_confidence` in `mind/memory.py`, `belief_credence` in `mind/theory_of_mind.py` |
+| Character theorises lucidly about others while in agony or ecstasy | `cognitive_absorption` in `mind/psychology_runtime.py`, `absorbed_cap`/`formation_floor`/`sheet_capacity` in `mind/theory_of_mind.py` |
+| Character treats its own guesses as established fact | `active_hypotheses` (`i_suspect` keys) in `agents/character.py`, ACTIVE HYPOTHESES block in `llm/prompts.py` |
 | Background dialogue names an unrecognized character | `_present_others` recognition gate in `agents/background.py` (F3) |
 | Narrator reports a door state in an unseen room | `_visible_portal_states` visibility gating in `agents/narration.py` (S3-A5) |

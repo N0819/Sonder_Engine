@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-import providers
+from llm import providers
 
 PROV = {"id": 3, "kind": "openrouter", "name": "openrouter", "api_key": "k",
         "base_url": "https://openrouter.ai/api/v1"}

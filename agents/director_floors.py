@@ -13,8 +13,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 
 import re
 
-from character_schema import name_boundary_pattern
-from scene import (
+from story.character_schema import name_boundary_pattern
+from story.scene import (
     NON_AWAKE_GATED,
     _normalize_awareness_level,
     awareness_conditions,

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-import guest_access as guest
-from db import q, get_setting
+from web import guest_access as guest
+from core.db import q, get_setting
 
 
 PASSWORD = "correct horse battery staple"

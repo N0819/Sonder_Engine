@@ -21,8 +21,8 @@ import time
 
 from agents.common import canonicalize_positions, cast_room, character_room
 from agents.perception import perception_act
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _doctor_sheet():

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     canonical_subject,
     canonical_subject_map,
     merge_scene_with_diff,
@@ -200,7 +200,7 @@ def test_the_merge_folds_before_it_derives():
     original defect survived a whole story."""
     import inspect
 
-    import spatial
+    from world import spatial
     src = inspect.getsource(spatial.merge_scene_with_diff)
     assert src.index("normalize_scene_subjects(merged)") < \
         src.index("derive_contained_positions(merged)")

@@ -8,7 +8,7 @@ This note designs the composer that replaces the perception model call: the
 code that turns (per-observer scene projection + typed beat events) into each
 mind's view prose. It is grounded in a full read of `agents/perception.py`
 (3,996 lines), the three existing deterministic composers, the memory-minting
-path in `commit.py`, and read-only measurements over the 2,296-turn play
+path in `persist/commit.py`, and read-only measurements over the 2,296-turn play
 corpus at `engine.db` (probe scripts summarized in the appendix; the database
 was never written).
 
@@ -37,7 +37,7 @@ survivable **only if memory minting moves off view prose in the same change**.
 ### 1.1 Two layers, one new module
 
 `agents/composer.py`, a role module under the facade rule (may import
-`agents/common.py`, `spatial.py`, `scene.py`; never another role module).
+`agents/common.py`, `world/spatial.py`, `story/scene.py`; never another role module).
 `agents/perception.py` keeps the three stage entry points and their exact
 output contract; it becomes the orchestrator that builds inputs and calls the
 composer instead of `_per_observer_model_views` (agents/perception.py:1146).
@@ -210,7 +210,7 @@ With no model output to repair, the following are deletable as runtime passes
 Survive, promoted from repair/injection to the composer's own law:
 
 - `_observer_scene_payload` and every gate it calls (Layer A's scene half);
-- `_delivery_ok` and the channel ladders in `spatial.py` (Layer A's event half);
+- `_delivery_ok` and the channel ladders in `world/spatial.py` (Layer A's event half);
 - `_unknown_actor_label`, `_strip_identity_tokens`, recognition/disguise
   logic (label selection);
 - `_compose_residue_view`, `contact_sensation`, `contact_phrase`,

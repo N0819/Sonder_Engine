@@ -15,8 +15,8 @@ from __future__ import annotations
 import json
 import time
 
-import commit
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_chat(temp_db, *, entity_id="ferry_tamsin", entity_name="The Tamsin",

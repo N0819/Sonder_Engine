@@ -7,7 +7,7 @@ every LLM call regardless of relevance.
 import json
 
 from agents.common import _contextual_rooms
-from character_schema import default_character_data
+from story.character_schema import default_character_data
 
 _CHAIN_SCENE = {
     "rooms": {

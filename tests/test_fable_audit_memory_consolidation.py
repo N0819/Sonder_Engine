@@ -30,9 +30,9 @@ from __future__ import annotations
 import json
 import time
 
-import memory
-from character_schema import default_character_data
-from frames import create_frame
+from mind import memory
+from story.character_schema import default_character_data
+from core.frames import create_frame
 
 
 def _make_chat(db):
@@ -128,7 +128,7 @@ class TestMaybeConsolidateFrameGuardSurvivesThreadPool:
 
         monkeypatch.setattr(memory, "chat_complete", boom)
 
-        from db import active_frame_id
+        from core.db import active_frame_id
         assert active_frame_id.get() is None  # the ambient default, as in a bare worker thread
 
         result = memory.maybe_consolidate_character_memory(

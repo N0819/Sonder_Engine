@@ -9,7 +9,7 @@ default tests pin.
 """
 from __future__ import annotations
 
-from spatial import (
+from world.spatial import (
     anchor_bearing_of,
     door_anchor_id,
     effective_anchors,
@@ -25,7 +25,7 @@ from spatial import (
     room_layout,
     spatial_rel,
 )
-from spatial_frames import infer_facing
+from world.spatial_frames import infer_facing
 
 
 def _scene(**over):

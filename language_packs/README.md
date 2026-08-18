@@ -30,7 +30,7 @@ catalog. The linguistic card includes quote and sentence rules, morphology,
 agreement, pronouns, action/authority cues, title handling, narration-person
 detection, and Director omission aliases. Lookups happen at use time through a
 context variable, so two concurrent stories can safely run different language
-packs. `prompts.py` now contains assembly and gating code only. The project
+packs. `llm/prompts.py` now contains assembly and gating code only. The project
 check regenerates and compares the English UI source inventory, preventing a
 new reader-visible string from bypassing the catalog.
 

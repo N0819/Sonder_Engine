@@ -209,8 +209,8 @@ def main():
     ap.add_argument("--show", action="store_true", help="print one sample each")
     args = ap.parse_args()
 
-    from prompts import get_prompt
-    from providers import chat_complete, resolve_role
+    from llm.prompts import get_prompt
+    from llm.providers import chat_complete, resolve_role
 
     prov, model, _cfg = resolve_role("narrator")
     print(f"narrator role -> {prov['name']} / {model}\n")

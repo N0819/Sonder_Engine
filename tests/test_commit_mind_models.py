@@ -9,11 +9,11 @@ payload construction surfaces competing hypotheses.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 def test_commit_memories_reinforces_existing_mind_model(temp_db, monkeypatch):
-    import commit
+    from persist import commit
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -83,7 +83,7 @@ def test_commit_memories_reinforces_existing_mind_model(temp_db, monkeypatch):
 
     # commit_memories resolves both names in commit_memory_write's
     # globals since the split; patching the commit facade would be inert.
-    import commit_memory_write
+    from persist import commit_memory_write
     monkeypatch.setattr(
         commit_memory_write, "add_memories_batch",
         lambda memories=None, *, prepared_batch=None: list(
@@ -116,8 +116,8 @@ def test_place_claim_memory_and_hypothesis_share_one_subject_key(temp_db):
     subject that never exists in mind_models, so
     reconcile_inference_confidence could never find the live hypothesis and
     demoted the row as abandoned from the moment it was formed."""
-    import commit
-    from theory_of_mind import belief_credence
+    from persist import commit
+    from mind.theory_of_mind import belief_credence
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

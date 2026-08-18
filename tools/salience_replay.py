@@ -105,16 +105,16 @@ def _percentiles(values):
 
 
 def run(db_path, per_bank=6, k=16, min_rows=40, verbose=False):
-    import providers
+    from llm import providers
 
     workdir = tempfile.mkdtemp(prefix="salience-replay-")
     copy = os.path.join(workdir, "replay.db")
     try:
         shutil.copy(db_path, copy)
         os.environ["ENGINE_DB"] = copy
-        import db as db_module
+        from core import db as db_module
         db_module.configure(copy)
-        import memory
+        from mind import memory
 
         con = sqlite3.connect(copy)
         probes = _bank_probes(con, per_bank, min_rows)

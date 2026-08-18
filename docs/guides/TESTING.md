@@ -108,7 +108,7 @@ Playwright packages are an optional extra and never belong in
 `requirements-dev.txt`; browser binaries are installed explicitly.
 
 `pydantic>=1.10.13,<3` spans two majors, and the range is a real promise:
-`schemas.py` reads a field's declared shape through `_declared`, which has one
+`llm/schemas.py` reads a field's declared shape through `_declared`, which has one
 branch per major, because Pydantic 2 removed `ModelField` entirely. Anything
 that needs to know what a field declared goes through there. Reaching into a
 version-specific internal instead is how `pydantic.fields.SHAPE_LIST` reached
@@ -123,7 +123,7 @@ runs the suite. It exists because a range is only a promise if something
 checks it.
 
 It ran only the fast tier until alpha 6.6, and that hid the failure running the
-other way. `schemas.py` lets an item model name its own subject slot
+other way. `llm/schemas.py` lets an item model name its own subject slot
 (`GoalImpact._subject_field`), read back with a bare `getattr` — a plain string
 on 1.x, an unhashable `ModelPrivateAttr` on 2.x, where the next line raises
 `TypeError`. The 1.x job was green, so the red 2.x test read as "the 1.x side
@@ -171,12 +171,12 @@ the cost is not a warning but a *silently unnormalized step*, because
 `"appraisal": []` costs that step every default, flatten and wrap the rest of
 the layer would have applied.
 
-The same exposure exists outside `schemas.py`. `character_schema.py`'s profile
+The same exposure exists outside `llm/schemas.py`. `story/character_schema.py`'s profile
 models are plain `BaseModel`s that were relying on 1.x to turn a number into
 prose, which made a card with `"expression": 3` a 500 on save and an unreadable
 character on every later turn — on the read path of every accessor, because
 `_normalize_psychology` validates with no `try`. They now share
-`schemas.coerce_to_declared`, and so does `chat_archive.py`, whose import gate
+`schemas.coerce_to_declared`, and so does `persist/chat_archive.py`, whose import gate
 was refusing `world: []` outright while the code behind it read
 `dict(data.get("world") or {})` — a gate stricter than its own consumer, which
 1.x hid by coercing for free. Any new model anywhere in the repo inherits the
@@ -187,7 +187,7 @@ Two remaining differences are deliberate rather than fixed:
 - `LoreOp.book_id` and `BookOp.parent_id` are `Union[int, str]` on purpose (an
   existing book's id **or** a same-turn temp handle), and the majors resolve
   that union differently — 1.x coerces `"77"` to `77`, 2.x's smart union keeps
-  the string. Both consumers in `commit.py` now resolve either spelling to the
+  the string. Both consumers in `persist/commit.py` now resolve either spelling to the
   same book, so the outcome agrees; normalising the *type* at the schema
   boundary would make a digit-shaped temp handle collide with a real id, which
   is a new failure mode traded for cosmetic agreement.

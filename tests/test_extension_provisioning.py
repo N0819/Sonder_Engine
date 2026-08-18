@@ -96,7 +96,7 @@ class TestProvisioning:
     def test_a_refused_package_leaves_nothing_behind(self, temp_db, campaign):
         """Everything or nothing. A half-created story is worse than a refusal:
         it looks playable."""
-        from db import q
+        from core.db import q
 
         before = q("SELECT COUNT(*) c FROM chats", one=True)["c"]
         with pytest.raises(ExtensionError):
@@ -112,7 +112,7 @@ class TestProvisioning:
         no campaign state whenever the second one failed -- and the story would
         still be in the chat list, looking finished.
         """
-        from db import q
+        from core.db import q
 
         before = q("SELECT COUNT(*) c FROM chats", one=True)["c"]
 
@@ -164,7 +164,7 @@ class TestProvisioning:
         through export, branch and clone with no line of its own. Worth pinning
         rather than assuming: a campaign whose state did not survive a branch
         would be discovered by a player, mid-story."""
-        import app
+        from web import app
 
         result = campaign.provision_story(_package(), state={"mission": "survey"})
         exported = app._chat_archive_service.export_chat(result["chat_id"])

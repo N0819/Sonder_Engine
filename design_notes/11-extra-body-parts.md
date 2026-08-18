@@ -20,7 +20,7 @@ of prose. In the corpus snapshot (read-only, aggregates only):
   free text (garment descriptions, `beneath` fields) — the tail keeps trying
   to get into the structured layer through whatever door is open;
 - the perception prompt already has to *name tails explicitly* as a thing not
-  to re-roll-call every beat (`prompts.py` APPEARANCE NOVELTY paragraph).
+  to re-roll-call every beat (`llm/prompts.py` APPEARANCE NOVELTY paragraph).
 
 Prose appendages cannot be gated per observer, cannot interact with clothing
 coverage deterministically, and are re-invented (or forgotten) by every model
@@ -52,8 +52,8 @@ beat.** Consequences, each deliberate:
 - **Persistence is free and complete.** Sheets already persist
   (`characters.sheet`, `personas.sheet`), already override per story
   (`chat_chars.sheet`, preserved by archives/branches/checkpoints), and card
-  edits already cannot rekey in-story identity. No `db.py` migration, no
-  `chat_archive.py` change, no checkpoint or remap work. In the physical
+  edits already cannot rekey in-story identity. No `core/db.py` migration, no
+  `persist/chat_archive.py` change, no checkpoint or remap work. In the physical
   authority hierarchy the parts are *authored configuration*, like senses —
   not `world.scene` runtime state, not a `world_entities` projection.
 - **Defaults are inert.** A sheet without `extra_parts` normalizes to `[]`,
@@ -71,7 +71,7 @@ beat.** Consequences, each deliberate:
 
 ## The menus
 
-Kept small, closed, and orthogonal. Defined in `character_schema.py`.
+Kept small, closed, and orthogonal. Defined in `story/character_schema.py`.
 
 **Attachment region — `at`: one of `attire.REGIONS`**
 (`head, torso, arms, hands, waist, groin, legs, feet`). Reusing the attire
@@ -114,13 +114,13 @@ itself: the self row always carries its own parts (tucked ones annotated
 `beneath clothing`), matching the self-knowledge floor.
 
 **`kind`** is a free noun on purpose — anatomy is open-ended and every story
-invents some (`spatial.py`'s own words). The closed menus are *where*, never
+invents some (`world/spatial.py`'s own words). The closed menus are *where*, never
 *what*. The kind doubles as the contact handle.
 
 ## Interaction with contacts, poses, scales, containment
 
 `StateDiff.contact_ops` (`schemas.py:1746`) carries `actor_part` /
-`target_part` / `target_interior` as free text, and `spatial.py`'s part
+`target_part` / `target_interior` as free text, and `world/spatial.py`'s part
 identity is structural, not a vocabulary: `_part_identity("tail")` →
 `("tail", "")`, `_same_appendage("tail", "tail spade")` is already true (that
 pair is the *measured live example* in the docstring at `spatial.py:2612`).
@@ -133,7 +133,7 @@ path end to end.
 
 ## The seams (what reads the field)
 
-1. **`character_schema.py`** — vocabulary constants
+1. **`story/character_schema.py`** — vocabulary constants
    (`EXTRA_PART_ASPECTS`), `_normalize_extra_parts` (tolerant: bare strings
    become `{kind}`, invalid menu values fall to a per-kind placement guess or
    the mildest default, count clamped), wired into all four normalize paths
@@ -155,12 +155,12 @@ path end to end.
 4. **`agents/character.py`** — the `_self` payload carries `body_parts`
    (own parts, always, tucked or not: a mind knows its own body — same
    rationale as the interoception/attire lines beside it).
-5. **`agents/director.py` / `scene.py`** — the entitled Director sees parts
+5. **`agents/director.py` / `story/scene.py`** — the entitled Director sees parts
    in `cast_scene_context` (establish), `present_characters`/`player`
    (interpret), and a `scene.body_parts` map beside the compact attire lines
    (resolve). Static config renders byte-identically every beat, so it is
    prefix-cache friendly.
-6. **`prompts.py`** — one sentence each for perception (a `parts` list on a
+6. **`llm/prompts.py`** — one sentence each for perception (a `parts` list on a
    body row is authored, real, gated for this observer; never invent one
    absent from it) and resolve (part names are valid contact endpoints;
    through-clothing parts stay visible when the region is covered).

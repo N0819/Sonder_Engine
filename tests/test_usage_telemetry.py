@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import inspect
 
-import providers
+from llm import providers
 
 
 # ---- Dialect normalization ----
@@ -111,7 +111,7 @@ def test_log_usage_forwards_both_cache_directions(monkeypatch):
         seen.update(kw)
         seen["role"], seen["model"] = role, model
 
-    import logging_utils
+    from core import logging_utils
     monkeypatch.setattr(logging_utils, "log_llm_call", fake_log)
 
     providers._log_usage("narrator", "claude", 0.0, {
@@ -128,7 +128,7 @@ def test_log_usage_forwards_both_cache_directions(monkeypatch):
 
 def test_log_usage_never_raises(monkeypatch):
     """Telemetry must never be able to fail a generation."""
-    import logging_utils
+    from core import logging_utils
 
     def boom(*a, **kw):
         raise RuntimeError("logging backend down")

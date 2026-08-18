@@ -157,7 +157,7 @@ on. The real gain is consistency, not seconds.**
   contract field is involved (checked: nothing in
   `prompts.py:2930-2975` asks for sound propagation or attention
   direction; focus/salience is wholly engine-derived in
-  `spatial_frames.py`).
+  `world/spatial_frames.py`).
 
 ### R4. `dialogue_order` — still asked, still derivable, still negligible
 **~0.007 s/turn (7.0 tok/beat measured). Kind: prompt-ask trim + code
@@ -209,7 +209,7 @@ measured here.
 ### R6. Findings that are NOT the dice pattern (checked and cleared)
 
 - **`effective_facing`**: no prompt anywhere asks a model to author
-  facing (`prompts.py` greps clean — `:624,:655,:692,:3270` all describe
+  facing (`llm/prompts.py` greps clean — `:624,:655,:692,:3270` all describe
   derived values). Pure derivation; nothing to remove.
 - **`effective_anchors`**: door pseudo-anchors were never asked for;
   authored anchors win collisions. The mapping anchor ask
@@ -299,8 +299,8 @@ worth landing independent of latency.
 - **Removing any schema field** (`dialogue_order`, `dice`,
   `fiction_frame`, `resolved_event`, `DialogueLogEntry.volume`):
   `LenientModel` drops undeclared keys on round-trip, and archives
-  (`chat_archive.py` carries steps/variants opaquely), pipeline traces
-  (`pipeline_trace.py` replays stored content), and checkpoint restore
+  (`persist/chat_archive.py` carries steps/variants opaquely), pipeline traces
+  (`persist/pipeline_trace.py` replays stored content), and checkpoint restore
   all carry historical values — a field removal breaks replay/rerun of
   every pre-change turn. Every proposal above is ask/wording + code
   projection; schemas untouched.

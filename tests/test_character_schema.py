@@ -1,6 +1,6 @@
 """Tests for native and legacy character schemas."""
 
-from character_schema import (
+from story.character_schema import (
     CHARACTER_SCHEMA,
     CHARACTER_VERSION,
     default_character_data,
@@ -244,13 +244,13 @@ class TestASheetIsReadableOnEitherPydantic:
     """
 
     def test_a_number_where_a_trait_declared_prose(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         sheet = normalize_character_data({"psychology": {
             "traits": [{"name": "wary", "expression": 3}]}})
         assert character_psychology(sheet)["traits"][0]["expression"] == "3"
 
     def test_it_reaches_every_profile_the_sheet_nests(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "values": [{"name": 1}],
             "self_model": {"beliefs": [{"belief": 7, "source": 1.5}]},
@@ -265,20 +265,20 @@ class TestASheetIsReadableOnEitherPydantic:
 
     def test_the_numeric_fields_are_still_numbers(self):
         """The generic coercion must not reach a field that declared one."""
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": [{"name": "wary", "strength": "0.8"}]}}))
         assert psych["traits"][0]["strength"] == 0.8
 
     def test_the_list_fields_still_split_a_comma_string(self):
         """The field-specific pre-validators still run first."""
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": [{"name": "wary", "activation_cues": "dark, cold"}]}}))
         assert psych["traits"][0]["activation_cues"] == ["dark", "cold"]
 
     def test_extension_keys_still_survive(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": [{"name": "wary", "house_rule": "keep me"}]}}))
         assert psych["traits"][0]["house_rule"] == "keep me"
@@ -292,25 +292,25 @@ class TestEveryProfileListToleratesTheSameSpellings:
     catches the latter."""
 
     def test_a_scalar_where_strategies_were_declared(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data(
             {"psychology": {"coping": {"strategies": 5}}}))
         assert psych["coping"]["strategies"] == []
 
     def test_a_scalar_where_associations_were_declared(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data(
             {"psychology": {"learning": {"associations": 5}}}))
         assert psych["learning"]["associations"] == []
 
     def test_one_strategy_written_as_itself(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data(
             {"psychology": {"coping": {"strategies": "freeze"}}}))
         assert psych["coping"]["strategies"][0]["name"] == "freeze"
 
     def test_one_association_written_as_itself(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data(
             {"psychology": {"learning": {"associations": {"cue": "smoke"}}}}))
         assert psych["learning"]["associations"][0]["cue"] == "smoke"
@@ -324,7 +324,7 @@ class TestAProfileMapKeepsBothItsKeyAndItsContents:
     """
 
     def test_a_map_of_strategies_keeps_every_strategy_and_its_fields(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "coping": {"strategies": {"freeze": {"trigger": "threat"},
                                       "flee": {"trigger": "noise"}}}}}))
@@ -332,20 +332,20 @@ class TestAProfileMapKeepsBothItsKeyAndItsContents:
             ("freeze", "threat"), ("flee", "noise")]
 
     def test_a_map_of_associations_keeps_its_cues(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "learning": {"associations": {"smoke": {"strength": 0.8}}}}}))
         assert [(a["cue"], a["strength"]) for a in psych["learning"]["associations"]] == [
             ("smoke", 0.8)]
 
     def test_a_map_of_traits_keeps_its_names(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": {"wary": {"strength": 0.8}}}}))
         assert [(t["name"], t["strength"]) for t in psych["traits"]] == [("wary", 0.8)]
 
     def test_a_map_of_beliefs_keeps_the_belief_and_its_confidence(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "self_model": {"beliefs": {"the door was open": {"confidence": 0.7}}}}}))
         belief = psych["self_model"]["beliefs"][0]
@@ -360,14 +360,14 @@ class TestAProfileMapKeepsBothItsKeyAndItsContents:
         the sheet read as populated -- traits was non-empty -- and named
         nobody.
         """
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": {"wary": 0.7, "patient": 0.3}}}))
         assert [(t["name"], t["strength"]) for t in psych["traits"]] == [
             ("wary", 0.7), ("patient", 0.3)]
 
     def test_a_map_mixing_bare_strengths_and_objects_keeps_every_name(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": {"wary": 0.7, "patient": {"strength": 0.3,
                                                 "expression": "waits"}}}}))
@@ -375,7 +375,7 @@ class TestAProfileMapKeepsBothItsKeyAndItsContents:
             ("wary", 0.7, ""), ("patient", 0.3, "waits")]
 
     def test_a_map_of_values_to_bare_priorities_keeps_its_names(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "values": {"honesty": 0.9}}}))
         assert [(v["name"], v["priority"]) for v in psych["values"]] == [
@@ -386,20 +386,20 @@ class TestAProfileMapKeepsBothItsKeyAndItsContents:
         not whether the values are scalars -- otherwise every ordinary sheet
         entry would be read as a map of two traits named `name` and `strength`.
         """
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": {"name": "wary", "strength": 0.7}}}))
         assert [(t["name"], t["strength"]) for t in psych["traits"]] == [("wary", 0.7)]
 
     def test_one_profile_written_as_an_object_is_not_mistaken_for_a_map(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "coping": {"strategies": {"name": "freeze", "trigger": "threat"}}}}))
         assert [(s["name"], s["trigger"]) for s in psych["coping"]["strategies"]] == [
             ("freeze", "threat")]
 
     def test_a_single_strategy_named_by_a_string_is_one_strategy(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "coping": {"strategies": "freeze"}}}))
         assert [s["name"] for s in psych["coping"]["strategies"]] == ["freeze"]
@@ -411,13 +411,13 @@ class TestAStructuredValueInAProseSlot:
     majors."""
 
     def test_a_nested_object_where_prose_was_declared_is_flattened(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "traits": [{"name": "wary", "expression": {"when": "cornered"}}]}}))
         assert psych["traits"][0]["expression"] == "cornered"
 
     def test_a_prose_less_structure_degrades_to_empty_rather_than_raising(self):
-        from character_schema import normalize_character_data, character_psychology
+        from story.character_schema import normalize_character_data, character_psychology
         psych = character_psychology(normalize_character_data({"psychology": {
             "self_model": {"beliefs": [{"belief": {"a": {"b": [1, {"c": 2}]}}}]}}}))
         assert psych["self_model"]["beliefs"][0]["belief"] == ""

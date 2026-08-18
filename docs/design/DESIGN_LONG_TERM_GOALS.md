@@ -2,7 +2,7 @@
 
 **Status: v1 built.** `affect.apply_project_ops` / `affect.serves_priority`
 (lifecycle, cap, weights), `character_schema.character_projects` (authored),
-`commit.py` (seeding, ops, persistence in `interior.projects` /
+`persist/commit.py` (seeding, ops, persistence in `interior.projects` /
 `interior.former_projects` on `chat_chars.state`), `agents/character.py`
 (payload `self.projects` / `self.former_projects`, destination fallback in
 `_destination_from_goals`), prompt contract (`project_ops`, PROJECTS block).
@@ -98,7 +98,7 @@ oscillation this tier exists to fix.
 This applies to ordinary intentions too, not only to projects, and it may be
 the more valuable half.
 
-Today decay is bookkeeping. `affect.py`:
+Today decay is bookkeeping. `mind/affect.py`:
 
 ```
 _INTENT_DORMANT_AFTER = 30    # turns without progress -> dormant
@@ -161,7 +161,7 @@ replaced.
   `chat_archive`, and branching carry that blob verbatim, so no schema,
   remap, or archive change. Not derivable: durability across evidence decay
   is the *defining* property, and anything derived from decaying rows
-  inherits their decay. Note `commit.py` rebuilds `interior` from scratch
+  inherits their decay. Note `persist/commit.py` rebuilds `interior` from scratch
   each beat, so both ledgers are carried through `_interior_out` explicitly.
 - **The bias:** a want or goal-impact whose `serves` names a held project id
   scores at **drive weight (1.0)** — `affect.serves_priority`. The scarcity

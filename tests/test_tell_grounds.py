@@ -17,10 +17,10 @@ Mechanism under test:
 import json
 import time
 
-from affect import ground_tells
-from character_schema import default_character_data
-from commit import RECENT_TELLS_CAP, prepare_memory_commit
-from pipeline_context import ChatData, PipelineContext, TurnData
+from mind.affect import ground_tells
+from story.character_schema import default_character_data
+from persist.commit import RECENT_TELLS_CAP, prepare_memory_commit
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 _STATE = {

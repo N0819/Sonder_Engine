@@ -20,8 +20,8 @@ import time
 
 import pytest
 
-import subjects
-from canon_provenance import validate_provisional
+from world import subjects
+from mind.canon_provenance import validate_provisional
 
 
 def _make_chat(db):

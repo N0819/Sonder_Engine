@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import providers
+from llm import providers
 
 
 @pytest.fixture
@@ -91,7 +91,7 @@ def test_no_stage_hardcodes_a_budget_the_ceiling_cannot_raise():
     import pathlib
     root = pathlib.Path(__file__).resolve().parent.parent
     offenders = []
-    for path in list((root / "agents").glob("*.py")) + [root / "llm_quality.py"]:
+    for path in list((root / "agents").glob("*.py")) + [root / "llm" / "llm_quality.py"]:
         for n, line in enumerate(path.read_text().splitlines(), 1):
             if "max_tokens" not in line or line.lstrip().startswith("#"):
                 continue

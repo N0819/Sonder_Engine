@@ -26,7 +26,7 @@ extensions/
       panel.js         # optional — the browser half
 ```
 
-The root is `extensions/` beside `app.py`. Override it with the `SONDER_EXTENSIONS`
+The root is `extensions/` beside `web/app.py`. Override it with the `SONDER_EXTENSIONS`
 environment variable — read at **call** time, so a test or a second library only
 has to set it.
 
@@ -249,7 +249,7 @@ from .campaign import package        # extension.py, beside campaign.py
 
 Relative rather than bare, and the reason is not style: a directory on
 `sys.path` would make every sibling importable under its bare name, so an
-extension shipping a `db.py` would shadow the engine's `db` for whatever
+extension shipping a `core/db.py` would shadow the engine's `db` for whatever
 imported next, and two extensions each shipping a `helper.py` would get
 whichever loaded first. Under a package the names are `sonder_ext_<id>.helper`
 and can collide with nothing. Disabling forgets every submodule, so an update
@@ -333,7 +333,7 @@ the whole turn's materialization check, far from the interesting failure.
 Because your stage is a normal `steps`/`variants` row, it inherits **reroll,
 one-active-variant, staleness, branch, checkpoint, archive and the pipeline
 drawer for free**. You do not add a row to `schemas.SCHEMA_MAP`, a field to
-`PipelineContext`, or a line to `commit.py`. The
+`PipelineContext`, or a line to `persist/commit.py`. The
 [add-a-stage checklist](../../agents/README.md) is for *engine* stages; none of it
 applies to you.
 
@@ -386,7 +386,7 @@ def apply(turn):
 `step_content(key)` (context first, then storage), and `state` — the per-story
 `ExtState`, already bound.
 
-This runs in `commit.py`'s tail, **after** the turn's facts are durable, inside a
+This runs in `persist/commit.py`'s tail, **after** the turn's facts are durable, inside a
 commit scope. A hook that raises produces a turn warning and an entry in the
 commit result's `extensions.errors`; it never rolls the turn back.
 
@@ -827,7 +827,7 @@ result = api.provision_story(package, state={"mission": "survey"},
                              package_id="episode-one", package_version="2.1.0")
 ```
 
-`package` is a **chat archive** — the format `chat_archive.py` already exports,
+`package` is a **chat archive** — the format `persist/chat_archive.py` already exports,
 validates and id-remaps. That is a deliberate refusal to invent a second
 scenario format: a campaign needs a story, a persona, a cast with stable ids,
 rooms and portals and positions, a scene, a clock, authored lore on both sides
@@ -972,7 +972,7 @@ The details each carry a reason:
 `api.state(chat_id)` is chat-global. `api.frame_state(chat_id)` is scoped to
 the era the story is currently in.
 
-A Sonder story can hold more than one era (`frames.py`), and most of the world
+A Sonder story can hold more than one era (`core/frames.py`), and most of the world
 is already per-era for a reason a campaign inherits whole: a branch that never
 went somewhere must not arrive holding what happened there. `scene`, `known`,
 the clock, the crowds and the couriers are all frame-scoped. Extension state
@@ -1077,7 +1077,7 @@ An extension cannot write an assistant message, and this will not be added.
 
 Narration here is produced by the pipeline from state the Director committed.
 Text inserted as though the narrator wrote it is narration nothing earned, and
-`commit.py` — the sole persistence boundary, where model output stays
+`persist/commit.py` — the sole persistence boundary, where model output stays
 provisional until deterministic code validates it — exists to make exactly that
 impossible. A seam for it would make the whole boundary advisory.
 

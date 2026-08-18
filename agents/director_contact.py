@@ -14,8 +14,8 @@ import copy
 import json
 import re
 
-from character_schema import character_name, character_name_from_text
-from spatial import (
+from story.character_schema import character_name, character_name_from_text
+from world.spatial import (
     contact_motion,
     contacts_of,
     contact_relation,

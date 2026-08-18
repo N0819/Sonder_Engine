@@ -25,7 +25,7 @@ those words, which is the point: instruction where structure was wanted.
 
 from __future__ import annotations
 
-import commit
+from persist import commit
 
 
 def _cond(level="asleep", subject="Hinami", active=True):
@@ -65,7 +65,7 @@ def test_a_position_reasserted_unchanged_is_not_a_move(temp_db, monkeypatch):
     """
     # _subjects_that_moved resolves get_scene in ITS module's globals --
     # commit_entities since the split; patching the commit facade is inert.
-    import commit_entities
+    from persist import commit_entities
     monkeypatch.setattr(commit_entities, "get_scene",
                         lambda cid: {"positions": {"Hinami": "hall"}},
                         raising=False)
@@ -103,7 +103,7 @@ def test_no_scene_is_not_a_movement_claim(temp_db, monkeypatch):
     """
     def boom(cid):
         raise RuntimeError("no scene")
-    import commit_entities
+    from persist import commit_entities
     monkeypatch.setattr(commit_entities, "get_scene", boom, raising=False)
     assert commit._subjects_that_moved(_Ctx(), {"positions": {"H": "x"}}) == set()
 
@@ -177,7 +177,7 @@ def test_the_resolve_prompt_does_not_authorise_the_failure(temp_db):
     The occasion is now named as the body going under, per the standing rule
     that a bare prohibition inverts.
     """
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     body = DEFAULT_PROMPTS["director_body"]
     assert "they declare sleeping" not in body, \
@@ -225,7 +225,7 @@ def test_prepare_scene_commit_carries_the_pre_beat_world(temp_db):
     normalization has already walked over.
     """
     import time as _time
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     chat_id = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                          ("Shrine", "", _time.time()))

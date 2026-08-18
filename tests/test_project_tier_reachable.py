@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import inspect
 
-from affect import project_boundary
+from mind.affect import project_boundary
 from agents import character
 
 HELD = [{"id": "p1", "project": "Keep this village alive through the winter",
@@ -154,7 +154,7 @@ class TestTheAnswerCouldNotBeHeardEither:
     """
 
     def test_a_declared_project_survives_validation(self):
-        from schemas import CharacterOutput
+        from llm.schemas import CharacterOutput
 
         out = CharacterOutput(**{"project_ops": [
             {"op": "adopt", "project": "find who emptied the ledger",
@@ -166,8 +166,8 @@ class TestTheAnswerCouldNotBeHeardEither:
     def test_the_field_the_prompt_names_is_the_field_the_model_has(self):
         """Prompt and schema disagreeing about a field name is the alpha 7.2
         lore-generator bug. This one cost a whole tier of psychology."""
-        import prompts
-        from schemas import CharacterOutput
+        from llm import prompts
+        from llm.schemas import CharacterOutput
 
         assert "project_ops" in prompts.DEFAULT_PROMPTS["character"]
         assert "project_ops" in CharacterOutput().dict()
@@ -176,7 +176,7 @@ class TestTheAnswerCouldNotBeHeardEither:
         """The reader was always correct about a key that was always absent."""
         import inspect
 
-        import commit
+        from persist import commit
         # The reader lives in prepare_memory_commit (commit_memory since the
         # split); the function source survives the move, the module's did not.
         assert 'own_result.get("project_ops")' \
@@ -185,8 +185,8 @@ class TestTheAnswerCouldNotBeHeardEither:
     def test_an_adopted_project_reaches_the_ledger(self):
         """End to end through the real applier, since every link in this chain
         has now been wrong at least once."""
-        import affect
-        from schemas import CharacterOutput
+        from mind import affect
+        from llm.schemas import CharacterOutput
 
         ops = CharacterOutput(**{"project_ops": [
             {"op": "adopt", "project": "find who emptied the ledger",

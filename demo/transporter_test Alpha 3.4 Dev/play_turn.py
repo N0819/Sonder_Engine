@@ -2,9 +2,9 @@ import os, sys, time, json
 HERE=os.path.dirname(os.path.abspath(__file__))
 os.environ["ENGINE_DB"]=os.path.join(HERE,"run.db")
 sys.path.insert(0,"/home/nathan/Documents/Fiction-improved/Fiction")
-import db
-from db import q, qi, transaction
-from checkpoints import ensure_checkpoint
+from core import db
+from core.db import q, qi, transaction
+from persist.checkpoints import ensure_checkpoint
 from agents.runtime import run_pipeline
 CID=1
 pin=sys.argv[1] if len(sys.argv)>1 else ""

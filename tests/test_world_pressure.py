@@ -19,9 +19,9 @@ Mechanism under test:
 import json
 import time
 
-import commit
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _simple_scene():

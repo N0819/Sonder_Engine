@@ -243,8 +243,8 @@ def test_quote_styles_are_all_seen(style):
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_ctx(temp_db, character_results):

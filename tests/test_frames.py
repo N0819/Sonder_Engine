@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import time
 
-import db
-import frames
-from db import q, qi, wget, wset
+from core import db
+from core import frames
+from core.db import q, qi, wget, wset
 
 
 def _make_chat(db):

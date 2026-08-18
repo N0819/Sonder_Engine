@@ -3,11 +3,11 @@
 import json
 import time
 
-import memory
+from mind import memory
 from agents.character import _ground_observation_citations
 from agents.common import _merge_character_results, norm_sequence
-from character_schema import default_character_data
-from prompts import DEFAULT_PROMPTS
+from story.character_schema import default_character_data
+from llm.prompts import DEFAULT_PROMPTS
 
 
 def _chat_and_char(db, name="Mara"):

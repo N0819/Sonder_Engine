@@ -12,10 +12,10 @@ entity by identity.
 import json
 import time
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 from tests.conftest import fanout_resolve_agent
-from spatial import merge_scene_with_diff
+from world.spatial import merge_scene_with_diff
 
 
 def _make_ctx(temp_db, movement):

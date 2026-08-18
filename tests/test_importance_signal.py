@@ -35,8 +35,8 @@ import time
 
 import pytest
 
-from commit import _cited_memory_ids
-from memory import add_memory, effective_importance, raise_importance
+from persist.commit import _cited_memory_ids
+from mind.memory import add_memory, effective_importance, raise_importance
 
 REF = "event:1a2b3c"
 OTHER = "event:9z8y7x"

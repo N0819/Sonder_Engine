@@ -21,8 +21,8 @@ import json
 import time
 
 import agents.director as director
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _scene():

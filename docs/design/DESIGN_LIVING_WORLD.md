@@ -2,7 +2,7 @@
 
 Status: **deterministic/reactive floors A–E landed**: A, B and D's original
 floors, C's physical first-person carrier envelopes, E's bounded typed-plan executor, the settings surface for all five (the
-`LIVING_WORLD_*` ladder in `living_world.py`, declared/built split per the
+`LIVING_WORLD_*` ladder in `world/living_world.py`, declared/built split per the
 `OFFSCREEN_LIFE_BUILT` idiom), and the §6 profile-rung output-shape fix.
 **C's crowd/message/degradation layers and E's adaptive ceiling remain held for later phases**, behind the
 epistemic-leak audit — see §9, which also records the author's constraints on rumor
@@ -18,8 +18,8 @@ performance", "Lifecycle and reactivation", "Design principles"),
 [`OFFSCREEN_LIFE_DESIGN.md`](OFFSCREEN_LIFE_DESIGN.md),
 [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md), the crowd-blob
 proposal, and the bg-life modules as they stand on `main`
-(`gaps.py`, `offscreen.py`, `subjects.py`, `canon_provenance.py`,
-`background_claims.py`, `jobs.py`) `[read]`.
+(`world/gaps.py`, `world/offscreen.py`, `world/subjects.py`, `mind/canon_provenance.py`,
+`world/background_claims.py`, `core/jobs.py`) `[read]`.
 
 Evidence marking follows the proposal: `[read]` code opened, `[measured]` a
 query against a live database, `[estimate]` a number nobody has measured.
@@ -35,7 +35,7 @@ one cost that is never paid. Money spent **off the critical path** is money
 the author is willing to spend — this engine is not under the budget
 pressure its heavier siblings are — so every rating below prices calls
 honestly and then notes where they run. The seam already exists and is
-already pinned: `jobs.py` runs work between turns, `base_turn`-stamped, and
+already pinned: `core/jobs.py` runs work between turns, `base_turn`-stamped, and
 a turn starting never cancels a tick — cancelling would make the world's
 aliveness inversely proportional to player engagement, which inverts the
 feature (amendment 4) `[read]`.
@@ -176,7 +176,7 @@ anchor, and cadence should be lazy — tick on return-horizon, not on wall
 clock.
 
 **Substrate.** Mostly exists: the clock, `subject_last_seen`,
-`gaps._skeleton`, `scheduled_events`, the room graph; `place_purpose.py`
+`gaps._skeleton`, `scheduled_events`, the room graph; `world/place_purpose.py`
 likely carries "what a place is for" (read before building). New: routine
 tables (small, pure), the residue-diff assembler, the payload seam; the
 ensemble tick needs a schema and a jobs producer.
@@ -187,7 +187,7 @@ ensemble tick needs a schema and a jobs producer.
 `{what, where, due_clock, provisional}` rows in `scheduled_events`, which
 already exists with a runtime writer `[read]`. News of the fire reaches the
 capital in a week; the patrol doubles three days after the theft. Minting is
-deterministic for known kinds (`mechanics.py` already does transit and news
+deterministic for known kinds (`world/mechanics.py` already does transit and news
 latency `[read]`) plus a small structured field on a commit-time model
 output already running. Firing is deterministic. **A fired fuse is state**:
 when the player arrives, the patrol *is* doubled, the notice *is* posted.
@@ -218,13 +218,13 @@ retell.
 **How it fails, from the chair.** *The consequence that ignored the week*: a
 fuse minted at turn N fires into a world the player changed at N+4 —
 base-revision checking at fire time plus ratify-at-delivery is the guard,
-the same `base_turn` discipline `jobs.py` and `land_profile_ticks` already
+the same `base_turn` discipline `core/jobs.py` and `land_profile_ticks` already
 implement `[read]`. *Escalation spam*: every beat minting fuses turns a
 quiet story into a ratchet — cap mints per turn, TTL the untriggered, let
 most beats mint nothing (the `pick_background_reactor` shape: a
 deterministic gate returning none, most turns, correctly).
 
-**Substrate.** `scheduled_events` + `mechanics.py` are the delay line;
+**Substrate.** `scheduled_events` + `world/mechanics.py` are the delay line;
 `canon_provenance` the provisional wrapper. New: the minting seam, the
 fire-time revision check, and (ceiling) the chaining producer. Small.
 
@@ -453,7 +453,7 @@ this document, and the least of it is code.
 ## 7. The parallelism contract (named problem 2, already decided)
 
 Every approach and every ceiling obeys the same three rules, all already
-decided or built: offscreen work runs **out of band** (`jobs.py`, from the
+decided or built: offscreen work runs **out of band** (`core/jobs.py`, from the
 commit tail, never on the turn path `[read]`); an in-flight tick is **never
 cancelled by a turn starting** (amendment 4, pinned by test); and every
 offscreen write is **provisional, so arrival is the resolution event, not

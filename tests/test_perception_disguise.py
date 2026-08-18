@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import time
 
-from scene import (
+from story.scene import (
     active_disguises,
     disguised_visible_appearance,
     disguise_known_to,
@@ -155,7 +155,7 @@ def test_a_denial_never_reaches_an_unaware_observer():
     negation was reading as a mention and granting the parts back) and fixed
     the mechanical half. This is the epistemic half.
     """
-    from scene import disguised_visible_appearance
+    from story.scene import disguised_visible_appearance
 
     seen = disguised_visible_appearance("a kitsune", {
         "presented_appearance": "A human-looking young woman with normal "
@@ -171,7 +171,7 @@ def test_a_denial_never_reaches_an_unaware_observer():
 def test_the_positive_half_of_the_same_sentence_survives():
     """Dropping every clause that mentions a concealed noun would delete the
     disguise itself -- a glamour over fox ears IS a description of ears."""
-    from scene import disguised_visible_appearance
+    from story.scene import disguised_visible_appearance
 
     seen = disguised_visible_appearance("a kitsune", {
         "presented_appearance": "Ordinary human ears sit on the sides of her "
@@ -185,7 +185,7 @@ def test_the_positive_half_of_the_same_sentence_survives():
 def test_an_appearance_made_only_of_denials_falls_to_the_generic_label():
     """Nothing is left that says what the observer SEES, and an information
     barrier fails toward concealment."""
-    from scene import disguised_visible_appearance
+    from story.scene import disguised_visible_appearance
 
     seen = disguised_visible_appearance("A woman with six golden tails", {
         "presented_appearance": "No tails are visible.",
@@ -196,7 +196,7 @@ def test_an_appearance_made_only_of_denials_falls_to_the_generic_label():
 
 
 def test_prose_with_nothing_to_remove_is_returned_verbatim():
-    from scene import disguised_visible_appearance
+    from story.scene import disguised_visible_appearance
 
     for text in ("a plain human girl", "She looks entirely ordinary."):
         assert disguised_visible_appearance("x", {
@@ -215,27 +215,27 @@ def test_a_glamour_over_ears_does_not_hide_who_she_is():
     paragraph: her NAME three times from the proximity and pose lines, and a
     stranger's descriptor once from the appearance line.
     """
-    from scene import disguise_breaks_recognition
+    from story.scene import disguise_breaks_recognition
 
     assert not disguise_breaks_recognition(
         {"marta"}, "The Doctor", conceals_identity=False)
 
 
 def test_a_mask_does_hide_who_she_is():
-    from scene import disguise_breaks_recognition
+    from story.scene import disguise_breaks_recognition
 
     assert disguise_breaks_recognition(
         {"marta"}, "The Doctor", conceals_identity=True)
 
 
 def test_being_told_beats_any_disguise():
-    from scene import disguise_breaks_recognition
+    from story.scene import disguise_breaks_recognition
 
     assert not disguise_breaks_recognition(
         {"the doctor"}, "The Doctor", conceals_identity=True)
 
 
 def test_no_disguise_at_all_never_breaks_recognition():
-    from scene import disguise_breaks_recognition
+    from story.scene import disguise_breaks_recognition
 
     assert not disguise_breaks_recognition(None, "anyone", True)

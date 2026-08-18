@@ -19,7 +19,7 @@ import pytest
 
 from agents.common import _detect_narration_person, _narration_person_counts
 from agents.narration import _resolve_narration_person
-from db import wget, wset
+from core.db import wget, wset
 
 
 # ---- per-turn detection ------------------------------------------------
@@ -242,7 +242,7 @@ def test_narration_person_is_not_preserved_across_a_restore():
     Observed live: a checkpoint holding `second` restored into a world still
     holding `first`.
     """
-    import checkpoints
+    from persist import checkpoints
 
     assert "narration_person" not in checkpoints.PRESERVED_SETTING_KEYS
 
@@ -254,7 +254,7 @@ def test_it_has_no_dial_to_justify_preserving_it():
     import pathlib
 
     root = pathlib.Path(__file__).resolve().parent.parent
-    surfaces = [root / "app.py"] + list((root / "static").rglob("*.js"))
+    surfaces = [root / "web" / "app.py"] + list((root / "static").rglob("*.js"))
     for path in surfaces:
         if path.exists():
             assert "narration_person" not in path.read_text(encoding="utf-8"), \

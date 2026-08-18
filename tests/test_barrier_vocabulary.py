@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (_PASSABLE_BARRIERS, _shield_standing_passage,
+from world.spatial import (_PASSABLE_BARRIERS, _shield_standing_passage,
                      normalize_barrier, unresolved_barrier_words)
-from spatial_orientation import normalize_scene_bearings
+from world.spatial_orientation import normalize_scene_bearings
 
 # (raw value, live occurrences, what it must resolve to)
 SILENTLY_WALLED = [
@@ -239,7 +239,7 @@ def test_a_named_doorway_is_never_a_wall():
     route-checked) went in without her. They spent the next beat in different
     rooms, which is why nothing she did reached him.
     """
-    from spatial import normalize_scene_barriers
+    from world.spatial import normalize_scene_barriers
 
     scene = {"positions": {}, "rooms": {"elevator": {"adjacent": [
         {"to": "lobby", "barrier": "wall", "name": "lobby doors"},
@@ -254,7 +254,7 @@ def test_it_downgrades_rather_than_opens():
     closed door still blocks this beat and still has to be opened by an
     action the resolve owns -- so this grants no passage, it only removes the
     permanent seal."""
-    from spatial import normalize_scene_barriers, _PASSABLE_BARRIERS
+    from world.spatial import normalize_scene_barriers, _PASSABLE_BARRIERS
 
     scene = {"positions": {}, "rooms": {"r": {"adjacent": [
         {"to": "x", "barrier": "wall", "name": "the front door"}]}}}
@@ -266,7 +266,7 @@ def test_a_wall_that_is_only_described_stays_a_wall():
     """An authored wall must survive. Only words that ONLY ever name an
     opening count -- "partition" and "screen" are as often the thing that
     stops you as the thing that lets you past, and are deliberately out."""
-    from spatial import normalize_scene_barriers
+    from world.spatial import normalize_scene_barriers
 
     scene = {"positions": {}, "rooms": {"r": {"adjacent": [
         {"to": "a", "barrier": "wall", "name": "concrete shaft wall"},

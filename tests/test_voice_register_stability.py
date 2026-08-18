@@ -26,9 +26,9 @@ live reroll, not asserted here.
 import json
 import time
 
-import memory
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from mind import memory
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_verbose_doctor_chat(temp_db, verbosity):

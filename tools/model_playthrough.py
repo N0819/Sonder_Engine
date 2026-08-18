@@ -97,7 +97,7 @@ def authored_establish(author):
 #: -- so a harness whose whole job is "seed every role on one model" was
 #: quietly seeding a subset, and any role it missed fell through to whatever
 #: `default` happened to be. Reading the real list means it cannot drift again.
-from providers import ROLES as _PROVIDER_ROLES
+from llm.providers import ROLES as _PROVIDER_ROLES
 
 ROLES = tuple(_PROVIDER_ROLES)
 MAIN_MODEL = "minimax/minimax-m3"
@@ -189,7 +189,7 @@ def install(author):
     rejected `courier_ops` entry here is a real rejection rather than a
     harness artifact.
     """
-    import llm_quality
+    from llm import llm_quality
 
     real = llm_quality.complete_validated_json
 
@@ -321,7 +321,7 @@ def main():
     args = ap.parse_args()
 
     _require_scratch()
-    import db as db_module
+    from core import db as db_module
 
     db_module.init()
     main_model = args.model or (FAST_MAIN_MODEL if args.fast else MAIN_MODEL)
@@ -422,7 +422,7 @@ def main():
         with open(os.path.join(args.out, "transcript.md"), "w") as fh:
             fh.write(transcript(played, narration_by_turn(db_module, cid),
                                 rates))
-        from chat_archive import ChatArchiveService
+        from persist.chat_archive import ChatArchiveService
         export = ChatArchiveService.export_chat(None, cid)
         export["checkpoints"] = []
         with open(os.path.join(args.out, "story.json"), "w") as fh:

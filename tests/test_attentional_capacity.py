@@ -38,10 +38,10 @@ warning was dead on the only path that calls it.
 
 from __future__ import annotations
 
-import affect
-import character_schema
-import importers
-from affect import (CAPACITY_DEFAULT, CAPACITY_LADDER, apply_intent_ops,
+from mind import affect
+from story import character_schema
+from story import importers
+from mind.affect import (CAPACITY_DEFAULT, CAPACITY_LADDER, apply_intent_ops,
                     capacity_caps, normalize_capacity, normalize_wants)
 
 
@@ -235,7 +235,7 @@ def test_the_character_is_told_its_own_ceiling():
     assert '"wants": _want_cap' in src
     assert '"intentions": _intent_cap' in src
 
-    import prompts
+    from llm import prompts
     block = prompts.DEFAULT_PROMPTS["character"]
     assert "self.attention" in block
     assert "self.attention.wants beat wants" in block
@@ -246,7 +246,7 @@ def test_commit_reads_the_same_pair_the_payload_showed():
     through `affect.capacity_caps` from the sheet plus absorption."""
     import inspect
 
-    import commit
+    from persist import commit
     # prepare_memory_commit's source, not the module's: the split moved the
     # commit-side call site into commit_memory and the facade re-exports the
     # same function object.

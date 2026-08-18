@@ -26,10 +26,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from affect import (PROJECT_CAP, apply_project_ops, normalize_serves,
+from mind.affect import (PROJECT_CAP, apply_project_ops, normalize_serves,
                     normalize_wants, project_boundary,
                     projects_served_this_beat, serves_priority)
-from character_schema import character_projects
+from story.character_schema import character_projects
 
 
 def _proj(pid, text, satisfied_when=""):
@@ -244,7 +244,7 @@ class TestDecayIsReasonedNotSilent:
     def test_the_fuse_shows_before_the_sweep_fires(self):
         """The whole point: the question reaches the character while there
         is still time to answer it."""
-        from affect import INTENT_DORMANT_AFTER
+        from mind.affect import INTENT_DORMANT_AFTER
         from agents.character import _FADING_AFTER
         assert _FADING_AFTER < INTENT_DORMANT_AFTER
 
@@ -327,27 +327,27 @@ class TestTimeFiltersInsteadOfJudgement:
         return live
 
     def test_adoption_starts_on_probation_at_intention_weight(self):
-        from affect import settle_probation
+        from mind.affect import settle_probation
         live = self._adopted()
         assert live[0]["probation"] is True
         assert serves_priority(live[0]["id"], set(), set(),
                                {live[0]["id"]}) == 0.8
 
     def test_service_plus_time_establishes(self):
-        from affect import settle_probation
+        from mind.affect import settle_probation
         live = self._adopted(served_beats=3, last_served_turn=22)
         live, former, warn = settle_probation(live, [], 22)
         assert "probation" not in live[0]
         assert any("established" in w for w in warn)
 
     def test_service_alone_does_not_establish_a_same_day_enthusiasm(self):
-        from affect import settle_probation
+        from mind.affect import settle_probation
         live = self._adopted(served_beats=3, last_served_turn=13)
         live, _, warn = settle_probation(live, [], 13)
         assert live[0].get("probation") is True
 
     def test_age_alone_is_establishment_by_neglect_and_refused(self):
-        from affect import settle_probation
+        from mind.affect import settle_probation
         live = self._adopted(served_beats=2, last_served_turn=30)
         live, _, _ = settle_probation(live, [], 30)
         assert live[0].get("probation") is True
@@ -355,7 +355,7 @@ class TestTimeFiltersInsteadOfJudgement:
     def test_an_unserved_probationary_project_lapses_quietly(self):
         """The chalk-circle counterfactual: adopted, then never served --
         it leaves without ceremony, recorded, freeing the slot."""
-        from affect import settle_probation
+        from mind.affect import settle_probation
         live = self._adopted(served_beats=1, last_served_turn=10)
         live, former, warn = settle_probation(live, [], 34)
         assert live == []
@@ -366,7 +366,7 @@ class TestTimeFiltersInsteadOfJudgement:
         """The stated-reason floor stays where it matters: on projects a
         character has actually lived by. Only displacement or its own
         criterion ends one -- however long unserved."""
-        from affect import settle_probation
+        from mind.affect import settle_probation
         held = [dict(_proj("pa1", "Every run ends at the shrine"),
                      last_served_turn=10)]
         live, former, warn = settle_probation(held, [], 500)
@@ -575,7 +575,7 @@ class TestAMutatedProjectIsNotReseeded:
     """
 
     def test_the_authored_id_is_what_makes_it_the_same_project(self):
-        from character_schema import character_projects, default_character_data
+        from story.character_schema import character_projects, default_character_data
         sheet = default_character_data("Someone")
         sheet.setdefault("psychology", {})["projects"] = [
             {"project": "Every run ends at the shrine.", "about": "world"}]

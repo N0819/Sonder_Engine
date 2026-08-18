@@ -24,9 +24,9 @@ be made structural is the rest, and this file covers exactly that:
 """
 import json
 
-from schemas import semantic_output_errors, validate_llm_output
-from spatial import THRESHOLD_CROSSING_BEATS, crossing_of
-from spatial_frames import infer_threshold_crossings
+from llm.schemas import semantic_output_errors, validate_llm_output
+from world.spatial import THRESHOLD_CROSSING_BEATS, crossing_of
+from world.spatial_frames import infer_threshold_crossings
 
 
 def _establish(**over):
@@ -150,7 +150,7 @@ def test_an_unkinded_entity_does_not_fail_an_opening():
 
 
 def test_the_shipped_example_satisfies_its_own_rule():
-    from schemas import output_example
+    from llm.schemas import output_example
     ex = output_example("director_establish")
     assert not any("absent from positions" in e for e in
                    semantic_output_errors("director_establish", ex))
@@ -189,7 +189,7 @@ def test_the_establish_tail_routes_contact_ops_into_the_state_diff():
 
 
 def test_a_declared_hold_reaches_scene_contacts_through_the_ordinary_merge():
-    from spatial import merge_scene_with_diff
+    from world.spatial import merge_scene_with_diff
     scene = merge_scene_with_diff({}, {
         "rooms": {"alley": {"name": "Alley", "desc": "Wet brick.",
                             "adjacent": []}},

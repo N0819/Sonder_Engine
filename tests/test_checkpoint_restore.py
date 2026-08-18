@@ -3,8 +3,8 @@
 import json
 import time
 
-from character_schema import default_character_data
-from memory import restore_chat_memories
+from story.character_schema import default_character_data
+from mind.memory import restore_chat_memories
 
 
 def _chat_and_character(db):
@@ -83,8 +83,8 @@ def _chat_with_two_books(db):
 
 
 def test_restore_books_removes_managed_links_when_snapshot_is_empty(temp_db):
-    from checkpoints import _restore_books
-    from memory import add_lorebook_link
+    from persist.checkpoints import _restore_books
+    from mind.memory import add_lorebook_link
 
     chat_id, first, second = _chat_with_two_books(temp_db)
     add_lorebook_link(first, second, "related", label="later timeline")
@@ -122,8 +122,8 @@ def test_restore_books_removes_managed_links_when_snapshot_is_empty(temp_db):
 
 
 def test_restore_books_replaces_existing_link_metadata(temp_db):
-    from checkpoints import _restore_books
-    from memory import add_lorebook_link
+    from persist.checkpoints import _restore_books
+    from mind.memory import add_lorebook_link
 
     chat_id, first, second = _chat_with_two_books(temp_db)
     add_lorebook_link(
@@ -176,8 +176,8 @@ def test_restore_preserves_archived_without_event_key(
     temp_db,
     monkeypatch,
 ):
-    import memory
-    from providers import EmbeddingBatch
+    from mind import memory
+    from llm.providers import EmbeddingBatch
 
     chat_id, character_id = _chat_and_character(temp_db)
 
@@ -222,8 +222,8 @@ def test_restore_replaces_existing_chat_memories(
     temp_db,
     monkeypatch,
 ):
-    import memory
-    from providers import EmbeddingBatch
+    from mind import memory
+    from llm.providers import EmbeddingBatch
 
     chat_id, character_id = _chat_and_character(temp_db)
 
@@ -280,7 +280,7 @@ class TestASnapshotBuiltOutsideTheLockIsStillCurrent:
 
     def test_it_moves_when_another_connection_commits(self, temp_db):
         import sqlite3
-        import db
+        from core import db
 
         before = db.data_version()
         other = sqlite3.connect(db.DB)
@@ -294,7 +294,7 @@ class TestASnapshotBuiltOutsideTheLockIsStillCurrent:
     def test_it_does_not_move_for_this_connections_own_writes(self, temp_db):
         """Or every snapshot would be treated as stale and rebuilt, which is
         the cost this avoids."""
-        import db
+        from core import db
 
         db.qi("INSERT INTO settings(key,value) VALUES(?,?)", ("own_probe", "1"))
         before = db.data_version()
@@ -305,7 +305,7 @@ class TestASnapshotBuiltOutsideTheLockIsStillCurrent:
             self, temp_db):
         """The concrete case the turn-id guard was blind to."""
         import sqlite3
-        import db
+        from core import db
 
         cid = db.qi("INSERT INTO chats(name,created) VALUES(?,?)", ("S", 0.0))
         latest_before = db.q(

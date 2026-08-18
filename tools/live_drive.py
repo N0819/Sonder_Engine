@@ -204,8 +204,8 @@ def main():
     args = ap.parse_args()
 
     _require_scratch()
-    import db as db_module
-    import llm_quality
+    from core import db as db_module
+    from llm import llm_quality
 
     db_module.init()
 
@@ -246,7 +246,7 @@ def main():
         os.makedirs(args.out, exist_ok=True)
         with open(os.path.join(args.out, "transcript.md"), "w") as fh:
             fh.write(transcript(played, prose, author.answered))
-        from chat_archive import ChatArchiveService
+        from persist.chat_archive import ChatArchiveService
         with open(os.path.join(args.out, "story.json"), "w") as fh:
             json.dump(ChatArchiveService.export_chat(None, cid), fh, indent=1,
                       default=str)

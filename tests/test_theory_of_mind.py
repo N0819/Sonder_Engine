@@ -3,7 +3,7 @@
 import json
 
 from agents import cap_mind_model_updates, normalize_character_refs
-from character_schema import default_character_data
+from story.character_schema import default_character_data
 
 def test_name_tom_trigger_becomes_id():
     sheet = default_character_data("Alex")

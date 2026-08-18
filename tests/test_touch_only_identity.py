@@ -35,7 +35,7 @@ from __future__ import annotations
 import pytest
 
 from agents.perception import _surface_translate_event, _touch_only_sources
-from spatial import spatial_rel_between
+from world.spatial import spatial_rel_between
 
 HOST = "Vessel"
 HOST_ID = "vessel_entity"

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 
-import llm_quality
+from llm import llm_quality
 
 
 def _fake_patch(monkeypatch, reply, seen=None):
@@ -104,7 +104,7 @@ def test_repair_is_its_own_configurable_role():
     hidden hop from a row the host never looked at. A host who wants a fast
     patcher sets this row; the panel says so on its face. See
     `tests/test_provider_fallbacks.py`."""
-    import providers
+    from llm import providers
 
     assert "repair" in providers.ROLES
     assert providers.ROLE_FALLBACKS == {}

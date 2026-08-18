@@ -179,7 +179,7 @@ That is the property worth having: **the crowd did not decide to release you,
 the room did.** A crush that thins when it reaches open ground is what a real
 one does, and it costs a subtraction.
 
-**Density maps onto barrier vocabulary that exists.** `spatial.py` folds
+**Density maps onto barrier vocabulary that exists.** `world/spatial.py` folds
 barrier words into a known set and asks two independent questions: is it
 passable, and does sight pass. `membrane` is already `passable` and already
 NOT in `_SIGHT_BARRIERS` — you can push through it and you cannot see through
@@ -259,7 +259,7 @@ through the same provisional-claim path as anything else offscreen invents.
 
 ## 7a. Built, 2026-08-10 — and what the building changed
 
-All five steps are in the tree. `crowds.py` is the pure module (bands, derived
+All five steps are in the tree. `world/crowds.py` is the pure module (bands, derived
 density, terrain, drift, splitting, emergence); `StateDiff.crowd_ops` is how a
 Director says it; `commit.commit_crowds` is the one persistence boundary;
 `agents.common.crowds_for_room` is the per-observer surface; and

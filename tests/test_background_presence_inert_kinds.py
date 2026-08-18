@@ -23,8 +23,8 @@ instead, and these tests pin the two ways a PERSON can be portable.
 
 from __future__ import annotations
 
-import commit
-from schemas import _ANIMATE_ENTITY_KINDS
+from persist import commit
+from llm.schemas import _ANIMATE_ENTITY_KINDS
 
 
 def _inert(ent, scene=None, eid="e1"):

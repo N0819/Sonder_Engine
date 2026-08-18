@@ -9,15 +9,15 @@ from __future__ import annotations
 import json
 import time
 
-from commit import (
+from persist.commit import (
     track_background_presences,
     promotable_background_presences,
     _background_name_mentioned,
     BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD,
 )
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_chat(db):
@@ -340,24 +340,24 @@ class TestOneCreatureIsOnePresence:
     """
 
     def test_an_article_does_not_make_a_second_presence(self):
-        from commit import _presence_identity
+        from persist.commit import _presence_identity
         assert (_presence_identity("A Dalek") == _presence_identity("Dalek")
                 == _presence_identity("The Dalek") == "dalek")
 
     def test_case_and_spacing_are_not_identity_either(self):
-        from commit import _presence_identity
+        from persist.commit import _presence_identity
         assert _presence_identity("  the   DALEK ") == _presence_identity("Dalek")
 
     def test_a_title_still_distinguishes_two_strangers(self):
         """Articles only. Among unregistered figures a title is often the only
         thing telling two of them apart -- unlike `strip_name_titles`, which is
         right for roster matching and wrong here."""
-        from commit import _presence_identity
+        from persist.commit import _presence_identity
         assert _presence_identity("the guard") != _presence_identity("the captain")
         assert _presence_identity("Dr. Crusher") != _presence_identity("Crusher")
 
     def test_the_established_spelling_wins(self):
-        from commit import _resolve_presence_name
+        from persist.commit import _resolve_presence_name
         presences = {"A Dalek": {"first_turn": 0}}
         assert _resolve_presence_name("The Dalek", presences) == "A Dalek"
         assert _resolve_presence_name("Dalek", presences) == "A Dalek"
@@ -366,7 +366,7 @@ class TestOneCreatureIsOnePresence:
     def test_an_already_split_ledger_heals(self):
         """Chat 57's exact shape. Folding happens on load so a story already
         carrying the split repairs on its next turn, with no migration."""
-        from commit import _fold_duplicate_presences
+        from persist.commit import _fold_duplicate_presences
         folded = _fold_duplicate_presences({
             "A Dalek": {"first_turn": 0, "last_turn": 25,
                         "dialogue_turns": [1, 2, 17], "mention_turns": [3, 5],
@@ -387,7 +387,7 @@ class TestOneCreatureIsOnePresence:
         assert record["sketch"]["station_room"] == "alley_room"
 
     def test_folding_leaves_genuinely_different_presences_alone(self):
-        from commit import _fold_duplicate_presences
+        from persist.commit import _fold_duplicate_presences
         folded = _fold_duplicate_presences({
             "A Dalek": {"first_turn": 0, "last_turn": 3, "dialogue_turns": []},
             "A Judoon": {"first_turn": 1, "last_turn": 3, "dialogue_turns": []},
@@ -402,7 +402,7 @@ class TestOneCreatureIsOnePresence:
         An over-merge silently welds two characters into one, which is worse
         than a split a name would fix -- so two bodies means hands off.
         """
-        from commit import _fold_duplicate_presences, _resolve_presence_name
+        from persist.commit import _fold_duplicate_presences, _resolve_presence_name
         crowd = {"entities": {
             "e1": {"name": "A Dalek"},
             "e2": {"name": "The Dalek"},
@@ -416,7 +416,7 @@ class TestOneCreatureIsOnePresence:
         assert _resolve_presence_name("Dalek", ledger, crowd) == "Dalek"
 
     def test_one_body_in_the_room_still_merges(self):
-        from commit import _fold_duplicate_presences, _resolve_presence_name
+        from persist.commit import _fold_duplicate_presences, _resolve_presence_name
         alone = {"entities": {"e1": {"name": "A Dalek",
                                      "kind": "dalek war machine"}}}
         ledger = {

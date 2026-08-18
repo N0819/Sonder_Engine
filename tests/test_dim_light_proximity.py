@@ -18,8 +18,8 @@ no-station-data fallback and would un-dim every ordinary room.
 
 from __future__ import annotations
 
-import attire
-import spatial
+from story import attire
+from world import spatial
 from agents.common import _unknown_actor_label, region_visibility
 
 

@@ -4,7 +4,7 @@ update must preserve the existing key rather than wiping it."""
 
 from __future__ import annotations
 
-import app
+from web import app
 
 
 def test_add_provider_never_returns_raw_key(temp_db):

@@ -9,11 +9,11 @@ import time
 
 import pytest
 
-import memory
-from character_schema import default_character_data
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from memory import add_memory
-from providers import EmbeddingBatch
+from mind import memory
+from story.character_schema import default_character_data
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from mind.memory import add_memory
+from llm.providers import EmbeddingBatch
 
 
 def _install_stub(monkeypatch):

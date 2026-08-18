@@ -6,7 +6,7 @@ baseline used (`tools/perception_quality.py::score_view`; engine checkers
 resolved on THIS tree), on entitlements rebuilt from the same stored
 structured data. Zero live model calls were spent on the measurement run
 (one stray `role=utility` call escaped during smoke testing —
-`artifacts.py`'s lazy notice wording re-triggered by checkpoint restore —
+`story/artifacts.py`'s lazy notice wording re-triggered by checkpoint restore —
 before the harness hard-blocked `providers._session`; the full replay made
 none).
 

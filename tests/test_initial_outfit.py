@@ -5,20 +5,20 @@ from __future__ import annotations
 import json
 import time
 
-import app
-import attire
-from character_schema import (
+from web import app
+from story import attire
+from story.character_schema import (
     default_character_data,
     default_persona_data,
 )
-from importers import (
+from story.importers import (
     REINT_CHAR_SYS,
     REINT_PERSONA_SYS,
     heuristic_character_sheet,
     import_persona,
 )
-from pipeline_context import ChatData, PipelineContext, TurnData
-from scene import get_scene
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from story.scene import get_scene
 
 
 def test_heuristic_character_import_separates_labeled_outfit():
@@ -54,7 +54,7 @@ def test_heuristic_persona_import_separates_direct_outfit(temp_db):
 
 
 def test_generators_and_ai_importers_require_body_outfit_separation():
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     texts = {
         "character generator": DEFAULT_PROMPTS["generator_character"],
@@ -312,7 +312,7 @@ def test_card_editors_place_initial_outfit_near_identity():
 
 
 def test_director_establishment_respects_initial_outfit_separation():
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     text = DEFAULT_PROMPTS["director_establish"]
     assert "initial_outfit is authoritative" in text

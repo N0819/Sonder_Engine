@@ -15,8 +15,8 @@ import json
 
 import pytest
 
-import greetings
-from character_schema import default_character_data
+from story import greetings
+from story.character_schema import default_character_data
 
 
 def _make_character(temp_db, name="Mara", voice_register="dry, clipped"):
@@ -45,7 +45,7 @@ def test_generates_a_greeting_entry(temp_db, monkeypatch):
         captured["payload"] = json.loads(user)
         return GREETING
 
-    monkeypatch.setattr("providers.chat_complete", fake_complete)
+    monkeypatch.setattr("llm.providers.chat_complete", fake_complete)
 
     g = greetings.generate_greeting(cid, brief="she's closing up in a storm")
 
@@ -66,7 +66,7 @@ def test_generates_a_greeting_entry(temp_db, monkeypatch):
 def test_blank_brief_still_generates(temp_db, monkeypatch):
     cid = _make_character(temp_db)
     monkeypatch.setattr(greetings, "get_prompt", lambda k: "SYS")
-    monkeypatch.setattr("providers.chat_complete",
+    monkeypatch.setattr("llm.providers.chat_complete",
                         lambda *a, **kw: "Mara nods at you across the bar.")
     g = greetings.generate_greeting(cid, brief="")
     assert g["prose"] == "Mara nods at you across the bar."
@@ -75,7 +75,7 @@ def test_blank_brief_still_generates(temp_db, monkeypatch):
 def test_code_fence_wrapping_is_stripped(temp_db, monkeypatch):
     cid = _make_character(temp_db)
     monkeypatch.setattr(greetings, "get_prompt", lambda k: "SYS")
-    monkeypatch.setattr("providers.chat_complete",
+    monkeypatch.setattr("llm.providers.chat_complete",
                         lambda *a, **kw: '```\nMara looks up. "You\'re late."\n```')
     g = greetings.generate_greeting(cid, brief="")
     assert "```" not in g["prose"]
@@ -85,7 +85,7 @@ def test_code_fence_wrapping_is_stripped(temp_db, monkeypatch):
 def test_char_macro_is_resolved_player_macro_is_kept(temp_db, monkeypatch):
     cid = _make_character(temp_db, name="Mara")
     monkeypatch.setattr(greetings, "get_prompt", lambda k: "SYS")
-    monkeypatch.setattr("providers.chat_complete",
+    monkeypatch.setattr("llm.providers.chat_complete",
                         lambda *a, **kw: '{{char}} waves you over. "Hi, {{PLAYER}}."')
     g = greetings.generate_greeting(cid, brief="")
     assert "{{char}}" not in g["prose"]
@@ -96,7 +96,7 @@ def test_char_macro_is_resolved_player_macro_is_kept(temp_db, monkeypatch):
 def test_empty_generation_raises(temp_db, monkeypatch):
     cid = _make_character(temp_db)
     monkeypatch.setattr(greetings, "get_prompt", lambda k: "SYS")
-    monkeypatch.setattr("providers.chat_complete", lambda *a, **kw: "   ")
+    monkeypatch.setattr("llm.providers.chat_complete", lambda *a, **kw: "   ")
     with pytest.raises(RuntimeError):
         greetings.generate_greeting(cid, brief="")
 
@@ -107,10 +107,10 @@ def test_missing_character_raises(temp_db):
 
 
 def test_endpoint_returns_greeting_without_persisting(temp_db, monkeypatch):
-    import app as app_module
+    from web import app as app_module
     cid = _make_character(temp_db)
     monkeypatch.setattr(greetings, "get_prompt", lambda k: "SYS")
-    monkeypatch.setattr("providers.chat_complete", lambda *a, **kw: GREETING)
+    monkeypatch.setattr("llm.providers.chat_complete", lambda *a, **kw: GREETING)
 
     out = app_module.char_generate_greeting(cid, {"prompt": "storm"})
     assert "{{PLAYER}}" in out["greeting"]["prose"]

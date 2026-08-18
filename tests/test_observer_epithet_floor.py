@@ -37,8 +37,8 @@ import time
 from agents import composer
 from agents.narration import _ordered_beat_events
 from agents.perception import _composer_self_forms, _joint_stranger_labels
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 from agents.common import (
     _check_narration_person_match,
     _check_narrator_fidelity,

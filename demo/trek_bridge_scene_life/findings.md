@@ -58,7 +58,7 @@ explicitly. The `place` block and style guide carried it.
 
 ## 3. The claims loop closed, end to end
 
-First live exercise of `background_claims.py`, in the setting with the most
+First live exercise of `world/background_claims.py`, in the setting with the most
 canon to trip over.
 
 - **t3** — Worf self-declares *"Two D'deridex-class warbirds at bearing
@@ -93,7 +93,7 @@ background agent rewriting the premise of the scene with no ratifier.
 ## Bugs found (all five fixed)
 
 The run was worth it for these. Four of five share one root cause: **ranks and
-titles were not normalized anywhere in the new code**, though `commit.py`
+titles were not normalized anywhere in the new code**, though `persist/commit.py`
 already carried the vocabulary for it.
 
 **1. A registered character was tracked as background furniture — serious.**

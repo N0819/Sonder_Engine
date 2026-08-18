@@ -3,8 +3,8 @@
 import pytest
 from fastapi import HTTPException
 
-import app
-from chat_archive import ChatArchiveData, ChatArchiveService
+from web import app
+from persist.chat_archive import ChatArchiveData, ChatArchiveService
 
 
 def test_archive_routes_and_app_compatibility_aliases():
@@ -83,7 +83,7 @@ class TestTheGateIsNotStricterThanTheCodeBehindIt:
 
     @staticmethod
     def _validate(payload):
-        from chat_archive import ChatArchiveData
+        from persist.chat_archive import ChatArchiveData
         validate = getattr(ChatArchiveData, "model_validate", None)
         model = validate(payload) if validate else ChatArchiveData.parse_obj(payload)
         dump = getattr(model, "model_dump", None)

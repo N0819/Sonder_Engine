@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import connect_orphan_new_rooms, merge_scene_with_diff, spatial_rel
+from world.spatial import connect_orphan_new_rooms, merge_scene_with_diff, spatial_rel
 
 
 PREV = {

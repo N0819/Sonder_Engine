@@ -30,7 +30,7 @@ import time
 
 import pytest
 
-import providers
+from llm import providers
 import extension_runtime
 from extension_runtime import ExtensionError
 
@@ -266,7 +266,7 @@ class TestDisableAndRemoval:
         inert, not explosive: `agent_models` parses, host roles resolve, and
         the orphan key resolves too (its extension could be re-enabled
         mid-process and its calls must not 500 in the meantime)."""
-        from db import set_setting
+        from core.db import set_setting
         set_setting("agent_models", json.dumps({
             "default": {"provider": "frontier", "model": "big"},
             "ext:gone:planner": {"provider": "dead", "model": "small"},
@@ -283,9 +283,9 @@ class TestDisableAndRemoval:
         """The policy above is only real if the PUT route calls it -- this is
         the wiring test, over the same route the panel's Save button hits."""
         from fastapi.testclient import TestClient
-        import app as app_module
-        import guest_access as guest
-        from db import get_setting, set_setting
+        from web import app as app_module
+        from web import guest_access as guest
+        from core.db import get_setting, set_setting
 
         set_setting("agent_models", json.dumps({
             "default": {"provider": "frontier", "model": "big"},

@@ -43,8 +43,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import attire  # noqa: E402
-import commit  # noqa: E402
+from story import attire  # noqa: E402
+from persist import commit  # noqa: E402
 
 
 # --- invariants -------------------------------------------------------------

@@ -12,7 +12,7 @@ emergent runtime intentions), so an authored character pursues its goals.
 from __future__ import annotations
 
 from agents.character import _merge_standing_intentions
-from character_schema import character_standing_intentions, default_character_data
+from story.character_schema import character_standing_intentions, default_character_data
 
 
 def test_authored_goals_become_standing_intentions():

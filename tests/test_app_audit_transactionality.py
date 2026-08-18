@@ -32,10 +32,10 @@ import time
 import pytest
 from fastapi import HTTPException
 
-import app
-import memory
-from character_schema import default_character_data
-from checkpoints import ensure_checkpoint
+from web import app
+from mind import memory
+from story.character_schema import default_character_data
+from persist.checkpoints import ensure_checkpoint
 
 
 def _make_chat(db):

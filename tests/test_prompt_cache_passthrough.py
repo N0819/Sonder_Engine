@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import pytest
 
-import providers
-from db import set_setting
+from llm import providers
+from core.db import set_setting
 
 CLAUDE = "anthropic/claude-sonnet-4"
 

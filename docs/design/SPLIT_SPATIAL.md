@@ -1,4 +1,4 @@
-# Split plan — `spatial.py`
+# Split plan — `world/spatial.py`
 
 Status: PROPOSED. Companion to [`DESIGN_MODULE_LAYOUT.md`](DESIGN_MODULE_LAYOUT.md),
 which carries the rules every step here obeys (verbatim moves, one module per
@@ -6,7 +6,7 @@ commit, flag-never-fix).
 
 8,451 lines · 199 top-level defs · 97 module-level constants. Verified by AST:
 199/199 defs and 97/97 constants assigned to exactly one module, no duplicates,
-no orphans, resulting graph acyclic by DFS. **Nothing stays** — `spatial.py`
+no orphans, resulting graph acyclic by DFS. **Nothing stays** — `world/spatial.py`
 becomes a pure facade of ~340 lines.
 
 ## Corrections the code forced on the guessed clustering
@@ -29,19 +29,19 @@ becomes a pure facade of ~340 lines.
 
 | module | ~lines | owns |
 | --- | --- | --- |
-| `spatial_identity.py` | 388 | What a name in a scene refers to — ledger lookup, entity resolution, subject canonicalisation, room-id normalisation. **Leaf.** |
-| `spatial_barriers.py` | 400 | Barrier vocabulary and the four class sets saying what a barrier passes. **Leaf.** |
-| `spatial_geometry.py` | 929 | Where a body stands and which way it faces — anchors, stations, facing, proximity, sides/arcs, poses, room size, egocentric frame. |
-| `spatial_light.py` | 201 | Illumination — the ladder, source aggregation with radius falloff, per-room and per-position light, the light→sight ceiling. |
-| `spatial_routing.py` | 870 | Walks over the room graph — edge distance, `spatial_rel`, adjacency, passable routes, sprint reach, corridor sightlines. |
-| `spatial_senses.py` | 1229 | What reaches a perceiver — comms, sight grading, hearing with its material ladder and bearing, scent, perceiver acuity. |
-| `spatial_containment.py` | 644 | Relative scale and enclosure — how big a body is, what encloses it, what that hides, what a size change breaks. |
-| `spatial_contacts.py` | 1150 | The contact ledger — part/region identity, manner/relation/motion classification, cleaning, op application. |
-| `spatial_contact_migration.py` | 321 | Converting contact prose the Director wrote into entity `state` into real contact records. Optional; see resistance. |
-| `spatial_substance.py` | 593 | Substances on and in bodies — placement, pooling, absorption, consumption, transfer, speech impediment. |
-| `spatial_prose.py` | 325 | Reader-facing contact phrase renderers and the aggregate `spatial_facts` bundle. |
-| `spatial_transit.py` | 363 | `parent_entity`-linked rooms — derived dock edges, inferred body enclosures, nesting-aware ambient scope. |
-| `spatial_merge.py` | 1015 | The deterministic scene merge — room/entity field merging, follow ops, structural repair, `merge_scene_with_diff`. |
+| `world/spatial_identity.py` | 388 | What a name in a scene refers to — ledger lookup, entity resolution, subject canonicalisation, room-id normalisation. **Leaf.** |
+| `world/spatial_barriers.py` | 400 | Barrier vocabulary and the four class sets saying what a barrier passes. **Leaf.** |
+| `world/spatial_geometry.py` | 929 | Where a body stands and which way it faces — anchors, stations, facing, proximity, sides/arcs, poses, room size, egocentric frame. |
+| `world/spatial_light.py` | 201 | Illumination — the ladder, source aggregation with radius falloff, per-room and per-position light, the light→sight ceiling. |
+| `world/spatial_routing.py` | 870 | Walks over the room graph — edge distance, `spatial_rel`, adjacency, passable routes, sprint reach, corridor sightlines. |
+| `world/spatial_senses.py` | 1229 | What reaches a perceiver — comms, sight grading, hearing with its material ladder and bearing, scent, perceiver acuity. |
+| `world/spatial_containment.py` | 644 | Relative scale and enclosure — how big a body is, what encloses it, what that hides, what a size change breaks. |
+| `world/spatial_contacts.py` | 1150 | The contact ledger — part/region identity, manner/relation/motion classification, cleaning, op application. |
+| `world/spatial_contact_migration.py` | 321 | Converting contact prose the Director wrote into entity `state` into real contact records. Optional; see resistance. |
+| `world/spatial_substance.py` | 593 | Substances on and in bodies — placement, pooling, absorption, consumption, transfer, speech impediment. |
+| `world/spatial_prose.py` | 325 | Reader-facing contact phrase renderers and the aggregate `spatial_facts` bundle. |
+| `world/spatial_transit.py` | 363 | `parent_entity`-linked rooms — derived dock edges, inferred body enclosures, nesting-aware ambient scope. |
+| `world/spatial_merge.py` | 1015 | The deterministic scene merge — room/entity field merging, follow ops, structural repair, `merge_scene_with_diff`. |
 
 Full symbol-by-symbol assignment with line numbers is reproduced in the
 implementer brief; the boundary decisions that are *not* mechanical are below.
@@ -92,11 +92,11 @@ Leaf-first. Steps 1–2 independent; 3 and 4 independent; 6 and 7 independent.
 
 Per step: create the file (docstring, import header, symbols cut verbatim in
 current order, each carrying the comment block above it) → delete those lines →
-add the `from <new> import (...)` block at the **top** of `spatial.py`
+add the `from <new> import (...)` block at the **top** of `world/spatial.py`
 (`_SENSE_LADDERS` and `_MOMENTARY_SET` evaluate at import) → `make map` →
 `make check` → commit.
 
-`AGENTS.md`'s routing table names `spatial.py` in thirteen rows, each citing
+`AGENTS.md`'s routing table names `world/spatial.py` in thirteen rows, each citing
 specific symbols. Update each row in the step that moves its symbols —
 `CLAUDE.md`'s rule is that the doc row lands in the same commit as the change.
 `docs/guides/ENGINEERING.md:274` and `Design.md:256,595` also name the file.
@@ -130,7 +130,7 @@ silently diverge — just not because that check enforces it.
    station from a standing contact, which is the only reason a 929-line module
    about anchors imports the 1,150-line contact ledger. The alternative closes a
    cycle. Accept the edge.
-2. **`spatial_light.py` is 201 lines and cannot be grown.** The only legal merge
+2. **`world/spatial_light.py` is 201 lines and cannot be grown.** The only legal merge
    is into geometry (~1,130 lines). Take it if you prefer twelve modules to a
    small one; the layering reads better with light named.
 3. **`SIGHT_LEVELS`/`_LIGHT_SIGHT` look like senses and must not go there** —

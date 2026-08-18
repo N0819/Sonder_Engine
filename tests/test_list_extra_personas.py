@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 
-import app
+from web import app
 
 
 def test_lists_only_active_extra_personas(temp_db):

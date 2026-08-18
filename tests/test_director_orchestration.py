@@ -30,8 +30,8 @@ import json
 import time
 import uuid
 
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 import agents.director as director
 
@@ -184,7 +184,7 @@ def test_every_delegated_block_has_exactly_one_owner():
     channel from two spellings that can drift. And none may appear in the
     prose author's own sheet, which is what "delegated" means.
     """
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     owners = {
         "CLOTHING TRACKING": "director_body",
@@ -238,7 +238,7 @@ def test_a_preset_can_actually_replace_a_chunked_sheet(temp_db):
     all, which is the only honest reading of replacing a sheet: a host's
     text carries no chunk boundaries for scope to select between.
     """
-    import prompts
+    from llm import prompts
 
     temp_db.set_setting("prompt_presets", json.dumps({
         "Mine": {"director_body": "BODY SHEET, REWRITTEN.",
@@ -266,7 +266,7 @@ def test_specialist_sheets_are_assembled_from_scope():
     unchunked prompt would load everything on every beat while appearing
     scoped, which is why tools/project_check.py enforces the structure;
     this pins the assembly itself."""
-    from prompts import SPECIALIST_PROMPT_SPECS, specialist_prompt
+    from llm.prompts import SPECIALIST_PROMPT_SPECS, specialist_prompt
 
     attire_only = specialist_prompt("body", ["attire"])
     assert "CLOTHING TRACKING" in attire_only
@@ -300,7 +300,7 @@ def test_orchestration_record_survives_the_schema_round_trip():
     dump dropped it (the `routed_to_background` lesson), the persisted
     variant would claim a monolithic resolve for an orchestrated one and no
     stored turn could ever be audited for gate mispredictions."""
-    from schemas import validate_llm_output
+    from llm.schemas import validate_llm_output
 
     out, _ = validate_llm_output("director_resolve", {
         "resolved_event": "x",
@@ -581,7 +581,7 @@ def test_specialist_role_is_separable_and_follows_default_when_unset(
     `director` to a writing model silently moved all six onto it. Separable
     spend does not require a hidden parent; it comes from the role string,
     which is unchanged either way. See `tests/test_provider_fallbacks.py`."""
-    import providers
+    from llm import providers
 
     monkeypatch.setattr(providers, "agent_models", lambda: {
         "default": {"provider": "cheap", "model": "small"},
@@ -1220,7 +1220,7 @@ def test_parallel_cancellation_aborts_the_beat(temp_db, monkeypatch):
     propagate out of the fan-out -- a cancelled turn has no beat to fail
     open into, and swallowing it as a specialist failure would commit a
     half-cancelled resolve."""
-    from providers import Aborted
+    from llm.providers import Aborted
 
     responses = {
         "director_resolve": {"resolved_event": "x", "summary": "x",
@@ -1247,7 +1247,7 @@ def test_specialists_never_stream(temp_db, monkeypatch):
     one set (as it always does in the live pipeline), while cancellation
     context still reaches the worker (copy_context, the loops.py
     precedent)."""
-    import providers
+    from llm import providers
 
     observed = {}
 
@@ -1325,7 +1325,7 @@ def test_prose_author_core_keeps_the_never_gated_blocks():
     OPENING duty, so an empty ledger can still be opened into. And the
     gated headings are genuinely chunked: none of them survives into the
     bare core."""
-    from prompts import prose_author_prompt
+    from llm.prompts import prose_author_prompt
 
     core = prose_author_prompt([])
     for marker in NEVER_GATED_HEADINGS:
@@ -1341,7 +1341,7 @@ def test_prose_author_full_scope_is_the_registered_lean_sheet(monkeypatch):
     drift check and preset editing see -- and assembly is canonical-order,
     so a given scope is byte-stable whatever order it arrives in (provider
     prefix caching)."""
-    import prompts
+    from llm import prompts
 
     monkeypatch.setattr(prompts, "nsfw_enabled", lambda: False)
     full = prompts.prose_author_prompt(None)
@@ -1469,7 +1469,7 @@ def test_prose_scope_fails_open_per_fact(temp_db, monkeypatch):
     """One fact source erroring grants ITS chunk without disturbing the
     rest of the scope: the bodiless-voices reader raising loads the voices
     block on a beat whose every other absent subject stays gated out."""
-    import scene as scene_mod
+    from story import scene as scene_mod
 
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
@@ -1528,7 +1528,7 @@ def test_prose_registries_are_level():
     gate a chunk, and every shipped-duty audit points at a real chunk --
     the same three-files-level discipline the specialists get from
     tools/project_check.py, which enforces this same fact at check time."""
-    from prompts import PROSE_DUTY_CHUNKS
+    from llm.prompts import PROSE_DUTY_CHUNKS
 
     assert set(PROSE_DUTY_CHUNKS) == set(director._PROSE_DUTY_GATES)
     assert set(director._PROSE_DUTY_SHIPPED) <= set(PROSE_DUTY_CHUNKS)
@@ -1555,7 +1555,7 @@ def test_prose_author_shape_carries_no_delegated_fields():
     field in the prose author's stated shape, so there is nothing to fill."""
     import re
 
-    from prompts import _PROSE_AUTHOR_OUTPUT_SHAPE
+    from llm.prompts import _PROSE_AUTHOR_OUTPUT_SHAPE
 
     for channel in director._DELEGATED_CHANNELS:
         assert not re.search(r"\b%s\b" % re.escape(channel),
@@ -1567,7 +1567,7 @@ def test_prose_author_shape_carries_no_delegated_fields():
                  "obligations", "world_pressure", "fact_adjudications"):
         assert kept in _PROSE_AUTHOR_OUTPUT_SHAPE, kept
     # And the sheet actually ships the lean shape, not the monolithic one.
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
     assert _PROSE_AUTHOR_OUTPUT_SHAPE in DEFAULT_PROMPTS[
         "director_resolve_lean"]
 
@@ -1604,7 +1604,7 @@ def test_interpret_always_gets_the_delegation_note_as_a_suffix(
 
     sheet = [c for c in calls if c["step_key"] == "director_interpret"
              ][0]["system"]
-    from prompts import get_prompt_body
+    from llm.prompts import get_prompt_body
     assert sheet.startswith(get_prompt_body("director_interpret"))
     assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet
     assert sheet.endswith(
@@ -1628,7 +1628,7 @@ class TestTheHostCanFindTheSwitch:
         """One setting key, one spelling. The route and the gate agreeing is
         the whole contract; a toggle that writes a key nothing reads is the
         failure this pins."""
-        import app as app_module
+        from web import app as app_module
         import agents.director as director
 
         assert director.fanout_is_parallel() is True   # the default
@@ -1642,7 +1642,7 @@ class TestTheHostCanFindTheSwitch:
     def test_boot_reports_it_so_the_checkbox_can_show_its_state(self, temp_db):
         """A toggle that always renders unchecked is worse than none: it
         invites a host to switch off something already off."""
-        import app as app_module
+        from web import app as app_module
 
         app_module.set_director_fanout_mode({"parallel": False})
         assert app_module.bootstrap()["director_fanout_parallel"] is False
@@ -1651,7 +1651,7 @@ class TestTheHostCanFindTheSwitch:
 
     def test_every_specialist_role_is_offered_to_the_host(self, temp_db):
         """The switch and the roles it governs have to arrive together."""
-        import app as app_module
+        from web import app as app_module
 
         roles = app_module.bootstrap()["roles"]
         for name in ("director_body", "director_social", "director_contact",
@@ -2123,11 +2123,11 @@ def test_the_stage_variant_carries_every_call_made_under_its_fanout(
     STAGE's key, each entry's role still naming the specialist."""
     import threading
 
-    import providers
+    from llm import providers
     from agents.runtime import _with_engine_notes
     from agents.storage import ENGINE_NOTES_KEY
-    from pipeline_context import current_step_key, current_warning_sink
-    from pipeline_context import note_step_warning
+    from core.pipeline_context import current_step_key, current_warning_sink
+    from core.pipeline_context import note_step_warning
 
     calls = []
     seen_cancel_events = []
@@ -2661,7 +2661,7 @@ def test_the_sheet_tells_every_hand_a_body_is_not_a_thing_it_keeps():
     pose belongs to another hand either way. Every specialist answers the
     same beat at once, so one hand hunting for another hand's subject is
     both a false blocker and N-1 duplicated observations."""
-    from prompts import specialist_prompt
+    from llm.prompts import specialist_prompt
 
     sheet = specialist_prompt("objects", ["entities"])
     assert "A BODY IS NOT A THING YOU KEEP" in sheet

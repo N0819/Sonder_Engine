@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     apply_contact_ops,
     contact_phrase,
     contacts_of,
@@ -328,7 +328,7 @@ class TestHygieneIsSafe:
         assert normalize_scene_contacts(scene)["contacts"] == []
 
     def test_the_list_is_capped(self):
-        from spatial import _MAX_CONTACTS
+        from world.spatial import _MAX_CONTACTS
 
         positions = {"Hinami": "bedroom"}
         ops = []
@@ -565,7 +565,7 @@ class TestLiftingContactOutOfEntityState:
 
 class TestSchema:
     def test_contact_ops_survive_state_diff_validation(self):
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
 
         diff = StateDiff(contact_ops=[{"op": "add", **_hold()}])
         assert diff.dict()["contact_ops"][0]["target_part"] == "waist"
@@ -752,7 +752,7 @@ class TestAnActIsNotAState:
             "ground truth must not hand the narrator an act to re-stage")
 
     def test_classification_is_total_on_junk(self):
-        from spatial import contact_is_momentary
+        from world.spatial import contact_is_momentary
 
         assert contact_is_momentary(_hold(manner="kiss")) is True
         assert contact_is_momentary(_hold(manner="rest")) is False
@@ -1325,7 +1325,7 @@ def test_a_contact_report_does_not_kill_the_turn():
     """
     import inspect
 
-    import commit
+    from persist import commit
     body = inspect.getsource(commit.prepare_scene_commit)
     assert "for _was, _now in _contact_report" not in body
     assert "for _note in _contact_report" in body
@@ -1336,6 +1336,6 @@ def test_every_contact_report_is_a_sentence():
     would restore the old crash from the other side."""
     import inspect
 
-    import spatial
+    from world import spatial
     source = inspect.getsource(spatial.apply_contact_ops)
     assert "report.append((" not in source

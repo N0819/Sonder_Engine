@@ -25,8 +25,8 @@ from __future__ import annotations
 import json
 import time
 
-import llm_quality
-import pipeline_context
+from llm import llm_quality
+from core import pipeline_context
 import pytest
 from agents.common import _agent_json
 
@@ -129,8 +129,8 @@ def test_decision_review_retry_is_warned_even_when_it_succeeds(
     warning is the whole record.
     """
     import agents.character as character_module
-    from character_schema import default_character_data
-    from pipeline_context import ChatData, PipelineContext, TurnData
+    from story.character_schema import default_character_data
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

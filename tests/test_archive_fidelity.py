@@ -7,11 +7,11 @@ import time
 
 import pytest
 
-import app
-import importers
-from character_schema import default_character_data
-from checkpoints import ensure_checkpoint, restore_checkpoint
-from frames import create_frame
+from web import app
+from story import importers
+from story.character_schema import default_character_data
+from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+from core.frames import create_frame
 
 
 def _chat(db, name="Archive"):

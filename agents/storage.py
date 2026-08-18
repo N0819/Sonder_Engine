@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 
-from db import q, qi, transaction
+from core.db import q, qi, transaction
 
 # Reserved key on a step's saved content carrying what the DETERMINISTIC layer
 # did to that step's output: repairs it made, and which steps it ran beside.
@@ -45,7 +45,7 @@ def save_step(turn_id, key, label, ordn, content, reasoning=None):
             _think = str(reasoning)[:20000]
         else:
             try:
-                from providers import last_reasoning
+                from llm.providers import last_reasoning
                 _think = str(last_reasoning.get() or "")[:20000]
             except Exception:
                 _think = ""

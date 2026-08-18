@@ -318,7 +318,7 @@ def enabled_ids() -> list[str]:
     if safe_mode():
         return []
     try:
-        from db import get_setting
+        from core.db import get_setting
         raw = get_setting(ENABLED_SETTING)
     except Exception:
         return []
@@ -337,7 +337,7 @@ def is_enabled(ext_id: str) -> bool:
 
 
 def _write_enabled(ids) -> list[str]:
-    from db import set_setting
+    from core.db import set_setting
     ordered = sorted({str(item) for item in ids})
     set_setting(ENABLED_SETTING, json.dumps(ordered))
     return ordered
@@ -1323,7 +1323,7 @@ def run_specialist_call(spec, scope, payload):
     same reason, as `api.llm_json`.
     """
     from agents.common import jparse
-    from providers import chat_complete
+    from llm.providers import chat_complete
 
     sheet = (
         f"{spec['prompt']}\n\n"

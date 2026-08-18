@@ -115,7 +115,7 @@ def _prepare(source):
 
 
 def run_chat(chat_id, turns):
-    import db
+    from core import db
     from agents.runtime import run_pipeline
 
     rows = []
@@ -276,7 +276,7 @@ def main(argv=None):
     workdir, copy = _prepare(args.db)
     print(f"copied {args.db} -> {copy}")
     try:
-        import db
+        from core import db
         db.configure(copy)
         rows = []
         with Capture() as cap:

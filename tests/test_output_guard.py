@@ -1,6 +1,6 @@
 import pytest
 
-from providers import DegenerateOutput, OutputGuard
+from llm.providers import DegenerateOutput, OutputGuard
 
 def test_output_guard_aborts_endless_spaces():
     guard = OutputGuard()
@@ -95,7 +95,7 @@ class TestAPhraseLoop:
         self._feed("ha " * 20)
 
     def test_the_period_finder_reports_the_unit_it_found(self):
-        from providers import _repeating_period
+        from llm.providers import _repeating_period
 
         # Stream-sized inputs: the finder needs more text than its own needle,
         # which is never a constraint on real output and is easy to trip over
@@ -111,7 +111,7 @@ class TestAPhraseLoop:
         skipped the nearest recurrence and returned a MULTIPLE -- 100 instead
         of 50 on a five-times-repeated sentence, which then failed its own
         three-repeat check and reported no loop at all."""
-        from providers import _repeating_period
+        from llm.providers import _repeating_period
 
         sentence = "The corridor was empty and the lamp had gone out. "
         assert _repeating_period(sentence * 5) == len(sentence)
@@ -126,7 +126,7 @@ class TestAPhraseLoop:
         hides, so the period is now FOUND by searching for the last recurrence
         of the tail rather than guessed at.
         """
-        from providers import DegenerateOutput, OutputGuard
+        from llm.providers import DegenerateOutput, OutputGuard
 
         unit = ("The subject's transition from Japanese confusion to articulate "
                 "English objection marks the shift from disoriented "
@@ -147,7 +147,7 @@ class TestAPhraseLoop:
         """A stammer repeats a sentence; nothing repeats a paragraph twice by
         accident. The threshold follows the length rather than being one number
         for both."""
-        from providers import _LOOP_LONG_PERIOD, _repeating_period
+        from llm.providers import _LOOP_LONG_PERIOD, _repeating_period
 
         short = "just a modest little phrase here that runs on a while. "
         assert len(short) < _LOOP_LONG_PERIOD
@@ -164,7 +164,7 @@ class TestAPhraseLoop:
 
     def test_the_live_thousand_character_cycle(self):
         """The one that got past the first version, at its real length."""
-        from providers import _repeating_period
+        from llm.providers import _repeating_period
 
         unit = ("The subject's transition from Japanese confusion to articulate "
                 "English objection, including the ability to register and "

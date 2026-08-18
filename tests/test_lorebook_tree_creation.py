@@ -25,9 +25,9 @@ import time
 
 import pytest
 
-import commit
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_chat(db):
@@ -51,7 +51,7 @@ def _make_ctx(chat_id, turn_idx, state_diff, lorebook_id=None):
 
 
 def db_qi_turn(chat_id, idx):
-    import db
+    from core import db
     return db.qi(
         "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
         (chat_id, idx, "test", time.time()),
@@ -290,7 +290,7 @@ class TestCommitMappingRoutesIntoBookOpsTemp:
         ctx.narrator = {"new_specifics": ["The Long Odds is Kess's freighter"]}
         ctx.mapping_stage = {}
 
-        import llm_quality
+        from llm import llm_quality
         monkeypatch.setattr(llm_quality, "complete_validated_json", lambda **k: {
             "validated": [{"fact": "The Long Odds is Kess's freighter", "ok": True}],
             "lore_ops": [{

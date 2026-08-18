@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     _SIGHT_BARRIERS,
     _PASSABLE_BARRIERS,
     _AMBIENT_BARRIERS,
@@ -276,12 +276,12 @@ class TestNothingElseChanged:
         assert [r["room_id"] for r in visible_adjacent_rooms(scene, "a")] == ["b"]
 
     def test_a_room_with_no_parent_entity_is_never_suppressed(self):
-        from spatial import _is_carried_interior
+        from world.spatial import _is_carried_interior
 
         scene = {"rooms": {"a": {"name": "A"}}, "entities": {}}
         assert _is_carried_interior(scene, "a") is False
 
     def test_a_missing_room_is_not_a_carried_interior(self):
-        from spatial import _is_carried_interior
+        from world.spatial import _is_carried_interior
 
         assert _is_carried_interior({"rooms": {}}, "nope") is False

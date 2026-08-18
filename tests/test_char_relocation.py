@@ -25,8 +25,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import guest_access as guest
+from web import app as app_module
+from web import guest_access as guest
 
 
 @pytest.fixture
@@ -325,7 +325,7 @@ class TestNameKeying:
         assert not [k for k in positions if k.strip().lower() == "bob"]
 
     def test_a_move_is_visible_to_the_spatial_reader(self, client, story, temp_db):
-        from spatial import room_of
+        from world.spatial import room_of
 
         client.put(
             f"/api/chats/{story['chat_id']}/characters/{story['Alice']}/position",

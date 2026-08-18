@@ -121,7 +121,7 @@ makes its size irrelevant to turn latency, which is what allows it to become
 the largest specialist without costing a beat anything, and it is why it does
 not belong inside the resolve step at all.
 
-**The design problem moves to writing, not to speed.** `commit.py` is the sole
+**The design problem moves to writing, not to speed.** `persist/commit.py` is the sole
 persistence boundary and a turn's mutations land in one outer transaction
 precisely so there is never a second writer. Offscreen mutating the world
 while a turn is also mutating it is exactly what that boundary exists to
@@ -185,7 +185,7 @@ interesting things this experiment can measure.
 
 Not on argument. Every latency and error-rate number behind the case above was
 served by a router silently substituting backing models, and cannot be
-segmented — `providers.py` now records the model that actually answered
+segmented — `llm/providers.py` now records the model that actually answered
 (`_note_served_model`), and a PINNED model is a precondition for any
 measurement here meaning anything.
 
@@ -202,7 +202,7 @@ read of the prose.
   needs an explicit entitlement; the Director's omniscience is justified by
   owning objective causality, and a specialist that emits text reaching a
   perceiver does not inherit it.
-- **`commit.py` stays the sole persistence boundary.**
+- **`persist/commit.py` stays the sole persistence boundary.**
 
 ---
 
@@ -217,7 +217,7 @@ losing path would only have preserved a way to make the engine worse.
 
 `DEFAULT_PROMPTS['director_resolve']` went with it: nothing sent it, so a
 preset key for it was folklore. Every `RESOLVE_*` segment it was assembled
-from is still in `prompts.py`, owned now by exactly one specialist
+from is still in `llm/prompts.py`, owned now by exactly one specialist
 (`SPECIALIST_PROMPT_SPECS`) or by the prose author's own sheet
 (`PROSE_AUTHOR_SHEET`), with `test_every_delegated_block_has_exactly_one_
 owner` holding each block to a single owner — lost means a rule nobody

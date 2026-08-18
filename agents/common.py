@@ -6,9 +6,9 @@ import hashlib
 import json
 import re
 
-import attire as attire_model
-import crowds as crowds_model
-from character_schema import (
+from story import attire as attire_model
+from world import crowds as crowds_model
+from story.character_schema import (
     _UNSPACED_SCRIPT,
     _extra_part_placement,
     character_appearance,
@@ -23,18 +23,18 @@ from character_schema import (
     persona_extra_parts,
     persona_name,
 )
-from db import get_setting, q, wget
+from core.db import get_setting, q, wget
 from language_runtime import (
     compositor_text, compositor_value, english_linguistic, linguistic,
 )
-from llm_quality import complete_validated_json
-from memory import chat_lorebook_ids, chat_lorebook_weights
-from providers import chat_complete
-from prompts import get_prompt
-from scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
+from llm.llm_quality import complete_validated_json
+from mind.memory import chat_lorebook_ids, chat_lorebook_weights
+from llm.providers import chat_complete
+from llm.prompts import get_prompt
+from story.scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
                    PLAYER_AUTHORITY_GRANTS)
-from schemas import normalize_speech_volume
-from spatial import (
+from llm.schemas import normalize_speech_volume
+from world.spatial import (
     _body_interior_holder,
     ambient_scope,
     containment_conceals,
@@ -51,7 +51,7 @@ from spatial import (
     sight_level,
     visual_level_between,
 )
-from theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
+from mind.theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
 
 
 _REACTIVE_STAGES = {
@@ -798,7 +798,7 @@ def crowds_for_room(cid, sc, room_id):
     band and the ROOM and the crowd may have walked into a different one since
     it was minted.
     """
-    from db import wget
+    from core.db import wget
 
     if not room_id:
         return []
@@ -853,8 +853,8 @@ def couriers_for_room(cid, sc, room_id):
     broadcast its contents, and the report itself moves only through delivery,
     questioning, or seizure, all of which are commit-validated ops.
     """
-    import couriers as couriers_model
-    from db import wget
+    from story import couriers as couriers_model
+    from core.db import wget
 
     if not room_id:
         return []
@@ -904,7 +904,7 @@ def artifacts_for_room(cid, sc, room_id):
     from broadcasting it into every mind in the room. A torn-down bill
     shows nothing at all; that silence is the feature.
     """
-    import artifacts as artifacts_model
+    from story import artifacts as artifacts_model
 
     if not room_id:
         return []
@@ -1518,7 +1518,7 @@ def jparse(text, fallback_key="text", required=False):
     # than writing a second one keeps the two from disagreeing about what
     # counts as the answer.
     try:
-        from llm_quality import strict_json_parse
+        from llm.llm_quality import strict_json_parse
 
         first = strict_json_parse(t)
         if isinstance(first, dict):
@@ -6065,7 +6065,7 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
     if not isinstance(raw, dict) or not raw:
         return {}
     try:
-        from schemas import StateDiff
+        from llm.schemas import StateDiff
         clean = StateDiff(**raw).dict(exclude_unset=True)
     except Exception as exc:  # noqa: BLE001 - a malformed assertion is not a turn failure
         if report:
@@ -6138,7 +6138,7 @@ def preview_player_state_assertions(sc, assertions, ctx=None,
         return sc
     merged = merge_scene_with_diff(sc, assertions)
     if assertions.get("attire") and ctx is not None:
-        from commit import apply_attire_diff
+        from persist.commit import apply_attire_diff
         # No resolve payload: the clamp's attribution reads
         # `ctx.turn.player_input`, which at pass 1 is the only account of this
         # beat that exists -- and the only one perception may ever have.

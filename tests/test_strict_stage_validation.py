@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-import llm_quality
+from llm import llm_quality
 from agents.common import _agent_json
 
 class _ScriptedLLM:

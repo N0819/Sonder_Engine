@@ -20,7 +20,7 @@ import time
 
 import pytest
 
-from memory import add_memory, contrast_memory, provenance_context_label
+from mind.memory import add_memory, contrast_memory, provenance_context_label
 from agents.character import (
     _UNBIDDEN_ABSORPTION_CEILING,
     _UNBIDDEN_COOLDOWN_BEATS,
@@ -28,8 +28,8 @@ from agents.character import (
     _unbidden_entry,
     _unbidden_trigger,
 )
-from character_schema import default_character_data
-from pipeline_context import ChatData, PipelineContext, TurnData
+from story.character_schema import default_character_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 # ---- fixtures -------------------------------------------------------------
@@ -245,7 +245,7 @@ def test_attach_substitutes_never_adds():
 def test_the_payload_key_is_documented_in_the_character_prompt():
     """The payload has no natural back-pressure against undocumented keys; a
     marker whose meaning is guessed from its name is worse than no marker."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
     prompt = DEFAULT_PROMPTS["character"]
     for key in ("surfaces_unbidden", "it_comes_back_to_me",
                 "what_i_concluded"):
@@ -302,7 +302,7 @@ def _ledger_of(prepared, char_id):
 
 
 def test_commit_records_a_fired_injection_and_mints_nothing(temp_db):
-    import commit
+    from persist import commit
     gist = "lantern light over the orchard wall"
     probe = {"stuck": True, "trigger": "refrain", "fired": True,
              "memory_id": 77, "repeat_survived": False}
@@ -322,7 +322,7 @@ def test_commit_records_a_fired_injection_and_mints_nothing(temp_db):
 
 
 def test_commit_scores_the_next_beat_and_clears(temp_db):
-    import commit
+    from persist import commit
     cstate = {"unbidden": {"last_turn": 1, "clear_seen": False,
                            "pending": {"turn": 1, "goal": ""}}}
     probe = {"stuck": False, "trigger": "", "fired": False,
@@ -336,7 +336,7 @@ def test_commit_scores_the_next_beat_and_clears(temp_db):
 
 
 def test_commit_suppresses_after_two_unhelpful_injections(temp_db):
-    import commit
+    from persist import commit
     cstate = {"unbidden": {
         "last_turn": 1, "clear_seen": False,
         "outcomes": [{"turn": 1, "helped": False}],
@@ -362,7 +362,7 @@ def test_commit_suppresses_after_two_unhelpful_injections(temp_db):
 
 
 def test_commit_persists_the_repeat_flag_for_the_next_beat(temp_db):
-    import commit
+    from persist import commit
     probe = {"stuck": False, "trigger": "", "fired": False,
              "memory_id": None, "repeat_survived": True}
     ctx, chat_id, char_id = _commit_ctx(temp_db, probe)
@@ -380,7 +380,7 @@ def test_commit_persists_the_repeat_flag_for_the_next_beat(temp_db):
 def test_ledger_untouched_for_a_character_with_no_probe(temp_db):
     """A character who did not act this beat has unknown stuckness; the
     ledger must not move."""
-    import commit
+    from persist import commit
     cstate = {"unbidden": {"last_turn": 1, "clear_seen": False}}
     ctx, chat_id, char_id = _commit_ctx(temp_db, None, cstate=cstate)
     ctx.character_results = {}
@@ -400,21 +400,21 @@ class TestTheSemanticAxisAndItsInversionTrap:
     """
 
     def test_the_axis_is_off_unless_almost_the_whole_bank_is_comparable(self):
-        import memory
+        from mind import memory
         assert memory._CONTRAST_SEMANTIC_COVERAGE >= 0.9, (
             "a half-rebuilt bank would rank on which half a row is in")
 
     def test_it_joins_the_token_axis_rather_than_replacing_it(self):
         """The structural fields are exact and have carried this since the
         beginning; the vector is a second opinion, not a successor."""
-        import memory
+        from mind import memory
         assert memory._CONTRAST_SEMANTIC <= 0.8
 
     def test_a_stranded_bank_falls_back_to_the_old_behaviour(self, temp_db,
                                                              monkeypatch):
         """Degrade to the previous answer, never to a wrong one."""
-        import memory
-        import providers
+        from mind import memory
+        from llm import providers
         seen = {}
         real = memory.embed_texts_meta
 

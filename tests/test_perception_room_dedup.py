@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 
-from pipeline_context import ChatData, PipelineContext, TurnData
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_ctx(temp_db):
@@ -65,7 +65,7 @@ def _make_ctx(temp_db):
 
 def test_outcome_scene_uses_the_canonical_rekeyed_room(temp_db, monkeypatch):
     import agents.perception as perception
-    import commit
+    from persist import commit
 
     ctx = _make_ctx(temp_db)
     perception.perception_outcome(ctx, nonce=0)

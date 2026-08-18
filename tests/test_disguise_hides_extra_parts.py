@@ -29,7 +29,7 @@ a part its card never declared is the same mechanism read the other way.
 
 import pytest
 
-from scene import conceal_disguised_parts
+from story.scene import conceal_disguised_parts
 
 
 TAILS = {"kind": "tail", "count": 6, "at": "waist", "aspect": "back"}

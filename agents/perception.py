@@ -7,7 +7,7 @@ import json
 import re
 
 from language_runtime import linguistic
-from character_schema import (
+from story.character_schema import (
     character_appearance,
     character_name,
     character_name_from_text,
@@ -17,8 +17,8 @@ from character_schema import (
     persona_name,
     persona_senses,
 )
-from db import q, wget
-from scene import (
+from core.db import q, wget
+from story.scene import (
     NON_AWAKE_GATED,
     active_disguises,
     active_transformations,
@@ -40,8 +40,8 @@ from scene import (
 )
 import os
 
-import affect
-from spatial import (
+from mind import affect
+from world.spatial import (
     apply_contact_ops,
     corridor_sightlines,
     hiding_holders_of,
@@ -1381,7 +1381,7 @@ def _ubiquitous_names(sc):
     Imported lazily: perception must not take a hard dependency on scene.py's
     import graph for what is a small, optional lookup."""
     try:
-        from scene import ubiquitous_speaker_names
+        from story.scene import ubiquitous_speaker_names
         return ubiquitous_speaker_names(sc)
     except Exception:
         return frozenset()
@@ -2346,7 +2346,7 @@ def perception_establish(ctx, nonce):
     sc = get_scene(chat["id"], chat)
     diff = est.get("state_diff") or {}
     sc = merge_scene_with_diff(sc, diff)
-    from commit import apply_attire_diff
+    from persist.commit import apply_attire_diff
     apply_attire_diff(sc, copy.deepcopy(diff), ctx, est, report=False)
 
     pers = persona_of(chat)
@@ -2906,7 +2906,7 @@ def perception_outcome(ctx, nonce):
     # import: commit.py must stay ignorant of agent modules (facade rule),
     # so the dependency points this way only (same precedent as commit's
     # own _is_player).
-    from commit import apply_attire_diff, dedup_minted_rooms
+    from persist.commit import apply_attire_diff, dedup_minted_rooms
 
     diff = copy.deepcopy(res.get("state_diff") or {})
     dedup_minted_rooms(chat["id"], sc, diff)
@@ -2929,7 +2929,7 @@ def perception_outcome(ctx, nonce):
     # result. Stashed on ctx so the narrator derives its spatial_frame/
     # spatial_facts from this same oriented scene, not the stale committed KV.
     try:
-        from spatial_frames import infer_came_from, infer_focus, infer_facing
+        from world.spatial_frames import infer_came_from, infer_focus, infer_facing
         _o_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
         infer_came_from(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
         infer_focus(chat["id"], ctx.turn.frame_id, prev_scene, sc, res, _o_names)

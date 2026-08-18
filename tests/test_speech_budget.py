@@ -36,8 +36,8 @@ from __future__ import annotations
 
 import pytest
 
-from prompts import DEFAULT_PROMPTS
-from scene import DEFAULT_INTERACTION_CONFIG, dialogue_budget
+from llm.prompts import DEFAULT_PROMPTS
+from story.scene import DEFAULT_INTERACTION_CONFIG, dialogue_budget
 
 CHAT = {"id": 1}
 TURN = {"idx": 3}
@@ -46,7 +46,7 @@ TURN = {"idx": 3}
 def _budget(cfg, monkeypatch, *, nonce="n1", cid=7):
     merged = dict(DEFAULT_INTERACTION_CONFIG)
     merged.update(cfg)
-    monkeypatch.setattr("scene.dialogue_config", lambda _cid: merged)
+    monkeypatch.setattr("story.scene.dialogue_config", lambda _cid: merged)
     return dialogue_budget(CHAT, TURN, cid, nonce)
 
 

@@ -12,7 +12,7 @@ import time
 import pytest
 
 from agents.storage import save_step
-from pipeline_trace import (
+from persist.pipeline_trace import (
     PipelineTraceError,
     dump_pipeline_trace,
     export_pipeline_trace,

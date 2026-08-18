@@ -5,7 +5,7 @@ disables reasoning; unset sends nothing."""
 from __future__ import annotations
 
 import json
-import providers
+from llm import providers
 
 
 def test_coercion_levels():
@@ -18,7 +18,7 @@ def test_coercion_levels():
 
 
 def test_per_role_map_and_fallback(temp_db):
-    import db
+    from core import db
     assert providers.reasoning_efforts() == {}
     assert providers.reasoning_effort_for("director") == ""
 
@@ -34,14 +34,14 @@ def test_per_role_map_and_fallback(temp_db):
 
 
 def test_no_default_means_unset_for_unlisted_roles(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", json.dumps({"narrator": "high"}))
     assert providers.reasoning_effort_for("narrator") == "high"
     assert providers.reasoning_effort_for("mapping") == ""   # no default entry
 
 
 def test_apply_per_provider_dialect(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", json.dumps({"default": "low"}))
     assert providers._apply_reasoning_effort({}, {"kind": "nanogpt"}, "director") \
         == {"reasoning_effort": "low"}
@@ -50,7 +50,7 @@ def test_apply_per_provider_dialect(temp_db):
 
 
 def test_off_disables_reasoning(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", json.dumps({"perception": "off"}))
     assert providers._apply_reasoning_effort({}, {"kind": "nanogpt"}, "perception") \
         == {"reasoning_effort": "none"}
@@ -59,21 +59,21 @@ def test_off_disables_reasoning(temp_db):
 
 
 def test_unset_role_adds_nothing(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", json.dumps({"director": "high"}))
     assert providers._apply_reasoning_effort({"model": "x"}, {"kind": "nanogpt"}, "mapping") \
         == {"model": "x"}
 
 
 def test_legacy_global_string_becomes_default_role(temp_db):
-    import db
+    from core import db
     db.set_setting("reasoning_effort", "low")   # old single-string format
     assert providers.reasoning_efforts() == {"default": "low"}
     assert providers.reasoning_effort_for("anything") == "low"
 
 
 def test_endpoint_single_role_and_full_map(temp_db):
-    import app as app_module
+    from web import app as app_module
     # single-role update
     out = app_module.put_reasoning_effort({"role": "narrator", "value": "high"})
     assert out["reasoning_effort"] == {"narrator": "high"}

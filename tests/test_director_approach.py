@@ -176,7 +176,7 @@ def test_a_diff_with_no_positions_is_not_an_error():
 def test_arrives_defaults_to_true():
     """Every declaration written before this field existed meant arrival, and
     a default of False would strand all of them."""
-    from schemas import MovementDecl
+    from llm.schemas import MovementDecl
     assert MovementDecl(to_room="bridge").arrives is True
     assert MovementDecl(to_room="bridge", arrives=False).arrives is False
 
@@ -186,7 +186,7 @@ def test_the_interpret_is_told_how_to_decide_it():
     sentence fills the field in. Nothing downstream can recover it -- measured
     across 1249 live turns, no text test separates an asserted crossing from a
     declared approach."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_interpret"]
     assert "arrives:true|false" in prompt
@@ -203,7 +203,7 @@ def test_the_prompt_states_the_rule_the_guard_enforces():
     """The clamp keeps the world right; the prompt is what stops the PROSE
     describing an interior nobody entered. Clamped state under narration that
     already walked her through the door is the worse failure of the two."""
-    from prompts import DEFAULT_PROMPTS
+    from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_resolve_lean"]
     assert "APPROACHING IS NOT ARRIVING, AND ARRIVING IS NOT ENTERING" in prompt

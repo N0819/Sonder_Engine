@@ -17,11 +17,11 @@ from agents.director import (
     _validated_character_contact_endings,
     _validated_player_contact_assertions,
 )
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from prompts import DEFAULT_PROMPTS
-from schemas import validate_llm_output
-from spatial import apply_contact_ops
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from llm.prompts import DEFAULT_PROMPTS
+from llm.schemas import validate_llm_output
+from world.spatial import apply_contact_ops
 
 
 def _scene():

@@ -147,7 +147,7 @@ every route computed over it. The maze has coordinates to check against; a
 general scene may not, so the honest fix may be "require a stated basis for a
 new edge" rather than a geometric test.
 
-### 1.3 `survival.py`'s sleep-recovery branch is dead
+### 1.3 `world/survival.py`'s sleep-recovery branch is dead
 
 `tick_vitals(..., asleep=)` is derived from `scene.contained[x]["mode"] ==
 "asleep"` — a **containment** mode ("carried", "pocket", …), never an awareness
@@ -175,7 +175,7 @@ displacement is currently the only one.
 **Real in story play; cannot affect the maze arms** (generated and authored
 mazes have only `open` edges).
 
-`update_place_graph`'s doorway filter (`commit.py`, two sites) excludes only
+`update_place_graph`'s doorway filter (`persist/commit.py`, two sites) excludes only
 `wall`. But `spatial._SIGHT_BARRIERS` is `{"open", "open_door", "window",
 "bars"}`, so a barred window or a pane of glass between two rooms records a
 walkable graph edge. You can see through a barred window; you cannot walk
@@ -260,9 +260,9 @@ does when the field name reads like an invitation to prose.
 
 ### 1.8 Promotion seeds are minted from the objective event (P5)
 
-`importers.py`'s promotion path uses the full `resolved_event` of every turn
+`story/importers.py`'s promotion path uses the full `resolved_event` of every turn
 mentioning the name — **including concealed acts, with no perception filter** —
-and `commit.py` writes the result with `provenance: "witnessed"`. The autonomous
+and `persist/commit.py` writes the result with `provenance: "witnessed"`. The autonomous
 promotion path has no reviewer, so a promoted background character begins life
 holding entitled information tagged as though they had seen it.
 
@@ -273,7 +273,7 @@ context".
 
 Nothing reconciles an entity's free-text `state` / `description` against the
 beat's resolution. An earlier "skip the update" fix was **reverted** as durable
-corruption; `commit.py` now only emits a `"possible stale clause (S3-A8)"`
+corruption; `persist/commit.py` now only emits a `"possible stale clause (S3-A8)"`
 warning and commits the blob anyway. `tests/test_pipeline_audit_leak_gaps.py`
 pins this deliberately as *a signal, not a fix*. Root cause — free-text state
 blobs with omission-only reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
@@ -685,7 +685,7 @@ Not defects yet. Each is a measured shape that will become one silently.
   exist — but two representations of one fact is the shape that produced
   `rekey_place_claims` and `reconcile_inference_confidence`. **If a third
   consumer appears, collapse them** — and one has arrived to be judged:
-  `place_purpose.py` reads `state["place_graph"]` directly, for the `affords`
+  `world/place_purpose.py` reads `state["place_graph"]` directly, for the `affords`
   ledger rather than for routing. Whether an affordance reader counts is the
   judgement this bullet exists to force; it is a second MODULE on the graph
   either way, which is the condition, not the intent.
@@ -913,8 +913,8 @@ with several of the same thing needs several names.** The engine cannot count
 word tables "fire and catch" more often. Shelved deliberately after the
 measurements pointed somewhere else. Recorded so nobody re-derives it.
 
-The engine carries **196 hand-maintained word tables** (30 in `spatial.py`, 29
-in `agents/common.py`, 19 in `weather.py`). Two of them decide physical facts
+The engine carries **196 hand-maintained word tables** (30 in `world/spatial.py`, 29
+in `agents/common.py`, 19 in `world/weather.py`). Two of them decide physical facts
 and were measured against the live database:
 
 | table | matches |
@@ -938,7 +938,7 @@ and were measured against the live database:
   "faint"/"faints" 0.784; "puts on"/"takes off" 0.612. Direction, polarity and
   part of speech are invisible to cosine, and those are exactly what
   `_inverted_motion_check` and `_UNCONSCIOUSNESS_CUE` turn on.
-* Latency 262 ms for one text against `db.py`'s 0.02 ms commit budget, so
+* Latency 262 ms for one text against `core/db.py`'s 0.02 ms commit budget, so
   nothing of this shape may enter the write path regardless.
 
 **What the numbers actually pointed at.** `weather.room_exposure` consults
@@ -1544,7 +1544,7 @@ continue. Re-run `tools/fire_rates.py` after a story or two.
 
 ### 1.27 Residuals from the speech-channel investigation
 
-Found in the same pass. The attire-blob accumulation is now fixed (`commit.py`
+Found in the same pass. The attire-blob accumulation is now fixed (`persist/commit.py`
 rebuilds `state` from `attire.flat_state` unconditionally and keeps only notes
 `attire.is_derived_state_note` says were authored; `tests/
 test_attire_commit_stored_shape.py`). The rest are open.
@@ -1825,7 +1825,7 @@ ordinary thing is not latent; it is open and unvisited.
 
 `psychology_runtime.resolve_stress` reads `threat` off
 `appraisal["goal_impacts"]` and weights it **0.55** — more than every other
-aversive term combined. Its only production caller (`commit.py`, the
+aversive term combined. Its only production caller (`persist/commit.py`, the
 `new_stress = psychology_runtime.resolve_stress(...)` site) passes
 `affect.appraise`'s **return value**, which is exactly:
 
@@ -1976,7 +1976,7 @@ side of any latency-relevant change.
 **What landed against this (2026-08-12):**
 
 - **Consolidation is out-of-band** (`commit.schedule_memory_consolidation` →
-  `jobs.py`, beside the offscreen ticks): deduped per chat, abandonable
+  `core/jobs.py`, beside the offscreen ticks): deduped per chat, abandonable
   between characters, silent-per-character on failure, cancelled
   cooperatively by `restore_checkpoint`. The ~29.5s leaves the commit
   stage's wall clock entirely. `tests/test_consolidation_out_of_band.py`.
@@ -2281,17 +2281,17 @@ is right for fiction. Until it is read by someone who speaks it, treat
 renders admitted percepts through the pack, but several producers build reader-
 facing clauses themselves and hand them over as data:
 
-- `spatial.py` contact and substance clauses (`contact_sensation`,
+- `world/spatial.py` contact and substance clauses (`contact_sensation`,
   `substance_event_clause`) — these reach the view AND the memory episode, so
   they are written permanently into a non-English character's memory bank;
 - `scene.appearance_of`'s glue (`"; wearing: "`, `"; clothing state: "`), whose
-  separators are also parsed back by `attire.py` and `agents/perception.py`,
+  separators are also parsed back by `story/attire.py` and `agents/perception.py`,
   so translating them breaks the readers unless all three move together;
-- `attire.py`'s ledger phrases (`"bare at the %s"`), which are persisted and
+- `story/attire.py`'s ledger phrases (`"bare at the %s"`), which are persisted and
   served raw to the attire panel — a later translation does not repair stories
   already written;
-- `paradox.py`'s `_HAZARD_WOUND_NOTE`, appended to room notes;
-- the first-person memory episodes minted in `commit.py` and `offscreen.py`
+- `world/paradox.py`'s `_HAZARD_WOUND_NOTE`, appended to room notes;
+- the first-person memory episodes minted in `persist/commit.py` and `world/offscreen.py`
   (`"I said …"`, `"I tried to …"`, the drive-rupture memory).
 
 The fix is not to translate the strings where they sit: each is either
@@ -2406,7 +2406,7 @@ things deliberately unfixed:
 - **Not every reader of `background_presences` folds.** The gate, the stage,
   the manager roster, the promotion list and commit read through
   `_fold_duplicate_presences`; the known-name rosters in `agents/director.py`
-  and `agents/perception.py` and the subject index in `subjects.py` read raw
+  and `agents/perception.py` and the subject index in `world/subjects.py` read raw
   and see a split ledger until the next commit heals it. They consume name
   lists, so the cost is a duplicate spelling for at most one beat.
 - **`_STATE_DIFF_SIBLING_FIELDS` is still hand-maintained.**
@@ -2447,7 +2447,7 @@ hardening items are closed.
 
 ### 1.52 The monolith-split audit: 43 findings, flagged and not fixed
 
-The 2026-08-18 split of `spatial.py`, `commit.py` and `agents/director.py`
+The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and `agents/director.py`
 required somebody to read all 24,783 lines once. Nothing else in this project
 does. Everything that read turned up was written down and NOT repaired: a fix
 inside a move commit destroys the property that made the move reviewable, which
@@ -2476,7 +2476,7 @@ while Directive is still porting against `ext_api: 1`:
    changes nothing, silently — and `auto_promote_background_characters`' own
    docstring describes a gate the code does not have.
 4. **`commit_cast_changes` silently ignores every status except `active` and
-   `dormant`**, while `schemas.py`'s own worked example writes `"departed"` and
+   `dormant`**, while `llm/schemas.py`'s own worked example writes `"departed"` and
    the prompt names no vocabulary at all.
 5. **An authored room `size` outside the vocabulary grades as `medium`** with no
    complaint.
@@ -2485,7 +2485,7 @@ while Directive is still porting against `ext_api: 1`:
 
 **Guards that cannot fire, and columns nothing writes.**
 `world_entities.retired_turn_id` is filtered on by `_entity_alias_map` and set
-by nothing — rows are DELETEd, not retired — while `db.py`'s comment claims
+by nothing — rows are DELETEd, not retired — while `core/db.py`'s comment claims
 `room_registry` mirrors it. `_SCENT_BARRIERS` is a declared vocabulary its own
 `scent_level` never reads, restating the rule inline as literals. Two spatial
 functions still speak the decommissioned `world_placements` record shape.
@@ -2504,7 +2504,7 @@ marker, a coupling class the split had to repoint and Phase 2 will meet again.
 
 **Documentation describing something else.** `_LIST_DELEGATED` carries a comment
 about `_CHANNEL_SPECIALISTS` 118 lines away, whose "derived, so the two cannot
-disagree" claim is false in place. `commit.py`'s `# ---- Mapping commit ----`
+disagree" claim is false in place. `persist/commit.py`'s `# ---- Mapping commit ----`
 marker labels the name-roster block while the real mapping commit sits
 unlabelled 1,700 lines below. A `spatial_facts` comment describes an ordering
 the code does not have. A doc block names `_orchestration_gate_backstop`, which
@@ -2561,7 +2561,7 @@ value of a better deterministic first pass.
 
 ### 2.5 Complete automatic canon lock
 
-Age-based locking is built (`commit.py` locks chat-canon entries older than 20
+Age-based locking is built (`persist/commit.py` locks chat-canon entries older than 20
 turns; locked entries reject in-place mapping updates). Add the remaining
 specified rule so facts **referenced multiple times** lock before the age
 threshold. Verified absent: no reference counter on `lore_entries`.
@@ -2615,7 +2615,7 @@ Build order, first three landed (bg-life work, 2026-08):
 6. **Reactivation proposal.**
 7. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
 
-Precedent that did not exist when the note was written: `background_claims.py`
+Precedent that did not exist when the note was written: `world/background_claims.py`
 is exactly the "commit invention as claims, not facts" mechanism its decision 3
 asks for, built for background presences.
 
@@ -2679,13 +2679,13 @@ surface is acquired only by a registered character physically at the event,
 stored in that holder's frame-specific state, moved with their actual position,
 and exposed only to their private character agent. Co-location never broadcasts
 it. Crowd carriers, explicit copy events, subtractive degradation at copies,
-bounded fan-out, and couriers/letters (`couriers.py`: position on a
+bounded fan-out, and couriers/letters (`story/couriers.py`: position on a
 `passable_path` route, clock-driven movement, perception surface, and
 question/silence interception — a silenced rider's message never arrives)
 have since landed, and the last two C legs landed in unreleased
 development: caravans (a `stops` list on the courier object — dwelling
 charged on the clock, two-way news exchange with the standing crowd,
-surfaces and notices at each stop) and artifact carriers (`artifacts.py`:
+surfaces and notices at each stop) and artifact carriers (`story/artifacts.py`:
 a claim posted where the poster stands, acquired only by reading,
 stopped by tearing down, with the authored-wording ceiling minted out of
 band and landed only while the bill still stands). C is closed.
@@ -2758,7 +2758,7 @@ Not built:
 
 ### 2.12 Ambience layering is capped at three, and has no sends
 
-`ambience.py` mixes up to three simultaneous beds (`tone` / `weather` /
+`dressing/ambience.py` mixes up to three simultaneous beds (`tone` / `weather` /
 `extra`), each with its own gain, rerollable and pinnable per layer. What is
 still absent:
 
@@ -3185,7 +3185,7 @@ largest measured defect class in resolve's warnings, and blind concurrent
 peers make it structurally unfixable rather than merely error-prone. One prose
 author, structure owned against it — the alpha-8.0 perception pattern.
 
-**How it gets judged.** Not on argument. `providers.py` now records the model
+**How it gets judged.** Not on argument. `llm/providers.py` now records the model
 that actually SERVED each call (`_note_served_model`), because the corpus
 behind every number above was served by a router silently substituting models
 and cannot be segmented. A pinned model plus per-call attribution is a
@@ -3270,7 +3270,7 @@ hits were constant sheet-sized prefixes, misses all-or-nothing; honest
 ceiling ~57% with the per-beat payload inherently uncacheable; a
 pinned/dedicated instance is configuration, not code, and is recorded
 rather than chased). Two shape traps the same run surfaced are
-closed in `schemas.py` rather than the prompts: a single value under a
+closed in `llm/schemas.py` rather than the prompts: a single value under a
 `dict[str, list]` channel (`overlays`/`conditions`, StateDiff and the body
 specialist) now wraps to the list of one, and a bare-string
 `evidence` citation coerces like the list-of-strings form always did —
@@ -3319,7 +3319,7 @@ character call identically. The boundary is upstream and singular; do not
 re-argue this.
 
 **The genuinely open question is narrower:** *what in that call is not the
-judgement?* Psychology persistence already is not — `psychology_runtime.py`
+judgement?* Psychology persistence already is not — `mind/psychology_runtime.py`
 does it deterministically from permitted inputs. If other pre- or post-work is
 bundled into the same call, that is separable without touching the decision at
 all, and is where any character-side decomposition should start.
@@ -3390,7 +3390,7 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
   background declaration filter**, which consults `visibility` only. Every other
   guard in `agents/background.py` fail-closes on `conceal_from` independently,
   precisely because models half-comply. *Latent, no test.*
-- **X7 — gate salience reads raw input.** `commit.py` counts `resolved_event`
+- **X7 — gate salience reads raw input.** `persist/commit.py` counts `resolved_event`
   mentions with no concealment gate, so a concealed declaration naming a presence
   still raises its pick priority.
 - **X19 — `_llm_resolve_player_room` receives the private thought**, for a call
@@ -3455,7 +3455,7 @@ All multiplayer-only, which is why they survived.
   the judgement itself and the fact that **recognition never decays or
   retracts**: there is no path that un-learns a face. *Plausible.*
 - **X24 — the legacy-archive raw-id fallback grafts interior state.**
-  `chat_archive.py` resolves an archive integer against whatever local row holds
+  `persist/chat_archive.py` resolves an archive integer against whatever local row holds
   that id, then attaches the archive's `chat_chars.state` to it. Memories are
   safe. Legacy path only.
 - **P5 / P8** are defects, filed at §1.8 and §1.9.
@@ -3577,14 +3577,14 @@ assertions, resolved objective events, imported canon, staged spatial
 necessities, character beliefs and narrator wording should not enter the same
 "proposed fact" pool. §3.5's P6 and P7 are this gap seen from the other side.
 
-**The tier itself has landed.** `canon_provenance.py` carries the seven
+**The tier itself has landed.** `mind/canon_provenance.py` carries the seven
 dispositions verbatim — `imported_canon`, `resolved_fact`, `player_claim`,
 `spatial_generation`, `character_belief`, `narrator_audit`, `inferred_mapping`
 — under `PROVISIONAL`, with `outranks` claiming only that provisional sits
 below all seven and deliberately declining to rank them against each other,
 because nothing has measured that and inventing an order would be a decision
-taken by accident. Wired into `gaps.py`, `offscreen.py`, `subjects.py` and
-`living_world.py`; `tests/test_canon_provenance.py`.
+taken by accident. Wired into `world/gaps.py`, `world/offscreen.py`, `world/subjects.py` and
+`world/living_world.py`; `tests/test_canon_provenance.py`.
 
 Two things remain, and they are the ones with teeth:
 
@@ -3613,7 +3613,7 @@ revision-checked, or merged through an explicit paradox rule. **At minimum,
 prepared commits touching shared canon should carry a base revision and reject or
 reprepare when the revision changed before commit.**
 
-Verified absent: no revision concept in `db.py`, `commit.py` or `frames.py`.
+Verified absent: no revision concept in `core/db.py`, `persist/commit.py` or `core/frames.py`.
 
 ### 4.5 Gap 8 — uniform cost against non-uniform uncertainty
 
@@ -3631,8 +3631,8 @@ Verified absent.
 
 ### 4.6 Priority 3 residual — request-size limits
 
-Decompression-bomb limits are in `importers.py`. There is no upload or
-content-length guard in `app.py`. Needed before the service is treated as safe
+Decompression-bomb limits are in `story/importers.py`. There is no upload or
+content-length guard in `web/app.py`. Needed before the service is treated as safe
 beyond a trusted local environment.
 
 ---
@@ -3720,7 +3720,7 @@ was translated in front of them; another's relief flipped to fear across adjacen
 turns.
 
 **Fix.** A world-KV `established_facts` ledger. Emit from `director_resolve` as a
-new optional list op, like `obligations`; persist in `commit.py` with dedup and a
+new optional list op, like `obligations`; persist in `persist/commit.py` with dedup and a
 cap, mirroring `commit_obligations`; inject the recent N into every co-present
 character payload alongside `world_knowledge`, with a prompt rule: *settled
 on-page facts may be disputed, never forgotten or contradicted.*
@@ -3799,7 +3799,7 @@ observer's `known` set during that turn — compounded by a name-variant mismatc
 `promote_background_character` now seeds a full mutual roster.
 
 **What remains.** It registers only the canonical `character_name(sheet)` with no
-aliases or variants, and the **attach** path in `app.py` seeds only
+aliases or variants, and the **attach** path in `web/app.py` seeds only
 player↔character, never cast↔cast.
 
 **Test.** Promote a presence the player addressed by name; assert the observer's
@@ -3836,7 +3836,7 @@ Most of §3 shipped in alpha 4.0. What did not:
 - **The separation eval (§3.3.1)** — the deterministic leak floor is built; the
   proposed measurement of real cross-presence leak rate has no artifact in-tree.
 - **Location-themed population and the chorus presence (§4).** `AggregateEntity`
-  is declared in `schemas.py` and unconsumed.
+  is declared in `llm/schemas.py` and unconsumed.
 - **The narrator dilution clause (§5)** — no tension-gated ambient suppression.
 - **The `digest`/`interim` tier typology (§3.1)** — only `blurb` was built.
 - **The prompt fix for §3.8** — a blurb tell should be available colour, not a
@@ -3870,7 +3870,7 @@ until it landed:
   which is the one of the three routing seams that propagates into state,
   perception and memory. Once per beat, so the resolve's own retries answer the
   same context. `tests/test_extension_director_context.py`.
-- **A read-only canonical story facade** — `story_view.py`, reached as
+- **A read-only canonical story facade** — `web/story_view.py`, reached as
   `api.story_view` and `GET /api/chats/{id}/story_view`. Versioned, plain
   values, no engine import and no database handle.
 - **The player-safe projection of it** — `api.player_view`, built entirely from
@@ -3898,7 +3898,7 @@ blocker, and the same cause — nobody hits it until an extension is built as a
 graph rather than a file, and a Directive port would have hit it immediately.
 Fixed by registering the extension directory as a package (relative imports,
 `sonder_ext_<id>.<module>`) rather than by putting it on `sys.path`, where a
-sibling `db.py` would shadow the engine's and two extensions' `helper.py` would
+sibling `core/db.py` would shadow the engine's and two extensions' `helper.py` would
 collide. `tests/test_campaign_slice.py` covers the fix and the slice together.
 
 A FIFTH batch answers `docs/design/DIRECTIVE_REMAINING_GAPS.md`, written
@@ -3932,7 +3932,7 @@ refactor from breaking somebody else's build:
   the next message" swipe model onto Sonder's variants will corrupt state; and
   there is **no way to post prose**, deliberately and permanently, because
   narration is produced by the pipeline from committed state and a seam for
-  injected text would make `commit.py`'s boundary advisory.
+  injected text would make `persist/commit.py`'s boundary advisory.
 - **Per-era extension state** — `api.frame_state(chat_id)` writes `extf:<id>`,
   which is in `FRAME_SCOPED_WORLD_PREFIXES`. `api.state` stays chat-global, so
   no story migrates. Two homes rather than one flag because the key is what
@@ -4078,7 +4078,7 @@ About 60% shipped in alpha 1.4, under a materially different architecture — th
 narrator **does** run on turn 0 and its prose is overridden afterwards, rather
 than the design's pre-baked variants plus resume. Still unbuilt and still wanted:
 
-- **Ingest-time extraction caching.** `importers.py` always writes
+- **Ingest-time extraction caching.** `story/importers.py` always writes
   `"extraction": None`; extraction runs lazily at launch and is discarded, not
   persisted. No `extractor_version` stamping.
 - **The `private_history` write.** Seeds route to character memory only.
@@ -4162,7 +4162,7 @@ v1–v3 are built, including goal-slot currency. Undecided:
 ### 6.8 Living world — [`DESIGN_LIVING_WORLD.md`](design/DESIGN_LIVING_WORLD.md)
 
 Phase 1 (branch `living-floors`) built the deterministic floors of A
-(`routines.py`), B (`living_world.mint_consequences` +
+(`world/routines.py`), B (`living_world.mint_consequences` +
 `mechanics._fire_due_events`) and D (`place_obligations` +
 `attach_owed_history`), plus the settings ladder for all five approaches
 (`LIVING_WORLD_BUILT` is the declared/built authority). Held for phase 2,
@@ -4176,7 +4176,7 @@ which starts when the epistemic-leak audit branch merges:
   load-bearing test), and invented gossip entering through
   `background_claims` + the provisional tier as its first real producer
   (the lane measured 0-of-29). *Carriers with positions and routes have
-  since landed as `couriers.py` (positions on `passable_path` routes,
+  since landed as `story/couriers.py` (positions on `passable_path` routes,
   clock-driven movement, interception/silencing that stops delivery); the
   claims-lane producer and reputation rules remain as stated.*
 - ~~**E, the antagonist ladder** — rungs 1 and 3 per §5; waits on C because a
@@ -4383,11 +4383,11 @@ or by the work that shipped in that release. Ordered by expected value.
 Not scheduled, not committed to a phase. Kept so they are not lost and not
 accidentally built.
 
-- **`providers.chat_complete_async` is dead.** Defined, imported by `app.py`,
+- **`providers.chat_complete_async` is dead.** Defined, imported by `web/app.py`,
   and called from nowhere but its own retry loop. The threading model works and
   the `contextvars` discipline is built around it, so the recommendation is to
   delete the import rather than build on it.
-- **`prompt_cache.py` is dead** — no importer anywhere — and its
+- **`llm/prompt_cache.py` is dead** — no importer anywhere — and its
   `estimate_cacheable_tokens` heuristic is wrong by 5x to 262x on every stage.
   `AGENTS.md` still names it as the watch-file for cacheability.
 - **`agents/common._agent_json`'s docstring** describes the ladder as "one

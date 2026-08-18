@@ -22,7 +22,7 @@ exists, and it is exactly the material detail worth delivering.
 from __future__ import annotations
 
 from agents.common import extra_part_phrase
-from scene import normalize_transformed_parts
+from story.scene import normalize_transformed_parts
 
 LIVE = [
     {"kind": "fox ears", "count": 2, "at": "top of the head",
@@ -75,7 +75,7 @@ def test_a_card_shaped_part_passes_through_untouched():
 def test_the_region_is_a_visibility_key_afterwards():
     """The whole point: `at` must be something region_visibility can answer
     for, or the concealment gate has nothing to look up."""
-    import attire
+    from story import attire
 
     for part in normalize_transformed_parts(LIVE):
         assert part["at"] in attire.REGIONS

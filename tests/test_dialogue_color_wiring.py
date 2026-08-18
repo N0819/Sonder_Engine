@@ -17,10 +17,10 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-import app as app_module
-import db
-import guest_access as guest
-from dialogue_colors import auto_dialogue_color
+from web import app as app_module
+from core import db
+from web import guest_access as guest
+from story.dialogue_colors import auto_dialogue_color
 
 
 SHEET = {

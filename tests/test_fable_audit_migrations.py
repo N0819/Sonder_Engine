@@ -38,7 +38,7 @@ def fresh_db_path():
 
 class TestFreshDatabaseSkipsMigrations:
     def test_a_fresh_database_never_executes_the_last_migration_list(self, fresh_db_path, monkeypatch):
-        import db
+        from core import db
 
         old_path = db.DB
         db.configure(fresh_db_path)
@@ -64,7 +64,7 @@ class TestFreshDatabaseSkipsMigrations:
             db.configure(old_path)
 
     def test_a_fresh_database_still_has_the_current_schema(self, fresh_db_path):
-        import db
+        from core import db
 
         old_path = db.DB
         db.configure(fresh_db_path)
@@ -81,7 +81,7 @@ class TestFreshDatabaseSkipsMigrations:
 
 class TestExistingDatabaseStillMigratesInOrder:
     def test_an_older_databases_migrations_run_in_ascending_order(self, fresh_db_path, monkeypatch):
-        import db
+        from core import db
 
         old_path = db.DB
         db.configure(fresh_db_path)

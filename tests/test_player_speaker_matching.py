@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import json
 
-import scene
-from character_schema import default_persona_data
+from story import scene
+from story.character_schema import default_persona_data
 
 
 def _make_persona(db, name):

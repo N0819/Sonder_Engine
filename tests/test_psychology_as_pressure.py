@@ -25,7 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from prompts import DEFAULT_PROMPTS
+from llm.prompts import DEFAULT_PROMPTS
 
 
 class TestWantsAreNotDerivedFromTheSheet:

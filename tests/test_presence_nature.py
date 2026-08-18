@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import json
 
-from schemas import PRESENCE_NATURES, BlurbMintEntry
-from commit import _presence_speech_verdict
+from llm.schemas import PRESENCE_NATURES, BlurbMintEntry
+from persist.commit import _presence_speech_verdict
 
 DEVICE_SCENE = {
     "positions": {"Anchors": "cell", "Reyes": "cell"},
@@ -80,7 +80,7 @@ class TestThePromptStopsAssumingPersonhood:
     a model to invent a grievance for a wall fixture."""
 
     def _prompt(self, language):
-        from prompts import get_prompt
+        from llm.prompts import get_prompt
 
         return get_prompt("blurb_mint", language)
 
@@ -133,7 +133,7 @@ class TestTheListsAreNoLongerTheAuthority:
 
         import agents.background as background
         import agents.director as director
-        import commit as commit_module
+        from persist import commit as commit_module
 
         for module in (background, director, commit_module):
             source = inspect.getsource(module)

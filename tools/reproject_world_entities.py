@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # The same predicate the merge and the commit projection use. Imported rather
 # than restated: a repair that disagreed with the rule it repairs toward would
 # undo itself on the next beat. `schemas` is pure at import.
-from schemas import is_derived_entity_name  # noqa: E402
+from llm.schemas import is_derived_entity_name  # noqa: E402
 
 FIELDS = ("kind", "subtype", "name")
 

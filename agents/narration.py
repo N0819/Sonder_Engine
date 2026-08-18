@@ -6,10 +6,10 @@ import contextvars
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from db import get_setting, q, wget, wset
+from core.db import get_setting, q, wget, wset
 from language_runtime import compositor_text, english_linguistic, linguistic
-from prompts import get_prompt, prompt_fragment
-from scene import (
+from llm.prompts import get_prompt, prompt_fragment
+from story.scene import (
     NON_AWAKE_GATED,
     apply_awareness_diff,
     awareness_map,
@@ -20,7 +20,7 @@ from scene import (
 import os
 import re
 
-from spatial import (
+from world.spatial import (
     containment_conceals,
     contact_sensation,
     effective_light,
@@ -36,7 +36,7 @@ from spatial import (
     visible_adjacent_rooms,
     visual_level_between,
 )
-from weather import weather_for_room, weather_words
+from world.weather import weather_for_room, weather_words
 
 
 def _ling(name):
@@ -58,9 +58,9 @@ def _spatial_facts_field(scene, observer):
     names = [n for n, r in positions.items() if r == o_room and n != observer]
     facts = spatial_facts(scene, observer, names)
     return {"spatial_facts": facts} if facts else {}
-from schemas import validate_llm_output
+from llm.schemas import validate_llm_output
 
-from character_schema import (
+from story.character_schema import (
     character_appearance,
     character_name,
     persona_appearance,

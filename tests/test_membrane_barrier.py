@@ -21,7 +21,7 @@ import copy
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     apply_transit_dock_edges,
     effective_light,
     has_visual,

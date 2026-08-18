@@ -40,7 +40,7 @@ class TestNoQualityRedo:
         """It existed only to decide whether to pay for the re-ask, and it
         answered `redo` whenever it could not tell -- an uncertain screen
         buying the exact call it was built to avoid."""
-        import llm_quality
+        from llm import llm_quality
 
         assert not hasattr(llm_quality, "move_repeat_screen")
 
@@ -71,7 +71,7 @@ class TestWhatStillFires:
     def test_a_schema_failure_still_repairs(self):
         """`complete_validated_json` owns repair/fallback/raise, and unusable
         JSON is the definition of broken."""
-        import llm_quality
+        from llm import llm_quality
 
         assert hasattr(llm_quality, "complete_validated_json")
 

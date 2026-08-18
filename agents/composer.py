@@ -55,8 +55,8 @@ from language_runtime import (
     renderer_for)
 
 logger = logging.getLogger(__name__)
-from scene import disguise_breaks_recognition
-from spatial import (
+from story.scene import disguise_breaks_recognition
+from world.spatial import (
     _clean_pose,
     entity_arc,
     entity_side,
@@ -485,7 +485,7 @@ def _visible_room_label(scene, name):
     the room" are both false. Naming the room is the one distance phrasing that
     is true through a doorway, a grille and a pane of glass alike.
     """
-    from spatial import room_of
+    from world.spatial import room_of
 
     room_id = room_of(scene, name)
     if not room_id:

@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from prompts import CHARACTER_BLOCK_KEYS, DEFAULT_PROMPTS, character_prompt
+from llm.prompts import CHARACTER_BLOCK_KEYS, DEFAULT_PROMPTS, character_prompt
 
 BASE = DEFAULT_PROMPTS["character"]
 

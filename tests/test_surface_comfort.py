@@ -8,9 +8,9 @@ manufacture an unresolved drive out of contentment), and comfort habituates
 
 import copy
 
-import psychology_runtime as psych
-from comfort import comfort_level, rest_affording
-from survival import tick_vitals, vitals_of
+from mind import psychology_runtime as psych
+from world.comfort import comfort_level, rest_affording
+from world.survival import tick_vitals, vitals_of
 
 
 # --- scene scaffolding -----------------------------------------------------

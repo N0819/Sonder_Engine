@@ -73,7 +73,7 @@ def _send(sender="Maelor", to=SQUARE, **over):
 
 
 def _run(ctx, scene, ops=(), names=(), places=()):
-    from couriers import run_couriers
+    from story.couriers import run_couriers
 
     return run_couriers(ctx, scene, list(ops), names=names, places=places)
 
@@ -219,7 +219,7 @@ def test_the_player_persona_can_silence_a_rider(temp_db):
     shape with the name under `identity`, and reading the top level made
     every player nameless -- so the one body the design most wants stopping
     riders was refused as 'not a body the story can place'."""
-    from pipeline_context import ChatData
+    from core.pipeline_context import ChatData
 
     cid, chars, scene, ctx = _world(temp_db)
     pid = temp_db.qi("INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
@@ -332,7 +332,7 @@ def test_checkpoint_restore_rewinds_the_road(temp_db):
     """New durable state must rewind with the story: a reroll that left a
     rider (or un-silenced one) would deliver news from a beat that no longer
     happened -- the relationship_events precedent, applied to the road."""
-    from checkpoints import ensure_checkpoint, restore_checkpoint
+    from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 
     cid, chars, scene, ctx = _world(temp_db)
     ensure_checkpoint(cid, 4)
@@ -354,7 +354,7 @@ def test_checkpoint_restore_rewinds_the_road(temp_db):
 def test_the_archive_carries_the_road(temp_db):
     """Archive export/import must move couriers with the chat, or an
     imported story would quietly lose every message still travelling."""
-    from chat_archive import ChatArchiveService
+    from persist.chat_archive import ChatArchiveService
 
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_send()])
@@ -431,7 +431,7 @@ class TestThePlayerCanSendNews:
             self, temp_db):
         """A claim with no event behind it lands on its author's own row, so
         the player needs a row-shaped place to keep it."""
-        from carriers import PERSONA_STATE_KEY, STATE_KEY
+        from story.carriers import PERSONA_STATE_KEY, STATE_KEY
 
         cid, scene, ctx = self._world_with_persona(temp_db)
         _run(ctx, scene, [self._paid_a_rider()])

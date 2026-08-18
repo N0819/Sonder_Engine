@@ -9,10 +9,10 @@ from __future__ import annotations
 import json
 import time
 
-import commit
-from character_schema import default_character_data
-from commit import commit_memories
-from pipeline_context import ChatData, PipelineContext, TurnData
+from persist import commit
+from story.character_schema import default_character_data
+from persist.commit import commit_memories
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 def _make_character(db, name):
@@ -70,7 +70,7 @@ def test_all_characters_are_attempted_and_one_failure_does_not_block_others(
 
     # Both readers live in commit_memory_write since the split;
     # patching the commit facade would be inert.
-    import commit_memory_write
+    from persist import commit_memory_write
     monkeypatch.setattr(
         commit_memory_write, "add_memories_batch",
         lambda memories=None, *, prepared_batch=None: [],

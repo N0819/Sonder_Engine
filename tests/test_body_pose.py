@@ -12,9 +12,9 @@ from agents.director import (_evidence_present, _normalize_diff_shape,
 from agents.perception import (_novel_visible_appearances,
                                _observer_scene_payload,
                                _strip_unknown_pose_claims)
-from prompts import DEFAULT_PROMPTS
-from schemas import DirectorEstablish, StateDiff, validate_llm_output_strict
-from spatial import merge_scene_with_diff, pose_facts
+from llm.prompts import DEFAULT_PROMPTS
+from llm.schemas import DirectorEstablish, StateDiff, validate_llm_output_strict
+from world.spatial import merge_scene_with_diff, pose_facts
 
 
 def _scene():
@@ -125,7 +125,7 @@ class TestPosePersistence:
         assert "constraint: pinned" in joined
 
     def test_pose_is_the_posture_authority_for_entityless_player_bodies(self):
-        from comfort import rest_affording
+        from world.comfort import rest_affording
 
         scene = _scene()
         scene["rooms"]["studio"]["anchors"]["work_table"][

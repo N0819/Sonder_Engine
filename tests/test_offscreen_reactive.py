@@ -75,8 +75,8 @@ def _world(temp_db, *, enabled=True):
 
 class TestPlanAuthoring:
     def test_a_grounded_plan_is_frame_state(self, temp_db):
-        from db import wget
-        from offscreen import apply_plan_ops
+        from core.db import wget
+        from world.offscreen import apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         result = apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
@@ -87,8 +87,8 @@ class TestPlanAuthoring:
         assert plan["stages"][0]["effect"]["where"] == "war_room"
 
     def test_the_mechanism_setting_gates_the_write(self, temp_db):
-        from db import wget
-        from offscreen import apply_plan_ops
+        from core.db import wget
+        from world.offscreen import apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db, enabled=False)
         result = apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
@@ -97,8 +97,8 @@ class TestPlanAuthoring:
         assert wget(cid, "offscreen_plans", []) == []
 
     def test_the_director_cannot_invent_an_absent_minds_plan(self, temp_db):
-        from db import wget
-        from offscreen import apply_plan_ops
+        from core.db import wget
+        from world.offscreen import apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         ctx.character_results = {}
@@ -107,7 +107,7 @@ class TestPlanAuthoring:
         assert wget(cid, "offscreen_plans", []) == []
 
     def test_an_unrelated_basis_is_refused(self, temp_db):
-        from offscreen import apply_plan_ops
+        from world.offscreen import apply_plan_ops
 
         _, _, scene, ctx, _ = _world(temp_db)
         ctx.director_resolve["state_diff"]["offscreen_plan_ops"][0]["basis"] = (
@@ -117,8 +117,8 @@ class TestPlanAuthoring:
         assert any("basis is not grounded" in w for w in ctx.warnings)
 
     def test_a_character_can_cancel_their_own_plan(self, temp_db):
-        from db import wget
-        from offscreen import apply_plan_ops
+        from core.db import wget
+        from world.offscreen import apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
@@ -131,8 +131,8 @@ class TestPlanAuthoring:
         assert wget(cid, "offscreen_plans", [])[0]["status"] == "cancelled"
 
     def test_dict_sheets_keep_their_display_name(self, temp_db):
-        from db import wget
-        from offscreen import apply_plan_ops
+        from core.db import wget
+        from world.offscreen import apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         ctx.cast[0]["sheet"] = json.loads(ctx.cast[0]["sheet"])
@@ -141,9 +141,9 @@ class TestPlanAuthoring:
         assert wget(cid, "offscreen_plans", [])[0]["actor_display"] == "Mora"
 
     def test_plan_state_restores_with_a_checkpoint(self, temp_db):
-        from checkpoints import ensure_checkpoint, restore_checkpoint
-        from db import wget, wset
-        from offscreen import apply_plan_ops
+        from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+        from core.db import wget, wset
+        from world.offscreen import apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
@@ -156,8 +156,8 @@ class TestPlanAuthoring:
 
 class TestPlanFiring:
     def test_crossing_a_plan_deadline_creates_its_own_epoch(self, temp_db):
-        from db import transaction, wget
-        from offscreen import advance_epoch, apply_plan_ops
+        from core.db import transaction, wget
+        from world.offscreen import advance_epoch, apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
@@ -177,8 +177,8 @@ class TestPlanFiring:
 
     def test_a_due_stage_mints_its_preauthored_effect_and_completes(self,
                                                                    temp_db):
-        from db import transaction, wget
-        from offscreen import advance_reactive_plans, apply_plan_ops
+        from core.db import transaction, wget
+        from world.offscreen import advance_reactive_plans, apply_plan_ops
 
         cid, _, scene, ctx, _ = _world(temp_db)
         apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
@@ -200,8 +200,8 @@ class TestPlanFiring:
         assert json.loads(row["payload"])["what"] == "the citadel gate is sealed"
 
     def test_an_event_trigger_is_narrowed_by_kind_and_location(self, temp_db):
-        from db import transaction, wget
-        from offscreen import advance_reactive_plans, apply_plan_ops
+        from core.db import transaction, wget
+        from world.offscreen import advance_reactive_plans, apply_plan_ops
 
         cid, _, scene, ctx, op = _world(temp_db)
         op["stages"][0]["trigger"] = {
@@ -225,7 +225,7 @@ class TestPlanFiring:
 
     def test_the_reactive_path_has_no_provider_call(self):
         import inspect
-        import offscreen
+        from world import offscreen
 
         source = inspect.getsource(offscreen.advance_reactive_plans)
         assert "providers" not in source
@@ -233,7 +233,7 @@ class TestPlanFiring:
 
 
 def test_schema_keeps_plan_ops():
-    from schemas import validate_llm_output
+    from llm.schemas import validate_llm_output
 
     out, warnings = validate_llm_output("director_resolve", {
         "state_diff": {"offscreen_plan_ops": [{

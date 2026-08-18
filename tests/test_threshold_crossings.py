@@ -13,7 +13,7 @@ gone. Seen going in; not seen once in.
 
 import pytest
 
-from spatial import (
+from world.spatial import (
     THRESHOLD_CROSSING_BEATS,
     crossing_of,
     crossing_visible_from,
@@ -23,7 +23,7 @@ from spatial import (
     spatial_rel_between,
     visual_level_between,
 )
-from spatial_frames import infer_threshold_crossings
+from world.spatial_frames import infer_threshold_crossings
 
 
 def _scene(positions, barrier="membrane", light=None):

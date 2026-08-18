@@ -20,9 +20,9 @@ from __future__ import annotations
 import json
 import time
 
-from character_schema import default_character_data, default_persona_data
-from pipeline_context import ChatData, PipelineContext, TurnData
-from scene import (
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from story.scene import (
     NON_AWAKE_GATED,
     apply_awareness_diff,
     apply_restraint_diff,

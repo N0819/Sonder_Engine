@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 
-from offscreen import (
+from world.offscreen import (
     IMPORTANCE_LEVELS,
     OVERRIDE_FIELD,
     derived_importance,
@@ -85,7 +85,7 @@ class TestImportanceFollowsWhatTheEngineKnows:
         """BehaviorController answers what a character MAY do; importance
         answers how much they MATTER. One vocabulary answering two questions
         is the flow.reactors defect (79% wrong, section 2D) re-minted."""
-        from schemas import BehaviorController
+        from llm.schemas import BehaviorController
 
         assert OVERRIDE_FIELD == "offscreen_importance"
         for level in IMPORTANCE_LEVELS:
@@ -200,7 +200,7 @@ class TestTheSeededDraw:
         with no provider configured and no database."""
         import inspect
 
-        import offscreen
+        from world import offscreen
 
         src = inspect.getsource(offscreen.stochastic_ticks)
         assert "chat_complete" not in src
@@ -289,7 +289,7 @@ class TestTheSeededDraw:
         standing-intention writes, no position moves (a position change has
         no warrant check — UNBUILT section 1.20 — and an offscreen writer
         would build the missing third warrant by accident)."""
-        from canon_provenance import validate_provisional
+        from mind.canon_provenance import validate_provisional
 
         for t in stochastic_ticks("tick:59:165", self.ACTORS, self.INTENTIONS, 3):
             assert "deltas" not in t
@@ -312,7 +312,7 @@ class TestTheLogHasOneDoor:
     def test_commit_writes_through_the_helper(self):
         import inspect
 
-        import offscreen
+        from world import offscreen
 
         src = inspect.getsource(offscreen.advance_epoch)
         assert "append_offscreen_log" in src
@@ -322,8 +322,8 @@ class TestTheLogHasOneDoor:
         """A stored invented room outlives the turn that made it — the
         'quiet office' row is the argument, and the write path is where the
         gate belongs (section 1.0.3)."""
-        from db import wget
-        from offscreen import append_offscreen_log
+        from core.db import wget
+        from world.offscreen import append_offscreen_log
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -349,8 +349,8 @@ class TestTheLogHasOneDoor:
 
     def test_a_batch_with_nothing_left_writes_no_batch(self, temp_db):
         """An empty batch row is noise wearing a turn stamp."""
-        from db import wget
-        from offscreen import append_offscreen_log
+        from core.db import wget
+        from world.offscreen import append_offscreen_log
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -365,8 +365,8 @@ class TestTheLogHasOneDoor:
         assert wget(cid, "offscreen_log", []) == []
 
     def test_the_same_epoch_batch_cannot_land_twice(self, temp_db):
-        from db import wget
-        from offscreen import append_offscreen_log
+        from core.db import wget
+        from world.offscreen import append_offscreen_log
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -387,8 +387,8 @@ class TestEpochCheckpointDiscipline:
         """Both are diegetic frame state in world KV, so the foundational
         whole-state checkpoint restores them atomically without a bespoke
         side-channel serializer."""
-        from checkpoints import ensure_checkpoint, restore_checkpoint
-        from db import wget, wset
+        from persist.checkpoints import ensure_checkpoint, restore_checkpoint
+        from core.db import wget, wset
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -410,8 +410,8 @@ class TestEpochCheckpointDiscipline:
 
     def test_an_old_job_cannot_land_after_restore_changes_the_epoch(self,
                                                                     temp_db):
-        from db import wget, wset
-        from offscreen import land_profile_ticks
+        from core.db import wget, wset
+        from world.offscreen import land_profile_ticks
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -483,7 +483,7 @@ class TestTheProducer:
         import pathlib
 
         root = pathlib.Path(__file__).resolve().parents[1]
-        for name in ("commit.py", "app.py"):
+        for name in ("persist/commit.py", "web/app.py"):
             src = (root / name).read_text(encoding="utf-8")
             assert "jobs.cancel" not in src, name
         runtime = (root / "agents" / "runtime.py").read_text(encoding="utf-8")
@@ -495,8 +495,8 @@ class TestTheProducer:
         base_turn is what makes that decidable; the landing check is what
         acts on it. The engine's own precedent is the checkpoint restore
         that silently undid a completed embedding rebuild."""
-        from db import wget
-        from offscreen import land_profile_ticks
+        from core.db import wget
+        from world.offscreen import land_profile_ticks
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -516,8 +516,8 @@ class TestTheProducer:
     def test_a_tick_landing_in_a_live_story_is_written(self, temp_db):
         """The guard must not eat legitimate work: base_turn at or behind
         the story's head lands."""
-        from db import wget
-        from offscreen import land_profile_ticks
+        from core.db import wget
+        from world.offscreen import land_profile_ticks
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -544,9 +544,9 @@ class TestTheProducer:
         import threading
         import types
 
-        import jobs
-        import offscreen
-        from db import wget, wget_for_frame, wset_for_frame
+        from core import jobs
+        from world import offscreen
+        from core.db import wget, wget_for_frame, wset_for_frame
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -626,7 +626,7 @@ class TestTheProfileRung:
         """'No psychology run' is the rung's definition. A drive leaking
         into a cheap cadenced call would make the honest full-agent rung
         indistinguishable from this sketch."""
-        from offscreen import _profile_surface
+        from world.offscreen import _profile_surface
 
         sheet = {
             "identity": {"name": "Guinan"},
@@ -645,7 +645,7 @@ class TestTheProfileRung:
         and validate_provisional refuses consequences on it."""
         import inspect
 
-        import offscreen
+        from world import offscreen
 
         src = inspect.getsource(offscreen.profile_summary_record)
         assert '"deltas"' not in src
@@ -655,7 +655,7 @@ class TestTheProfileRung:
         """A deterministic 'she was elsewhere' is worth more than a
         plausible lie (section 1.0.3), and a fallen-back record says what it
         fell from rather than wearing the model basis silently."""
-        import offscreen
+        from world import offscreen
 
         cid = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -664,7 +664,7 @@ class TestTheProfileRung:
         def _boom(*a, **k):
             raise RuntimeError("provider down")
 
-        import providers
+        from llm import providers
 
         monkeypatch.setattr(providers, "chat_complete", _boom)
         record = offscreen.profile_summary_record(
@@ -688,7 +688,7 @@ class TestTheProfileRungEmitsState:
 
     @staticmethod
     def _trail(monkeypatch):
-        import gaps
+        from world import gaps
 
         def _gap(cid, kind, sid, since, until, resolution=None, scene=None,
                  frame_id=None):
@@ -701,8 +701,8 @@ class TestTheProfileRungEmitsState:
     def test_state_fields_land_and_no_summary_does(self, monkeypatch):
         import json as _json
 
-        import offscreen
-        import providers
+        from world import offscreen
+        from llm import providers
 
         self._trail(monkeypatch)
         monkeypatch.setattr(
@@ -724,8 +724,8 @@ class TestTheProfileRungEmitsState:
         it falls back to the deterministic record saying exactly why."""
         import json as _json
 
-        import offscreen
-        import providers
+        from world import offscreen
+        from llm import providers
 
         self._trail(monkeypatch)
         monkeypatch.setattr(
@@ -747,8 +747,8 @@ class TestTheProfileRungEmitsState:
         storing a 'quiet office'."""
         import json as _json
 
-        import offscreen
-        import providers
+        from world import offscreen
+        from llm import providers
 
         self._trail(monkeypatch)
         monkeypatch.setattr(
@@ -768,7 +768,7 @@ class TestTheProfileRungEmitsState:
         record shape does with them."""
         import inspect
 
-        import offscreen
+        from world import offscreen
 
         src = inspect.getsource(offscreen.profile_summary_record)
         assert "1-2 sentences" not in src
@@ -778,7 +778,7 @@ class TestTheProfileRungEmitsState:
         """Deterministic composition, not model prose: the stored legacy
         `tick` asserts the fields and nothing more, so the log cannot
         smuggle a sentence past the state shape."""
-        from offscreen import compose_tick
+        from world.offscreen import compose_tick
 
         assert compose_tick("Guinan", {"doing": "mending nets",
                                        "at": "quay_1",

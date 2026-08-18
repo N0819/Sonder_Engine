@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import time
 
-import commit
-from memory import (
+from persist import commit
+from mind.memory import (
     chat_lorebook_ids,
     dump_lorebook_links,
     restore_lorebook_links,

@@ -8,7 +8,7 @@
 > **The one deviation worth knowing before you read §"The clean cut".** The
 > design pre-bakes four establishment steps as saved variants so the narrator LLM
 > never runs on turn 0, and calls that "verbatim by construction — the only real
-> guarantee". That is not what shipped: `greetings.py` runs the full pipeline and
+> guarantee". That is not what shipped: `story/greetings.py` runs the full pipeline and
 > then swaps the authored prose into a new active variant afterwards
 > (`_override_narrator`). Verbatim preservation is real but is enforced
 > post-hoc, not structurally.
@@ -87,9 +87,9 @@ positions contains the character; if player present, positions contains `{{PLAYE
 
 ## Module placement (deviation, argued)
 
-Put the extractor in a **new top-level `greetings.py`**, not `agents/`. Rationale: `agents/`
+Put the extractor in a **new top-level `story/greetings.py`**, not `agents/`. Rationale: `agents/`
 modules are per-turn stages dispatched by `runtime.py`; `greeting_interpret` runs per-card at
-ingest, and `importers.py` already runs ingest-time LLM work via `chat_complete`/`get_prompt`
+ingest, and `story/importers.py` already runs ingest-time LLM work via `chat_complete`/`get_prompt`
 under `_silent_provider_stream()`. Registering it in `STEP_HANDLERS` would be dead weight and
 drag heavy scene/memory imports into the import path.
 
@@ -175,12 +175,12 @@ Pure variant-activation can't implement swipe because activating an old variant 
 
 | Change | Primary files | Inspect |
 |---|---|---|
-| Greeting capture/normalization | `importers.py`, `greetings.py` | `character_schema.py`, importer tests |
-| Extraction schema/prompt | `schemas.py`, `prompts.py` | `llm_quality.py` |
-| Launch merge / escalation | `greetings.py` | `agents/director.py` tail (share it), `commit.py` |
-| Seeded turn-0 execution | `app.py` (`/start`, `/greeting_swipe`) | `agents/runtime.py` (hydration, read-only), `storage.py`, `checkpoints.py` |
-| Private-seed routing | `app.py` launch | `scene.py:private_knowledge_for`, `memory.py`, `commit.py` |
-| Greeting UI | `static/js/editors.js`, `app.js`, `chat.js` | matching `app.py` routes |
+| Greeting capture/normalization | `story/importers.py`, `story/greetings.py` | `story/character_schema.py`, importer tests |
+| Extraction schema/prompt | `llm/schemas.py`, `llm/prompts.py` | `llm/llm_quality.py` |
+| Launch merge / escalation | `story/greetings.py` | `agents/director.py` tail (share it), `persist/commit.py` |
+| Seeded turn-0 execution | `web/app.py` (`/start`, `/greeting_swipe`) | `agents/runtime.py` (hydration, read-only), `storage.py`, `persist/checkpoints.py` |
+| Private-seed routing | `web/app.py` launch | `scene.py:private_knowledge_for`, `mind/memory.py`, `persist/commit.py` |
+| Greeting UI | `static/js/editors.js`, `app.js`, `chat.js` | matching `web/app.py` routes |
 
 ## Test surface
 

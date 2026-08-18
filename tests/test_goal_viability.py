@@ -23,7 +23,7 @@ of yield is stopped.
 
 from __future__ import annotations
 
-from affect import apply_intent_ops, steering_intent_ids
+from mind.affect import apply_intent_ops, steering_intent_ids
 
 
 def _intents():

@@ -127,7 +127,7 @@ class _CallCapture:
 
 
 def run(chat_id, turns, script=None, verbose=False):
-    import db
+    from core import db
     import time as _t
     from agents.runtime import run_pipeline
 
@@ -253,7 +253,7 @@ def main(argv=None):
     workdir, copy = _prepare_db(args.db)
     print(f"copied {args.db} -> {copy}")
     try:
-        import db
+        from core import db
         db.configure(copy)
         rows, capture = run(args.chat, args.turns, verbose=args.verbose)
         render(rows, args.label)

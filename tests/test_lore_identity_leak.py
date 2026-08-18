@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 
 from agents.common import observer_name_scrub, scrub_names_deep
-from character_schema import default_character_data
+from story.character_schema import default_character_data
 
 
 def _cast(*names):
@@ -39,7 +39,7 @@ def _cast(*names):
 def _chat(chat_id):
     """The real row — `persona_of` reads `persona_id`, so a hand-built stub
     with it nulled silently exempts the player from every identity gate."""
-    from db import q
+    from core.db import q
     return dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
 
 
@@ -52,7 +52,7 @@ def _seed(temp_db, *, known=None, persona="Hinami"):
             (persona, json.dumps(default_character_data(persona))))
         temp_db.qi("UPDATE chats SET persona_id=? WHERE id=?", (pid, chat_id))
     if known:
-        from db import wset
+        from core.db import wset
         wset(chat_id, "known", known)
     return chat_id
 

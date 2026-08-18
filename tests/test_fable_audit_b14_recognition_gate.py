@@ -27,11 +27,11 @@ import time
 
 import pytest
 
-import commit
-from character_schema import default_character_data
-from frames import create_frame
-from pipeline_context import ChatData, PipelineContext, TurnData
-from scene import all_cast_name_to_id
+from persist import commit
+from story.character_schema import default_character_data
+from core.frames import create_frame
+from core.pipeline_context import ChatData, PipelineContext, TurnData
+from story.scene import all_cast_name_to_id
 
 
 def _make_chat(db):
@@ -80,8 +80,8 @@ class TestCharacterStepMasksDormantCastmatesToo:
         independent axes -- a not-yet-existing character being dormant
         must not accidentally bypass the mask."""
         import agents.character as character_module
-        import memory
-        from scene import active_cast
+        from mind import memory
+        from story.scene import active_cast
 
         chat_id = _make_chat(temp_db)
         tamamo = _make_char(temp_db, "Tamamo")
@@ -95,7 +95,7 @@ class TestCharacterStepMasksDormantCastmatesToo:
             "entities": {}, "attire": {}, "overlays": {},
         })
 
-        from frames import create_frame
+        from core.frames import create_frame
         past = create_frame(chat_id, label="Before Hinami existed", ordinal=-10,
                             kind="past", travelers=[hinami], nonexistent_cast=[hinami])
 
@@ -175,13 +175,13 @@ class TestCommitMappingHonorsExistenceMasking:
         )
         ctx = self._base_ctx(temp_db, chat_id, past, cast)
 
-        import llm_quality
+        from llm import llm_quality
         monkeypatch.setattr(llm_quality, "complete_validated_json", lambda **k: {
             "validated": [], "lore_ops": [],
             "validated_introductions": [{"ok": True, "who": "Alice", "learns": "Bob"}],
         })
 
-        from db import active_frame_id, wget
+        from core.db import active_frame_id, wget
         token = active_frame_id.set(past)
         try:
             commit.commit_mapping(ctx, nonce=0)
@@ -207,13 +207,13 @@ class TestCommitMappingHonorsExistenceMasking:
         )
         ctx = self._base_ctx(temp_db, chat_id, past, cast)
 
-        import llm_quality
+        from llm import llm_quality
         monkeypatch.setattr(llm_quality, "complete_validated_json", lambda **k: {
             "validated": [], "lore_ops": [],
             "validated_introductions": [{"ok": True, "who": "Alice", "learns": "Bob"}],
         })
 
-        from db import active_frame_id, wget
+        from core.db import active_frame_id, wget
         token = active_frame_id.set(past)
         try:
             commit.commit_mapping(ctx, nonce=0)

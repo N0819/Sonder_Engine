@@ -36,10 +36,10 @@ import time
 
 import pytest
 
-import frames
-import memory
-from frames import create_frame, is_memory_visible
-from memory import add_memory, search_memories, visible_memory_rows
+from core import frames
+from mind import memory
+from core.frames import create_frame, is_memory_visible
+from mind.memory import add_memory, search_memories, visible_memory_rows
 
 PRESENT = None
 
