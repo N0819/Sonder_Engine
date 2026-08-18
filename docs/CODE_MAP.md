@@ -33,20 +33,20 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 575 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_background`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_mechanics`, `commit_memory`, `commit_memory_write`, `commit_place_graph`, `commit_room_registry`, `commit_scene_state`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
-| `commit_attire.py` | 862 |  | `attire`, `commit_common` |
-| `commit_background.py` | 1476 |  | `character_schema`, `commit_common`, `db`, `memory`, `scene`, `spatial` |
-| `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
-| `commit_destruction.py` | 413 |  | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
-| `commit_entities.py` | 499 |  | `character_schema`, `commit_common`, `db`, `scene`, `spatial` |
-| `commit_ledgers.py` | 302 |  | `commit_common`, `db` |
-| `commit_mapping.py` | 490 |  | `character_schema`, `commit_common`, `db`, `frames`, `memory`, `prompts`, `providers`, `spatial` |
-| `commit_mechanics.py` | 348 |  | `character_schema`, `commit_common`, `commit_scene_state`, `db`, `mechanics`, `scene` |
-| `commit_memory.py` | 1486 |  | `affect`, `character_schema`, `comfort`, `commit_background`, `commit_common`, `commit_place_graph`, `db`, `memory`, `psychology_runtime`, `survival`, `theory_of_mind` |
-| `commit_memory_write.py` | 230 |  | `character_schema`, `commit_memory`, `db`, `memory`, `scene` |
-| `commit_place_graph.py` | 274 |  | `spatial` |
-| `commit_room_registry.py` | 444 |  | `character_schema`, `commit_common`, `db`, `spatial` |
-| `commit_scene_state.py` | 709 |  | `character_schema`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_room_registry`, `db`, `memory`, `spatial`, `spatial_frames`, `weather` |
+| `commit.py` | 575 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_background`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_mechanics`, `commit_memory`, `commit_memory_write`, `commit_place_graph`, `commit_room_registry`, `commit_scene_state`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit_attire.py` | 862 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `attire`, `commit_common` |
+| `commit_background.py` | 1476 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `character_schema`, `commit_common`, `db`, `memory`, `scene`, `spatial` |
+| `commit_common.py` | 384 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `character_schema`, `db`, `mechanics`, `spatial` |
+| `commit_destruction.py` | 413 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
+| `commit_entities.py` | 499 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `character_schema`, `commit_common`, `db`, `scene`, `spatial` |
+| `commit_ledgers.py` | 302 | Pending-obligation and world-pressure debt ledgers. | `commit_common`, `db` |
+| `commit_mapping.py` | 490 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `character_schema`, `commit_common`, `db`, `frames`, `memory`, `prompts`, `providers`, `spatial` |
+| `commit_mechanics.py` | 348 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `character_schema`, `commit_common`, `commit_scene_state`, `db`, `mechanics`, `scene` |
+| `commit_memory.py` | 1486 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `affect`, `character_schema`, `comfort`, `commit_background`, `commit_common`, `commit_place_graph`, `db`, `memory`, `psychology_runtime`, `survival`, `theory_of_mind` |
+| `commit_memory_write.py` | 230 | The durable memory write and its out-of-band consolidation twin. | `character_schema`, `commit_memory`, `db`, `memory`, `scene` |
+| `commit_place_graph.py` | 274 | Per-mind durable place graph and per-beat spatial experience. | `spatial` |
+| `commit_room_registry.py` | 444 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `character_schema`, `commit_common`, `db`, `spatial` |
+| `commit_scene_state.py` | 709 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `character_schema`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_room_registry`, `db`, `memory`, `spatial`, `spatial_frames`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
