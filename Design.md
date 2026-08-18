@@ -603,6 +603,18 @@ Subsystems the original architecture never imagined, now load-bearing:
   project tier between them — capped at two, adopted only against a
   non-circular criterion, weighed at drive strength once established, and made
   legible when the mind drifts from one rather than decayed behind its back.
+  A `progress` claim is a self-report and is audited: at the ceiling, where a
+  beat spent on a finished goal gains nothing, and — since the first played
+  case — on a beat that repeated an earlier move, where the goal is grinding
+  UP the ramp and every repeat was buying a real +0.2 and a refreshed dormancy
+  clock. Live (chat 80, turns 1–3): three beats of the same three sentences
+  carried `ia1` from 0.0 to 0.4 with `barren_attempts` never set, while the
+  engine had already measured the repetition twice and paid 82.2s for a second
+  full character call over it. The ledger was simply never told. The flag is
+  CARRIED from the character stage rather than re-derived, and a repetition
+  the screen judged warranted still counts as progress. Below the ceiling it
+  warns and holds progress but does not stall the goal: a slow intention is not
+  a stuck one.
 - **Deterministic mechanics sweep** (`mechanics.py`). Timed arrivals, expiry,
   dock edges, news latency — LLM-free, seeded, idempotent.
 - **Weather** (`weather.py`). One sky per scene, with each room's share decided

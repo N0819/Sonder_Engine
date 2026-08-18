@@ -1110,7 +1110,7 @@ def _revive_intent(target):
     for key in ("blocked_why", "blocked_turn", "stalled_turn"):
         target.pop(key, None)
 
-def _advance_intent(target, turn_idx, warnings):
+def _advance_intent(target, turn_idx, warnings, *, barren_beat=False):
     """Apply one step of forward progress, returning True if it actually moved.
 
     A goal already at the ceiling cannot advance: the beat was spent on it and
@@ -1120,15 +1120,38 @@ def _advance_intent(target, turn_idx, warnings):
     FORGOTTEN goal, never on a stuck one, and the guard meant to stop a goal
     steering forever was defeated by exactly the behaviour it existed to catch.
 
+    `barren_beat` is that same rule one rung lower, and it was found in play.
+    The ceiling test catches a character grinding once there is nothing left to
+    gain; it says nothing about one grinding UP THE RAMP, where every repeat
+    still buys a real +0.2 and refreshes the clock. Live (chat 80, turns 1-3):
+    a psychologist delivered the same three propositions -- you were sedated,
+    it was not to harm you, the restraints are for safety -- on three
+    consecutive beats, and `ia1` went 0.0 -> 0.2 -> 0.4 with `barren_attempts`
+    never set. Nothing had happened; the ledger recorded steady progress
+    because progress is a SELF-REPORT and this was the only place it was
+    audited.
+
+    The caller supplies the flag rather than this module deriving it, because
+    the engine has already measured it: `agents/character.py` detects a
+    repeated move, `llm_quality.move_repeat_screen` clears the ones the beat
+    genuinely invited, and only an unscreened one gets this far. So the beats
+    marked here are exactly the beats the engine already paid a full re-ask to
+    fix. Nothing new is asked of the model -- it emits whatever ops it likes,
+    and the engine declines to call a repeat an advance.
+
     Barren attempts leave the clock alone and never revive a set-aside goal.
-    After _INTENT_STALL_AFTER of them the goal stops steering: at full progress
+    After _INTENT_STALL_AFTER of them AT THE CEILING the goal stops steering:
     with nothing left to gain it must be satisfied, abandoned, or replaced by a
-    goal that asks something genuinely different. Closing a goal still needs
-    evidence -- this only stops one being pursued past the point of yield.
+    goal that asks something genuinely different. A barren beat below the
+    ceiling counts and warns but does NOT stall, deliberately -- a slow
+    intention is not a stuck one, and taking a goal away from a character over
+    two repeated beats would be the guard doing more harm than the grind.
+    Closing a goal still needs evidence.
     """
     before = _clamp01(_float_or(target.get("progress")))
     after = _clamp01(before + _INTENT_PROGRESS_STEP)
-    if after > before:
+    at_ceiling = after <= before
+    if not at_ceiling and not barren_beat:
         target["progress"] = after
         target["last_progress_turn"] = turn_idx
         target.pop("barren_attempts", None)
@@ -1136,16 +1159,21 @@ def _advance_intent(target, turn_idx, warnings):
 
     barren = int(_float_or(target.get("barren_attempts"))) + 1
     target["barren_attempts"] = barren
-    if barren >= _INTENT_STALL_AFTER and target.get("status") == "active":
+    if at_ceiling and barren >= _INTENT_STALL_AFTER and target.get("status") == "active":
         target["status"] = "dormant"
         target["stalled_turn"] = turn_idx
         warnings.append(
             f"intent {target.get('id')!r} stalled: {barren} attempts at full "
             "progress with nothing gained -- satisfy, abandon or re-route it")
-    else:
+    elif at_ceiling:
         warnings.append(
             f"intent {target.get('id')!r}: already at full progress, "
             "nothing gained this beat")
+    else:
+        warnings.append(
+            f"intent {target.get('id')!r}: progress claimed on a beat that "
+            f"repeated an earlier move -- {barren} barren attempt(s), progress "
+            f"held at {before:.1f}")
     return False
 
 def steering_intent_ids(intentions, turn_idx):
@@ -1181,7 +1209,7 @@ def steering_intent_ids(intentions, turn_idx):
     return out
 
 def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
-                     intent_cap=None):
+                     intent_cap=None, barren_beat=False):
     """Apply a turn's intention operations under deterministic guards.
 
     `intent_cap` is this character's attentional capacity (see
@@ -1259,7 +1287,8 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                 target.pop("barren_attempts", None)
                 moved = True
             else:
-                moved = _advance_intent(target, turn_idx, warnings)
+                moved = _advance_intent(target, turn_idx, warnings,
+                                        barren_beat=barren_beat)
             if moved and target.get("status") in ("dormant", "blocked"):
                 _revive_intent(target)
         elif kind == "nonviable":

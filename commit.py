@@ -6611,7 +6611,13 @@ def prepare_memory_commit(ctx, *, scene=None):
                 }
                 intentions, _iwarn = affect.apply_intent_ops(
                     intentions, own_result.get("intent_ops") or [], turn.idx,
-                    _evidence_ok, intent_cap=_intent_cap)
+                    _evidence_ok, intent_cap=_intent_cap,
+                    # Set by the character stage when this beat repeated an
+                    # earlier move and the screen did not judge the repetition
+                    # warranted -- i.e. the beat the engine already paid a full
+                    # re-ask over. A `progress` claim on one of those does not
+                    # advance the goal (affect._advance_intent).
+                    barren_beat=bool(own_result.get("_barren_beat")))
                 # OUTCOME FEEDBACK. Everything else in this engine revises a
                 # belief by CONTRADICTION -- another claim -- never by whether
                 # acting on it worked. So a character who concludes something,
