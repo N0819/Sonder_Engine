@@ -145,7 +145,6 @@ from .director_contact import (
     _merge_character_material_effects,
     _merge_character_contact_endings,
 )
-
 from .director_views import (
     _cast_match_forms,
     _route_authorial_npc_beat,
@@ -160,6 +159,118 @@ from .director_views import (
     _couriers_view,
     _artifacts_view,
     _carried_reports_view,
+)
+from .director_movement import (
+    _egocentric_exits,
+    _ci_mapping_key,
+    _reconcile_near_group_positions,
+    _declares_rapid_movement,
+    _follow_op_for_actor,
+    _collect_following_ops,
+    _following_record,
+    _apply_following_movement,
+    _unreachable_position_writes,
+    _resolve_movement_mover,
+    _LONG_EDGE_DISTANCES,
+    _LONG_EDGE_BEATS,
+    _travel_in_flight_view,
+    _travel_continues,
+    _guard_approach_is_not_arrival,
+)
+from .director_floors import (
+    _untracked_restraint_subjects,
+    _MAX_UNCONSCIOUSNESS_GAP,
+    _sentence_break_positions,
+    _awareness_support_in_beat,
+    _unsupported_player_awareness,
+    _NATURAL_SLEEP_SECONDS,
+    _clause_attributed_subjects,
+    _declared_act_texts,
+    _rouse_attempts,
+    _sleep_elapsed,
+    _awareness_view,
+    _already_ended,
+    _ending_condition,
+    _awareness_exits,
+    _untracked_unconsciousness_subjects,
+    _destruction_name_pattern,
+    _narrated_destruction_subjects,
+    _scan_for_untracked_restraint,
+)
+from .director_evidence import (
+    _RECONCILE_INTERPRET_MAX_UNITS,
+    _INTERPRET_COVERAGE_MIN,
+    _decl_tokens,
+    _declaration_units,
+    _interpret_coverage_corpus,
+    _unit_covered,
+    _uncovered_declarations,
+    _output_field_names,
+    _OUTPUT_FIELD_NAMES,
+    _normalize_diff_shape,
+    _is_blank_placeholder,
+    _strip_blank_diff_placeholders,
+    _diff_is_substantive,
+    _beat_has_physical_activity,
+    _reconcile_scene_slice,
+    _merge_repair_into_diff,
+    _norm_subject,
+    _claim_subject_is_referrable,
+    _subject_match_forms,
+    _make_subject_hit,
+    _omission_subject_encoded,
+    _normalize_omission_category,
+    _entity_state_has_transit,
+    _evidence_present,
+    _RECONCILE_MAX_MANIFEST_ITEMS,
+    _manifest_items,
+    _DERIVED_OF_ATTIRE,
+    _fold_derived_manifest_events,
+)
+from .director_scopes import (
+    SPECIALISTS,
+    _DELEGATED_CHANNELS,
+    _CATEGORY_CHANNELS,
+    _LIST_DELEGATED,
+    _CHANNEL_GATES,
+    _CHANNEL_SPECIALISTS,
+    _default_channel_gate,
+    _rebuild_channel_owners,
+    register_specialist,
+    unregister_specialists,
+    _extension_specialist_call,
+    _shipped_transit_state,
+    _shipped_darkened_room,
+    _shipped_bodiless_definition,
+    _PROSE_DUTY_SHIPPED,
+    _gate_facts,
+    _dispatch_specialists,
+)
+from .director_fanout import (
+    fanout_is_parallel,
+    _resolve_beat_view,
+    _interpret_beat_view,
+    _specialist_manifest_slice,
+    _specialist_payload,
+    _stage_container,
+    _normalized_channel_value,
+    _EVENT_VERDICTS,
+    _resolved_event_verdicts,
+    _index_addressed_events,
+    _STRUCTURAL_CHANNEL_FACTS,
+    _structurally_absent_channels,
+    _orchestration_scope_backstop,
+)
+from .director_reconcile import (
+    _deep_audit_mode,
+    _player_claim_findings,
+    _public_omission,
+    _stamp_dialogue_articulation,
+    _SETTLING_VERDICTS,
+    _verify_already_true,
+    _acquit_addressed_events,
+    _REROUTE_FULL_SCOPE,
+    _route_repair_omissions,
 )
 
 
@@ -288,25 +399,6 @@ def director_establish(ctx, nonce):
     out["summary"] = "Scene established: " + (out.get("location") or "")
     out["dialogue_log"] = []
     return out
-
-
-from .director_movement import (
-    _egocentric_exits,
-    _ci_mapping_key,
-    _reconcile_near_group_positions,
-    _declares_rapid_movement,
-    _follow_op_for_actor,
-    _collect_following_ops,
-    _following_record,
-    _apply_following_movement,
-    _unreachable_position_writes,
-    _resolve_movement_mover,
-    _LONG_EDGE_DISTANCES,
-    _LONG_EDGE_BEATS,
-    _travel_in_flight_view,
-    _travel_continues,
-    _guard_approach_is_not_arrival,
-)
 
 
 def director_interpret(ctx, nonce):
@@ -845,38 +937,6 @@ def director_interpret(ctx, nonce):
     return out
 
 
-from .director_evidence import (
-    _RECONCILE_INTERPRET_MAX_UNITS,
-    _INTERPRET_COVERAGE_MIN,
-    _decl_tokens,
-    _declaration_units,
-    _interpret_coverage_corpus,
-    _unit_covered,
-    _uncovered_declarations,
-    _output_field_names,
-    _OUTPUT_FIELD_NAMES,
-    _normalize_diff_shape,
-    _is_blank_placeholder,
-    _strip_blank_diff_placeholders,
-    _diff_is_substantive,
-    _beat_has_physical_activity,
-    _reconcile_scene_slice,
-    _merge_repair_into_diff,
-    _norm_subject,
-    _claim_subject_is_referrable,
-    _subject_match_forms,
-    _make_subject_hit,
-    _omission_subject_encoded,
-    _normalize_omission_category,
-    _entity_state_has_transit,
-    _evidence_present,
-    _RECONCILE_MAX_MANIFEST_ITEMS,
-    _manifest_items,
-    _DERIVED_OF_ATTIRE,
-    _fold_derived_manifest_events,
-)
-
-
 def _reconcile_interpretation(ctx, out, sc):
     """The interpret-reconciliation seam (see the block comment above).
     Mutates `out` in place: repaired sequence elements are appended (never
@@ -997,114 +1057,9 @@ def _reconcile_interpretation(ctx, out, sc):
             "request (no structured act was fabricated)."
         )
 
-# ---------------------------------------------------------------------------
-# Resolve reconciliation: one general seam catching the recurring failure
-# class where director_resolve's resolved_event PROSE asserts a persistent,
-# physically consequential change (doors sealed, a passage collapsed, an
-# object destroyed, someone restrained) that its structured state_diff
-# OMITS -- so commit applies stale objective truth and perception, which
-# renders from structured truth rather than prose, contradicts the story
-# on the very next turn (live instance: an elevator narrated as sealed and
-# descending while the room diff was a blank placeholder, leaving the
-# doors objectively "held open" onto the smoke-filled corridor).
-#
-# Shape of the mechanism, deliberately NOT keyword/verb recognition of
-# world events (an unwinnable enumeration treadmill). Three tiers, all
-# DETECTION deterministic on the common path (no per-beat LLM call):
-#   Tier 0 (deterministic, every beat, zero cost):
-#     - blank all-empty placeholder diff entries are pure noise
-#       masquerading as a handled change; strip and flag them in code;
-#     - the legacy restraint/duress scan (folded in; used to be warn-only
-#       and one-off);
-#     - PLAYER-CLAIM COVERAGE: every asserted scope='effect' authority
-#       claim with a resolvable subject must be encoded somewhere in the
-#       diff -- structure minted by director_interpret in a DIFFERENT
-#       call, so a resolve-side encoding drop is caught with no same-call
-#       self-consistency bias. Null-subject claims degrade to a metadata
-#       note, never a warning. The claim_dispositions contract (asserted
-#       claims are never rejected/failed) is cross-checked too.
-#   Tier 1 (near-zero cost, same call): director_resolve's own
-#     changes_asserted manifest -- persistent changes its prose asserts,
-#     beyond the player's claims -- checked against the diff with
-#     CATEGORY-AWARE evidence classes (an 'adjacency' change needs an
-#     adjacency-affecting entry, not merely the subject's name somewhere:
-#     the partial-encoding trap that let the elevator through) and
-#     ALIAS-AWARE subjects (name/uid/alias via character_scene_keys and
-#     entity aliases).
-#   Tier 2 (LLM, omission path only): bounded self-repair BY THE DIRECTOR
-#     ITSELF (never an external critic writing state): one re-invocation
-#     with the specific detected omissions called out, returning a
-#     correction delta merged ADDITIVELY over the original diff and
-#     re-checked deterministically. Disposition authority is tiered:
-#     player-claim omissions are NON-REJECTABLE (honored only when
-#     post-merge evidence actually exists) and always warn while
-#     unencoded; structural signals warn if unrepaired; manifest
-#     (emergent) omissions may be rejected by the owner. Anything still
-#     unencoded falls back to ctx.warnings -- this engine never
-#     fabricates objective state from a heuristic, because a wrongly
-#     invented fact lingering is worse than a stale missing one.
-# The standalone resolve_reconcile deep audit is retained behind the
-# default-off 'resolve_deep_audit' setting ('1'/'always' = every physical
-# beat; 'tripwire' = only when the silent-false-negative tripwire fires:
-# successful dice or asserted effect-claims alongside an EMPTY manifest
-# and an empty physical diff).
-# ---------------------------------------------------------------------------
-
-
-from .director_floors import (
-    _untracked_restraint_subjects,
-    _MAX_UNCONSCIOUSNESS_GAP,
-    _sentence_break_positions,
-    _awareness_support_in_beat,
-    _unsupported_player_awareness,
-    _NATURAL_SLEEP_SECONDS,
-    _clause_attributed_subjects,
-    _declared_act_texts,
-    _rouse_attempts,
-    _sleep_elapsed,
-    _awareness_view,
-    _already_ended,
-    _ending_condition,
-    _awareness_exits,
-    _untracked_unconsciousness_subjects,
-    _destruction_name_pattern,
-    _narrated_destruction_subjects,
-    _scan_for_untracked_restraint,
-)
-
 
 _RECONCILE_MAX_AUDIT_OMISSIONS = 6
 _RECONCILE_MIN_CONFIDENCE = 0.4
-
-
-from .director_fanout import (
-    fanout_is_parallel,
-    _resolve_beat_view,
-    _interpret_beat_view,
-    _specialist_manifest_slice,
-    _specialist_payload,
-    _stage_container,
-    _normalized_channel_value,
-    _EVENT_VERDICTS,
-    _resolved_event_verdicts,
-    _index_addressed_events,
-    _STRUCTURAL_CHANNEL_FACTS,
-    _structurally_absent_channels,
-    _orchestration_scope_backstop,
-)
-
-
-from .director_reconcile import (
-    _deep_audit_mode,
-    _player_claim_findings,
-    _public_omission,
-    _stamp_dialogue_articulation,
-    _SETTLING_VERDICTS,
-    _verify_already_true,
-    _acquit_addressed_events,
-    _REROUTE_FULL_SCOPE,
-    _route_repair_omissions,
-)
 
 
 def _deep_audit_omissions(ctx, out, sd, scene_slice, dlog_compact,
@@ -1284,6 +1239,58 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
     return repaired, verdicts
 
 
+# ---------------------------------------------------------------------------
+# Resolve reconciliation: one general seam catching the recurring failure
+# class where director_resolve's resolved_event PROSE asserts a persistent,
+# physically consequential change (doors sealed, a passage collapsed, an
+# object destroyed, someone restrained) that its structured state_diff
+# OMITS -- so commit applies stale objective truth and perception, which
+# renders from structured truth rather than prose, contradicts the story
+# on the very next turn (live instance: an elevator narrated as sealed and
+# descending while the room diff was a blank placeholder, leaving the
+# doors objectively "held open" onto the smoke-filled corridor).
+#
+# Shape of the mechanism, deliberately NOT keyword/verb recognition of
+# world events (an unwinnable enumeration treadmill). Three tiers, all
+# DETECTION deterministic on the common path (no per-beat LLM call):
+#   Tier 0 (deterministic, every beat, zero cost):
+#     - blank all-empty placeholder diff entries are pure noise
+#       masquerading as a handled change; strip and flag them in code;
+#     - the legacy restraint/duress scan (folded in; used to be warn-only
+#       and one-off);
+#     - PLAYER-CLAIM COVERAGE: every asserted scope='effect' authority
+#       claim with a resolvable subject must be encoded somewhere in the
+#       diff -- structure minted by director_interpret in a DIFFERENT
+#       call, so a resolve-side encoding drop is caught with no same-call
+#       self-consistency bias. Null-subject claims degrade to a metadata
+#       note, never a warning. The claim_dispositions contract (asserted
+#       claims are never rejected/failed) is cross-checked too.
+#   Tier 1 (near-zero cost, same call): director_resolve's own
+#     changes_asserted manifest -- persistent changes its prose asserts,
+#     beyond the player's claims -- checked against the diff with
+#     CATEGORY-AWARE evidence classes (an 'adjacency' change needs an
+#     adjacency-affecting entry, not merely the subject's name somewhere:
+#     the partial-encoding trap that let the elevator through) and
+#     ALIAS-AWARE subjects (name/uid/alias via character_scene_keys and
+#     entity aliases).
+#   Tier 2 (LLM, omission path only): bounded self-repair BY THE DIRECTOR
+#     ITSELF (never an external critic writing state): one re-invocation
+#     with the specific detected omissions called out, returning a
+#     correction delta merged ADDITIVELY over the original diff and
+#     re-checked deterministically. Disposition authority is tiered:
+#     player-claim omissions are NON-REJECTABLE (honored only when
+#     post-merge evidence actually exists) and always warn while
+#     unencoded; structural signals warn if unrepaired; manifest
+#     (emergent) omissions may be rejected by the owner. Anything still
+#     unencoded falls back to ctx.warnings -- this engine never
+#     fabricates objective state from a heuristic, because a wrongly
+#     invented fact lingering is worse than a stale missing one.
+# The standalone resolve_reconcile deep audit is retained behind the
+# default-off 'resolve_deep_audit' setting ('1'/'always' = every physical
+# beat; 'tripwire' = only when the silent-false-negative tripwire fires:
+# successful dice or asserted effect-claims alongside an EMPTY manifest
+# and an empty physical diff).
+# ---------------------------------------------------------------------------
 def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
                           tracked_names):
     """The resolve-reconciliation seam (see the block comment above).
@@ -1729,27 +1736,6 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             resolved_event, dialogue_log, sd.get("conditions") or {},
             tracked_names):
         ctx.add_warning(restraint_warning)
-
-
-from .director_scopes import (
-    SPECIALISTS,
-    _DELEGATED_CHANNELS,
-    _CATEGORY_CHANNELS,
-    _LIST_DELEGATED,
-    _CHANNEL_GATES,
-    _CHANNEL_SPECIALISTS,
-    _default_channel_gate,
-    _rebuild_channel_owners,
-    register_specialist,
-    unregister_specialists,
-    _extension_specialist_call,
-    _shipped_transit_state,
-    _shipped_darkened_room,
-    _shipped_bodiless_definition,
-    _PROSE_DUTY_SHIPPED,
-    _gate_facts,
-    _dispatch_specialists,
-)
 
 
 #: Prose-duty gates for the orchestrated PROSE AUTHOR's own sheet (the same
