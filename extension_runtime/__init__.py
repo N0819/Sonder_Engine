@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import fnmatch
+import importlib.machinery
 import importlib.util
 import json
 import logging
@@ -477,18 +478,54 @@ def _import_entry(ext: Extension):
     if not target.is_file():
         raise ExtensionError(
             f"extension {ext.id!r} python entry {ext.python_entry!r} is missing")
-    name = _module_name(ext.id)
+    package = _module_name(ext.id)
+    name = package + ".extension"
+    # The extension's directory is registered as a PACKAGE before its entry is
+    # executed, so an extension whose Python is more than one file can say
+    # `from .campaign import package` and have it mean its own sibling.
+    #
+    # Found by writing one: `campaign-demo` is the first bundled extension to
+    # split its Python, and `from campaign import ...` raised
+    # ModuleNotFoundError -- the same shape as the ES-module blocker, which
+    # nobody hit either until an extension was built as a module graph.
+    #
+    # A package rather than putting the directory on `sys.path`, and the
+    # difference is the whole reason: a path entry makes every sibling
+    # importable under its BARE name, so a file called `db.py` would shadow the
+    # engine's `db` for whatever imported next, and two extensions each
+    # shipping a `helper.py` would get whichever loaded first. Under a package
+    # the names are `sonder_ext_<id>.helper`, which can collide with nothing.
+    # Relative imports only, therefore -- the same rule the module UI half
+    # already follows.
+    if package not in sys.modules:
+        container = importlib.util.module_from_spec(
+            importlib.machinery.ModuleSpec(package, None, is_package=True))
+        container.__path__ = [str(base)]
+        sys.modules[package] = container
     spec = importlib.util.spec_from_file_location(name, target)
     if spec is None or spec.loader is None:
+        sys.modules.pop(package, None)
         raise ExtensionError(f"extension {ext.id!r} entry could not be loaded")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     try:
         spec.loader.exec_module(module)
     except BaseException:
-        sys.modules.pop(name, None)
+        _drop_extension_modules(package)
         raise
     return module
+
+
+def _drop_extension_modules(package: str) -> None:
+    """Forget the extension's package and every submodule it imported.
+
+    Submodules too, because a disable that left `sonder_ext_x.helper` behind
+    would have the next enable execute a stale copy of a file the host may have
+    replaced in between -- which is exactly what an update does.
+    """
+    for name in [n for n in sys.modules
+                 if n == package or n.startswith(package + ".")]:
+        sys.modules.pop(name, None)
 
 
 def _deregister(ext_id: str, *, error: str | None = None) -> None:
@@ -515,7 +552,7 @@ def _deregister(ext_id: str, *, error: str | None = None) -> None:
                 "could not unregister specialists for extension %s", ext_id)
     if error is None:
         _registered.pop(ext_id, None)
-        sys.modules.pop(_module_name(ext_id), None)
+        _drop_extension_modules(_module_name(ext_id))
     else:
         _registered[ext_id] = _Registration(ext_id, error=error)
 

@@ -52,9 +52,10 @@ SYNCED.txt
 
 # Installed extensions belong to the host, not to the repo: `/api/extensions/
 # install` writes third-party code straight into this directory, and it must
-# not turn up in `git status` as if it were the engine's own. The two reference
-# extensions are the deliberate exception -- docs/guides/EXTENSIONS.md points at
-# them as the worked examples, so they ship.
+# not turn up in `git status` as if it were the engine's own. The three
+# reference extensions are the deliberate exception -- docs/guides/EXTENSIONS.md
+# points at them as the worked examples, so they ship.
 /extensions/*
 !/extensions/cohesion-demo/
 !/extensions/overlay-demo/
+!/extensions/campaign-demo/

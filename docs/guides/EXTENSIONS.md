@@ -240,6 +240,21 @@ def register(api):
 If `register` raises, your extension is disabled with the exception message
 readable in the Extensions menu, and **every sibling stays live**.
 
+**More than one file.** Your extension's directory is imported as a package, so
+a second module beside your entry is reached with a **relative** import:
+
+```python
+from .campaign import package        # extension.py, beside campaign.py
+```
+
+Relative rather than bare, and the reason is not style: a directory on
+`sys.path` would make every sibling importable under its bare name, so an
+extension shipping a `db.py` would shadow the engine's `db` for whatever
+imported next, and two extensions each shipping a `helper.py` would get
+whichever loaded first. Under a package the names are `sonder_ext_<id>.helper`
+and can collide with nothing. Disabling forgets every submodule, so an update
+cannot leave a stale file executing.
+
 ### `api` — the whole surface
 
 | Member | What it is |
@@ -1055,9 +1070,26 @@ side, this one shows the surfaces that reach the READER. It is an **ES module
 split across three files** (so it exercises the loading contract rather than
 describing it), a toolbar launcher, a full-window view over the transcript, two
 routes of its own, and a standing block of narration context the story is then
-told through. Between them the two demos touch every seam in this guide.
+told through.
 
-Neither touches an engine file. That is the point.
+[`extensions/campaign-demo/`](../../extensions/campaign-demo/) is the third, and
+it is a different kind of thing from the other two: a **campaign layer** rather
+than a mod. It provisions a whole story — two rooms, two characters, a secret held in one
+of their own `private_history` entries, and its own mission state, atomically — gates one objective behind a fact that has to
+reach the player through a real route, puts its rules in front of the Director
+and rewrites them when the objective opens, advances mission state inside the
+turn's transaction, declares `actor_only` so the player cannot simply write the
+sealed door open, and renders a panel from `player_view` rather than
+`story_view`. It is deliberately tiny and deliberately genre-neutral: the
+scenario is the smallest one that exercises all five contracts at once.
+
+Its Python is **split across two files**, which is not decoration — it is how
+the loader's package contract was found missing. See §4's note on relative
+imports.
+
+Between them the three demos touch every seam in this guide.
+
+None of them touches an engine file. That is the point.
 
 Tests to read next: [`tests/test_extensions.py`](../../tests/test_extensions.py)
 (discovery, isolation, plan splices, the state gate),
@@ -1070,4 +1102,8 @@ module loading contract),
 [`tests/test_extension_ui_surface.py`](../../tests/test_extension_ui_surface.py)
 (the browser registries and their teardown), and
 [`tests/test_extension_install.py`](../../tests/test_extension_install.py)
-(zip-slip, symlinks, atomicity, size cap).
+(zip-slip, symlinks, atomicity, size cap), and
+[`tests/test_campaign_slice.py`](../../tests/test_campaign_slice.py), which runs
+`campaign-demo` end to end over the *shipped* tree — provision, gate, discover,
+unlock, project, export — and is the only test that proves the five campaign
+contracts compose rather than merely each working alone.

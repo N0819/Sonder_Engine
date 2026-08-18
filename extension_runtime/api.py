@@ -1079,7 +1079,7 @@ class SonderExtensionAPI:
     # -- creating a story
 
     def provision_story(self, package, *, state=None, package_id="",
-                        package_version=""):
+                        package_version="", player_authority=None):
         """Create a whole playable story in one act, or create nothing.
 
         `package` is a chat archive -- the engine's own portable format, the
@@ -1098,6 +1098,14 @@ class SonderExtensionAPI:
         do and the reason this is a method rather than a documentation note: a
         story that exists with no campaign state attached is precisely the
         partial provisioning the whole contract is supposed to make impossible.
+
+        `player_authority` declares the rung the campaign needs -- `actor_only`,
+        `explicit_outcomes` or `world_author` (`Design.md` § Hard mode). A
+        campaign whose whole premise is that the player may not write the world
+        cannot ask for that after the first beat has already been played under
+        the other rule, and reaching into `scene.set_player_authority` to get it
+        would be exactly the unsupported-internals dependency this facade
+        exists to remove. Omitted leaves the story on the host default.
 
         Provenance is recorded against your id, so a story can always answer
         which extension and which package version made it. Six months later
@@ -1140,6 +1148,20 @@ class SonderExtensionAPI:
 
                 qi("UPDATE chats SET name=? WHERE id=?", (wanted, chat_id))
                 chat = dict(chat, name=wanted)
+            if player_authority is not None:
+                from scene import (PLAYER_AUTHORITY_MODES,
+                                   set_player_authority)
+
+                # Refused rather than normalized, for the reason the host route
+                # gives: `set_player_authority` falls back to the default on an
+                # unreadable value, and a campaign whose premise is that the
+                # player may not write the world would then quietly ship with
+                # the player writing the world.
+                if player_authority not in PLAYER_AUTHORITY_MODES:
+                    raise ExtensionError(
+                        f"player_authority must be one of "
+                        f"{', '.join(PLAYER_AUTHORITY_MODES)}")
+                set_player_authority(chat_id, player_authority, turn_idx=0)
             if state is not None:
                 self.state(chat_id).set_now(state)
             wset(chat_id, f"ext:{self.id}:provisioned", {

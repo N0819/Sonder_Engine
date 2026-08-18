@@ -1,0 +1,17 @@
+{
+  "id": "campaign-demo",
+  "version": "0.1.0",
+  "ext_api": 1,
+  "name": "Campaign (demo)",
+  "description": "A reference campaign layer: it provisions a whole story, gates one objective behind a fact that has to reach play legitimately, puts its rules in front of the Director, advances mission state inside the turn's transaction, and renders a player-safe panel. The vertical slice, end to end.",
+  "capabilities": {
+    "chat_state": true,
+    "routes": [
+      {"method": "GET", "path": "/campaign", "description": "Mission state and a player-safe view of the story."},
+      {"method": "POST", "path": "/start", "description": "Provision the bundled campaign as a new story."}
+    ],
+    "commit_domains": ["mission"],
+    "python": "extension.py",
+    "ui": {"module": "ui/index.js", "css": "ui/campaign.css"}
+  }
+}
