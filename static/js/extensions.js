@@ -39,6 +39,19 @@ const Sonder = {
   //: extension id -> consecutive-ish throw count, for the three-strikes rule.
   _faults: new Map(),
 
+  //: Standing notices, newest first. A TOAST is not this: a toast is a
+  //: transient acknowledgement of something the reader just did, and it is
+  //: gone in four seconds whether or not it was read. A campaign layer needs
+  //: to say "your objective changed while you were reading" and have it still
+  //: be there when the reader looks up. Host-owned so `_unregister` can take a
+  //: retired extension's notices down with the rest of its interface.
+  _notices: [],
+  //: Bounded, because a notice nobody dismisses is a notice that accumulates,
+  //: and an extension raising one per beat would otherwise fill the column
+  //: with its own history. Oldest fall off.
+  _noticeCap: 8,
+  _noticeSeq: 0,
+
   // ---- Failure containment ----
   // Wrap a callback so a throw is contained and ATTRIBUTED. Returning
   // `undefined` on failure is deliberate: every caller here treats a missing
@@ -90,6 +103,23 @@ const Sonder = {
       name => name.charAt(0) !== "_" && typeof Sonder[name] === "function");
   },
 
+  // Public members that are NAMESPACES rather than calls -- `chats` is the
+  // first. Derived by the same rule and for the same reason: a namespace on
+  // `Sonder` that the facade did not carry would work for a classic `ui.js`
+  // extension and simply not exist for a module one.
+  //
+  // Passed through by reference rather than owner-bound, because there is
+  // nothing to attribute: these are direct host calls that return a promise,
+  // not registrations that leave a callback behind for the host to run later.
+  // Owner binding exists so a callback can be charged to whoever registered
+  // it; a fetch has no callback and no owner to charge.
+  _publicNamespaces() {
+    return Object.keys(Sonder).filter(
+      name => name.charAt(0) !== "_"
+        && typeof Sonder[name] === "object" && Sonder[name] !== null
+        && !Array.isArray(Sonder[name]) && !(Sonder[name] instanceof Map));
+  },
+
   _facade(extId) {
     const owner = String(extId || "");
     const facade = { id: owner };
@@ -102,6 +132,7 @@ const Sonder = {
         finally { Sonder._owner = previous; }
       };
     }
+    for (const name of Sonder._publicNamespaces()) facade[name] = Sonder[name];
     return facade;
   },
 
@@ -187,6 +218,102 @@ const Sonder = {
     Sonder._renderComposer();
   },
 
+  // ---- Notices ----
+  //
+  // The standing counterpart of `toast`. Returns an id so the raiser can take
+  // its own notice down when the condition clears -- a notification centre
+  // whose entries can only be dismissed by the reader tells them about
+  // problems that were fixed an hour ago.
+  notify({ title, body, level, onClick } = {}) {
+    const owner = Sonder._owner;
+    // Concatenated from a single-token literal rather than interpolated, and
+    // the class names below are added one token at a time for the same reason:
+    // `tools/extract_ui_catalog.py` is deliberately overinclusive, and it
+    // normalises whitespace before deciding, so a TWO-token literal like
+    // "ext-notice ext-notice--" reads as a message and lands in the public
+    // translation catalog. One token reads as machine vocabulary and does not.
+    const id = "notice-" + (++Sonder._noticeSeq);
+    Sonder._notices.unshift({
+      id,
+      owner,
+      title: String(title || ""),
+      body: String(body || ""),
+      level: ["info", "ok", "warn", "err"].includes(level) ? level : "info",
+      onClick: typeof onClick === "function" ? onClick : null
+    });
+    if (Sonder._notices.length > Sonder._noticeCap) {
+      Sonder._notices.length = Sonder._noticeCap;
+    }
+    Sonder._renderNotices();
+    return id;
+  },
+
+  dismissNotice(id) {
+    Sonder._notices = Sonder._notices.filter(notice => notice.id !== id);
+    Sonder._renderNotices();
+  },
+
+  notices() {
+    // A copy, so a reader of the list cannot mutate the registry through it --
+    // the same rule `state()` follows.
+    return Sonder._notices.map(notice => ({
+      id: notice.id, owner: notice.owner, title: notice.title,
+      body: notice.body, level: notice.level
+    }));
+  },
+
+  _renderNotices() {
+    let host = document.getElementById("ext-notices");
+    if (!Sonder._notices.length) {
+      if (host) host.remove();
+      return;
+    }
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "ext-notices";
+      host.setAttribute("aria-live", "polite");
+      document.body.append(host);
+    }
+    host.innerHTML = "";
+    for (const notice of Sonder._notices) {
+      const row = document.createElement("div");
+      row.classList.add("ext-notice");
+      row.classList.add("ext-notice--" + notice.level);
+
+      const text = document.createElement("div");
+      text.className = "ext-notice__text";
+      if (notice.title) {
+        const heading = document.createElement("strong");
+        heading.textContent = notice.title;
+        text.append(heading);
+      }
+      if (notice.body) {
+        const para = document.createElement("div");
+        para.className = "ext-notice__body";
+        para.textContent = notice.body;
+        text.append(para);
+      }
+      // Charged to its owner like every other extension callback, so a throw
+      // inside a notice action counts toward that extension's three strikes
+      // rather than looking like a host defect.
+      if (notice.onClick) {
+        text.classList.add("ext-notice__text--action");
+        text.addEventListener("click",
+          () => Sonder._safe(notice.owner, notice.onClick));
+      }
+      row.append(text);
+
+      const close = document.createElement("button");
+      close.classList.add("ghost");
+      close.classList.add("ext-notice__close");
+      close.textContent = "✕";
+      close.addEventListener("click", () => Sonder.dismissNotice(notice.id));
+      row.append(close);
+
+      host.append(row);
+    }
+  },
+
   // A step key an extension added to the pipeline, rendered its way in the
   // pipeline drawer instead of as raw JSON.
   registerStepRenderer(key, fn) {
@@ -242,6 +369,60 @@ const Sonder = {
     const chatId = typeof S === "object" && S ? S.chatId : null;
     if (!chatId) return Promise.resolve(null);
     return window.api("GET", `/api/extensions/${extId}/state?chat_id=${chatId}`);
+  },
+
+  // ---- The chat lifecycle, as a declared contract ----
+  //
+  // Every one of these was already reachable by hand-writing a URL into
+  // `Sonder.api(...)`, which is to say they worked and were refactor-fragile:
+  // exactly the position the UI mount points were in before they were
+  // declared. Naming them here is the whole change -- a route this facade
+  // covers is one the host owes an extension, and one a refactor has to keep.
+  //
+  // What is NOT here, and will not be: posting an assistant message. Prose in
+  // this engine comes out of the pipeline, and text injected as though the
+  // narrator wrote it would be narration nothing earned -- the one thing
+  // `commit.py` exists to prevent. See `docs/guides/EXTENSIONS.md` section 6a.
+  chats: {
+    list() { return window.api("GET", "/api/chats"); },
+
+    get(chatId) { return window.api("GET", `/api/chats/${chatId}`); },
+
+    create(body) { return window.api("POST", "/api/chats", body || {}); },
+
+    // The host owns which story is open, and this is the supported way to ask
+    // it to change that. Guarded rather than assumed: an extension view can be
+    // mounted on a page that never loaded the chat module.
+    open(chatId) {
+      if (typeof openChat !== "function") return Promise.resolve(null);
+      return openChat(chatId);
+    },
+
+    // Sonder's answer to "clone". A branch forks the story at a turn and
+    // carries its state, cast, lore and checkpoints with it; there is no
+    // shallower copy, because a story is not its transcript.
+    branch(turnId) {
+      return window.api("POST", `/api/turns/${turnId}/branch`, {});
+    },
+
+    // The narration variants of one turn, and choosing among them. This is
+    // the honest analogue of a swipe -- READ THE WARNING in section 6a of the
+    // guide before treating it as one. Selecting an existing variant is free;
+    // generating another is `reroll`, which restores the pre-turn checkpoint
+    // and runs the beat again, because a committed turn has already changed
+    // the world.
+    narration(turnId) {
+      return window.api("GET", `/api/turns/${turnId}/narration`);
+    },
+
+    selectNarration(turnId, variantId) {
+      return window.api("POST", `/api/turns/${turnId}/narration`,
+        { variant_id: variantId });
+    },
+
+    reroll(turnId) {
+      return window.api("POST", `/api/turns/${turnId}/reroll`, {});
+    }
   },
 
   // Redraw whatever the host currently shows. Guarded the same way boot()
@@ -391,6 +572,8 @@ const Sonder = {
     for (const [event, list] of [...Sonder._events]) {
       Sonder._events.set(event, list.filter(entry => entry.owner !== extId));
     }
+    Sonder._notices = Sonder._notices.filter(notice => notice.owner !== extId);
+    Sonder._renderNotices();
     Sonder._faults.delete(extId);
     Sonder._dropAssets(extId);
   },

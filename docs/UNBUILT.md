@@ -3739,6 +3739,31 @@ Fixed by registering the extension directory as a package (relative imports,
 sibling `db.py` would shadow the engine's and two extensions' `helper.py` would
 collide. `tests/test_campaign_slice.py` covers the fix and the slice together.
 
+Three more from the same review landed alongside it, each of which was a thing
+an extension could already do by reaching past the facade — working, and one
+refactor from breaking somebody else's build:
+
+- **The chat lifecycle is a declared contract** — `Sonder.chats` and
+  `api.chats`. Two things the declaration had to SAY rather than provide, both
+  in [`EXTENSIONS.md`](guides/EXTENSIONS.md) §6a: a reroll is a **rollback**,
+  not a re-render, so an adapter porting a "replies are drafts until you send
+  the next message" swipe model onto Sonder's variants will corrupt state; and
+  there is **no way to post prose**, deliberately and permanently, because
+  narration is produced by the pipeline from committed state and a seam for
+  injected text would make `commit.py`'s boundary advisory.
+- **Per-era extension state** — `api.frame_state(chat_id)` writes `extf:<id>`,
+  which is in `FRAME_SCOPED_WORLD_PREFIXES`. `api.state` stays chat-global, so
+  no story migrates. Two homes rather than one flag because the key is what
+  does the scoping — and because it is a real distinction: what an installation
+  IS spans eras, what has HAPPENED does not. `CommitView` carries both. No
+  archive/checkpoint/branch work was needed; the frame remap parses a key
+  generically rather than against a list.
+- **A notification surface** — `Sonder.notify`/`dismissNotice`/`notices`: a
+  standing column, bounded, cleared by `_unregister`, actions charged to their
+  owner. A toast acknowledges what the reader just did and leaves in four
+  seconds, which is the wrong shape for "your objective changed while you were
+  reading".
+
 A third batch closed what a TOTAL-CONVERSION extension needs, measured against
 Directive (`docs/design/DIRECTIVE_HOST_SURFACE.md`): ES module entries
 (`capabilities.ui.module`, dynamic-`import()` loading with an id-bound facade,
@@ -3759,11 +3784,10 @@ seam, `api.llm_json`/`llm_text` give a model call on any configured role,
 
 Still missing:
 
-- **No notification surface and no settings-section mount point.** `toast` is
-  not a notification centre, and an extension's configuration currently has to
-  live in its own panel or a modal it builds. Both are registry entries of the
-  same shape as the three that landed; neither blocked Directive, so neither was
-  guessed at in advance of a second extension wanting them.
+- **No settings-section mount point.** An extension's configuration still has
+  to live in its own panel or a modal it builds. A registry entry of the same
+  shape as the ones that landed; nothing has blocked on it yet, so it has not
+  been guessed at in advance of an extension wanting it.
 - **An extension cannot declare its own model lane.** `api.llm_json`/`llm_text`
   take `role=`, and roles come from `providers.ROLES` — a fixed host list. An
   extension that wants its own configurable model (its own sampler, its own
@@ -3772,11 +3796,6 @@ Still missing:
   porting from a host with JSON-documents-at-logical-paths has no `list`,
   `delete` or `verify` to map onto, and a storage-integrity screen has nothing
   to ask.
-- **The browser chat lifecycle is not a declared contract.** Creating, binding,
-  cloning and opening a chat, and posting an assistant message or a swipe, are
-  all reachable through `Sonder.api(...)` against host routes — which is to say
-  they work and are refactor-fragile, exactly the position the UI mount points
-  were in before this batch.
 - **Declarative advisor stages** — a stage as data (role, prompt, input-scope
   whitelist, anchor) for authors who write no code. Genuinely useful; no longer a
   prerequisite for anything.
@@ -3815,8 +3834,6 @@ Still missing:
 - **Scoped clients**, which is what would make third-party frontends real for
   non-host players: scoped stream and chat reads, `client`-scope tokens. A
   firewall decision, and it deserves its own design note before code.
-- **Frame-scoped extension state.** `ext:<id>` world keys are chat-global (not in
-  `FRAME_SCOPED_WORLD_KEYS`), so they are shared across eras.
 - **`extension_runtime/` is outside the UI catalog's reach.**
   `tools/extract_ui_catalog.py` scans root `*.py` and `agents/*.py`, so the
   dozen-odd extension registration errors that surface in the Extensions menu's

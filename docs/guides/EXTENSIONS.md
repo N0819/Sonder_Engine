@@ -275,12 +275,14 @@ cannot leave a stale file executing.
 | `api.story_view(chat_id)` | canonical story state, versioned and read-only |
 | `api.player_view(chat_id, viewer)` | what one person in the story may be shown |
 | `api.viewers(chat_id)` | the viewer ids `player_view` accepts |
+| `api.chats` | the story lifecycle — create, find yours, read turns (§6a) |
 | `api.provision_story(package, state=..., ...)` | create a whole story atomically |
 | `api.provenance(chat_id)` | what you recorded when you provisioned it |
 | `api.add_director_specialist(name, channels=..., prompt=...)` | a seventh Director family |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
 | `api.state(chat_id)` | per-story state |
+| `api.frame_state(chat_id)` | per-story state scoped to the current era |
 | `api.settings` | install-scoped config |
 | `api.char_state(chat_id, char_id)` | per-character state |
 
@@ -719,6 +721,7 @@ Four homes, all namespaced under `ext:<your-id>`, and nothing else:
 | Call | Stored in | Scope | Write-gated? |
 |---|---|---|---|
 | `api.state(chat_id)` | `world` KV, key `ext:<id>` | one story | yes |
+| `api.frame_state(chat_id)` | `world` KV, key `extf:<id>` | one story, **one era** | yes |
 | `api.char_state(chat_id, char_id)` | `chat_chars.state["ext:<id>"]` | one character in one story | yes |
 | `handle.state` | same as above | same | yes |
 | `api.settings` | settings table, key `ext:<id>` | the install | no |
@@ -749,6 +752,32 @@ mind's whole history to store one counter.
 
 ---
 
+### Two per-story homes, and which one you want
+
+`api.state(chat_id)` is chat-global. `api.frame_state(chat_id)` is scoped to
+the era the story is currently in.
+
+A Sonder story can hold more than one era (`frames.py`), and most of the world
+is already per-era for a reason a campaign inherits whole: a branch that never
+went somewhere must not arrive holding what happened there. `scene`, `known`,
+the clock, the crowds and the couriers are all frame-scoped. Extension state
+was not — so a mission advanced in one era was advanced in every era, and a
+rewind that took the room back left the objective ticked.
+
+The rule of thumb: **what your installation IS goes in `state`; what has
+HAPPENED goes in `frame_state`.** Your configuration for this story and the
+package you provisioned it from do not change because the player walked into a
+different century. Your mission progress does.
+
+Two homes rather than one flag, because the key is what does the scoping —
+a story already holding `ext:<id>` cannot gain scoping without its key
+changing, so a flag would be a migration wearing the word. Both ride
+checkpoints, archives, branches and clones with no schema change; the frame
+remap is generic, so `extf:` needed no code of its own to be carried correctly.
+
+A commit domain receives both (`view.state`, `view.frame_state`), and a
+mission-advancing domain almost always wants the second.
+
 ## 6. Targeting characters
 
 ```python
@@ -777,6 +806,79 @@ defaulted** — you must be able to tell "has never deliberated" from "is calm".
 
 `request_bind` writes immediately (`set_now`): a bind is a host action taken
 outside a running turn, and there is no transaction for it to be rolled back with.
+
+---
+
+## 6a. The story lifecycle, and two things it is not
+
+Creating, finding, branching and opening a story are a declared contract:
+`api.chats` in Python, `Sonder.chats` in the browser. Everything in them was
+already reachable by writing a host URL by hand, which is to say it worked and
+was one refactor from breaking — the position the UI mount points were in
+before they were declared.
+
+| Call | What it is |
+|---|---|
+| `api.chats.create(name=, scenario=, language=)` | a new empty story. For a whole campaign use `provision_story` |
+| `api.chats.mine()` | every story YOU provisioned, by provenance |
+| `api.chats.turns(chat_id, limit=)` | recent committed turns |
+| `Sonder.chats.open(chatId)` | ask the host to open a story |
+| `Sonder.chats.branch(turnId)` | fork the story at a turn |
+| `Sonder.chats.narration(turnId)` / `selectNarration(turnId, variantId)` | the turn's narration variants, and choosing one |
+| `Sonder.chats.reroll(turnId)` | generate another — **read below first** |
+
+Use `mine()` rather than matching on a chat's name. Renaming a story is the
+most ordinary thing a person does to one, and provenance cannot be typed into
+existence.
+
+### A reroll is a rollback, not a re-render
+
+This is the one most likely to cost somebody a day, and it is a difference in
+meaning rather than a missing call.
+
+If you are porting from a host where a reply is a **draft until the next
+message is sent**, the mapping looks obvious — variants are swipes, reroll
+generates another — and it is wrong in a way that corrupts state. In Sonder a
+turn that has committed **has already changed the world**: `state_diff` applied,
+positions moved, memories formed, relationships adjusted. `reroll` restores the
+pre-turn checkpoint and runs the beat again.
+
+So:
+
+- **Selecting an existing variant is free.** `selectNarration` swaps which
+  rendering of an already-committed beat the reader sees.
+- **Generating another is not.** `reroll` rolls the world back to before the
+  turn and replays it. Anything your extension wrote during that turn through
+  a commit domain is rolled back with it — which is exactly why commit domains
+  run inside the transaction, and why an extension that wrote its state in
+  `on_turn_committed` instead would survive a rollback it should not have.
+
+Treat a reroll as "that beat did not happen", never as "render that beat
+differently".
+
+### There is no way to post prose
+
+An extension cannot write an assistant message, and this will not be added.
+
+Narration here is produced by the pipeline from state the Director committed.
+Text inserted as though the narrator wrote it is narration nothing earned, and
+`commit.py` — the sole persistence boundary, where model output stays
+provisional until deterministic code validates it — exists to make exactly that
+impossible. A seam for it would make the whole boundary advisory.
+
+If you want the reader told something, there are three legitimate routes and
+one of them is right for your case:
+
+1. **Make it true.** A Director specialist you registered owns a `state_diff`
+   channel; a commit domain writes inside the turn's transaction. Then
+   perception distributes it and the narrator renders it because it happened.
+2. **Put standing context in front of the narrator** — `api.narration_context`,
+   for setting and situation rather than world fact the engine also tracks.
+3. **Put a rule in front of the Director** — `api.director_context`, for
+   anything that must be true before the engine forms a belief about the beat.
+
+The first is almost always the right one, and it is the only one that survives
+a reroll — because after a reroll it is still true.
 
 ---
 
@@ -812,6 +914,9 @@ down every extension after it. **Wrap your file in an IIFE and guard on
 | `registerView({id, label, render})` | a full-window surface over the transcript; open it with `openView(id)` |
 | `registerComposerControl({id, render})` | a control beside the send button |
 | `openView(id)` / `closeView()` | show or dismiss a registered view |
+| `notify({title, body, level, onClick})` | raise a **standing** notice; returns an id |
+| `dismissNotice(id)` / `notices()` | take one down, or read the column |
+| `chats` | the story lifecycle namespace (§6a) |
 | `registerStepRenderer(key, fn)` | claim a step in the pipeline drawer; `fn(content, container, step)` |
 | `on(event, fn)` / `off(event, fn)` | subscribe to the live turn stream |
 | `state()` | a **copy** of `{boot, chat, chatId}` — you cannot write to `S` through it |
@@ -841,6 +946,32 @@ What you get by registering instead is that the host holds it: a throw is
 charged to you and contained, a disable takes it back down, and a host refactor
 of `#topactions` is not your outage.
 
+
+### 7.1a Notices, and when not to use one
+
+`toast` still exists and is still right for acknowledging something the reader
+just did. It is gone in four seconds whether or not it was read, which makes it
+the wrong shape for the thing a campaign layer actually needs to say: *your
+objective changed while you were reading*.
+
+```javascript
+const id = Sonder.notify({
+  title: "Objective available",
+  body: "Get into the east wing",
+  level: "ok",
+  onClick: () => Sonder.openView("campaign-demo")
+});
+// ...later, when the condition clears
+Sonder.dismissNotice(id);
+```
+
+Take your own notices down. A centre whose entries only the reader can dismiss
+tells them about problems that were fixed an hour ago. The column is bounded
+(oldest fall off) and is cleared for you when your extension is disabled, the
+same as every other registry here.
+
+`onClick` is charged to you like any other callback: a throw inside one counts
+toward your three strikes rather than reading as a host defect.
 
 ### 7.2 Failure containment
 

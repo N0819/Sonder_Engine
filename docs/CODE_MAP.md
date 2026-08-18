@@ -36,7 +36,7 @@
 | `commit.py` | 7951 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
-| `db.py` | 1675 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
+| `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
 | `degradation.py` | 171 |  | — |
 | `dialogue_colors.py` | 248 |  | — |
 | `frames.py` | 220 |  | `db` |
@@ -440,14 +440,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1582 | 50 lines |
-| `conn()` | 1429 | 38 lines |
-| `transaction()` | 1469 | 36 lines |
-| `_backfill_resource_uids()` | 1564 | 17 lines |
-| `qi()` | 1527 | 16 lines |
-| `data_version()` | 1506 | 14 lines |
-| `parse_scoped_world_key()` | 71 | 13 lines |
-| `_execute_retry()` | 1398 | 13 lines |
+| `init()` | 1592 | 50 lines |
+| `conn()` | 1439 | 38 lines |
+| `transaction()` | 1479 | 36 lines |
+| `_backfill_resource_uids()` | 1574 | 17 lines |
+| `qi()` | 1537 | 16 lines |
+| `data_version()` | 1516 | 14 lines |
+| `parse_scoped_world_key()` | 81 | 13 lines |
+| `_execute_retry()` | 1408 | 13 lines |
 
 ### `degradation.py`
 
@@ -1176,9 +1176,9 @@ Sections: Background-character promotion (`:701`); Import (file upload) (`:750`)
 
 Declared functions: `appearanceFillButton()`, `defaultCharacterSheet()`, `greetingCarousel()`, `quickStartModal()`, `charEditor()`, `personaEditor()`, `promotionReviewModal()`, `promoteBackgroundPresence()`, `importModal()`, `generateModal()`, `generateLoreModal()`, `loreModal()`, `exportCharacter()`, `exportPersona()`, `exportLorebook()`.
 
-### `static/js/extensions.js` (450 lines)
+### `static/js/extensions.js` (633 lines)
 
-Sections: Extension host (`:2`); Registration attribution (`:20`); Failure containment (`:42`); ES module entries (`:72`); Registration surface (`:145`); Host services (`:218`); Host-internal accessors (`:275`); Hot load / unload (`:398`).
+Sections: Extension host (`:2`); Registration attribution (`:20`); Failure containment (`:55`); ES module entries (`:85`); Registration surface (`:176`); Notices (`:221`); Host services (`:345`); The chat lifecycle, as a declared contract (`:374`); Host-internal accessors (`:456`); Hot load / unload (`:581`).
 
 ### `static/js/i18n.js` (106 lines)
 

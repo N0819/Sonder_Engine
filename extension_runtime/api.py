@@ -86,13 +86,22 @@ class ExtState:
         return f"<ExtState {self.label}>"
 
 
-def _world_state(ext_id, chat_id, *, gated=True):
+def _world_state(ext_id, chat_id, *, gated=True, frame_scoped=False):
+    """One of an extension's two per-story homes.
+
+    `ext:<id>` is chat-global and `extf:<id>` is per-era -- the second prefix
+    is in `db.FRAME_SCOPED_WORLD_PREFIXES`, which is what does the scoping, so
+    everything downstream (checkpoints, archives, branch and clone frame
+    remapping) already handles it: those paths parse the frame off a key
+    generically rather than checking it against a list.
+    """
     from db import wget, wset
 
-    key = f"ext:{ext_id}"
+    key = f"{'extf' if frame_scoped else 'ext'}:{ext_id}"
     cid = int(chat_id)
     return ExtState(
-        f"extension {ext_id!r} state for chat {cid}",
+        f"extension {ext_id!r} {'frame ' if frame_scoped else ''}state "
+        f"for chat {cid}",
         lambda: wget(cid, key),
         lambda value: wset(cid, key, value),
         gated=gated,
@@ -635,6 +644,15 @@ class CommitView:
         self.turn_id = getattr(turn, "id", None)
         self.state = (_world_state(api.id, self.chat_id, gated=False)
                       if self.chat_id is not None else None)
+        # The per-era half, ungated for the same reason: the transaction is the
+        # guarantee. A commit domain advancing mission state is the likeliest
+        # caller of it -- an objective ticked in one era and not another is
+        # precisely the thing `frame_state` exists for, and a domain that could
+        # only reach the chat-global home would have to reimplement the
+        # scoping itself, wrongly.
+        self.frame_state = (
+            _world_state(api.id, self.chat_id, gated=False, frame_scoped=True)
+            if self.chat_id is not None else None)
 
     def char_state(self, char_id):
         return _char_ext_state(self._api.id, self.chat_id, char_id, gated=False)
@@ -809,6 +827,77 @@ class CommittedTurn:
 
 _STAGE_KEY = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _ANCHOR_MODES = ("after", "before")
+
+
+class ChatAccess:
+    """`api.chats` -- the story lifecycle, declared rather than merely reachable.
+
+    Every call here was already possible by writing the host's own URL into a
+    request. That is the position the UI mount points were in before they were
+    declared: working, and one refactor from breaking somebody else's build.
+    Naming them makes them a contract the host owes.
+
+    What is deliberately absent is a way to POST prose. An extension cannot
+    write an assistant message, and this is not an oversight to be filled in
+    later -- narration in this engine is produced by the pipeline from state
+    the Director committed, and text inserted as though the narrator wrote it
+    is narration nothing earned. `commit.py` exists to make that impossible.
+    An extension that wants the reader told something has three legitimate
+    routes and should pick one: make it TRUE (`state_diff` via a specialist,
+    or a commit domain) and let perception distribute it; put standing context
+    in front of the narrator (`api.narration_context`); or put a rule in front
+    of the Director (`api.director_context`).
+    """
+
+    def __init__(self, api):
+        self._api = api
+
+    def create(self, name="", scenario="", language=None):
+        """A new empty story. For a whole campaign use `provision_story`."""
+        from db import q, qi, transaction
+        import time as _time
+
+        with transaction():
+            chat_id = qi(
+                "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                (str(name or f"Chat {int(_time.time())}"), str(scenario or ""),
+                 _time.time()))
+            if language:
+                from language_runtime import set_story_language
+
+                set_story_language(chat_id, language)
+        return dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
+
+    def mine(self):
+        """Every story THIS extension provisioned, newest first.
+
+        The other half of "create or bind": an extension resuming a campaign
+        needs to find the story it already made, and matching on a chat's NAME
+        would bind to whatever a player happened to rename something to. This
+        reads the provenance written at provisioning time, so it can only ever
+        return stories that are actually yours.
+        """
+        from db import q, wget
+
+        found = []
+        for row in q("SELECT id, name FROM chats ORDER BY id DESC"):
+            stored = wget(row["id"], f"ext:{self._api.id}:provisioned")
+            if isinstance(stored, dict):
+                found.append({"chat_id": row["id"], "name": row["name"],
+                              "provenance": dict(stored)})
+        return found
+
+    def turns(self, chat_id, limit=20):
+        """Recent committed turns of one story, oldest last."""
+        from db import q
+
+        rows = q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
+                 "ORDER BY idx DESC LIMIT ?", (int(chat_id), int(limit)))
+        return [{"turn_id": r["id"], "idx": r["idx"],
+                 "player_input": r["player_input"]} for r in reversed(rows)]
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return f"<ChatAccess {self._api.id}>"
 
 
 class SonderExtensionAPI:
@@ -1243,10 +1332,47 @@ class SonderExtensionAPI:
 
         return facade.viewers(chat_id)
 
+    @property
+    def chats(self):
+        """The story lifecycle. See `ChatAccess`, including what it refuses."""
+        return ChatAccess(self)
+
     # -- storage
 
     def state(self, chat_id):
+        """Per-story state, shared across every era of that story.
+
+        The right home for what an installation is -- your configuration for
+        this story, the package you provisioned it from, anything whose answer
+        does not change because the player walked into a different century.
+        For what does, see `frame_state`.
+        """
         return _world_state(self.id, chat_id)
+
+    def frame_state(self, chat_id):
+        """Per-story state scoped to the FRAME the story is currently in.
+
+        Sonder stories can hold more than one era (`frames.py`), and most of
+        the world is already per-era for a reason a campaign inherits whole: a
+        branch that never went somewhere must not arrive holding what happened
+        there. `scene`, `known`, the clock, the crowds and the couriers are all
+        frame-scoped; an extension's state was not, so a mission advanced in
+        one era was advanced in every era, and a rewind that took the room back
+        left the objective ticked.
+
+        Two homes rather than one flag, because the KEY is the scoping
+        mechanism: a story already holding `ext:<id>` cannot gain scoping
+        without its key changing, so a flag would be a migration wearing the
+        word. It is also a real distinction rather than a workaround -- a
+        campaign's provenance spans eras and its mission state does not, and an
+        author choosing between them is answering a question about their
+        campaign, not about this engine.
+
+        Reads and writes go to whichever frame the turn is running in. Outside
+        a pipeline run there is no active frame and this reads the present, the
+        same rule every other frame-scoped key follows.
+        """
+        return _world_state(self.id, chat_id, frame_scoped=True)
 
     @property
     def settings(self):
@@ -1334,7 +1460,7 @@ def _stage_wrapper(api, key, handler, on_error):
 
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
-    "DirectorBlock", "DirectorContext",
+    "ChatAccess", "DirectorBlock", "DirectorContext",
     "ExtState", "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
     "Request", "SonderExtensionAPI", "StepView", "enter_commit_scope",
     "in_commit_scope", "leave_commit_scope",
