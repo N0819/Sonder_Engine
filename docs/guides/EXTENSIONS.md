@@ -714,7 +714,7 @@ somebody else's save.
 
 ## 5. Persistence
 
-Four homes, all namespaced under `ext:<your-id>`, and nothing else:
+Five homes, all namespaced under `ext:<your-id>`, and nothing else:
 
 | Call | Stored in | Scope | Write-gated? |
 |---|---|---|---|
@@ -722,6 +722,8 @@ Four homes, all namespaced under `ext:<your-id>`, and nothing else:
 | `api.char_state(chat_id, char_id)` | `chat_chars.state["ext:<id>"]` | one character in one story | yes |
 | `handle.state` | same as above | same | yes |
 | `api.settings` | settings table, key `ext:<id>` | the install | no |
+| `api.documents(chat_id)` | `world` KV, one row per document at `ext:<id>:doc:<path>` | one story | yes |
+| `api.documents()` | settings table, same keys | the install | no |
 
 Every one of those already rides checkpoints, archives and branches **wholesale**,
 so you inherit rewind, export and clone without a schema change and without a line
@@ -746,6 +748,65 @@ Per-character writes are read-modify-write through `scene.set_char_state`. Never
 build a fresh state dict: `chat_chars.state` carries `active_state`, `interior`,
 `stance`, the tell ledgers and spatial memory, and a blind overwrite deletes a
 mind's whole history to store one counter.
+
+### Documents
+
+`api.documents(chat_id)` is for the extension whose unit of state is a **file**
+rather than a value — a storage adapter ported from a host that kept JSON
+documents at logical paths (the Directive port's adapter is exactly that, and
+its Settings screen's storage-integrity check calls `list` and `verify`;
+`docs/design/DIRECTIVE_HOST_SURFACE.md` §6 is the measurement). It is **not** a
+new table: a story document is one `world` row at `ext:<id>:doc:<path>`, an
+install document one settings row at the same key — the `world` table already
+*is* a namespaced JSON-document store keyed `(chat_id, key)`, and every
+carriage a durable table would owe (checkpoint snapshot/restore, archive
+export/import, branch cloning, cascade on delete) copies it wholesale with no
+per-key knowledge. One row per document, so a put never rewrites a sibling and
+`list` never deserializes the whole store.
+
+```python
+docs = api.documents(chat_id)              # story scope
+docs.put_now("missions/epsilon", {...})    # or .put(...) inside a hook
+docs.get("missions/epsilon")               # the value; default= for absence
+docs.stat("missions/epsilon")              # metadata, or None
+docs.list("missions")     # [{path, size, sha256, revision, created_at, updated_at}]
+docs.verify()             # {"ok", "checked", "damaged": [{path, error}]}
+docs.delete_now("missions/epsilon")        # True if it existed
+docs.delete_prefix_now("missions")         # count removed
+api.documents().put_now("library/pack-3", {...})   # install scope
+```
+
+The details each carry a reason:
+
+- **Two scopes, because they answer different questions.** Story documents
+  (`chat_id` given) are computed *from* the story and ride its history: a
+  rewound beat takes its documents with it, a branch holds them as of the
+  branch point. Install documents (`chat_id=None`) are the campaign library —
+  they exist before any story does, so like `api.settings` they deliberately
+  do **not** ride story history: rerolling a beat must not delete the host's
+  library.
+- **Paths are validated as the attacker-adjacent input they are**, even though
+  no filesystem is ever touched (the path is an exact row key): `/`-separated
+  segments of letters, digits, `._-`, each starting alphanumeric (so `.` and
+  `..` are unspellable), max 64 chars a segment and 256 a path. Refused, with
+  the rule in the message.
+- **Ceilings refuse rather than truncate** — 128 KiB of canonical JSON per
+  document, 256 documents per extension per scope. A story document is
+  re-stored in *every* checkpoint of the story, so its true cost is size times
+  story length; and a truncated JSON document is not a smaller document, it is
+  a parse error that `verify` would report fifty beats after the write that
+  caused it. The writer must learn at write time.
+- **Story writes are gated like `state.set`**, with `put_now`/`delete_now` as
+  the named escapes, for the same ghost-state hazard §5 opens with. Install
+  writes are ungated like `api.settings`. `CommitView.documents()` is ungated
+  because inside the turn's transaction the transaction is the guarantee.
+- **`verify` reports damage, it never throws** — an integrity check that dies
+  on the first broken row cannot tell you about the second. It checks each row
+  parses, has an envelope, and that the document's canonical `sha256` matches
+  the recorded one (canonical serialization, so a reordered dict is not
+  damage). `get` on a damaged row *raises* rather than returning `default`:
+  absence and damage are different answers. A `put` over a damaged row
+  succeeds — overwriting damage is repair.
 
 ---
 
@@ -1032,6 +1093,10 @@ migration of everything already installed.
 | `POST /api/extensions/{id}/disable` | disable; deregisters |
 | `DELETE /api/extensions/{id}` | remove the directory, keep the story state |
 | `GET /api/extensions/{id}/state?chat_id=N` | that extension's per-story state |
+| `GET /api/extensions/{id}/documents?chat_id=N&prefix=` | list that extension's documents (omit `chat_id` for install scope) |
+| `GET /api/extensions/{id}/documents/verify?chat_id=N&prefix=` | the storage-integrity report |
+| `GET`/`PUT`/`DELETE /api/extensions/{id}/document?chat_id=N&path=...` | one document; `PUT` body is `{"doc": <value>}`; the path is a query parameter so a document may be named anything |
+| `DELETE /api/extensions/{id}/documents?chat_id=N&prefix=...` | delete a prefix; `prefix` required so a forgotten parameter cannot mean "everything" |
 | `GET /api/extensions/ui.js` | the concatenated script bundle |
 | `GET /api/extensions/ui.css` | the concatenated stylesheet |
 | `GET /api/extensions/{id}/ui.js` | one extension's script, for hot-loading |

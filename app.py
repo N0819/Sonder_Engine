@@ -1635,6 +1635,95 @@ def extension_state(eid: str, chat_id: int):
             "state": wget(chat_id, f"ext:{_extension_id(eid)}")}
 
 
+def _extension_documents(eid: str, chat_id):
+    """One extension's document store, scope chosen by the query.
+
+    `chat_id` present is story scope (rides checkpoints/archives/branches
+    with the rest of the `ext:<id>` namespace); absent is install scope
+    (the settings table, outside story history, like `api.settings`).
+    Paths and prefixes travel as QUERY parameters rather than URL path
+    segments, so a document may be named `verify` or `state` without
+    shadowing anything and a prefix may be empty without a route ambiguity.
+    """
+    return extension_runtime.DocumentStore(_extension_id(eid), chat_id)
+
+
+@app.get("/api/extensions/{eid}/documents")
+def extension_documents_list(eid: str, chat_id: int | None = None,
+                             prefix: str = ""):
+    try:
+        store = _extension_documents(eid, chat_id)
+        return {"id": _extension_id(eid), "chat_id": chat_id,
+                "documents": store.list(prefix)}
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/extensions/{eid}/documents/verify")
+def extension_documents_verify(eid: str, chat_id: int | None = None,
+                               prefix: str = ""):
+    """The storage-integrity read: damage is rows in the report, never a 500."""
+    try:
+        return _extension_documents(eid, chat_id).verify(prefix)
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/api/extensions/{eid}/document")
+def extension_document_get(eid: str, path: str, chat_id: int | None = None):
+    try:
+        store = _extension_documents(eid, chat_id)
+        meta = store.stat(path)
+        if meta is None:
+            raise HTTPException(404, f"No document at {path!r}")
+        return {"path": meta["path"], "doc": store.get(path), "meta": meta}
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.put("/api/extensions/{eid}/document")
+def extension_document_put(eid: str, path: str, body: dict = Body(...),
+                           chat_id: int | None = None):
+    """Store one document. The body is `{"doc": <any JSON value>}` -- an
+    envelope rather than the raw value, because a bare list or scalar body
+    would be indistinguishable from a malformed request.
+
+    Written with `put_now`: a route call is a host action outside any turn,
+    with no transaction to be rolled back with -- the same reasoning that
+    leaves `NarrationBlock` writes ungated.
+    """
+    if "doc" not in body:
+        raise HTTPException(400, 'body must be {"doc": <value>}')
+    try:
+        store = _extension_documents(eid, chat_id)
+        return store.put_now(path, body["doc"])
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/extensions/{eid}/document")
+def extension_document_delete(eid: str, path: str,
+                              chat_id: int | None = None):
+    try:
+        store = _extension_documents(eid, chat_id)
+        return {"deleted": store.delete_now(path)}
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/extensions/{eid}/documents")
+def extension_documents_delete(eid: str, prefix: str,
+                               chat_id: int | None = None):
+    """Delete a whole prefix. `prefix` is REQUIRED so that a caller who
+    forgot the parameter gets a 422, not an empty prefix silently matching
+    the entire store; passing `prefix=` explicitly does mean everything."""
+    try:
+        store = _extension_documents(eid, chat_id)
+        return {"deleted": store.delete_prefix_now(prefix)}
+    except extension_runtime.ExtensionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.get("/api/extensions/ui.js")
 def extensions_ui():
     # Served under /api/ rather than /static/ so `access_control` gates it:

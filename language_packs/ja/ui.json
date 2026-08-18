@@ -1889,5 +1889,7 @@
   "🔊 Mute": "🔊 ミュート",
   "🔒 locked": "🔒 ロック済み",
   "🔒 persona secrets": "🔒 ペルソナの秘密",
-  "🔗 Generate invite": "🔗 招待を生成"
+  "🔗 Generate invite": "🔗 招待を生成",
+  "body must be {\"doc\": <value>}": "本文は {\"doc\": <value>} の形でなければなりません",
+  "No document at ${path}": "${path} にドキュメントはありません"
 }
