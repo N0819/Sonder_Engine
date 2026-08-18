@@ -33,8 +33,9 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7851 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7590 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `commit_place_graph`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
+| `commit_place_graph.py` | 274 |  | `spatial` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -402,14 +403,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5887 | 1264 lines |
-| `prepare_scene_commit()` | 2253 | 452 lines |
-| `track_background_presences()` | 4082 | 341 lines |
-| `apply_attire_diff()` | 1957 | 294 lines |
-| `commit_world_entities()` | 3281 | 287 lines |
-| `_commit_all_locked()` | 7569 | 226 lines |
-| `pick_background_reactors()` | 4566 | 178 lines |
-| `commit_transit_sweep()` | 2754 | 169 lines |
+| `prepare_memory_commit()` | 5626 | 1264 lines |
+| `prepare_scene_commit()` | 1992 | 452 lines |
+| `track_background_presences()` | 3821 | 341 lines |
+| `apply_attire_diff()` | 1696 | 294 lines |
+| `commit_world_entities()` | 3020 | 287 lines |
+| `_commit_all_locked()` | 7308 | 226 lines |
+| `pick_background_reactors()` | 4305 | 178 lines |
+| `commit_transit_sweep()` | 2493 | 169 lines |
 
 ### `commit_common.py`
 
@@ -423,6 +424,13 @@
 | `_known_name_roster()` | 223 | 27 lines |
 | `_resolve_roster_name()` | 281 | 20 lines |
 | `_form_in()` | 101 | 16 lines |
+
+### `commit_place_graph.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `update_place_graph()` | 33 | 153 lines |
+| `record_spatial_experience()` | 188 | 87 lines |
 
 ### `couriers.py`
 
