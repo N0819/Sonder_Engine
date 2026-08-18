@@ -1151,17 +1151,18 @@ def _bootstrap_extensions():
     """Installed extensions, never fatally. Same posture as _bootstrap_language:
     a broken extension costs the host that extension, not the whole UI."""
     try:
-        return extension_runtime.listing(), extension_runtime.load_errors()
+        return (extension_runtime.listing(), extension_runtime.load_errors(),
+                extension_runtime.registered_model_lanes())
     except Exception as exc:
         logging.getLogger("fiction_engine.pipeline").exception(
             "extension listing failed")
-        return [], [{"dir": "", "error": str(exc)}]
+        return [], [{"dir": "", "error": str(exc)}], []
 
 
 @app.get("/api/bootstrap")
 def bootstrap():
     selected_ui, language_packs, language_error = _bootstrap_language()
-    extensions, extension_errors = _bootstrap_extensions()
+    extensions, extension_errors, extension_lanes = _bootstrap_extensions()
     return {
         "providers": [_provider_public(r["id"]) for r in q("SELECT id FROM providers")],
         "provider_presets": DEFAULT_BASES,
@@ -1250,6 +1251,12 @@ def bootstrap():
         # own row in the panel, never the application's entry point.
         "extensions": extensions,
         "extension_errors": extension_errors,
+        # Enabled extensions' declared model lanes ({ext_id, name, role,
+        # label, description}), rendered by the models panel as rows of their
+        # own beneath the host roles. NOT part of `roles`: that list is the
+        # host's fixed vocabulary, and the panel needs to know which rows are
+        # an extension's to label them as such. Empty with nothing installed.
+        "extension_lanes": extension_lanes,
     }
 
 @app.put("/api/agent_models")
@@ -1257,7 +1264,15 @@ def put_agent_models(body: dict = Body(...)):
     # Only the EMBEDDINGS role bears on stored vectors. Changing the narrator
     # or director model has nothing to do with them, so comparing before and
     # after keeps this from becoming a nag on every settings write.
-    _before = (json.loads(get_setting("agent_models") or "{}") or {}).get("embeddings") or {}
+    _stored = json.loads(get_setting("agent_models") or "{}") or {}
+    _before = _stored.get("embeddings") or {}
+    # The panel PUTs the whole map, built from the rows it rendered -- which
+    # is how clearing a row works, and which would also delete the stored
+    # configuration of any extension lane whose extension is disabled or
+    # removed (those rows are not rendered). That configuration is the host's
+    # work, so it rides through the save; a LIVE lane omitted from the body
+    # was genuinely cleared and stays dropped.
+    body = extension_runtime.keep_orphan_lane_rows(_stored, body)
     set_setting("agent_models", json.dumps(body))
     _after = (body or {}).get("embeddings") or {}
     changed = ((_before.get("provider"), _before.get("model"))
@@ -1443,6 +1458,11 @@ def put_reasoning_effort(body: dict = Body(...)):
             lvl = _coerce_reasoning_effort(level)
             if lvl:
                 cleaned[str(role)] = lvl
+        # Same carry-through as `put_agent_models`: the panel's full map only
+        # names the roles it rendered, and a disabled extension's lane is not
+        # among them -- its stored effort is the host's choice and survives.
+        cleaned = extension_runtime.keep_orphan_lane_rows(
+            reasoning_efforts(), cleaned)
     set_setting("reasoning_effort", json.dumps(cleaned))
     return {"ok": True, "reasoning_effort": cleaned}
 

@@ -3788,10 +3788,15 @@ Still missing:
   to live in its own panel or a modal it builds. A registry entry of the same
   shape as the ones that landed; nothing has blocked on it yet, so it has not
   been guessed at in advance of an extension wanting it.
-- **An extension cannot declare its own model lane.** `api.llm_json`/`llm_text`
-  take `role=`, and roles come from `providers.ROLES` — a fixed host list. An
-  extension that wants its own configurable model (its own sampler, its own
-  provider row in the host's settings) has to borrow a host role instead.
+- **A model lane cannot be declared without Python.** `api.add_model_lane` is
+  built (lanes are namespaced `ext:<id>:<name>`, rendered in the host's model
+  settings, inherit `default` when blank, and log spend under their own role
+  string), but declaring one happens in `register(api)`, so a data-only
+  extension cannot have one. A manifest-declared lane rides the same residual
+  as declarative advisor stages below — a lane is also the smaller half of
+  that item. Nor can a lane ship a SUGGESTED model: the host configures it or
+  it inherits `default`, because a manifest choosing a model is an install
+  choosing spend.
 - **No document storage.** The four namespaced homes are KV. An extension
   porting from a host with JSON-documents-at-logical-paths has no `list`,
   `delete` or `verify` to map onto, and a storage-integrity screen has nothing

@@ -2383,7 +2383,10 @@ function renderFullApiSettings(b) {
     // edited directly, it's pinned and stops following.
     function propagateToFollowers(provider, model) {
       defaultValues = { provider, model };
-      for (const role of S.boot.roles) {
+      // Every RENDERED row, not S.boot.roles: extension lanes follow Default
+      // exactly as host roles do, and iterating the host list alone would
+      // leave a following lane row displaying a stale Default.
+      for (const role of Object.keys(roleMeta)) {
         const meta = roleMeta[role];
         if (meta && meta.following) meta.rebuild(provider, model);
       }
@@ -2409,6 +2412,22 @@ function renderFullApiSettings(b) {
     const orderedRoles = [...S.boot.roles].sort(
       (a, b) => (ROLE_ORDER[a] ?? 50) - (ROLE_ORDER[b] ?? 50)
     );
+
+    // Extension-declared model lanes (`api.add_model_lane`), rendered LAST,
+    // after every host role: they are guests in this panel, and their roles
+    // are namespaced (`ext:<id>:<name>`) so none can collide with a host
+    // row. Each gets the full generic row -- follow-Default, samplers,
+    // backups, reasoning effort -- because a lane IS a role to everything
+    // downstream; only the label differs, since `ext:directive:planner`
+    // names a storage key, not a thing a host recognises. The list comes
+    // from the bootstrap (extension_runtime.registered_model_lanes), which
+    // empties with the extension's registration, so a disabled or removed
+    // extension leaves no phantom row here.
+    const laneByRole = {};
+    for (const lane of S.boot.extension_lanes || []) {
+      laneByRole[lane.role] = lane;
+      orderedRoles.push(lane.role);
+    }
 
     // Embedding models have to be OFFERED, not filtered for: a provider's
     // /models catalogue lists what it will CHAT with, and embedding models are
@@ -2666,16 +2685,23 @@ function renderFullApiSettings(b) {
         };
       }
 
+      const lane = laneByRole[role];
       b.append(el(
         "div",
         { class: "card" },
+        // A lane row says whose it is and what it is for; the raw namespaced
+        // role only appears as the tooltip, because it is a storage key.
+        lane
+          ? el("div", { class: "small dim" },
+               `🧩 ${lane.ext_id}${lane.description ? " — " + lane.description : ""}`)
+          : null,
         el(
           "div",
           { class: "row" },
           el(
             "b",
-            { style: "width:130px" },
-            role
+            { style: "width:130px", ...(lane ? { title: role } : {}) },
+            lane ? lane.label : role
           ),
           followChk
             ? el(
