@@ -1,4 +1,5 @@
 import os
+import pathlib
 import stat
 import sys
 
@@ -40,6 +41,25 @@ def _check_harness(monkeypatch, responses):
     monkeypatch.setattr(updates, "_upstream_ref", lambda branch: "origin/main")
     monkeypatch.setattr(updates, "_git", fake)
     return fake
+
+
+def test_the_install_root_is_the_repository_not_the_package():
+    """The one property every other test in this file monkeypatches away.
+
+    Nine tests here patch `REPO_ROOT` or `_is_git_repo` outright, so when
+    `updates.py` moved into `core/` and `REPO_ROOT` started naming
+    `<repo>/core`, the whole suite stayed green while the feature was dead:
+    `_is_git_repo()` compares the checkout's top level against this path, so
+    it returned False for every real install and both routes answered "This
+    install is not a git checkout".
+
+    Asserted against the real module path, unpatched, because that is the
+    thing that broke.
+    """
+    root = pathlib.Path(updates.REPO_ROOT)
+    assert (root / "core" / "updates.py").is_file()
+    assert (root / "Makefile").is_file()
+    assert root.name != "core"
 
 
 def test_git_repo_check_rejects_an_unrelated_parent_checkout(

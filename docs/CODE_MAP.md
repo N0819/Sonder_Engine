@@ -33,11 +33,12 @@
 | `core/jobs.py` | 209 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 118 |  | — |
 | `core/outofband.py` | 276 |  | `core.logging_utils` |
+| `core/paths.py` | 32 |  | — |
 | `core/pipeline_context.py` | 312 |  | `core.db` |
-| `core/updates.py` | 394 |  | — |
+| `core/updates.py` | 398 |  | `core.paths` |
 | `dressing/__init__.py` | 6 |  | — |
-| `dressing/ambience.py` | 2090 |  | `core`, `core.db`, `dressing.backdrops`, `world.weather` |
-| `dressing/backdrops.py` | 1262 |  | `core`, `core.db`, `core.logging_utils`, `world.spatial`, `world.weather` |
+| `dressing/ambience.py` | 2090 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
+| `dressing/backdrops.py` | 1263 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/llm_quality.py` | 655 |  | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 |  | `llm.providers` |
@@ -426,14 +427,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check_updates()` | 290 | 53 lines |
-| `install_updates()` | 345 | 50 lines |
-| `_git()` | 75 | 41 lines |
-| `_github_releases()` | 252 | 36 lines |
-| `_upstream_ref()` | 139 | 24 lines |
-| `_remote_tip()` | 175 | 15 lines |
-| `_is_git_repo()` | 118 | 14 lines |
-| `_repo_slug()` | 225 | 13 lines |
+| `check_updates()` | 294 | 53 lines |
+| `install_updates()` | 349 | 50 lines |
+| `_git()` | 79 | 41 lines |
+| `_github_releases()` | 256 | 36 lines |
+| `_upstream_ref()` | 143 | 24 lines |
+| `_remote_tip()` | 179 | 15 lines |
+| `_is_git_repo()` | 122 | 14 lines |
+| `_repo_slug()` | 229 | 13 lines |
 
 ### `dressing/ambience.py`
 
@@ -452,14 +453,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `generate_backdrop()` | 1068 | 115 lines |
-| `room_projection()` | 526 | 73 lines |
-| `visual_signature()` | 135 | 48 lines |
-| `scene_after_turn()` | 690 | 35 lines |
-| `build_backdrop_request()` | 727 | 35 lines |
-| `branch_lineage()` | 216 | 34 lines |
-| `compose_prompt()` | 833 | 34 lines |
-| `compose_revision()` | 895 | 33 lines |
+| `generate_backdrop()` | 1069 | 115 lines |
+| `room_projection()` | 527 | 73 lines |
+| `visual_signature()` | 136 | 48 lines |
+| `scene_after_turn()` | 691 | 35 lines |
+| `build_backdrop_request()` | 728 | 35 lines |
+| `branch_lineage()` | 217 | 34 lines |
+| `compose_prompt()` | 834 | 34 lines |
+| `compose_revision()` | 896 | 33 lines |
 
 ### `llm/llm_quality.py`
 
