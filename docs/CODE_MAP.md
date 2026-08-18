@@ -12,8 +12,9 @@
 | `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
-| `agents/director.py` | 6451 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_lingua`, `agents.director_movement`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 5819 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/director_contact.py` | 421 |  | `character_schema`, `spatial` |
+| `agents/director_floors.py` | 678 |  | `agents.director_lingua`, `character_schema`, `scene` |
 | `agents/director_lingua.py` | 22 |  | — |
 | `agents/director_movement.py` | 938 |  | `agents.director_lingua`, `character_schema`, `spatial` |
 | `agents/director_views.py` | 453 |  | `agents.common`, `character_schema`, `scene` |
@@ -149,14 +150,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4944 | 1474 lines |
+| `director_resolve()` | 4312 | 1474 lines |
 | `director_interpret()` | 312 | 534 lines |
-| `_reconcile_resolution()` | 3125 | 445 lines |
-| `_evidence_present()` | 2196 | 232 lines |
-| `_run_specialists()` | 4569 | 211 lines |
-| `_specialist_payload()` | 4350 | 133 lines |
-| `_orchestration_scope_backstop()` | 4800 | 131 lines |
-| `_verify_already_true()` | 2774 | 126 lines |
+| `_reconcile_resolution()` | 2493 | 445 lines |
+| `_evidence_present()` | 1564 | 232 lines |
+| `_run_specialists()` | 3937 | 211 lines |
+| `_specialist_payload()` | 3718 | 133 lines |
+| `_orchestration_scope_backstop()` | 4168 | 131 lines |
+| `_verify_already_true()` | 2142 | 126 lines |
 
 ### `agents/director_contact.py`
 
@@ -169,6 +170,19 @@
 | `_merge_character_material_effects()` | 353 | 35 lines |
 | `_merge_character_contact_endings()` | 390 | 32 lines |
 | `_canonical_scene_subject()` | 27 | 6 lines |
+
+### `agents/director_floors.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_awareness_exits()` | 417 | 98 lines |
+| `_narrated_destruction_subjects()` | 584 | 79 lines |
+| `_clause_attributed_subjects()` | 245 | 50 lines |
+| `_unsupported_player_awareness()` | 146 | 43 lines |
+| `_untracked_restraint_subjects()` | 31 | 32 lines |
+| `_awareness_view()` | 356 | 31 lines |
+| `_sleep_elapsed()` | 325 | 29 lines |
+| `_untracked_unconsciousness_subjects()` | 517 | 23 lines |
 
 ### `agents/director_lingua.py`
 
