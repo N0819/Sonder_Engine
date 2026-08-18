@@ -632,6 +632,31 @@ def _reads_as_bool(value):
     return False
 
 
+#: How many entries an unbounded list of FREE STRINGS may carry.
+#:
+#: A list of bare strings is the one shape in this schema that invites a model
+#: to ENUMERATE, and enumeration is where a stuck sampler locks: each
+#: comma-separated item is highly predictable from the last. Live, a character
+#: step's `serves` began with real aims, drifted into the payload's own field
+#: names, ran off into JSON Schema meta-keywords, and cycled those for
+#: thousands of tokens.
+#:
+#: 64 is measured, not guessed. Across 26,975 stored variants -- the whole of a
+#: live install's history -- the longest free-string list ever produced was 13
+#: (`state`, and `dialogue_order` in a crowded beat). The largest structure of
+#: ANY kind was a 28-key `entities` map. So this sits roughly five times above
+#: anything real play has ever generated, which is the point: it must never
+#: decide the shape of legitimate output, only stop a runaway.
+#:
+#: Dicts and lists of MODELS are deliberately NOT capped, though they were
+#: measured in the same sweep. Dropping the tail of `serves` costs advisory
+#: metadata; dropping the tail of `entities` or `positions` costs world state
+#: that commit.py is about to persist. And a model cannot fall into an object
+#: list the way it falls into a comma-separated one -- every item needs
+#: structure, which breaks the cadence a loop rides on.
+FREE_STRING_LIST_LIMIT = 64
+
+
 def _lenient_coerce(value, declared):
     """The one coercion, given a value and the shape its field declared."""
     if value is None and not declared.allows_none:
@@ -692,6 +717,10 @@ def _lenient_coerce(value, declared):
     # string`, which is how a model answering with room NUMBERS instead of
     # room names costs a beat.
     if declared.is_list and isinstance(value, list):
+        # The runaway ceiling, applied before the per-item coercion so a
+        # thousand-element loop is not walked element by element first.
+        if declared.item_type is str and len(value) > FREE_STRING_LIST_LIMIT:
+            value = value[:FREE_STRING_LIST_LIMIT]
         members = [_coerce_member(item, declared.item_type) for item in value]
         if declared.item_type is dict:
             # A BARE `list[dict]` -- `relevant_lore`, `npc_suggestions`,
