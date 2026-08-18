@@ -33,7 +33,8 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 6765 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `commit_destruction`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 5921 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit_attire.py` | 862 |  | `attire`, `commit_common` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
 | `commit_destruction.py` | 413 |  | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
 | `commit_place_graph.py` | 274 |  | `spatial` |
@@ -405,14 +406,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 4801 | 1264 lines |
-| `prepare_scene_commit()` | 1167 | 452 lines |
-| `track_background_presences()` | 2996 | 341 lines |
-| `apply_attire_diff()` | 871 | 294 lines |
-| `commit_world_entities()` | 2195 | 287 lines |
-| `_commit_all_locked()` | 6483 | 226 lines |
-| `pick_background_reactors()` | 3480 | 178 lines |
-| `commit_transit_sweep()` | 1668 | 169 lines |
+| `prepare_memory_commit()` | 3957 | 1264 lines |
+| `prepare_scene_commit()` | 323 | 452 lines |
+| `track_background_presences()` | 2152 | 341 lines |
+| `commit_world_entities()` | 1351 | 287 lines |
+| `_commit_all_locked()` | 5639 | 226 lines |
+| `pick_background_reactors()` | 2636 | 178 lines |
+| `commit_transit_sweep()` | 824 | 169 lines |
+| `commit_mapping()` | 3331 | 142 lines |
+
+### `commit_attire.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `apply_attire_diff()` | 569 | 294 lines |
+| `interpret_attire_notes()` | 155 | 115 lines |
+| `_fold_duplicate_shed_garments()` | 272 | 85 lines |
+| `_heal_attire_identity_keys()` | 32 | 72 lines |
+| `_fold_worn_garment_entities()` | 359 | 69 lines |
+| `_mint_shed_garments()` | 501 | 66 lines |
+| `_adopt_shed_record()` | 446 | 34 lines |
+| `_beat_voices()` | 106 | 25 lines |
 
 ### `commit_common.py`
 
