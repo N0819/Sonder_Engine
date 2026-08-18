@@ -337,9 +337,12 @@ def _entity_alias_map(cid):
         for key in keys:
             amap.setdefault(key, canonical)
 
+    # No `retired_turn_id IS NULL` filter: the projection has no retirement.
+    # A removed entity's row is DELETED with the blob it projects, so the
+    # filter excluded nothing and implied a row state that cannot occur --
+    # see `test_the_entity_projection_never_retires_a_row`.
     for row in q(
-        "SELECT entity_id, name, payload FROM world_entities "
-        "WHERE chat_id=? AND retired_turn_id IS NULL",
+        "SELECT entity_id, name, payload FROM world_entities WHERE chat_id=?",
         (cid,),
     ):
         try:
