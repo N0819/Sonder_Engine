@@ -33,11 +33,12 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 5438 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 5149 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `commit_attire.py` | 862 |  | `attire`, `commit_common` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
 | `commit_destruction.py` | 413 |  | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
 | `commit_entities.py` | 499 |  | `character_schema`, `commit_common`, `db`, `scene`, `spatial` |
+| `commit_ledgers.py` | 302 |  | `commit_common`, `db` |
 | `commit_place_graph.py` | 274 |  | `spatial` |
 | `commit_room_registry.py` | 444 |  | `character_schema`, `commit_common`, `db`, `spatial` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
@@ -407,14 +408,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 3474 | 1264 lines |
-| `prepare_scene_commit()` | 326 | 452 lines |
-| `track_background_presences()` | 1669 | 341 lines |
-| `_commit_all_locked()` | 5156 | 226 lines |
-| `pick_background_reactors()` | 2153 | 178 lines |
-| `commit_transit_sweep()` | 827 | 169 lines |
-| `commit_mapping()` | 2848 | 142 lines |
-| `prepare_mapping_commit()` | 2717 | 129 lines |
+| `prepare_memory_commit()` | 3185 | 1264 lines |
+| `prepare_scene_commit()` | 330 | 452 lines |
+| `track_background_presences()` | 1673 | 341 lines |
+| `_commit_all_locked()` | 4867 | 226 lines |
+| `pick_background_reactors()` | 2157 | 178 lines |
+| `commit_transit_sweep()` | 831 | 169 lines |
+| `commit_mapping()` | 2852 | 142 lines |
+| `prepare_mapping_commit()` | 2721 | 129 lines |
 
 ### `commit_attire.py`
 
@@ -465,6 +466,17 @@
 | `_subjects_that_moved()` | 33 | 36 lines |
 | `_subjects_targeted_by_an_action()` | 71 | 21 lines |
 | `_is_gated_awareness()` | 17 | 14 lines |
+
+### `commit_ledgers.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_world_pressure()` | 188 | 115 lines |
+| `commit_obligations()` | 67 | 65 lines |
+| `world_pressure_view()` | 144 | 22 lines |
+| `_find_obligation()` | 45 | 21 lines |
+| `pending_obligation_view()` | 24 | 20 lines |
+| `_find_pressure()` | 168 | 18 lines |
 
 ### `commit_place_graph.py`
 
