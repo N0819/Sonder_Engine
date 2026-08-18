@@ -31,9 +31,11 @@ from world.spatial import (
     _SIGHT_BARRIERS,
     _PASSABLE_BARRIERS,
     _AMBIENT_BARRIERS,
+    _SCENT_BARRIER_LEVELS,
     has_visual,
     merge_scene_with_diff,
     normalize_barrier,
+    scent_level,
     spatial_rel,
     visible_adjacent_rooms,
 )
@@ -67,6 +69,30 @@ class TestTheVocabulary:
         assert "bars" in _SIGHT_BARRIERS
         assert "bars" not in _PASSABLE_BARRIERS
         assert "bars" in _AMBIENT_BARRIERS      # sound carries through a cage
+
+    def test_the_fourth_question_is_graded_and_scent_level_reads_it(
+            self, monkeypatch):
+        """Scent is not a yes/no like its three siblings -- a closed door and a
+        curtain both pass it, weakened -- so its vocabulary is a table, and
+        `scent_level` must be that table's only reader.
+
+        It was not. The set existed, was documented in AGENTS.md as gating
+        scent "the same way `_SIGHT_BARRIERS` gates sight", was asserted on by
+        a test, and decided nothing: `scent_level` restated the same rule as
+        literal tuples in its own body. Two statements of one rule, free to
+        disagree, with a test guarding the one that did not run.
+        """
+        assert _SCENT_BARRIER_LEVELS["open"] == "full"
+        assert _SCENT_BARRIER_LEVELS["closed_door"] == "muffled"
+        assert "window" not in _SCENT_BARRIER_LEVELS  # glass stops air
+        assert "wall" not in _SCENT_BARRIER_LEVELS
+
+        # The guard that the constant is load-bearing: move the rule and the
+        # function moves with it.
+        monkeypatch.setitem(_SCENT_BARRIER_LEVELS, "open", "muffled")
+        assert scent_level({"barrier": "open"}) == "muffled"
+        monkeypatch.delitem(_SCENT_BARRIER_LEVELS, "bars")
+        assert scent_level({"barrier": "bars"}) == "none"
 
 
 class TestSightThroughBarriers:

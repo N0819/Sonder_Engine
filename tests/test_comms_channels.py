@@ -515,7 +515,7 @@ class TestOneWayWindow:
         assert sp.hear_level(rel, "normal") == "none"
         assert "one_way_window" not in sp._PASSABLE_BARRIERS
         assert "one_way_window" not in sp._AMBIENT_BARRIERS
-        assert "one_way_window" not in sp._SCENT_BARRIERS
+        assert "one_way_window" not in sp._SCENT_BARRIER_LEVELS
 
     @pytest.mark.parametrize("written", [
         "two-way mirror", "two_way_mirror", "one-way mirror", "one_way_mirror",

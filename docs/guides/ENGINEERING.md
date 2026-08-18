@@ -275,10 +275,10 @@ separately. Sight is decided by `spatial_barriers._SIGHT_BARRIERS` (through
 `sight_level`/`has_visual`); sound is graded per barrier inside
 `spatial_senses.hear_level`, shifted by material
 (`_MATERIAL_SOUND_STEPS`/`_SOUND_LADDER`) — `_AMBIENT_BARRIERS` gates only
-`ambient_scope`'s ambience reach, not the voice channel; scent is graded
-inline in `spatial_senses.scent_level` (the declared `_SCENT_BARRIERS` set is
-currently read by nothing — `docs/experiments/AUDIT_SPATIAL.md` F1); touch is
-containment. A window passes sight only; bars pass sight and
+`ambient_scope`'s ambience reach, not the voice channel; scent is graded by
+`spatial_barriers._SCENT_BARRIER_LEVELS`, a TABLE rather than a set because
+scent is the one channel with degrees, and `spatial_senses.scent_level` is its
+only reader; touch is containment. A window passes sight only; bars pass sight and
 sound; a membrane passes passage only. Touch-only perception is deliberately
 **cause-blind**: surface sensation crosses, the act producing it does not.
 

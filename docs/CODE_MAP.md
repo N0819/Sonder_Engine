@@ -98,7 +98,7 @@
 | `world/place_purpose.py` | 532 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 200 |  | — |
 | `world/spatial.py` | 166 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
-| `world/spatial_barriers.py` | 414 |  | — |
+| `world/spatial_barriers.py` | 433 |  | — |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1167 |  | `world.spatial_containment`, `world.spatial_identity` |
 | `world/spatial_containment.py` | 636 |  | `world.spatial_identity`, `world.spatial_transit` |
@@ -110,7 +110,7 @@
 | `world/spatial_orientation.py` | 246 |  | — |
 | `world/spatial_prose.py` | 336 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 923 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
-| `world/spatial_senses.py` | 1264 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
+| `world/spatial_senses.py` | 1266 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_substance.py` | 602 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 414 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/subjects.py` | 449 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
@@ -1106,11 +1106,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_barrier()` | 263 | 67 lines |
-| `_barrier_against_its_own_name()` | 382 | 27 lines |
-| `normalize_scene_barriers()` | 348 | 21 lines |
-| `unresolved_barrier_words()` | 332 | 15 lines |
-| `_barrier_exact()` | 252 | 9 lines |
+| `normalize_barrier()` | 282 | 67 lines |
+| `_barrier_against_its_own_name()` | 401 | 27 lines |
+| `normalize_scene_barriers()` | 367 | 21 lines |
+| `unresolved_barrier_words()` | 351 | 15 lines |
+| `_barrier_exact()` | 271 | 9 lines |
 
 ### `world/spatial_contact_migration.py`
 
@@ -1251,14 +1251,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `hear_level()` | 730 | 138 lines |
-| `spatial_rel_between()` | 464 | 71 lines |
-| `sound_bearing()` | 1030 | 69 lines |
-| `scent_level()` | 36 | 55 lines |
-| `_clean_comms_channel()` | 156 | 53 lines |
-| `_opening_view_cap()` | 551 | 52 lines |
-| `visual_level_between()` | 605 | 52 lines |
-| `can_perceive_onset()` | 345 | 39 lines |
+| `hear_level()` | 732 | 138 lines |
+| `spatial_rel_between()` | 466 | 71 lines |
+| `sound_bearing()` | 1032 | 69 lines |
+| `scent_level()` | 37 | 56 lines |
+| `_clean_comms_channel()` | 158 | 53 lines |
+| `_opening_view_cap()` | 553 | 52 lines |
+| `visual_level_between()` | 607 | 52 lines |
+| `can_perceive_onset()` | 347 | 39 lines |
 
 ### `world/spatial_substance.py`
 

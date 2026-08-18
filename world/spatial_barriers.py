@@ -246,7 +246,26 @@ _SIGHT_BARRIERS = {"open", "open_door", "window", "bars", "one_way_window"}
 #
 # The graded answer is `scent_level` (none | muffled | full), mirroring
 # `sight_level` (none | shapes | full) and `hear_level` (none | fragment | full).
-_SCENT_BARRIERS = {"open", "open_door", "bars", "membrane", "closed_door"}
+#: barrier -> how much scent crosses it. Absent means none.
+#:
+#: A TABLE, not a set, because scent is the one channel of the four that is
+#: GRADED: a closed door and a curtain both pass it, weakened, where sight and
+#: passage are yes-or-no. Its three siblings above answer a membership
+#: question and are sets; this one cannot, and pretending otherwise is what
+#: made it decorative -- it was a set naming everything scent crosses AT ALL,
+#: which `scent_level` could not use without restating the full/muffled split
+#: itself. So it restated the whole rule, and the two were free to disagree.
+#:
+#: `scent_level` is now this table's only reader, and its only statement.
+#: window and wall are deliberately absent: glass stops air, and a wall stops
+#: everything. So is an unrecognized barrier, which normalizes to `wall`.
+_SCENT_BARRIER_LEVELS = {
+    "open": "full",
+    "open_door": "full",
+    "bars": "full",
+    "membrane": "muffled",
+    "closed_door": "muffled",
+}
 
 
 def _barrier_exact(key):
