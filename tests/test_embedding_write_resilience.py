@@ -303,7 +303,17 @@ def test_a_burst_beyond_the_ceiling_completes_instead_of_stranding(monkeypatch):
     class _CeilingSession:
         """429s exactly while the engine is unpaced -- the measured provider
         shape reduced to its essence: requests above the ceiling fail, and
-        the ceiling clears once departures are spaced."""
+        the ceiling clears once departures are spaced.
+
+        ANSWERS THE REQUEST IT WAS GIVEN, one vector per input. Eight
+        concurrent callers is precisely the traffic the coalescer exists to
+        merge, so some runs hand this one request carrying several texts --
+        and a stub that always returned a single vector failed those runs
+        with `unexpected vector count`, four retries, and the hash for the
+        whole group. Read as an engine flake for a day (2026-08-18): it is
+        timing-shaped, so it surfaced in the full suite and never once in
+        four hundred standalone bursts.
+        """
 
         def __init__(self):
             self._lock = _threading.Lock()
@@ -311,12 +321,13 @@ def test_a_burst_beyond_the_ceiling_completes_instead_of_stranding(monkeypatch):
             self.refusals = 0
 
         def post(self, url, **kw):
+            asked = len((kw.get("json") or {}).get("input") or [])
             with self._lock:
                 self.calls += 1
                 if providers._EMBED_PACE["interval"] <= 0:
                     self.refusals += 1
                     return _Resp(429, text="request_rate_limit_exceeded")
-            return _Resp(200, _vectors(1))
+            return _Resp(200, _vectors(asked))
 
     session = _CeilingSession()
     monkeypatch.setattr(providers, "_session", lambda: session)
