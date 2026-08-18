@@ -54,7 +54,10 @@ def test_english_is_an_installed_complete_default_pack():
     assert packs["en"].adapter == "english"
     assert packs["en"].translation_status == "native"
     assert packs["en"].card("compositor")["ordinal_words"]["2"] == "second"
-    assert len(packs["en"].card("system_prompts")["prompts"]) >= 43
+    # 42, not 43: `move_repeat_screen` was retired with the quality re-ask it
+    # existed to gate. A floor rather than an equality, so a prompt going
+    # MISSING still fails here while a deliberate retirement is one edit.
+    assert len(packs["en"].card("system_prompts")["prompts"]) >= 42
     # Perception composes every view deterministically and has no model role,
     # so it must carry no prompt: one in the pack is 28k characters shipped to
     # nobody, surfaced in the host's prompt editor as if it were editable, and

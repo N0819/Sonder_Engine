@@ -1132,12 +1132,21 @@ def _advance_intent(target, turn_idx, warnings, *, barren_beat=False):
     audited.
 
     The caller supplies the flag rather than this module deriving it, because
-    the engine has already measured it: `agents/character.py` detects a
-    repeated move, `llm_quality.move_repeat_screen` clears the ones the beat
-    genuinely invited, and only an unscreened one gets this far. So the beats
-    marked here are exactly the beats the engine already paid a full re-ask to
-    fix. Nothing new is asked of the model -- it emits whatever ops it likes,
-    and the engine declines to call a repeat an advance.
+    the engine has already measured it: `agents/character.py` detects that this
+    beat repeated an earlier move.
+
+    That detection used to be filtered by a model screen that judged whether
+    the beat had INVITED the repetition, and only an unscreened one reached
+    here. The screen existed to decide whether to pay for a full re-ask; the
+    re-ask is gone (repetition is weak, not unusable, and a redo on anything
+    short of broken output is a nuisance), so the screen went with it. The
+    honest consequence, stated rather than hidden: a repetition the beat
+    genuinely invited -- an insistence, one continuous riff, a deliberate
+    return -- now counts barren too. It costs that goal its +0.2 and surfaces
+    `barren_attempts` to the character, which for an insistence that is not
+    working is the right thing to say and for one that is working is a beat of
+    over-caution. Nothing is asked of the model either way: it emits whatever
+    ops it likes, and the engine declines to call a repeat an advance.
 
     Barren attempts leave the clock alone and never revive a set-aside goal.
     After _INTENT_STALL_AFTER of them AT THE CEILING the goal stops steering:

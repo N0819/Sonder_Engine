@@ -143,41 +143,6 @@ def strict_json_parse(text: str) -> dict:
 
     return value
 
-def move_repeat_screen(ctx, sh, repeated_move, what_is_new):
-    """keep (True) / redo (False) / undecided (None), on the cheap lane.
-
-    Entitlement is a strict subset of what the character itself was given:
-    its own prior move, its own draft, and its own view of this beat. No
-    other mind, no ledger, nothing it did not already hold -- a screen that
-    widened what is visible would be a leak wearing an optimisation's
-    clothes.
-    """
-    if not isinstance(repeated_move, dict):
-        return None
-    try:
-        raw = chat_complete(
-            "utility",
-            get_prompt("move_repeat_screen"),
-            json.dumps({
-                "already_did": str(repeated_move.get("move") or "")[:400],
-                "draft_does": str(repeated_move.get("current") or "")[:400],
-                "what_is_new": str(what_is_new or "")[:1200],
-            }, ensure_ascii=False),
-            temperature=0.0,
-            max_tokens=200,
-        )
-        verdict = str((strict_json_parse(raw) or {}).get("verdict") or "").strip().lower()
-    except Aborted:
-        raise
-    except Exception:
-        return None
-    if verdict == "keep":
-        return True
-    if verdict == "redo":
-        return False
-    return None
-
-
 # --- The cheap rung: patch the fields that failed, not the whole beat -------
 
 def _error_paths(errors):

@@ -119,10 +119,15 @@ def test_noting_outside_a_pipeline_step_is_a_noop(monkeypatch):
 
 def test_decision_review_retry_is_warned_even_when_it_succeeds(
         temp_db, monkeypatch):
-    """The asymmetry this closes: a warning used to land only when the retry
-    FAILED a second time, which is why the fire rate was unknowable. Now the
-    retry itself is one warning line, with the corrections that fired and the
-    second call's duration."""
+    """A reissued line is recorded and does not buy a second model call.
+
+    This test used to assert the opposite -- that the retry fired, and that a
+    warning named its duration -- back when the fire rate was the thing worth
+    measuring. The measurement is in: 36.3s, 58.0s and 155.6s per retry, kept
+    unchanged 48 times, and on the slowest beat the "corrected" answer restated
+    the same propositions in different words. So the retry is gone and the
+    warning is the whole record.
+    """
     import agents.character as character_module
     from character_schema import default_character_data
     from pipeline_context import ChatData, PipelineContext, TurnData
@@ -185,12 +190,12 @@ def test_decision_review_retry_is_warned_even_when_it_succeeds(
     monkeypatch.setattr(character_module, "_agent_json", fake_agent_json)
     character_module.character_step(ctx, char_id, nonce=0)
 
-    assert len(calls) == 2, "the repetition screen should have retried"
-    assert "repeat_correction" in calls[1]
-    retry_notes = [w for w in ctx.warnings if "decision review retry" in w]
-    assert len(retry_notes) == 1
-    assert "repeat_correction" in retry_notes[0]
-    assert "s)" in retry_notes[0]
-    # The old failure-only note still fires when the retry repeats again --
-    # the two together are the numerator and the denominator.
-    assert any("repetition retained" in w for w in ctx.warnings)
+    # ONE call. A reissued line is weak output, not broken output, and a redo
+    # on anything short of broken is a nuisance -- so the repetition is
+    # recorded and the beat stands. What this used to assert (a second full
+    # character call, and a warning naming its duration) is the cost that was
+    # removed; the warning it left behind is the record.
+    assert len(calls) == 1, "weak output must not buy a second model call"
+    assert not [w for w in ctx.warnings if "decision review retry" in w]
+    assert any("repeat_correction" in w and "the beat stands" in w
+               for w in ctx.warnings)

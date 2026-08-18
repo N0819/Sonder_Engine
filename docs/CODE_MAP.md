@@ -6,10 +6,10 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `affect.py` | 2177 |  | `theory_of_mind` |
+| `affect.py` | 2186 |  | `theory_of_mind` |
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 927 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3432 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
 | `agents/director.py` | 8125 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
@@ -46,7 +46,7 @@
 | `importers.py` | 2618 | Native and AI-assisted character, persona, and lorebook import/generation. | `character_schema`, `db`, `logging_utils`, `memory`, `prompts`, `providers` |
 | `jobs.py` | 209 |  | `logging_utils` |
 | `living_world.py` | 608 |  | `logging_utils`, `mechanics` |
-| `llm_quality.py` | 690 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `prompts`, `providers`, `schemas` |
+| `llm_quality.py` | 655 | Strict JSON parsing, schema validation, and model-assisted repair. | `pipeline_context`, `prompts`, `providers`, `schemas` |
 | `logging_utils.py` | 118 | Structured timing and observability helpers. | — |
 | `lore_structure.py` | 242 |  | — |
 | `mechanics.py` | 310 |  | `spatial`, `spatial_frames` |
@@ -81,13 +81,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `resolve_affect()` | 806 | 184 lines |
-| `apply_project_ops()` | 1390 | 137 lines |
+| `apply_project_ops()` | 1399 | 137 lines |
 | `appraise()` | 513 | 136 lines |
-| `apply_intent_ops()` | 1211 | 133 lines |
+| `apply_intent_ops()` | 1220 | 133 lines |
 | `normalize_wants()` | 996 | 87 lines |
-| `validate_drive_shift()` | 1960 | 79 lines |
-| `update_drive_strain()` | 1841 | 77 lines |
-| `project_boundary()` | 1724 | 66 lines |
+| `validate_drive_shift()` | 1969 | 79 lines |
+| `update_drive_strain()` | 1850 | 77 lines |
+| `_advance_intent()` | 1113 | 74 lines |
 
 ### `agents/background.py`
 
@@ -106,14 +106,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2417 | 1016 lines |
-| `_annotate_known_exits()` | 1781 | 445 lines |
-| `_ground_observation_citations()` | 849 | 263 lines |
+| `character_step()` | 2449 | 960 lines |
+| `_annotate_known_exits()` | 1813 | 445 lines |
+| `_ground_observation_citations()` | 881 | 263 lines |
 | `_unanswered_question_note()` | 285 | 117 lines |
-| `_destination_from_goals()` | 1347 | 109 lines |
-| `sprint_offers()` | 2261 | 97 lines |
+| `_destination_from_goals()` | 1379 | 109 lines |
+| `sprint_offers()` | 2293 | 97 lines |
 | `_recent_self_moves()` | 155 | 90 lines |
-| `_verdict()` | 1191 | 72 lines |
+| `_verdict()` | 1223 | 72 lines |
 
 ### `agents/common.py`
 
@@ -565,14 +565,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 312 | 379 lines |
-| `_targeted_field_patch()` | 223 | 57 lines |
+| `complete_validated_json()` | 277 | 379 lines |
+| `_targeted_field_patch()` | 188 | 57 lines |
 | `output_ran_out_of_room()` | 77 | 47 lines |
 | `_extract_balanced_object()` | 23 | 34 lines |
-| `move_repeat_screen()` | 146 | 33 lines |
-| `_step_json_schema()` | 285 | 25 lines |
+| `_step_json_schema()` | 250 | 25 lines |
 | `strict_json_parse()` | 126 | 19 lines |
 | `_strip_fences()` | 59 | 16 lines |
+| `_dig()` | 161 | 12 lines |
 
 ### `logging_utils.py`
 

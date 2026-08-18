@@ -537,11 +537,16 @@ def test_character_step_combines_move_and_spent_intention_rewrite(
 
     result = character.character_step(ctx, char_id, nonce=0)
 
-    assert len(calls) == 2
+    # ONE call. Both signals still fire and both are recorded; neither is
+    # broken output, so neither buys a second model call. The prevention that
+    # was always the real mechanism rides the FIRST payload -- the character is
+    # shown its own recent moves and which intentions still steer before it
+    # decides anything.
+    assert len(calls) == 1, "weak output must not buy a second model call"
     assert calls[0]["self"]["recent_self_moves"][0]["move"] == repeated_move
     assert calls[0]["self"]["steering_intention_ids"] == []
-    assert calls[1]["move_correction"]["turn"] == 137
-    assert "continuous excited riff or rant" in (
-        calls[1]["move_correction"]["instruction"])
-    assert calls[1]["intention_correction"]["nonsteering_ids"] == ["i1"]
-    assert result["speech"] == "What's that bell for?"
+    assert any("move_correction" in w and "the beat stands" in w
+               for w in ctx.warnings)
+    assert any("intention_correction" in w for w in ctx.warnings)
+    assert result["speech"] == (
+        "After the shrine, the archives of Calufrax?")
