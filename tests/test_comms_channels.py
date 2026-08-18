@@ -1,0 +1,405 @@
+"""Voice channels: intercoms, PAs, radios, phones.
+
+A channel is equipment that carries a VOICE between places, as distinct from a
+doorway between them. Before this existed the engine had one per-LINE rescue --
+a dialogue entry tagged `medium: "comm"` reached the observer it explicitly
+named -- which covers a phone call to one person and nothing else. It could not
+express a PA a whole room hears, a channel switched off mid-scene, a ship's
+intercom across four compartments, a radio travelling in its owner's pocket, or
+a broadcast that goes one way, because it was a property of one sentence rather
+than a standing fact about the world.
+
+The property every test here is really defending: a channel carries VOICE and
+nothing else, and a mind that hears someone over one is never told they are
+present. That is not decoration. A voice at your shoulder and a voice on a
+speaker are different facts, and collapsing them hands a mind a fact it has no
+channel for -- through the front door of the layer built to stop exactly that.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+import spatial as sp
+from agents import composer
+
+
+def _scene(**over):
+    scene = {
+        "rooms": {
+            "observation": {"name": "Observation Room",
+                            "adjacent": [{"to": "cell", "barrier": "window"}]},
+            "cell": {"name": "Interview Cell",
+                     "adjacent": [{"to": "observation", "barrier": "window"}]},
+            "street": {"name": "Street"},
+            "van": {"name": "Van"},
+        },
+        "positions": {"Sarah Moon": "observation", "guard_1": "observation",
+                      "Hinami": "cell", "Vela": "van", "Passerby": "street"},
+        "comms": {},
+    }
+    scene.update(over)
+    return scene
+
+
+def _link(scene, speaker, listener):
+    return sp.comms_link(
+        scene, sp.room_of(scene, speaker), sp.room_of(scene, listener),
+        speaker_name=speaker, observer_name=listener)
+
+
+def _percept(scene, speaker, listener, text="State your designation.",
+             volume="normal"):
+    rel = sp.spatial_rel(scene, sp.room_of(scene, listener),
+                         sp.room_of(scene, speaker))
+    channel = _link(scene, speaker, listener)
+    if channel:
+        rel = {**rel, "comm_channel": channel}
+    entry = {"speaker": speaker, "text": text, "exact_quote": text,
+             "volume": volume}
+    return composer.speech_percept(
+        entry, rel, listener, display=speaker,
+        can_see=sp.sight_level(rel) != "none")
+
+
+# ---------------------------------------------------------------- the ledger
+
+
+class TestTheLedger:
+    def test_a_fixed_installation_joins_two_rooms(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "name": "the cell intercom",
+            "rooms": ["observation", "cell"]}])
+        assert _link(scene, "Sarah Moon", "Hinami")
+        assert _link(scene, "Hinami", "Sarah Moon"), "duplex answers back"
+
+    def test_a_broadcast_is_genuinely_one_way(self):
+        """The asymmetry `_VALID_BARRIERS` refuses for doorways, and should.
+
+        A barrier belongs to the doorway rather than to the side you stand on.
+        A transmitter and a receiver are different equipment, so the same rule
+        would be wrong here.
+        """
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "pa", "name": "the PA", "rooms": ["observation", "cell"],
+            "mode": "broadcast", "source": "observation"}])
+        assert _link(scene, "Sarah Moon", "Hinami")
+        assert _link(scene, "Hinami", "Sarah Moon") is None
+
+    def test_a_broadcast_with_no_transmitter_falls_back_to_duplex(self):
+        """Guessing which way a one-way channel points is how a voice ends up
+        somewhere it never went."""
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "pa", "rooms": ["observation", "cell"],
+            "mode": "broadcast", "source": "somewhere_else"}])
+        assert scene["comms"]["pa"]["mode"] == "duplex"
+        assert scene["comms"]["pa"]["source"] == ""
+
+    def test_live_is_a_switch_and_a_fact_about_the_world(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "rooms": ["observation", "cell"]}])
+        assert _link(scene, "Sarah Moon", "Hinami")
+
+        sp.apply_comms_ops(scene, [{"id": "cell_intercom", "op": "close"}])
+        assert _link(scene, "Sarah Moon", "Hinami") is None
+
+        sp.apply_comms_ops(scene, [{"id": "cell_intercom", "op": "open"}])
+        assert _link(scene, "Sarah Moon", "Hinami")
+
+    def test_closing_does_not_forget_who_was_on_it(self):
+        """`open`/`close` flip a switch; only `set` restates the endpoints."""
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "net", "name": "ship comm", "rooms": ["observation", "cell"]}])
+        sp.apply_comms_ops(scene, [{"id": "net", "op": "close"}])
+        assert scene["comms"]["net"]["rooms"] == ["observation", "cell"]
+        assert scene["comms"]["net"]["name"] == "ship comm"
+
+    def test_removing_takes_the_equipment_out_of_the_world(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{"id": "net", "rooms": ["observation", "cell"]}])
+        sp.apply_comms_ops(scene, [{"id": "net", "op": "remove"}])
+        assert scene["comms"] == {}
+
+    def test_a_channel_needs_two_endpoints(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [
+            {"id": "nowhere", "rooms": ["observation"]},
+            {"id": "nobody", "carriers": ["Vela"]},
+            {"id": "empty"},
+        ])
+        assert scene["comms"] == {}
+
+    def test_a_base_station_and_one_field_radio_is_two(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "base", "name": "base station",
+            "rooms": ["observation"], "carriers": ["Vela"]}])
+        assert "base" in scene["comms"]
+        assert _link(scene, "Sarah Moon", "Vela")
+
+    def test_a_channel_to_a_retired_room_is_pruned(self):
+        """Not kept, so a compartment nobody can stand in cannot keep carrying
+        voices."""
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "net", "rooms": ["observation", "cell"]}])
+        del scene["rooms"]["cell"]
+        sp.normalize_scene_comms(scene)
+        assert scene["comms"] == {}
+
+
+# ---------------------------------------------------------------- carried
+
+
+class TestCarriedEquipment:
+    """A walkie-talkie is a channel that travels in a pocket."""
+
+    def test_a_radio_follows_its_carrier(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "squad", "name": "squad radio",
+            "carriers": ["Sarah Moon", "Vela"]}])
+        assert _link(scene, "Sarah Moon", "Vela")
+
+        # Vela drives somewhere else; the radio is still in her hand.
+        scene["positions"]["Vela"] = "street"
+        assert _link(scene, "Sarah Moon", "Vela")
+
+    def test_a_speaker_fills_the_room_its_carrier_is_standing_in(self):
+        """A handheld on speaker is heard by whoever is beside it -- which is
+        the difference between a private call and one everybody overhears."""
+        scene = _scene()
+        scene["positions"]["Vela"] = "street"
+        sp.apply_comms_ops(scene, [{
+            "id": "squad", "carriers": ["Sarah Moon", "Vela"]}])
+        assert _link(scene, "Sarah Moon", "Passerby"), \
+            "the passerby is standing next to Vela's radio"
+
+    def test_private_reaches_the_carrier_and_nobody_else(self):
+        scene = _scene()
+        scene["positions"]["Vela"] = "street"
+        sp.apply_comms_ops(scene, [{
+            "id": "call", "name": "phone call", "private": True,
+            "carriers": ["Sarah Moon", "Vela"]}])
+        assert _link(scene, "Sarah Moon", "Vela")
+        assert _link(scene, "Sarah Moon", "Passerby") is None
+
+    def test_a_carrier_with_no_recorded_position_breaks_nothing(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "squad", "carriers": ["Sarah Moon", "Ghost"]}])
+        assert _link(scene, "Sarah Moon", "Passerby") is None
+
+    def test_co_presence_is_not_a_channel(self):
+        """Two people in one room hear each other directly. Saying they heard
+        it "over the radio" puts a device between them the beat does not need
+        -- and tells a mind its neighbour was elsewhere."""
+        scene = _scene()
+        scene["positions"]["Vela"] = "observation"
+        sp.apply_comms_ops(scene, [{
+            "id": "squad", "carriers": ["Sarah Moon", "Vela"]}])
+        assert _link(scene, "Sarah Moon", "Vela") is None
+
+
+# ---------------------------------------------------------------- perception
+
+
+class TestWhatReachesAMind:
+    def test_a_voice_crosses_a_wall_that_stops_it(self):
+        scene = _scene()
+        assert _percept(scene, "Sarah Moon", "Hinami") is None, \
+            "a window stops an ordinary voice"
+
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "name": "the cell intercom",
+            "rooms": ["observation", "cell"]}])
+        percept = _percept(scene, "Sarah Moon", "Hinami")
+        assert percept is not None
+        assert percept.data["level"] == "full"
+
+    def test_the_route_is_recorded_on_the_percept(self):
+        """The whole firewall claim of this feature.
+
+        A voice on a speaker is a different fact from a voice in the room. A
+        mind handed the second when the first is true has been told the
+        speaker is present -- by the layer built to stop precisely that.
+        """
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "name": "the cell intercom",
+            "rooms": ["observation", "cell"]}])
+        percept = _percept(scene, "Sarah Moon", "Hinami")
+        assert percept.data["via"] == "the cell intercom"
+        assert percept.data["via_channel"] == "cell_intercom"
+
+    def test_someone_in_the_room_is_never_told_they_heard_a_radio(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "rooms": ["observation", "cell"]}])
+        percept = _percept(scene, "Sarah Moon", "guard_1")
+        assert percept is not None
+        assert "via" not in percept.data
+
+    def test_it_reaches_whoever_is_listening_not_only_the_addressee(self):
+        """The difference between a channel and the old per-line rescue.
+
+        `line_hear_level`'s `medium: "comm"` path only ever rescued the
+        observer the line explicitly NAMED. A voice on a speaker is heard by
+        whoever is in front of the speaker; it does not check who it was
+        talking to.
+        """
+        scene = _scene()
+        scene["positions"]["Vela"] = "cell"
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "rooms": ["observation", "cell"]}])
+        for listener in ("Hinami", "Vela"):
+            percept = _percept(scene, "Sarah Moon", listener)
+            assert percept is not None, listener
+            assert percept.data["level"] == "full"
+
+    def test_closing_the_channel_silences_it_and_nothing_else(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "rooms": ["observation", "cell"]}])
+        sp.apply_comms_ops(scene, [{"id": "cell_intercom", "op": "close"}])
+
+        assert _percept(scene, "Sarah Moon", "Hinami") is None
+        assert _percept(scene, "Sarah Moon", "guard_1") is not None, \
+            "the guard beside her still hears her"
+
+    def test_a_channel_carries_voice_and_not_sight(self):
+        """A speaker in the ceiling is not a window."""
+        scene = _scene()
+        scene["rooms"]["street"]["adjacent"] = []
+        sp.apply_comms_ops(scene, [{
+            "id": "net", "rooms": ["observation", "street"]}])
+        rel = sp.spatial_rel(scene, "street", "observation")
+        assert sp.sight_level(rel) == "none"
+        percept = _percept(scene, "Sarah Moon", "Passerby")
+        assert percept is not None
+        assert percept.data["can_see"] is False
+
+    def test_the_view_says_which_channel_carried_it(self):
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "name": "the cell intercom",
+            "rooms": ["observation", "cell"]}])
+        rendered = composer._render_event(_percept(scene, "Sarah Moon", "Hinami"))
+        assert "the cell intercom" in rendered
+
+    def test_the_memory_episode_says_it_too(self):
+        """The route rides into memory, or the fact is deleted one layer down
+        where nobody would ever notice -- a character recalling being told
+        something over a radio must not remember the speaker standing there."""
+        scene = _scene()
+        sp.apply_comms_ops(scene, [{
+            "id": "cell_intercom", "name": "the cell intercom",
+            "rooms": ["observation", "cell"]}])
+        episode = composer._episode_sentence(
+            _percept(scene, "Sarah Moon", "Hinami"))
+        assert "the cell intercom" in episode
+        assert "State your designation." in episode
+
+
+# ---------------------------------------------------------------- reactions
+
+
+class TestWhoMayReact:
+    """The reactor fallback used a hand-written list of barrier names, and it
+    had drifted from the vocabulary it was quoting.
+
+    Measured the day it was found, against the real tables: 4 of 9 barriers
+    classified wrong, in BOTH directions. It admitted `wall`, through which
+    nothing whatever is perceived, and excluded `bars` (sight and full speech),
+    `window` (sight) and `membrane` (muffled speech). So a character behind
+    glass could not answer what she was plainly watching, while one behind a
+    solid wall could react to what she could not possibly know.
+    """
+
+    @pytest.mark.parametrize("barrier", ["open", "open_door", "bars",
+                                         "closed_door", "membrane", "window"])
+    def test_anything_perceptible_may_react(self, barrier):
+        scene = {"rooms": {"a": {"adjacent": [{"to": "b", "barrier": barrier}]},
+                           "b": {"adjacent": [{"to": "a", "barrier": barrier}]}}}
+        assert sp.can_perceive_onset(scene, "a", "b") is True
+
+    @pytest.mark.parametrize("barrier", ["wall", "separated", "unknown"])
+    def test_nothing_perceptible_may_not(self, barrier):
+        """Dropping `wall` is the deliberate half of the correction. A mind
+        that perceives nothing has nothing to react to, and handing it a turn
+        invites it to answer something it never received."""
+        scene = {"rooms": {"a": {"adjacent": [{"to": "b", "barrier": barrier}]},
+                           "b": {"adjacent": [{"to": "a", "barrier": barrier}]}}}
+        assert sp.can_perceive_onset(scene, "a", "b") is False
+
+    def test_a_live_channel_makes_a_sealed_room_reactable(self):
+        scene = {"rooms": {"a": {"adjacent": [{"to": "b", "barrier": "wall"}]},
+                           "b": {"adjacent": [{"to": "a", "barrier": "wall"}]}},
+                 "positions": {}, "comms": {}}
+        assert sp.can_perceive_onset(scene, "a", "b") is False
+        sp.apply_comms_ops(scene, [{"id": "net", "rooms": ["a", "b"]}])
+        assert sp.can_perceive_onset(scene, "a", "b") is True
+
+    def test_the_probe_is_an_ordinary_voice_not_a_shout(self):
+        """A shout carries a fragment through absolutely everything, including
+        `separated` -- which is what two rooms with no edge between them
+        report. Probing at shout volume answers True for every pair of rooms in
+        the scene, which turns the gate into "everyone" and plans a character
+        step per cast member per beat."""
+        scene = {"rooms": {"a": {}, "b": {}}}
+        rel = sp.spatial_rel(scene, "a", "b")
+        assert sp.hear_level(rel, "shout") == "fragment"
+        assert sp.can_perceive_onset(scene, "a", "b") is False
+
+
+# ---------------------------------------------------------------- the merge
+
+
+class TestItRidesTheEngine:
+    def test_ops_land_through_the_ordinary_merge(self):
+        scene = _scene()
+        merged = sp.merge_scene_with_diff(scene, {
+            "comms_ops": [{"id": "net", "name": "ship comm",
+                           "rooms": ["observation", "cell"]}]})
+        assert merged["comms"]["net"]["name"] == "ship comm"
+
+    def test_the_schema_carries_the_channel(self):
+        import schemas
+
+        out, _warnings = schemas.validate_llm_output("director_spatial", {
+            "comms_ops": [{"id": "pa", "rooms": ["observation", "cell"],
+                           "mode": "broadcast", "source": "observation"}]})
+        assert out["comms_ops"][0]["mode"] == "broadcast"
+        assert out["comms_ops"][0]["op"] == "set"
+
+    def test_the_opening_beat_can_install_one(self):
+        """A scene BUILT around an intercom -- an observation room, a bridge, a
+        control booth -- must have one on beat zero, which is the beat it was
+        needed for."""
+        import schemas
+
+        out, _warnings = schemas.validate_llm_output("director_establish", {
+            "location": "Site-17", "time": "now", "scene_description": "x",
+            "comms_ops": [{"id": "cell_intercom",
+                           "rooms": ["observation", "cell"]}]})
+        assert out["comms_ops"][0]["id"] == "cell_intercom"
+
+    def test_the_spatial_specialist_owns_it(self):
+        from agents import director
+
+        assert "comms_ops" in director.SPECIALISTS["spatial"]["channels"]
+        assert "comms_ops" in director._CHANNEL_GATES
+
+    def test_the_specialist_sheet_can_teach_it(self):
+        """An owned channel with no chunk loads nothing when granted."""
+        import prompts
+
+        chunks = prompts.SPECIALIST_PROMPT_SPECS["spatial"]["chunks"]
+        assert "comms_ops" in chunks
+        assert "carriers" in chunks["comms_ops"]
+        assert "broadcast" in chunks["comms_ops"]

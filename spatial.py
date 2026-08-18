@@ -668,6 +668,299 @@ _LIGHT_SIGHT = {
 }
 
 
+# ---------------------------------------------------------------- comms
+#
+# A CHANNEL between places or people, as distinct from a doorway between rooms.
+#
+# The engine already had a per-LINE rescue: a dialogue entry tagged
+# `medium: "comm"` reaches the observer it explicitly names, whatever wall is
+# in the way (`composer.line_hear_level`). That covers a phone call to one
+# person and nothing else. It cannot express a PA that a whole room hears, a
+# channel switched off mid-scene, a ship's intercom reaching four
+# compartments, a radio that travels in its owner's pocket, or a broadcast
+# that goes one way -- because it is a property of one sentence rather than a
+# standing fact about the world.
+#
+# So channels are world state, in the scene blob beside rooms and positions:
+#
+#     scene["comms"] = {
+#       "cell_pa":  {"name": "Interview cell PA",
+#                    "rooms": ["observation", "cell"],
+#                    "mode": "broadcast", "source": "observation",
+#                    "live": true},
+#       "squad_net": {"name": "squad radio",
+#                     "carriers": ["Sarah Moon", "Vela"], "live": true},
+#       "her_phone": {"name": "phone call",
+#                     "carriers": ["Sarah Moon", "Ito"],
+#                     "private": true, "live": true},
+#     }
+#
+# ENDPOINTS ARE ROOMS **OR** BODIES, which is the difference between an
+# intercom and a walkie-talkie. A fixed installation names `rooms`; a handset,
+# radio or phone names `carriers`, and its endpoint is wherever that body is
+# standing NOW -- resolved at question time from `positions`, so the channel
+# travels in the pocket it is actually in.
+#
+# Four properties, each earned:
+#
+# * **It carries VOICE and nothing else.** Not sight, not scent, not the room's
+#   own noise. A speaker in the ceiling is not a window. Hearing someone over a
+#   channel must never imply they are present, which is why the percept records
+#   which channel carried it -- a mind that cannot tell a voice on a radio from
+#   a voice at its shoulder has been handed a fact it has no channel for.
+# * **`live` is the switch, and it is a fact about the world.** A radio nobody
+#   keyed carries nothing; closing a channel mid-scene is an act with
+#   consequences, which is the whole reason this is state and not a per-line
+#   flag.
+# * **`broadcast` is genuinely one-way.** The observation room talks to the
+#   cell; the cell does not answer. This is the asymmetry `_VALID_BARRIERS`
+#   refuses for doorways -- a barrier belongs to the doorway, not to the side
+#   you stand on -- and it is right HERE, because a transmitter and a receiver
+#   are different equipment.
+# * **`private` decides who in the room hears it.** A handset held to an ear
+#   reaches its carrier alone; the same handset on speaker fills the room. Both
+#   are ordinary, and the difference is the entire question of whether the man
+#   beside you learns what you were just told.
+
+COMMS_MODES = ("duplex", "broadcast")
+
+
+def _comms_carrier_room(scene, name):
+    """Where a carrier is standing now, or None."""
+    positions = (scene or {}).get("positions") or {}
+    return _ci_get(positions, str(name or "")) if name else None
+
+
+def _clean_comms_channel(raw, rooms=None):
+    """One channel, or None when it names nothing usable.
+
+    A channel needs two endpoints to be a channel; `rooms` and `carriers` are
+    counted together toward that, because a base station talking to one field
+    radio is the ordinary shape and neither half alone is two.
+
+    `rooms=None` means "do not check the room ids yet", and that is what the
+    APPLIER passes. Checking them there would make this channel's result
+    depend on whether the beat's room changes had already been merged -- an
+    ordering coupling between two delegated channels, which
+    `test_diff_application_is_order_independent_by_construction` exists to
+    forbid. So the applier only records what the beat said, and
+    `normalize_scene_comms` -- which runs once rooms have settled -- does
+    every prune. Same end state, no order to get wrong.
+    """
+    if not isinstance(raw, dict):
+        return None
+    served = []
+    for room_id in raw.get("rooms") or []:
+        room_id = str(room_id or "").strip()
+        # A channel to a room that no longer exists is not a channel: pruned
+        # rather than kept, so a retired compartment cannot keep carrying
+        # voices somewhere nobody can stand.
+        if not room_id or room_id in served:
+            continue
+        if rooms is None or room_id in rooms:
+            served.append(room_id)
+    carriers = []
+    for name in raw.get("carriers") or []:
+        name = " ".join(str(name or "").split())[:80]
+        if name and name not in carriers:
+            carriers.append(name)
+    if len(served) + len(carriers) < 2:
+        return None
+    mode = str(raw.get("mode") or "duplex").strip().lower()
+    if mode not in COMMS_MODES:
+        mode = "duplex"
+    source = " ".join(str(raw.get("source") or "").split())[:80]
+    if mode == "broadcast" and source not in served and source not in carriers:
+        # A broadcast with no transmitter among its own endpoints cannot say
+        # which way it points, and guessing the direction of a one-way channel
+        # is exactly what would put a voice somewhere it never went.
+        mode, source = "duplex", ""
+    return {
+        "name": " ".join(str(raw.get("name") or "").split())[:120],
+        "rooms": served,
+        "carriers": carriers,
+        "mode": mode,
+        "source": source if mode == "broadcast" else "",
+        "private": bool(raw.get("private", False)),
+        "live": bool(raw.get("live", True)),
+    }
+
+
+def normalize_scene_comms(scene: dict) -> dict:
+    """Drop channels that no longer join two endpoints."""
+    channels = scene.get("comms")
+    if not isinstance(channels, dict):
+        scene["comms"] = {}
+        return scene
+    rooms = scene.get("rooms") or {}
+    cleaned = {}
+    for channel_id, raw in channels.items():
+        channel = _clean_comms_channel(raw, rooms)
+        if channel is not None:
+            cleaned[str(channel_id)] = channel
+    scene["comms"] = cleaned
+    return scene
+
+
+def apply_comms_ops(scene: dict, ops) -> dict:
+    """Create, open, close or remove channels.
+
+    `op` is one of set | open | close | remove. `set` is a COMPLETE
+    replacement snapshot of one channel, the rule poses already follow: a
+    partial update to a thing whose whole point is which endpoints it joins
+    would let a channel keep serving somebody the beat just cut off.
+    """
+    if not isinstance(ops, list):
+        return scene
+    channels = scene.get("comms")
+    if not isinstance(channels, dict):
+        channels = {}
+        scene["comms"] = channels
+    for raw in ops:
+        if not isinstance(raw, dict):
+            continue
+        channel_id = str(raw.get("id") or raw.get("channel") or "").strip()
+        if not channel_id:
+            continue
+        op = str(raw.get("op") or "set").strip().lower()
+        if op == "remove":
+            channels.pop(channel_id, None)
+            continue
+        if op in ("open", "close"):
+            existing = channels.get(channel_id)
+            if isinstance(existing, dict):
+                existing["live"] = (op == "open")
+            continue
+        channel = _clean_comms_channel(raw)
+        if channel is not None:
+            channels[channel_id] = channel
+    return scene
+
+
+def _comms_transmits(scene, channel, room, name):
+    """May this speaker put a voice ONTO the channel."""
+    carriers = channel.get("carriers") or []
+    on_it = (room and room in (channel.get("rooms") or [])) or (
+        name and any(str(name).casefold() == c.casefold() for c in carriers))
+    if not on_it:
+        return False
+    if channel.get("mode") != "broadcast":
+        return True
+    source = str(channel.get("source") or "")
+    return (source == room) or bool(
+        name and source.casefold() == str(name).casefold())
+
+
+def _comms_delivers(scene, channel, room, name):
+    """Does this observer hear what comes OFF the channel.
+
+    A private channel reaches its carriers and nobody else -- an earpiece, a
+    handset at an ear. A channel that is not private plays out loud, so anyone
+    in the carrier's room hears it too, which is the difference between a phone
+    call and the same call on speaker.
+    """
+    carriers = channel.get("carriers") or []
+    if name and any(str(name).casefold() == c.casefold() for c in carriers):
+        return True
+    if channel.get("private"):
+        return False
+    if room and room in (channel.get("rooms") or []):
+        return True
+    return bool(room) and any(
+        _comms_carrier_room(scene, carrier) == room for carrier in carriers)
+
+
+def comms_link(scene, speaker_room, observer_room, *,
+               speaker_name=None, observer_name=None):
+    """The live channel carrying a voice from speaker to observer, or None.
+
+    Directional: a broadcast reaches its receivers and hears nothing back, so
+    the same question asked the other way round answers no.
+    """
+    channels = (scene or {}).get("comms")
+    if not isinstance(channels, dict):
+        return None
+    speaker_room = str(speaker_room) if speaker_room else None
+    observer_room = str(observer_room) if observer_room else None
+    if speaker_room and observer_room and speaker_room == observer_room \
+            and not speaker_name:
+        return None
+    for channel_id, channel in channels.items():
+        if not isinstance(channel, dict) or not channel.get("live"):
+            continue
+        if not _comms_transmits(scene, channel, speaker_room, speaker_name):
+            continue
+        if not _comms_delivers(scene, channel, observer_room, observer_name):
+            continue
+        # A channel exists to reach somewhere a voice does not already go. Two
+        # people in one room hear each other directly, and saying they heard it
+        # "over the radio" would put a device between them that the beat does
+        # not need -- and would tell a mind its neighbour was elsewhere.
+        if speaker_room and observer_room and speaker_room == observer_room:
+            continue
+        return {"id": str(channel_id), **channel}
+    return None
+
+
+def comms_between(scene: dict, from_room, to_room):
+    """Room-to-room convenience: is any voice route open at all."""
+    return comms_link(scene, from_room, to_room)
+
+
+def comms_reach(scene: dict, from_room, speaker_name=None):
+    """Every room a voice raised in `from_room` reaches over a live channel."""
+    reached = {}
+    if not isinstance((scene or {}).get("comms"), dict):
+        return reached
+    for room_id in (scene.get("rooms") or {}):
+        channel = comms_link(scene, from_room, room_id,
+                             speaker_name=speaker_name)
+        if channel is not None:
+            reached[str(room_id)] = channel
+    return reached
+
+
+def can_perceive_onset(scene: dict, from_room, to_room) -> bool:
+    """Could anything of a beat in `from_room` reach someone in `to_room`.
+
+    DERIVED from the channels, never a list of barrier names. The list it
+    replaces was written once and then drifted from the vocabulary it was
+    quoting: it admitted `wall` -- through which nothing whatever is perceived
+    -- and excluded `bars`, through which sight AND full speech cross, and
+    `window`, through which sight crosses. So a character behind glass could
+    not react to what they were plainly watching, while one behind a solid
+    wall could react to what they could not possibly know about. Measured
+    against the real tables the day it was found: 4 of 9 barriers classified
+    wrong, in both directions.
+
+    Probed at ORDINARY speaking volume, not at a shout. A shout carries a
+    fragment through absolutely everything the table has -- a solid wall, and
+    `separated`, which is what two rooms with no edge between them report. So
+    a shout probe answers True for every pair of rooms in the scene, which
+    turns this gate into "everyone" and plans a character step per cast member
+    per beat. Sight is checked outright because sight does not have volumes.
+
+    What remains is genuinely fail-open for the case that matters: anything a
+    body could see, or hear said at a normal voice, or be told over a live
+    channel. A gate too tight here is invisible -- the character simply says
+    nothing and reads as incurious -- so the tie goes to letting them answer.
+    """
+    if not from_room or not to_room:
+        return False
+    if str(from_room) == str(to_room):
+        return True
+    rel = spatial_rel(scene, from_room, to_room)
+    if rel.get("same_room"):
+        return True
+    if sight_level(rel) != "none":
+        return True
+    if hear_level(rel, "normal") != "none":
+        return True
+    # A live channel is a channel: someone on the other end of an open
+    # intercom can hear the beat, whatever the wall between the rooms is.
+    return comms_between(scene, from_room, to_room) is not None
+
+
 def sight_level(rel: dict) -> str:
     """How well these two can see each other: none | shapes | full.
 
@@ -8025,6 +8318,11 @@ def merge_scene_with_diff(
     merged.setdefault("stations", {})
     normalize_scene_stations(merged)
     normalize_scene_poses(merged)
+
+    # Channels, after rooms have settled: a channel names rooms, so it can only
+    # be pruned once this beat's room retirements are known.
+    apply_comms_ops(merged, diff.get("comms_ops"))
+    normalize_scene_comms(merged)
 
     # Bodily condition, last: air depends on whether the doorway ended the beat
     # sealed, which the dock-edge rewrite above has only just settled. Entirely

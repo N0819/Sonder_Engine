@@ -1546,6 +1546,31 @@ class ActorDef(LenientModel):
 
 # ---- Establishment and Resolve ----
 
+class CommsOp(LenientModel):
+    """One change to a voice channel: a PA, an intercom, a radio, a phone.
+
+    Endpoints are ROOMS or CARRIERS, which is the difference between a fixed
+    installation and a handset that travels in a pocket. `set` is a complete
+    replacement snapshot; `open`/`close` flip the switch without restating who
+    is on it; `remove` takes the equipment out of the world.
+    """
+
+    _subject_field = "id"
+
+    id: str = ""
+    op: str = "set"
+    name: str = ""
+    rooms: list[str] = Field(default_factory=list)
+    carriers: list[str] = Field(default_factory=list)
+    # "duplex" both ways, "broadcast" one way from `source`.
+    mode: str = "duplex"
+    source: str = ""
+    # True for an earpiece or a handset at an ear -- only the carrier hears it.
+    # False for a speaker, which fills the room the carrier is standing in.
+    private: bool = False
+    live: bool = True
+
+
 class PoseEntry(LenientModel):
     """One body's complete current pose snapshot.
 
@@ -1639,6 +1664,8 @@ class DirectorEstablish(LenientModel):
     # Complete current body-pose snapshots: posture/support plus optional
     # relative body arrangement. Separate from room/station and contact.
     poses: dict[str, PoseEntry] = Field(default_factory=dict)
+    # Voice channels opened, closed or installed this beat (spatial.comms).
+    comms_ops: list[CommsOp] = Field(default_factory=list)
     # Holds the opening passage leaves standing -- same op shape as
     # StateDiff.contact_ops, routed into it by the establish tail so it reaches
     # spatial.apply_contact_ops through the one merge every other beat uses.
@@ -1943,6 +1970,8 @@ class StateDiff(LenientModel):
     # {name:{posture,support,relative_to,relation,constraint,detail}}.
     # Open strings keep fictional embodiment genre-neutral.
     poses: dict[str, PoseEntry] = Field(default_factory=dict)
+    # Voice channels opened, closed or installed this beat (spatial.comms).
+    comms_ops: list[CommsOp] = Field(default_factory=list)
     # Scale: {name: factor} relative to that body's own baseline. 1.0 (or
     # omission) is normal size; the engine cancels contacts on a body whose
     # size changed, since a hold is a fact about two bodies at the sizes they
@@ -2322,6 +2351,8 @@ class DirectorSpatialSpecialist(LenientModel):
     remove_adjacent: list[dict] = Field(default_factory=list)
     stations: dict[str, dict] = Field(default_factory=dict)
     poses: dict[str, PoseEntry] = Field(default_factory=dict)
+    # Voice channels opened, closed or installed this beat (spatial.comms).
+    comms_ops: list[CommsOp] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -3432,7 +3463,7 @@ SPECIALIST_CHANNELS = {
     "director_objects": ("entities", "remove_entities", "inventory_ops",
                          "artifact_ops", "destruction"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
-                         "remove_adjacent", "stations", "poses"),
+                         "remove_adjacent", "stations", "poses", "comms_ops"),
     "director_offscreen": ("crowd_ops", "courier_ops", "telling_ops",
                            "offscreen_plan_ops", "ratified_claims",
                            "contradicted_claims"),
@@ -3440,7 +3471,7 @@ SPECIALIST_CHANNELS = {
 
 _SPECIALIST_DICT_CHANNELS = frozenset({
     "attire", "conditions", "vitals", "overlays", "containment", "scales",
-    "entities", "positions", "rooms", "stations", "poses",
+    "entities", "positions", "rooms", "stations", "poses", "comms_ops",
 })
 _SPECIALIST_LIST_CHANNELS = frozenset({
     "cast_changes", "introductions", "world_facts", "contact_ops",
