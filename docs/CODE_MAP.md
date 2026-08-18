@@ -12,9 +12,10 @@
 | `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
-| `agents/director.py` | 4501 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_scopes`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 4041 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_scopes`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/director_contact.py` | 421 |  | `character_schema`, `spatial` |
 | `agents/director_evidence.py` | 892 |  | `agents.common`, `agents.director_lingua`, `schemas`, `spatial` |
+| `agents/director_fanout.py` | 501 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `character_schema`, `db`, `survival` |
 | `agents/director_floors.py` | 678 |  | `agents.director_lingua`, `character_schema`, `scene` |
 | `agents/director_lingua.py` | 22 |  | — |
 | `agents/director_movement.py` | 938 |  | `agents.director_lingua`, `character_schema`, `spatial` |
@@ -152,14 +153,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2994 | 1474 lines |
+| `director_resolve()` | 2534 | 1474 lines |
 | `director_interpret()` | 312 | 534 lines |
-| `_reconcile_resolution()` | 1666 | 445 lines |
-| `_run_specialists()` | 2619 | 211 lines |
-| `_specialist_payload()` | 2400 | 133 lines |
-| `_orchestration_scope_backstop()` | 2850 | 131 lines |
-| `_verify_already_true()` | 1315 | 126 lines |
+| `_reconcile_resolution()` | 1662 | 445 lines |
+| `_run_specialists()` | 2310 | 211 lines |
+| `_verify_already_true()` | 1311 | 126 lines |
 | `director_establish()` | 166 | 125 lines |
+| `_reconcile_interpretation()` | 880 | 119 lines |
+| `_specialist_repairs()` | 1541 | 119 lines |
 
 ### `agents/director_contact.py`
 
@@ -185,6 +186,19 @@
 | `_strip_blank_diff_placeholders()` | 255 | 42 lines |
 | `_manifest_items()` | 791 | 37 lines |
 | `_normalize_diff_shape()` | 195 | 36 lines |
+
+### `agents/director_fanout.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_specialist_payload()` | 135 | 133 lines |
+| `_orchestration_scope_backstop()` | 371 | 131 lines |
+| `_interpret_beat_view()` | 83 | 35 lines |
+| `_resolve_beat_view()` | 51 | 30 lines |
+| `_resolved_event_verdicts()` | 302 | 30 lines |
+| `fanout_is_parallel()` | 29 | 20 lines |
+| `_index_addressed_events()` | 334 | 18 lines |
+| `_stage_container()` | 270 | 14 lines |
 
 ### `agents/director_floors.py`
 
