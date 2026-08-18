@@ -1316,3 +1316,50 @@ class TestAScalarWhereAnObjectWasDeclared:
             flag: bool = False
 
         assert _subject_slot(Anonymous) is None
+
+
+class TestAnUnboundedListIsWhereASamplerLocks:
+    """`ResponseCandidate.serves` had no ceiling and no stated vocabulary.
+
+    Live, a character step read that as an invitation to enumerate. It began
+    with real aims -- `ia1`, `drive`, `situation` -- drifted into the payload's
+    own field NAMES (`beliefs`, `values`, `self_model`, `coping`), ran off the
+    end of the payload into JSON Schema meta-keywords (`title`, `properties`,
+    `$ref`), and then locked into a cycle of those for thousands of tokens.
+
+    Two things were missing and both are fixed here. The prompt never said what
+    `serves` may contain -- alone among the three `serves` fields in this
+    schema, and the only one that is a LIST. And nothing bounded it, so a model
+    that started listing had no reason to stop. The ceiling is deterministic
+    because the floor must not depend on a model cooperating.
+    """
+
+    def _serves(self, values):
+        import schemas
+
+        out, _warnings = schemas.validate_llm_output("character", {
+            "response_candidates": [{"response": "speak", "serves": values}]})
+        return out["response_candidates"][0]["serves"]
+
+    def test_a_runaway_list_is_cut_to_the_ceiling(self):
+        import schemas
+
+        runaway = (["ia1", "drive", "situation"]
+                   + ["title", "description", "type", "properties",
+                      "$ref", "enum"] * 60)
+        kept = self._serves(runaway)
+        assert len(kept) == schemas.CANDIDATE_SERVES_LIMIT
+        # The head survives, which is where the real aims were.
+        assert kept[:3] == ["ia1", "drive", "situation"]
+
+    def test_an_ordinary_answer_is_untouched(self):
+        assert self._serves(["drive", "ia2"]) == ["drive", "ia2"]
+
+    def test_the_prompt_now_states_the_vocabulary(self):
+        """The reason it ran: `want.serves` and `goal_impacts.serves` both name
+        their domain, and this one named nothing."""
+        from prompts import get_prompt
+
+        text = get_prompt("character")
+        assert "`serves` uses the SAME vocabulary as a want's" in text
+        assert "do not list your traits" in text
