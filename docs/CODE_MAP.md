@@ -33,8 +33,9 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 4683 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 3244 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_background`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `commit_attire.py` | 862 |  | `attire`, `commit_common` |
+| `commit_background.py` | 1476 |  | `character_schema`, `commit_common`, `db`, `memory`, `scene`, `spatial` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
 | `commit_destruction.py` | 413 |  | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
 | `commit_entities.py` | 499 |  | `character_schema`, `commit_common`, `db`, `scene`, `spatial` |
@@ -409,14 +410,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 2775 | 1264 lines |
-| `prepare_scene_commit()` | 298 | 452 lines |
-| `track_background_presences()` | 1641 | 341 lines |
-| `_commit_all_locked()` | 4457 | 226 lines |
-| `pick_background_reactors()` | 2125 | 178 lines |
-| `commit_transit_sweep()` | 799 | 169 lines |
-| `promote_background_character()` | 2376 | 97 lines |
-| `commit_information_carriers()` | 1018 | 85 lines |
+| `prepare_memory_commit()` | 1336 | 1264 lines |
+| `prepare_scene_commit()` | 316 | 452 lines |
+| `_commit_all_locked()` | 3018 | 226 lines |
+| `commit_transit_sweep()` | 817 | 169 lines |
+| `commit_information_carriers()` | 1036 | 85 lines |
+| `commit_crowds()` | 2898 | 82 lines |
+| `commit_memories()` | 2732 | 80 lines |
+| `_cited_memory_ids()` | 1177 | 76 lines |
 
 ### `commit_attire.py`
 
@@ -430,6 +431,19 @@
 | `_mint_shed_garments()` | 501 | 66 lines |
 | `_adopt_shed_record()` | 446 | 34 lines |
 | `_beat_voices()` | 106 | 25 lines |
+
+### `commit_background.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `track_background_presences()` | 534 | 341 lines |
+| `pick_background_reactors()` | 1018 | 178 lines |
+| `promote_background_character()` | 1269 | 97 lines |
+| `auto_promote_background_characters()` | 1405 | 72 lines |
+| `_presence_speech_verdict()` | 188 | 67 lines |
+| `_at_post_within_earshot()` | 954 | 52 lines |
+| `_is_inert_presence_candidate()` | 457 | 50 lines |
+| `_character_address_of()` | 364 | 40 lines |
 
 ### `commit_common.py`
 
