@@ -66,6 +66,7 @@ from spatial import (
     resolve_substance_ops,
     room_layout,
     room_of,
+    comms_link,
     same_subject,
     scent_level,
     spatial_facts,
@@ -1493,6 +1494,32 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
         },
         "scent_channel_to_sources": {n: scent_level(r) for n, r in rels.items()},
     }
+
+
+def _with_comm_channel(scene, rel, *, speaker, observer, observer_room=None,
+                       speaker_room=None):
+    """Attach the live channel carrying this voice, when there is one.
+
+    Computed HERE and handed over as data, because `agents/composer.py` is the
+    layer that may not read the world: it decides admission from typed
+    percepts, and a renderer that could reach into the scene could add to what
+    it renders. Perception already holds the scene, the rooms and the names, so
+    the lookup belongs on this side of the line.
+
+    Absent when no channel applies, so the composer's `rel.get("comm_channel")`
+    reads as "no channel" rather than as "unknown".
+    """
+    if not isinstance(rel, dict):
+        return rel
+    try:
+        channel = comms_link(
+            scene,
+            speaker_room or room_of(scene, speaker),
+            observer_room or room_of(scene, observer),
+            speaker_name=speaker, observer_name=observer)
+    except Exception:
+        return rel
+    return {**rel, "comm_channel": channel} if channel else rel
 
 
 def _in_plain_view(rel, vis):
@@ -3938,6 +3965,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 if event.get("type") == "speech":
                     speech_rel = rel if continuity else {
                         **rel, "open_group_continuity": False}
+                    speech_rel = _with_comm_channel(
+                        sc, speech_rel, speaker=p_name, observer=name,
+                        observer_room=p.get("room"))
                     entry = {
                         "speaker": p_name,
                         "text": event.get("text"),
@@ -4192,7 +4222,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 else:
                     display = "a voice"
                 percept = composer.speech_percept(
-                    d, rel, name, display=display, can_see=can_see,
+                    d, _with_comm_channel(
+                        sc, rel, speaker=speaker, observer=name,
+                        observer_room=p.get("room"),
+                        speaker_room=d.get("speaker_room")),
+                    name, display=display, can_see=can_see,
                     proximity=measured_proximity_rel(sc, name, speaker),
                     order_key=order, observer_id=pid)
                 if percept:

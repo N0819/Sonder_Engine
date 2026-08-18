@@ -2388,6 +2388,11 @@ def test_diff_application_is_order_independent_by_construction():
         "inventory_ops", "artifact_ops", "remove_rooms", "remove_adjacent",
         "crowd_ops", "courier_ops", "telling_ops", "offscreen_plan_ops",
         "ratified_claims", "contradicted_claims",
+        # `apply_comms_ops` records what the beat said and checks nothing
+        # against the rooms: every prune is `normalize_scene_comms`, which runs
+        # once rooms have settled. That split is deliberate and is what keeps
+        # this channel out of the sequential set.
+        "comms_ops",
     }
     # Op lists whose appliers walk evolving state sequentially. Two axes on
     # purpose: containment and scales APPLY as end-state upserts (so they

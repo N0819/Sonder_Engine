@@ -724,6 +724,13 @@ def director_establish(ctx, nonce):
                         if isinstance(out.get("contact_ops"), list) else []),
         "substance_ops": (out.get("substance_ops")
                           if isinstance(out.get("substance_ops"), list) else []),
+        # The channels the opening installs, through the same merge every later
+        # beat uses (spatial.apply_comms_ops). Without this a scene BUILT
+        # around an intercom -- an observation room, a bridge, a control booth
+        # -- could not have one until beat two, which is exactly the beat it
+        # was needed for.
+        "comms_ops": (out.get("comms_ops")
+                      if isinstance(out.get("comms_ops"), list) else []),
         "attire": out.get("attire") if isinstance(out.get("attire"), dict) else {},
         "world_facts": out.get("world_facts") if isinstance(out.get("world_facts"), list) else [],
         "time": None,
@@ -1119,9 +1126,7 @@ def director_interpret(ctx, nonce):
             sh = json.loads(c["sheet"])
             c_room = character_room(sc, sh)
             rel = spatial_rel(sc, p_room, c_room)
-            barrier = rel.get("barrier")
-            if rel.get("same_room") or barrier in ("open", "open_door",
-                                                    "closed_door", "wall"):
+            if rel.get("same_room") or can_perceive_onset(sc, p_room, c_room):
                 fl["reactors"].append(c["id"])
 
     fl.setdefault("dialogue_mode", False)
@@ -5044,7 +5049,7 @@ SPECIALISTS = {
         "step_key": "director_spatial",
         "role": "director_spatial",
         "channels": ("positions", "rooms", "remove_rooms",
-                     "remove_adjacent", "stations", "poses"),
+                     "remove_adjacent", "stations", "poses", "comms_ops"),
     },
     # The world's traffic. The ops surface ONLY -- the offscreen SIMULATOR
     # (design note 19's out-of-band parallel) remains owner-deferred, and
@@ -5095,6 +5100,13 @@ _CATEGORY_CHANNELS = {
     "pose": "poses",
     "poses": "poses",
     "stations": "stations",
+    # Equipment that carries a voice, not the doorway it carries it past. A
+    # beat that keys a mic, kills an intercom or hands someone a radio is
+    # categorized here, so it reaches the specialist that owns the channel
+    # rather than being detected as an omission every beat and repaired by a
+    # mind that never saw it.
+    "comms": "comms_ops",
+    "comms_ops": "comms_ops",
     # The remaining delegated families. A category that reaches no channel
     # is a change nobody is handed and nobody can encode, so it is detected
     # as an omission every beat and buys a repair from a mind that never
@@ -5118,7 +5130,7 @@ _LIST_DELEGATED = frozenset({
     "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
     "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
     "telling_ops", "offscreen_plan_ops", "ratified_claims",
-    "contradicted_claims",
+    "contradicted_claims", "comms_ops",
 })
 
 #: Per-CHANNEL work gates: does this beat have possible work in this
@@ -5169,6 +5181,11 @@ _CHANNEL_GATES = {
     "remove_adjacent": lambda f: f["physical_beat"],
     "stations": lambda f: f["physical_beat"],
     "poses": lambda f: f["physical_beat"],
+    # A channel is opened, closed, carried or installed by an ACT, so the
+    # structural physical-beat fact gates it -- but a beat where anyone is
+    # SPEAKING can also key a mic, which is the ordinary way an intercom gets
+    # used. Fails open across both, per the rule this table follows.
+    "comms_ops": lambda f: f["physical_beat"] or f["speech_present"],
     # The world's traffic: gated on its subjects EXISTING, which is what
     # makes this family cold in practice (0 fires in 2,243 beats) while
     # staying genuinely dispatchable the moment a crowd stands in a room or

@@ -360,6 +360,18 @@ def line_hear_level(entry, rel, observer_name, proximity=None):
     base = hear_level(rel, entry.get("volume", "normal"), proximity=proximity)
     if base != "none":
         return base
+    # A live channel between speaker and observer -- a PA, an intercom, a
+    # radio, a phone. Read off the RELATION, never out of the scene: this
+    # module decides admission on typed data alone, and a rendering path that
+    # could consult the world could add to it.
+    #
+    # It rescues regardless of who the line names, which is the whole
+    # difference between a channel and the addressed rescue below. A voice on
+    # a speaker is heard by whoever is in front of the speaker; it does not
+    # check whether it was talking to them. `spatial.comms_link` has already
+    # decided direction, liveness and who is on the channel.
+    if isinstance(rel.get("comm_channel"), dict):
+        return "full"
     if not _addresses(entry.get("intended_target"), observer_name):
         return base
     if str(entry.get("medium") or "").lower() == "comm":
@@ -764,6 +776,7 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         level = "full"
     if level == "none":
         return None
+    channel = rel.get("comm_channel")
     data = {
         "level": level,
         "volume": volume,
@@ -780,6 +793,14 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     else:
         data["body"] = body
         fidelity = "full"
+    # WHICH channel carried it, when one did. Not decoration: a voice arriving
+    # over a speaker is a different fact from a voice arriving from a body in
+    # the room, and a mind handed the second when the first is true has been
+    # told the speaker is present. The renderer says so and the observation
+    # carries it, so nothing downstream can quietly lose the distinction.
+    if isinstance(channel, dict) and not rel.get("same_room"):
+        data["via"] = str(channel.get("name") or channel.get("id") or "")
+        data["via_channel"] = str(channel.get("id") or "")
     return Percept(
         kind="speech", channel="hearing", source_label=display,
         fidelity=fidelity, data=data,
@@ -1136,17 +1157,26 @@ def _render_standing(p):
 def _render_event(p):
     if p.kind == "speech":
         body = p.data.get("body") or ""
+        via = str(p.data.get("via") or "")
         # `_inject_dialogue` into an empty document is the production grammar
         # (bare-infinitive heard form, conducted, articulation) emitting into
         # nothing -- no duplicate detection against model prose needed.
         if p.fidelity == "fragment":
-            return _en("muffled", fragment=p.data.get("fragment", ""))
-        return _inject_dialogue(
-            "", p.source_label, f'"{body}"', p.data.get("level", "full"),
-            p.data.get("volume", "normal"), p.data.get("can_see", False),
-            conducted=p.data.get("conducted", False),
-            tone=p.data.get("tone", ""),
-            articulation=p.data.get("articulation", ""))
+            line = _en("muffled", fragment=p.data.get("fragment", ""))
+        else:
+            line = _inject_dialogue(
+                "", p.source_label, f'"{body}"', p.data.get("level", "full"),
+                p.data.get("volume", "normal"), p.data.get("can_see", False),
+                conducted=p.data.get("conducted", False),
+                tone=p.data.get("tone", ""),
+                articulation=p.data.get("articulation", ""))
+        # The route is part of what was perceived, not a flourish. A voice on a
+        # speaker and a voice at your shoulder are different facts, and the
+        # view is where a reader learns which one this was -- drop it here and
+        # the whole channel reads as somebody standing in the room.
+        if via and line:
+            line = _en("speech_via", sentence=line.rstrip("."), via=via)
+        return line
     if p.kind == "act":
         return _observable_predicate(
             p.source_label, p.data.get("surface")) or ""
@@ -1321,10 +1351,21 @@ _GENERIC_LABELS = frozenset(_ENGLISH_COMPOSITOR["generic_labels"])
 
 def _episode_sentence(p):
     if p.kind == "speech":
+        via = str(p.data.get("via") or "")
         if p.fidelity == "fragment":
+            if via:
+                return _en("episode_muffled_via", via=via,
+                           fragment=p.data.get("fragment", ""))
             return _en(
                 "episode_muffled", fragment=p.data.get("fragment", ""))
         body = p.data.get("body") or ""
+        # The route rides into MEMORY too. A character who later recalls being
+        # told something over a radio must not remember the speaker standing
+        # there -- that is the same fact deleted one layer down, and memory is
+        # where it would never be noticed.
+        if via:
+            return _en("episode_speech_via", via=via,
+                       label=p.source_label, body=body)
         if p.data.get("conducted"):
             return _en(
                 "episode_conducted", label=_cap(p.source_label), body=body)
