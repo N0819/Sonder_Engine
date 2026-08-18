@@ -100,6 +100,22 @@ _BARRIER_ALIASES = {
     # before now: any of these had to be lied about as `open_door` (which sees
     # straight through) or degrade to `wall` (which nothing passes).
     "membrane": "membrane",
+    "one-way window": "one_way_window",
+    "one_way_mirror": "one_way_window",
+    "one-way mirror": "one_way_window",
+    "one way mirror": "one_way_window",
+    "two_way_mirror": "one_way_window",
+    "two-way mirror": "one_way_window",
+    "two way mirror": "one_way_window",
+    # NOT `observation_window`: it was already an alias for plain `window`
+    # and it genuinely is ambiguous -- a hospital nursery's observation window
+    # is glass both ways, an interrogation suite's is not. The word does not
+    # decide, so it keeps the reading it had and the unambiguous spellings
+    # below carry the one-way meaning.
+    "mirrored_glass": "one_way_window",
+    "mirrored glass": "one_way_window",
+    "peephole": "one_way_window",
+    "spy_hole": "one_way_window",
     "curtain": "membrane",
     "curtained": "membrane",
     "curtained_doorway": "membrane",
@@ -210,6 +226,19 @@ _VALID_BARRIERS = {
     # -- so entering such a space made its occupant MORE exposed than standing
     # in the open, which is precisely backwards.
     "membrane",
+    # Sight passes ONE WAY -- the direction the edge is declared in -- and not
+    # back. A two-way mirror, an observation window, a peephole, a hunting
+    # blind, a confessional screen. Every other barrier is a property of the
+    # doorway rather than of the side you stand on, and that rule is right for
+    # passage and for sound: sealing a stair from one end must not leave it
+    # open from the other. It is WRONG for sight, and a real class of object
+    # sat unrepresentable because of it.
+    #
+    # The asymmetry lives on the doorway too, which is why this is one barrier
+    # value rather than a pair of contradicting declarations. `spatial_rel`
+    # already reads the OBSERVER's own edge first, so the forward direction
+    # needs nothing; what needed saying is that the way back is a wall.
+    "one_way_window",
     "wall",
     "separated",
     "unknown",
@@ -218,7 +247,7 @@ _VALID_BARRIERS = {
 # The three questions a barrier answers, kept apart because they genuinely
 # differ. Conflating them is what left the engine with no way to say "you can
 # see it but you cannot reach it" -- or, in `membrane`'s case, the reverse.
-_SIGHT_BARRIERS = {"open", "open_door", "window", "bars"}
+_SIGHT_BARRIERS = {"open", "open_door", "window", "bars", "one_way_window"}
 
 # Which barriers carry scent at all. Scent passes freely through open air and
 # doorways; bars and grilles let it through almost as well. A membrane (a
@@ -1366,10 +1395,10 @@ def spatial_rel(
 
     rooms = scene.get("rooms") or {}
 
-    for source, target in (
+    for index, (source, target) in enumerate((
         (a_room, b_room),
         (b_room, a_room),
-    ):
+    )):
         room = rooms.get(source) or {}
 
         for edge in room.get("adjacent") or []:
@@ -1379,11 +1408,22 @@ def spatial_rel(
             if edge.get("to") != target:
                 continue
 
+            barrier = normalize_barrier(edge.get("barrier"))
+            # `a_room` is the OBSERVER, and this loop reads their own side
+            # first -- so the forward direction of a one-way window needs no
+            # special case at all. Found on the SECOND pass means we are
+            # standing on the far side of one, which is a wall: that is what
+            # the back of a two-way mirror is, and it is why the asymmetry can
+            # live on a single edge instead of two declarations that
+            # contradict each other. Sound and scent land in the same place a
+            # wall does either way, so nothing else is lost by saying it this
+            # way.
+            if index == 1 and barrier == "one_way_window":
+                barrier = "wall"
+
             return {
                 "same_room": False,
-                "barrier": normalize_barrier(
-                    edge.get("barrier")
-                ),
+                "barrier": barrier,
                 # What the barrier is made of, carried through so hearing can
                 # account for it. Absent means "ordinary", which is the
                 # behaviour every existing scene already had.
@@ -7030,6 +7070,11 @@ def visible_adjacent_rooms(
 
             if (
                 edge.get("to") != room_id
+                # The reverse pass exists so a bidirectional doorway declared
+                # from one side is visible from both. A one-way window is the
+                # one edge where that generosity is wrong: it is declared in
+                # the direction it looks, and looking back is what it refuses.
+                or barrier == "one_way_window"
                 or barrier not in _SIGHT_BARRIERS
                 or _is_carried_interior(scene, other_id)
                 # Same light gate as the forward loop: sight does not care

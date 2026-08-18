@@ -64,7 +64,7 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1858 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5129 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 8389 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
+| `spatial.py` | 8434 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `subjects.py` | 449 |  | `canon_provenance`, `db`, `spatial` |
@@ -767,14 +767,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 5086 | 318 lines |
-| `merge_scene_with_diff()` | 8044 | 301 lines |
-| `sprint_reach()` | 6684 | 175 lines |
-| `apply_transit_dock_edges()` | 7418 | 165 lines |
-| `contact_sensation()` | 6249 | 144 lines |
-| `hear_level()` | 1573 | 138 lines |
-| `visible_adjacent_rooms()` | 6929 | 138 lines |
-| `contacts_from_entity_state()` | 4401 | 137 lines |
+| `apply_contact_ops()` | 5126 | 318 lines |
+| `merge_scene_with_diff()` | 8089 | 301 lines |
+| `sprint_reach()` | 6724 | 175 lines |
+| `apply_transit_dock_edges()` | 7463 | 165 lines |
+| `contact_sensation()` | 6289 | 144 lines |
+| `visible_adjacent_rooms()` | 6969 | 143 lines |
+| `hear_level()` | 1613 | 138 lines |
+| `contacts_from_entity_state()` | 4441 | 137 lines |
 
 ### `spatial_frames.py`
 
