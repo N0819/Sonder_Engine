@@ -42,11 +42,11 @@ from typing import Any, Callable
 
 from .api import (
     CharacterAccess, CharacterHandle, CommitView, CommittedTurn,
-    DirectorBlock, DirectorContext, ExtState,
+    DirectorBlock, DirectorContext, DocumentStore, ExtState,
     ExtensionError, NarrationBlock, NarrationContext,
     PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
-    SonderExtensionAPI, StepView, enter_commit_scope, in_commit_scope,
-    leave_commit_scope,
+    SonderExtensionAPI, StepView, document_path, enter_commit_scope,
+    in_commit_scope, leave_commit_scope,
 )
 
 log = logging.getLogger("extension_runtime")
@@ -1490,7 +1490,7 @@ def ui_styles() -> str:
 
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
-    "DirectorBlock", "DirectorContext",
+    "DirectorBlock", "DirectorContext", "DocumentStore",
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
     "ExtensionError", "NarrationBlock", "NarrationContext",
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
@@ -1499,7 +1499,7 @@ __all__ = [
     "disabled_reasons",
     "dispatch_character_payload", "dispatch_director_payload",
     "dispatch_narration_payload",
-    "dispatch_route", "dispatch_turn_committed",
+    "dispatch_route", "dispatch_turn_committed", "document_path",
     "enable_extension", "enabled_ids", "extension", "extension_root",
     "extension_script", "extension_styles", "in_commit_scope",
     "installed_extensions", "is_enabled", "keep_orphan_lane_rows", "listing",

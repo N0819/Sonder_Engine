@@ -3802,10 +3802,17 @@ Still missing:
   that item. Nor can a lane ship a SUGGESTED model: the host configures it or
   it inherits `default`, because a manifest choosing a model is an install
   choosing spend.
-- **No document storage.** The four namespaced homes are KV. An extension
-  porting from a host with JSON-documents-at-logical-paths has no `list`,
-  `delete` or `verify` to map onto, and a storage-integrity screen has nothing
-  to ask.
+- **No BINARY/blob storage.** `api.documents` (built; JSON documents at
+  logical paths with `list`, `delete`, `verify` and host routes —
+  `tests/test_extension_documents.py`) closed the document-storage gap, but it
+  stores JSON values only and refuses above 128 KiB, because a story document
+  is a `world` row and rides every checkpoint of the story. A large binary
+  asset — an image pack, an audio file, a campaign export measured in
+  megabytes — still has no home that survives an extension update
+  (`data_path` is replaced by re-clone). Deliberately left until an extension
+  actually wants one, because the right shape (content-addressed like
+  `memory_vectors`, or plain files outside story history) depends on whether
+  the asset needs to ride checkpoints at all.
 - **Declarative advisor stages** — a stage as data (role, prompt, input-scope
   whitelist, anchor) for authors who write no code. Genuinely useful; no longer a
   prerequisite for anything.
@@ -3844,6 +3851,11 @@ Still missing:
 - **Scoped clients**, which is what would make third-party frontends real for
   non-host players: scoped stream and chat reads, `client`-scope tokens. A
   firewall decision, and it deserves its own design note before code.
+- **Documents are not frame-scoped.** `api.state` has a per-era counterpart
+  (`api.frame_state` → `extf:<id>`) and `api.documents` does not: a document
+  row is `ext:<id>:doc:<path>`, which is chat-global like the namespace it sits
+  in. A campaign holding per-era documents would need an `extf:` document
+  store, and nothing has wanted one yet.
 - **`extension_runtime/` is outside the UI catalog's reach.**
   `tools/extract_ui_catalog.py` scans root `*.py` and `agents/*.py`, so the
   dozen-odd extension registration errors that surface in the Extensions menu's

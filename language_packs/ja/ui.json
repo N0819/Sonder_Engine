@@ -1891,5 +1891,7 @@
   "🔒 persona secrets": "🔒 ペルソナの秘密",
   "🔗 Generate invite": "🔗 招待を生成",
   "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}",
-  "Settings": "設定"
+  "Settings": "設定",
+  "body must be {\"doc\": <value>}": "本文は {\"doc\": <value>} の形でなければなりません",
+  "No document at ${path}": "${path} にドキュメントはありません"
 }
