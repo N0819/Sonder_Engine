@@ -752,6 +752,27 @@ _UNBIDDEN_ABSORPTION_CEILING = 0.85
 _UNBIDDEN_PLATEAU_BEATS = 3
 
 
+def _barren_intent(active_annotated, stored_state):
+    """Is a live intention being pressed with nothing to show for it.
+
+    Reads the same `barren_attempts` the character's own payload carries and
+    the prompt already names ("an intention at progress 1.0, or carrying
+    barren_attempts, is SPENT"). Deterministic, no model, and non-mutating:
+    this only asks whether the mind is measurably stuck on a goal.
+    """
+    st = stored_state if isinstance(stored_state, dict) else {}
+    interior = st.get("interior") if isinstance(st.get("interior"), dict) else {}
+    for intent in interior.get("intentions") or []:
+        if not isinstance(intent, dict) or intent.get("status") != "active":
+            continue
+        try:
+            if int(intent.get("barren_attempts") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def _unbidden_trigger(stored_state, active_annotated, refrain, turn_idx,
                       absorption):
     """(stuck_reason or None, fire: bool) -- fully deterministic, no model.
@@ -776,6 +797,17 @@ def _unbidden_trigger(stored_state, active_annotated, refrain, turn_idx,
         reason = "refrain"
     elif ledger.get("repeat_flag"):
         reason = "verbatim_repeat"
+    elif _barren_intent(active_annotated, st):
+        # THE SIGNAL THAT ACTUALLY CAUGHT THE LIVE CASE. A goal carrying
+        # `barren_attempts` was pressed on a beat that repeated an earlier
+        # move and gained nothing (`affect._advance_intent`). The three
+        # negative mechanisms all missed it: her lines were not verbatim
+        # repeats, their shapes varied, and the goal was neither held nor at
+        # its ceiling -- she was grinding UP the ramp, which nothing measured
+        # until that floor existed. It belongs here rather than in another
+        # "not that" rule, because a mind repeating itself for want of a
+        # better move needs an alternative offered, not a further constraint.
+        reason = "barren_goal"
     elif active.get("goal_held"):
         reason = "goal_held"
     else:
@@ -3237,12 +3269,9 @@ def character_step(ctx, cid, nonce):
     )
 
     # Deterministic decision-continuity screen. Semantic similarity is a review
-    # trigger, not proof of bad repetition: the retry sees the current beat and
-    # may preserve an invited continuation, deliberate emphasis, or an
-    # in-character riff. One combined review also names any verbatim line or
-    # already-spent intention, keeping the cost bounded and letting the model
-    # solve the decision as a whole instead of whack-a-mole phrasing.
-    _repeat_survived = False
+    # trigger, not proof of bad repetition -- an invited continuation,
+    # deliberate emphasis and an in-character riff all look the same to it --
+    # which is why what follows RECORDS rather than re-asks.
     _repeated = _first_verbatim_repeat(
         _speech_texts(out), [str(l.get("said") or "") for l in (_self_lines or [])])
     _repeated_move = _first_repeated_move(out, _self_moves)
@@ -3282,97 +3311,44 @@ def character_step(ctx, cid, nonce):
                 "from a live intention, the drive, the present situation, or "
                 "let the spent thread rest."),
         }
-    # THE CHEAP SCREEN. A semantic-similarity trigger is a REVIEW trigger,
-    # not proof of bad repetition (AGENTS.md), and the review it bought was
-    # a full second character call: the same ~25k payload and another ~7k
-    # of decision, measured live at 58.0s and 36.3s. Across stored variants
-    # that call ran and KEPT the draft 48 times. Paying a frontier model to
-    # re-author a whole decision in order to be told the decision was fine
-    # is the expensive way to ask a cheap question.
+    # NO RE-ASK. Repetition is WEAK, not unusable, and a redo that fires on
+    # anything short of broken output is a nuisance -- the owner's rule, and
+    # the measurements agree with it. What the re-ask cost was a full second
+    # character call on the character's own model: 36.3s, 58.0s, and 155.6s
+    # measured live, the last of those on a beat whose corrected answer
+    # restated the same three propositions in different words. It was kept
+    # unchanged 48 times across stored variants. Paying a frontier model to
+    # re-author a whole decision in order to be told the decision was fine is
+    # the expensive way to ask a cheap question, and asking it cheaply
+    # (a small screen that judged whether the beat had invited the
+    # repetition) only made a wrong answer cheaper: its own tie-break was
+    # "when you cannot tell, answer redo". It is gone with the re-ask it
+    # existed to gate.
     #
-    # So ask the cheap question cheaply: prior move, draft move, what is new
-    # this beat -- keep or redo. Only a `redo` escalates to the full call.
-    # This does NOT make the mind conclude less, which would be the one
-    # unacceptable fix: the character still decides, and the screen only
-    # decides whether the character is asked AGAIN. Undecidable, erroring or
-    # unconfigured screens fall through to the full retry unchanged.
-    if _corrections and set(_corrections) == {"move_correction"}:
-        from llm_quality import move_repeat_screen
-        _verdict = move_repeat_screen(
-            ctx, sh, _repeated_move,
-            (payload.get("perception") or {}).get("view") or "")
-        if _verdict is True:
-            ctx.add_warning(
-                f"character {character_name(sh)}: repetition screened as "
-                f"warranted by the beat -- kept without a full re-ask "
-                f"({str((_repeated_move or {}).get('current'))[:80]!r})")
-            _corrections = {}
-
-    if _corrections:
-        # Say the retry HAPPENED, not only that it failed. Until this line
-        # existed a retry that came back clean was indistinguishable from a
-        # first draft, so the fire rate could only be bounded from its
-        # failures -- 14 "repetition retained" notes in 401 recent-era calls,
-        # a floor of >=3.5% with the true rate unknowable -- while the live
-        # benchmark's 1.25-1.50 provider calls/turn against 1.01 stored
-        # results/turn left ~8-15s/turn of suspected retry cost unattributed
-        # (design_notes/09-character-agent-audit.md, finding 1). The duration
-        # is the number that decides whether a bounded-delta retry is worth
-        # designing; collect it before building anything.
-        _t0 = time.monotonic()
-        _retry = _agent_json(
-            role,
-            "character",
-            _cprompt,
-            {**payload, **_corrections},
-            temperature=character_temperature(sh),
-            sampler=character_sampler(sh) or None,
-        )
-        ctx.add_warning(
-            f"character {character_name(sh)}: decision review retry -- "
-            f"{', '.join(sorted(_corrections))} -- full second model call "
-            f"({time.monotonic() - _t0:.1f}s)")
-        _retry_line = _first_verbatim_repeat(
-            _speech_texts(_retry),
-            [str(l.get("said") or "") for l in (_self_lines or [])])
-        _retry_move = _first_repeated_move(_retry, _self_moves)
-        _retry_spent = _nonsteering_intention_refs(
-            _retry, _decision_intentions, ctx.turn.idx)
-        if _retry_line or _retry_move:
-            ctx.add_warning(
-                f"character {character_name(sh)}: repetition retained after "
-                f"contextual review -- "
-                f"{str(_retry_line or (_retry_move or {}).get('move'))[:100]!r}")
-        if _retry_line:
-            # Known only HERE, after the model call, so it cannot trigger
-            # anything this beat -- commit persists it on the unbidden ledger
-            # (cstate.unbidden.repeat_flag) and the NEXT beat's trigger reads
-            # it as a stuck signal. A semantic move deliberately retained after
-            # contextual review is not enough evidence to call the mind stuck.
-            _repeat_survived = True
-        if _retry_spent:
-            ctx.add_warning(
-                f"character {character_name(sh)}: non-steering intentions "
-                f"survived decision rewrite: {', '.join(_retry_spent)}")
-            _retry = _sanitize_nonsteering_intention_refs(_retry, _retry_spent)
-        out = _retry
-
-    # THE BEAT HAD NOTHING NEW, and the intent ledger is the one place that
-    # needed telling. A `move_correction` that survived `move_repeat_screen`
-    # means this beat repeated an earlier move AND the screen judged the
-    # repetition unwarranted -- the engine then paid a full re-ask over it.
-    # `affect.apply_intent_ops` audits a `progress` claim only at the ceiling,
-    # so until now a character grinding UP THE RAMP banked +0.2 and a
-    # refreshed dormancy clock on every repeat (live: chat 80, ia1 0.0 -> 0.4
-    # across three beats of the same three sentences, `barren_attempts` never
-    # set). Recorded on the result rather than acted on here, because whether
-    # a goal advanced is commit's question, not this stage's.
+    # THE DEEPER REASON IT COULD NOT WORK. This file already says it, one
+    # screen up: `recent_self_lines`, the refrain skeleton and the verbatim
+    # rewrite "all say NOT THAT". A negative constraint helps a mind that has
+    # another move and does nothing for one that does not -- so the retry
+    # rephrased, every time, because rephrasing was the only move left. Live
+    # (chat 80): a psychologist delivered the same three propositions on five
+    # consecutive beats, and each retry changed the wording and kept the
+    # propositions.
     #
-    # Deliberately NOT keyed on whether the RETRY still looked repeated: the
-    # retry cleared that check by rewording, which is what the correction text
-    # forbids in so many words, and a signal a rewrite can erase is the guard
-    # this repo keeps re-learning not to build.
+    # So the corrections stop buying a call and start doing what they always
+    # should have: they are recorded, and they arm the one mechanism that says
+    # HERE IS SOMETHING ELSE YOU OWN. `_unbidden_trigger` surfaces a
+    # contrasting memory to a measurably stuck mind, and its signals now
+    # include the two this beat can prove.
+    _repeat_survived = bool(_repeated)
+    # Still handed to the intent ledger, which is the one consumer that was
+    # never about re-asking: a `progress` claim on a beat that repeated an
+    # earlier move does not advance the goal (`affect._advance_intent`).
     _barren_beat = bool(_corrections) and "move_correction" in _corrections
+    for _name, _correction in sorted(_corrections.items()):
+        ctx.add_warning(
+            f"character {character_name(sh)}: {_name} -- "
+            f"{str(_correction.get('you_already_said') or _correction.get('you_already_did') or _correction.get('nonsteering_ids'))[:100]!r} "
+            "(recorded; the beat stands)")
 
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json -- a

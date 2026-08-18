@@ -157,19 +157,26 @@ class TestTheSignalIsAlreadyMeasured:
 
         assert 'barren_beat=bool(own_result.get("_barren_beat"))' in source
 
-    def test_a_screened_repetition_is_not_barren(self):
-        """`move_repeat_screen` clears `_corrections` when the beat genuinely
-        invited the repetition -- an insistence, a continuous riff, answering
-        something that was asked. Those beats must still count as progress."""
+    def test_an_invited_repetition_is_barren_too_and_that_is_deliberate(self):
+        """The honest consequence of removing the re-ask.
+
+        A model screen used to judge whether the beat had INVITED the
+        repetition, and only an unscreened one counted. That screen existed to
+        decide whether to pay for a full re-ask; with the re-ask gone it went
+        too. So an insistence, a continuous riff or a deliberate return now
+        costs its goal the +0.2 and surfaces `barren_attempts`. For a rule that
+        is not working that is the right thing to say; for one that is, it is a
+        beat of over-caution. Stated here rather than discovered later.
+        """
         import inspect
 
         import agents.character as character
 
         source = inspect.getsource(character)
-        cleared = source.index("_corrections = {}\n\n    if _corrections:")
-        flag = source.index("_barren_beat = bool(_corrections)")
 
-        assert flag > cleared
+        assert "move_repeat_screen" not in source
+        assert '_barren_beat = bool(_corrections) and "move_correction" in _corrections' \
+            in source
 
 
 class TestTheCharacterIsTold:
