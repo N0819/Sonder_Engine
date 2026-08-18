@@ -64,7 +64,7 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 1160 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light`, `spatial_orientation`, `spatial_prose`, `spatial_routing`, `spatial_senses`, `spatial_substance`, `spatial_transit` |
+| `spatial.py` | 166 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light`, `spatial_merge`, `spatial_orientation`, `spatial_prose`, `spatial_routing`, `spatial_senses`, `spatial_substance`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
 | `spatial_contact_migration.py` | 331 |  | `spatial_contacts`, `spatial_identity` |
 | `spatial_contacts.py` | 1167 |  | `spatial_containment`, `spatial_identity` |
@@ -73,6 +73,7 @@
 | `spatial_geometry.py` | 951 |  | `spatial_barriers`, `spatial_contacts`, `spatial_containment`, `spatial_identity`, `spatial_orientation` |
 | `spatial_identity.py` | 345 |  | — |
 | `spatial_light.py` | 209 |  | `spatial_barriers`, `spatial_geometry`, `spatial_identity` |
+| `spatial_merge.py` | 1037 |  | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_orientation`, `spatial_senses`, `spatial_substance`, `spatial_transit` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `spatial_prose.py` | 336 |  | `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light` |
 | `spatial_routing.py` | 923 |  | `spatial_barriers`, `spatial_containment`, `spatial_light`, `spatial_orientation` |
@@ -776,19 +777,6 @@
 | `_coerce_list_valued_map()` | 93 | 57 lines |
 | `_coerce_evidence_refs()` | 2504 | 51 lines |
 
-### `spatial.py`
-
-| Function | Start | Size |
-|---|---:|---:|
-| `merge_scene_with_diff()` | 813 | 318 lines |
-| `apply_following_ops()` | 734 | 77 lines |
-| `connect_orphan_new_rooms()` | 648 | 68 lines |
-| `_merge_room()` | 251 | 64 lines |
-| `_shield_standing_bearings()` | 523 | 61 lines |
-| `_shield_standing_passage()` | 586 | 60 lines |
-| `_dedup_duplicate_entity_keys()` | 463 | 58 lines |
-| `_merge_entity()` | 346 | 55 lines |
-
 ### `spatial_barriers.py`
 
 | Function | Start | Size |
@@ -886,6 +874,19 @@
 | `normalize_light()` | 35 | 4 lines |
 | `light_blocks_sight()` | 195 | 3 lines |
 | `_brighter()` | 52 | 2 lines |
+
+### `spatial_merge.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `merge_scene_with_diff()` | 690 | 318 lines |
+| `apply_following_ops()` | 611 | 77 lines |
+| `connect_orphan_new_rooms()` | 525 | 68 lines |
+| `_merge_room()` | 128 | 64 lines |
+| `_shield_standing_bearings()` | 400 | 61 lines |
+| `_shield_standing_passage()` | 463 | 60 lines |
+| `_dedup_duplicate_entity_keys()` | 340 | 58 lines |
+| `_merge_entity()` | 223 | 55 lines |
 
 ### `spatial_orientation.py`
 
