@@ -13,7 +13,8 @@ from world.spatial_orientation import (
     travel_bearing,
 )
 
-from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
+from world.spatial_barriers import (_SCENT_BARRIER_LEVELS, _SIGHT_BARRIERS,
+                                    normalize_barrier)
 from world.spatial_containment import (_body_interior_holder, _shares_enclosure,
                                  containment_conceals)
 from world.spatial_contacts import contacts_of
@@ -80,14 +81,15 @@ def scent_level(rel: dict) -> str:
         return "muffled"
     if rel.get("same_room"):
         return "full"
-    barrier = normalize_barrier(rel.get("barrier"))
-    if barrier in ("open", "open_door", "bars"):
-        return "full"
-    if barrier in ("membrane", "closed_door"):
-        return "muffled"
-    # window, wall, separated, unknown -- glass stops air; wall stops
-    # everything; unknown is safe-closed.
-    return "none"
+    # The grading is `_SCENT_BARRIER_LEVELS`' to state, not this function's.
+    # It used to be both: the table declared which barriers scent crosses and
+    # this body restated the same rule as two literal tuples, so the constant
+    # decided nothing and either could be changed without the other.
+    # Absent from the table means none -- window and wall (glass stops air,
+    # wall stops everything), and anything unrecognized, which normalizes to
+    # `wall` and is therefore safe-closed.
+    return _SCENT_BARRIER_LEVELS.get(
+        normalize_barrier(rel.get("barrier")), "none")
 
 
 # ---------------------------------------------------------------- comms
