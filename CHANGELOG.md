@@ -1,5 +1,60 @@
 # Changelog
 
+## alpha 9.5 — Everyone remembers what they said, and nothing speaks that is not somebody
+
+- **Characters remember their own conduct again.** Since 12 August no
+  character anywhere formed a memory of anything they said or did — they
+  remembered what was done TO them and nothing they themselves chose. Two
+  correct changes combined into it: one suppressed a mind's own record when
+  its perception already contained the act, which was true while perception
+  was written by a model, and the next day perception became deterministic
+  and stopped putting a mind's own conduct in its own view at all. So the
+  condition never fired and the record went quiet. Measured: a chat from
+  8 August holds 20 such memories over 51 turns; every chat from 12 August
+  on holds 0 over 240. It is why a doctor could promise you a blanket and
+  never think of it again, and why characters kept restating the same three
+  sentences — they could not recall having said them the first time.
+
+- **One body is one presence.** A background ledger that took names from one
+  place and internal ids from another was holding six entries for three
+  things: every unregistered body in a story existed twice, and the two
+  halves accrued different descriptions and different histories. The halves
+  are merged on sight now, and heal at the next beat with nothing for you to
+  do.
+
+- **Something that is not a person cannot speak for itself.** In one story a
+  ceiling-mounted suppression device interrogated a restrained player twice,
+  in the second person, having been quietly given a personality — a manner
+  of speaking and a standing grievance — by the engine's own description
+  pass, because that pass assumed everything it was handed was people.
+
+- **So the engine now asks what a presence IS before asking who.** The
+  previous answer was a guess read off whatever noun the story invented,
+  propped up by two hand-kept lists of animate and inert words, 85 entries
+  between them and never going to be finished — a device still could not be
+  told from a live war machine. The question moved to where the answer costs
+  nothing: the same pass that was already looking at each new presence, in
+  its room, with the story's genre in front of it, now answers person, thing
+  or voice, and a thing or a voice gets its nature and nothing else. No
+  manner, no trait, no look. An unanswered question is not a yes.
+
+- **A name no longer decides who anyone is.** For panels an extension shows
+  you: two people sharing a name collapsed into one entry or swapped facts,
+  a renamed person split into two strangers, and every viewer's handle for
+  the same stranger was identical — which would let two people's separate
+  views of the world be joined against each other. Identity is now the thing
+  a person keeps; a name is only what a viewer calls them. A body you have
+  seen but cannot name still appears under the label you know them by, and a
+  delivered name that several people bear now dates nobody rather than
+  guessing which of them you saw.
+
+- **An embedding is never silently answered with nothing.** Concurrent
+  requests for memory vectors are merged into one call; the caller that
+  arrived at the wrong instant could be woken with no answer to give it and
+  hand back an empty result, which everything above it would then store as
+  though it were real. A caller now settles on whether it is holding vectors,
+  and does the work itself if it is not.
+
 ## alpha 9.4 — Nobody walks through walls, and nothing is redone for nothing
 
 - **A beat is no longer redone because it was merely repetitive.** A character
