@@ -348,6 +348,26 @@ def _stream_one(bus, key, fn, holder):
             )
             holder["e"] = exc
         finally:
+            # The reasoning trace, carried out of the worker BY HAND.
+            #
+            # `providers.last_reasoning` is a ContextVar the provider sets
+            # inside the call, and the call happens here, on this thread,
+            # inside `context.run`. `save_step` reads it on the GENERATOR
+            # thread after this one has finished, where that write was never
+            # visible -- so every stored trace was empty: 0 of 27,020 variants
+            # in a live install, since the column existed.
+            #
+            # This is the fan-out contextvar hazard `agents/director.py`
+            # documents, in the direction it does not cover. Copying the
+            # parent's context INTO a worker carries values inward; nothing
+            # carries a value the worker produced back out, and a ContextVar
+            # cannot. So it rides `holder`, which is what `holder` is for.
+            try:
+                from providers import last_reasoning
+
+                holder["reasoning"] = last_reasoning.get() or ""
+            except Exception:
+                holder["reasoning"] = ""
             bus.q.put({
                 "type": "__done__",
                 "key": key,
@@ -451,7 +471,8 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
         ctx[k] = h["v"]
         saved = _with_engine_notes(
             h["v"], ctx, k, parallel_with=[m for m in members if m != k])
-        sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), saved)
+        sid, vid, n = save_step(turn_id, k, lbl, keys.index(k), saved,
+                                reasoning=h.get("reasoning"))
         _extension_step_saved(ctx, k, saved)
         yield _evt(k, lbl, sid, vid, n, saved)
 
@@ -466,7 +487,8 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     # ctx keeps the stage's own output; only what is PERSISTED carries the
     # notes, so no downstream stage reads a key its schema never declared.
     saved = _with_engine_notes(holder["v"], ctx, key)
-    sid, vid, n = save_step(turn_id, key, label, ordn, saved)
+    sid, vid, n = save_step(turn_id, key, label, ordn, saved,
+                            reasoning=holder.get("reasoning"))
     _extension_step_saved(ctx, key, saved)
     yield _evt(key, label, sid, vid, n, saved)
 

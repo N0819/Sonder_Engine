@@ -18,7 +18,7 @@ from db import q, qi, transaction
 ENGINE_NOTES_KEY = "_engine_notes"
 
 
-def save_step(turn_id, key, label, ordn, content):
+def save_step(turn_id, key, label, ordn, content, reasoning=None):
     # Deactivating the old variant and activating the new one used to be
     # two separate autocommitted statements -- a crash between them could
     # leave a step with zero active variants, silently breaking the "one
@@ -34,13 +34,21 @@ def save_step(turn_id, key, label, ordn, content):
                       (turn_id, key, label, ordn))
         qi("UPDATE variants SET active=0 WHERE step_id=?", (sid,))
         # The reasoning trace belongs to the call that just produced this
-        # content, so it is read here rather than passed down through every
-        # stage signature. Diagnostic only -- never read back as content.
-        try:
-            from providers import last_reasoning
-            _think = str(last_reasoning.get() or "")[:20000]
-        except Exception:
-            _think = ""
+        # content. It is PASSED IN when the caller ran that call on another
+        # thread, because `last_reasoning` is a ContextVar and a value set in
+        # a worker is not visible here -- which is every pipeline step, and is
+        # why this stored nothing at all for as long as the column existed.
+        # The ContextVar read stays as the fallback for a caller on the same
+        # thread as its own model call. Diagnostic only -- never read back as
+        # content.
+        if reasoning:
+            _think = str(reasoning)[:20000]
+        else:
+            try:
+                from providers import last_reasoning
+                _think = str(last_reasoning.get() or "")[:20000]
+            except Exception:
+                _think = ""
         vid = qi("INSERT INTO variants(step_id,content,created,active,reasoning) "
                  "VALUES(?,?,?,1,?)",
                  (sid, json.dumps(content), time.time(), _think))
