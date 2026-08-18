@@ -1,5 +1,78 @@
 # Changelog
 
+## alpha 9.3 — Hard mode, and a story an extension can start
+
+- **Hard mode.** You can now choose who decides what your declaration
+  achieved. Under the default — unchanged, and still the default — writing
+  "the door gives way" makes it so. Under hard mode your words are kept
+  exactly as you wrote them and the OUTCOME becomes a question again: the
+  Director may grant it, roll for it, or refuse it, and the cast gets to push
+  back physically. What you say, attempt and do with your own body is yours in
+  every setting and is never rewritten. It sits in **Genre & style**, next to
+  genre and tone, because it is that kind of choice about a story. Changing it
+  mid-story is allowed and is written down, since it changes what your earlier
+  turns meant.
+
+- **Hard mode was played before it shipped, and it did not work.** The first
+  real story under it — five rooms, two characters, an empty house — let every
+  assertion through. Two guards walked in, a locked vault opened, and the
+  player flew, none of it questioned. The setting was right; the engine was
+  filing declarations about guards and doors as though they were about the
+  player's own body, which every setting allows. It is fixed, and the same
+  story replayed properly: the guards arrive because the Director let them,
+  the caretaker moves to block the vault door, and trying to drag her by the
+  wrist has her plant her feet and hold. Nothing but playing it could have
+  found that.
+
+- **An extension can now start a story of its own.** Not a panel bolted onto
+  your story — the whole thing: rooms, a cast, lore, a clock and its own
+  campaign state, created together or not at all. A failure halfway leaves no
+  half-built story in your list.
+
+- **An extension can put rules in front of the Director.** Until now one could
+  colour what you were TOLD, after the engine had already decided what
+  happened. It can now shape the decision — "that deck is sealed and no order
+  routes a body through it" — which is what a campaign needs to gate an
+  objective on something you have actually found out.
+
+- **An extension can see the story, and see it as you see it.** Two different
+  reads: everything that is true, for its own rules, and what one person in
+  the story actually has, for anything it shows you. The second is built out
+  of what the engine already gave that person rather than being worked out
+  again, so a panel cannot show you a secret the story has not told you yet.
+  What it cannot answer is simply missing, never guessed at.
+
+- **An extension can keep documents, not just settings.** Files at paths, with
+  a list, a delete and an integrity check — which is what a campaign library
+  needs and what a key-and-value store could not offer.
+
+- **An extension can have its own model.** Its own row in your model settings,
+  its own sampler, its own spending in the ledger, instead of quietly running
+  on — and being billed as — whichever of the engine's roles it borrowed.
+
+- **An extension can have per-era state, its own settings panel, and standing
+  notices.** Stories with more than one era were sharing extension state
+  across all of them, so a mission finished in one was finished in every one
+  and rewinding did not undo it. Settings now live in that extension's own
+  card in the Extensions menu. And a notice — "your objective changed" — stays
+  on screen until you deal with it, rather than vanishing in four seconds like
+  a toast.
+
+- **A reference campaign ships with the engine.** `campaign-demo` is a small
+  playable one: a sealed wing, a caretaker who knows where the key is, a
+  surveyor who does not, and an objective that stays shut until you are
+  actually told. Building it found a real fault — an extension could not split
+  its code across more than one Python file — which is the second time now
+  that writing a real extension has found something no test had.
+
+- **What a step was thinking is kept.** Turning reasoning on has always shown
+  a model's deliberation while a turn ran, and it was thrown away the moment
+  the turn ended — every one of them, for the life of the feature. It is now
+  stored with the step and can be read afterwards, which is often the only
+  thing that explains why a beat came out the way it did.
+
+- **A model that answers and then keeps talking is no longer thrown away.**
+
 ## alpha 9.2 — An extension can change what the story tells you
 
 - **An extension can now put standing context in front of the narrator.** Until
