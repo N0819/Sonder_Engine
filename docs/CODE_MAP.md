@@ -28,7 +28,7 @@
 | `agents/runtime.py` | 1116 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 1685 |  | — |
+| `core/db.py` | 1696 |  | — |
 | `core/frames.py` | 220 |  | `core.db` |
 | `core/jobs.py` | 209 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 118 |  | — |
@@ -56,7 +56,7 @@
 | `persist/commit.py` | 575 |  | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 862 |  | `persist.commit_common`, `story` |
 | `persist/commit_background.py` | 1489 |  | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `persist/commit_common.py` | 384 |  | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
+| `persist/commit_common.py` | 387 |  | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 413 |  | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial` |
 | `persist/commit_entities.py` | 499 |  | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 302 |  | `core.db`, `persist.commit_common` |
@@ -370,14 +370,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1592 | 50 lines |
-| `conn()` | 1439 | 38 lines |
-| `transaction()` | 1479 | 36 lines |
-| `_backfill_resource_uids()` | 1574 | 17 lines |
-| `qi()` | 1537 | 16 lines |
-| `data_version()` | 1516 | 14 lines |
+| `init()` | 1603 | 50 lines |
+| `conn()` | 1450 | 38 lines |
+| `transaction()` | 1490 | 36 lines |
+| `_backfill_resource_uids()` | 1585 | 17 lines |
+| `qi()` | 1548 | 16 lines |
+| `data_version()` | 1527 | 14 lines |
 | `parse_scoped_world_key()` | 81 | 13 lines |
-| `_execute_retry()` | 1408 | 13 lines |
+| `_execute_retry()` | 1419 | 13 lines |
 
 ### `core/frames.py`
 
@@ -651,7 +651,7 @@
 |---|---:|---:|
 | `_names_heard_in()` | 168 | 53 lines |
 | `_address_forms()` | 119 | 47 lines |
-| `_entity_alias_map()` | 313 | 44 lines |
+| `_entity_alias_map()` | 313 | 47 lines |
 | `_monotonic_elapsed()` | 57 | 38 lines |
 | `_registered_name_roster()` | 252 | 28 lines |
 | `_known_name_roster()` | 223 | 27 lines |
@@ -1549,7 +1549,7 @@
 | `settings` | `key`, `value` |
 | `characters` | `id`, `name`, `sheet`, `source`, `created`, `resource_uid` |
 | `personas` | `id`, `name`, `sheet`, `source`, `resource_uid` |
-| `lorebooks` | `id`, `name`, `chat_id`, `origin_id`, `book_type`, `summary`, `resource_uid`, `parent_id`, `scope_world_id`, `scope_location_id`, `inheritance_mode`, `sort_order`, `anchor_entity_id`, `--`, `--`, `--`, `--`, `retired_turn_id` |
+| `lorebooks` | `id`, `name`, `chat_id`, `origin_id`, `book_type`, `summary`, `resource_uid`, `parent_id`, `scope_world_id`, `scope_location_id`, `inheritance_mode`, `sort_order`, `anchor_entity_id`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `retired_turn_id` |
 | `lorebook_links` | `id`, `source_book_id`, `target_book_id`, `relation_type`, `label`, `notes`, `bidirectional`, `follow_for_retrieval`, `weight`, `sort_order`, `created` |
 | `chat_lorebooks` | `chat_id`, `lorebook_id`, `origin_id`, `enabled` |
 | `lore_entries` | `id`, `lorebook_id`, `keys`, `content`, `category`, `canon_locked`, `turn_added`, `embedding`, `title`, `knowledge_tag`, `knowledge_range`, `knowledge_locations`, `entry_uid`, `importance`, `aliases`, `scope`, `relations`, `source_notes`, `--`, `--`, `--`, `--`, `embedding_model`, `embedding_dim` |
@@ -1573,7 +1573,7 @@
 | `checkpoints` | `id`, `chat_id`, `turn_idx`, `blob`, `created` |
 | `world_events` | `event_id`, `chat_id`, `turn_id`, `frame_id`, `occurred_at`, `duration_seconds`, `kind`, `location_id`, `payload`, `seed`, `committed` |
 | `relationship_events` | `id`, `chat_id`, `frame_id`, `char_id`, `target`, `axis`, `delta`, `triggers`, `note`, `provenance`, `turn_idx`, `created` |
-| `world_entities` | `entity_id`, `chat_id`, `kind`, `subtype`, `name`, `payload`, `created_turn_id`, `retired_turn_id` |
+| `world_entities` | `entity_id`, `chat_id`, `kind`, `subtype`, `name`, `payload`, `created_turn_id`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `retired_turn_id` |
 | `world_placements` | `chat_id`, `subject_id`, `relation`, `container_id`, `detail` |
 | `world_conditions` | `condition_id`, `chat_id`, `subject_id`, `kind`, `started_at`, `expires_at`, `next_tick`, `payload`, `active` |
 | `scheduled_events` | `event_id`, `chat_id`, `due_at`, `kind`, `location_id`, `payload`, `seed`, `status` |

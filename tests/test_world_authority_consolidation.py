@@ -214,6 +214,45 @@ def test_world_put_without_turns_registers_but_never_retires(temp_db):
     assert rows["clearing"]["created_turn_id"] is None
 
 
+def test_the_entity_projection_never_retires_a_row(temp_db):
+    """A projection has no history to keep, so `world_entities` has no
+    retirement: removal DELETES, and `retired_turn_id` is never written.
+
+    Pinned because the column exists, is round-tripped by every archive and
+    checkpoint path, and was filtered on by `_entity_alias_map` -- a guard
+    that could not fire. `room_registry` is where existence-over-time lives
+    (`test_world_put_syncs_room_registry_with_manual_scene_edit`), and the
+    destroyed thing's lore stays retrievable through its RETIRED lorebook.
+    If a writer ever appears, that division has forked and this must fail.
+    """
+    ids = _make_chat(temp_db, _two_ship_scene(),
+                     books=[("The Aurora", "ship_a")])
+    cid = ids["chat_id"]
+    _commit_beat(_make_ctx(temp_db, ids, {
+        "entities": {"ship_a": {"name": "The Aurora", "kind": "vehicle",
+                                "interior_rooms": ["deck_3"], "state": {}},
+                     "crate": {"name": "Crate", "kind": "object"}},
+        "positions": {"crate": "harbor"},
+    }))
+    _commit_beat(_make_ctx(temp_db, ids, {
+        "remove_entities": ["crate"],
+    }, turn_idx=2))
+    _commit_beat(_make_ctx(temp_db, ids, {
+        "destruction": {"target_id": "ship_a", "scale": "vehicle",
+                        "kind": "sunk", "news": []},
+    }, turn_idx=3))
+
+    rows = temp_db.q("SELECT entity_id, retired_turn_id FROM world_entities "
+                     "WHERE chat_id=?", (cid,))
+    assert {r["entity_id"] for r in rows}.isdisjoint({"crate", "ship_a"})
+    assert all(r["retired_turn_id"] is None for r in rows)
+    # ...and the sunk ship's BOOK is retired rather than deleted, which is the
+    # half of the pair that is real.
+    book = temp_db.q("SELECT retired_turn_id FROM lorebooks WHERE chat_id=? "
+                     "AND anchor_entity_id='ship_a'", (cid,), one=True)
+    assert book["retired_turn_id"] is not None
+
+
 def test_world_placements_have_no_runtime_writer(temp_db):
     """Decommission guard: a full commit beat must leave world_placements
     empty -- the table is import/restore compatibility only. If a runtime

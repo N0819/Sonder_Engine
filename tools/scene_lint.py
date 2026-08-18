@@ -439,8 +439,14 @@ def check_story(conn, chat_id, sc):
     for eid in entities:
         if eid not in proj:
             out.append(("scene entity missing from world_entities", eid))
-        elif proj[eid]["retired_turn_id"] is not None:
-            out.append(("live entity marked retired in world_entities", eid))
+    # The projection keeps no history: removal deletes. A stamp here means a
+    # writer appeared and the entity table has started being a ledger, which
+    # is room_registry's job -- reported for ANY row, not just live ones,
+    # because checking only live rooms made this unfireable.
+    for eid, row in proj.items():
+        if row["retired_turn_id"] is not None:
+            out.append(("world_entities row carries a retirement stamp the "
+                        "projection has no writer for", eid))
 
     # A mind's records must belong to a mind this story actually has.
     attached = {r["char_id"] for r in conn.execute(

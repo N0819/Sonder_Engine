@@ -148,10 +148,13 @@ CREATE TABLE IF NOT EXISTS lorebooks(
     inheritance_mode TEXT NOT NULL DEFAULT 'inherit',
     sort_order INTEGER NOT NULL DEFAULT 0,
     anchor_entity_id TEXT,
-    -- Mirrors world_entities.retired_turn_id: a destroyed vehicle/building's
-    -- book is RETIRED (marked with the turn that destroyed it), never
-    -- deleted -- its lore stays retrievable history ("the ship that sank
-    -- here"). NULL = live. Written only by commit.py's destruction path.
+    -- A destroyed vehicle/building's book is RETIRED (marked with the turn
+    -- that destroyed it), never deleted -- its lore stays retrievable history
+    -- ("the ship that sank here"). NULL = live. Written only by the
+    -- destruction path. It does NOT mirror world_entities.retired_turn_id,
+    -- which this comment used to claim: that column has never had a writer,
+    -- because the entity table is a projection of the live scene and a
+    -- projection keeps no history. The book IS the history.
     retired_turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_lorebooks_chat ON lorebooks(chat_id);
@@ -674,6 +677,14 @@ CREATE TABLE IF NOT EXISTS world_entities(
     name TEXT NOT NULL DEFAULT '',
     payload TEXT NOT NULL,
     created_turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL,
+    -- VESTIGIAL: no writer, and by design. This table is a projection of the
+    -- live scene, so a removed entity's row is deleted with the thing it
+    -- projects; existence-over-time is room_registry's ledger and the
+    -- destroyed thing's lore stays in its RETIRED lorebook. Kept rather than
+    -- dropped only because every archive, checkpoint and branch-remap path
+    -- round-trips the column, and a rebuild migration on live stories is not
+    -- worth removing a NULL. Guarded by scene_lint and by
+    -- test_the_entity_projection_never_retires_a_row.
     retired_turn_id INTEGER REFERENCES turns(id) ON DELETE SET NULL,
     PRIMARY KEY(chat_id, entity_id)
 );
