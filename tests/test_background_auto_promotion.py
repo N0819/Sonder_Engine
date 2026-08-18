@@ -288,7 +288,7 @@ class TestAutoPromoteSweep:
         assert result == {"promoted": []}
         assert temp_db.q("SELECT id FROM characters WHERE name='Data'", one=True) is None
 
-    def test_below_dialogue_threshold_stays_tracked(self, temp_db, monkeypatch):
+    def test_below_addressed_threshold_stays_tracked(self, temp_db, monkeypatch):
         """Promotable per the UI badge (2 dialogue turns) but below the
         configured number of addressed turns -- the sweep leaves her alone."""
         cid = _make_chat(temp_db)
@@ -299,6 +299,41 @@ class TestAutoPromoteSweep:
 
         assert result == {"promoted": []}
         assert "Data" in temp_db.wget(cid, "background_presences", {})
+
+    def test_below_the_auto_dialogue_threshold_stays_tracked(self, temp_db,
+                                                             monkeypatch):
+        """Addressed all day, but she has barely spoken.
+
+        The two gates are independent and the autonomous path wants BOTH:
+        `promote_after_addressed` measures how deliberately the story turned
+        toward her, `auto_dialogue` how much voice she has actually accrued.
+        Someone talked AT for six turns who answered twice is a prop being
+        addressed, not a mind emerging -- and minting one costs a model call
+        and a permanent cast member that cannot be taken back.
+        """
+        cid = _make_chat(temp_db)
+        self._seed(temp_db, cid, [1, 2], last_turn=6,
+                   addressed_turns=[1, 2, 3, 4, 5, 6])
+        _stub_draft(monkeypatch)
+
+        result = auto_promote_background_characters(_ctx(cid, 6, "Data, report."))
+
+        assert result == {"promoted": []}
+        assert "Data" in temp_db.wget(cid, "background_presences", {})
+
+    def test_the_chat_may_tune_the_auto_dialogue_threshold(self, temp_db,
+                                                           monkeypatch):
+        """`promotion_thresholds` has had a route, an editor and a test since
+        the feature shipped. Nothing read the value."""
+        cid = _make_chat(temp_db)
+        self._seed(temp_db, cid, [1, 2], last_turn=6,
+                   addressed_turns=[1, 2, 3, 4, 5, 6])
+        _stub_draft(monkeypatch)
+        temp_db.wset(cid, "promotion_thresholds", {"auto_dialogue": 2})
+
+        result = auto_promote_background_characters(_ctx(cid, 6, "Data, report."))
+
+        assert [p["name"] for p in result["promoted"]] == ["Data"]
 
     def test_not_present_this_beat_is_not_promoted(self, temp_db, monkeypatch):
         cid = _make_chat(temp_db)

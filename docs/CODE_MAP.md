@@ -55,7 +55,7 @@
 | `persist/checkpoints.py` | 1149 |  | `core.db`, `mind.memory` |
 | `persist/commit.py` | 575 |  | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 862 |  | `persist.commit_common`, `story` |
-| `persist/commit_background.py` | 1476 |  | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `persist/commit_background.py` | 1489 |  | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 384 |  | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 413 |  | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial` |
 | `persist/commit_entities.py` | 499 |  | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -639,7 +639,7 @@
 | `track_background_presences()` | 534 | 341 lines |
 | `pick_background_reactors()` | 1018 | 178 lines |
 | `promote_background_character()` | 1269 | 97 lines |
-| `auto_promote_background_characters()` | 1405 | 72 lines |
+| `auto_promote_background_characters()` | 1405 | 85 lines |
 | `_presence_speech_verdict()` | 188 | 67 lines |
 | `_at_post_within_earshot()` | 954 | 52 lines |
 | `_is_inert_presence_candidate()` | 457 | 50 lines |
