@@ -1,0 +1,64 @@
+/* Every class is prefixed `ext-overlay-demo-`. The host's stylesheet is not
+   namespaced, so an unprefixed `.shell` here would restyle the app.
+
+   Colours come from the host's custom properties rather than literals, so the
+   view follows the reader's theme instead of being one more thing they have to
+   theme separately. */
+
+.ext-overlay-demo-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.ext-overlay-demo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--bd);
+  padding-bottom: 12px;
+}
+
+.ext-overlay-demo-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.ext-overlay-demo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ext-overlay-demo-hint,
+.ext-overlay-demo-empty,
+.ext-overlay-demo-status {
+  margin: 0;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ext-overlay-demo-input {
+  width: 100%;
+  resize: vertical;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bd);
+  background: var(--bg2);
+  color: var(--fg);
+  font: inherit;
+}
+
+.ext-overlay-demo-close {
+  background: var(--bg3);
+  color: var(--fg);
+  border: 1px solid var(--bd);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}

@@ -28,6 +28,12 @@ const Sonder = {
   _end() { Sonder._owner = null; },
 
   _sidebar: [],
+  _topbar: [],
+  _views: [],
+  _composer: [],
+  //: the open view's id, or null for the transcript. Host-owned, so disabling
+  //: an extension whose view is open can put the reader back on their story.
+  _openView: null,
   _steps: new Map(),
   _events: new Map(),
   //: extension id -> consecutive-ish throw count, for the three-strikes rule.
@@ -63,12 +69,122 @@ const Sonder = {
     }
   },
 
+  // ---- ES module entries ----
+  //
+  // The classic path attributes registrations with a `_begin(id)`/`_end()`
+  // pair around synchronous top-level code. That does not survive a module: a
+  // `register` may await, and ambient owner state set before the await belongs
+  // to somebody else after it. So a module gets an ID-BOUND facade instead and
+  // never relies on `_owner` at all.
+  //
+  // The facade carries whatever this registry publishes, DERIVED rather than
+  // listed: a hand-kept list is a second copy of the registration surface, and
+  // the copy that falls behind is the one nobody notices -- a call added below
+  // would work for a classic `ui.js` extension and simply not exist for a
+  // module one, which reads as "modules are broken".
+  //
+  // The `_` prefix is the whole convention: everything host-internal already
+  // wears one, so "public" needs no separate declaration to stay true.
+  _publicNames() {
+    return Object.keys(Sonder).filter(
+      name => name.charAt(0) !== "_" && typeof Sonder[name] === "function");
+  },
+
+  _facade(extId) {
+    const owner = String(extId || "");
+    const facade = { id: owner };
+    for (const name of Sonder._publicNames()) {
+      const fn = Sonder[name];
+      facade[name] = (...args) => {
+        const previous = Sonder._owner;
+        Sonder._owner = owner;
+        try { return fn.apply(Sonder, args); }
+        finally { Sonder._owner = previous; }
+      };
+    }
+    return facade;
+  },
+
+  // Load one extension's ES module and hand it its facade. Called from the
+  // loader line the server emits for a `capabilities.ui.module` entry, so an
+  // extension author never writes this call themselves.
+  //
+  // Resolves rather than rejects on every path: a broken extension is charged
+  // a fault and the host keeps its page.
+  async _loadModule(extId, href) {
+    const owner = String(extId || "");
+    let module = null;
+    try {
+      module = await import(href);
+    } catch (error) {
+      Sonder._fault(owner, error);
+      return false;
+    }
+    const register = module && module.register;
+    if (typeof register !== "function") {
+      // Not an error -- a module may have done its work at import time -- but
+      // nothing it registered while importing was attributed to it, so say so
+      // once rather than leaving a silent no-op to be debugged later.
+      console.warn({ extension: owner, missing: "register" });
+      return true;
+    }
+    try {
+      await register(Sonder._facade(owner));
+    } catch (error) {
+      Sonder._fault(owner, error);
+      return false;
+    }
+    // A module registers AFTER boot has drawn the page -- import resolution is
+    // asynchronous, so unlike a classic entry it cannot rely on a render that
+    // has not happened yet. Redraw once, here, so a sidebar tab registered by
+    // a module is not invisible until the reader clicks something.
+    Sonder._safe(owner, () => Sonder.refresh());
+    return true;
+  },
+
   // ---- Registration surface ----
   registerSidebarTab({ id, label, render }) {
     if (!id || typeof render !== "function") return;
     const owner = Sonder._owner;
     Sonder._sidebar = Sonder._sidebar.filter(tab => tab.id !== id);
     Sonder._sidebar.push({ id: String(id), label: String(label || id), render, owner });
+  },
+
+  // A button beside the host's own in the story toolbar. The launcher an
+  // overlay extension needs: without one it has to find `#topactions` and
+  // append to it, which works and is outside every safety net here -- a throw
+  // in the handler is not charged to anyone and disabling the extension leaves
+  // the button on the page.
+  registerTopBarButton({ id, icon, title, onClick }) {
+    if (!id || typeof onClick !== "function") return;
+    const owner = Sonder._owner;
+    Sonder._topbar = Sonder._topbar.filter(item => item.id !== id);
+    Sonder._topbar.push({
+      id: String(id), icon: String(icon || "🧩"),
+      title: String(title || id), onClick, owner
+    });
+    Sonder._renderTopBar();
+  },
+
+  // A full-window surface over the transcript, which is what an extension that
+  // is an APPLICATION rather than a panel actually needs. The host owns the
+  // container and the open/close state, so `_unload` can take a view away and
+  // a throw inside `render` is charged to its owner -- neither of which is
+  // true of an extension that appends its own overlay to `document.body`.
+  registerView({ id, label, render }) {
+    if (!id || typeof render !== "function") return;
+    const owner = Sonder._owner;
+    Sonder._views = Sonder._views.filter(view => view.id !== id);
+    Sonder._views.push({ id: String(id), label: String(label || id), render, owner });
+  },
+
+  // A control beside the composer's send button.
+  registerComposerControl({ id, render }) {
+    if (!id || typeof render !== "function") return;
+    const owner = Sonder._owner;
+    Sonder._composer = Sonder._composer.filter(item => item.id !== id);
+    Sonder._composer.push({ id: String(id), render, owner });
+    Sonder._renderComposer();
   },
 
   // A step key an extension added to the pipeline, rendered its way in the
@@ -134,11 +250,96 @@ const Sonder = {
   refresh() {
     if (typeof renderSide === "function") renderSide();
     if (typeof renderChat === "function") renderChat();
+    Sonder._renderTopBar();
+    Sonder._renderComposer();
+    Sonder._renderView();
+  },
+
+  // Open one registered view over the transcript, or return to the story with
+  // `closeView()`. Both are callable by an extension -- a launcher button that
+  // could not open its own app would be decoration.
+  openView(id) {
+    const view = Sonder._views.find(entry => entry.id === String(id || ""));
+    if (!view) return false;
+    Sonder._openView = view.id;
+    Sonder._renderView();
+    return true;
+  },
+
+  closeView() {
+    if (Sonder._openView === null) return;
+    Sonder._openView = null;
+    Sonder._renderView();
   },
 
   // ---- Host-internal accessors ----
   // Used by app.js and chat.js; not part of what an extension calls.
   _sidebarTabs() { return [...Sonder._sidebar]; },
+
+  // Redraw the extension buttons in the story toolbar. Host elements are left
+  // alone: only nodes this registry created are removed, matched by a data
+  // attribute rather than by position, so the host may add or reorder its own
+  // buttons without this having to know.
+  _renderTopBar() {
+    const host = document.getElementById("topactions");
+    if (!host) return;
+    for (const node of [...host.querySelectorAll("[data-ext-button]")]) {
+      node.remove();
+    }
+    for (const item of Sonder._topbar) {
+      const button = document.createElement("button");
+      button.className = "icon-button";
+      button.dataset.extButton = item.id;
+      button.textContent = item.icon;
+      button.title = item.title;
+      button.setAttribute("aria-label", item.title);
+      button.onclick = () => Sonder._safe(item.owner, item.onClick);
+      host.append(button);
+    }
+  },
+
+  _renderComposer() {
+    const host = document.getElementById("composer-inner");
+    if (!host) return;
+    for (const node of [...host.querySelectorAll("[data-ext-composer]")]) {
+      node.remove();
+    }
+    for (const item of Sonder._composer) {
+      const slot = document.createElement("span");
+      slot.dataset.extComposer = item.id;
+      host.append(slot);
+      const result = Sonder._safe(item.owner, item.render, slot);
+      if (result && typeof result.catch === "function") {
+        result.catch(error => Sonder._fault(item.owner, error));
+      }
+    }
+  },
+
+  // Draw or tear down the open view. The container is created on demand and
+  // removed on close rather than left hidden, because a view left in the DOM
+  // keeps its timers, its listeners and its scroll position -- and an
+  // extension retired mid-view would leave all three running.
+  _renderView() {
+    const main = document.getElementById("main");
+    if (!main) return;
+    const existing = document.getElementById("ext-view");
+    if (existing) existing.remove();
+    const view = Sonder._views.find(entry => entry.id === Sonder._openView);
+    if (!view) {
+      Sonder._openView = null;
+      main.classList.remove("ext-view-open");
+      return;
+    }
+    const container = document.createElement("div");
+    container.id = "ext-view";
+    container.dataset.extView = view.id;
+    main.append(container);
+    main.classList.add("ext-view-open");
+    const result = Sonder._safe(view.owner, view.render, container);
+    if (result && typeof result.catch === "function") {
+      result.catch(error => Sonder._fault(view.owner, error));
+    }
+  },
 
   _renderSidebarTab(id, container) {
     const tab = Sonder._sidebar.find(entry => entry.id === id);
@@ -173,6 +374,17 @@ const Sonder = {
   _unregister(extId) {
     if (!extId) return;
     Sonder._sidebar = Sonder._sidebar.filter(tab => tab.owner !== extId);
+    Sonder._topbar = Sonder._topbar.filter(item => item.owner !== extId);
+    Sonder._composer = Sonder._composer.filter(item => item.owner !== extId);
+    // A view belonging to a retired extension must not stay on screen: the
+    // reader would be left looking at a dead application with no way back to
+    // their story, which is the worst failure this registry can produce.
+    const open = Sonder._views.find(view => view.id === Sonder._openView);
+    if (open && open.owner === extId) Sonder._openView = null;
+    Sonder._views = Sonder._views.filter(view => view.owner !== extId);
+    Sonder._renderTopBar();
+    Sonder._renderComposer();
+    Sonder._renderView();
     for (const [key, entry] of [...Sonder._steps]) {
       if (entry.owner === extId) Sonder._steps.delete(key);
     }

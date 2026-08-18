@@ -123,6 +123,12 @@ Elsewhere:
   shipped, including the ruling that the firewall is for minds rather than
   developers, and the fourteen things building it changed. The reference for
   *writing* one is [`guides/EXTENSIONS.md`](guides/EXTENSIONS.md).
+- [`DIRECTIVE_HOST_SURFACE.md`](design/DIRECTIVE_HOST_SURFACE.md) — what the
+  extension surface is still short of for a *total-conversion* extension,
+  measured against Directive. A study; nothing built. Names three blockers —
+  no narration-context seam, a declared UI surface two mount points wide, and
+  no ES module loading — and finds the port is a host adapter rather than the
+  Python rewrite it was taken for.
 - [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md) —
   greeting-seeded openings. Shipped, under a materially different architecture
   than proposed; its header records the deviation.
