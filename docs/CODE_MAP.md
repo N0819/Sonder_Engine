@@ -12,9 +12,10 @@
 | `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
-| `agents/director.py` | 7342 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_lingua`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 6451 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_lingua`, `agents.director_movement`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/director_contact.py` | 421 |  | `character_schema`, `spatial` |
 | `agents/director_lingua.py` | 22 |  | — |
+| `agents/director_movement.py` | 938 |  | `agents.director_lingua`, `character_schema`, `spatial` |
 | `agents/director_views.py` | 453 |  | `agents.common`, `character_schema`, `scene` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
@@ -148,14 +149,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5835 | 1474 lines |
-| `director_interpret()` | 342 | 534 lines |
-| `_reconcile_resolution()` | 3700 | 445 lines |
-| `_reconcile_near_group_positions()` | 1926 | 276 lines |
-| `_evidence_present()` | 2771 | 232 lines |
-| `_run_specialists()` | 5460 | 211 lines |
-| `_specialist_payload()` | 5241 | 133 lines |
-| `_orchestration_scope_backstop()` | 5691 | 131 lines |
+| `director_resolve()` | 4944 | 1474 lines |
+| `director_interpret()` | 312 | 534 lines |
+| `_reconcile_resolution()` | 3125 | 445 lines |
+| `_evidence_present()` | 2196 | 232 lines |
+| `_run_specialists()` | 4569 | 211 lines |
+| `_specialist_payload()` | 4350 | 133 lines |
+| `_orchestration_scope_backstop()` | 4800 | 131 lines |
+| `_verify_already_true()` | 2774 | 126 lines |
 
 ### `agents/director_contact.py`
 
@@ -174,6 +175,19 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_ling()` | 15 | 2 lines |
+
+### `agents/director_movement.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_reconcile_near_group_positions()` | 98 | 276 lines |
+| `_travel_continues()` | 733 | 124 lines |
+| `_apply_following_movement()` | 465 | 88 lines |
+| `_guard_approach_is_not_arrival()` | 859 | 80 lines |
+| `_unreachable_position_writes()` | 554 | 68 lines |
+| `_travel_in_flight_view()` | 673 | 58 lines |
+| `_egocentric_exits()` | 29 | 48 lines |
+| `_resolve_movement_mover()` | 624 | 37 lines |
 
 ### `agents/director_views.py`
 
