@@ -12,12 +12,13 @@
 | `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
-| `agents/director.py` | 4992 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 4501 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_scopes`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/director_contact.py` | 421 |  | `character_schema`, `spatial` |
 | `agents/director_evidence.py` | 892 |  | `agents.common`, `agents.director_lingua`, `schemas`, `spatial` |
 | `agents/director_floors.py` | 678 |  | `agents.director_lingua`, `character_schema`, `scene` |
 | `agents/director_lingua.py` | 22 |  | — |
 | `agents/director_movement.py` | 938 |  | `agents.director_lingua`, `character_schema`, `spatial` |
+| `agents/director_scopes.py` | 545 |  | `agents.director_views`, `db`, `survival` |
 | `agents/director_views.py` | 453 |  | `agents.common`, `character_schema`, `scene` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
@@ -151,12 +152,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3485 | 1474 lines |
+| `director_resolve()` | 2994 | 1474 lines |
 | `director_interpret()` | 312 | 534 lines |
 | `_reconcile_resolution()` | 1666 | 445 lines |
-| `_run_specialists()` | 3110 | 211 lines |
-| `_specialist_payload()` | 2891 | 133 lines |
-| `_orchestration_scope_backstop()` | 3341 | 131 lines |
+| `_run_specialists()` | 2619 | 211 lines |
+| `_specialist_payload()` | 2400 | 133 lines |
+| `_orchestration_scope_backstop()` | 2850 | 131 lines |
 | `_verify_already_true()` | 1315 | 126 lines |
 | `director_establish()` | 166 | 125 lines |
 
@@ -216,6 +217,19 @@
 | `_travel_in_flight_view()` | 673 | 58 lines |
 | `_egocentric_exits()` | 29 | 48 lines |
 | `_resolve_movement_mover()` | 624 | 37 lines |
+
+### `agents/director_scopes.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_gate_facts()` | 450 | 70 lines |
+| `register_specialist()` | 320 | 37 lines |
+| `_dispatch_specialists()` | 522 | 24 lines |
+| `_extension_specialist_call()` | 371 | 17 lines |
+| `_shipped_transit_state()` | 390 | 12 lines |
+| `unregister_specialists()` | 359 | 10 lines |
+| `_shipped_darkened_room()` | 404 | 6 lines |
+| `_rebuild_channel_owners()` | 313 | 5 lines |
 
 ### `agents/director_views.py`
 
