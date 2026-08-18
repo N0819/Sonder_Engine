@@ -64,8 +64,9 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 7341 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_identity`, `spatial_orientation`, `spatial_transit` |
+| `spatial.py` | 6727 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_containment`, `spatial_identity`, `spatial_orientation`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
+| `spatial_containment.py` | 636 |  | `spatial_identity`, `spatial_transit` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_identity.py` | 345 |  | — |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -771,14 +772,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 4431 | 318 lines |
-| `merge_scene_with_diff()` | 6981 | 318 lines |
-| `sprint_reach()` | 6029 | 175 lines |
-| `contact_sensation()` | 5594 | 144 lines |
-| `visible_adjacent_rooms()` | 6274 | 143 lines |
-| `hear_level()` | 1223 | 138 lines |
-| `contacts_from_entity_state()` | 3961 | 137 lines |
-| `_resolved_substance_add()` | 4938 | 122 lines |
+| `apply_contact_ops()` | 3830 | 318 lines |
+| `merge_scene_with_diff()` | 6380 | 318 lines |
+| `sprint_reach()` | 5428 | 175 lines |
+| `contact_sensation()` | 4993 | 144 lines |
+| `visible_adjacent_rooms()` | 5673 | 143 lines |
+| `hear_level()` | 1238 | 138 lines |
+| `contacts_from_entity_state()` | 3360 | 137 lines |
+| `_resolved_substance_add()` | 4337 | 122 lines |
 
 ### `spatial_barriers.py`
 
@@ -789,6 +790,19 @@
 | `normalize_scene_barriers()` | 345 | 21 lines |
 | `unresolved_barrier_words()` | 329 | 15 lines |
 | `_barrier_exact()` | 249 | 9 lines |
+
+### `spatial_containment.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_body_interior_holder()` | 312 | 75 lines |
+| `normalize_scene_containment()` | 469 | 47 lines |
+| `derive_contained_positions()` | 518 | 42 lines |
+| `size_facts()` | 160 | 40 lines |
+| `containment_broken_by_scale_change()` | 562 | 36 lines |
+| `normalize_scene_scales()` | 83 | 34 lines |
+| `_hiding_holders()` | 389 | 34 lines |
+| `size_relation()` | 125 | 33 lines |
 
 ### `spatial_frames.py`
 
