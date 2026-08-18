@@ -142,7 +142,7 @@ def test_only_generative_stages_carry_the_guide():
     authored voices."""
     director = open("agents/director.py").read()
     interpret = director[director.index("def director_interpret"):
-                         director.index("def _decl_tokens")]
+                         director.index("def _reconcile_interpretation")]
     assert "style_guide" not in interpret
 
     for path in ("agents/character.py", "agents/perception.py",
