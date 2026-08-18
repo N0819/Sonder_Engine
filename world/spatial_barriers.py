@@ -60,7 +60,6 @@ _BARRIER_ALIASES = {
     "viewport": "window",
     "view_port": "window",
     "observation_window": "window",
-    "one_way_mirror": "window",
     "transparent": "window",
     "sealed_glass": "window",
     # See-through AND sound-through: a cage, a grille, a barred door. Distinct
@@ -90,6 +89,10 @@ _BARRIER_ALIASES = {
     "two_way_mirror": "one_way_window",
     "two-way mirror": "one_way_window",
     "two way mirror": "one_way_window",
+    # `one_way_mirror` was ALSO already an alias for plain `window`, thirty
+    # lines up, and this binding silently won on source order -- the reading
+    # below is the one the engine has always had. The dead line is gone.
+    #
     # NOT `observation_window`: it was already an alias for plain `window`
     # and it genuinely is ambiguous -- a hospital nursery's observation window
     # is glass both ways, an interrogation suite's is not. The word does not
