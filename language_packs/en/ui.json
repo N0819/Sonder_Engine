@@ -1889,5 +1889,6 @@
   "🔊 Mute": "🔊 Mute",
   "🔒 locked": "🔒 locked",
   "🔒 persona secrets": "🔒 persona secrets",
-  "🔗 Generate invite": "🔗 Generate invite"
+  "🔗 Generate invite": "🔗 Generate invite",
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}"
 }

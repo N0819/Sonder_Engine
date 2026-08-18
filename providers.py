@@ -1073,6 +1073,20 @@ ROLES = [
     # OPTIONAL and out of band on the same terms as backdrop_prompt: with no
     # model configured, ambience falls back to a deterministic keyword query.
     "ambience_prompt",
+    # NO extension lanes, though they exist: an enabled extension may declare
+    # its own lane (`api.add_model_lane`), and the role it gets is namespaced
+    # `ext:<extension-id>:<name>` -- never appended here, because this list is
+    # the HOST's fixed vocabulary, read all over the engine, and a ROLES an
+    # install could grow would also be one it could shadow or shrink. A lane
+    # needs no entry to work: `resolve_role_candidates` looks its role string
+    # up in `agent_models`, so a configured lane resolves its own row, a blank
+    # one inherits `default` exactly as a blank host row does, and `_log_usage`
+    # attributes the spend to the lane's own role string. The settings panel
+    # learns the live lanes from the bootstrap's `extension_lanes`
+    # (`extension_runtime.registered_model_lanes`), which empties with the
+    # extension's registration -- so a disabled or removed extension leaves no
+    # phantom row here or there, while the host's stored configuration for it
+    # survives (`extension_runtime.keep_orphan_lane_rows`).
 ]
 
 # Image generation is a different API surface from chat completion, so it gets

@@ -176,5 +176,6 @@
   "— “${AMB.track.title}”": "placeholder-only template",
   "→ ${verdict.reroute_to}": "placeholder-only template",
   "⚙ API": "protocol, brand, or literal control name",
-  "✓ All ${total.toLocaleString()} checkpoints are in the current format (${mb(d.bytes)}).": "source, style, selector, or markup fragment"
+  "✓ All ${total.toLocaleString()} checkpoints are in the current format (${mb(d.bytes)}).": "source, style, selector, or markup fragment",
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "placeholder-only template"
 }
