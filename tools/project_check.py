@@ -647,6 +647,15 @@ def check_no_dead_prompts(errors: list[str]) -> None:
 EXTENSION_DEEP_IMPORTS = (
     "db", "commit", "pipeline_context", "agents", "providers", "prompts",
     "schemas", "scene", "memory", "affect",
+    # The commit.py split (docs/experiments/AUDIT_COMMIT.md): the matcher
+    # below compares the FIRST dotted path component, so every commit_*
+    # sibling must be named here or `import commit_memory` from an
+    # extension bypasses this guard entirely.
+    "commit_common", "commit_place_graph", "commit_destruction",
+    "commit_room_registry", "commit_attire", "commit_entities",
+    "commit_ledgers", "commit_mapping", "commit_background",
+    "commit_scene_state", "commit_mechanics", "commit_memory",
+    "commit_memory_write",
 )
 
 
