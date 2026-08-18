@@ -357,21 +357,35 @@ def line_hear_level(entry, rel, observer_name, proximity=None):
     named by a voice beyond the mass around you creates no channel through
     it. The comm path carries only the VOICE; the caller sets can_see
     separately."""
+    # A live channel between speaker and observer -- a PA, an intercom, a
+    # radio, a phone -- decides FIRST, before the wall gets a say.
+    #
+    # It was ordered after the spatial read and that was wrong in a way only
+    # play could show: an interview room whose two-way mirror the Director
+    # encoded as `membrane` muffles an ordinary voice to a `fragment`, and a
+    # fragment is not "none", so the early return took it and the live PA
+    # standing between those two rooms was never consulted. The scene had the
+    # equipment, the equipment was switched on, and the reader got a muffled
+    # voice through the glass.
+    #
+    # The rule the ordering encodes: a speaker reproduces the voice, so what
+    # the wall would have done to it does not matter. Muffling is a property
+    # of the path the channel replaces. A channel only ever RAISES what
+    # arrives, and where none applies this falls through to the ordinary
+    # spatial read unchanged.
+    #
+    # Read off the RELATION, never out of the scene: this module decides
+    # admission on typed data alone, and a rendering path that could consult
+    # the world could add to it. It rescues regardless of who the line NAMES,
+    # which is the whole difference between a channel and the addressed rescue
+    # below -- a voice on a speaker is heard by whoever is in front of the
+    # speaker. `spatial.comms_link` has already decided direction, liveness,
+    # and who is on the channel.
+    if isinstance(rel.get("comm_channel"), dict):
+        return "full"
     base = hear_level(rel, entry.get("volume", "normal"), proximity=proximity)
     if base != "none":
         return base
-    # A live channel between speaker and observer -- a PA, an intercom, a
-    # radio, a phone. Read off the RELATION, never out of the scene: this
-    # module decides admission on typed data alone, and a rendering path that
-    # could consult the world could add to it.
-    #
-    # It rescues regardless of who the line names, which is the whole
-    # difference between a channel and the addressed rescue below. A voice on
-    # a speaker is heard by whoever is in front of the speaker; it does not
-    # check whether it was talking to them. `spatial.comms_link` has already
-    # decided direction, liveness and who is on the channel.
-    if isinstance(rel.get("comm_channel"), dict):
-        return "full"
     if not _addresses(entry.get("intended_target"), observer_name):
         return base
     if str(entry.get("medium") or "").lower() == "comm":

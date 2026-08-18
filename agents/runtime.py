@@ -88,6 +88,13 @@ def _load_extra_players(chat_id, turn_idx, frame_id=None):
         sheet = normalize_persona_data(json.loads(row["sheet"]))
         extras.append({
             "persona_id": row["persona_id"],
+            # The whole sheet, not just the fields below. `narrator_extra`
+            # needs THIS player's persona to work out which body the authored
+            # extra parts belong to, and reaching for the chat's primary
+            # persona instead files one player's anatomy under another
+            # player's name -- the exact failure `_authored_body_parts` was
+            # written for, one player over.
+            "persona": sheet,
             "name": sheet.get("identity", {}).get("name") or "Player",
             "pronouns": sheet.get("identity", {}).get("pronouns", {}),
             "appearance": persona_appearance(sheet),

@@ -79,6 +79,7 @@ from spatial import (
     resolve_substance_ops,
     normalize_edge_distance,
     room_of,
+    can_perceive_onset,
     same_subject,
     spatial_rel,
     speech_articulation_impediment,
