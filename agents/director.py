@@ -131,9 +131,6 @@ from .common import (
 
 from .director_lingua import (
     _ling,
-    _UNCONSCIOUSNESS_CUE,
-    _SLEEP_CUE,
-    _STAY_UNDER_CUE,
 )
 from .director_contact import (
     _canonical_scene_subject,

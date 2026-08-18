@@ -41,8 +41,8 @@ from agents.director import (
     _awareness_view,
     _rouse_attempts,
     _sleep_elapsed,
-    _STAY_UNDER_CUE,
 )
+from language_runtime import english_linguistic
 from story.scene import NON_AWAKE_GATED, apply_awareness_diff, awareness_of
 
 PLAYER = "Hinami"
@@ -461,17 +461,31 @@ def test_an_ending_for_an_unknown_id_inserts_inactive(temp_db):
 # --- the stay-under vocabulary --------------------------------------------
 
 class TestStayUnderCues:
+    """The ENGLISH cue, fetched as such.
+
+    It used to be imported as `director._STAY_UNDER_CUE`, a module constant
+    resolved at import under whatever language was current then -- so a test
+    written to guard a story-language vocabulary was pinned to one language
+    without saying which. Every runtime read goes through `_ling(...)` under
+    the story's own language context; the constants were alive only as these
+    fixtures, and are gone. The Japanese cues have their own guard in
+    `tests/test_language_packs.py`, with Japanese fixtures, because English
+    sentences cannot test a Japanese regex.
+    """
+
+    CUE = english_linguistic("agents.director", "_STAY_UNDER_CUE")
+
     @pytest.mark.parametrize("text", [
         "falls asleep", "she sleeps", "still sleeping", "dreaming of home",
         "stays under", "keeps sleeping", "remains unconscious", "snoring",
         "does not wake", "without waking", "drifts off",
     ])
     def test_recognized(self, text):
-        assert _STAY_UNDER_CUE.search(text)
+        assert self.CUE.search(text)
 
     @pytest.mark.parametrize("text", [
         "you wake", "you open your eyes", "you sit up", "morning comes",
         "you reach for her hand", "sleepless", "a heavy sleeper",
     ])
     def test_not_a_request_to_stay_under(self, text):
-        assert not _STAY_UNDER_CUE.search(text)
+        assert not self.CUE.search(text)
