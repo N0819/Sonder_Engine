@@ -3069,21 +3069,29 @@ def _coalesced_embed(texts, config) -> EmbeddingBatch:
         if leader:
             _COALESCE_INFLIGHT = True
     if not leader:
-        if waiter.done.wait(_COALESCE_WAIT_CEILING):
-            return waiter.result
+        waiter.done.wait(_COALESCE_WAIT_CEILING)
         with _COALESCE_LOCK:
             if waiter in _COALESCE_QUEUE:
                 _COALESCE_QUEUE.remove(waiter)
-        return waiter.result if waiter.done.is_set() else _embed_with_retry(texts, config)
+        # WOKEN IS NOT THE SAME AS SERVED. The drain below wakes whoever is
+        # still queued without a result to give them, and the ceiling expires
+        # with no wake at all -- so the only thing that settles this caller is
+        # whether it is holding vectors, never whether its event fired.
+        return waiter.result if waiter.result is not None \
+            else _embed_with_retry(texts, config)
     try:
         while True:
             with _COALESCE_LOCK:
                 group = _take_embed_group_locked()
                 if not group:
-                    _COALESCE_INFLIGHT = False
                     break
             _serve_embed_group(group, config)
     finally:
+        # LEADERSHIP IS HELD UNTIL THE DRAIN, not dropped when the queue first
+        # reads empty: releasing it earlier leaves a window in which a caller
+        # arriving before this block runs elects itself leader, and is then
+        # drained by the outgoing one -- so its own request is woken, empty,
+        # by a leader that never served it.
         with _COALESCE_LOCK:
             _COALESCE_INFLIGHT = False
             # Never leave a queued caller without a leader: whoever is still
@@ -3093,7 +3101,11 @@ def _coalesced_embed(texts, config) -> EmbeddingBatch:
             stranded, _COALESCE_QUEUE[:] = list(_COALESCE_QUEUE), []
         for other in stranded:
             other.done.set()
-    return waiter.result
+    # A leader can be drained by nothing but itself, yet its own group is
+    # served by the same code every other caller depends on: hold the same
+    # floor rather than trust that.
+    return waiter.result if waiter.result is not None \
+        else _embed_with_retry(texts, config)
 
 
 def _embed_with_retry(texts, config) -> EmbeddingBatch:
