@@ -2852,6 +2852,76 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
             break
     return changed
 
+def _unreachable_position_writes(scene, route_scene, positions, bodies,
+                                 exempt=()):
+    """Position writes with no open route from where the body actually is.
+
+    THE PHYSICAL FLOOR THE DIFF NEVER HAD. `passable_neighbors` is the one
+    graph everyone walks -- crowds move on it, couriers move on it, a follower
+    is only carried along a route it proves -- and the Director's own
+    `state_diff.positions` was never held to it. So a body could be written
+    into a room it has no way of reaching, and nothing anywhere objected.
+
+    Live, chat 80 turn 4. The player declared no movement at all
+    (`director_interpret.movement` null, its `positions` null) and the spatial
+    specialist wrote `{"Hinami": "obs_room"}`. `passable_route_exists` from
+    `interview_cell` is False for every room in the scene -- the cell's only
+    edges are a `wall` (the two-way mirror) and a `closed_door` -- so she was
+    moved through the mirror out of a sealed room, into the room the observers
+    were watching her from. The prose author, in the same step, had written her
+    correctly as "the young woman in the interview cell" seen "through the
+    two-way mirror" with the psychologist's voice arriving "through the PA
+    speaker": the diff contradicted the prose beside it.
+
+    Deliberately about REACHABILITY and not about declarations. Being dragged,
+    carried, or moved by a lift are all legitimate undeclared moves, and a rule
+    keyed on "the player did not say so" would refuse them; what is never
+    legitimate, declared or not, is passing through a wall. Portals need no
+    exemption either -- `apply_transit_dock_edges` materialises an open
+    `state.link` into a real adjacency edge, so the one graph already carries
+    them.
+
+    Silent about anything it cannot judge: an unknown origin (a body arriving
+    into the scene), an unknown destination (a room this beat is minting), and
+    a body that has not moved. Refusing a write this cannot check would be
+    inventing a physics from a gap in the map.
+    """
+    rooms = (route_scene or scene).get("rooms") or {}
+    known = {str(b).strip().casefold() for b in (bodies or []) if str(b).strip()}
+    spared = {str(b).strip().casefold() for b in (exempt or []) if str(b).strip()}
+    refused = []
+    for body, dest in list((positions or {}).items()):
+        dest = str(dest or "").strip()
+        if not dest or dest not in rooms:
+            continue
+        folded = str(body).strip().casefold()
+        # BODIES ONLY. A vehicle is positioned in a room and does not get there
+        # by walking: it travels on `state.transit`, and its arrival is what
+        # CREATES the dock edge everyone else then uses. Route-checking one
+        # strips the very move that opens the door.
+        if folded not in known:
+            continue
+        # A body whose movement somebody DECLARED is the movement backstop's
+        # business, and that seam owns the harder question this one must not
+        # re-answer: a closed door is CONTESTED, not impossible, and whether it
+        # was opened and crossed belongs to the causality owner. This floor is
+        # only for a position nobody said anything about.
+        if folded in spared:
+            continue
+        # Origin from the PRE-BEAT scene -- where the body actually was when
+        # the beat started -- and the route from the scene as this beat leaves
+        # it, so a door the resolve opens is open to the body walking through
+        # it. The backstop above splits the two the same way and for the same
+        # reason.
+        origin = room_of(scene, body)
+        if not origin or origin not in rooms or origin == dest:
+            continue
+        if passable_route_exists(route_scene or scene, origin, dest):
+            continue
+        refused.append((str(body), origin, dest))
+    return refused
+
+
 def _is_blank_placeholder(entry):
     """True when a diff entry encodes nothing at all -- every field an empty
     string/list/dict or zero (e.g. {"name":"","desc":"","adjacent":[],
@@ -7409,6 +7479,51 @@ def director_resolve(ctx, nonce):
     # narrow provable case before approach semantics gets final authority over
     # whether the player's own movement arrived this beat.
     _reconcile_near_group_positions(ctx, sc, sd, p_name)
+
+    # THE PHYSICAL FLOOR, for the writes nothing above was watching.
+    #
+    # The movement backstop over this line is thorough and is scoped to a
+    # DECLARED movement: it reads `interp["movement"]`, checks the route, and
+    # strips the mover and anyone the same beat sent after them. A position
+    # the diff writes for a body that declared no movement at all never
+    # reaches it -- and that is the whole of the gap, because a body can be
+    # written into a room without anybody having said it was going there.
+    #
+    # Live, chat 80 turn 4: `interp["movement"]` was null and the spatial
+    # specialist wrote {"Hinami": "obs_room"}, moving a restrained subject
+    # through a two-way mirror out of a cell whose only other edge is a closed
+    # door, into the room she was being observed FROM. The prose author had her
+    # correctly in the cell in the same step.
+    #
+    # Runs AFTER the backstop and after following/near-group reconciliation, so
+    # every seam that legitimately writes a position has already had its say
+    # and this only reads what survived. Reachability, never declaration:
+    # dragged, carried and lift-borne moves are all legitimate and undeclared,
+    # and none of them passes through a wall.
+    _bodies = [p_name] + [str(x.get("name") or "") for x in ctx.extra_players]
+    for _row in ctx.cast:
+        try:
+            _bodies.append(character_name_from_text(_row["sheet"]))
+        except Exception:
+            continue
+    # The declared mover, and anyone the same beat sent where they were going:
+    # both belong to the movement backstop above, which has already ruled on
+    # them and may legitimately have honoured a contested crossing.
+    _spared = set()
+    if isinstance(mv, dict) and mv.get("to_room"):
+        if move_subject:
+            _spared.add(move_subject)
+        _spared.update(
+            subject for subject, room in (sd["positions"] or {}).items()
+            if room == mv.get("to_room"))
+    for _body, _from, _to in _unreachable_position_writes(
+            sc, merge_scene_with_diff(sc, sd), sd["positions"],
+            _bodies, exempt=_spared):
+        sd["positions"].pop(_body, None)
+        ctx.add_warning(
+            f"Unreachable position: nothing declared a move for {_body}, and "
+            f"there is no passable route from '{_from}' to '{_to}'; "
+            "position unchanged.")
 
     # `_guard_approach_is_not_arrival` used to run HERE and was undone on every
     # beat it fired. It now runs at the END of this function; see the call site
