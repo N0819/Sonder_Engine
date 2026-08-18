@@ -115,7 +115,12 @@ def test_the_blocking_twin_is_not_used_by_the_tail(temp_db, monkeypatch):
             "_consolidate_committed_memories ran inside the commit: the "
             "player is now waiting for a background summarisation")
 
-    monkeypatch.setattr(commit_module, "_consolidate_committed_memories", blocking)
+    # commit_memories resolves this name in commit_memory_write's globals
+    # since the split; patched on the facade, this stub is INERT and the
+    # test goes green while proving nothing (it asserts by absence).
+    import commit_memory_write
+    monkeypatch.setattr(commit_memory_write,
+                        "_consolidate_committed_memories", blocking)
     commit_module.commit_all(_context(temp_db), nonce=0)
 
 

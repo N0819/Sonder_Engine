@@ -81,14 +81,17 @@ def test_commit_memories_reinforces_existing_mind_model(temp_db, monkeypatch):
         }
     }
 
+    # commit_memories resolves both names in commit_memory_write's
+    # globals since the split; patching the commit facade would be inert.
+    import commit_memory_write
     monkeypatch.setattr(
-        commit, "add_memories_batch",
+        commit_memory_write, "add_memories_batch",
         lambda memories=None, *, prepared_batch=None: list(
             range(1, len(memories if memories is not None else prepared_batch["prepared"]) + 1)
         ),
     )
     monkeypatch.setattr(
-        commit, "maybe_consolidate_character_memory",
+        commit_memory_write, "maybe_consolidate_character_memory",
         lambda *a, **k: None,
     )
 

@@ -360,9 +360,11 @@ class TestTimeDoesNotRunBackwards:
         import inspect
 
         import commit
-        body = inspect.getsource(commit)
-        assert "if claimed < was:" in body
-        assert "ran backwards" in body
+        # Function sources, not the module's: the split moved the guard into
+        # commit_common and the warning's caller into commit_scene_state, and
+        # the facade re-exports the same function objects either way.
+        assert "if claimed < was:" in inspect.getsource(commit._monotonic_elapsed)
+        assert "ran backwards" in inspect.getsource(commit.prepare_scene_commit)
 
     def test_a_backward_beat_still_gets_its_duration(self):
         """The elapsed time is the part the fiction actually asserted. A beat
@@ -371,7 +373,7 @@ class TestTimeDoesNotRunBackwards:
         import inspect
 
         import commit
-        body = inspect.getsource(commit)
+        body = inspect.getsource(commit._monotonic_elapsed)
         guard = body[body.index("if claimed < was:"):]
         assert "duration_seconds" in guard.split("clock[")[0]
 

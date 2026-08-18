@@ -28,6 +28,10 @@ import time
 import pytest
 
 import commit
+# The consolidation producers resolve maybe_consolidate_character_memory in
+# THEIR module's globals -- commit_memory_write since the split; patching
+# the commit facade would be inert.
+import commit_memory_write
 import jobs
 from character_schema import default_character_data
 from pipeline_context import ChatData, PipelineContext, TurnData
@@ -100,8 +104,8 @@ def test_the_commit_tail_schedules_rather_than_waits(temp_db, monkeypatch):
         called.append((cid, char_id, turn_idx, frame_id))
         return {"summary": "updated"}
 
-    monkeypatch.setattr(commit, "maybe_consolidate_character_memory",
-                        fake_maybe)
+    monkeypatch.setattr(commit_memory_write,
+                        "maybe_consolidate_character_memory", fake_maybe)
     t0 = time.time()
     job = commit.schedule_memory_consolidation(ctx)
     scheduled_in = time.time() - t0
@@ -133,8 +137,8 @@ def test_one_characters_failure_is_silence_not_a_broken_turn(temp_db,
             raise RuntimeError("simulated consolidation failure")
         return {"summary": "updated"}
 
-    monkeypatch.setattr(commit, "maybe_consolidate_character_memory",
-                        fake_maybe)
+    monkeypatch.setattr(commit_memory_write,
+                        "maybe_consolidate_character_memory", fake_maybe)
     job = commit.schedule_memory_consolidation(ctx)
     assert _join(ctx.chat.id) == "done"
     assert len(called) == 3
@@ -152,7 +156,7 @@ def test_a_second_beat_joins_the_running_job_instead_of_stacking(
     ctx = _make_ctx(temp_db)
     release = threading.Event()
     monkeypatch.setattr(
-        commit, "maybe_consolidate_character_memory",
+        commit_memory_write, "maybe_consolidate_character_memory",
         lambda *a, **k: release.wait(timeout=5) and None)
 
     first = commit.schedule_memory_consolidation(ctx)
@@ -177,8 +181,8 @@ def test_cancellation_stops_between_characters(temp_db, monkeypatch):
         release.wait(timeout=5)
         return None
 
-    monkeypatch.setattr(commit, "maybe_consolidate_character_memory",
-                        fake_maybe)
+    monkeypatch.setattr(commit_memory_write,
+                        "maybe_consolidate_character_memory", fake_maybe)
     commit.schedule_memory_consolidation(ctx)
     assert first_started.wait(timeout=5)
     jobs.cancel(ctx.chat.id, commit.MEMORY_CONSOLIDATION_JOB_KEY)

@@ -42,7 +42,20 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 8197 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 575 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_background`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_mechanics`, `commit_memory`, `commit_memory_write`, `commit_place_graph`, `commit_room_registry`, `commit_scene_state`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit_attire.py` | 862 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `attire`, `commit_common` |
+| `commit_background.py` | 1476 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `character_schema`, `commit_common`, `db`, `memory`, `scene`, `spatial` |
+| `commit_common.py` | 384 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `character_schema`, `db`, `mechanics`, `spatial` |
+| `commit_destruction.py` | 413 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
+| `commit_entities.py` | 499 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `character_schema`, `commit_common`, `db`, `scene`, `spatial` |
+| `commit_ledgers.py` | 302 | Pending-obligation and world-pressure debt ledgers. | `commit_common`, `db` |
+| `commit_mapping.py` | 490 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `character_schema`, `commit_common`, `db`, `frames`, `memory`, `prompts`, `providers`, `spatial` |
+| `commit_mechanics.py` | 348 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `character_schema`, `commit_common`, `commit_scene_state`, `db`, `mechanics`, `scene` |
+| `commit_memory.py` | 1486 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `affect`, `character_schema`, `comfort`, `commit_background`, `commit_common`, `commit_place_graph`, `db`, `memory`, `psychology_runtime`, `survival`, `theory_of_mind` |
+| `commit_memory_write.py` | 230 | The durable memory write and its out-of-band consolidation twin. | `character_schema`, `commit_memory`, `db`, `memory`, `scene` |
+| `commit_place_graph.py` | 274 | Per-mind durable place graph and per-beat spatial experience. | `spatial` |
+| `commit_room_registry.py` | 444 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `character_schema`, `commit_common`, `db`, `spatial` |
+| `commit_scene_state.py` | 709 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `character_schema`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_room_registry`, `db`, `memory`, `spatial`, `spatial_frames`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -531,14 +544,162 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 6231 | 1264 lines |
-| `prepare_scene_commit()` | 2310 | 452 lines |
-| `track_background_presences()` | 4345 | 341 lines |
-| `apply_attire_diff()` | 1974 | 294 lines |
-| `commit_world_entities()` | 3338 | 287 lines |
-| `_commit_all_locked()` | 7913 | 226 lines |
-| `pick_background_reactors()` | 4829 | 178 lines |
-| `commit_transit_sweep()` | 2811 | 169 lines |
+| `_commit_all_locked()` | 349 | 226 lines |
+| `commit_crowds()` | 229 | 82 lines |
+| `commit_narration_person()` | 148 | 29 lines |
+| `commit_authored_events()` | 180 | 25 lines |
+| `_prepare_turn_commit()` | 326 | 12 lines |
+| `commit_offscreen_epoch()` | 207 | 11 lines |
+| `commit_all()` | 313 | 11 lines |
+| `commit_offscreen_plans()` | 220 | 7 lines |
+
+### `commit_attire.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `apply_attire_diff()` | 569 | 294 lines |
+| `interpret_attire_notes()` | 155 | 115 lines |
+| `_fold_duplicate_shed_garments()` | 272 | 85 lines |
+| `_heal_attire_identity_keys()` | 32 | 72 lines |
+| `_fold_worn_garment_entities()` | 359 | 69 lines |
+| `_mint_shed_garments()` | 501 | 66 lines |
+| `_adopt_shed_record()` | 446 | 34 lines |
+| `_beat_voices()` | 106 | 25 lines |
+
+### `commit_background.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `track_background_presences()` | 534 | 341 lines |
+| `pick_background_reactors()` | 1018 | 178 lines |
+| `promote_background_character()` | 1269 | 97 lines |
+| `auto_promote_background_characters()` | 1405 | 72 lines |
+| `_presence_speech_verdict()` | 188 | 67 lines |
+| `_at_post_within_earshot()` | 954 | 52 lines |
+| `_is_inert_presence_candidate()` | 457 | 50 lines |
+| `_character_address_of()` | 364 | 40 lines |
+
+### `commit_common.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_names_heard_in()` | 168 | 53 lines |
+| `_address_forms()` | 119 | 47 lines |
+| `_entity_alias_map()` | 313 | 44 lines |
+| `_monotonic_elapsed()` | 57 | 38 lines |
+| `_registered_name_roster()` | 252 | 28 lines |
+| `_known_name_roster()` | 223 | 27 lines |
+| `_resolve_roster_name()` | 281 | 20 lines |
+| `_form_in()` | 101 | 16 lines |
+
+### `commit_destruction.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_prepare_destruction()` | 192 | 158 lines |
+| `_destruction_cascade()` | 124 | 66 lines |
+| `_apply_destruction()` | 380 | 34 lines |
+| `_chat_book_graph()` | 51 | 30 lines |
+| `_finalize_destruction_news()` | 352 | 26 lines |
+| `_audience_book_id()` | 102 | 20 lines |
+| `_book_distances()` | 83 | 17 lines |
+| `_destruction_book()` | 33 | 16 lines |
+
+### `commit_entities.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_world_entities()` | 213 | 287 lines |
+| `_supersede_disguises()` | 94 | 74 lines |
+| `_inherit_known_to()` | 170 | 41 lines |
+| `_subjects_that_moved()` | 33 | 36 lines |
+| `_subjects_targeted_by_an_action()` | 71 | 21 lines |
+| `_is_gated_awareness()` | 17 | 14 lines |
+
+### `commit_ledgers.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_world_pressure()` | 188 | 115 lines |
+| `commit_obligations()` | 67 | 65 lines |
+| `world_pressure_view()` | 144 | 22 lines |
+| `_find_obligation()` | 45 | 21 lines |
+| `pending_obligation_view()` | 24 | 20 lines |
+| `_find_pressure()` | 168 | 18 lines |
+
+### `commit_mapping.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_mapping()` | 292 | 142 lines |
+| `prepare_mapping_commit()` | 161 | 129 lines |
+| `_apply_mapping_book_ops()` | 57 | 103 lines |
+| `normalize_offscreen_events()` | 21 | 35 lines |
+| `_generate_fallback_ops()` | 460 | 31 lines |
+| `_fact_is_covered()` | 441 | 18 lines |
+| `_lore_for()` | 437 | 2 lines |
+
+### `commit_mechanics.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_transit_sweep()` | 21 | 169 lines |
+| `commit_information_carriers()` | 240 | 85 lines |
+| `commit_world_event_spine()` | 192 | 46 lines |
+| `commit_cast_changes()` | 328 | 21 lines |
+
+### `commit_memory.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `prepare_memory_commit()` | 223 | 1264 lines |
+| `_cited_memory_ids()` | 64 | 76 lines |
+| `_own_sequence_memory()` | 186 | 36 lines |
+| `_marked_for_memory()` | 142 | 24 lines |
+| `_durable_dialogue_category()` | 40 | 23 lines |
+| `_salience_of()` | 176 | 8 lines |
+| `_is_player()` | 172 | 3 lines |
+| `_quote_body()` | 168 | 2 lines |
+
+### `commit_memory_write.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_memories()` | 151 | 80 lines |
+| `schedule_memory_consolidation()` | 77 | 72 lines |
+| `_consolidate_committed_memories()` | 21 | 51 lines |
+
+### `commit_place_graph.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `update_place_graph()` | 33 | 153 lines |
+| `record_spatial_experience()` | 188 | 87 lines |
+
+### `commit_room_registry.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `dedup_minted_rooms()` | 132 | 90 lines |
+| `_prepare_room_registry()` | 223 | 76 lines |
+| `_refresh_relocated_location()` | 350 | 54 lines |
+| `_apply_room_renames()` | 76 | 53 lines |
+| `prune_dangling_exits()` | 406 | 39 lines |
+| `_apply_room_registry()` | 301 | 27 lines |
+| `_registry_alias_index()` | 53 | 22 lines |
+| `sync_room_registry_with_scene()` | 329 | 19 lines |
+
+### `commit_scene_state.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `prepare_scene_commit()` | 212 | 452 lines |
+| `sync_anchored_books()` | 47 | 66 lines |
+| `_guard_occupied_mover_removal()` | 114 | 63 lines |
+| `_advance_ground()` | 179 | 31 lines |
+| `_record_subject_last_seen()` | 686 | 24 lines |
+| `commit_scene()` | 666 | 18 lines |
+| `_anchor_current_room()` | 31 | 14 lines |
 
 ### `couriers.py`
 
