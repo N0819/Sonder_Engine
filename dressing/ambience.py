@@ -58,6 +58,7 @@ from core import outofband
 from dressing.backdrops import (_room_of_player, branch_lineage, place_desc,
                        scene_after_turn, time_bucket)
 from core.db import get_setting, wget, wset
+from core.paths import INSTALL_ROOT
 from world.weather import weather_for_room, weather_words
 
 # Fetched audio lives beside the backdrop cache and for the same reason:
@@ -65,13 +66,12 @@ from world.weather import weather_for_room, weather_words
 # while dragging themselves through every backup and export.
 AMBIENCE_DIR = os.environ.get(
     "FICTION_ENGINE_AMBIENCE_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "ambience"))
+    os.path.join(INSTALL_ROOT, "ambience"))
 
 # The host's own audio. Never written to, never copied out of: a local library
 # can be tens of gigabytes of purchased material, so the cache stores a POINTER
 # to the chosen file rather than a duplicate of it.
-DEFAULT_LIBRARY_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "ambience_library")
+DEFAULT_LIBRARY_DIR = os.path.join(INSTALL_ROOT, "ambience_library")
 
 AUDIO_EXTENSIONS = (".mp3", ".ogg", ".oga", ".wav", ".flac", ".m4a", ".opus", ".webm")
 

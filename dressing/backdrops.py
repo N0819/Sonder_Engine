@@ -42,6 +42,7 @@ from core import outofband
 from core.db import q, wget_for_frame
 from core.logging_utils import logger
 from world.spatial import effective_light, light_at, normalize_light, room_of
+from core.paths import INSTALL_ROOT
 from world.weather import weather_for_room, weather_words
 
 # Where generated images live. Deliberately NOT the database: engine.db is
@@ -49,7 +50,7 @@ from world.weather import weather_for_room, weather_words
 # making every backup and export drag them along.
 BACKDROP_DIR = os.environ.get(
     "FICTION_ENGINE_BACKDROP_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "backdrops"))
+    os.path.join(INSTALL_ROOT, "backdrops"))
 
 # A backdrop is scenery, so the visual signature only tracks what changes how
 # the PLACE looks. Overlays and conditions can do that (smoke, darkness,

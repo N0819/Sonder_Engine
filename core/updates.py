@@ -34,7 +34,11 @@ import subprocess
 import urllib.error
 import urllib.request
 
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+from core.paths import INSTALL_ROOT
+
+#: The checkout this install IS, which `_is_git_repo` compares git's own
+#: top level against. Kept as a module name because nine tests monkeypatch it.
+REPO_ROOT = INSTALL_ROOT
 
 # Hard ceiling so a hung network fetch can't wedge the request thread. This
 # is generous because it is a backstop, not an expectation: a real release

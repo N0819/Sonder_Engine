@@ -141,6 +141,49 @@ def check_duplicate_dict_keys(errors: list[str]) -> None:
                     seen[marker] = key.lineno
 
 
+#: The one module allowed to derive the install root from `__file__`.
+INSTALL_ROOT_OWNER = "core/paths.py"
+
+#: Packages whose modules sit one level below the install root, so a bare
+#: `dirname(abspath(__file__))` in them names the PACKAGE and not the install.
+_ROOT_PATTERNS = (
+    "os.path.dirname(os.path.abspath(__file__))",
+    "Path(__file__).resolve().parent.parent",
+    "Path(__file__).parent.parent",
+)
+
+
+def check_install_root_derivations(errors: list[str]) -> None:
+    """Only `core/paths.py` may work out where the install is.
+
+    Every module that derived it from `__file__` was correct while the engine
+    was a flat directory. On 2026-08-18 eighty-one modules moved into
+    packages and three of those derivations silently began naming their own
+    package: `core/updates.py`'s `REPO_ROOT` became `<install>/core`, which
+    disabled self-update for every real install, and `dressing/backdrops.py`
+    and `dressing/ambience.py` started looking for the host's generated
+    images and fetched audio under `dressing/` -- orphaning 751 MB of the
+    owner's assets on the machine this was found on.
+
+    Nothing failed. `_is_git_repo` returned False, which is a legitimate
+    answer; the asset directories were simply created empty. That is why this
+    is a structural check and not a test: the symptom of getting it wrong is
+    an engine that quietly does less.
+    """
+    for path in sorted(engine_python_paths()):
+        rel = str(path.relative_to(ROOT))
+        if rel == INSTALL_ROOT_OWNER:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for pattern in _ROOT_PATTERNS:
+            if pattern in text:
+                errors.append(
+                    f"{rel} derives a filesystem root from __file__ "
+                    f"({pattern}); import INSTALL_ROOT from core.paths "
+                    "instead -- a module that moves takes its own wrong "
+                    "answer with it")
+
+
 def check_patch_debris(errors: list[str]) -> None:
     paths = (engine_python_paths()
              + list((ROOT / "static" / "js").glob("*.js")))
@@ -1014,6 +1057,7 @@ def main() -> int:
     check_facade_import_direction(errors)
     check_duplicate_python_symbols(errors)
     check_duplicate_dict_keys(errors)
+    check_install_root_derivations(errors)
     check_no_dead_prompts(errors)
     check_patch_debris(errors)
     check_empty_tests(errors)
