@@ -64,7 +64,8 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 8126 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_identity`, `spatial_orientation` |
+| `spatial.py` | 7737 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_identity`, `spatial_orientation` |
+| `spatial_barriers.py` | 411 |  | — |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_identity.py` | 345 |  | — |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -769,14 +770,24 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 4811 | 318 lines |
-| `merge_scene_with_diff()` | 7766 | 318 lines |
-| `sprint_reach()` | 6409 | 175 lines |
-| `apply_transit_dock_edges()` | 7140 | 165 lines |
-| `contact_sensation()` | 5974 | 144 lines |
-| `visible_adjacent_rooms()` | 6654 | 143 lines |
-| `hear_level()` | 1603 | 138 lines |
-| `contacts_from_entity_state()` | 4341 | 137 lines |
+| `apply_contact_ops()` | 4423 | 318 lines |
+| `merge_scene_with_diff()` | 7377 | 318 lines |
+| `sprint_reach()` | 6021 | 175 lines |
+| `apply_transit_dock_edges()` | 6752 | 165 lines |
+| `contact_sensation()` | 5586 | 144 lines |
+| `visible_adjacent_rooms()` | 6266 | 143 lines |
+| `hear_level()` | 1215 | 138 lines |
+| `contacts_from_entity_state()` | 3953 | 137 lines |
+
+### `spatial_barriers.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `normalize_barrier()` | 260 | 67 lines |
+| `_barrier_against_its_own_name()` | 379 | 27 lines |
+| `normalize_scene_barriers()` | 345 | 21 lines |
+| `unresolved_barrier_words()` | 329 | 15 lines |
+| `_barrier_exact()` | 249 | 9 lines |
 
 ### `spatial_frames.py`
 
