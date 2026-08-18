@@ -247,7 +247,10 @@ def test_commit_reads_the_same_pair_the_payload_showed():
     import inspect
 
     import commit
-    src = inspect.getsource(commit)
+    # prepare_memory_commit's source, not the module's: the split moved the
+    # commit-side call site into commit_memory and the facade re-exports the
+    # same function object.
+    src = inspect.getsource(commit.prepare_memory_commit)
     assert "affect.capacity_caps(" in src
     assert "want_cap=_want_cap" in src
     assert "intent_cap=_intent_cap" in src

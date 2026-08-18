@@ -39,7 +39,11 @@ def _capture_batch(monkeypatch):
         captured["memories"] = memories
         return {"prepared": [], "embedded": None}  # skip real embedding
 
-    monkeypatch.setattr(commit, "prepare_memories_batch", fake_batch)
+    # prepare_memory_commit resolves prepare_memories_batch in ITS
+    # module's globals -- commit_memory since the split; patching the
+    # commit facade would be inert.
+    import commit_memory
+    monkeypatch.setattr(commit_memory, "prepare_memories_batch", fake_batch)
     return captured
 
 
