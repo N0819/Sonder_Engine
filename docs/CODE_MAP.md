@@ -64,12 +64,13 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 4693 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_identity`, `spatial_orientation`, `spatial_substance`, `spatial_transit` |
+| `spatial.py` | 3777 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_orientation`, `spatial_substance`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
 | `spatial_contact_migration.py` | 331 |  | `spatial_contacts`, `spatial_identity` |
 | `spatial_contacts.py` | 1167 |  | `spatial_containment`, `spatial_identity` |
 | `spatial_containment.py` | 636 |  | `spatial_identity`, `spatial_transit` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
+| `spatial_geometry.py` | 951 |  | `spatial_barriers`, `spatial_contacts`, `spatial_containment`, `spatial_identity`, `spatial_orientation` |
 | `spatial_identity.py` | 345 |  | — |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `spatial_substance.py` | 602 |  | `spatial_contacts`, `spatial_identity` |
@@ -775,14 +776,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 4346 | 318 lines |
-| `sprint_reach()` | 3394 | 175 lines |
-| `contact_sensation()` | 2959 | 144 lines |
-| `visible_adjacent_rooms()` | 3639 | 143 lines |
-| `hear_level()` | 1276 | 138 lines |
-| `derive_scene_stations()` | 2676 | 104 lines |
-| `corridor_sightlines()` | 3246 | 85 lines |
-| `spatial_facts()` | 3105 | 84 lines |
+| `merge_scene_with_diff()` | 3430 | 318 lines |
+| `sprint_reach()` | 2478 | 175 lines |
+| `contact_sensation()` | 2043 | 144 lines |
+| `visible_adjacent_rooms()` | 2723 | 143 lines |
+| `hear_level()` | 1264 | 138 lines |
+| `corridor_sightlines()` | 2330 | 85 lines |
+| `spatial_facts()` | 2189 | 84 lines |
+| `contact_phrase()` | 1958 | 83 lines |
 
 ### `spatial_barriers.py`
 
@@ -842,6 +843,19 @@
 | `infer_facing()` | 623 | 71 lines |
 | `perform_merge()` | 971 | 69 lines |
 | `detect_split()` | 753 | 44 lines |
+
+### `spatial_geometry.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `derive_scene_stations()` | 848 | 104 lines |
+| `egocentric_frame()` | 50 | 80 lines |
+| `spatial_digest()` | 132 | 61 lines |
+| `effective_station()` | 312 | 55 lines |
+| `normalize_scene_poses()` | 712 | 53 lines |
+| `effective_anchors()` | 260 | 50 lines |
+| `guessed_room_sizes()` | 436 | 50 lines |
+| `normalize_scene_stations()` | 654 | 35 lines |
 
 ### `spatial_identity.py`
 
