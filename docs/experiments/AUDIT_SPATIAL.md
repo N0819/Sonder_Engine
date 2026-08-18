@@ -424,3 +424,42 @@ private names included (`tests/test_crowds.py:258-259` reads
 `spatial._VALID_BARRIERS`/`_SIGHT_BARRIERS`,
 `tests/test_continuous_contact_sensation.py:507-544` calls
 `spatial._clean_contact`, both by attribute).
+
+## Execution record
+
+Base: `418ab5b` (alpha 9.5). One module per commit, leaf-first, `make check`
+green (7,274 passed) before every one:
+
+| step | module | commit | lines |
+| --- | --- | --- | --- |
+| 0 | (this audit, written before the first move) | `24f997b` | — |
+| 1 | `spatial_identity.py` | `d02ec09` | 345 |
+| 2 | `spatial_barriers.py` | `0cccd3f` | 411 |
+| 3 | `spatial_transit.py` | `ccf5d79` | 414 |
+| 4 | `spatial_containment.py` | `23eae5a` | 636 |
+| 5 | `spatial_contacts.py` | `8d29d86` | 1167 |
+| 6 | `spatial_contact_migration.py` | `7ce9025` | 331 |
+| 7 | `spatial_substance.py` | `2423ae8` | 602 |
+| 8 | `spatial_geometry.py` | `dae0657` | 951 |
+| 9 | `spatial_light.py` | `3257534` | 209 |
+| 10 | `spatial_routing.py` | `553cbf5` | 923 |
+| 11 | `spatial_senses.py` | `1e063be` | 1264 |
+| 12 | `spatial_prose.py` | `94fb036` | 336 |
+| 13 | `spatial_merge.py` + facade + doc repoint | `24bed76` | 1037 |
+| 14 | stale channel-gate claims corrected (F1) | `865ca6d` | — |
+
+`spatial.py` after step 13: 166 lines, imports only.
+
+Verified after step 13 by AST comparison against `418ab5b:spatial.py`:
+
+- **Facade complete**: every top-level name of the pre-split module —
+  defs, constants, and imported names alike — resolves on `spatial` (0
+  missing of 296 moved symbols plus the head imports).
+- **Verbatim**: all 296 def/class/constant bodies byte-identical between the
+  pre-split file and their new modules (`ast` span extraction, text
+  equality); no symbol defined in more than one module.
+- The six cycle-breaking deferred imports remain deferred in their new homes
+  (`spatial_identity.room_of`, `spatial_senses._phrase_table`/`sound_bearing`,
+  `spatial_merge.prune_bodiless_positions`/`merge_scene_with_diff`,
+  `spatial_prose.spatial_facts`), plus the stdlib `deque` one in
+  `spatial_routing.passable_path`.
