@@ -108,6 +108,50 @@ was false. **A finding is a hypothesis until somebody tries to kill it.**
 Survivors become the repair batch, run like Phase 1: one commit per finding,
 failing test first, `make check` between.
 
+## Owner decisions, 2026-08-18
+
+Taken after triage, on the 70 confirmed rows marked NEEDS-OWNER. They are
+policy, not one-off answers: a patch agent meeting a new row of the same shape
+applies these without asking again.
+
+1. **Dead-but-built features: WIRE UP, delete only the truly obsolete.**
+   ~35 rows are features that were built, documented, tested and called by
+   nothing — `PUT /api/exemplars` (so the narrator's STYLE EXEMPLARS clause
+   runs against `[]` on every install), `attire.guessed_spans` (110 of 560
+   live garment records carry a guessed span), `protected_beliefs`,
+   `allow_npc_initiative`, `rebuild_checkpoint_embeddings` (1,160 of 2,586
+   live lore rows sit permanently unstamped for want of it). The wiring is the
+   last mile of work already paid for. Delete only what is genuinely
+   superseded, and delete its docs, tests and settings rows in the same
+   commit. **The ten uncalled `spatial` symbols keep their standing caveat:
+   they are in the facade contract, so removing one is an API change.**
+
+2. **Hardcoded English recognizers: ROUTE THROUGH THE PACKS, AND TRANSLATE
+   JAPANESE NOW.** Two dozen recognizers decide belief-confidence
+   calibration, claim similarity, memory salience, durable-quote detection
+   and trust movement in English literals, and there is no `mind.*` key in
+   the linguistics card at all — a pack has nowhere to put a translation.
+   The `ja` pack declares `"story": true`, which is a claim to support play.
+   Both halves land together, so the claim becomes true rather than
+   better-structured.
+
+3. **`background_claims`: fix the gate and the writer; leave the seven live
+   rows alone.** Ratification matches any ≥4-character reference appearing
+   anywhere in the resolved prose, and the live corpus is 7 ratified, 0
+   contradicted, 0 expired — a three-outcome design collapsed onto its one
+   irreversible branch. Two of seven `lore_entries` rows carry a raw engine
+   uid as a speaker, and one establishes a DENIAL as truth. Canon is
+   write-once, so the gate and the writer are the repair; the existing rows
+   stay until the owner chooses to clean them.
+
+4. **Schema changes: do the carrier-envelope leak, defer the rest.** The
+   player's carrier envelope is the only carrier state not frame-scoped, so
+   what the player learned in one era survives a rewind or a branch and can be
+   told onward in an era that never produced it — a firewall leak, and worth a
+   migration on live stories. Every other schema-touching row goes to
+   `UNBUILT.md` with its `DATABASE.md` checklist written out, for a dedicated
+   pass with its own testing and its own release.
+
 ## Standing constraints
 
 - `engine.db` is the owner's live database. Never write to it; reads must be
