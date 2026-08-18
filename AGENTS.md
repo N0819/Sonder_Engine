@@ -363,7 +363,20 @@ files are local state or private diagnostics and are ignored deliberately.
 
 ### `agents/`
 
-- `director.py`: scene establishment, interpretation, and resolution
+- `director.py`: scene establishment, interpretation, and resolution — the
+  stage bodies and every model-calling function, plus the facade re-exporting
+  its split-out family: `director_lingua.py` (language-pack access),
+  `director_contact.py` (contact/material validate+merge),
+  `director_views.py` (payload views and output audits),
+  `director_movement.py` (spatial backstops), `director_floors.py`
+  (prose-vs-diff floors), `director_evidence.py` (the seams' detection
+  substrate), `director_scopes.py` (specialist registry/gates/dispatch —
+  sole writer of `SPECIALISTS`, `_CHANNEL_GATES`, `_CHANNEL_SPECIALISTS`),
+  `director_fanout.py` (beat views, payload assembly, scope backstop) and
+  `director_reconcile.py` (repair routing and acquittal). Import direction
+  is an invariant: nothing outside `agents/director*.py` may import an
+  `agents/director_*` submodule, and no `director_*` module may import
+  `agents.director` (that is the cycle the facade exists to prevent).
 - `mapping.py`: lore routing and retrieval
 - `perception.py`: opening, action-onset, and outcome views
 - `character.py`: one character decision

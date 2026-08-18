@@ -12,7 +12,7 @@
 | `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
-| `agents/director.py` | 3666 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
+| `agents/director.py` | 3652 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/director_contact.py` | 421 |  | `character_schema`, `spatial` |
 | `agents/director_evidence.py` | 892 |  | `agents.common`, `agents.director_lingua`, `schemas`, `spatial` |
 | `agents/director_fanout.py` | 501 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `character_schema`, `db`, `survival` |
@@ -154,14 +154,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 2159 | 1474 lines |
-| `director_interpret()` | 312 | 534 lines |
-| `_reconcile_resolution()` | 1287 | 445 lines |
-| `_run_specialists()` | 1935 | 211 lines |
-| `director_establish()` | 166 | 125 lines |
-| `_reconcile_interpretation()` | 880 | 119 lines |
-| `_specialist_repairs()` | 1166 | 119 lines |
-| `_prose_gate_facts()` | 1817 | 92 lines |
+| `director_resolve()` | 2145 | 1474 lines |
+| `director_interpret()` | 404 | 534 lines |
+| `_reconcile_resolution()` | 1294 | 445 lines |
+| `_run_specialists()` | 1921 | 211 lines |
+| `director_establish()` | 277 | 125 lines |
+| `_reconcile_interpretation()` | 940 | 119 lines |
+| `_specialist_repairs()` | 1121 | 119 lines |
+| `_prose_gate_facts()` | 1803 | 92 lines |
 
 ### `agents/director_contact.py`
 
