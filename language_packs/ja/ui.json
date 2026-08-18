@@ -1889,5 +1889,6 @@
   "🔊 Mute": "🔊 ミュート",
   "🔒 locked": "🔒 ロック済み",
   "🔒 persona secrets": "🔒 ペルソナの秘密",
-  "🔗 Generate invite": "🔗 招待を生成"
+  "🔗 Generate invite": "🔗 招待を生成",
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}"
 }

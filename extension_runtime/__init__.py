@@ -377,6 +377,7 @@ class _Registration:
     director_hooks: list[Callable] = field(default_factory=list)
     routes: dict[str, dict] = field(default_factory=dict)
     specialists: list[str] = field(default_factory=list)
+    model_lanes: list[dict] = field(default_factory=list)
     error: str | None = None
 
 
@@ -448,6 +449,19 @@ def _record_specialist(ext_id, full_name) -> None:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         if full_name not in record.specialists:
             record.specialists.append(full_name)
+
+
+def _record_model_lane(ext_id, name, role, *, label, description) -> None:
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        # Replace, not append: re-enabling an extension in a live process
+        # re-runs its register(), and the same lane declared twice is one
+        # lane, not two settings rows.
+        record.model_lanes = [lane for lane in record.model_lanes
+                              if lane["name"] != name]
+        record.model_lanes.append({"ext_id": ext_id, "name": name,
+                                   "role": role, "label": label,
+                                   "description": description})
 
 
 def _record_route(ext_id, path, fn, methods) -> None:
@@ -1239,6 +1253,59 @@ def registered_specialists() -> list[dict]:
             key=lambda row: (row["ext_id"], row["name"]))
 
 
+def registered_model_lanes() -> list[dict]:
+    """Every enabled extension's declared model lanes, for the host's panel.
+
+    This registry is the ONLY thing standing between a lane and the settings
+    UI -- resolution never consults it. `providers.resolve_role_candidates`
+    reads `agent_models` by role string, so a lane's calls resolve (and
+    inherit `default` when its row is blank) whether or not the extension is
+    still enabled; what a disabled extension loses is the settings row, which
+    is exactly the phantom-role guarantee: `_deregister` pops the whole
+    record, so a gone extension configures nothing and haunts nothing.
+    """
+    with _lock:
+        return sorted(
+            (dict(lane)
+             for record in _registered.values()
+             for lane in record.model_lanes),
+            key=lambda row: (row["ext_id"], row["name"]))
+
+
+def keep_orphan_lane_rows(stored: dict, incoming: dict) -> dict:
+    """Carry a vanished extension's lane rows through a full-map settings save.
+
+    The models panel PUTs the WHOLE role->config map, built from the rows it
+    rendered -- which is how clearing a row works (omission means unset), and
+    which would also silently delete the stored configuration of any lane
+    whose extension is currently disabled or removed, because those rows are
+    not rendered. That configuration is the HOST's work, not the extension's:
+    removal takes the code, never the host's choices (the same rule that
+    leaves `world["ext:<id>"]` alone on remove), so re-enabling must find the
+    lane configured as it was left.
+
+    The split is exact: an `ext:` key absent from the incoming map is dropped
+    only when its lane is LIVE (the panel showed it, so omission was the host
+    clearing it) and preserved otherwise. If the lane registry itself cannot
+    be read, everything is preserved -- losing host configuration to a broken
+    extension tree is strictly worse than keeping an orphan row nobody reads.
+    """
+    out = dict(incoming or {})
+    try:
+        activate()
+        live = {lane["role"] for lane in registered_model_lanes()}
+    except Exception:
+        log.exception("could not read model lanes; keeping every ext: row")
+        live = None
+    for key, value in (stored or {}).items():
+        key = str(key)
+        if not key.startswith("ext:") or key in out:
+            continue
+        if live is None or key not in live:
+            out[key] = value
+    return out
+
+
 def registered_commit_domains() -> list[dict]:
     with _lock:
         return sorted(
@@ -1435,8 +1502,10 @@ __all__ = [
     "dispatch_route", "dispatch_turn_committed",
     "enable_extension", "enabled_ids", "extension", "extension_root",
     "extension_script", "extension_styles", "in_commit_scope",
-    "installed_extensions", "is_enabled", "listing", "load_errors",
+    "installed_extensions", "is_enabled", "keep_orphan_lane_rows", "listing",
+    "load_errors",
     "notify_step_saved", "observer_failures", "registered_commit_domains",
+    "registered_model_lanes",
     "registered_routes", "registered_specialists", "registered_stages",
     "reload", "routing_notes", "run_commit_domains", "run_specialist_call",
     "safe_mode", "ui_bundle", "ui_styles", "update_extension",
