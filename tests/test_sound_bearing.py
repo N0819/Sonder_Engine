@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from world.spatial import (
     is_alarming,
     sound_bearing,
@@ -39,6 +41,32 @@ def _chain(*barriers):
         "positions": {},
         "entities": {},
     }
+
+
+# ---- the phrase tables are the pack's, and a broken pack must say so ---------
+
+def test_a_missing_compositor_table_raises_rather_than_emptying(monkeypatch):
+    """`_phrase_table` swallowed every exception and returned `{}`.
+
+    An empty table does not fail: `_sector_phrases().get(direction, direction)`
+    falls back to the raw token, so a Japanese story quietly renders "left"
+    where it should render the pack's own phrase. Silent degradation in the
+    compositor, which is the one place the engine has no second chance to
+    notice.
+
+    And the swallow bought nothing. `compositor_text` on the very next line
+    raises `LanguagePackError` for the same broken pack, so the turn dies
+    anyway -- one statement later, with a worse message.
+    """
+    from language_runtime import LanguagePackError
+    import world.spatial_senses as senses
+
+    def boom(name, *a, **kw):
+        raise LanguagePackError(f"pack lacks compositor value {name!r}")
+
+    monkeypatch.setattr("language_runtime.compositor_value", boom)
+    with pytest.raises(LanguagePackError):
+        senses._sector_phrases()
 
 
 # ---- sound_bearing -----------------------------------------------------------

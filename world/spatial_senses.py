@@ -985,11 +985,23 @@ _COMPASS_WORDS = {"n": "north", "ne": "northeast", "e": "east",
 # follows the story language like every other engine phrase. Held English
 # before, which put "to your left" inside a Japanese view.
 def _phrase_table(name):
+    """The pack's table for `name`. Raises if the pack has not got one.
+
+    It used to `except Exception: return {}`, and an empty table does not
+    fail -- `_sector_phrases().get(direction, direction)` falls back to the
+    raw token, so a Japanese story quietly rendered "left" where the pack's
+    own phrase belonged. Silent degradation in the compositor, which is the
+    one place the engine has no second chance to notice.
+
+    The swallow also bought nothing: `compositor_text`, called on the same
+    statement as these tables in `sound_bearing`, raises `LanguagePackError`
+    for the same broken pack. The turn died one line later with a worse
+    message. `make check` enforces pack completeness for every installed
+    pack, so a missing key is a build error, not a runtime condition.
+    """
     from language_runtime import compositor_value
-    try:
-        return dict(compositor_value(name))
-    except Exception:
-        return {}
+
+    return dict(compositor_value(name))
 
 
 def _sound_barrier_phrases():
