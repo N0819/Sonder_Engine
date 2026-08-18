@@ -615,6 +615,20 @@ Subsystems the original architecture never imagined, now load-bearing:
   the screen judged warranted still counts as progress. Below the ceiling it
   warns and holds progress but does not stall the goal: a slow intention is not
   a stuck one.
+- **A position must be reachable** (`agents/director.py`). The movement
+  backstop rules on DECLARED movement — route, contested doors, companions
+  held back — and a position written for a body nobody said was going anywhere
+  never reached it. Live (chat 80 turn 4): `interp["movement"]` was null and
+  the spatial specialist wrote `{"Hinami": "obs_room"}`, moving a restrained
+  subject through a two-way mirror out of a cell whose only other edge is a
+  closed door, into the room she was being observed from — while the prose
+  author, in the same step, had her correctly in the cell. The floor is
+  reachability and never declaration: dragged, carried and lift-borne moves are
+  legitimate and undeclared, and none of them passes through a wall. Scoped by
+  what three existing tests taught it — a declared mover belongs to the
+  backstop, because a closed door is contested rather than impossible and the
+  causality owner decides it; and an entity is not a body, because a vehicle's
+  arrival is what CREATES the dock edge everyone else walks.
 - **Deterministic mechanics sweep** (`mechanics.py`). Timed arrivals, expiry,
   dock edges, news latency — LLM-free, seeded, idempotent.
 - **Weather** (`weather.py`). One sky per scene, with each room's share decided
