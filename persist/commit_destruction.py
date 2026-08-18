@@ -10,6 +10,7 @@ from core.db import q, qi, wget, wset
 from mind.memory import lorebook_descendants
 from world.mechanics import news_latency_seconds
 from world.spatial import normalize_room_id
+from world.spatial_frames import _cast_changes_leaving
 from persist.commit_common import _stable_event_key
 
 # ---- Destruction: single-book (Phase 2) + multi-book cascades (3b) ----
@@ -303,10 +304,7 @@ def _prepare_destruction(cid, prev_scene, diff, add_warning=None):
         str(k).casefold(): str(v)
         for k, v in (diff.get("positions") or {}).items()
     }
-    departed = {
-        str(c.get("who") or "").casefold()
-        for c in (diff.get("cast_changes") or []) if isinstance(c, dict)
-    }
+    departed = _cast_changes_leaving(diff.get("cast_changes"))
     vacated = sorted(
         str(name)
         for name, room in (prev_scene.get("positions") or {}).items()

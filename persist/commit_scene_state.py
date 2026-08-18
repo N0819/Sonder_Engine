@@ -13,7 +13,8 @@ from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
 from world.weather import advance_weather, normalize_weather
 from world.spatial import merge_scene_with_diff, guessed_room_sizes
-from world.spatial_frames import (infer_companion_carry, infer_vehicle_zones,
+from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
+                            infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
                             infer_threshold_crossings)
 from persist.commit_common import _monotonic_elapsed, _player_name_or_none
@@ -140,10 +141,7 @@ def _guard_occupied_mover_removal(prev_scene, diff, doomed=None):
     diff_positions = {
         str(k).casefold(): v for k, v in (diff.get("positions") or {}).items()
     }
-    departed = {
-        str(c.get("who") or "").casefold()
-        for c in (diff.get("cast_changes") or []) if isinstance(c, dict)
-    }
+    departed = _cast_changes_leaving(diff.get("cast_changes"))
     doom_map = {}
     for eid in removals:
         interior = {rid for rid, r in rooms.items()

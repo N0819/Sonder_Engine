@@ -106,6 +106,32 @@ class TestInferCompanionCarry:
         assert changed is False
         assert new_scene["positions"]["Reya"] == "room_a"
 
+    def test_a_companion_recorded_as_ARRIVING_is_still_carried(
+        self, temp_db,
+    ):
+        """The exemption is for someone the beat sent AWAY. It read the entry's
+        existence, not its status -- so `cast_changes` saying Reya rejoined the
+        story left her standing in the old room while the ship left with the
+        player, the opposite of what her entry said."""
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Test", "", time.time()),
+        )
+        prev_scene = _base_scene()
+        new_scene = json.loads(json.dumps(prev_scene))
+        new_scene["positions"]["The Stranger"] = "ship_cockpit"
+
+        cast_changes = [
+            {"who": "Reya", "status": "active", "reason": "rejoined the crew"},
+        ]
+
+        changed = spatial_frames.infer_companion_carry(
+            chat_id, None, prev_scene, new_scene, ["Reya"], cast_changes,
+        )
+
+        assert changed is True
+        assert new_scene["positions"]["Reya"] == "ship_cockpit"
+
     def test_companion_already_explicitly_moved_by_diff_is_not_overridden(
         self, temp_db,
     ):
