@@ -1514,7 +1514,8 @@ class SonderExtensionAPI:
         return f"ext:{self.id}:{name}"
 
     def add_director_specialist(self, name, *, channels, prompt, gate=None,
-                                role="default", label=None):
+                                role="default", label=None,
+                                list_channels=None):
         """Add a Director specialist family of your own.
 
         The Director is no longer one mind: each stage fans out to a prose
@@ -1541,13 +1542,18 @@ class SonderExtensionAPI:
         `gate(facts) -> bool` decides whether this beat has work for the family;
         omit it and it runs on physical beats, which is the fail-open rule the
         engine's own gates follow.
+
+        `list_channels` names the subset of `channels` whose value is a LIST.
+        The merge coerces every other channel to a keyed table, so an undeclared
+        list arrives as `{}` -- your family dispatched, paid for and discarded
+        with nothing said. Declare the shape or return a dict.
         """
         from agents.director import register_specialist
         from . import _record_specialist
 
         full = register_specialist(self.id, name, channels=channels,
                                    prompt=prompt, gate=gate, role=role,
-                                   label=label)
+                                   label=label, list_channels=list_channels)
         _record_specialist(self.id, full)
         return full
 

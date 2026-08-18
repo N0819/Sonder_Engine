@@ -146,6 +146,7 @@
   "sonder.reopenExtensions": "identifier, route, enum, class, or filename",
   "sonder.reopenPrompts": "identifier, route, enum, class, or filename",
   "sonder.ui.proseSize": "identifier, route, enum, class, or filename",
+  "specialist ${full_name} declares ${unknown} list-shaped, but does not own them": "developer-facing extension API error, never player text",
   "specialist ${full_name} declares no channels": "specialist ${full_name} declares no channels",
   "specialist ${full_name} declares no prompt": "specialist ${full_name} declares no prompt",
   "storyLanguage": "identifier, route, enum, class, or filename",

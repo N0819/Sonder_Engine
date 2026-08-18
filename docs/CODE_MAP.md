@@ -19,7 +19,7 @@
 | `agents/director_lingua.py` | 22 |  | — |
 | `agents/director_movement.py` | 938 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 424 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
-| `agents/director_scopes.py` | 545 |  | `agents.director_views`, `core.db`, `world.survival` |
+| `agents/director_scopes.py` | 601 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 453 |  | `agents.common`, `story.character_schema`, `story.scene` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
@@ -270,14 +270,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_gate_facts()` | 450 | 70 lines |
-| `register_specialist()` | 320 | 37 lines |
-| `_dispatch_specialists()` | 522 | 24 lines |
-| `_extension_specialist_call()` | 371 | 17 lines |
-| `_shipped_transit_state()` | 390 | 12 lines |
-| `unregister_specialists()` | 359 | 10 lines |
-| `_shipped_darkened_room()` | 404 | 6 lines |
-| `_rebuild_channel_owners()` | 313 | 5 lines |
+| `_gate_facts()` | 506 | 70 lines |
+| `register_specialist()` | 364 | 49 lines |
+| `_rebuild_channel_owners()` | 334 | 24 lines |
+| `_dispatch_specialists()` | 578 | 24 lines |
+| `_extension_specialist_call()` | 427 | 17 lines |
+| `_schema_list_channels()` | 200 | 14 lines |
+| `_shipped_transit_state()` | 446 | 12 lines |
+| `unregister_specialists()` | 415 | 10 lines |
 
 ### `agents/director_views.py`
 
