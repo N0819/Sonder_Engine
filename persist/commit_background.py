@@ -1406,8 +1406,9 @@ def auto_promote_background_characters(ctx):
     """Commit-side sweep: autonomously promote the single most-deserving
     tracked background presence that has crossed the auto-threshold --
     promotable (see promotable_background_presences) AND at least
-    AUTO_PROMOTE_DIALOGUE_THRESHOLD dialogue turns AND present/addressed
-    THIS beat. Promotion used to be UI-only (app.py's draft/confirm
+    `promotion_thresholds(cid)["auto_dialogue"]` dialogue turns AND at least
+    `dialogue_config`'s `promote_after_addressed` addressed turns AND
+    present/addressed THIS beat. Promotion used to be UI-only (app.py's draft/confirm
     routes were promotable_background_presences' sole callers), so a
     deserving presence could stay shallow forever in hands-off play.
 
@@ -1436,6 +1437,10 @@ def auto_promote_background_characters(ctx):
     _addressed_min = _promote_after_addressed(cid)
     if _addressed_min <= 0:
         return {"promoted": []}
+    # ...and how much VOICE she must have accrued. The other half of the gate,
+    # and independently settable, because the two measure different things: a
+    # prop can be talked at for six turns and answer twice.
+    _dialogue_min = promotion_thresholds(cid)["auto_dialogue"]
     selected = {
         str(n).casefold()
         for n in ((ctx.get("background_react") or {}).get("selected") or [])
@@ -1452,6 +1457,14 @@ def auto_promote_background_characters(ctx):
         # merely SPOKE promoted extras for holding conversations with each
         # other, which is what background life is FOR.
         if len(record.get("addressed_turns") or []) < _addressed_min:
+            continue
+        # And the voice gate, which the UI's `promotable` badge sets lower --
+        # auto-minting a sheet is irreversible spend, so the autonomous path
+        # waits for more demonstrated salience than the offer does. It also
+        # closes the mentions-only route: `promotable` is satisfied by
+        # `mention_turns` ALONE, so without this a presence who has never once
+        # spoken could be handed a mind.
+        if len(dialogue_turns) < _dialogue_min:
             continue
         # "Present/addressed this beat": their record was touched this turn
         # (spoke / mentioned), the gate picked them, a character's address
