@@ -1089,8 +1089,15 @@ def narrator_extra(ctx, nonce):
             extra.get("pronouns") or {}, key=f"narration_person:extra:{pid}",
             pending=pending_person_writes)
 
+        # THIS player's persona and THIS player's name. `player_name` was a
+        # free variable here -- bound in `narrator`, never in `narrator_extra`
+        # -- so every extra-player render raised NameError the moment a chat
+        # had a second human in it. And the persona it reached for was the
+        # chat's PRIMARY one, which would have filed the main player's
+        # authored anatomy under the extra player's name: the same defect
+        # `_authored_body_parts` exists to prevent, one player over.
         _abp2 = _authored_body_parts(
-            ctx, persona_of(ctx.chat), player_name)
+            ctx, extra.get("persona"), extra.get("name") or "Player")
         payload = {
             "player_view": view,
             "player_declared": player_declared,

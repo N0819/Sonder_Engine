@@ -658,6 +658,94 @@ def _extension_dirs() -> list[Path]:
                   if child.is_dir() and not child.name.startswith("."))
 
 
+#: Names Python binds on a module that `symtable` does not list as symbols.
+_IMPLICIT_MODULE_NAMES = frozenset({
+    "__file__", "__name__", "__doc__", "__package__", "__spec__",
+    "__loader__", "__builtins__", "__debug__",
+})
+
+
+def check_undefined_names(errors: list[str]) -> None:
+    """A name used inside a function that nothing anywhere binds.
+
+    The class: call a helper you forgot to import. `python -m compileall`
+    passes -- it is valid syntax -- and the whole suite passes too whenever the
+    line sits on a branch no test drives. It fails in PRODUCTION, as a
+    NameError, mid-turn.
+
+    That is not hypothetical. `director_interpret`'s reactor fallback called
+    `can_perceive_onset` with no import for it, on a branch that only runs when
+    the Director names no reactors; 6,826 tests were green and the first live
+    beat died. Sweeping the tree for the same shape immediately turned up a
+    SECOND one that had been sitting in `narrator_extra` -- `player_name`, a
+    free variable bound in `narrator` and never in the function that used it,
+    so every extra-player render would have raised the moment a chat had a
+    second human in it.
+
+    Uses `symtable`, which is CPython's own scope analyser, rather than a
+    hand-rolled AST walk: comprehension scopes, walrus targets, `global`/
+    `nonlocal`, class bodies and nested closures are exactly where a
+    hand-rolled one produces false positives, and a false positive here blocks
+    `make check` for everyone.
+
+    Conservative on purpose. Only a symbol the analyser calls global, that is
+    read, and that nothing in the module ever assigns, is reported -- and a
+    module containing a star-import is skipped entirely, because then the
+    module's own namespace is not knowable from the source.
+    """
+    import builtins
+    import symtable
+
+    # Enumerated rather than rglob'd. `ROOT` contains `.claude/worktrees/`,
+    # which holds several complete checkouts of this repository, and a
+    # whole-tree walk therefore scans the engine seven times over and takes
+    # minutes. These are the directories the engine actually ships from.
+    paths = (
+        list(ROOT.glob("*.py"))
+        + list((ROOT / "agents").glob("*.py"))
+        + list((ROOT / "tools").glob("*.py"))
+        + list((ROOT / "tests").glob("*.py"))
+        + list((ROOT / "extension_runtime").glob("*.py"))
+        + list((ROOT / "language_runtime").glob("*.py"))
+        + list((ROOT / "language_adapters").glob("*.py"))
+        + list((ROOT / "extensions").glob("*/*.py"))
+    )
+    scanned = 0
+    for path in sorted(paths):
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+        except (OSError, SyntaxError):
+            continue          # compileall owns syntax; this owns names
+        if any(isinstance(node, ast.ImportFrom)
+               and any(alias.name == "*" for alias in node.names)
+               for node in ast.walk(tree)):
+            continue
+        try:
+            top = symtable.symtable(source, str(path), "exec")
+        except (SyntaxError, ValueError):
+            continue
+        scanned += 1
+        known = ({symbol.get_name() for symbol in top.get_symbols()}
+                 | set(dir(builtins)) | _IMPLICIT_MODULE_NAMES)
+        relative = path.relative_to(ROOT).as_posix()
+
+        def visit(scope):
+            for symbol in scope.get_symbols():
+                name = symbol.get_name()
+                if (symbol.is_global() and symbol.is_referenced()
+                        and not symbol.is_assigned() and name not in known):
+                    errors.append(
+                        f"{relative}: {scope.get_name()}() uses {name!r}, "
+                        "which nothing in the module defines or imports")
+            for child in scope.get_children():
+                visit(child)
+
+        visit(top)
+
+
 def check_extension_manifests(errors: list[str]) -> None:
     """Every bundled extension loads, and declares what it actually registers.
 
@@ -793,6 +881,7 @@ def check_extension_imports(errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
+    check_undefined_names(errors)
     check_extension_manifests(errors)
     check_extension_imports(errors)
     check_duplicate_python_symbols(errors)

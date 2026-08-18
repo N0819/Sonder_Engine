@@ -237,6 +237,46 @@ class TestWhatReachesAMind:
         assert percept.data["via"] == "the cell intercom"
         assert percept.data["via_channel"] == "cell_intercom"
 
+    def test_a_live_channel_beats_a_wall_that_only_muffles(self):
+        """The channel decides BEFORE the wall, and that ordering is the fix.
+
+        Found in play, on a live interview room. The Director had encoded its
+        two-way mirror as `membrane`, which muffles an ordinary voice to a
+        `fragment` -- and a fragment is not "none", so the spatial read
+        returned first and the live PA standing between those exact two rooms
+        was never consulted. The scene had the equipment, the equipment was
+        switched on, and the reader got a muffled voice through the glass.
+
+        A speaker reproduces the voice; what the wall would have done to it is
+        a property of the path the channel replaces.
+        """
+        scene = _scene()
+        scene["rooms"]["observation"]["adjacent"] = [
+            {"to": "cell", "barrier": "membrane"}]
+        scene["rooms"]["cell"]["adjacent"] = [
+            {"to": "observation", "barrier": "membrane"}]
+
+        muffled = _percept(scene, "Sarah Moon", "Hinami")
+        assert muffled.fidelity == "fragment", "the wall alone muffles"
+
+        sp.apply_comms_ops(scene, [{
+            "id": "pa", "name": "the PA", "rooms": ["observation", "cell"]}])
+        clear = _percept(scene, "Sarah Moon", "Hinami")
+        assert clear.data["level"] == "full"
+        assert clear.data["body"] == "State your designation."
+        assert clear.data["via"] == "the PA"
+
+    def test_a_channel_only_ever_raises_what_arrives(self):
+        """Where no channel applies, nothing about the ordinary spatial read
+        changes -- the rescue is a floor, never a ceiling."""
+        scene = _scene()
+        scene["rooms"]["observation"]["adjacent"] = [
+            {"to": "cell", "barrier": "membrane"}]
+        scene["rooms"]["cell"]["adjacent"] = [
+            {"to": "observation", "barrier": "membrane"}]
+        assert _percept(scene, "Sarah Moon", "Hinami").fidelity == "fragment"
+        assert _percept(scene, "Sarah Moon", "guard_1").data["level"] == "full"
+
     def test_someone_in_the_room_is_never_told_they_heard_a_radio(self):
         scene = _scene()
         sp.apply_comms_ops(scene, [{
