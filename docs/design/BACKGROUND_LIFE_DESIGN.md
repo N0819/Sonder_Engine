@@ -96,14 +96,34 @@ No qualifier → `[]` → no LLM call. This is the common case and it is correct
 
 Qualifying is necessary but not sufficient: **only a person may hold a
 background speaking turn** (`commit._presence_speech_verdict`). The ledger says
-nothing about what a name denotes, so the scene is asked: an animate kind or no
-entity record at all is a person and qualifies as above; a bodiless voice
-(`scene.is_ubiquitous_entity`) or a thing (`_is_inert_presence_candidate`) is
-the Director's own mouth and never speaks here; a kind that decides neither
-("device" cannot be lexically told from a "dalek war machine") speaks only on
-the Director's explicit judgment this beat — `routed_to_background` or
-`flow.addressed_to`. Chat 80 is why: a ceiling-mounted suppression device with
-an accrued record was picked at its "post" twice and interrogated the player.
+nothing about what a name denotes, so the presence's own frozen answer decides.
+
+**The answer is asked where a model is already looking.** `blurb_mint` visits
+every newly tracked presence once, batched per room, with the place, the
+Director's description and the story's genre in front of it — so it now settles
+`nature` (`person` / `thing` / `voice`, `schemas.PRESENCE_NATURES`) at no
+additional call, and the answer is frozen on the record beside the blurb. A
+`thing` or a `voice` is stored with no personality at all, because the stored
+blurb is what made chat 80's ceiling-mounted suppression device sound like
+somebody who "refuses to blink or shift posture" before it interrogated the
+restrained player twice. That prompt used to open "you give personalities to
+background PEOPLE" and was handed a list assembled by name; it answered the
+question it was asked.
+
+Everything below the frozen answer is a fallback for a presence that has none
+yet, and is deliberately graded rather than confident: an animate kind or no
+entity record at all is a person; a bodiless voice (`scene.is_ubiquitous_entity`)
+or a thing (`_is_inert_presence_candidate`) is the Director's own mouth and
+never speaks here; a kind that decides neither ("device" cannot be lexically
+told from a "dalek war machine") speaks only on the Director's explicit
+judgment this beat — `routed_to_background` or `flow.addressed_to`. **An
+unanswered `nature` is not a yes**: reading an unasked question as "person" is
+the defect this closes.
+
+The kind lists (`_INERT_ENTITY_KINDS` at 50 entries, `_ANIMATE_ENTITY_KINDS` at
+35) are that fallback and nothing more. They were never going to finish — the
+space of nouns a story can invent has no end, and a `kind` is a word the model
+chose in passing rather than a fact about the thing.
 The scene-manager roster (§3.10) applies the same rule more strictly — persons
 only — because the manager voices its roster with no per-signal gate.
 

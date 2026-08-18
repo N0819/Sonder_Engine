@@ -439,7 +439,7 @@ def managed_presences(ctx, cap):
         # line for a non-person still reaches the per-presence path through
         # background_react's unpaid-debt fall-through, where the gate's own
         # verdict logic applies.
-        if _presence_speech_verdict(sc, name) != "person":
+        if _presence_speech_verdict(sc, name, rec) != "person":
             continue
         room = _presence_room(sc, name, rec, name_ids)
         if scope is not None and room and room not in scope:
@@ -761,8 +761,26 @@ def _mint_blurbs(ctx, managed):
             canon = wanted.get(str(b.get("name") or "").strip().casefold())
             if not canon:
                 continue
-            minted[canon] = {k: str(b.get(k) or "").strip()[:160]
-                             for k in ("manner", "trait", "tell", "look")}
+            entry = {k: str(b.get(k) or "").strip()[:160]
+                     for k in ("manner", "trait", "tell", "look")}
+            # WHAT IT IS, settled here and frozen with the blurb. This pass is
+            # the one moment the engine already looks at a new presence with
+            # its place, the Director's description and the genre in front of a
+            # model, so it costs no call of its own -- and every other way of
+            # asking was trying to read animacy off a noun the model chose in
+            # passing (`_INERT_ENTITY_KINDS` at 50 entries and climbing).
+            #
+            # A thing or a voice keeps its nature and loses the personality:
+            # the prompt no longer asks for one, and a stale model that answers
+            # anyway must not have it stored, because the stored blurb is
+            # exactly what made a suppression device sound like a person who
+            # "refuses to blink or shift posture" (chat 80).
+            nature = str(b.get("nature") or "").strip().casefold()
+            if nature in ("thing", "voice"):
+                entry = {k: "" for k in entry}
+            if nature:
+                entry["nature"] = nature
+            minted[canon] = entry
     return minted
 
 

@@ -7655,7 +7655,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             # perception object and their own recognition of the room.
             from commit import _presence_speech_verdict
             if (not director_may_voice(speaker, sc, _rec)
-                    and _presence_speech_verdict(sc, speaker) != "thing"):
+                    and _presence_speech_verdict(sc, speaker, _rec) != "thing"):
                 # Only a possible PERSON is re-homed to the background stage.
                 # A bodiless voice or a thing that speaks (a PA, a ship
                 # computer, an enchanted object) is the Director's own mouth

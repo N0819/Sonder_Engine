@@ -1812,14 +1812,38 @@ class SceneLifeEntry(LenientModel):
 class SceneLifeOutput(LenientModel):
     entries: list[SceneLifeEntry] = Field(default_factory=list)
 
+#: What a tracked presence turns out to BE, answered once and frozen with the
+#: blurb. `""` means the pass did not say, which every caller must treat as
+#: "undecided" rather than as "person" -- the whole defect this field closes was
+#: an unanswered question being read as a yes.
+PRESENCE_NATURES = ("person", "thing", "voice")
+
+
 class BlurbMintEntry(LenientModel):
     """A frozen personality blurb (§3.8). Surface only -- manner, a standing
-    concern, a repeatable tic -- never private goals or beliefs about others."""
+    concern, a repeatable tic -- never private goals or beliefs about others.
+
+    `nature` is not decoration and not a personality field. The blurb pass is
+    the ONE moment the engine already looks at a newly tracked presence with
+    its place, the Director's description of it and the story's genre in front
+    of a model -- so it is the moment to settle what the thing IS, at no extra
+    call. Everything else that asked ("is `device` an animate kind?") was
+    trying to derive animacy from a noun the model chose in passing, which is
+    an enumeration treadmill: `_INERT_ENTITY_KINDS` reached 50 entries and
+    `_ANIMATE_ENTITY_KINDS` 35, and a kind string still cannot separate a
+    suppression device from a dalek war machine.
+    """
     name: str
     manner: str = ""
     trait: str = ""
     tell: str = ""
     look: str = ""
+    nature: str = ""
+
+    _nature = validator("nature", pre=True, allow_reuse=True)(
+        lambda cls, value: (
+            str(value or "").strip().casefold()
+            if str(value or "").strip().casefold() in PRESENCE_NATURES else ""))
 
 class BackdropPromptOutput(LenientModel):
     prompt: str = ""
@@ -4741,6 +4765,7 @@ OUTPUT_EXAMPLES = {
                 "trait": "convinced adventurers always leave without paying",
                 "tell": "wipes the same clean spot on the bar",
                 "look": "forearms like a smith's, grey braid pinned up",
+                "nature": "person",
             },
         ],
     },
