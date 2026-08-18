@@ -57,7 +57,10 @@ from character_schema import (
     persona_name,
 )
 from scene import (background_config, dialogue_config, interaction_limits,
-                   normalize_offscreen_life, style_guide, normalize_style_guide,
+                   normalize_offscreen_life, player_authority,
+                   set_player_authority, PLAYER_AUTHORITY_GRANTS,
+                   PLAYER_AUTHORITY_MODES,
+                   style_guide, normalize_style_guide,
                    OFFSCREEN_LIFE_BUILT, OFFSCREEN_LIFE_DEFAULT,
                    OFFSCREEN_LIFE_DESCRIPTIONS, OFFSCREEN_LIFE_LADDER,
                    STYLE_GUIDE_FIELDS)
@@ -4106,6 +4109,74 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
         raise HTTPException(400, "background config numeric fields must be numbers")
     wset(cid, "background_config", config)
     return config
+
+@app.get("/api/chats/{cid}/story_view")
+def story_view_get(cid: int, events: int = 20):
+    """Canonical story state, versioned. The read `story_view.py` documents.
+
+    Served to the host UI as well as to extensions because it is the same
+    question either asks -- and because a surface only extensions can reach is
+    one nothing in this repository exercises.
+    """
+    import story_view
+
+    try:
+        return story_view.story_view(cid, events=events)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+@app.get("/api/chats/{cid}/player_view")
+def player_view_get(cid: int, viewer: str = "player", memories: int = 12):
+    """What one viewer may be shown. See `story_view.player_view`."""
+    import story_view
+
+    try:
+        return story_view.player_view(cid, viewer, memories=memories)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+
+@app.get("/api/chats/{cid}/viewers")
+def viewers_get(cid: int):
+    import story_view
+
+    return {"viewers": story_view.viewers(cid)}
+
+@app.get("/api/chats/{cid}/player_authority")
+def player_authority_get(cid: int):
+    """This story's player-authority mode, its ladder, and its change record.
+
+    The ladder is served by the engine rather than copied into the menu, for
+    the reason the offscreen-life route gives: a mode list maintained in two
+    places is one that disagrees with itself the first time a rung moves.
+    """
+    current = player_authority(cid)
+    current["modes"] = [
+        {"value": mode, "grants": sorted(PLAYER_AUTHORITY_GRANTS[mode])}
+        for mode in PLAYER_AUTHORITY_MODES
+    ]
+    return current
+
+@app.put("/api/chats/{cid}/player_authority")
+def player_authority_put(cid: int, body: dict = Body(...)):
+    """Choose the mode. Refused rather than normalized, unlike its neighbours.
+
+    `offscreen_life` falls back to its default on an unreadable value because
+    the cost of guessing wrong there is a story with slightly more or less
+    happening off screen. Here the cost is the player silently keeping or
+    losing authorship of the world, and a typo that lands on `world_author`
+    when `actor_only` was meant is exactly the failure the whole feature
+    exists to prevent.
+    """
+    mode = str(body.get("mode", "")).strip().lower()
+    if mode not in PLAYER_AUTHORITY_MODES:
+        raise HTTPException(
+            400, "mode must be one of " + ", ".join(PLAYER_AUTHORITY_MODES))
+    turn_idx = body.get("turn_idx")
+    try:
+        turn_idx = int(turn_idx) if turn_idx is not None else None
+    except (TypeError, ValueError):
+        turn_idx = None
+    return set_player_authority(cid, mode, turn_idx=turn_idx)
 
 @app.get("/api/chats/{cid}/frames")
 def frames_list(cid: int):

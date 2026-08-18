@@ -107,6 +107,20 @@ NARRATION_CONTEXT_KEY = "narration"
 NARRATION_CONTEXT_MAX = 8000
 
 
+DIRECTOR_CONTEXT_KEY = "director"
+#: The Director phases an extension may put standing context in front of.
+#: `establish` is the opening turn's single Director call; `interpret` reads
+#: what the player declared; `resolve` decides what it did. A campaign rule
+#: that must be true before the engine forms a belief about the beat belongs
+#: in one of these, and after them is too late -- which is the whole reason
+#: this exists alongside `narration_context`.
+DIRECTOR_PHASES = ("establish", "interpret", "resolve")
+#: Per PHASE, not per block: a campaign whose interpret and resolve rules are
+#: both at the ceiling costs two payloads, never one of 16,000. Same ceiling
+#: as narration and for the same reason -- it rides every beat.
+DIRECTOR_CONTEXT_MAX = 8000
+
+
 def _narration_hash(text: str) -> str:
     import hashlib
 
@@ -192,6 +206,138 @@ class NarrationBlock:
         block = self._read() or {}
         return (f"<NarrationBlock {self.ext_id} chat={self.chat_id} "
                 f"rev={block.get('revision', 0)}>")
+
+
+class DirectorBlock:
+    """An extension's standing context for one story's DIRECTOR calls.
+
+    The narration seam's counterpart, one stage earlier, and the difference is
+    the point of having both. `NarrationBlock` colours what the reader is
+    TOLD, after the engine has already decided what happened. This colours
+    what the engine decides -- a campaign rule that makes an objective ineligible
+    until its evidence exists, or a command invalid while the system carrying it
+    is down, has to be in front of the Director or it is a note appended to a
+    verdict already reached.
+
+    Stored per PHASE (`DIRECTOR_PHASES`), because the two questions are not the
+    same question. Interpret reads the player's declaration; resolve decides
+    what it did; a rule aimed at one and applied to both is how an interpretive
+    constraint starts silently vetoing outcomes.
+
+    Everything else matches `NarrationBlock` deliberately: one keyed block per
+    extension per phase, REPLACED rather than appended to (an injector that
+    appends leaks everything it ever said), revision stable across an identical
+    re-install, writes ungated because a block is installed by a host action
+    outside any turn, and resident in the `world` KV under
+    `ext:<id>:director` so it rides checkpoints, archives, branches and clones
+    with the rest of the namespace.
+
+    What it is NOT is engine authority. The block arrives attributed, in
+    `payload["extension_context"]`, alongside every other extension's -- it
+    cannot present itself as the host's own instruction, and the Director's
+    deterministic floors (player authority, claim coverage, the movement and
+    restraint backstops) run afterwards on the merged result exactly as they do
+    on an unextended beat.
+    """
+
+    def __init__(self, ext_id, chat_id):
+        self.ext_id = str(ext_id)
+        self.chat_id = int(chat_id)
+        self._key = f"ext:{self.ext_id}:{DIRECTOR_CONTEXT_KEY}"
+
+    def _read(self):
+        from db import wget
+
+        stored = wget(self.chat_id, self._key)
+        return stored if isinstance(stored, dict) else {}
+
+    def _write(self, value):
+        from db import wset
+
+        wset(self.chat_id, self._key, value or None)
+
+    def get(self, phase=None):
+        """Every stored phase as `{phase: record}`, or one phase's record."""
+        stored = self._read()
+        if phase is None:
+            return {name: dict(record) for name, record in stored.items()
+                    if isinstance(record, dict)}
+        record = stored.get(self._phase(phase))
+        return dict(record) if isinstance(record, dict) else None
+
+    def text(self, phase) -> str:
+        record = self.get(phase) or {}
+        return str(record.get("text") or "")
+
+    @staticmethod
+    def _phase(phase):
+        name = str(phase or "").strip().lower()
+        if name not in DIRECTOR_PHASES:
+            raise ExtensionError(
+                f"unknown Director phase {phase!r}; "
+                f"expected one of {', '.join(DIRECTOR_PHASES)}")
+        return name
+
+    def set(self, blocks=None, **kwargs):
+        """Install or replace this story's blocks. Returns the stored record.
+
+        Takes a mapping, keyword arguments, or both::
+
+            api.director_context(chat_id).set(
+                interpret="Deck 4 is sealed; no order can route a body there.",
+                resolve="A sealed deck refuses entry however the attempt is made.",
+            )
+
+        A phase given `None` is left ALONE and a phase given an empty string is
+        CLEARED -- the distinction matters because the common caller rebuilds
+        one phase per host action and must not silently drop the other. Setting
+        the same text twice does not bump that phase's revision.
+        """
+        merged = dict(blocks or {})
+        merged.update(kwargs)
+        if not merged:
+            return self.get()
+        stored = self._read()
+        for phase, text in merged.items():
+            name = self._phase(phase)
+            if text is None:
+                continue
+            text = str(text).strip()
+            if not text:
+                stored.pop(name, None)
+                continue
+            if len(text) > DIRECTOR_CONTEXT_MAX:
+                raise ExtensionError(
+                    f"Director {name} context is {len(text)} characters; the "
+                    f"ceiling is {DIRECTOR_CONTEXT_MAX}. It rides every beat "
+                    "of the story.")
+            previous = stored.get(name) if isinstance(
+                stored.get(name), dict) else {}
+            digest = _narration_hash(text)
+            if previous.get("hash") == digest:
+                continue
+            stored[name] = {
+                "text": text,
+                "hash": digest,
+                "revision": int(previous.get("revision") or 0) + 1,
+            }
+        self._write(stored)
+        return self.get()
+
+    def clear(self, phase=None):
+        """Remove one phase's block, or every phase. Idempotent."""
+        if phase is None:
+            self._write(None)
+            return {}
+        stored = self._read()
+        stored.pop(self._phase(phase), None)
+        self._write(stored)
+        return self.get()
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        stored = self._read()
+        return (f"<DirectorBlock {self.ext_id} chat={self.chat_id} "
+                f"phases={sorted(stored)}>")
 
 
 def _settings_state(ext_id):
@@ -569,6 +715,38 @@ class NarrationContext:
         return f"<NarrationContext {self.scope} chat={self.chat_id}>"
 
 
+class DirectorContext:
+    """Identity handed to an `on_director_payload` hook alongside the payload.
+
+    `phase` is the field with content, and reading it is not optional: the
+    three Director calls ask different questions of the same beat, and a hook
+    that answers all of them the same way is applying an interpretive rule to
+    a resolution or an opening-turn rule to every turn after it.
+    """
+
+    def __init__(self, api, ctx, *, phase):
+        self.api = api
+        self.phase = str(phase or "")
+        chat = getattr(ctx, "chat", None)
+        turn = getattr(ctx, "turn", None)
+        self.chat_id = getattr(chat, "id", None)
+        self.turn_idx = getattr(turn, "idx", None)
+        self.turn_id = getattr(turn, "id", None)
+        self._ctx = ctx
+
+    def step(self, key):
+        getter = getattr(self._ctx, "get", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter(key)
+        except Exception:
+            return None
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return f"<DirectorContext {self.phase} chat={self.chat_id}>"
+
+
 class Request:
     """One call to an extension's own HTTP route.
 
@@ -816,6 +994,36 @@ class SonderExtensionAPI:
         _record_narration_hook(self.id, fn)
         return fn
 
+    def on_director_payload(self, fn):
+        """Alter what the DIRECTOR is about to be given. The earliest seam.
+
+        `fn(payload, info)` runs after a Director payload is assembled and
+        before the model sees it, for all three phases -- read `info.phase`
+        (`"establish"`, `"interpret"`, `"resolve"`) and return a dict to
+        replace the payload, or `None` to leave it alone.
+
+        Once per BEAT, not once per attempt. `director_resolve` re-enters
+        generation for the world-pressure floor and again for the player-act
+        authority retry, and those retries reuse the hooked payload rather than
+        re-running the hook -- a correction that saw different campaign context
+        than the first attempt did would be answering a question nobody asked.
+
+        Unrestricted and attributed, exactly as `on_character_payload` and
+        `on_narration_payload` are. The distinction worth holding: a character
+        payload shapes what one mind believes, a narration payload shapes what
+        the reader is told, and this shapes what the ENGINE believes happened
+        -- which is the one of the three that then propagates into state,
+        perception, memory and every later beat. It also cannot be taken back
+        by a reroll of a later stage.
+
+        Most callers want `api.director_context(chat_id)` instead: standing
+        campaign rules are a stored block, not a hook that has to run every
+        beat to say the same thing.
+        """
+        from . import _record_director_hook
+        _record_director_hook(self.id, fn)
+        return fn
+
     def add_route(self, path, fn, *, methods=("GET",)):
         """Serve `fn(Request)` at `/api/extensions/<your-id>/x/<path>`.
 
@@ -868,6 +1076,151 @@ class SonderExtensionAPI:
                              temperature=temperature, json_mode=False,
                              max_tokens=max_tokens)
 
+    # -- creating a story
+
+    def provision_story(self, package, *, state=None, package_id="",
+                        package_version=""):
+        """Create a whole playable story in one act, or create nothing.
+
+        `package` is a chat archive -- the engine's own portable format, the
+        one `chat_archive.py` already exports, validates and id-remaps. That is
+        a deliberate refusal to invent a second scenario format: a campaign
+        needs a story, a persona, a cast with stable ids, rooms and portals and
+        positions, a scene, a clock, authored lore on both sides of the
+        firewall, and relationship state, all agreeing from the first turn --
+        which is a list this engine already knows how to build atomically,
+        because it is the same list a branch and a restore have to get right.
+        A second importer would be a second set of the bugs that one has
+        already had.
+
+        `state` seeds this extension's own namespaced state for the new story
+        INSIDE the same transaction. That is the part an archive alone cannot
+        do and the reason this is a method rather than a documentation note: a
+        story that exists with no campaign state attached is precisely the
+        partial provisioning the whole contract is supposed to make impossible.
+
+        Provenance is recorded against your id, so a story can always answer
+        which extension and which package version made it. Six months later
+        that is the difference between a reproducible campaign and a save file
+        nobody can place.
+
+        Everything or nothing: a validation failure anywhere leaves no chat, no
+        characters, no lore and no state behind. Raises `ExtensionError` with
+        the validation message on a package the engine will not accept.
+        """
+        import time
+
+        from db import transaction, wset
+
+        payload = package
+        if not isinstance(payload, dict):
+            raise ExtensionError("provision_story needs an archive dict")
+
+        with transaction():
+            try:
+                import app
+
+                chat = app._chat_archive_service.import_chat({"data": payload})
+            except ExtensionError:
+                raise
+            except Exception as exc:
+                detail = getattr(exc, "detail", None) or str(exc)
+                raise ExtensionError(f"campaign package refused: {detail}")
+
+            chat_id = int(chat["id"])
+            # The import path appends " (import)" so somebody else's save does
+            # not sit in the list looking like your own. A campaign the player
+            # just pressed Start on is not somebody else's save: the package
+            # named the story, and the name it chose is the one that belongs on
+            # it. Renamed inside the same transaction, so a later failure takes
+            # the rename with everything else.
+            wanted = str((payload.get("chat") or {}).get("name") or "").strip()
+            if wanted and wanted != chat.get("name"):
+                from db import qi
+
+                qi("UPDATE chats SET name=? WHERE id=?", (wanted, chat_id))
+                chat = dict(chat, name=wanted)
+            if state is not None:
+                self.state(chat_id).set_now(state)
+            wset(chat_id, f"ext:{self.id}:provisioned", {
+                "extension": self.id,
+                "package": str(package_id or ""),
+                "version": str(package_version or ""),
+                "at": time.time(),
+            })
+        return {"chat_id": chat_id, "name": chat.get("name"),
+                "schema": self.story_view(chat_id)["schema"]}
+
+    def provenance(self, chat_id):
+        """What this extension recorded when it provisioned this story.
+
+        `None` for a story it did not provision -- including one a player
+        started by hand and later installed you into, which is a different
+        situation from a campaign of yours and should not be mistaken for one.
+        """
+        from db import wget
+
+        stored = wget(int(chat_id), f"ext:{self.id}:provisioned")
+        return dict(stored) if isinstance(stored, dict) else None
+
+    # -- reading the story
+
+    def story_view(self, chat_id, *, events=None):
+        """Canonical story state as a versioned, read-only, plain-value dict.
+
+        What is objectively true right now: ids, clock, frame, scene, rooms,
+        cast with their STABLE ids, recent committed events, and the story's
+        player-authority mode. Enough to derive campaign eligibility and render
+        a panel without importing an engine module or opening the database --
+        which is the point, because an integration built on either of those is
+        one refactor from breaking, and the extension boundary was supposed to
+        prevent exactly that.
+
+        Objective truth, and deliberately so. The firewall constrains what
+        reaches a fictional MIND; an extension is not one. Where a mind's
+        limits ARE the question, ask `player_view` instead -- and note that
+        wanting the objective read here is usually the right instinct, because
+        a campaign rule that fires on what the PLAYER happens to have noticed
+        fires differently on a reroll.
+
+        `schema` is the compatibility contract: it is bumped when a consumer
+        could break, and consumers of this live outside this repository and
+        cannot be migrated in the same commit.
+        """
+        import story_view as facade
+
+        if events is None:
+            return facade.story_view(chat_id)
+        return facade.story_view(chat_id, events=events)
+
+    def player_view(self, chat_id, viewer="player", *, memories=12):
+        """What one person in the story may be shown. A security boundary.
+
+        Built out of what the engine ALREADY DELIVERED to that viewer -- the
+        perception stage's own rendered view and structured observations, their
+        own memories and relationships, the identity ledger's own answer about
+        who they can name. Nothing in it re-decides admission, because a second
+        implementation of "what does this persona know" agrees with
+        `agents/perception.py` on the day it is written and drifts from it
+        silently forever after. A projection is never narrated, so nobody would
+        read the leak.
+
+        Absent means absent. A field this cannot answer is missing from the
+        result rather than defaulted, guessed, or filled from personality: a UI
+        cannot tell a guess from a fact and will render both the same way.
+
+        `api.viewers(chat_id)` lists the ids this accepts.
+        """
+        import story_view as facade
+
+        return facade.player_view(chat_id, viewer, memories=memories)
+
+    def viewers(self, chat_id):
+        """Who this story can be projected for, as `{id, name, kind}`."""
+        import story_view as facade
+
+        return facade.viewers(chat_id)
+
     # -- storage
 
     def state(self, chat_id):
@@ -903,6 +1256,22 @@ class SonderExtensionAPI:
         perception distribute it.
         """
         return NarrationBlock(self.id, chat_id)
+
+    def director_context(self, chat_id):
+        """Standing campaign context for this story's Director calls.
+
+        The declarative half of the Director seam::
+
+            api.director_context(chat_id).set(
+                interpret="Deck 4 is sealed; no order routes a body there.",
+                resolve="A sealed deck refuses entry however it is attempted.",
+            )
+
+        Installed once and read on every beat of that phase, attributed to you,
+        until you clear it. Returns a `DirectorBlock`; see it for what the
+        block is and, as importantly, what it is not.
+        """
+        return DirectorBlock(self.id, chat_id)
 
 
 def _stage_wrapper(api, key, handler, on_error):
@@ -943,6 +1312,7 @@ def _stage_wrapper(api, key, handler, on_error):
 
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
+    "DirectorBlock", "DirectorContext",
     "ExtState", "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
     "Request", "SonderExtensionAPI", "StepView", "enter_commit_scope",
     "in_commit_scope", "leave_commit_scope",

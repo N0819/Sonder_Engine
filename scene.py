@@ -1572,6 +1572,79 @@ def reaction_config(chat_id):
     config.update(stored)
     return config
 
+#: What each mode grants the player, as the ladder `Design.md` states it. The
+#: default is today's behaviour, so an existing story's meaning does not change
+#: under it: nothing is enforced until a host chooses to enforce something.
+PLAYER_AUTHORITY_MODES = ("actor_only", "explicit_outcomes", "world_author")
+DEFAULT_PLAYER_AUTHORITY = "world_author"
+
+#: Which claim kinds each mode GRANTS as already-true. Everything a mode does
+#: not grant survives as a declaration the Director adjudicates -- it is never
+#: deleted, because deleting player text is the one thing this engine's
+#: authority contract has never done and hard mode must not become the
+#: exception (`Design.md`, hard mode, design note 1).
+#:
+#:   own_body   -- an asserted effect on the player's own body. Granted by
+#:                 every mode: "attempts, speech, and immediate bodily
+#:                 conduct" is the floor, not a grant.
+#:   own_effect -- a completed effect the player declares their own action had
+#:                 on something else ("I pick the lock and it opens").
+#:   world      -- an actor-less assertion about the world ("two guards come
+#:                 around the corner"), which is authorship rather than
+#:                 conduct.
+PLAYER_AUTHORITY_GRANTS = {
+    "actor_only": frozenset({"own_body"}),
+    "explicit_outcomes": frozenset({"own_body", "own_effect"}),
+    "world_author": frozenset({"own_body", "own_effect", "world"}),
+}
+
+
+def normalize_player_authority(value):
+    mode = str(value or "").strip().lower()
+    return mode if mode in PLAYER_AUTHORITY_MODES else DEFAULT_PLAYER_AUTHORITY
+
+
+def player_authority(chat_id):
+    """This story's player-authority mode and the record of it changing.
+
+    Per chat rather than global, and the change history is stored WITH it,
+    because changing the mode mid-story changes what the earlier turns meant --
+    a beat where the player asserted a world fact and got it reads as a bug
+    once the story is in `actor_only`, and the only thing that can explain it
+    is knowing when the dial moved.
+
+    Returns `{"mode": ..., "changes": [{"turn_idx": n, "mode": ...}, ...]}`.
+    """
+    stored = wget(chat_id, "player_authority", None)
+    if isinstance(stored, str):          # tolerated shorthand
+        stored = {"mode": stored}
+    if not isinstance(stored, dict):
+        stored = {}
+    changes = [
+        {"turn_idx": item.get("turn_idx"),
+         "mode": normalize_player_authority(item.get("mode"))}
+        for item in (stored.get("changes") or []) if isinstance(item, dict)
+    ]
+    return {"mode": normalize_player_authority(stored.get("mode")),
+            "changes": changes}
+
+
+def set_player_authority(chat_id, mode, *, turn_idx=None):
+    """Choose this story's mode, appending to the change record.
+
+    Idempotent: re-selecting the current mode records nothing, so a host panel
+    that saves on every render cannot turn the history into noise.
+    """
+    mode = normalize_player_authority(mode)
+    current = player_authority(chat_id)
+    if mode == current["mode"] and (current["changes"] or mode ==
+                                    DEFAULT_PLAYER_AUTHORITY):
+        return current
+    changes = current["changes"] + [{"turn_idx": turn_idx, "mode": mode}]
+    wset(chat_id, "player_authority", {"mode": mode, "changes": changes[-40:]})
+    return player_authority(chat_id)
+
+
 def background_config(chat_id):
     """Config for the background_react stage. `max_reactors` bounds how many
     unregistered presences may voice a single beat (default 1 -- the historical

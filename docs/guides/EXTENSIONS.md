@@ -253,6 +253,15 @@ readable in the Extensions menu, and **every sibling stays live**.
 | `api.on_turn_committed(fn)` | run after a turn is durable, outside the transaction |
 | `api.add_commit_domain(name, fn, on_error=...)` | run **inside** the turn's transaction |
 | `api.on_character_payload(fn)` | rewrite what one mind is about to be given |
+| `api.on_narration_payload(fn)` | rewrite what the narrator is about to be given |
+| `api.on_director_payload(fn)` | rewrite what the Director is about to be given |
+| `api.narration_context(chat_id)` | standing context for the narrator |
+| `api.director_context(chat_id)` | standing campaign rules for the Director |
+| `api.story_view(chat_id)` | canonical story state, versioned and read-only |
+| `api.player_view(chat_id, viewer)` | what one person in the story may be shown |
+| `api.viewers(chat_id)` | the viewer ids `player_view` accepts |
+| `api.provision_story(package, state=..., ...)` | create a whole story atomically |
+| `api.provenance(chat_id)` | what you recorded when you provisioned it |
 | `api.add_director_specialist(name, channels=..., prompt=...)` | a seventh Director family |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
@@ -549,6 +558,143 @@ from in-tree `PROSE_DUTY_CHUNKS`. A `state_diff` channel you own still reaches
 the ledger and not the prose on its own — put it in front of the narrator here,
 or nothing mentions it.
 
+### Colouring what the Director is told
+
+Earlier than the narrator, and the difference is not a matter of degree.
+`on_narration_payload` shapes what the reader is **told**, after the engine has
+already decided what happened. This shapes what the engine **decides** — and
+that is the one of the three that propagates: into `state_diff`, into
+perception, into memory, into every beat after it.
+
+A campaign rule that must hold before a belief is formed — an objective
+ineligible until its evidence exists, a command invalid while the system
+carrying it is down, an authored fact unavailable until a legitimate discovery
+route has completed — has to be in front of the Director, or it is a note
+appended to a verdict already reached.
+
+**Standing context**, stored per phase:
+
+```python
+api.director_context(chat_id).set(
+    interpret="Deck 4 is sealed; no order routes a body there.",
+    resolve="A sealed deck refuses entry however the attempt is made.",
+)
+```
+
+Three phases: `establish` (the opening turn's single Director call), `interpret`
+(what the player declared), `resolve` (what it did). **Read the phase you are
+setting.** Interpret reads the player's declaration; resolve decides what it
+achieved. A rule aimed at one and applied to both is how an interpretive
+constraint starts silently vetoing outcomes.
+
+A phase given `None` is left alone and a phase given `""` is cleared — the
+distinction matters because the common caller rebuilds one phase per host action
+and must not silently drop the other. The ceiling is 8000 characters **per
+phase**, so a campaign at full length in two phases costs two payloads and never
+one of 16,000. Everything else matches `narration_context`: one block per
+extension per phase, replaced rather than appended, revision stable across an
+identical re-install, ungated writes, resident in the `world` KV under
+`ext:<id>:director`.
+
+**The hook**, for a rule that has to be computed:
+
+```python
+@api.on_director_payload
+def campaign_rules(payload, info):
+    if info.phase != "resolve":
+        return None
+    return {**payload, "extension_context": [...]}
+```
+
+Once per **beat**, not once per attempt. `director_resolve` re-enters generation
+for the world-pressure floor and again for the player-act authority retry, and
+those retries reuse the hooked payload — a correction answered against context
+the answer it corrects never saw would make the retry loop look like the defect.
+
+What this does **not** reach is the deterministic floor underneath. A block or a
+hook can tell the Director anything; it cannot make the Director's output skip
+player-act authority, claim coverage, the movement backstop or the restraint
+floor, because those read the RESULT and run afterwards. Nor can a block present
+itself as the host's own instruction: it arrives attributed, in
+`payload["extension_context"]`, alongside every other extension's.
+
+### Reading the story
+
+Two reads, and choosing the wrong one is the mistake worth naming up front.
+
+```python
+snapshot = api.story_view(chat_id)              # what is TRUE
+seen     = api.player_view(chat_id, "player")   # what one PERSON has
+```
+
+`story_view` is canonical: ids, clock, frame, scene, rooms, cast with stable
+ids, recent committed events, and the story's player-authority mode. Plain
+serialisable values with a `schema` number, so a campaign can derive its own
+eligibility and render its own panels without importing an engine module or
+opening the database. It is objective truth, and that is not a firewall breach —
+the firewall constrains what reaches a fictional **mind**, and an extension is
+not one (`docs/design/EXTENSIONS_DESIGN.md` §1).
+
+**Usually you want this one**, including for rules about the player. A campaign
+rule that fires on what the player happens to have *noticed* fires differently
+on a reroll.
+
+`player_view` is the other case, and it is a security boundary rather than a
+convenience. It is built out of what the engine **already delivered** to that
+viewer — the perception stage's own rendered view and structured observations,
+the viewer's own memories and relationships, the identity ledger's own answer
+about who they can name. Nothing in it re-decides admission, deliberately: a
+second implementation of "what does this persona know" agrees with
+`agents/perception.py` on the day it is written and drifts from it silently
+forever after, and because a projection is never narrated, nobody would read the
+leak.
+
+**Absent means absent.** A field it cannot answer is missing from the result —
+not `null`, not a default, not a deduction from personality. A UI cannot tell a
+guess from a fact and will render both the same way. In particular a viewer with
+no delivered view has no `perception` key at all, and never inherits somebody
+else's.
+
+Use `api.viewers(chat_id)` for the ids it accepts: `"player"`,
+`"extra:<persona_id>"`, and a character's numeric id as a string. Those are
+perception's own view keys, and they are not guessable by inspection.
+
+Provenance uses the vocabulary the engine already speaks —
+`what_i_experienced` / `what_i_was_told` / `what_i_concluded` — rather than a
+second one invented for the facade.
+
+### Provisioning a campaign
+
+```python
+result = api.provision_story(package, state={"mission": "survey"},
+                             package_id="episode-one", package_version="2.1.0")
+```
+
+`package` is a **chat archive** — the format `chat_archive.py` already exports,
+validates and id-remaps. That is a deliberate refusal to invent a second
+scenario format: a campaign needs a story, a persona, a cast with stable ids,
+rooms and portals and positions, a scene, a clock, authored lore on both sides
+of the firewall and relationship state, all agreeing from the first turn, which
+is the same list a branch and a restore have to get right. A second importer
+would be a second copy of the bugs the first one has already had.
+
+`state` seeds your own namespaced state **inside the same transaction**. That is
+the part an archive alone cannot do and the reason this is a method rather than
+a documentation note: a story that exists with no campaign state attached is
+exactly the partial provisioning the contract forbids.
+
+Everything or nothing. A validation failure leaves no chat, no characters, no
+lore and no state behind, and raises `ExtensionError` carrying the engine's own
+message about which field it refused. `api.provenance(chat_id)` reads back what
+you recorded, and returns `None` for a story you did not provision — including
+one a player started by hand and later installed you into, which is a different
+situation and must not be mistaken for a campaign of yours.
+
+The package's own `chat.name` is the story's name: the import path's
+" (import)" suffix exists so somebody else's save does not sit in the list
+looking like your own, and a campaign the player just pressed Start on is not
+somebody else's save.
+
 ---
 
 ## 5. Persistence
@@ -787,6 +933,15 @@ mind puts nothing in anyone's head. The pipeline drawer, persisted traces,
 `chat_archive` and `pipeline_trace` already read every mind's state at once, and
 that is correct. See [`AGENTS.md`](../../AGENTS.md) § Information boundaries.
 
+This is worth reading twice, because it is the thing outside readers get wrong
+most reliably — including in a careful review of this engine by a developer
+building on it, who treated an extension's access to objective story state as
+something needing justification. It does not. `api.story_view` is canonical for
+the same reason `make map` is: neither is a mind. Where a MIND's limits are
+actually the question — because you are rendering something a person in the
+story is looking at — `api.player_view` is the read, and it does not re-derive
+those limits, it returns what the engine already delivered.
+
 So the default API shape is about **making the right thing easy**, not about
 stopping you:
 
@@ -797,10 +952,15 @@ stopping you:
 - `on_step` gets content, not context — so a step observer cannot become a
   payload channel *by accident*.
 
-The one surface that is deliberately unrestricted rather than accident-proofed is
-`on_character_payload` (§4). It exists because you asked for the power, and it
-buys legibility instead of restraint: every key you change is attributed to you
-on the durable turn.
+Three surfaces are deliberately unrestricted rather than accident-proofed:
+`on_character_payload`, `on_narration_payload` and `on_director_payload` (§4).
+They exist because you asked for the power, and they buy legibility instead of
+restraint: every top-level key you change is attributed to you on the durable
+turn. They are listed in ascending order of consequence — a mind given too much
+acts wrongly in fiction and is recoverable next beat; a narrator given too much
+has already told the player; a DIRECTOR given too much has changed what
+happened, and that propagates into state, perception and memory for the rest of
+the story.
 
 None of that is a wall. Your Python runs in-process: `import db`, reach into
 `agents.runtime`, monkeypatch `agents.character`, reroute whatever you like. Your
@@ -863,6 +1023,17 @@ migration of everything already installed.
 | `GET /api/extensions/{id}/ui.css` | one extension's stylesheet |
 | `* /api/extensions/{id}/x/{path}` | dispatch to a route the extension registered |
 | `GET /api/extensions/{id}/asset/{path}` | one file from an extension directory, containment-checked on the resolved path |
+
+Host routes an extension's browser half will also want, serving the same reads
+as `api.story_view` / `player_view` / `viewers` and the same setting hard mode
+runs on:
+
+| Route | Purpose |
+|---|---|
+| `GET /api/chats/{id}/story_view?events=N` | canonical story state, versioned |
+| `GET /api/chats/{id}/player_view?viewer=...` | what one viewer may be shown |
+| `GET /api/chats/{id}/viewers` | the ids `player_view` accepts |
+| `GET`/`PUT /api/chats/{id}/player_authority` | the player-authority mode, its ladder, and its change record |
 
 All are host-session routes. None are on the guest allowlist, and a manifest
 cannot widen it.

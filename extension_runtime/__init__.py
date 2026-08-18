@@ -40,7 +40,8 @@ import threading
 from typing import Any, Callable
 
 from .api import (
-    CharacterAccess, CharacterHandle, CommitView, CommittedTurn, ExtState,
+    CharacterAccess, CharacterHandle, CommitView, CommittedTurn,
+    DirectorBlock, DirectorContext, ExtState,
     ExtensionError, NarrationBlock, NarrationContext,
     PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
     SonderExtensionAPI, StepView, enter_commit_scope, in_commit_scope,
@@ -372,6 +373,7 @@ class _Registration:
     commit_domains: list[dict] = field(default_factory=list)
     payload_hooks: list[Callable] = field(default_factory=list)
     narration_hooks: list[Callable] = field(default_factory=list)
+    director_hooks: list[Callable] = field(default_factory=list)
     routes: dict[str, dict] = field(default_factory=dict)
     specialists: list[str] = field(default_factory=list)
     error: str | None = None
@@ -422,6 +424,14 @@ def _record_payload_hook(ext_id, fn) -> None:
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.payload_hooks.append(fn)
+
+
+def _record_director_hook(ext_id, fn) -> None:
+    if not callable(fn):
+        raise ExtensionError("on_director_payload needs a callable")
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        record.director_hooks.append(fn)
 
 
 def _record_narration_hook(ext_id, fn) -> None:
@@ -872,6 +882,111 @@ def _narration_blocks(chat_id) -> list:
     return blocks
 
 
+def _director_blocks(chat_id, phase) -> list:
+    """Every enabled extension's standing block for this story and phase.
+
+    Read fresh each beat, for the reason `_narration_blocks` gives: a block is
+    installed by a host action outside the turn, so a cache would run the whole
+    session against the campaign rules of whenever it was first warmed.
+    """
+    if chat_id is None:
+        return []
+    try:
+        activate()
+        with _lock:
+            ids = sorted(_registered)
+    except Exception:
+        log.exception("extension director blocks could not be resolved")
+        return []
+
+    blocks = []
+    for ext_id in ids:
+        api = _apis.get(ext_id)
+        if api is None:
+            continue
+        try:
+            record = api.director_context(chat_id).get(phase)
+        except Exception:
+            log.exception("extension %s director block failed to read", ext_id)
+            continue
+        text = str((record or {}).get("text") or "").strip()
+        if text:
+            blocks.append({"source": ext_id, "text": text,
+                           "revision": int((record or {}).get("revision") or 0)})
+    return blocks
+
+
+def dispatch_director_payload(ctx, payload, *, phase):
+    """Let installed extensions colour what the DIRECTOR is about to be told.
+
+    The same two seams in the same order as `dispatch_narration_payload`
+    -- standing blocks into `payload["extension_context"]`, then
+    `on_director_payload` hooks which may rewrite anything -- and the same
+    total failure posture: any error leaves the payload exactly as the engine
+    assembled it.
+
+    Called ONCE per Director call, before the first attempt. The retries this
+    stage owns (the world-pressure must-tick floor, the player-act authority
+    correction, the Tier 2 omission repair) all rebuild from this payload, so
+    a correction is answered against the same campaign context the answer it is
+    correcting was given.
+
+    What it does not touch is the deterministic floor underneath. A block or a
+    hook can tell the Director anything; it cannot make the Director's output
+    skip player-act authority, claim coverage, the movement backstop or the
+    restraint floor, because those read the RESULT and run after this.
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    chat = getattr(ctx, "chat", None)
+    chat_id = getattr(chat, "id", None)
+    scope = f"director_{phase}"
+    current = payload
+
+    blocks = _director_blocks(chat_id, phase)
+    if blocks:
+        current = dict(current)
+        current["extension_context"] = blocks
+        for block in blocks:
+            _note_narration_routing(ctx, block["source"], scope,
+                                    ["extension_context"])
+
+    try:
+        with _lock:
+            hooks = [(record.ext_id, fn) for record in _registered.values()
+                     for fn in record.director_hooks]
+        if not hooks:
+            return current
+    except Exception:
+        log.exception("extension director hooks could not be resolved")
+        return current
+
+    for ext_id, fn in hooks:
+        api = _apis.get(ext_id)
+        if api is None:
+            continue
+        before = current
+        # Fingerprint BEFORE the call, for the reason spelled out in
+        # `dispatch_character_payload`.
+        stamps = _payload_stamps(before)
+        try:
+            info = DirectorContext(api, ctx, phase=phase)
+            result = fn(before, info)
+        except Exception:
+            log.exception("extension %s director payload hook failed", ext_id)
+            continue
+        if not isinstance(result, dict):
+            continue
+        after = _payload_stamps(result)
+        changed = sorted({key for key in set(stamps) | set(after)
+                          if stamps.get(key) != after.get(key)})
+        if changed:
+            _note_narration_routing(ctx, ext_id, scope, changed)
+        current = result
+    return current
+
+
 def dispatch_narration_payload(ctx, payload, *, scope="narrator", player=""):
     """Let installed extensions colour what the narrator is about to be told.
 
@@ -1271,13 +1386,15 @@ def ui_styles() -> str:
 
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
+    "DirectorBlock", "DirectorContext",
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
     "ExtensionError", "NarrationBlock", "NarrationContext",
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
     "SonderExtensionAPI", "StepView", "activate", "apply_plan_splices",
     "asset_path", "check_update", "check_updates", "disable_extension",
     "disabled_reasons",
-    "dispatch_character_payload", "dispatch_narration_payload",
+    "dispatch_character_payload", "dispatch_director_payload",
+    "dispatch_narration_payload",
     "dispatch_route", "dispatch_turn_committed",
     "enable_extension", "enabled_ids", "extension", "extension_root",
     "extension_script", "extension_styles", "in_commit_scope",
