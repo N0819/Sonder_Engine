@@ -64,7 +64,7 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 1472 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light`, `spatial_orientation`, `spatial_routing`, `spatial_senses`, `spatial_substance`, `spatial_transit` |
+| `spatial.py` | 1160 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_contact_migration`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light`, `spatial_orientation`, `spatial_prose`, `spatial_routing`, `spatial_senses`, `spatial_substance`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
 | `spatial_contact_migration.py` | 331 |  | `spatial_contacts`, `spatial_identity` |
 | `spatial_contacts.py` | 1167 |  | `spatial_containment`, `spatial_identity` |
@@ -74,6 +74,7 @@
 | `spatial_identity.py` | 345 |  | — |
 | `spatial_light.py` | 209 |  | `spatial_barriers`, `spatial_geometry`, `spatial_identity` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
+| `spatial_prose.py` | 336 |  | `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light` |
 | `spatial_routing.py` | 923 |  | `spatial_barriers`, `spatial_containment`, `spatial_light`, `spatial_orientation` |
 | `spatial_senses.py` | 1264 |  | `spatial_barriers`, `spatial_contacts`, `spatial_containment`, `spatial_geometry`, `spatial_identity`, `spatial_light`, `spatial_orientation`, `spatial_routing` |
 | `spatial_substance.py` | 602 |  | `spatial_contacts`, `spatial_identity` |
@@ -779,14 +780,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1125 | 318 lines |
-| `contact_sensation()` | 331 | 144 lines |
-| `spatial_facts()` | 477 | 84 lines |
-| `contact_phrase()` | 246 | 83 lines |
-| `apply_following_ops()` | 1046 | 77 lines |
-| `connect_orphan_new_rooms()` | 960 | 68 lines |
-| `_merge_room()` | 563 | 64 lines |
-| `_shield_standing_bearings()` | 835 | 61 lines |
+| `merge_scene_with_diff()` | 813 | 318 lines |
+| `apply_following_ops()` | 734 | 77 lines |
+| `connect_orphan_new_rooms()` | 648 | 68 lines |
+| `_merge_room()` | 251 | 64 lines |
+| `_shield_standing_bearings()` | 523 | 61 lines |
+| `_shield_standing_passage()` | 586 | 60 lines |
+| `_dedup_duplicate_entity_keys()` | 463 | 58 lines |
+| `_merge_entity()` | 346 | 55 lines |
 
 ### `spatial_barriers.py`
 
@@ -898,6 +899,14 @@
 | `normalize_vertical()` | 65 | 8 lines |
 | `_find_edge()` | 105 | 8 lines |
 | `opposite_bearing()` | 58 | 2 lines |
+
+### `spatial_prose.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `contact_sensation()` | 107 | 144 lines |
+| `spatial_facts()` | 253 | 84 lines |
+| `contact_phrase()` | 22 | 83 lines |
 
 ### `spatial_routing.py`
 
