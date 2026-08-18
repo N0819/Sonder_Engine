@@ -276,6 +276,41 @@ class DegenerateOutput(LLMError):
         )
         self.reason = reason
 
+#: A phrase must repeat back-to-back at least this many times before it counts
+#: as a loop. Three is deliberate: two consecutive identical sentences is
+#: something a writer does (a stammer, a refrain, a character insisting), and
+#: three exactly-identical blocks in a row is something a writer essentially
+#: never does while a stuck sampler does it forever.
+_LOOP_REPEATS = 3
+#: Shortest phrase worth calling a phrase. Below this the 2-16 rule above has
+#: it covered, at a much higher repeat count, which is the right trade at that
+#: length -- "ha ha ha" is prose and "ha" x 80 is not.
+_LOOP_MIN_PERIOD = 24
+#: Longest cycle looked for. A model that has locked on repeats far sooner than
+#: this; the bound is here so the sweep stays cheap.
+_LOOP_MAX_PERIOD = 700
+
+
+def _repeating_period(tail: str) -> int:
+    """The length of a phrase repeating back-to-back at the END of `tail`, or 0.
+
+    Anchored at the end on purpose. A loop is a thing that has STARTED and is
+    still going, so the evidence is always the most recent output -- and
+    checking only the tail means legitimate repetition earlier in a long
+    passage (a list, a refrain, a quoted line) can never accumulate into a
+    false positive.
+    """
+    limit = min(_LOOP_MAX_PERIOD, len(tail) // _LOOP_REPEATS)
+    for period in range(_LOOP_MIN_PERIOD, limit + 1):
+        block = tail[-period:]
+        # `all` over slices: each comparison is one memcmp, and the loop stops
+        # at the first period that does not hold.
+        if all(tail[-period * (n + 1):-period * n or None] == block
+               for n in range(1, _LOOP_REPEATS)):
+            return period
+    return 0
+
+
 _GUARD_CHECK_STRIDE = 200
 
 class OutputGuard:
@@ -322,6 +357,23 @@ class OutputGuard:
         if re.search(r"(.{2,16})\1{80,}", tail, re.S):
             raise DegenerateOutput(
                 "repeating output fragment"
+            )
+
+        # The SAME failure at sentence scale, which the rule above cannot see:
+        # its longest unit is 16 characters. Measured live, a character step
+        # locked onto a 100-character cycle -- "I apologize for the shock. Are
+        # you able to understand me? The restraints are a standard precaution."
+        # -- and rode it for three and a half minutes toward the 40,000-token
+        # ceiling, because every rule here was looking for something shorter.
+        #
+        # Checked by periodicity rather than by regex: `(.{17,600})\1{2,}`
+        # against a 4KB tail is a backtracking hazard on exactly the input
+        # this runs on. Slice comparison is a C-level memcmp per candidate
+        # period, so the whole sweep is a few hundred of those.
+        period = _repeating_period(tail)
+        if period:
+            raise DegenerateOutput(
+                f"repeating {period}-character phrase"
             )
 
         controls = sum(
