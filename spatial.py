@@ -7,7 +7,7 @@ import re
 from collections import defaultdict
 from typing import Optional
 
-from schemas import is_derived_entity_name
+from schemas import NON_ENTITY_FIELD_KEYS, is_derived_entity_name
 from spatial_orientation import (
     _LEFT_SECTORS,
     _REL_SECTORS,
@@ -8146,8 +8146,25 @@ def merge_scene_with_diff(
     # perception/narration reader walks this dict).
     _dedup_duplicate_entity_keys(merged["entities"], incoming_entities)
 
+    # A FIELD NAME can never key an entity. A sibling field written one
+    # nesting level too deep (or its validation debris) arrives in the
+    # entities map keyed `remove_entities`, `notes`, ... -- chat 80's scene
+    # carried six such "entities", each a verbatim copy of the Interview
+    # Chair. The hoist in schemas.preprocess_llm_output now stops new ones at
+    # validation; this floor refuses whatever still arrives AND heals a scene
+    # already carrying them, since the merged blob is what commits -- the
+    # same heal-on-load shape commit._fold_duplicate_presences uses, so a
+    # live story needs no migration.
+    for _bad in [k for k in merged["entities"] if k in NON_ENTITY_FIELD_KEYS]:
+        merged["entities"].pop(_bad, None)
+
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)
+    # The same refusal for the position ledger: a field name is not a body,
+    # so it cannot stand in a room. After the update so an incoming key is
+    # refused too, before the dedup below reads the ledger.
+    for _bad in [k for k in merged["positions"] if k in NON_ENTITY_FIELD_KEYS]:
+        merged["positions"].pop(_bad, None)
     # DW-4: an entity can end up in `positions` under BOTH its id key and its
     # display-name key -- e.g. an auto-created backstory person seeded with an
     # id-keyed position (`karen_marsh`) while director_resolve moves it by name

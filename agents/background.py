@@ -56,9 +56,11 @@ from commit import (
     pick_background_reactors,
     _background_name_mentioned,
     _character_address_of,
+    _fold_duplicate_presences,
     _known_name_roster,
-    _registered_name_roster,
+    _presence_speech_verdict,
     _quote_body,
+    _registered_name_roster,
     _room_of,
     _valid_pending_reply,
 )
@@ -264,7 +266,11 @@ def background_react(ctx, nonce):
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
     sc = wget(ctx.chat.id, "scene", {}) or {}
-    presences = wget(ctx.chat.id, "background_presences", {}) or {}
+    # Read through the duplicate fold so a gate-picked display name finds the
+    # record even while the stored ledger still carries an id-keyed twin
+    # (healed at commit; this stage runs before it).
+    presences = _fold_duplicate_presences(
+        wget(ctx.chat.id, "background_presences", {}) or {}, sc)
 
     # One independent reactive beat per gated presence. At cap == 1 this is a
     # single call (unchanged behavior). For cap > 1 each extra reacts to the
@@ -395,7 +401,8 @@ def managed_presences(ctx, cap):
     """
     cid = ctx.chat.id
     sc = wget(cid, "scene", {}) or {}
-    presences = wget(cid, "background_presences", {}) or {}
+    presences = _fold_duplicate_presences(
+        wget(cid, "background_presences", {}) or {}, sc)
     if not presences:
         return [], None
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
@@ -421,6 +428,18 @@ def managed_presences(ctx, cap):
         # exactly the "compliance holds until it doesn't" situation this
         # codebase keeps learning to make structural instead.
         if name_in_roster(name, roster):
+            continue
+        # The manager voices whoever it likes among its roster, with no
+        # per-signal gate -- so only a PERSON may be on that roster. A
+        # "thing" or an undecided kind (a device, a bodiless voice) handed
+        # to the ensemble gets improvised a temperament: chat 80's
+        # scene-manager path blurb-minted the id-keyed twin of a
+        # ceiling-mounted suppression device a face ("sallow skin, buzzed
+        # hair") and let it interrogate the player twice. A Director-routed
+        # line for a non-person still reaches the per-presence path through
+        # background_react's unpaid-debt fall-through, where the gate's own
+        # verdict logic applies.
+        if _presence_speech_verdict(sc, name) != "person":
             continue
         room = _presence_room(sc, name, rec, name_ids)
         if scope is not None and room and room not in scope:
