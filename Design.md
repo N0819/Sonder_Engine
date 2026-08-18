@@ -506,7 +506,10 @@ The resolution is the mode set already named in `schemas.py`, now enforced:
 
 Hard mode is `actor_only` with the director free to say no. Per chat
 (`scene.player_authority` / `set_player_authority`,
-`PUT /api/chats/{id}/player_authority`), defaulting to `world_author` — so an
+`PUT /api/chats/{id}/player_authority`), chosen in the **Genre & style** menu
+beside genre, tone and weather severity — it decides what a declaration MEANS
+in this story, which is a question about the fiction rather than about how much
+happens off screen — and defaulting to `world_author` — so an
 existing story means tomorrow exactly what it meant yesterday, and this costs
 one dict lookup per beat for everyone who never touches the dial.
 

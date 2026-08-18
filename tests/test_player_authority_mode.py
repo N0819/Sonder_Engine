@@ -445,3 +445,79 @@ class TestWiring:
 
         source = inspect.getsource(director.director_resolve)
         assert '"ABSOLUTE": True' in source
+
+
+class TestTheHostControl:
+    """The menu the mode is actually chosen in.
+
+    It sits in **Genre & style**, beside genre, tone and weather severity,
+    because it decides what a DECLARATION MEANS in this story -- a question
+    about the fiction, not about how much happens off screen. The panel reads
+    the ladder from the engine rather than carrying its own copy, so a rung
+    added later cannot go missing from the menu.
+    """
+
+    def test_the_route_serves_the_ladder_and_records_a_change(self, temp_db):
+        from fastapi.testclient import TestClient
+
+        import app as app_module
+        import guest_access as guest
+
+        from tests.test_extensions import _chat
+
+        chat_id = _chat(temp_db)
+        guest.reset_host_account()
+        try:
+            with TestClient(app_module.app) as client:
+                assert client.post(
+                    "/api/auth/setup",
+                    json={"username": "host", "password": "pw12345"}
+                ).status_code == 200
+
+                got = client.get(f"/api/chats/{chat_id}/player_authority").json()
+                assert got["mode"] == "world_author"
+                assert [m["value"] for m in got["modes"]] == list(
+                    PLAYER_AUTHORITY_MODES)
+
+                put = client.put(f"/api/chats/{chat_id}/player_authority",
+                                 json={"mode": "actor_only", "turn_idx": 4})
+                assert put.status_code == 200
+                assert put.json()["changes"] == [
+                    {"turn_idx": 4, "mode": "actor_only"}]
+
+                # Refused rather than normalized: the setter falls back to the
+                # default on an unreadable value, and a typo landing on
+                # `world_author` is the one failure this feature exists to
+                # prevent.
+                bad = client.put(f"/api/chats/{chat_id}/player_authority",
+                                 json={"mode": "hard"})
+                assert bad.status_code == 400
+                assert client.get(
+                    f"/api/chats/{chat_id}/player_authority"
+                ).json()["mode"] == "actor_only"
+        finally:
+            guest.reset_host_account()
+
+    def test_the_menu_reads_the_ladder_from_the_engine(self):
+        """A mode list maintained in two places is one that disagrees with
+        itself the first time a rung moves."""
+        from pathlib import Path
+
+        settings = (Path(__file__).resolve().parents[1]
+                    / "static/js/settings.js").read_text(encoding="utf-8")
+
+        assert "/player_authority`)" in settings
+        assert "authorityState.modes" in settings
+
+    def test_every_rung_has_a_label_in_the_menu(self):
+        """A rung the engine serves and the menu cannot name renders as its raw
+        storage key in a dropdown a player is meant to choose from."""
+        from pathlib import Path
+
+        settings = (Path(__file__).resolve().parents[1]
+                    / "static/js/settings.js").read_text(encoding="utf-8")
+        labels = settings[settings.index("const AUTHORITY_LABELS"):
+                          settings.index("const authority =")]
+
+        for mode in PLAYER_AUTHORITY_MODES:
+            assert mode in labels, mode

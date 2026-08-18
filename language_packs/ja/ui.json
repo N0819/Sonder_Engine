@@ -1893,5 +1893,9 @@
   "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}",
   "Settings": "設定",
   "body must be {\"doc\": <value>}": "本文は {\"doc\": <value>} の形でなければなりません",
-  "No document at ${path}": "${path} にドキュメントはありません"
+  "No document at ${path}": "${path} にドキュメントはありません",
+  "Authority": "権限",
+  "Full authorship — what you write is true, including events and people": "完全な執筆権 — 書いたことは真実になる。出来事も人物も含めて",
+  "Your outcomes — your acts land as you declare them; the world is the Director's": "自分の結果のみ — 自分の行為は宣言どおりに成立し、世界はディレクターのもの",
+  "Hard mode — you declare what you attempt, the Director decides what it did": "ハードモード — 試みを宣言し、その結果はディレクターが決める"
 }

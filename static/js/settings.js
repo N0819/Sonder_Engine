@@ -113,6 +113,31 @@ $("#b-style").onclick = async () => {
 
   const survivalState = await api("GET", `/api/chats/${chatId}/survival`);
   if (S.chatId !== chatId) return;
+  // Player authority belongs here rather than beside the simulation dials:
+  // it decides what a DECLARATION MEANS in this story, which is a question
+  // about the fiction, not about how much happens off screen.
+  let authorityState = { mode: "world_author" };
+  try { authorityState = await api("GET", `/api/chats/${chatId}/player_authority`); }
+  catch (e) { toast(e.message, "warn"); }
+  if (S.chatId !== chatId) return;
+  // A closed set, like Weather above and for the same reason: it gates engine
+  // behaviour rather than describing it. The engine owns the ladder
+  // (scene.PLAYER_AUTHORITY_MODES) and the route serves it, so a rung added
+  // later cannot go missing from this menu.
+  const AUTHORITY_LABELS = {
+    world_author:
+      "Full authorship — what you write is true, including events and people",
+    explicit_outcomes:
+      "Your outcomes — your acts land as you declare them; the world is the Director's",
+    actor_only:
+      "Hard mode — you declare what you attempt, the Director decides what it did",
+  };
+  const authority = el("select", { style: "flex:1" },
+    (authorityState.modes || Object.keys(AUTHORITY_LABELS).map(m => ({ value: m })))
+      .map(entry => el("option", {
+        value: entry.value,
+        ...(entry.value === authorityState.mode ? { selected: "" } : {}),
+      }, AUTHORITY_LABELS[entry.value] || entry.value)));
   const survivalBox = el("input", {
     type: "checkbox", ...(survivalState.enabled ? { checked: "" } : {})
   });
@@ -145,6 +170,18 @@ $("#b-style").onclick = async () => {
       + "there when the sky clears — the room sounds and looks like it. "
       + "Catastrophic is the only setting that lets weather hurt anyone or "
       + "break anything, and nothing reaches for it unless you do."),
+    el("div", { class: "row", style: "margin-top:10px" },
+      el("span", { class: "small", style: "width:70px" }, "Authority"), authority),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      "Who decides what your declaration achieved. Under full authorship — the "
+      + "default — writing \u201cthe door gives way\u201d makes it so, and the "
+      + "engine encodes it. Hard mode keeps your words exactly as you wrote "
+      + "them and turns the OUTCOME back into a question: the Director may "
+      + "grant it, roll for it, or refuse it, and the cast gets to push back "
+      + "physically. What you say, attempt and do with your own body is yours "
+      + "in every setting and is never rewritten. Changing this mid-story is "
+      + "allowed and is recorded, because it changes what the earlier turns "
+      + "meant."),
     el("div", { style: "margin-top:10px" },
       el("div", { class: "small" }, "Director notes"), dirNotes),
     el("div", { style: "margin-top:8px" },
@@ -173,6 +210,13 @@ $("#b-style").onclick = async () => {
             avoid: avoid.value, weather_severity: severity.value,
           },
         });
+        if (authority.value !== authorityState.mode) {
+          await api("PUT", `/api/chats/${chatId}/player_authority`, {
+            mode: authority.value,
+            turn_idx: (S.chat && S.chat.turns && S.chat.turns.length)
+              ? S.chat.turns[S.chat.turns.length - 1].idx : null,
+          });
+        }
         // Last, and only on a real change: this is the one field here whose
         // route refuses to run mid-turn, and the only one whose loss is
         // permanent.
