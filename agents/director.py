@@ -29,7 +29,7 @@ from character_schema import (
 from db import get_setting, q, wget
 from memory import lorebook_manifest
 from paradox import paradox_visible_to
-from language_runtime import apply_prompt_policy, english_linguistic, linguistic
+from language_runtime import apply_prompt_policy
 from prompts import (
     PROSE_DUTY_CHUNKS,
     get_prompt,
@@ -129,14 +129,12 @@ from .common import (
     scene_extra_parts,
 )
 
-def _ling(name):
-    return linguistic("agents.director", name)
-
-# English compatibility views only; runtime uses context-local `_ling(...)`.
-_UNCONSCIOUSNESS_CUE = english_linguistic(
-    "agents.director", "_UNCONSCIOUSNESS_CUE")
-_SLEEP_CUE = english_linguistic("agents.director", "_SLEEP_CUE")
-_STAY_UNDER_CUE = english_linguistic("agents.director", "_STAY_UNDER_CUE")
+from .director_lingua import (
+    _ling,
+    _UNCONSCIOUSNESS_CUE,
+    _SLEEP_CUE,
+    _STAY_UNDER_CUE,
+)
 
 def _cast_match_forms(cast):
     """Two views of the cast's identifying text, both casefolded: by id (for
