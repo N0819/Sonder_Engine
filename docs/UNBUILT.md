@@ -2419,8 +2419,11 @@ things deliberately unfixed:
 
 The people projection (`story_view._people`, schema 3) now keys every join
 and every anonymous id on immutable identity
-(`docs/design/DIRECTIVE_HARDENING_REPORT.md` §1). Three things were
-deliberately left:
+(`docs/design/DIRECTIVE_HARDENING_REPORT.md` §1). Two things were
+deliberately left. The report's §2 is NOT among them: the executable
+full-pipeline correction proof is built
+(`tests/test_director_correction_pipeline.py`, commit 4ede534), so both
+hardening items are closed.
 
 - **The identity ledger still speaks names, on both sides.** `known` is
   keyed by the VIEWER's name and grants name strings. So two same-named
@@ -2441,11 +2444,6 @@ deliberately left:
   rename of an unregistered presence re-keys its viewer-scoped id, where a
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
-- **The report's §2 — the executable full-pipeline Director-correction
-  proof — is not written.** The runtime path exists and its component
-  contracts are tested; the two-response integration test (one bounded
-  correction that lands, and fail-closed rejection committing nothing) does
-  not yet exercise the real pipeline end to end.
 
 Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in
