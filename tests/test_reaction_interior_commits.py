@@ -80,7 +80,9 @@ class TestAReactingMindIsStillAMind:
         import commit
         body = inspect.getsource(commit.prepare_character_commits) \
             if hasattr(commit, "prepare_character_commits") else ""
-        source = body or inspect.getsource(commit)
+        # The merge lives in prepare_memory_commit (commit_memory since the
+        # split); the function source survives the move.
+        source = body or inspect.getsource(commit.prepare_memory_commit)
         assert "reaction_results" in source, (
             "commit still never reads reaction_results")
 

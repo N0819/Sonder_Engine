@@ -242,13 +242,19 @@ def test_commit_collects_every_field_record_dispute_needs():
     import inspect
 
     import commit
-    src = inspect.getsource(commit)
+    # Function sources, not the module's: the collector lives in
+    # commit_memory.prepare_memory_commit and the writer in
+    # commit_memory_write.commit_memories since the split; the facade
+    # re-exports the same function objects.
+    src = inspect.getsource(commit.prepare_memory_commit)
+    writer_src = inspect.getsource(commit.commit_memories)
     collector = src[src.index('for _d in own_result.get("memory_disputes")'):]
     collector = collector[:collector.index("# Consequence, not popularity")]
     for field in ('_d.get("gist")', '_d.get("now_reads")',
                   '_d.get("memory_ref")'):
         assert field in collector, field
-    writer = src[src.index('prepared.get(\n                "memory_disputes")'):]
+    writer = writer_src[
+        writer_src.index('prepared.get(\n                "memory_disputes")'):]
     writer = writer[:writer.index("# Memories that turned out")]
     assert "record_dispute(chat_id, char_id, _gist, _reading, _tidx," in writer
     assert "memory_ref=_ref" in writer

@@ -153,7 +153,9 @@ class TestTheSignalIsAlreadyMeasured:
 
         import commit
 
-        source = inspect.getsource(commit)
+        # The pass-through lives in prepare_memory_commit (commit_memory
+        # since the split); the function source survives the move.
+        source = inspect.getsource(commit.prepare_memory_commit)
 
         assert 'barren_beat=bool(own_result.get("_barren_beat"))' in source
 
