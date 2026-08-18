@@ -231,7 +231,12 @@ def apply_transit_dock_edges(scene: dict) -> bool:
                 if len(kept) != len(adjacency):
                     room["adjacent"] = kept
                     changed = True
-            if is_open and a in rooms and b in rooms and a != b:
+            # `isinstance` on the room, not just `a in rooms`: this is the
+            # one room WRITE in this function, and every read above it skips a
+            # malformed record rather than raising. A non-dict room here took
+            # the whole merge down instead.
+            if (is_open and a != b and isinstance(rooms.get(a), dict)
+                    and b in rooms):
                 rooms[a].setdefault("adjacent", []).append({
                     "to": b, "barrier": "open_door",
                     "distance": str(link.get("distance") or "near"),

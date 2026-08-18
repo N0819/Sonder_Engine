@@ -2581,25 +2581,21 @@ def director_resolve(ctx, nonce, _corrections=None):
     # specialist is granted -- is decided HERE, at this stage's own time,
     # from the scene as it stands after every character declared, never
     # inherited from interpret. The prose author keeps the same role, step
-    # key, schema and payload either way; only the instruction sheet is
-    # lean when the delegated machinery is cold-stored in the specialists.
-    _orch_dispatch = None
-    _prose_scope = None
-    if True:
-        _orch_facts = _gate_facts(
-            ctx, sc,
-            physical=_beat_has_physical_activity(interp, char_actions, dice),
-            speech=bool(char_speech) or bool(player_speech_lines(interp)),
-            material_effects=bool(character_material_effects),
-        )
-        _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts)
-        # The prose author's OWN scope (same mechanism as the specialists'
-        # channel scopes, same facts, same fail-open): which conditional
-        # prose-duty blocks this beat can have work for. The sheet is
-        # assembled from the core plus exactly those chunks; the scope is
-        # persisted below and audited by the same backstop.
-        _prose_scope = _prose_author_scope(
-            ctx, sc, payload, _orch_facts, p_name)
+    # key, schema and payload; the instruction sheet is lean because the
+    # delegated machinery is cold-stored in the specialists.
+    _orch_facts = _gate_facts(
+        ctx, sc,
+        physical=_beat_has_physical_activity(interp, char_actions, dice),
+        speech=bool(char_speech) or bool(player_speech_lines(interp)),
+        material_effects=bool(character_material_effects),
+    )
+    _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts)
+    # The prose author's OWN scope (same mechanism as the specialists'
+    # channel scopes, same facts, same fail-open): which conditional
+    # prose-duty blocks this beat can have work for. The sheet is
+    # assembled from the core plus exactly those chunks; the scope is
+    # persisted below and audited by the same backstop.
+    _prose_scope = _prose_author_scope(ctx, sc, payload, _orch_facts, p_name)
     _resolve_prompt = prose_author_prompt(_prose_scope, ctx.language)
 
     # AFTER the prose-author scope is computed, deliberately: which conditional
