@@ -908,6 +908,22 @@ def disguise_breaks_recognition(known_to, observer_name, conceals_identity):
         return False
     if str(observer_name or "").casefold() in (known_to or ()):
         return False                           # told the truth: they know
+    if conceals_identity is None:
+        # A disguise is active and the caller did not say which kind. That is
+        # never a disguise's own answer -- `_subject_disguise_context` returns
+        # a real bool for every active one -- so it means the body record was
+        # built without the flag, and the two halves of one fact came apart.
+        #
+        # Fail CLOSED, alone among this function's defaults. Everywhere else
+        # here the default is recognition surviving, because a guard must not
+        # make a mind conclude less than its senses support. This branch is
+        # not about senses: it is the engine failing to state its own rule,
+        # and a leak is an engine failure, never a model's. The cost of
+        # guessing wrong here is a name withheld for a beat; the cost of the
+        # other guess is a concealed identity handed to everyone who ever met
+        # the wearer, which is what `_composer_outcome` did for as long as it
+        # dropped this flag.
+        return True
     return bool(conceals_identity)
 
 
