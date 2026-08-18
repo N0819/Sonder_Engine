@@ -235,7 +235,21 @@ class TestFeasibilityIsReported:
 
         assert rel["can_lift_other"] is True
         assert rel["fits_in_other_hand"] is False   # that is the other way round
+        assert rel["other_fits_in_actors_hand"] is True
         assert rel["ratio"] == pytest.approx(10)
+
+    def test_the_hand_threshold_is_one_boundary_seen_from_both_sides(self):
+        """`size_facts` used to hardcode `ratio >= 6.7` as the inverse of
+        `fits_in_other_hand`'s `ratio <= 0.15`. 1/0.15 is 6.67, the two were
+        written down separately, and either could be changed alone."""
+        scene = merge_scene_with_diff(_scene(), {"scales": {"Hinami": 0.15}})
+        small = size_relation(scene, "Hinami", "Tamamo")
+        large = size_relation(scene, "Tamamo", "Hinami")
+
+        assert small["fits_in_other_hand"] is True
+        assert large["other_fits_in_actors_hand"] is True
+        assert large["fits_in_other_hand"] is False
+        assert small["other_fits_in_actors_hand"] is False
 
     def test_the_smaller_body_cannot_reach_or_lift(self):
         scene = merge_scene_with_diff(_scene(), {"scales": {"Hinami": 0.1}})

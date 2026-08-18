@@ -34,12 +34,18 @@ _MAX_SCALE = 1000.0
 _SCALE_CONTACT_BREAK = 1.25
 _MAX_SCALES = 40
 
+# One body fits in the other's hand below this ratio. ONE constant, because
+# this boundary is stated in three places that must agree: the `tiny` size
+# tier, `fits_in_other_hand`, and its mirror seen from the larger body -- which
+# `size_facts` used to hardcode as `>= 6.7` while 1/0.15 is 6.67.
+_HAND_HELD_RATIO = 0.15
+
 # Ordered small -> large. The boundary is the RATIO to baseline, and the label
 # is what a prompt and a narrator can actually use.
 _SIZE_TIERS = (
     # 'tiny' shares its boundary with fits_in_other_hand below, so the label
     # and the capability agree: tiny IS "small enough to be held in a hand".
-    (0.15, "tiny"),
+    (_HAND_HELD_RATIO, "tiny"),
     (0.5, "small"),
     (2.0, "comparable"),
     (20.0, "large"),
@@ -142,8 +148,12 @@ def size_relation(scene: dict, a: str, b: str) -> dict:
         # not happening without leverage the fiction has to supply.
         "can_lift_other": ratio >= 2.0,
         "can_be_lifted_by_other": ratio <= 0.5,
-        # Small enough to be carried in one hand rather than hoisted.
-        "fits_in_other_hand": ratio <= 0.15,
+        # Small enough to be carried in one hand rather than hoisted, and the
+        # SAME boundary seen from the other side. Both derived from one
+        # constant: `size_facts` used to hardcode the inverse as `>= 6.7`
+        # (1/0.15 is 6.67), so the two halves of one rule could drift apart.
+        "fits_in_other_hand": ratio <= _HAND_HELD_RATIO,
+        "other_fits_in_actors_hand": ratio >= 1 / _HAND_HELD_RATIO,
         # A body this much smaller cannot reach past the other's feet unaided,
         # nor act on anything at their head height.
         "can_reach_other_upper_body": ratio > 0.25,
@@ -191,7 +201,7 @@ def size_facts(scene: dict, observer: str, source_names) -> list:
                 clause = f"{name} could pick you up"
         else:
             clause = f"you tower over {name}"
-            if rel["ratio"] >= 6.7:
+            if rel["other_fits_in_actors_hand"]:
                 clause = f"{name} could fit in your hand"
             elif rel["can_lift_other"]:
                 clause = f"you could pick {name} up"
