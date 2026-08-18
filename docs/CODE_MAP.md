@@ -11,12 +11,12 @@
 | `agents/background.py` | 927 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3432 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/composer.py` | 1717 |  | `agents.common`, `scene`, `spatial` |
+| `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
 | `agents/director.py` | 8125 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1210 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial`, `weather` |
-| `agents/perception.py` | 4341 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
+| `agents/perception.py` | 4383 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/runtime.py` | 1116 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2090 |  | `backdrops`, `db`, `outofband`, `weather` |
@@ -67,7 +67,7 @@
 | `spatial.py` | 8434 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
-| `story_view.py` | 356 |  | `db` |
+| `story_view.py` | 522 |  | `db` |
 | `subjects.py` | 449 |  | `canon_provenance`, `db`, `spatial` |
 | `survival.py` | 320 |  | `db` |
 | `theory_of_mind.py` | 703 |  | — |
@@ -132,14 +132,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_render_view_english()` | 1245 | 91 lines |
-| `_render_episode_english()` | 1464 | 80 lines |
-| `pose_percepts()` | 609 | 75 lines |
-| `observations_from_render()` | 1643 | 75 lines |
-| `presence_percepts()` | 498 | 67 lines |
-| `speech_percept()` | 803 | 59 lines |
-| `_episode_sentence()` | 1404 | 58 lines |
-| `_render_standing()` | 1153 | 54 lines |
+| `_render_view_english()` | 1253 | 91 lines |
+| `_render_episode_english()` | 1472 | 80 lines |
+| `presence_percepts()` | 498 | 75 lines |
+| `pose_percepts()` | 617 | 75 lines |
+| `observations_from_render()` | 1651 | 75 lines |
+| `speech_percept()` | 811 | 59 lines |
+| `_episode_sentence()` | 1412 | 58 lines |
+| `_render_standing()` | 1161 | 54 lines |
 
 ### `agents/director.py`
 
@@ -193,11 +193,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 4019 | 323 lines |
+| `_composer_outcome()` | 4058 | 326 lines |
 | `perception_outcome()` | 2890 | 297 lines |
 | `perception_act()` | 2451 | 251 lines |
 | `_observer_scene_payload()` | 808 | 212 lines |
-| `_composer_act()` | 3895 | 122 lines |
+| `_composer_act()` | 3931 | 125 lines |
 | `_previous_open_group_continuity()` | 163 | 117 lines |
 | `_strip_self_narration()` | 1639 | 107 lines |
 | `perception_establish()` | 2343 | 107 lines |
@@ -807,14 +807,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `player_view()` | 294 | 63 lines |
-| `story_view()` | 157 | 51 lines |
-| `_delivered()` | 237 | 24 lines |
-| `viewers()` | 213 | 22 lines |
-| `_viewer_memories()` | 271 | 21 lines |
-| `_cast()` | 108 | 19 lines |
-| `_step_content()` | 88 | 18 lines |
-| `_rooms()` | 129 | 14 lines |
+| `player_view()` | 450 | 73 lines |
+| `_people()` | 390 | 58 lines |
+| `story_view()` | 163 | 51 lines |
+| `_public_facts()` | 331 | 46 lines |
+| `_delivered()` | 243 | 24 lines |
+| `viewers()` | 219 | 22 lines |
+| `_viewer_memories()` | 277 | 21 lines |
+| `_cast()` | 114 | 19 lines |
 
 ### `subjects.py`
 

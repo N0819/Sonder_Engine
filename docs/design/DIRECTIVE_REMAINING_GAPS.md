@@ -1,5 +1,11 @@
 # Directive on Sonder — remaining integration gaps
 
+> *Received as-is from Directive's author and kept verbatim, because it is
+> evidence. Of its three contracts, §2 — the structured player-safe people
+> projection — is built as `player_view["people"]` (schema 2, `story_view.py`;
+> `tests/test_story_view.py::TestPeople`). §1 and §3 are registered in
+> [`../UNBUILT.md`](../UNBUILT.md) §6.2.*
+
 **Audience:** Sonder Engine maintainer  
 **Purpose:** define the three residual host contracts needed for a robust
 Directive integration  
