@@ -400,6 +400,18 @@ def effective_facing(scene: dict, name: str) -> Optional[str]:
     return None
 
 
+#: How big a room is. Ordered, so the index is the rank, and the ONE statement
+#: of the vocabulary -- `crowds.py` held it while `effective_room_size` here,
+#: the function that grades the size, accepted any string at all. An authored
+#: `enormous` was handed back as though it meant something and then read as
+#: medium by every consumer (`_ROOM_COST.get` defaults to 1, `proximity_rel`
+#: and `size_facts` test membership in literal tuples, `crowds.room_size_rank`
+#: folds), so it was indistinguishable from an unsized room without ever
+#: saying so.
+ROOM_SIZES = ("tiny", "small", "medium", "large", "huge", "vast")
+DEFAULT_ROOM_SIZE = "medium"
+
+
 # Rooms whose NAME says "big" even when nobody authored `size`. Deliberately
 # blunt and deliberately short: the hint only widens the `near`->`across`
 # distinction, fails toward today's behaviour, and an authored size always
@@ -418,12 +430,16 @@ def effective_room_size(scene: dict, room_id) -> str:
     proximity-grade consumers should read it."""
     room = (scene.get("rooms") or {}).get(room_id) or {}
     size = str(room.get("size") or "").strip().casefold()
-    if size:
+    # A size outside the vocabulary is not a size. It falls through to the
+    # unauthored path rather than being returned verbatim, which is what every
+    # consumer was doing with it anyway -- the difference is that the name
+    # hint now gets its chance, and `scene_lint` reports the authored word.
+    if size in ROOM_SIZES:
         return size
     text = " ".join(str(room.get(key) or "") for key in ("name", "desc", "notes"))
     if set(re.split(r"[^a-z]+", text.casefold())) & _ROOM_SIZE_HINT_WORDS:
         return "large"
-    return "medium"
+    return DEFAULT_ROOM_SIZE
 
 
 def _occupancy(scene: dict) -> dict:

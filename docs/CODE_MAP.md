@@ -88,7 +88,7 @@
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 466 |  | `core.db` |
 | `world/comfort.py` | 306 |  | `world.spatial` |
-| `world/crowds.py` | 608 |  | — |
+| `world/crowds.py` | 609 |  | `world.spatial_geometry` |
 | `world/degradation.py` | 171 |  | — |
 | `world/gaps.py` | 542 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 608 |  | `core.logging_utils`, `world.mechanics` |
@@ -97,13 +97,13 @@
 | `world/paradox.py` | 489 |  | `core.db`, `core.frames`, `story.character_schema` |
 | `world/place_purpose.py` | 532 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 200 |  | — |
-| `world/spatial.py` | 166 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial.py` | 167 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 433 |  | — |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1167 |  | `world.spatial_containment`, `world.spatial_identity` |
 | `world/spatial_containment.py` | 646 |  | `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_frames.py` | 1087 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 951 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 967 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 345 |  | — |
 | `world/spatial_light.py` | 209 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_merge.py` | 1037 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
@@ -996,14 +996,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_ops()` | 236 | 158 lines |
-| `emerge()` | 396 | 38 lines |
-| `drift()` | 136 | 35 lines |
-| `advance_crowds()` | 467 | 32 lines |
-| `absorb()` | 436 | 29 lines |
-| `talk_view()` | 567 | 29 lines |
-| `describe()` | 512 | 21 lines |
-| `density()` | 92 | 15 lines |
+| `apply_ops()` | 237 | 158 lines |
+| `emerge()` | 397 | 38 lines |
+| `drift()` | 137 | 35 lines |
+| `advance_crowds()` | 468 | 32 lines |
+| `absorb()` | 437 | 29 lines |
+| `talk_view()` | 568 | 29 lines |
+| `describe()` | 513 | 21 lines |
+| `density()` | 93 | 15 lines |
 
 ### `world/degradation.py`
 
@@ -1165,14 +1165,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_scene_stations()` | 848 | 104 lines |
+| `derive_scene_stations()` | 864 | 104 lines |
 | `egocentric_frame()` | 50 | 80 lines |
 | `spatial_digest()` | 132 | 61 lines |
 | `effective_station()` | 312 | 55 lines |
-| `normalize_scene_poses()` | 712 | 53 lines |
+| `normalize_scene_poses()` | 728 | 53 lines |
 | `effective_anchors()` | 260 | 50 lines |
-| `guessed_room_sizes()` | 436 | 50 lines |
-| `normalize_scene_stations()` | 654 | 35 lines |
+| `guessed_room_sizes()` | 452 | 50 lines |
+| `normalize_scene_stations()` | 670 | 35 lines |
 
 ### `world/spatial_identity.py`
 
