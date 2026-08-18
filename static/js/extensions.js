@@ -31,6 +31,7 @@ const Sonder = {
   _topbar: [],
   _views: [],
   _composer: [],
+  _settings: [],
   //: the open view's id, or null for the transcript. Host-owned, so disabling
   //: an extension whose view is open can put the reader back on their story.
   _openView: null,
@@ -314,6 +315,28 @@ const Sonder = {
     }
   },
 
+  // A configuration section, rendered inside this extension's own card in the
+  // 🧩 menu. That is where it belongs rather than in the host's API settings:
+  // an extension's configuration is install-scoped (`api.settings`), and the
+  // one place a reader is already looking at this extension is the row with
+  // its name, version and enable switch on it.
+  //
+  // `render(container)` may be async, like a sidebar tab's.
+  registerSettingsSection({ id, label, render }) {
+    if (!id || typeof render !== "function") return;
+    const owner = Sonder._owner;
+    Sonder._settings = Sonder._settings.filter(item => item.id !== id);
+    Sonder._settings.push({
+      id: String(id), label: String(label || "Settings"), render, owner
+    });
+  },
+
+  // Every section belonging to one extension, for the host's menu to render.
+  // A copy, so the menu cannot mutate the registry through it.
+  _settingsFor(extId) {
+    return Sonder._settings.filter(item => item.owner === extId);
+  },
+
   // A step key an extension added to the pipeline, rendered its way in the
   // pipeline drawer instead of as raw JSON.
   registerStepRenderer(key, fn) {
@@ -572,6 +595,7 @@ const Sonder = {
     for (const [event, list] of [...Sonder._events]) {
       Sonder._events.set(event, list.filter(entry => entry.owner !== extId));
     }
+    Sonder._settings = Sonder._settings.filter(item => item.owner !== extId);
     Sonder._notices = Sonder._notices.filter(notice => notice.owner !== extId);
     Sonder._renderNotices();
     Sonder._faults.delete(extId);

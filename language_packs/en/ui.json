@@ -1466,6 +1466,7 @@
   "Setting only Default is enough to start playing": "Setting only Default is enough to start playing",
   "Setting the scene": "Setting the scene",
   "Setting up story": "Setting up story",
+  "Settings": "Settings",
   "severity ${Math.round((active.severity || 0) * 100)}%": "severity ${Math.round((active.severity || 0) * 100)}%",
   "Shame triggers": "Shame triggers",
   "Share this with your friend": "Share this with your friend",

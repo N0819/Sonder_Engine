@@ -961,6 +961,7 @@ down every extension after it. **Wrap your file in an IIFE and guard on
 | `notify({title, body, level, onClick})` | raise a **standing** notice; returns an id |
 | `dismissNotice(id)` / `notices()` | take one down, or read the column |
 | `chats` | the story lifecycle namespace (§6a) |
+| `registerSettingsSection({id, label, render})` | a config panel inside your own card in the 🧩 menu |
 | `registerStepRenderer(key, fn)` | claim a step in the pipeline drawer; `fn(content, container, step)` |
 | `on(event, fn)` / `off(event, fn)` | subscribe to the live turn stream |
 | `state()` | a **copy** of `{boot, chat, chatId}` — you cannot write to `S` through it |
@@ -1016,6 +1017,29 @@ same as every other registry here.
 
 `onClick` is charged to you like any other callback: a throw inside one counts
 toward your three strikes rather than reading as a host defect.
+
+### 7.1b Your own settings
+
+```javascript
+Sonder.registerSettingsSection({
+  id: "campaign-demo-config",
+  label: "Campaign settings",
+  render: async (container) => { /* build your controls */ }
+});
+```
+
+It appears inside **your** card in the 🧩 Extensions menu — beside your name,
+version and enable switch — rather than in the host's API settings, because
+what belongs here is install-scoped configuration (`api.settings`) and that is
+the one place a reader is already looking at your extension.
+
+Collapsed by default and rendered on first open, not on menu open: this menu is
+a list somebody scans to find one extension, and a section that fetched on
+render would cost a round trip per installed extension every time anyone
+glanced at it. `render` may be async and is charged to you like any other
+callback. A disabled extension shows no section — its registrations are
+cleared, so there would be nothing to draw and a surviving panel would be
+configuring code that is not running.
 
 ### 7.2 Failure containment
 
