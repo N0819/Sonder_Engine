@@ -425,7 +425,18 @@ mount point, extension-declared model lanes, document storage, and the browser
 chat lifecycle as a declared contract — none of which blocked a first campaign
 integration, on the integrator's own assessment.
 
-What is not a surface and is the next real piece of work: a REFERENCE CAMPAIGN.
-One room change, two characters, one secret, one gated objective and one
-forbidden invented player line exercises all four new contracts plus hard mode
-end to end, and nothing in this tree currently does.
+The reference campaign is built — `extensions/campaign-demo/`, run end to end by
+`tests/test_campaign_slice.py` — and writing it paid for itself immediately, on
+the first import: **an extension could not split its Python across files.** That
+is the second time a reference build has found a loading gap nobody had named
+(§7a's ES modules was the first), and the lesson is the same one both times. A
+seam that has only ever been exercised by a demo shaped like the seam is a seam
+nobody has tested. Building something with its own shape is what finds the
+difference.
+
+What remains is the thing no suite can supply: **play**. The slice runs with
+stubbed perception content. Nobody has taken a campaign through twenty real
+beats under `actor_only` and watched what a Director actually does with a
+refused assertion — whether it translates the attempt gracefully, refuses it
+visibly, or quietly narrates around it, which is the one outcome the design
+forbids and the one a test cannot catch.

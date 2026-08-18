@@ -15,6 +15,7 @@ written against 9.2 by Directive's author after building on this tree.
 | §3 prose author | Not built, and deliberately so — see the section |
 | §6 secondary gaps | Not built; registered in [`UNBUILT.md`](../UNBUILT.md) §6.2 |
 | §9 the five gap-report gaps | **Built** — `api.director_context`/`on_director_payload`, `api.story_view`, `api.player_view`, `api.provision_story`, and hard mode (`PlayerAuthorityMode`, enforced) |
+| §9 the vertical slice | **Built** — `extensions/campaign-demo/`, `tests/test_campaign_slice.py`; building it found and fixed a sixth gap, multi-file extensions |
 
 What an author needs is [`docs/guides/EXTENSIONS.md`](../guides/EXTENSIONS.md)
 §4, §7.1 and §7.5. This file keeps the measurement and the reasoning.
@@ -425,10 +426,44 @@ observation. It is worth saying plainly in the guide, and §8 of
   a declared contract. The report agrees none of them blocks a first
   integration.
 
-### The vertical slice
+### The vertical slice, and the sixth gap it found
 
 The report's §5 defines "the gaps are closed" as ten steps ending in a
-checkpointed, branchable campaign. Steps 1–4 and 7–10 are now reachable through
-public API only. What is not yet proven is the whole thing running end to end,
-because that needs a reference campaign to exist — the report's step 5, and the
-right next piece of work on this side.
+checkpointed, branchable campaign, and its §6 says to prove it with a tiny
+reference campaign. That is `extensions/campaign-demo/` — two rooms, two
+characters, one secret, one gated objective, `actor_only` — and
+`tests/test_campaign_slice.py` runs it over the shipped tree: provision, gate,
+discover, unlock, project, export.
+
+Writing it found a gap nobody had named, on the first import. **An extension
+could not split its Python across files.** `_import_entry` loaded the entry as
+a lone module with its directory on no search path, so `from campaign import
+package` raised `ModuleNotFoundError`.
+
+That is the value of building a reference rather than describing one, and it is
+the SECOND time this exact shape has appeared in this document: §5's ES-module
+blocker was invisible until an extension existed as a module graph, and this one
+was invisible until an extension existed as more than one Python file. Directive
+is 156 ES modules; a Python port is not going to be one file, so it would have
+hit this before it hit anything else here.
+
+Fixed by registering the extension's directory as a PACKAGE — relative imports,
+`sonder_ext_<id>.<module>` — rather than by putting it on `sys.path`, which
+would make every sibling importable under its bare name: an extension shipping
+`db.py` would shadow the engine's for whatever imported next, and two extensions
+each shipping `helper.py` would get whichever loaded first. Disabling now
+forgets every submodule, so an update cannot leave a stale file executing.
+
+One more thing the reference forced: `provision_story` takes
+`player_authority=`. A campaign whose premise is that the player may not write
+the world cannot ask for that after the first beat has been played under the
+other rule, and reaching into `scene.set_player_authority` to get it would be
+the unsupported-internals dependency this facade exists to remove. Refused
+rather than normalized on an unreadable value, because a typo landing on
+`world_author` is the one failure the whole feature exists to prevent.
+
+**What is still unproven is the only thing a test cannot prove: play.** The
+slice runs with stubbed perception content. Nobody has taken a campaign through
+twenty real beats under `actor_only` and watched what the Director does with a
+refused assertion. That is the next thing to learn, and it needs a person, not
+a suite.

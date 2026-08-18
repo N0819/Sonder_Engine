@@ -3727,6 +3727,18 @@ context — the block arrives attributed, alongside every other extension's, and
 the report's own safeguard list asks that an extension not be able to
 impersonate an engine-owned instruction.
 
+The report's own acceptance step — a reference campaign — is built as
+`extensions/campaign-demo/`, and building it found a SIXTH gap nobody had
+named: **an extension could not split its Python across files.** `_import_entry`
+loaded the entry as a lone module with its directory on no search path, so a
+sibling import raised `ModuleNotFoundError`. Same shape as the ES-module
+blocker, and the same cause — nobody hits it until an extension is built as a
+graph rather than a file, and a Directive port would have hit it immediately.
+Fixed by registering the extension directory as a package (relative imports,
+`sonder_ext_<id>.<module>`) rather than by putting it on `sys.path`, where a
+sibling `db.py` would shadow the engine's and two extensions' `helper.py` would
+collide. `tests/test_campaign_slice.py` covers the fix and the slice together.
+
 A third batch closed what a TOTAL-CONVERSION extension needs, measured against
 Directive (`docs/design/DIRECTIVE_HOST_SURFACE.md`): ES module entries
 (`capabilities.ui.module`, dynamic-`import()` loading with an id-bound facade,
