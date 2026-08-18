@@ -2415,6 +2415,38 @@ things deliberately unfixed:
   channel is refused as an entity everywhere while its hoist-up repair needs
   the list edited by hand.
 
+### 1.51 Residuals from immutable people identity (Directive hardening §1)
+
+The people projection (`story_view._people`, schema 3) now keys every join
+and every anonymous id on immutable identity
+(`docs/design/DIRECTIVE_HARDENING_REPORT.md` §1). Three things were
+deliberately left:
+
+- **The identity ledger still speaks names, on both sides.** `known` is
+  keyed by the VIEWER's name and grants name strings. So two same-named
+  viewers share one knowledge row; a granted name that several roster
+  members bear admits every bearer (the projection lists all of them because
+  it cannot know which one the viewer actually met — correct under "decide
+  nothing", but coarser than a ledger of ids would be); and a grant matching
+  no roster member's current name resolves to nobody, so a viewer who knows
+  only a card-authored alias gets no roster entry. The projection
+  deliberately does not join card aliases: knowing a name is not knowing its
+  bearer, and an alias→id join here would disclose exactly that link. The
+  real fix is the ledger itself granting immutable ids, which is
+  perception's change to make, not the facade's.
+- **An unregistered background presence has no immutable id to ride.** Its
+  ref degrades to its tracked name — honest, because that name IS its
+  identity in this engine (`commit._fold_duplicate_presences` keys one
+  record per body under its first-seen spelling) — so a deliberate canonical
+  rename of an unregistered presence re-keys its viewer-scoped id, where a
+  cast member's survives. A presence that matters enough to be renamed
+  probably matters enough to promote.
+- **The report's §2 — the executable full-pipeline Director-correction
+  proof — is not written.** The runtime path exists and its component
+  contracts are tested; the two-response integration test (one bounded
+  correction that lands, and fail-closed rejection committing nothing) does
+  not yet exercise the real pipeline end to end.
+
 Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in
 [`../Design.md`](../Design.md) § Structural debt.
@@ -3941,25 +3973,17 @@ Still missing:
 Directive's author reviewed how the fourth batch COMPOSES and named three
 residual contracts
 ([`docs/design/DIRECTIVE_REMAINING_GAPS.md`](design/DIRECTIVE_REMAINING_GAPS.md),
-against alpha 9.3). Its §2 — the structured player-safe people projection — is
-**built**: `player_view["people"]` (schema 2), riding the identity ledger, the
-perception stages' new per-observer delivered-company record, and the card's
-authored-public surfaces; `tests/test_story_view.py::TestPeople` and the
-write-side proof in `tests/test_composer_pipeline.py`. The other two stand:
-
-- **§1 Director-result validation and correction** — a deterministic extension
-  validator over the merged Director result, with one attributed, bounded
-  correction attempt before commit. The enforcement machinery it wants to ride
-  already exists (`director_resolve`'s five authority checks behind one
-  correction retry); the extension seam into it does not. Commit-domain
-  rollback remains the only extension-reachable enforcement, which loses the
-  beat where a corrected turn was possible.
-- **§3 Transactional campaign initialization** — Director/narration context,
-  frame-scoped state and initial documents inside the SAME transaction as
-  `provision_story` (the report's Option A, declarative). Today the reference
-  campaign provisions and then installs its rules as a second write, so a
-  failure between the two leaves a playable story whose sealed wing is not
-  sealed.
+against alpha 9.3). All three are now built — §1 as `api.on_director_result`
+(one attributed, bounded correction attempt before commit), §2 as
+`player_view["people"]` (schema 2; re-keyed in schema 3 onto immutable
+identity per the follow-up hardening report,
+[`docs/design/DIRECTIVE_HARDENING_REPORT.md`](design/DIRECTIVE_HARDENING_REPORT.md)
+§1, whose residuals are §1.51), §3 as `api.provision_story` — full
+disposition in `Design.md`'s Third-party extensions row;
+`tests/test_story_view.py::TestPeople`/`::TestImmutableIdentity` and the
+write-side proof in `tests/test_composer_pipeline.py`. The hardening
+report's §2, the executable full-pipeline correction proof, is §1.51's
+third bullet.
 
 And two residuals of the people projection itself, both "absent means absent"
 edges rather than defects: a fact can only carry `authored_public` provenance
