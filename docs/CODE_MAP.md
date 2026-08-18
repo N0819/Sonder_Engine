@@ -110,7 +110,7 @@
 | `world/spatial_orientation.py` | 246 |  | — |
 | `world/spatial_prose.py` | 336 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 923 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
-| `world/spatial_senses.py` | 1266 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
+| `world/spatial_senses.py` | 1278 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_substance.py` | 602 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 419 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/subjects.py` | 449 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
@@ -1253,7 +1253,7 @@
 |---|---:|---:|
 | `hear_level()` | 732 | 138 lines |
 | `spatial_rel_between()` | 466 | 71 lines |
-| `sound_bearing()` | 1032 | 69 lines |
+| `sound_bearing()` | 1044 | 69 lines |
 | `scent_level()` | 37 | 56 lines |
 | `_clean_comms_channel()` | 158 | 53 lines |
 | `_opening_view_cap()` | 553 | 52 lines |
