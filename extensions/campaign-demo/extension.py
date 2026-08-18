@@ -46,6 +46,8 @@ OPENED_RESOLVE = (
 
 def register(api):
     api.add_commit_domain("mission", lambda view: _advance(api, view))
+    api.on_director_result(lambda result, info: _validate(api, result),
+                           on_error="warn")
     api.add_route("/campaign", lambda request: _campaign(api, request))
     api.add_route("/start", lambda request: _start(api, request),
                   methods=("POST",))
@@ -55,8 +57,16 @@ def register(api):
 
 
 def _start(api, request):
-    """Provision the bundled campaign. The player pressed Start."""
-    result = api.provision_story(
+    """Provision the bundled campaign. The player pressed Start.
+
+    ONE call, and it either produces a whole campaign or none. This used to be
+    two: provision, then install the Director rules. If the second failed, the
+    story stayed in the player's list -- playable, holding its mission state
+    and its `actor_only` mode, and missing the rule that makes its sealed wing
+    sealed. That is the hazard `provision_story`'s initialisation arguments
+    exist to close, and this file is where it was found.
+    """
+    return api.provision_story(
         package(),
         state=initial_state(),
         package_id=CAMPAIGN_ID,
@@ -65,9 +75,9 @@ def _start(api, request):
         # that the player may not write the world cannot ask for that after the
         # first beat has already been played under the other rule.
         player_authority="actor_only",
+        director_context={"interpret": SEALED_INTERPRET,
+                          "resolve": SEALED_RESOLVE},
     )
-    _install_rules(api, result["chat_id"], unlocked=False)
-    return result
 
 
 def _install_rules(api, chat_id, *, unlocked):
@@ -81,6 +91,42 @@ def _install_rules(api, chat_id, *, unlocked):
     api.director_context(chat_id).set(
         interpret=SEALED_INTERPRET if not unlocked else "",
         resolve=SEALED_RESOLVE if not unlocked else OPENED_RESOLVE,
+    )
+
+
+# ------------------------------------------------------------- the invariant
+
+
+def _validate(api, result):
+    """Refuse a result that put a body in the wing while it is still sealed.
+
+    The Director rule above is model INPUT: it guides the decision and cannot
+    guarantee it. This is the other half -- deterministic code reading the
+    merged result, after every one of the engine's own floors, and refusing an
+    answer that broke the campaign's one rule. The Director then gets exactly
+    one attempt to resolve the beat again with the violation in front of it.
+
+    `on_error="warn"` here because this is a demo, and a demo that could cost a
+    reader their turn is teaching the wrong lesson. A campaign whose invariant
+    genuinely must hold registers `fail` and accepts that a beat is lost rather
+    than that the campaign is wrong.
+    """
+    state = api.state(result.chat_id).get() or {}
+    if state.get("campaign") != CAMPAIGN_ID:
+        return None
+    if _objective(state, "enter-the-wing").get("status") != "locked":
+        return None                      # the wing is open; nothing to defend
+
+    inside = sorted(body for body, room in result.positions.items()
+                    if room == SEALED_ROOM)
+    if not inside:
+        return None
+    return api.correction(
+        "sealed-wing",
+        "The east wing is still sealed: its key has not been found, so no "
+        "committed movement may put a body inside it. Resolve the attempt "
+        "against a locked door.",
+        evidence={"room": SEALED_ROOM, "bodies": inside},
     )
 
 
