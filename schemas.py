@@ -3530,7 +3530,8 @@ _SPECIALIST_LIST_CHANNELS = frozenset({
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
-    "inventory_ops", "contact_ops", "substance_ops", "stations", "poses", "scales", "containment",
+    "inventory_ops", "artifact_ops", "destruction", "contact_ops",
+    "substance_ops", "stations", "poses", "scales", "containment",
     "vitals", "overlays",
     "attire", "cast_changes",
     "world_facts", "introductions", "time", "claim_dispositions",
@@ -3540,6 +3541,29 @@ _SCENE_PATCH_SIBLING_FIELDS = (
     "rooms", "positions", "stations", "remove_entities", "remove_rooms",
     "remove_adjacent",
 )
+
+
+def _non_entity_field_keys():
+    """Keys that can never denote an entity: the field names that sit BESIDE
+    an entity map in any schema that carries one (StateDiff, ScenePatch, the
+    objects specialist), plus the envelope names. An entities mapping is
+    keyed by whatever string arrives, so a sibling field written one nesting
+    level too deep becomes an "entity" named after a field -- chat 80's scene
+    held six entities keyed `remove_entities`, `inventory_ops`,
+    `artifact_ops`, `destruction`, `notes` and `resolved_events`, each a
+    verbatim copy of the Interview Chair. Computed from the models' own
+    declarations so a channel added later is covered without this list being
+    remembered."""
+    keys = {"entities", "state_diff", "state_assertions"}
+    for model_cls in (StateDiff, ScenePatch, DirectorObjectsSpecialist):
+        keys |= set(_fields(model_cls) or {})
+    return frozenset(keys)
+
+
+#: See _non_entity_field_keys. Read by spatial.merge_scene_with_diff and
+#: scene.get_scene so a live story already carrying such keys stops reading
+#: them as entities without a migration.
+NON_ENTITY_FIELD_KEYS = _non_entity_field_keys()
 
 def _hoist_misplaced_entity_siblings(container, sibling_fields):
     """Both StateDiff.entities and ScenePatch.entities are dict[str, <entity
@@ -3555,13 +3579,29 @@ def _hoist_misplaced_entity_siblings(container, sibling_fields):
     doesn't already have that field set (never clobber a correctly-placed
     value); an actual entity legitimately named e.g. "time" is not a
     realistic collision risk for either schema's field-name vocabulary.
+
+    A matched key is REMOVED from `entities` even when it cannot be hoisted:
+    a field name can never key an entity, so leaving it in place mints one.
+    Chat 80 turn 1: the objects specialist's entities map carried its own
+    sibling names holding verbatim copies of the Interview Chair's def, and
+    six chair clones entered the scene keyed `remove_entities`,
+    `inventory_ops`, `artifact_ops`, `destruction`, `notes` and
+    `resolved_events`. An entity-def-shaped value under a sibling key is that
+    debris exactly -- neither an entity (the key is a field name) nor the
+    sibling (the value is an entity def) -- and hoisting it would turn a
+    chair copy into, say, a `destruction` declaration, so it is dropped.
     """
     entities = container.get("entities")
     if not isinstance(entities, dict):
         return
     for field in sibling_fields:
-        if field in entities and field not in container:
-            container[field] = entities.pop(field)
+        if field not in entities:
+            continue
+        value = entities.pop(field)
+        entity_shaped = isinstance(value, dict) and bool(
+            {"kind", "portable", "aliases"} & set(value))
+        if field not in container and not entity_shaped:
+            container[field] = value
 
 def _flatten_view_value(value):
     """perception's views field is typed as {perceiver_id: string|null} -- one
@@ -4151,6 +4191,18 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             elif field in _SPECIALIST_LIST_CHANNELS:
                 result[field] = _coerce_empty_dict_to_list(result[field])
         if "entities" in channels:
+            # The specialist's own sibling fields, written one nesting level
+            # too deep inside `entities`, must come OUT before names are
+            # filled -- the resolve diff has had this hoist for ages, but the
+            # specialist path did not, which is how chat 80 turn 1 committed
+            # six "entities" keyed remove_entities/inventory_ops/artifact_ops/
+            # destruction/notes/resolved_events, each a copy of the Interview
+            # Chair. The sibling set is the model's own declared fields, so a
+            # channel added later is covered automatically.
+            model_cls = SCHEMA_MAP.get(step_key)
+            siblings = tuple(k for k in (_fields(model_cls) or {})
+                             if k != "entities")
+            _hoist_misplaced_entity_siblings(result, siblings)
             # SceneEntityDef.name is required but the dict key already
             # carries it; recover rather than fail the call (the same
             # recovery the resolve diff gets).

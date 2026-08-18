@@ -7653,7 +7653,17 @@ def director_resolve(ctx, nonce, _corrections=None):
             # for anyone already in `dialogue_log`, so removing the line hands
             # them to the stage that gives them their own call, their own
             # perception object and their own recognition of the room.
-            if not director_may_voice(speaker, sc, _rec):
+            from commit import _presence_speech_verdict
+            if (not director_may_voice(speaker, sc, _rec)
+                    and _presence_speech_verdict(sc, speaker) != "thing"):
+                # Only a possible PERSON is re-homed to the background stage.
+                # A bodiless voice or a thing that speaks (a PA, a ship
+                # computer, an enchanted object) is the Director's own mouth
+                # -- the resolve prompt's contract -- and routing one handed
+                # it to the stage that voices people: with the speech gate
+                # now refusing things there, routing would delete the line
+                # and replace it with nothing, which is the chat 72 "a guard
+                # that deletes lines" failure in new clothes.
                 ctx.add_warning(
                     f"Routed {speaker!r}'s line to the background stage: the "
                     "Director mints presences and moves them; it does not "

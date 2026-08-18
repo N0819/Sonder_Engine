@@ -61,10 +61,16 @@ The existing system is well-built for the job it was scoped to do.
 **Discovery** (`commit.track_background_presences`) is deterministic and
 LLM-free. A name becomes a tracked presence only from structured fields commit
 already trusts: `dialogue_log` speakers, `state_diff.entities` with a non-inert
-`kind` (deny-list `_INERT_ENTITY_KINDS`), `director_establish`'s top-level
-entities on the opening turn, and `background_react`'s own authored line. No NER
-over prose — later prose *mentions* of an already-tracked name are counted, but
-never discover a new one.
+`kind` (deny-list `_INERT_ENTITY_KINDS`), `state_diff.positions` keys,
+`director_establish`'s top-level entities on the opening turn, and
+`background_react`'s own authored line. No NER over prose — later prose
+*mentions* of an already-tracked name are counted, but never discover a new
+one. **One presence per body**: every harvest folds an entity-id spelling back
+to the entity's display name before tracking, and `_fold_duplicate_presences`
+merges an id-keyed twin (or an article variant) into the display-name record on
+load, so a story already carrying a split heals at its next commit. Chat 80 is
+the measured case: six presences for three things, with a device's id-keyed
+twin accruing its own dialogue history and its own minted human blurb.
 
 **Record shape** per presence:
 
@@ -87,6 +93,19 @@ presence qualifies independently on any of six conditions:
 | `dialogue_turns` | they have ever spoken |
 
 No qualifier → `[]` → no LLM call. This is the common case and it is correct.
+
+Qualifying is necessary but not sufficient: **only a person may hold a
+background speaking turn** (`commit._presence_speech_verdict`). The ledger says
+nothing about what a name denotes, so the scene is asked: an animate kind or no
+entity record at all is a person and qualifies as above; a bodiless voice
+(`scene.is_ubiquitous_entity`) or a thing (`_is_inert_presence_candidate`) is
+the Director's own mouth and never speaks here; a kind that decides neither
+("device" cannot be lexically told from a "dalek war machine") speaks only on
+the Director's explicit judgment this beat — `routed_to_background` or
+`flow.addressed_to`. Chat 80 is why: a ceiling-mounted suppression device with
+an accrued record was picked at its "post" twice and interrogated the player.
+The scene-manager roster (§3.10) applies the same rule more strictly — persons
+only — because the manager voices its roster with no per-signal gate.
 
 **Reaction** (`agents/background.py:background_react`) makes one LLM call per
 picked presence (cap 1, hard-ceiling 3 via `scene.background_config`). Payload:

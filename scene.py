@@ -313,6 +313,19 @@ def get_scene(chat_id, chat=None):
         }
     for k in ("rooms", "entities", "positions", "overlays", "attire", "orientation"):
         sc.setdefault(k, {})
+    # A field name can never key an entity or stand in a room. A stored scene
+    # can carry such keys from before schemas' hoist covered the specialist
+    # path (chat 80: six "entities" keyed remove_entities/inventory_ops/...,
+    # each a copy of the Interview Chair); the merge heals the durable blob on
+    # the next commit (spatial.merge_scene_with_diff), and this keeps every
+    # reader between now and then from treating the debris as furniture.
+    try:
+        from schemas import NON_ENTITY_FIELD_KEYS
+        for ledger in ("entities", "positions"):
+            for bad in [k for k in sc[ledger] if k in NON_ENTITY_FIELD_KEYS]:
+                sc[ledger].pop(bad, None)
+    except Exception:
+        pass
     # Body position tracking. A list, not a dict: a contact is a relation and is
     # stored once rather than on either body (spatial.normalize_scene_contacts).
     sc.setdefault("contacts", [])

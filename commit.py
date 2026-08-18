@@ -3955,6 +3955,129 @@ def _bodies_answering_to(identity, scene):
     return seen
 
 
+def _canonical_presence_name(name, scene):
+    """The display-name spelling of a name that is really an entity ID.
+
+    A scene entity carries two spellings of one identity: the opaque id
+    keying `scene.entities`/`scene.positions` ("cfc004eb2c174286") and the
+    human display name in its def ("Scranton Reality Anchors"). The dialogue-
+    speaker harvest has folded ids to names for a while, but the positions
+    harvest did not, so one body tracked through both fields became TWO
+    presences -- chat 80 held six entries for three things, and each id-keyed
+    twin accrued its own dialogue history and its own separately-minted
+    personality. One being, one name: anything about to become a presence key
+    resolves through here first.
+    """
+    raw = str(name or "").strip()
+    if not raw:
+        return raw
+    ent = ((scene or {}).get("entities") or {}).get(raw)
+    if isinstance(ent, dict):
+        display = str(ent.get("name") or "").strip()
+        if display and display.casefold() != raw.casefold():
+            return display
+    return raw
+
+
+def _presence_scene_entity(scene, name):
+    """The scene entity a presence name denotes -- by entity id or display
+    name -- as (entity_id, entity_def), or (None, None) when the name has no
+    entity record at all (a presence tracked from a dialogue speaker or a
+    bare positions key)."""
+    cf = str(name or "").strip().casefold()
+    if not cf:
+        return None, None
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        if (str(eid).strip().casefold() == cf
+                or str(ent.get("name") or "").strip().casefold() == cf):
+            return eid, ent
+    return None, None
+
+
+def _presence_speech_verdict(scene, name):
+    """May this presence hold a background SPEAKING turn?
+
+    A background reaction is a person's -- the whole stage exists to make
+    extras feel like people (docs/design/BACKGROUND_LIFE_DESIGN.md), and the
+    director_resolve prompt is explicit that bodiless voices are the
+    Director's to speak and "never get a character step". Yet the gate never
+    once asked what a tracked name DENOTES: it read only the ledger, so any
+    record with history qualified. Chat 80 turns 3 and 7: the Scranton
+    Reality Anchors -- kind "device", a ceiling-mounted suppression fixture
+    -- were picked at their "post" in the interview cell and interrogated the
+    restrained player twice, rendered as "the unfamiliar person" because a
+    device has no name anyone knows.
+
+    The scene is the authority on what a name denotes, and it answers in
+    three grades:
+
+    - "person": no entity record at all (provenance is already person-shaped
+      -- a dialogue speaker or a placed body, like chat 72's night clerk), an
+      animate kind (schemas._ANIMATE_ENTITY_KINDS, whole or word-wise so
+      "security guard" counts), or no kind to judge.
+    - "thing": a bodiless voice (scene.is_ubiquitous_entity -- the Director's
+      own mouth) or a thing (_is_inert_presence_candidate -- chat 75's shed
+      utility sash got three turns of housekeeper dialogue through exactly
+      this hole). Never speaks through this stage.
+    - "undecided": a kind neither animate nor inert. Deliberately possible:
+      the kind string cannot lexically separate a suppression device from a
+      "dalek war machine" (live kinds include both), so where the record
+      cannot decide, personhood is the Director's call -- only its explicit
+      judgments this beat (routed_to_background, flow.addressed_to) may give
+      such a presence a voice. Ambient salience (at post, mentioned, its own
+      accrued backstop lines) never does.
+    """
+    eid, ent = _presence_scene_entity(scene, name)
+    if ent is None:
+        return "person"
+    try:
+        from scene import is_ubiquitous_entity
+        if is_ubiquitous_entity(ent):
+            return "thing"
+    except Exception:
+        pass
+    if _is_inert_presence_candidate(scene, eid, ent):
+        return "thing"
+    kind = str(ent.get("kind") or "").strip().casefold()
+    if not kind:
+        return "person"
+    from schemas import _ANIMATE_ENTITY_KINDS
+    if kind in _ANIMATE_ENTITY_KINDS:
+        return "person"
+    if any(w in _ANIMATE_ENTITY_KINDS for w in re.split(r"[^a-z0-9]+", kind)):
+        return "person"
+    return "undecided"
+
+
+def _merge_presence_record(target, other):
+    """Fold one presence record into another, in place. The target keeps its
+    own blurb (blurbs are frozen -- the anchor against self-feeding drift)
+    and its own sketch entries; histories union; the recent-conduct tail
+    interleaves by turn and keeps the cap."""
+    for field in ("dialogue_turns", "mention_turns", "addressed_turns"):
+        merged = set(target.get(field) or []) | set(other.get(field) or [])
+        if merged:
+            target[field] = sorted(merged)
+    target["first_turn"] = min(target.get("first_turn", 0),
+                               other.get("first_turn", 0))
+    target["last_turn"] = max(target.get("last_turn", 0),
+                              other.get("last_turn", 0))
+    # A sketch the duplicate carried is still objective description of
+    # the same body; keep anything the keeper is missing.
+    for key, value in (other.get("sketch") or {}).items():
+        target.setdefault("sketch", {}).setdefault(key, value)
+    if other.get("pending_reply") and not target.get("pending_reply"):
+        target["pending_reply"] = other["pending_reply"]
+    if other.get("blurb") and not target.get("blurb"):
+        target["blurb"] = other["blurb"]
+    tail = list(target.get("recent") or []) + list(other.get("recent") or [])
+    if tail:
+        tail.sort(key=lambda r: (r or {}).get("turn") or 0)
+        target["recent"] = tail[-BACKGROUND_RECENT_TAIL:]
+
+
 def _resolve_presence_name(name, presences, scene=None):
     """The key `name` should be filed under, given what is already tracked.
 
@@ -3962,6 +4085,7 @@ def _resolve_presence_name(name, presences, scene=None):
     other record already refers to it by rather than being renamed by whichever
     determiner the model reached for this beat.
     """
+    name = _canonical_presence_name(name, scene)
     identity = _presence_identity(name)
     if not identity:
         return name
@@ -3974,13 +4098,30 @@ def _resolve_presence_name(name, presences, scene=None):
 
 
 def _fold_duplicate_presences(presences, scene=None):
-    """Merge presences that were split by an article before they were resolved
+    """Merge presences that were split -- by an article, or by being tracked
+    under both an entity id and its display name -- before they were resolved
     on write. Runs on load, so a story already carrying the split heals on its
     next turn instead of needing a migration.
 
-    The earliest first_turn wins the name -- that is the spelling the rest of
-    the story has been using.
+    The id fold runs first and is unconditional: an entity id denotes exactly
+    one entity, so unlike the article fold there is no crowd ambiguity to
+    respect, and the display name always wins the key -- the id was never a
+    name (chat 80: "cfc004eb2c174286" tracked beside "Scranton Reality
+    Anchors", "ab1299cb69244904" beside "Guard 1", "eef58c8d667f414f" beside
+    "Guard 2" -- every presence doubled, each twin with half the history).
+
+    For the article fold, the earliest first_turn wins the name -- that is
+    the spelling the rest of the story has been using.
     """
+    for key in list(presences):
+        canon = _canonical_presence_name(key, scene)
+        if canon == key:
+            continue
+        other = presences.pop(key)
+        if canon in presences:
+            _merge_presence_record(presences[canon], other)
+        else:
+            presences[canon] = other
     by_identity = {}
     for name in list(presences):
         by_identity.setdefault(_presence_identity(name), []).append(name)
@@ -3993,21 +4134,7 @@ def _fold_duplicate_presences(presences, scene=None):
         keeper, rest = names[0], names[1:]
         target = presences[keeper]
         for other_name in rest:
-            other = presences.pop(other_name)
-            for field in ("dialogue_turns", "mention_turns", "addressed_turns"):
-                merged = set(target.get(field) or []) | set(other.get(field) or [])
-                if merged:
-                    target[field] = sorted(merged)
-            target["first_turn"] = min(target.get("first_turn", 0),
-                                       other.get("first_turn", 0))
-            target["last_turn"] = max(target.get("last_turn", 0),
-                                      other.get("last_turn", 0))
-            # A sketch the duplicate carried is still objective description of
-            # the same body; keep anything the keeper is missing.
-            for key, value in (other.get("sketch") or {}).items():
-                target.setdefault("sketch", {}).setdefault(key, value)
-            if other.get("pending_reply") and not target.get("pending_reply"):
-                target["pending_reply"] = other["pending_reply"]
+            _merge_presence_record(target, presences.pop(other_name))
     return presences
 
 
@@ -4253,6 +4380,22 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         for eid, edef in (_scene_now.get("entities") or {}).items()
         if isinstance(edef, dict) and str((edef or {}).get("name") or "").strip()
     }
+    # An entity MINTED THIS BEAT is not in the stored scene yet (the merge
+    # commits later in this same turn), so fold its id from the beat's own
+    # entity defs too -- otherwise a positions key naming a just-minted body
+    # escapes the fold on exactly its first appearance, which is when the
+    # duplicate is created. Chat 80 turn 0: the establish placed every body
+    # by entity id, and each id became a second presence beside the
+    # display-name record harvested from the same entity defs.
+    _beat_entity_maps = [((res.get("state_diff") or {}).get("entities") or {})]
+    if is_opening:
+        _beat_entity_maps.append(res.get("entities") or {})
+    for _ents in _beat_entity_maps:
+        for _eid, _edef in _ents.items():
+            if isinstance(_edef, dict):
+                _nm = str(_edef.get("name") or "").strip()
+                if _nm:
+                    entity_id_to_name.setdefault(str(_eid), _nm)
     # A bodiless voice (ship AI, station PA) is voiced by the Director and has
     # no room. Tracking one as a background presence pinned it to whatever room
     # it was positioned in and made it a promotion candidate -- observed live
@@ -4317,7 +4460,13 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             desc = str(entity_def.get("description") or "").strip()
             if desc:
                 sk["role_hint"] = desc[:160]
-            room = positions.get(name)
+            # Positions are usually keyed by the entity ID, not the display
+            # name this sketch is filed under. Looking up the name alone left
+            # the station on the floor -- and the positions harvest below then
+            # tracked the id as a SECOND presence just to hold it, which is
+            # how chat 80's guards each split into a name-keyed record with a
+            # role_hint and an id-keyed record with a station_room.
+            room = positions.get(name) or positions.get(str(entity_id))
             if room:
                 sk["station_room"] = str(room)
 
@@ -4378,7 +4527,15 @@ def track_background_presences(ctx, nonce, *, prepared=None):
             if _key:
                 _inert_by_key.setdefault(_key, _verdict)
     for _placed in _diff_positions:
-        _name = str(_placed or "").strip()
+        # The same id-to-display-name fold the dialogue-speaker harvest has
+        # always applied. `positions` legitimately keys bodies by entity id,
+        # so tracking the key verbatim minted an id-keyed twin beside the
+        # display-name presence -- chat 80 held six presences for three
+        # things, and the twin "cfc004eb2c174286" accrued its own dialogue
+        # history and blurb while "Scranton Reality Anchors" accrued the
+        # mentions.
+        _name = entity_id_to_name.get(str(_placed or "").strip(),
+                                      str(_placed or "").strip())
         if not _name or name_in_roster(_name, roster):
             continue
         if _name.casefold() in _ubiquitous:
@@ -4403,6 +4560,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     br = ctx.get("background_react") or {}
     for _r in _background_fired_reactions(br):
         br_name = str((_r.get("dialogue_log_entry") or {}).get("speaker") or "").strip()
+        br_name = entity_id_to_name.get(br_name, br_name)
         if br_name and not name_in_roster(br_name, roster):
             candidates.add(br_name)
             dialogue_speakers.add(br_name.casefold())
@@ -4719,7 +4877,11 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     player_input = str(ctx.get("input") or "")
     turn_idx = ctx.turn.idx
     sc = wget(cid, "scene", {}) or {}
-    presences = wget(cid, "background_presences", {})
+    # Read through the duplicate fold: the ledger is healed at commit, but
+    # this gate runs BEFORE commit, so a story already carrying an id-keyed
+    # twin (chat 80) must not be able to dispatch the twin one last time.
+    presences = _fold_duplicate_presences(
+        wget(cid, "background_presences", {}) or {}, sc)
 
     addressed_refs = _flow_addressed_refs(ctx)
 
@@ -4798,6 +4960,20 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         if not (flow_addressed or routed or addressed or char_addr or owed
                 or mentioned or dialogue_turns or at_post):
             continue
+        # Only a person may hold a background speaking turn. The ledger says
+        # nothing about what a name DENOTES, so a device with an accrued
+        # record qualified exactly like a barkeep: chat 80's ceiling-mounted
+        # Scranton Reality Anchors (kind "device") were picked at their
+        # "post" on turn 3 and again on turn 7 and interrogated the player.
+        # A thing never speaks here; where the scene record cannot decide
+        # (see _presence_speech_verdict), only the Director's own explicit
+        # judgment this beat -- routing the line here, or naming this
+        # presence the player's addressee -- can hand over a voice.
+        verdict = _presence_speech_verdict(sc, name)
+        if verdict == "thing":
+            continue
+        if verdict == "undecided" and not (routed or flow_addressed):
+            continue
         if flow_addressed or routed:
             forced += 1
         priority = (bool(flow_addressed or routed), bool(addressed),
@@ -4816,7 +4992,9 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     return [name for _, name in candidates[:slots]]
 
 def promotable_background_presences(chat_id):
-    presences = wget(chat_id, "background_presences", {})
+    sc = wget(chat_id, "scene", {}) or {}
+    presences = _fold_duplicate_presences(
+        wget(chat_id, "background_presences", {}) or {}, sc)
     limits = promotion_thresholds(chat_id)
     out = []
     for name, record in presences.items():
@@ -4824,6 +5002,15 @@ def promotable_background_presences(chat_id):
             len(record.get("dialogue_turns") or []) >= limits["dialogue"]
             or len(record.get("mention_turns") or []) >= limits["mention"]
         )
+        # Promotion mints a MIND, and a thing cannot hold one -- however much
+        # history its record accrued before the speech gate existed (chat
+        # 75's utility sash spoke on three turns; chat 80's PA-class fixtures
+        # are one dialogue line away from the same flag). "undecided" stays
+        # promotable on purpose: a "dalek war machine" the player keeps
+        # engaging deserves the offer, and the auto-promotion sweep already
+        # demands deliberate addressed_turns on top of this flag.
+        if promotable and _presence_speech_verdict(sc, name) == "thing":
+            promotable = False
         out.append({
             "name": name,
             "first_turn": record.get("first_turn"),
