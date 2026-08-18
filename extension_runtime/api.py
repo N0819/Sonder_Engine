@@ -1136,6 +1136,56 @@ class SonderExtensionAPI:
 
     # -- models
 
+    def add_model_lane(self, name, *, label=None, description=None):
+        """Declare a model lane of your own: a role that appears in the host's
+        model settings with its own provider row, sampler and backups, instead
+        of borrowing a host role. Returns the role string to pass to
+        `llm_json`/`llm_text`.
+
+        Borrowing was the previous state and it failed twice over: a call on
+        `role="utility"` runs on whatever the host chose FOR UTILITY WORK
+        (an extension has no row of its own to be configured on), and it is
+        logged as utility spend, so "which model is looping" stops being
+        answerable per lane -- the whole reason `_log_usage` keys on the role
+        string. A lane of your own fixes both, and its blank row inherits
+        `default` exactly the way every blank host row does, because that is
+        what a host who leaves a row blank means.
+
+        Three properties, each deliberate:
+
+        * **The role is namespaced `ext:<your-id>:<name>`**, never appended to
+          `providers.ROLES` -- that list is the host's fixed vocabulary, read
+          all over the engine, and a mutable one would let an install shadow
+          or retire a host role. A name that IS a host role (`director`,
+          `narrator`, ...) is refused outright rather than namespaced into
+          something legal: a settings row wearing a host role's name reads as
+          that role's configuration, and the misread costs real money.
+        * **Declaration buys the settings row, nothing else.** Resolution
+          reads `agent_models` by role string, so the calls themselves would
+          resolve without this method -- what an undeclared lane can never be
+          is CONFIGURED, because the host's panel has no row to offer.
+        * **Disable takes the row, not the host's configuration.** The lane
+          registry empties with your registration, so no phantom row survives
+          you in the panel -- but a stored configuration is the host's work
+          and outlives you (`keep_orphan_lane_rows`), the same rule that
+          leaves `world["ext:<id>"]` alone on remove. Re-enabling finds the
+          lane configured as it was left.
+        """
+        name = str(name or "").strip()
+        if not _STAGE_KEY.fullmatch(name):
+            raise ExtensionError(f"invalid model lane name: {name!r}")
+        from providers import ROLES
+        if name in ROLES:
+            raise ExtensionError(
+                f"model lane {name!r} is a host role; a lane needs a name of "
+                "its own")
+        role = f"ext:{self.id}:{name}"
+        from . import _record_model_lane
+        _record_model_lane(self.id, name, role,
+                           label=str(label or f"{self.id} · {name}"),
+                           description=str(description or ""))
+        return role
+
     def llm_json(self, system, payload, *, role="utility", temperature=None,
                  max_tokens=8000):
         """One loose validated-by-nobody JSON call on a configured role.

@@ -281,6 +281,7 @@ cannot leave a stale file executing.
 | `api.add_director_specialist(name, channels=..., prompt=...)` | a seventh Director family |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
+| `api.add_model_lane(name, *, label=..., description=...)` | a model lane of your own in the host's settings; returns the role string |
 | `api.state(chat_id)` | per-story state |
 | `api.frame_state(chat_id)` | per-story state scoped to the current era |
 | `api.settings` | install-scoped config |
@@ -443,6 +444,49 @@ Loose on purpose. `_agent_json`, the engine's own path, validates against
 `schemas.SCHEMA_MAP`, which only knows the engine's steps — you own your output's
 shape, so you get the parse and not the schema. Roles come from the host's
 configured `agent_models`.
+
+**Declare a lane of your own** rather than borrowing a host role for anything
+you want independently configurable. Borrowing fails twice over: a call on
+`role="utility"` runs on whatever model the host chose *for utility work* —
+there is no row of yours for them to configure — and it is logged as utility
+spend, so "which model is looping" stops being answerable for your calls.
+
+```python
+def register(api):
+    planner = api.add_model_lane(
+        "planner", label="Directive · planner",
+        description="Plans the next campaign beat from mission state.")
+    # later:
+    api.llm_json("You plan beats.", {"mission": ...}, role=planner)
+```
+
+The returned role is namespaced `ext:<your-id>:<name>` and appears in the
+host's model settings as a row of its own — provider, model, samplers, backup
+models, reasoning effort, the same generic row every host role gets. Left
+blank it inherits `default`, exactly the way a blank host row does, because
+that is what a host who leaves a row blank means; configured, its calls
+resolve its own row and its spend logs under its own role string in the
+per-call ledger.
+
+Four edges, each deliberate:
+
+- **A name that is a host role (`director`, `narrator`, …) is refused**, not
+  namespaced into something legal — a settings row wearing a host role's name
+  reads as that role's configuration, and the misread costs real money.
+  `providers.ROLES` itself never changes: an extension cannot shadow or
+  retire a host role.
+- **Declaration buys the settings row, nothing else.** `llm_json` on an
+  undeclared `ext:` role would already resolve (and inherit `default`); what
+  it can never be is *configured*, because the panel has no row to offer.
+  Declare the lane, or the host cannot answer for it.
+- **Disable takes the row, not the host's configuration.** Your lane
+  disappears from the panel with your registration — no phantom row — but a
+  stored configuration survives disable and removal, the same rule that
+  leaves `world["ext:<id>"]` alone: it is the host's work, not yours, and
+  re-enabling finds the lane configured as it was left.
+- **You cannot ship a default model for it.** The host configures the lane or
+  it inherits `default`; a manifest choosing a model would be an install
+  choosing spend.
 
 ### Adding a Director specialist
 
