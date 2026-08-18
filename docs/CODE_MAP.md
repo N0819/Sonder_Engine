@@ -10,7 +10,7 @@
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 927 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3398 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
-| `agents/common.py` | 6133 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
+| `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1717 |  | `agents.common`, `scene`, `spatial` |
 | `agents/director.py` | 7922 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
@@ -119,14 +119,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1816 | 204 lines |
-| `_scrub_invented_dialogue()` | 4815 | 145 lines |
-| `_check_narrator_fidelity()` | 5772 | 125 lines |
+| `norm_sequence()` | 1832 | 204 lines |
+| `_scrub_invented_dialogue()` | 4868 | 145 lines |
+| `_check_narrator_fidelity()` | 5825 | 125 lines |
+| `_extract_authority_claims()` | 1340 | 122 lines |
 | `observer_body_regions()` | 664 | 117 lines |
-| `_extract_authority_claims()` | 1340 | 106 lines |
-| `_strip_player_echo()` | 4618 | 101 lines |
+| `_strip_player_echo()` | 4671 | 101 lines |
 | `_perceptible_entities()` | 918 | 98 lines |
-| `_check_presence_knowledge_channel()` | 3369 | 95 lines |
+| `_check_presence_knowledge_channel()` | 3385 | 95 lines |
 
 ### `agents/composer.py`
 
