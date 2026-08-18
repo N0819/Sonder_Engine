@@ -1785,6 +1785,15 @@ class SonderExtensionAPI:
         result rather than defaulted, guessed, or filled from personality: a UI
         cannot tell a guess from a fact and will render both the same way.
 
+        `people` (schema 2) is the structured roster for a persistent crew or
+        people interface: stable ids that never depend on display names,
+        `identity_status` from the identity ledger and the perception stage's
+        own delivery record, composer labels for unrecognised bodies, and an
+        allowlisted `facts`/`fact_sources` pair carrying only authored-public
+        card surfaces. Key your UI on `id` and join your own campaign state to
+        it; do not join known-name strings to canonical cast data, which is
+        the disclosure logic this field exists so you never re-implement.
+
         `api.viewers(chat_id)` lists the ids this accepts.
         """
         import story_view as facade

@@ -273,7 +273,7 @@ cannot leave a stale file executing.
 | `api.narration_context(chat_id)` | standing context for the narrator |
 | `api.director_context(chat_id)` | standing campaign rules for the Director |
 | `api.story_view(chat_id)` | canonical story state, versioned and read-only |
-| `api.player_view(chat_id, viewer)` | what one person in the story may be shown |
+| `api.player_view(chat_id, viewer)` | what one person in the story may be shown, incl. the `people` roster |
 | `api.viewers(chat_id)` | the viewer ids `player_view` accepts |
 | `api.chats` | the story lifecycle — create, find yours, read turns (§6a) |
 | `api.provision_story(package, state=..., ...)` | create a whole story atomically |
@@ -723,6 +723,40 @@ perception's own view keys, and they are not guessable by inspection.
 Provenance uses the vocabulary the engine already speaks —
 `what_i_experienced` / `what_i_was_told` / `what_i_concluded` — rather than a
 second one invented for the facade.
+
+**`people` (schema 2)** is the structured roster a persistent crew or people
+interface renders from, and it keeps the same two rules. Each entry:
+
+```python
+{"id": "17", "kind": "character", "display_name": "Ilse",
+ "identity_status": "recognized",
+ "facts": {"appearance": "...", "public_history": "..."},
+ "fact_sources": {"appearance": "authored_public",
+                  "public_history": "authored_public"},
+ "last_observed_turn": 42}
+```
+
+Two admissions, neither decided by the facade. A **recognised** person is the
+identity ledger's own answer (the same read as `knows`) joined to the stable
+ids `viewers()` already speaks — so a rename changes `display_name` and never
+`id`, and there is one id scheme per person across the whole surface. An
+**observed** body is the perception stage's own per-beat record of who the
+delivered view was composed about: it appears as
+`{"id": "body:<opaque>", "kind": "presence", "display_name": <composer
+label>, "identity_status": "observed"}`, and its canonical name and canonical
+id appear nowhere — the recognition verdict is the composer's (a disguise that
+conceals identity makes a well-known name a stranger), so the two entries of a
+disguised acquaintance deliberately do not join. `facts` is a schema
+allowlist of the card's genuinely authored-public surfaces
+(`embodiment.visible.summary`, `knowledge.public_history`; source
+`authored_public`); everything else — psychology, private history, goals,
+undisclosed relationships, other minds' memories — is not filtered out, it is
+never read. A person the viewer has neither come to know nor been shown is
+absent, `identity_status` has no "provisional" tier because the engine has no
+such ledger, and missing facts are missing keys. Key your UI on `id` and join
+Directive-style campaign state in your own namespace; the moment you find
+yourself joining `knows` strings to `story_view` cast rows instead, you are
+re-implementing disclosure outside the engine.
 
 ### Provisioning a campaign
 
