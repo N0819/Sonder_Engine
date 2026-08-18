@@ -764,6 +764,23 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
     return out
 
 
+def _extension_narration_payload(ctx, payload, *, scope, player=""):
+    """Hand the assembled narrator payload to installed extensions, or leave it.
+
+    Lazy-imported and total, the same discipline as `character.py`'s routing
+    seam and for the same reason: this runs inside the turn's wall clock, so a
+    broken extension must cost the beat nothing. With nothing installed -- the
+    overwhelmingly common case -- this is one attribute lookup.
+    """
+    try:
+        import extension_runtime
+
+        return extension_runtime.dispatch_narration_payload(
+            ctx, payload, scope=scope, player=player)
+    except Exception:
+        return payload
+
+
 def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
                         fidelity_facts=None, language="en"):
     call_payload = dict(payload)
@@ -973,6 +990,12 @@ def narrator(ctx, nonce):
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
         "variant_seed": nonce,
     }
+    # Once, here, rather than inside `_generate_narration`: that function is
+    # re-entered for the fidelity correction and up to twice more for craft
+    # rewrites, and a hook re-run per attempt could hand each attempt different
+    # context -- so a correction pass would be narrating against a frame the
+    # first pass never saw, and the retry loop would look like the defect.
+    payload = _extension_narration_payload(ctx, payload, scope="narrator")
     out, warnings, fidelity_warnings = _generate_narration(
         payload, view, prev, p_lines, fidelity_facts=_fidelity_facts,
         language=ctx.language)
@@ -1118,6 +1141,9 @@ def narrator_extra(ctx, nonce):
             "exemplars": json.loads(get_setting("exemplars") or "[]"),
             "variant_seed": nonce,
         }
+        payload = _extension_narration_payload(
+            ctx, payload, scope="narrator_extra",
+            player=extra.get("name") or "")
         out, warnings, fidelity_warnings = _generate_narration(
             payload, view, prev, p_lines, language=ctx.language)
 

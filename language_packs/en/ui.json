@@ -135,6 +135,8 @@
   "[${operation.book_type || \"general\"}]": "[${operation.book_type || \"general\"}]",
   "[data-entry-id=\"${entryId}\"]": "[data-entry-id=\"${entryId}\"]",
   "[data-entry-id=\"${result.id}\"]": "[data-entry-id=\"${result.id}\"]",
+  "[data-ext-button]": "[data-ext-button]",
+  "[data-ext-composer]": "[data-ext-composer]",
   "[data-tab=\"relationships\"]": "[data-tab=\"relationships\"]",
   "[title],[aria-label],[placeholder],[alt]": "[title],[aria-label],[placeholder],[alt]",
   "^${parts.join(\"(.+?)\")}$": "^${parts.join(\"(.+?)\")}$",

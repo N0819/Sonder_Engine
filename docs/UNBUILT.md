@@ -3722,6 +3722,15 @@ reference extension. Developer documentation:
 The tier ladder (Tier 0–3, story packs as rung 1) was **abandoned**, not
 deferred — design note §2 records why. Do not treat its absence as debt.
 
+A third batch closed what a TOTAL-CONVERSION extension needs, measured against
+Directive (`docs/design/DIRECTIVE_HOST_SURFACE.md`): ES module entries
+(`capabilities.ui.module`, dynamic-`import()` loading with an id-bound facade,
+so an extension built as a module graph can be loaded at all), the narration
+seam (`api.on_narration_payload`, `api.narration_context`), and three host-owned
+UI mount points beyond the sidebar — `registerTopBarButton`, `registerView` (a
+full-window surface over the transcript) and `registerComposerControl`, each
+cleared by `_unregister` so a disable takes the whole interface back down. `extensions/overlay-demo/` is the reference for all three.
+
 A second batch closed the surfaces the first release left open: `ui.css` is
 served (as its own document, linked after the host's sheets), enable/disable
 hot-load in the browser through `Sonder._load`/`_unload`, extensions serve their
@@ -3733,6 +3742,24 @@ seam, `api.llm_json`/`llm_text` give a model call on any configured role,
 
 Still missing:
 
+- **No notification surface and no settings-section mount point.** `toast` is
+  not a notification centre, and an extension's configuration currently has to
+  live in its own panel or a modal it builds. Both are registry entries of the
+  same shape as the three that landed; neither blocked Directive, so neither was
+  guessed at in advance of a second extension wanting them.
+- **An extension cannot declare its own model lane.** `api.llm_json`/`llm_text`
+  take `role=`, and roles come from `providers.ROLES` — a fixed host list. An
+  extension that wants its own configurable model (its own sampler, its own
+  provider row in the host's settings) has to borrow a host role instead.
+- **No document storage.** The four namespaced homes are KV. An extension
+  porting from a host with JSON-documents-at-logical-paths has no `list`,
+  `delete` or `verify` to map onto, and a storage-integrity screen has nothing
+  to ask.
+- **The browser chat lifecycle is not a declared contract.** Creating, binding,
+  cloning and opening a chat, and posting an assistant message or a swipe, are
+  all reachable through `Sonder.api(...)` against host routes — which is to say
+  they work and are refactor-fragile, exactly the position the UI mount points
+  were in before this batch.
 - **Declarative advisor stages** — a stage as data (role, prompt, input-scope
   whitelist, anchor) for authors who write no code. Genuinely useful; no longer a
   prerequisite for anything.
@@ -3740,12 +3767,18 @@ Still missing:
   designed alongside `on_character_payload` but not built: `on_admission` and
   `on_view`, which would let an extension alter what perception ADMITS rather
   than only what the assembled payload carries.
-- **An extension specialist cannot reach the prose author.**
-  `PROSE_AUTHOR_SHEET` and `test_every_delegated_block_has_exactly_one_owner`
-  are in-tree, so a registered family writes its channel to the merged
-  `state_diff` and nothing narrates it. Documented in the guide rather than
-  fixed; closing it means a prose-chunk registry with the one-owner test
-  extended across the boundary.
+- **An extension still cannot reach the Director's PROSE AUTHOR**, though it
+  can now reach the narrator. `api.on_narration_payload` and
+  `api.narration_context` (built; `tests/test_extension_narration.py`) put an
+  extension's standing context in front of the narrator on every beat, which is
+  what makes a reader-visible extension layer possible at all. The prose
+  author is the remaining half: `PROSE_AUTHOR_SHEET` and
+  `test_every_delegated_block_has_exactly_one_owner` are in-tree, so a
+  registered specialist family writes its channel to the merged `state_diff`
+  and nothing narrates it *from there*. Closing it means a prose-chunk registry
+  with the one-owner test extended across the boundary. Deliberately left: the
+  narrator seam delivers the reader-visible result without touching a
+  one-owner invariant, so this is no longer blocking anything.
 - **`tools/project_check.py --extension <path>`** — the author-facing self-check
   that runs the same two lints against an unbundled extension before shipping.
   The checks exist; the CLI entry point does not.

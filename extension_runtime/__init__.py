@@ -41,7 +41,8 @@ from typing import Any, Callable
 
 from .api import (
     CharacterAccess, CharacterHandle, CommitView, CommittedTurn, ExtState,
-    ExtensionError, PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
+    ExtensionError, NarrationBlock, NarrationContext,
+    PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
     SonderExtensionAPI, StepView, enter_commit_scope, in_commit_scope,
     leave_commit_scope,
 )
@@ -105,6 +106,21 @@ class Extension:
         return str(ui.get("js") or "").strip()
 
     @property
+    def module_entry(self) -> str:
+        """An ES module entry, if this extension ships one.
+
+        The alternative to `ui.js`, not a replacement for it: a classic entry
+        is concatenated into one bundle and cannot contain `import`, which is
+        fine for a panel and impossible for an extension built as a module
+        graph. Declaring both is allowed and both are served -- a migration
+        wants to move one file at a time.
+        """
+        ui = self.capabilities.get("ui")
+        if not isinstance(ui, dict):
+            return ""
+        return str(ui.get("module") or "").strip()
+
+    @property
     def css_entry(self) -> str:
         ui = self.capabilities.get("ui")
         if not isinstance(ui, dict):
@@ -155,11 +171,11 @@ def _trust_class(manifest: dict, capabilities: dict, directory: Path) -> str:
     host enables the extension, whether or not the manifest admits to it.
     """
     ui = capabilities.get("ui") if isinstance(capabilities.get("ui"), dict) else {}
-    if capabilities.get("python") or ui.get("js"):
+    if capabilities.get("python") or ui.get("js") or ui.get("module"):
         return "code"
     try:
         for child in directory.rglob("*"):
-            if child.is_file() and child.suffix in (".py", ".js"):
+            if child.is_file() and child.suffix in (".py", ".js", ".mjs"):
                 return "code"
     except OSError:
         pass
@@ -355,6 +371,7 @@ class _Registration:
     commit_observers: list[Callable] = field(default_factory=list)
     commit_domains: list[dict] = field(default_factory=list)
     payload_hooks: list[Callable] = field(default_factory=list)
+    narration_hooks: list[Callable] = field(default_factory=list)
     routes: dict[str, dict] = field(default_factory=dict)
     specialists: list[str] = field(default_factory=list)
     error: str | None = None
@@ -405,6 +422,14 @@ def _record_payload_hook(ext_id, fn) -> None:
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.payload_hooks.append(fn)
+
+
+def _record_narration_hook(ext_id, fn) -> None:
+    if not callable(fn):
+        raise ExtensionError("on_narration_payload needs a callable")
+    with _lock:
+        record = _registered.setdefault(ext_id, _Registration(ext_id))
+        record.narration_hooks.append(fn)
 
 
 def _record_specialist(ext_id, full_name) -> None:
@@ -812,6 +837,137 @@ def dispatch_character_payload(ctx, char_id, payload, names=()):
     return current
 
 
+def _narration_blocks(chat_id) -> list:
+    """Every enabled extension's standing block for this story, in id order.
+
+    Read fresh each beat rather than cached: a block is installed by a host
+    action outside the turn -- a panel's Save, a route call, a campaign
+    starting -- so a cache would narrate the previous revision for the rest of
+    the session, which is the failure mode this whole seam exists to prevent.
+    """
+    if chat_id is None:
+        return []
+    try:
+        activate()
+        with _lock:
+            ids = sorted(_registered)
+    except Exception:
+        log.exception("extension narration blocks could not be resolved")
+        return []
+
+    blocks = []
+    for ext_id in ids:
+        api = _apis.get(ext_id)
+        if api is None:
+            continue
+        try:
+            block = api.narration_context(chat_id).get()
+        except Exception:
+            log.exception("extension %s narration block failed to read", ext_id)
+            continue
+        text = str((block or {}).get("text") or "").strip()
+        if text:
+            blocks.append({"source": ext_id, "text": text,
+                           "revision": int((block or {}).get("revision") or 0)})
+    return blocks
+
+
+def dispatch_narration_payload(ctx, payload, *, scope="narrator", player=""):
+    """Let installed extensions colour what the narrator is about to be told.
+
+    Two seams in one pass, in this order:
+
+    1. Standing blocks (`api.narration_context`) are collected into
+       `payload["extension_context"]`, a list of `{source, text, revision}`.
+       Declarative, so the common case costs no extension code per beat.
+    2. `on_narration_payload` hooks run, which may rewrite anything including
+       the list just assembled.
+
+    Attribution matches `dispatch_character_payload`: every top-level key an
+    extension changed is recorded against its id on the context and rides the
+    turn's commit results. Narration is the one place a routed fact reaches the
+    PLAYER rather than a fictional mind, so being able to name its author in
+    one read matters more here, not less.
+
+    Total: any failure leaves the payload exactly as the engine assembled it.
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    chat = getattr(ctx, "chat", None)
+    chat_id = getattr(chat, "id", None)
+    current = payload
+
+    blocks = _narration_blocks(chat_id)
+    if blocks:
+        current = dict(current)
+        current["extension_context"] = blocks
+        for block in blocks:
+            _note_narration_routing(ctx, block["source"], scope,
+                                    ["extension_context"])
+
+    try:
+        with _lock:
+            hooks = [(record.ext_id, fn) for record in _registered.values()
+                     for fn in record.narration_hooks]
+        if not hooks:
+            return current
+    except Exception:
+        log.exception("extension narration hooks could not be resolved")
+        return current
+
+    for ext_id, fn in hooks:
+        api = _apis.get(ext_id)
+        if api is None:
+            continue
+        before = current
+        # Fingerprint BEFORE the call, for the reason spelled out in
+        # `dispatch_character_payload`: a hook handed the real payload can
+        # mutate both sides of a naive comparison at once and come back with an
+        # empty diff, which is an unattributed edit to what the reader is told.
+        stamps = _payload_stamps(before)
+        try:
+            info = NarrationContext(api, ctx, scope=scope, player=player)
+            result = fn(before, info)
+        except Exception:
+            _observer_failures[ext_id] = _observer_failures.get(ext_id, 0) + 1
+            log.exception("extension %s narration hook failed", ext_id)
+            continue
+        if result is None:
+            result = before
+        if not isinstance(result, dict):
+            log.warning("extension %s narration hook returned %s; ignored",
+                        ext_id, type(result).__name__)
+            continue
+        after = _payload_stamps(result)
+        changed = sorted({key for key in set(stamps) | set(after)
+                          if stamps.get(key) != after.get(key)})
+        if changed:
+            _note_narration_routing(ctx, ext_id, scope, changed)
+        current = result
+    return current
+
+
+def _note_narration_routing(ctx, ext_id, scope, changed) -> None:
+    """Record a narration edit beside the character-routing notes.
+
+    Same list, same shape, `char_id: None` -- because the question a reader of
+    the turn asks is "who touched what this beat", and splitting the answer
+    across two places is how half of it stops being read.
+    """
+    log.info("extension %s rewrote %s payload keys: %s",
+             ext_id, scope, ", ".join(changed))
+    try:
+        entries = ctx.get("_extension_routing")
+        if not isinstance(entries, list):
+            entries = []
+        entries.append({"ext": ext_id, "char_id": None, "scope": str(scope),
+                        "changed": list(changed)})
+        ctx["_extension_routing"] = entries
+    except Exception:
+        log.exception("could not record extension narration routing note")
+
+
 def _payload_stamps(payload) -> dict:
     """A comparable snapshot of each top-level value, taken by VALUE.
 
@@ -1001,6 +1157,28 @@ def _wrap_ui(ext: "Extension", source: str) -> str:
     )
 
 
+def _module_bootstrap(ext: "Extension") -> str:
+    """A classic one-liner that dynamically imports an extension's ES module.
+
+    Why a bootstrap rather than a `<script type="module">` served directly: the
+    host has to be able to hand the module an ID-BOUND facade. The classic
+    path attributes registrations with a `Sonder._begin(id)` / `_end()` pair
+    around synchronous top-level code, and that trick does not survive a
+    module -- imports resolve asynchronously and a `register` may `await`, so
+    ambient owner state set before the await belongs to somebody else after it.
+    A dynamic `import()` lets the host call `register(facade)` itself, which is
+    both correct under concurrency and the same shape as the Python half's
+    `register(api)`.
+
+    Relative imports inside the module resolve against its own URL, which is
+    why the entry is served from `/asset/` -- the whole extension tree is
+    reachable there, already containment-checked by `asset_path`.
+    """
+    href = f"/api/extensions/{ext.id}/asset/{ext.module_entry}"
+    return (f'window.Sonder && Sonder._loadModule('
+            f'{json.dumps(ext.id)}, {json.dumps(href)});\n')
+
+
 def _read_asset(ext: "Extension", relative: str) -> str | None:
     try:
         return asset_path(ext.id, relative).read_text(encoding="utf-8")
@@ -1019,10 +1197,16 @@ def extension_script(ext_id: str) -> str:
     if safe_mode():
         return ""
     ext = installed_extensions().get(str(ext_id or ""))
-    if ext is None or not ext.ui_entry or not is_enabled(ext.id):
+    if ext is None or not is_enabled(ext.id):
         return ""
-    source = _read_asset(ext, ext.ui_entry)
-    return "" if source is None else _wrap_ui(ext, source)
+    parts = []
+    if ext.ui_entry:
+        source = _read_asset(ext, ext.ui_entry)
+        if source is not None:
+            parts.append(_wrap_ui(ext, source))
+    if ext.module_entry:
+        parts.append(_module_bootstrap(ext))
+    return "\n".join(parts)
 
 
 def extension_styles(ext_id: str) -> str:
@@ -1048,12 +1232,18 @@ def ui_bundle() -> str:
     parts = []
     enabled = set(enabled_ids())
     for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
-        if ext.id not in enabled or not ext.ui_entry:
+        if ext.id not in enabled:
             continue
-        source = _read_asset(ext, ext.ui_entry)
-        if source is None:
-            continue
-        parts.append(_wrap_ui(ext, source))
+        if ext.ui_entry:
+            source = _read_asset(ext, ext.ui_entry)
+            if source is not None:
+                parts.append(_wrap_ui(ext, source))
+        # A module entry contributes a loader line, not its source: the module
+        # is fetched by the browser from `/asset/` so its own imports resolve,
+        # and inlining it here would put `import` in a classic script -- a
+        # SyntaxError that takes down every extension after it in the bundle.
+        if ext.module_entry:
+            parts.append(_module_bootstrap(ext))
     return "\n".join(parts)
 
 
@@ -1082,11 +1272,13 @@ def ui_styles() -> str:
 __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
-    "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
+    "ExtensionError", "NarrationBlock", "NarrationContext",
+    "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
     "SonderExtensionAPI", "StepView", "activate", "apply_plan_splices",
     "asset_path", "check_update", "check_updates", "disable_extension",
     "disabled_reasons",
-    "dispatch_character_payload", "dispatch_route", "dispatch_turn_committed",
+    "dispatch_character_payload", "dispatch_narration_payload",
+    "dispatch_route", "dispatch_turn_committed",
     "enable_extension", "enabled_ids", "extension", "extension_root",
     "extension_script", "extension_styles", "in_commit_scope",
     "installed_extensions", "is_enabled", "listing", "load_errors",

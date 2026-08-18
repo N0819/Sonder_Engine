@@ -8,8 +8,9 @@ Unfinished pieces are registered in [`docs/UNBUILT.md`](../UNBUILT.md) §6.2.
 An extension is a directory, installed from a git repository, a zip, or a
 folder. It can add pipeline stages, observe every step,
 persist per-story and per-character state, read a character's interior, add
-sidebar tabs and step renderers, serve its own HTTP routes' worth of data, and
-restyle or replace the entire interface. It does all of that without editing a
+sidebar tabs, toolbar buttons, composer controls, full-window views and step
+renderers, colour what the narrator is told, serve its own HTTP routes' worth of
+data, and restyle or replace the entire interface. It does all of that without editing a
 single engine file.
 
 ---
@@ -92,7 +93,14 @@ registry, not a capability sandbox. See §9.
 | `python` | relative path to your Python entry | Yes — containment-checked |
 | `routes` | HTTP routes you serve | No |
 | `commit_domains` | you write inside the turn transaction | No |
-| `ui` | `{"js": "...", "css": "..."}` | Both served |
+| `ui` | `{"js": "...", "module": "...", "css": "..."}` | All served |
+
+`ui.js` and `ui.module` are two ways in, not a choice you have to make once.
+`js` is a **classic script**, concatenated with every other extension's into one
+bundle — right for a panel, and unable to contain `import`. `module` is an **ES
+module entry**, fetched on its own so its own imports resolve, which is what any
+extension built as more than one file needs. Declare both while you move files
+across; both are served. Section 7.5 has the loading contract.
 
 Each `stages` entry must have a non-empty `key` and `anchor` or the manifest
 fails to load. That validation is all the manifest does for stages — the actual
@@ -102,10 +110,10 @@ registration happens in Python (§4).
 
 Computed, not declared — `data` < `prompt` < `code`:
 
-- **`code`** — declares `python` or `ui.js`, **or** has any `.py`/`.js` file
-  anywhere in its tree. Declared-or-present, because a script sitting in the
-  directory is code the moment the host enables it, whether the manifest admits
-  to it or not.
+- **`code`** — declares `python`, `ui.js` or `ui.module`, **or** has any
+  `.py`/`.js`/`.mjs` file anywhere in its tree. Declared-or-present, because a
+  script sitting in the directory is code the moment the host enables it,
+  whether the manifest admits to it or not.
 - **`prompt`** — ships prompt text (`prompts`, `prompt_presets`, or a stage with
   a `prompt`).
 - **`data`** — everything else.
@@ -470,6 +478,77 @@ defect. A hook that throws leaves the payload exactly as assembled.
 Read §8 before using this one. It is the seam where the firewall guarantee stops
 describing Sonder's pipeline and starts being yours.
 
+### Colouring what the narrator is told
+
+The other direction. `on_character_payload` decides what a MIND is given;
+this decides what the **reader** is given, and there are two ways in.
+
+**Standing context** — a stored block, which is what a layer that says the same
+thing every beat actually wants:
+
+```python
+api.narration_context(chat_id).set(
+    "The ship is three days into a fuel emergency; corridors are dim and cold.")
+```
+
+Installed once, it rides every beat of that story inside the narrator's payload
+under `extension_context`, attributed to you, until you `.clear()` it. It is one
+block per extension per story, **replaced** rather than appended to — a context
+injector that appends leaks everything it ever said. Re-setting identical text
+does not bump `revision`, so a `sync`-shaped caller that re-installs every beat
+does not drive the number to the turn count. It lives in the `world` KV under
+`ext:<id>:narration`, so it rides checkpoints, archives, branches and clones
+with everything else in that namespace. Writes are **ungated** — a block is
+installed by a host action that has no turn transaction to belong to, the same
+reasoning as `request_bind`. The ceiling is 8000 characters, refused rather than
+truncated, because the cost is paid on every beat rather than once.
+
+**The hook**, when a block is not enough:
+
+```python
+@api.on_narration_payload
+def frame(payload, info):
+    if info.scope != "narrator":
+        return None
+    return {**payload, "extension_context": [...]}
+```
+
+Blocks are assembled first and hooks run second, so a hook can see and replace
+what the declarative half just built. `info` carries `scope`, `player`,
+`chat_id`, `turn_idx`, `turn_id` and `step(key)`.
+
+**Read `info.scope`.** The narrator runs once for the main reader (`"narrator"`)
+and again per extra player (`"narrator_extra"`), each with their own
+perception-filtered view. A hook that colours only one of them hands two people
+at the same table different stories, and it surfaces as a continuity complaint
+from one seat only.
+
+Both run **once per beat**, not once per attempt: the narrator re-enters
+generation for a fidelity correction and up to twice more for craft rewrites,
+and all of those reuse the hooked payload. A hook re-run per attempt could hand
+each attempt different context, and the retry loop would then look like the
+defect.
+
+Two things to get right, neither of them the firewall:
+
+- **Put setting and standing situation in it, not world fact the engine also
+  tracks.** The narrator checks event order, positions, room names and portal
+  states against the committed scene. A block asserting a door is open when
+  `state_diff.rooms` recorded it closed makes the two fight, and the loser is
+  legible only as a narrator defect fifty beats later. Where a fact belongs to
+  the world, put it in the world and let perception distribute it.
+- **This reaches the player, not a mind.** §8's bargain applies here with one
+  difference worth stating plainly: a character payload carrying too much
+  produces a mind acting on knowledge it should not have — in-fiction, legible,
+  recoverable next beat. Narration carrying too much is simply told to the
+  reader and cannot be taken back.
+
+Still unbuilt, and it is the neighbouring gap rather than this one: an extension
+cannot add a chunk to the **Director's prose author**, whose sheet is assembled
+from in-tree `PROSE_DUTY_CHUNKS`. A `state_diff` channel you own still reaches
+the ledger and not the prose on its own — put it in front of the narrator here,
+or nothing mentions it.
+
 ---
 
 ## 5. Persistence
@@ -568,6 +647,10 @@ down every extension after it. **Wrap your file in an IIFE and guard on
 | Call | What it does |
 |---|---|
 | `registerSidebarTab({id, label, render})` | a tab beside Stories/Characters; `render(container)` may be async |
+| `registerTopBarButton({id, icon, title, onClick})` | a button beside the host's own in the story toolbar |
+| `registerView({id, label, render})` | a full-window surface over the transcript; open it with `openView(id)` |
+| `registerComposerControl({id, render})` | a control beside the send button |
+| `openView(id)` / `closeView()` | show or dismiss a registered view |
 | `registerStepRenderer(key, fn)` | claim a step in the pipeline drawer; `fn(content, container, step)` |
 | `on(event, fn)` / `off(event, fn)` | subscribe to the live turn stream |
 | `state()` | a **copy** of `{boot, chat, chatId}` — you cannot write to `S` through it |
@@ -582,6 +665,20 @@ change what the reader was about to be shown: `turn:step`, `turn:token`,
 
 Sidebar tabs are rebuilt on every `renderSide()`, so late registration is a
 non-issue and an extension disappearing takes its tab with it.
+
+**A view is the mount point for an extension that is an application rather than
+a panel.** It covers the transcript instead of replacing it, so the story keeps
+its scroll position and its in-flight turn and `closeView()` puts the reader
+back exactly where they were. The container is created on open and removed on
+close rather than hidden, because a hidden view keeps its timers, its listeners
+and its scroll position. The host owns the open state, which is the point: if
+your extension is retired while its view is open, the reader is returned to
+their story instead of being left in a dead application with no way out.
+
+You can still build all of this by reaching into the host's DOM — §8 means it.
+What you get by registering instead is that the host holds it: a throw is
+charged to you and contained, a disable takes it back down, and a host refactor
+of `#topactions` is not your outage.
 
 
 ### 7.2 Failure containment
@@ -623,6 +720,60 @@ namespaced, so an unprefixed `.card` here restyles every card in the app.
 There is no CSS restriction beyond that. Set the theme custom properties on
 `:root` to reship the whole palette, or inject a `<style>`/`<link>` from JS and
 replace the stylesheet outright. Full custom themes are supported, not tolerated.
+
+### 7.5 ES modules
+
+`capabilities.ui.js` is a classic script and cannot contain `import` — it is
+concatenated with every other extension's into one bundle, where an `import`
+statement is a SyntaxError that takes down every extension after it. For
+anything built as more than one file, declare a module entry instead:
+
+```json
+"ui": {"module": "src/index.js", "css": "styles/app.css"}
+```
+
+and export a `register`:
+
+```js
+// src/index.js
+import { campaignView } from './views/campaign.js';
+
+export function register(sonder) {
+  sonder.registerView(campaignView);
+  sonder.registerTopBarButton({
+    id: "launch", icon: "🚀", title: "Campaign",
+    onClick: () => sonder.openView("campaign")
+  });
+}
+```
+
+What the host does with that:
+
+- Your entry is served from `/api/extensions/<your-id>/asset/<path>` and loaded
+  with a dynamic `import()`. **Relative imports resolve against that URL**, so
+  your whole directory tree is reachable — still containment-checked, so an
+  import naming `../` outside the extension is refused rather than served.
+- `register` is called with an **id-bound facade**, not `window.Sonder`. It
+  carries every call in §7.1 and attributes each to you. `register` may be
+  async and may `await`: the bound facade is why. The classic path's
+  `_begin`/`_end` attribution is ambient state that does not survive an await,
+  so whatever ran during yours would have registered under your name.
+- `register` returning or throwing is contained the same way every other
+  callback is, and a module that fails to import at all is charged one fault
+  rather than breaking the page.
+- A module registers **after** boot has drawn the page, since import resolution
+  is asynchronous. The host redraws once for you afterwards, so a sidebar tab
+  registered from a module is not invisible until the reader clicks something.
+- A module with no exported `register` is not an error — it may have done its
+  work at import time — but nothing it registered that way is attributed to
+  anyone, and the console says so once.
+
+Declaring `js` and `module` together is allowed and both are served, so a
+migration can move one file at a time instead of all at once.
+
+Serve your own `.mjs` files if you prefer them; the asset route sends a
+JavaScript MIME type for both suffixes, which a browser requires before it will
+execute a module at all.
 
 ---
 
@@ -727,11 +878,25 @@ on commit, a step observer, a route of its own, a stylesheet, a sidebar tab, and
 a step renderer. It makes no model call, so it costs
 a turn nothing and behaves identically under stubbed-provider tests.
 
-It touches no engine file. That is the point.
+[`extensions/overlay-demo/`](../../extensions/overlay-demo/) is the second
+reference, and it is the other half: where `cohesion-demo` shows the pipeline
+side, this one shows the surfaces that reach the READER. It is an **ES module
+split across three files** (so it exercises the loading contract rather than
+describing it), a toolbar launcher, a full-window view over the transcript, two
+routes of its own, and a standing block of narration context the story is then
+told through. Between them the two demos touch every seam in this guide.
+
+Neither touches an engine file. That is the point.
 
 Tests to read next: [`tests/test_extensions.py`](../../tests/test_extensions.py)
 (discovery, isolation, plan splices, the state gate),
 [`tests/test_extension_seams.py`](../../tests/test_extension_seams.py) (commit
-domains, routing hooks, routes, specialists, hot-loadable assets), and
+domains, routing hooks, routes, specialists, hot-loadable assets),
+[`tests/test_extension_narration.py`](../../tests/test_extension_narration.py)
+(narration blocks and hooks, and `overlay-demo` end to end),
+[`tests/test_extension_modules.py`](../../tests/test_extension_modules.py) (the
+module loading contract),
+[`tests/test_extension_ui_surface.py`](../../tests/test_extension_ui_surface.py)
+(the browser registries and their teardown), and
 [`tests/test_extension_install.py`](../../tests/test_extension_install.py)
 (zip-slip, symlinks, atomicity, size cap).

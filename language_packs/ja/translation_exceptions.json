@@ -73,6 +73,8 @@
   "[${operation.book_type || \"general\"}]": "placeholder-only template",
   "[data-entry-id=\"${entryId}\"]": "path, selector, markup, or query fragment",
   "[data-entry-id=\"${result.id}\"]": "path, selector, markup, or query fragment",
+  "[data-ext-button]": "path, selector, markup, or query fragment",
+  "[data-ext-composer]": "path, selector, markup, or query fragment",
   "[data-tab=\"relationships\"]": "path, selector, markup, or query fragment",
   "[title],[aria-label],[placeholder],[alt]": "source, style, selector, or markup fragment",
   "^${parts.join(\"(.+?)\")}$": "placeholder-only template",

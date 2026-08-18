@@ -825,6 +825,9 @@ def _dry_run_registrations(extension_runtime, ext) -> set[str]:
         def on_character_payload(self, fn):
             return fn
 
+        def on_narration_payload(self, fn):
+            return fn
+
         def add_route(self, path, fn, **kwargs):
             return f"/api/extensions/{self.id}/x{path}"
 

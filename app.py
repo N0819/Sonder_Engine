@@ -1702,6 +1702,13 @@ def extension_asset(eid: str, path: str):
         target = extension_runtime.asset_path(_extension_id(eid), path)
     except extension_runtime.ExtensionError as exc:
         raise HTTPException(404, str(exc)) from exc
+    # A module entry and everything it imports are fetched through here, and a
+    # browser REFUSES a module served as anything but a JavaScript MIME type --
+    # `.mjs` in particular is guessed as `application/octet-stream` on hosts
+    # whose mimetypes database predates it, which fails the import with a
+    # message about the type rather than about the file.
+    if target.suffix in (".js", ".mjs"):
+        return FileResponse(str(target), media_type="application/javascript")
     return FileResponse(str(target))
 
 @app.get("/api/nsfw")

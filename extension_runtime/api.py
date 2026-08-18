@@ -99,6 +99,101 @@ def _world_state(ext_id, chat_id, *, gated=True):
     )
 
 
+NARRATION_CONTEXT_KEY = "narration"
+#: One block's text ceiling. A narration block rides in the narrator's payload
+#: on EVERY beat of the story it is installed in, so an unbounded one is a
+#: permanent tax on the context window rather than a one-off cost -- and the
+#: stage it lands in is the one already carrying the whole player view.
+NARRATION_CONTEXT_MAX = 8000
+
+
+def _narration_hash(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+class NarrationBlock:
+    """An extension's standing narration context for one story.
+
+    The declarative half of the narration seam, and the shape a host-side
+    context injector actually wants: ONE keyed block per extension per story,
+    revision-tracked, replaced rather than appended to. Appending is what turns
+    a context injector into a leak of everything it ever said, so there is no
+    append.
+
+    Writes are UNGATED. A block is installed by a host action -- a campaign
+    starting, a panel's Save, a route call -- which has no turn transaction to
+    belong to, the same reasoning as `request_bind`. It is read inside the turn
+    and written outside one.
+
+    It lives in the `world` KV under `ext:<id>:narration`, so it rides
+    checkpoints, archives, branches and clones with everything else in that
+    namespace and needs no line in `DATABASE.md`'s checklist.
+    """
+
+    def __init__(self, ext_id, chat_id):
+        self.ext_id = str(ext_id)
+        self.chat_id = int(chat_id)
+        self._key = f"ext:{self.ext_id}:{NARRATION_CONTEXT_KEY}"
+
+    def _read(self):
+        from db import wget
+
+        stored = wget(self.chat_id, self._key)
+        return stored if isinstance(stored, dict) else None
+
+    def _write(self, value):
+        from db import wset
+
+        wset(self.chat_id, self._key, value)
+
+    def get(self):
+        """The stored block, or `None` if this extension has installed none."""
+        return self._read()
+
+    @property
+    def text(self) -> str:
+        block = self._read()
+        return str((block or {}).get("text") or "")
+
+    def set(self, text):
+        """Install or replace this story's block. Returns the stored record.
+
+        Setting the same text twice does NOT bump the revision: a rebuild that
+        changed nothing is not a new revision, and a caller that re-installs on
+        every beat would otherwise make the number meaningless.
+        """
+        text = str(text or "").strip()
+        if not text:
+            return self.clear()
+        if len(text) > NARRATION_CONTEXT_MAX:
+            raise ExtensionError(
+                f"narration context is {len(text)} characters; the ceiling is "
+                f"{NARRATION_CONTEXT_MAX}. It rides every beat of the story.")
+        previous = self._read() or {}
+        digest = _narration_hash(text)
+        if previous.get("hash") == digest:
+            return dict(previous)
+        block = {
+            "text": text,
+            "hash": digest,
+            "revision": int(previous.get("revision") or 0) + 1,
+        }
+        self._write(block)
+        return dict(block)
+
+    def clear(self):
+        """Remove this story's block. Idempotent."""
+        self._write(None)
+        return None
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        block = self._read() or {}
+        return (f"<NarrationBlock {self.ext_id} chat={self.chat_id} "
+                f"rev={block.get('revision', 0)}>")
+
+
 def _settings_state(ext_id):
     from db import get_setting, set_setting
 
@@ -441,6 +536,39 @@ class PayloadContext:
             return None
 
 
+class NarrationContext:
+    """Identity handed to an `on_narration_payload` hook alongside the payload.
+
+    The counterpart of `PayloadContext`, and thin for the same reason. The one
+    field with real content is `scope`: the narrator runs once for the reader
+    and again per extra player (`narrator_extra`), and a hook that colours only
+    the first silently gives two people at the same table different stories.
+    """
+
+    def __init__(self, api, ctx, *, scope="narrator", player=""):
+        self.api = api
+        self.scope = str(scope or "narrator")
+        self.player = str(player or "")
+        chat = getattr(ctx, "chat", None)
+        turn = getattr(ctx, "turn", None)
+        self.chat_id = getattr(chat, "id", None)
+        self.turn_idx = getattr(turn, "idx", None)
+        self.turn_id = getattr(turn, "id", None)
+        self._ctx = ctx
+
+    def step(self, key):
+        getter = getattr(self._ctx, "get", None)
+        if not callable(getter):
+            return None
+        try:
+            return getter(key)
+        except Exception:
+            return None
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        return f"<NarrationContext {self.scope} chat={self.chat_id}>"
+
+
 class Request:
     """One call to an extension's own HTTP route.
 
@@ -658,6 +786,36 @@ class SonderExtensionAPI:
         _record_payload_hook(self.id, fn)
         return fn
 
+    def on_narration_payload(self, fn):
+        """Alter what the NARRATOR is about to be given. The other routing seam.
+
+        `fn(payload, info)` runs after the narrator's payload is assembled and
+        before the model sees it -- including the retry paths, which reuse the
+        hooked payload rather than re-running the hook, so a fidelity or craft
+        correction cannot silently narrate against different context than the
+        first attempt did.
+
+        `info` is a `NarrationContext`. Read `info.scope` before assuming which
+        reader this is: `"narrator"` is the main player and `"narrator_extra"`
+        is one additional player at the same table, each with their own
+        perception-filtered view. A hook that colours only one of them hands two
+        people at one table different stories.
+
+        Unrestricted and attributed, exactly as `on_character_payload` is, and
+        §8 of the guide applies here with one difference worth stating: the
+        narrator writes what the READER sees. A character payload that carries
+        too much produces a mind acting on knowledge it should not have --
+        legible, in-fiction, and recoverable. Narration that carries too much is
+        simply told to the player and cannot be taken back.
+
+        Most callers want `api.narration_context(chat_id)` instead: standing
+        context for a story is a stored block, not a hook that has to run on
+        every beat to say the same thing.
+        """
+        from . import _record_narration_hook
+        _record_narration_hook(self.id, fn)
+        return fn
+
     def add_route(self, path, fn, *, methods=("GET",)):
         """Serve `fn(Request)` at `/api/extensions/<your-id>/x/<path>`.
 
@@ -721,6 +879,30 @@ class SonderExtensionAPI:
 
     def char_state(self, chat_id, char_id):
         return _char_ext_state(self.id, chat_id, char_id)
+
+    def narration_context(self, chat_id):
+        """This extension's standing narration block for one story.
+
+        The declarative narration seam: install a block once and every beat of
+        that story carries it into the narrator's payload under
+        `extension_context`, attributed to you, until you clear it.
+
+        ```python
+        api.narration_context(chat_id).set(
+            "The ship is three days into a fuel emergency; corridors are dim "
+            "and the air is cold.")
+        ```
+
+        What belongs in it is SETTING and STANDING SITUATION -- the frame the
+        beat is narrated inside. What does not is world fact the engine also
+        tracks: the narrator checks event order, positions, room names and
+        portal states against the committed scene, so a block asserting a door
+        is open when `state_diff.rooms` recorded it closed makes the two fight,
+        and the loser is legible only as a narrator defect fifty beats later.
+        Where a fact belongs to the world, put it in the world and let
+        perception distribute it.
+        """
+        return NarrationBlock(self.id, chat_id)
 
 
 def _stage_wrapper(api, key, handler, on_error):
