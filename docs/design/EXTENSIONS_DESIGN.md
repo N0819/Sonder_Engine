@@ -413,6 +413,47 @@ extension work: the surfaces a third party needs are a reasonable proxy for the
 features the engine was already missing, because a third party has no way to
 route around them.
 
+## 7c. Three surfaces where the work was saying, not building
+
+A later pass closed three of the secondary gaps, and two of them changed what
+this note thinks the job of a facade is.
+
+`Sonder.chats` and `api.chats` declare the story lifecycle. Every call in them
+already worked — an extension could write the host's URL by hand. Declaring
+them buys refactor safety, which is what §7a's UI mount points bought. But the
+valuable half was not the calls. It was **two things the host had never had to
+say out loud**, because until an outside integrator read the surface, nobody
+had been in a position to get them wrong:
+
+**A reroll is a rollback, not a re-render.** Anyone arriving from a host where
+a reply is a draft until the next message is sent will map swipes onto variants,
+and the mapping is wrong in a way that corrupts state rather than merely
+failing. A committed turn here has already applied its `state_diff`; `reroll`
+restores the pre-turn checkpoint and replays the beat. Nothing in the API
+prevented the mistake and no test could have caught it, because the mistake is
+in the reader's model, not in the code.
+
+**There is no way to post prose, permanently.** A seam for injected assistant
+text would make `commit.py`'s persistence boundary advisory. The instructive
+part is that a refusal nobody can find reads as a missing feature — and an
+author who reads it that way goes looking for the internal that does it anyway,
+which this design cannot stop them doing. So the refusal is documented where
+the calls are, with the three legitimate routes beside it and a note that only
+the first survives a reroll, because after a reroll it is still true.
+
+Both are documentation. Neither is enforcement. That is the honest shape of a
+facade whose §1 ruling is that nothing is walled off: **the only thing it can
+actually give an author is a correct model of what they are working with**, and
+where the model is counter-intuitive, saying so IS the feature.
+
+The third, `api.frame_state`, is a more ordinary lesson: extension state was
+chat-global while almost everything it sits beside is per-era, so a mission
+advanced in one era was advanced in every era and a rewind that took the room
+back left the objective ticked. Built as a second home rather than a flag,
+because the key is what does the scoping — a flag would have been a migration
+wearing the word — and because the distinction is real rather than mechanical.
+What an installation IS spans eras; what has HAPPENED does not.
+
 ## 8. What is left
 
 In [`UNBUILT.md`](../UNBUILT.md) §6.2, which is the status list. In short:

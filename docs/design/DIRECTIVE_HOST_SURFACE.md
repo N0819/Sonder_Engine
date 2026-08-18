@@ -467,3 +467,44 @@ slice runs with stubbed perception content. Nobody has taken a campaign through
 twenty real beats under `actor_only` and watched what the Director does with a
 refused assertion. That is the next thing to learn, and it needs a person, not
 a suite.
+
+### §6's list, revisited
+
+Three of the five secondary gaps are closed, and the two that mattered most to
+an adapter turned out not to be missing code at all.
+
+- **Chat lifecycle** — declared: `Sonder.chats`, `api.chats`. But the useful
+  half of closing it was writing down two things the host had never had to say
+  out loud, because until now nobody outside it had asked:
+
+  **A reroll is a rollback.** Directive's swipe model is "replies are drafts
+  until you send the next message", and variants look like the obvious mapping.
+  They are not. A committed turn in Sonder has already applied its `state_diff`
+  — positions moved, memories formed, relationships adjusted — and `reroll`
+  restores the pre-turn checkpoint and replays the beat. Selecting an existing
+  variant is free; generating another is a rollback. An adapter that treats
+  swipes as cheap re-renders will corrupt state, silently, in a way that
+  surfaces many beats later.
+
+  **There is no way to post prose, and there will not be.** Narration is
+  produced by the pipeline from state the Director committed. A seam for
+  injected assistant text would make `commit.py`'s persistence boundary
+  advisory, which is the one thing this engine cannot trade. The three
+  legitimate routes are in the guide; the first — make it true and let
+  perception distribute it — is the only one that survives a reroll, because
+  after a reroll it is still true.
+
+- **Frame-scoped extension state** — built as a second home (`api.frame_state`
+  → `extf:<id>`) rather than as a flag, because the key is what does the
+  scoping and a flag would have been a migration wearing the word. It is also a
+  real distinction a campaign has to make: what an installation IS spans eras,
+  what has HAPPENED does not.
+
+- **Notification surface** — built (`Sonder.notify`). A toast is a transient
+  acknowledgement of something the reader just did; a campaign needs to say
+  "your objective changed while you were reading" and still be there when they
+  look up.
+
+Left: extension-declared model lanes, document storage, a settings-section
+mount point, and `on_admission`/`on_view` — none of which blocks a first
+integration on the integrator's own assessment.

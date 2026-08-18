@@ -706,6 +706,22 @@ box-shadow:var(--soft-shadow);animation:toast-in .2s ease;pointer-events:auto}
 .toast.err{border-color:#75404b}
 .toast.warn{border-color:#6a5930}
 .toast-body{min-width:0;flex:1;white-space:pre-wrap;overflow-wrap:anywhere}
+/* Extension notices: the STANDING counterpart of a toast. Below the toast
+column rather than beside it, because the two say different things -- a toast
+acknowledges what the reader just did and leaves, a notice waits to be read. */
+#ext-notices{position:fixed;bottom:16px;right:16px;z-index:118;display:flex;
+width:min(340px,calc(100vw - 30px));flex-direction:column-reverse;gap:7px}
+.ext-notice{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;
+border:1px solid #35435c;border-radius:10px;background:#141b28;
+box-shadow:var(--soft-shadow)}
+.ext-notice--ok{border-color:#39644f}
+.ext-notice--err{border-color:#75404b}
+.ext-notice--warn{border-color:#6a5930}
+.ext-notice__text{min-width:0;flex:1;overflow-wrap:anywhere}
+.ext-notice__text--action{cursor:pointer}
+.ext-notice__body{margin-top:3px;color:#b9c4d7;font-size:12px;
+white-space:pre-wrap}
+.ext-notice__close{flex:none;align-self:flex-start}
 .memory-layout{display:grid;grid-template-columns:minmax(250px,320px) minmax(0,1fr);
 gap:13px;min-height:520px}
 .memory-sidebar{min-width:0}.memory-main{min-width:0}

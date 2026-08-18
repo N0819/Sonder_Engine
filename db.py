@@ -45,7 +45,17 @@ FRAME_SCOPED_WORLD_KEYS = {
     # (see gaps.LAST_SEEN_KEY).
     "subject_last_seen",
 }
-FRAME_SCOPED_WORLD_PREFIXES = ("relationships:",)
+#: Prefixes whose every key is per-era. `relationships:` because a stance is
+#: held by a mind that exists in one frame and may not exist in another.
+#:
+#: `extf:` is the frame-scoped half of an extension's own state, and it is a
+#: SECOND prefix rather than a flag on the first because the prefix IS the
+#: scoping mechanism here -- a key cannot be scoped without changing, so a
+#: per-key flag would have to rewrite the key anyway, and a story already
+#: holding `ext:<id>` would need a migration to gain one. A campaign layer
+#: genuinely wants both: its installation and its package provenance span
+#: eras, and its mission state does not. See `api.state` / `api.frame_state`.
+FRAME_SCOPED_WORLD_PREFIXES = ("relationships:", "extf:")
 
 _FRAME_KEY_SEP = "\x1efr"  # unlikely-to-collide separator; not valid in ordinary key text
 

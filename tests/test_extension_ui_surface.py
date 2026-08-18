@@ -61,6 +61,110 @@ class TestModuleFacade:
 
         assert 'name.charAt(0) !== "_"' in names.group(1)
 
+    def test_the_facade_carries_namespaces_as_well_as_calls(self):
+        """`chats` is a namespace, not a call, and the first of its kind.
+
+        The derivation filtered on `typeof === "function"`, so a namespace
+        added to `Sonder` reached classic `ui.js` extensions and was simply
+        absent for module ones -- the exact failure the derivation exists to
+        prevent, arriving through the one shape it did not cover.
+        """
+        assert "_publicNamespaces()" in EXTENSIONS
+
+        facade = re.search(r"_facade\(extId\)\s*\{(.*?)\n  \},", EXTENSIONS,
+                           re.S)
+        assert facade, "Sonder._facade no longer parses"
+
+        assert "_publicNamespaces()" in facade.group(1)
+
+    def test_namespaces_are_not_owner_bound_and_the_reason_is_written_down(
+            self):
+        """Owner binding exists so a CALLBACK can be charged to whoever
+        registered it. A namespace method is a fetch: no callback, nobody to
+        charge. Binding it would be cargo, and an unexplained difference
+        between the two loops is one somebody later 'fixes'."""
+        namespaces = re.search(r"_publicNamespaces\(\)\s*\{(.*?)\n  \},",
+                               EXTENSIONS, re.S)
+        assert namespaces, "Sonder._publicNamespaces no longer parses"
+
+        assert 'name.charAt(0) !== "_"' in namespaces.group(1)
+        assert "not registrations" in EXTENSIONS
+
+
+class TestNotices:
+    """The standing counterpart of a toast.
+
+    A toast acknowledges what the reader just did and is gone in four seconds
+    whether or not it was read. A campaign layer needs to say "your objective
+    changed while you were reading" and have it still be there when the reader
+    looks up.
+    """
+
+    def test_notices_are_cleared_when_their_extension_retires(self):
+        """The failure every registry here shares: a retired extension leaving
+        part of its interface on the page."""
+        unregister = re.search(r"_unregister\(extId\)\s*\{(.*?)\n  \},",
+                               EXTENSIONS, re.S)
+        assert unregister, "Sonder._unregister no longer parses"
+
+        assert "_notices" in unregister.group(1)
+
+    def test_a_notice_can_be_taken_down_by_whoever_raised_it(self):
+        """A centre whose entries only the reader can dismiss tells them about
+        problems that were fixed an hour ago. `notify` returns an id."""
+        assert "dismissNotice(id)" in EXTENSIONS
+        assert "return id;" in EXTENSIONS
+
+    def test_notices_are_bounded(self):
+        """One raised per beat would otherwise fill the column with history."""
+        assert "_noticeCap" in EXTENSIONS
+
+    def test_a_notice_action_is_charged_to_its_owner(self):
+        """Same rule as every other extension callback: a throw inside one
+        counts toward that extension's three strikes rather than reading as a
+        host defect."""
+        render = re.search(r"_renderNotices\(\)\s*\{(.*?)\n  \},",
+                           EXTENSIONS, re.S)
+        assert render, "Sonder._renderNotices no longer parses"
+
+        assert "Sonder._safe(notice.owner, notice.onClick)" in render.group(1)
+
+    def test_the_notice_column_is_styled(self):
+        """Registered chrome with no stylesheet is chrome that lands unstyled
+        in the corner of somebody's screen."""
+        assert "#ext-notices" in STYLES
+        assert ".ext-notice" in STYLES
+
+
+class TestChatLifecycle:
+    """The lifecycle namespace, and the refusal inside it."""
+
+    def test_it_declares_the_calls_an_adapter_needs(self):
+        chats = re.search(r"\n  chats: \{(.*?)\n  \},", EXTENSIONS, re.S)
+        assert chats, "Sonder.chats no longer parses"
+        body = chats.group(1)
+
+        for call in ("list(", "get(", "create(", "open(", "branch(",
+                     "narration(", "selectNarration(", "reroll("):
+            assert call in body, call
+
+    def test_there_is_no_post_message_call(self):
+        """Not an oversight. Prose comes out of the pipeline, and text injected
+        as though the narrator wrote it is narration nothing earned."""
+        chats = re.search(r"\n  chats: \{(.*?)\n  \},", EXTENSIONS, re.S)
+        assert chats, "Sonder.chats no longer parses"
+        body = chats.group(1)
+
+        assert "postAssistant" not in body
+        assert "postMessage" not in body
+
+    def test_open_is_guarded_against_a_page_without_the_chat_module(self):
+        """An extension view can be mounted on a page that never loaded it."""
+        chats = re.search(r"\n  chats: \{(.*?)\n  \},", EXTENSIONS, re.S)
+
+        assert 'typeof openChat !== "function"' in chats.group(1)
+
+
     def test_the_facade_pins_the_owner_across_awaits(self):
         """The reason a facade exists at all.
 
