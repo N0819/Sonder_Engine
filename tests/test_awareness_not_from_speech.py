@@ -63,7 +63,10 @@ def test_a_position_reasserted_unchanged_is_not_a_move(temp_db, monkeypatch):
     people standing still -- so the diff is compared against the scene, not
     merely read.
     """
-    monkeypatch.setattr(commit, "get_scene",
+    # _subjects_that_moved resolves get_scene in ITS module's globals --
+    # commit_entities since the split; patching the commit facade is inert.
+    import commit_entities
+    monkeypatch.setattr(commit_entities, "get_scene",
                         lambda cid: {"positions": {"Hinami": "hall"}},
                         raising=False)
     ctx = _Ctx()
@@ -100,7 +103,8 @@ def test_no_scene_is_not_a_movement_claim(temp_db, monkeypatch):
     """
     def boom(cid):
         raise RuntimeError("no scene")
-    monkeypatch.setattr(commit, "get_scene", boom, raising=False)
+    import commit_entities
+    monkeypatch.setattr(commit_entities, "get_scene", boom, raising=False)
     assert commit._subjects_that_moved(_Ctx(), {"positions": {"H": "x"}}) == set()
 
 
