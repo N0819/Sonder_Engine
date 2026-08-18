@@ -2445,6 +2445,88 @@ hardening items are closed.
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
 
+### 1.52 The monolith-split audit: 43 findings, flagged and not fixed
+
+The 2026-08-18 split of `spatial.py`, `commit.py` and `agents/director.py`
+required somebody to read all 24,783 lines once. Nothing else in this project
+does. Everything that read turned up was written down and NOT repaired: a fix
+inside a move commit destroys the property that made the move reviewable, which
+is that `git diff -M` reads as pure renames. Full detail, each finding carrying
+`file:line` as of `418ab5b` plus the commit that moved the code:
+
+- [`docs/experiments/AUDIT_SPATIAL.md`](experiments/AUDIT_SPATIAL.md) — 16
+- [`docs/experiments/AUDIT_COMMIT.md`](experiments/AUDIT_COMMIT.md) — 14
+- [`docs/experiments/AUDIT_DIRECTOR.md`](experiments/AUDIT_DIRECTOR.md) — 13
+
+**Live behaviour. The first two are extension-facing**, which is worth acting on
+while Directive is still porting against `ext_api: 1`:
+
+1. **An extension specialist's list-valued channel is silently emptied at
+   assembly.** `_LIST_DELEGATED` is hand-frozen, so a channel a registered
+   family owns normalises to nothing on the way into the merged diff. The
+   extension's work is dispatched, accepted and discarded without a warning.
+2. **`_DELEGATED_CHANNELS` is frozen at import**, so the orchestration scope
+   backstop cannot see any channel registered afterwards — its gate-mispredict
+   report is blind to every extension channel. This is the SAME bug whose fix
+   is documented 176 lines below it on `_CHANNEL_SPECIALISTS` ("a split that
+   routes a repair to nobody"), never applied to its siblings. Two instances of
+   one class; assume a third until checked.
+3. **The `auto_dialogue` promotion threshold is configurable, clamped, tested,
+   and enforced nowhere.** A host who raises it to slow hands-off promotion
+   changes nothing, silently — and `auto_promote_background_characters`' own
+   docstring describes a gate the code does not have.
+4. **`commit_cast_changes` silently ignores every status except `active` and
+   `dormant`**, while `schemas.py`'s own worked example writes `"departed"` and
+   the prompt names no vocabulary at all.
+5. **An authored room `size` outside the vocabulary grades as `medium`** with no
+   complaint.
+6. **`_BARRIER_ALIASES` has a duplicate dict key** — the first `one_way_mirror`
+   mapping is dead, and which one wins is a source-order accident.
+
+**Guards that cannot fire, and columns nothing writes.**
+`world_entities.retired_turn_id` is filtered on by `_entity_alias_map` and set
+by nothing — rows are DELETEd, not retired — while `db.py`'s comment claims
+`room_registry` mirrors it. `_SCENT_BARRIERS` is a declared vocabulary its own
+`scent_level` never reads, restating the rule inline as literals. Two spatial
+functions still speak the decommissioned `world_placements` record shape.
+`prepare_mapping_commit`'s `proposed_specifics` field is permanently empty.
+`commit_all`'s hardcoded `"errors": []` has no writer and no reader.
+`contact_phrase`'s `subject_first=False` branch is dead and would be wrong if
+resurrected. Ten spatial symbols have no caller anywhere — all ten are in the
+facade contract, so none may simply be deleted.
+
+**Tests that pass for the wrong reason.** Three Director cue constants are dead
+at runtime (every real path goes through `_ling(...)` under a story-language
+context) and their tests assert against the eagerly-bound ENGLISH copies — a
+guard that would not fire on the language it was written to protect. Separately
+`tests/test_style_guide.py` asserts on `director.py`'s SOURCE LAYOUT by def-name
+marker, a coupling class the split had to repoint and Phase 2 will meet again.
+
+**Documentation describing something else.** `_LIST_DELEGATED` carries a comment
+about `_CHANNEL_SPECIALISTS` 118 lines away, whose "derived, so the two cannot
+disagree" claim is false in place. `commit.py`'s `# ---- Mapping commit ----`
+marker labels the name-roster block while the real mapping commit sits
+unlabelled 1,700 lines below. A `spatial_facts` comment describes an ordering
+the code does not have. A doc block names `_orchestration_gate_backstop`, which
+does not exist.
+
+Two doc corrections were made in their own commits rather than deferred, both
+being claims about behaviour that is not there: `AGENTS.md:64` and
+`docs/guides/ENGINEERING.md` said `_SCENT_BARRIERS` gates scent "the same way
+`_SIGHT_BARRIERS` gates sight". It does not.
+
+**Not a defect, but the honest ceiling on what the split bought.** The three
+functions that made these files unreadable did not get smaller:
+`director_resolve` is 1,474 lines, `prepare_memory_commit` 1,264,
+`merge_scene_with_diff` 318 while reaching into nine modules. Splitting files
+does not split functions, and those three are most of what made the originals
+hard to audit.
+
+Also found stale by the read, left for their own commits: §2.18 below still
+carries the orchestration proposal the code has landed, and design note 19's
+header still describes a branch experiment when the code is now the only path.
+
+
 Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in
 [`../Design.md`](../Design.md) § Structural debt.
