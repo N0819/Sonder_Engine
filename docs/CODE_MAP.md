@@ -64,11 +64,12 @@
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
 | `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
-| `spatial.py` | 7737 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_identity`, `spatial_orientation` |
+| `spatial.py` | 7341 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_barriers`, `spatial_identity`, `spatial_orientation`, `spatial_transit` |
 | `spatial_barriers.py` | 411 |  | — |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_identity.py` | 345 |  | — |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
+| `spatial_transit.py` | 414 |  | `spatial_barriers`, `spatial_identity` |
 | `story_view.py` | 670 |  | `db` |
 | `subjects.py` | 449 |  | `canon_provenance`, `db`, `spatial` |
 | `survival.py` | 320 |  | `db` |
@@ -770,14 +771,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 4423 | 318 lines |
-| `merge_scene_with_diff()` | 7377 | 318 lines |
-| `sprint_reach()` | 6021 | 175 lines |
-| `apply_transit_dock_edges()` | 6752 | 165 lines |
-| `contact_sensation()` | 5586 | 144 lines |
-| `visible_adjacent_rooms()` | 6266 | 143 lines |
-| `hear_level()` | 1215 | 138 lines |
-| `contacts_from_entity_state()` | 3953 | 137 lines |
+| `apply_contact_ops()` | 4431 | 318 lines |
+| `merge_scene_with_diff()` | 6981 | 318 lines |
+| `sprint_reach()` | 6029 | 175 lines |
+| `contact_sensation()` | 5594 | 144 lines |
+| `visible_adjacent_rooms()` | 6274 | 143 lines |
+| `hear_level()` | 1223 | 138 lines |
+| `contacts_from_entity_state()` | 3961 | 137 lines |
+| `_resolved_substance_add()` | 4938 | 122 lines |
 
 ### `spatial_barriers.py`
 
@@ -827,6 +828,19 @@
 | `normalize_vertical()` | 65 | 8 lines |
 | `_find_edge()` | 105 | 8 lines |
 | `opposite_bearing()` | 58 | 2 lines |
+
+### `spatial_transit.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `apply_transit_dock_edges()` | 177 | 165 lines |
+| `ambient_scope()` | 376 | 39 lines |
+| `infer_body_enclosures()` | 89 | 27 lines |
+| `_is_body_entity()` | 61 | 26 lines |
+| `containment_chain()` | 356 | 19 lines |
+| `_link_state()` | 147 | 14 lines |
+| `_entity_exterior_room()` | 162 | 14 lines |
+| `_closed_enclosure_barrier()` | 132 | 13 lines |
 
 ### `story_view.py`
 
