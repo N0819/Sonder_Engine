@@ -56,7 +56,7 @@
 | `persist/commit.py` | 575 |  | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 862 |  | `persist.commit_common`, `story` |
 | `persist/commit_background.py` | 1489 |  | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `persist/commit_common.py` | 387 |  | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
+| `persist/commit_common.py` | 393 |  | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 |  | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 499 |  | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 302 |  | `core.db`, `persist.commit_common` |
@@ -108,11 +108,11 @@
 | `world/spatial_light.py` | 209 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_merge.py` | 1037 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 246 |  | — |
-| `world/spatial_prose.py` | 336 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
+| `world/spatial_prose.py` | 338 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 923 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_senses.py` | 1278 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_substance.py` | 602 |  | `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_transit.py` | 419 |  | `world.spatial_barriers`, `world.spatial_identity` |
+| `world/spatial_transit.py` | 421 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/subjects.py` | 449 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 320 |  | `core.db` |
 | `world/weather.py` | 808 |  | `world.spatial` |
@@ -649,14 +649,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_names_heard_in()` | 168 | 53 lines |
-| `_address_forms()` | 119 | 47 lines |
-| `_entity_alias_map()` | 313 | 47 lines |
+| `_names_heard_in()` | 174 | 53 lines |
+| `_address_forms()` | 125 | 47 lines |
+| `_entity_alias_map()` | 319 | 47 lines |
 | `_monotonic_elapsed()` | 57 | 38 lines |
-| `_registered_name_roster()` | 252 | 28 lines |
-| `_known_name_roster()` | 223 | 27 lines |
-| `_resolve_roster_name()` | 281 | 20 lines |
-| `_form_in()` | 101 | 16 lines |
+| `_registered_name_roster()` | 258 | 28 lines |
+| `_known_name_roster()` | 229 | 27 lines |
+| `_resolve_roster_name()` | 287 | 20 lines |
+| `_form_in()` | 107 | 16 lines |
 
 ### `persist/commit_destruction.py`
 
@@ -1231,7 +1231,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `contact_sensation()` | 107 | 144 lines |
-| `spatial_facts()` | 253 | 84 lines |
+| `spatial_facts()` | 253 | 86 lines |
 | `contact_phrase()` | 22 | 83 lines |
 
 ### `world/spatial_routing.py`
@@ -1278,7 +1278,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `apply_transit_dock_edges()` | 177 | 170 lines |
-| `ambient_scope()` | 381 | 39 lines |
+| `ambient_scope()` | 381 | 41 lines |
 | `infer_body_enclosures()` | 89 | 27 lines |
 | `_is_body_entity()` | 61 | 26 lines |
 | `containment_chain()` | 361 | 19 lines |

@@ -55,13 +55,13 @@ from .director_views import (
 # §3.1 refuses. Where structure cannot decide, the specialist runs: a scoped
 # specialist costs little to run needlessly, and that asymmetry is what makes
 # a generous gate affordable. A wrongly-skipped specialist is never silent:
-# `_orchestration_gate_backstop` is `changes_asserted` reconciliation pointed
+# `_orchestration_scope_backstop` is `changes_asserted` reconciliation pointed
 # at the GATE, and reports the misprediction through `tell_director`.
 #
 # Dispatch is decided at THIS stage's time, from what is true then. Nothing
-# here assumes a plan fixed at the top of the turn: when `director_interpret`
-# grows its own specialists it will call its own dispatch against the state
-# it sees, because characters declare between the two stages and bring
+# here assumes a plan fixed at the top of the turn, and `director_interpret`
+# does the same: it has its own specialists and its own dispatch, against the
+# state IT sees, because characters declare between the two stages and bring
 # channels into play nothing at interpret time could predict.
 # ---------------------------------------------------------------------------
 

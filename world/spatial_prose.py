@@ -282,22 +282,10 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
                 clause += f", on your {side}"
         facts.append(clause + ".")
 
-    # Body position: contact is objective, and it is the fact a narrator most
-    # easily contradicts -- describing hands that let go a beat ago, or a hold
-    # that was never recorded.
-    #
-    # BOTH parties must be nameable to this observer, exactly like the
-    # proximity clauses above, which only ever iterate source_names. These
-    # lines carry canonical names, so a contact involving someone the observer
-    # does not recognize would hand the narrator a name the observer has no way
-    # to know -- the leak this engine exists to prevent. Being held by a
-    # stranger therefore yields no line here rather than a named one; the
-    # perception view still reports the hold in the observer's own terms.
-    # Relative size, when anyone is off their baseline. This is the fact that
-    # silently invalidates everything else -- reach, lifting, whether a hold is
-    # even possible -- so it is stated before the contacts below it.
-    # Light before anything else: it decides whether the rest of this list is
-    # perceivable at all.
+    # Light, which qualifies every VISUAL fact after it -- it decides whether
+    # detail is perceivable at all. Not "before anything else": the exit
+    # directions and proximity clauses above are already in the list, and they
+    # are placement rather than sight, so they stand in the dark.
     here = effective_light(scene, room_of(scene, observer))
     if here == "dark":
         facts.append(
@@ -315,6 +303,9 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
         from world.survival import vitals_facts
         facts.extend(vitals_facts(scene, observer))
 
+    # Relative size, when anyone is off their baseline. The fact that silently
+    # invalidates the ones after it -- reach, lifting, whether a hold is even
+    # possible -- so it is stated before the contacts at the end.
     facts.extend(size_facts(scene, observer, source_names))
     # Being carried is a harder constraint than any of the above: it decides
     # where you are at all, so the narrator is told before it describes anyone
@@ -322,6 +313,17 @@ def spatial_facts(scene: dict, observer: str, source_names) -> list:
     facts.extend(containment_facts(scene, observer, source_names))
     facts.extend(pose_facts(scene, observer, source_names))
 
+    # Body position: contact is objective, and it is the fact a narrator most
+    # easily contradicts -- describing hands that let go a beat ago, or a hold
+    # that was never recorded.
+    #
+    # BOTH parties must be nameable to this observer, exactly like the
+    # proximity clauses above, which only ever iterate source_names. These
+    # lines carry canonical names, so a contact involving someone the observer
+    # does not recognize would hand the narrator a name the observer has no way
+    # to know -- the leak this engine exists to prevent. Being held by a
+    # stranger therefore yields no line here rather than a named one; the
+    # perception view still reports the hold in the observer's own terms.
     visible = {str(n) for n in (source_names or []) if n} | {observer}
     for contact in (scene.get("contacts") or []):
         if not isinstance(contact, dict):
