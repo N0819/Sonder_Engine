@@ -33,10 +33,11 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7193 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `commit_destruction`, `commit_place_graph`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 6765 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `commit_destruction`, `commit_place_graph`, `commit_room_registry`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
 | `commit_destruction.py` | 413 |  | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
 | `commit_place_graph.py` | 274 |  | `spatial` |
+| `commit_room_registry.py` | 444 |  | `character_schema`, `commit_common`, `db`, `spatial` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -404,14 +405,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5229 | 1264 lines |
-| `prepare_scene_commit()` | 1595 | 452 lines |
-| `track_background_presences()` | 3424 | 341 lines |
-| `apply_attire_diff()` | 1299 | 294 lines |
-| `commit_world_entities()` | 2623 | 287 lines |
-| `_commit_all_locked()` | 6911 | 226 lines |
-| `pick_background_reactors()` | 3908 | 178 lines |
-| `commit_transit_sweep()` | 2096 | 169 lines |
+| `prepare_memory_commit()` | 4801 | 1264 lines |
+| `prepare_scene_commit()` | 1167 | 452 lines |
+| `track_background_presences()` | 2996 | 341 lines |
+| `apply_attire_diff()` | 871 | 294 lines |
+| `commit_world_entities()` | 2195 | 287 lines |
+| `_commit_all_locked()` | 6483 | 226 lines |
+| `pick_background_reactors()` | 3480 | 178 lines |
+| `commit_transit_sweep()` | 1668 | 169 lines |
 
 ### `commit_common.py`
 
@@ -445,6 +446,19 @@
 |---|---:|---:|
 | `update_place_graph()` | 33 | 153 lines |
 | `record_spatial_experience()` | 188 | 87 lines |
+
+### `commit_room_registry.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `dedup_minted_rooms()` | 132 | 90 lines |
+| `_prepare_room_registry()` | 223 | 76 lines |
+| `_refresh_relocated_location()` | 350 | 54 lines |
+| `_apply_room_renames()` | 76 | 53 lines |
+| `prune_dangling_exits()` | 406 | 39 lines |
+| `_apply_room_registry()` | 301 | 27 lines |
+| `_registry_alias_index()` | 53 | 22 lines |
+| `sync_room_registry_with_scene()` | 329 | 19 lines |
 
 ### `couriers.py`
 
