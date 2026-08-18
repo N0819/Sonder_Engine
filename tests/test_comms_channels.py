@@ -443,3 +443,116 @@ class TestItRidesTheEngine:
         assert "comms_ops" in chunks
         assert "carriers" in chunks["comms_ops"]
         assert "broadcast" in chunks["comms_ops"]
+
+
+# ---------------------------------------------------------------- one-way sight
+
+
+class TestOneWayWindow:
+    """Sight that passes in one direction and not the other.
+
+    Every other barrier is a property of the DOORWAY rather than of the side
+    you stand on, and `_one_sided_seal`'s docstring records why: a stair
+    declared `open_shoji` from one end and `wall` from the other left a hall
+    with no route to its own upstairs. That rule is right for passage and for
+    sound. It is wrong for SIGHT, and a real class of object sat
+    unrepresentable behind it -- a two-way mirror, an observation window, a
+    peephole, a hunting blind, a confessional screen.
+
+    Found in play. An interview room with an observation window offered the
+    Director only `window` (both see) or `membrane` (neither sees), and it
+    chose `membrane` -- so the interviewer could not see the person she was
+    watching through the glass.
+    """
+
+    def _mirror(self, both_sides=False):
+        cell_edges = ([{"to": "obs", "barrier": "one_way_window"}] if both_sides
+                      else [{"to": "obs", "barrier": "wall"}])
+        return {"rooms": {
+            "obs": {"name": "Observation",
+                    "adjacent": [{"to": "cell", "barrier": "one_way_window"}]},
+            "cell": {"name": "Cell", "adjacent": cell_edges}}}
+
+    def test_the_watcher_sees_and_the_watched_does_not(self):
+        scene = self._mirror()
+        assert sp.sight_level(sp.spatial_rel(scene, "obs", "cell")) == "full"
+        assert sp.sight_level(sp.spatial_rel(scene, "cell", "obs")) == "none"
+
+    def test_the_room_itself_is_only_visible_one_way(self):
+        """`visible_adjacent_rooms` admits a neighbour's whole room record, so
+        the two answers have to agree -- otherwise the far side is refused a
+        sightline and handed the room description anyway."""
+        scene = self._mirror()
+        assert [r["room_id"] for r in sp.visible_adjacent_rooms(scene, "obs")] \
+            == ["cell"]
+        assert sp.visible_adjacent_rooms(scene, "cell") == []
+
+    def test_one_declaration_is_enough(self):
+        """The asymmetry lives on a single edge. Requiring the blind side to
+        also declare something would make a forgotten second line silently
+        restore the sightline."""
+        scene = {"rooms": {
+            "obs": {"adjacent": [{"to": "cell", "barrier": "one_way_window"}]},
+            "cell": {"adjacent": []}}}
+        assert sp.sight_level(sp.spatial_rel(scene, "obs", "cell")) == "full"
+        assert sp.sight_level(sp.spatial_rel(scene, "cell", "obs")) == "none"
+        assert sp.spatial_rel(scene, "cell", "obs")["barrier"] == "wall", \
+            "the back of a one-way mirror is a wall"
+        assert sp.visible_adjacent_rooms(scene, "cell") == []
+
+    def test_declared_from_both_sides_it_is_an_ordinary_window(self):
+        """Two one-way windows back to back ARE a window, and that is the only
+        reading available without an arbitrary tie-break -- nothing in the pair
+        says which of them the author meant. The prompts therefore ask for
+        `wall` on the blind side rather than a second one of these."""
+        scene = self._mirror(both_sides=True)
+        assert sp.sight_level(sp.spatial_rel(scene, "obs", "cell")) == "full"
+        assert sp.sight_level(sp.spatial_rel(scene, "cell", "obs")) == "full"
+
+    def test_it_is_glass_so_it_stops_a_voice_and_a_body(self):
+        scene = self._mirror()
+        rel = sp.spatial_rel(scene, "obs", "cell")
+        assert sp.hear_level(rel, "normal") == "none"
+        assert "one_way_window" not in sp._PASSABLE_BARRIERS
+        assert "one_way_window" not in sp._AMBIENT_BARRIERS
+        assert "one_way_window" not in sp._SCENT_BARRIERS
+
+    @pytest.mark.parametrize("written", [
+        "two-way mirror", "two_way_mirror", "one-way mirror", "one_way_mirror",
+        "mirrored glass", "mirrored_glass", "peephole", "spy_hole",
+    ])
+    def test_what_a_model_actually_writes_normalizes_to_it(self, written):
+        """A vocabulary the model cannot spell is a vocabulary it does not
+        have."""
+        assert sp.normalize_barrier(written) == "one_way_window"
+
+    def test_an_ambiguous_word_keeps_the_reading_it_had(self):
+        """`observation_window` was already an alias for plain `window`, and
+        the word really is ambiguous -- a hospital nursery's is glass both
+        ways, an interrogation suite's is not. Hijacking it would have made
+        every existing scene that used the word silently one-way."""
+        assert sp.normalize_barrier("observation_window") == "window"
+
+    def test_the_director_is_offered_the_whole_vocabulary(self):
+        """The reason the live scene got `membrane`: the prompts listed
+        open|open_door|membrane|closed_door|wall and nothing else, so `window`
+        and `bars` existed in the engine and were never on the menu. A barrier
+        the Director is not told about cannot be chosen, and the nearest
+        wrong one gets picked instead.
+        """
+        from prompts import get_prompt
+
+        for key in ("director_establish", "resolve_repair",
+                    "greeting_interpret"):
+            text = get_prompt(key)
+            for barrier in ("window", "bars", "one_way_window", "membrane"):
+                assert barrier in text, f"{key} never offers {barrier}"
+
+    def test_every_valid_barrier_is_offered_somewhere(self):
+        """The list in the prompt and the list in the engine are two spellings
+        of one vocabulary, and they had drifted."""
+        from prompts import get_prompt
+
+        text = get_prompt("director_establish")
+        for barrier in sp._VALID_BARRIERS - {"separated", "unknown"}:
+            assert barrier in text, barrier
