@@ -1558,9 +1558,21 @@ _FADING_AFTER = (INTENT_DORMANT_AFTER * 2) // 3
 
 def _annotate_fading(intentions, now_turn):
     """Mark each active intention that is near the dormancy sweep with how
-    many beats it has yielded nothing. Read-side only, non-mutating: the
-    stored rows and the sweep in affect.apply_intent_ops are untouched, so
-    this adds a legible question, not a new lifecycle."""
+    many beats it has yielded nothing. Read-side only, non-mutating: the stored
+    rows and the sweep in affect.apply_intent_ops are untouched, so this adds
+    a legible question, not a new lifecycle.
+
+    `barren_attempts` needs no annotation of its own: it is a stored field, it
+    rides in this dict whole, and the character prompt already names it ("an
+    intention at progress 1.0, or carrying barren_attempts, is SPENT"). What
+    was missing was never the WORD -- it was that `affect._advance_intent`
+    only ever set it at the ceiling, so a goal grinding UP THE RAMP burned
+    nothing and the character was never told. Live (chat 80, turns 1-3): three
+    beats of the same three sentences, and an appraisal still reporting
+    controllability 0.7, because nothing in the payload had ever said the
+    approach was not working. A mind cannot revise a plan on evidence it was
+    never given.
+    """
     if not isinstance(now_turn, int):
         return intentions
     out = []
@@ -3345,6 +3357,23 @@ def character_step(ctx, cid, nonce):
             _retry = _sanitize_nonsteering_intention_refs(_retry, _retry_spent)
         out = _retry
 
+    # THE BEAT HAD NOTHING NEW, and the intent ledger is the one place that
+    # needed telling. A `move_correction` that survived `move_repeat_screen`
+    # means this beat repeated an earlier move AND the screen judged the
+    # repetition unwarranted -- the engine then paid a full re-ask over it.
+    # `affect.apply_intent_ops` audits a `progress` claim only at the ceiling,
+    # so until now a character grinding UP THE RAMP banked +0.2 and a
+    # refreshed dormancy clock on every repeat (live: chat 80, ia1 0.0 -> 0.4
+    # across three beats of the same three sentences, `barren_attempts` never
+    # set). Recorded on the result rather than acted on here, because whether
+    # a goal advanced is commit's question, not this stage's.
+    #
+    # Deliberately NOT keyed on whether the RETRY still looked repeated: the
+    # retry cleared that check by rewording, which is what the correction text
+    # forbids in so many words, and a signal a rewrite can erase is the guard
+    # this repo keeps re-learning not to build.
+    _barren_beat = bool(_corrections) and "move_correction" in _corrections
+
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json -- a
     # mind_model_updates entry that fails CharacterOutput validation can
@@ -3353,6 +3382,11 @@ def character_step(ctx, cid, nonce):
     ctx.warnings.extend(warnings)
 
     out = _normalize_character_output(out)
+    # Attached AFTER validation: the schema dump drops unknown keys, so setting
+    # it on the draft above would have posted the flag into a dict that is
+    # thrown away, and the ledger would have gone on trusting the self-report.
+    if _barren_beat:
+        out["_barren_beat"] = True
     for _warning in _ground_observation_citations(
             out, observations, memory_context, memory_internal):
         ctx.add_warning(f"character {character_name(sh)}: {_warning}")

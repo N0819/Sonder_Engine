@@ -6,10 +6,10 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `affect.py` | 2148 |  | `theory_of_mind` |
+| `affect.py` | 2177 |  | `theory_of_mind` |
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
 | `agents/background.py` | 927 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
-| `agents/character.py` | 3398 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
+| `agents/character.py` | 3432 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1717 |  | `agents.common`, `scene`, `spatial` |
 | `agents/director.py` | 7922 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7951 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7957 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -81,13 +81,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `resolve_affect()` | 806 | 184 lines |
-| `apply_project_ops()` | 1361 | 137 lines |
+| `apply_project_ops()` | 1390 | 137 lines |
 | `appraise()` | 513 | 136 lines |
-| `apply_intent_ops()` | 1183 | 132 lines |
+| `apply_intent_ops()` | 1211 | 133 lines |
 | `normalize_wants()` | 996 | 87 lines |
-| `validate_drive_shift()` | 1931 | 79 lines |
-| `update_drive_strain()` | 1812 | 77 lines |
-| `project_boundary()` | 1695 | 66 lines |
+| `validate_drive_shift()` | 1960 | 79 lines |
+| `update_drive_strain()` | 1841 | 77 lines |
+| `project_boundary()` | 1724 | 66 lines |
 
 ### `agents/background.py`
 
@@ -106,12 +106,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2405 | 994 lines |
-| `_annotate_known_exits()` | 1769 | 445 lines |
+| `character_step()` | 2417 | 1016 lines |
+| `_annotate_known_exits()` | 1781 | 445 lines |
 | `_ground_observation_citations()` | 849 | 263 lines |
 | `_unanswered_question_note()` | 285 | 117 lines |
 | `_destination_from_goals()` | 1347 | 109 lines |
-| `sprint_offers()` | 2249 | 97 lines |
+| `sprint_offers()` | 2261 | 97 lines |
 | `_recent_self_moves()` | 155 | 90 lines |
 | `_verdict()` | 1191 | 72 lines |
 
@@ -401,12 +401,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 6010 | 1239 lines |
+| `prepare_memory_commit()` | 6010 | 1245 lines |
 | `prepare_scene_commit()` | 2310 | 452 lines |
 | `track_background_presences()` | 4204 | 310 lines |
 | `apply_attire_diff()` | 1974 | 294 lines |
 | `commit_world_entities()` | 3338 | 287 lines |
-| `_commit_all_locked()` | 7667 | 226 lines |
+| `_commit_all_locked()` | 7673 | 226 lines |
 | `commit_transit_sweep()` | 2811 | 169 lines |
 | `pick_background_reactors()` | 4657 | 160 lines |
 
