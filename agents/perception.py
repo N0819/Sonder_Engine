@@ -3812,6 +3812,39 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     return percepts
 
 
+def _composer_company(others, display_map, percepts):
+    """Which co-present bodies this observer's view was composed ABOUT, each
+    under the label the observer earned -- the per-beat record the people
+    projection (`story_view.player_view`'s `people`) reads back.
+
+    Derived from the presence percepts themselves (their opaque `body` key)
+    rather than by re-checking sight levels here, so this record structurally
+    cannot admit a body the rendered view did not: both come from the same
+    gated IR. `recognized` is `observer_display_map`'s own verdict -- a
+    recognised body maps to its own name -- which is NOT the same question as
+    "is the name in the identity ledger": a disguise that conceals identity
+    makes a well-known name a stranger, and a reader that re-derived
+    recognition from the ledger would undo the disguise.
+
+    The canonical `name` rides this record because a step's content is
+    engine-side, like the other viewers' views beside it; the projection is
+    what withholds it from an unrecognising viewer.
+    """
+    admitted = {p.data.get("body") for p in percepts
+                if p.kind == "presence" and p.data.get("body")}
+    out = []
+    for body in others or []:
+        name = str(body.get("name") or "")
+        if not name or composer.body_key(name) not in admitted:
+            continue
+        label = str(display_map.get(name) or "")
+        if not label:
+            continue
+        out.append({"key": composer.body_key(name), "name": name,
+                    "label": label, "recognized": label == name})
+    return out
+
+
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
                               spoken_lines=None):
@@ -3857,12 +3890,13 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
-    clean_views, observations, ledger = {}, {}, {}
+    clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
         name = p["name"]
         if p.get("awareness") in NON_AWAKE_GATED:
             percepts = composer.residue_percepts(p["awareness"])
+            company[pid] = []       # an unconscious observer sees nobody
         else:
             others = [b for b in bodies if b["name"] != name]
             display_map = composer.observer_display_map(
@@ -3876,6 +3910,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 gate=gate, extra_parts=cast_parts)
             percepts.extend(
                 _gated_ambient_percepts(gate, sensory_events, p.get("room")))
+            company[pid] = _composer_company(others, display_map, percepts)
         # A scene opening is the one beat where everything is legitimately
         # new: full render for every mind, and the ledger starts here.
         rendered = composer.render_view(percepts, mode="character",
@@ -3889,6 +3924,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
         "views": clean_views,
         "observations": observations,
         "composer_ledger": ledger,
+        "company": company,
     }
 
 
@@ -3925,7 +3961,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     all_bodies.append(actor_body)
     bodies_by_name = {b["name"]: b for b in all_bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(all_bodies)
-    clean_views, observations, ledger = {}, {}, {}
+    clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
         name = p["name"]
@@ -3939,6 +3975,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             percepts = composer.residue_percepts(
                 p["awareness"], targeted=(name_cf in onset_targets),
                 loud_event=onset_loud, pain=pain)
+            company[pid] = []       # an unconscious observer sees nobody
         else:
             others = [b for b in co_present if b["name"] != name]
             others.append(actor_body)
@@ -3998,6 +4035,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         order_key=idx, observer_id=pid, surface=surface)
                     if percept:
                         percepts.append(percept)
+            company[pid] = _composer_company(others, display_map, percepts)
         rendered = composer.render_view(
             percepts, mode="character", prev_standing=prev_standing,
             prev_described=prev_described, language=ctx.language)
@@ -4013,6 +4051,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "views": clean_views,
         "observations": observations,
         "composer_ledger": merged,
+        "company": company,
     }
 
 
@@ -4150,7 +4189,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     full_player_render = _explicit_look_intent(interp)
     _ubiq = _ubiquitous_names(sc)
 
-    clean_views, observations, ledger = {}, {}, {}
+    clean_views, observations, ledger, company = {}, {}, {}, {}
     episodes, episode_meta = {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -4172,6 +4211,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             percepts = composer.residue_percepts(
                 p["awareness"], targeted=targeted, loud_event=loud_event,
                 pain=pain)
+            company[pid] = []       # an unconscious observer sees nobody
         else:
             others = [b for b in bodies if b["name"] != name]
             display_map = composer.observer_display_map(
@@ -4289,6 +4329,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 if percept:
                     percepts.append(percept)
                     order += 1
+            company[pid] = _composer_company(others, display_map, percepts)
         rendered = composer.render_view(
             percepts,
             mode="player" if is_player_view else "character",
@@ -4338,4 +4379,5 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         "episodes": episodes,
         "episode_meta": episode_meta,
         "composer_ledger": merged,
+        "company": company,
     }

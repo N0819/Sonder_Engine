@@ -39,7 +39,13 @@ from db import q, wget
 #: Bump when a consumer could break. Callers are outside this repository and
 #: cannot be migrated in the same commit, which is the whole reason a read this
 #: shape carries a version at all.
-STORY_VIEW_SCHEMA = 1
+#:
+#: 2: `player_view` carries `people`. Additive, but bumped anyway, because
+#: under "absent means absent" an omitted `people` key must be readable as
+#: "nobody this viewer can be shown" -- and on schema 1 the same absence means
+#: "not supported". A version is the only thing that lets a consumer tell a
+#: silent engine from an empty roster.
+STORY_VIEW_SCHEMA = 2
 
 #: How many committed world events a view carries by default. Bounded because
 #: this is a per-render read from a UI, and an unbounded history turns a panel
@@ -291,6 +297,156 @@ def _viewer_memories(chat_id, char_id, limit):
             for row in reversed(rows)]
 
 
+#: Provenance marker for a fact that is public because an AUTHOR made it so
+#: (a card's visible appearance, its public history) rather than because this
+#: viewer acquired it. The acquisition labels stay `memory.
+#: provenance_context_label`'s own -- `what_i_experienced` / `what_i_was_told`
+#: / `what_i_concluded` -- and are not re-invented here; this is the one case
+#: that vocabulary cannot name, because authored-public facts were never
+#: acquired by anyone.
+AUTHORED_PUBLIC = "authored_public"
+
+
+def _delivered_company(turn_id, viewer_id):
+    """The perception stage's own record of who this viewer's view was
+    composed about, under the labels the viewer earned.
+
+    Written by the composer stages beside `views`/`observations`
+    (`agents/perception.py`'s `_composer_company`), from the same admitted
+    percepts the view renders from -- so reading it back cannot list a body
+    the delivered view did not carry. `None` when no stage recorded one for
+    this viewer (older stories predate the record; absent stays absent).
+    """
+    for key in ("perception_outcome", "perception_act", "perception_establish"):
+        content = _step_content(turn_id, key)
+        if not content:
+            continue
+        company = content.get("company")
+        if isinstance(company, dict) and viewer_id in company:
+            entries = company.get(viewer_id)
+            return entries if isinstance(entries, list) else None
+    return None
+
+
+def _public_facts(chat_id, entry):
+    """The allowlisted authored-public facts of one cast member or persona.
+
+    Two fields, both defensible as PUBLIC by the card's own structure:
+    `embodiment.visible.summary` is the body's stable outward appearance --
+    the card's own claim about what anyone who looks receives -- and
+    `knowledge.public_history` is public by name. Nothing else on a card
+    qualifies: psychology, private history, goals and relationships are the
+    other side of the firewall, and this engine has no rank, role or
+    assignment vocabulary to expose, so none is invented here.
+    """
+    from character_schema import normalize_character_data, normalize_persona_data
+
+    if entry["kind"] == "character":
+        row = q("SELECT cc.sheet AS chat_sheet, c.sheet AS base_sheet "
+                "FROM chat_chars cc JOIN characters c ON c.id=cc.char_id "
+                "WHERE cc.chat_id=? AND cc.char_id=?",
+                (int(chat_id), int(entry["id"])), one=True)
+        if not row:
+            return {}, {}
+        data = normalize_character_data(
+            _json(row["chat_sheet"] or row["base_sheet"], {}))
+    else:
+        if entry["id"] == "player":
+            row = q("SELECT p.sheet FROM personas p JOIN chats c "
+                    "ON c.persona_id=p.id WHERE c.id=?", (int(chat_id),),
+                    one=True)
+        else:
+            row = q("SELECT sheet FROM personas WHERE id=?",
+                    (int(str(entry["id"]).split(":", 1)[1]),), one=True)
+        if not row:
+            return {}, {}
+        data = normalize_persona_data(_json(row["sheet"], {}))
+
+    facts, sources = {}, {}
+    appearance = str(((data.get("embodiment") or {}).get("visible") or {})
+                     .get("summary") or "").strip()
+    if appearance:
+        facts["appearance"] = appearance
+        sources["appearance"] = AUTHORED_PUBLIC
+    history = str((data.get("knowledge") or {})
+                  .get("public_history") or "").strip()
+    if history:
+        facts["public_history"] = history
+        sources["public_history"] = AUTHORED_PUBLIC
+    return facts, sources
+
+
+def _recognized_person(chat_id, entry):
+    person = {"id": entry["id"], "kind": entry["kind"],
+              "display_name": entry["name"],
+              "identity_status": "recognized"}
+    facts, sources = _public_facts(chat_id, entry)
+    if facts:
+        person["facts"] = facts
+        person["fact_sources"] = sources
+    return person
+
+
+def _people(chat_id, identity, turn):
+    """The structured people projection for one viewer. Ledgers only.
+
+    Two admissions, and NEITHER is decided here:
+
+      * `recognized` -- the identity ledger's own answer about who this
+        viewer can name, the same read `knows` is, joined to the stable ids
+        `viewers()` already speaks. A known name that resolves to no cast
+        member or persona has no stable id to key a UI on and is omitted.
+      * `observed` -- the perception stage's own per-beat record of the
+        bodies this viewer's delivered view was composed about
+        (`_delivered_company`). An unrecognised body appears under the label
+        the composer gave it and an opaque `body:` key, never its canonical
+        name or canonical id: the recognition verdict is the COMPOSER's, not
+        re-derived from the ledger, because a disguise that conceals identity
+        makes a well-known name a stranger, and a ledger re-check here would
+        undo the disguise. For the same reason the two entries of a disguised
+        acquaintance -- the name known, the body observed -- deliberately do
+        not join.
+
+    A person in both (recognised and delivered this beat) is one entry with
+    `last_observed_turn`; a person in neither is absent, which is the
+    acceptance test that matters most: this function has no opinion of its
+    own about who exists.
+    """
+    people = {}
+    known = (wget(chat_id, "known", {}) or {}).get(identity["name"]) or []
+    roster = {entry["name"]: entry for entry in viewers(chat_id)}
+    for name in sorted(str(item) for item in known):
+        entry = roster.get(name)
+        if not entry or entry["id"] == identity["id"]:
+            continue
+        people[entry["id"]] = _recognized_person(chat_id, entry)
+    delivered = _delivered_company(turn["id"], identity["id"]) if turn else None
+    for body in delivered or []:
+        if not isinstance(body, dict):
+            continue
+        label = str(body.get("label") or "")
+        if body.get("recognized"):
+            entry = roster.get(str(body.get("name") or ""))
+            if not entry or entry["id"] == identity["id"]:
+                continue
+            person = people.get(entry["id"]) \
+                or _recognized_person(chat_id, entry)
+            person["last_observed_turn"] = turn["idx"]
+            people[entry["id"]] = person
+            continue
+        key = str(body.get("key") or "")
+        if not key or not label:
+            continue
+        pid = f"body:{key}"
+        people[pid] = {"id": pid, "kind": "presence", "display_name": label,
+                       "identity_status": "observed",
+                       "last_observed_turn": turn["idx"]}
+    return sorted(people.values(),
+                  key=lambda person: (person["identity_status"] != "recognized",
+                                      person["display_name"].casefold(),
+                                      person["id"]))
+
+
 def player_view(chat_id, viewer="player", *, memories=12):
     """What this viewer may be shown. A security boundary, not a convenience.
 
@@ -301,6 +457,12 @@ def player_view(chat_id, viewer="player", *, memories=12):
       * `knows` -- the identity ledger's list of who they can name. A body they
         can see but not name is in `observations` under whatever label the
         composer gave it, and is NOT resolved here;
+      * `people` -- the same two ledgers joined into a structured roster with
+        STABLE ids (`_people`): the identity ledger's names carrying the ids
+        `viewers()` already speaks, plus the perception stage's own per-beat
+        record of observed bodies under composer labels and opaque `body:`
+        keys. A rename changes `display_name` and never `id`; a stranger's
+        canonical name and canonical id appear nowhere;
       * `memories` and `relationships` -- their own, by construction;
       * `location` -- where their own body is, which a body always knows.
 
@@ -341,6 +503,10 @@ def player_view(chat_id, viewer="player", *, memories=12):
     known = (wget(chat_id, "known", {}) or {}).get(name)
     if known:
         view["knows"] = sorted(str(item) for item in known)
+
+    people = _people(chat_id, identity, turn)
+    if people:
+        view["people"] = people
 
     if identity["kind"] == "character":
         char_id = int(identity["id"])

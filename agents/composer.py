@@ -552,11 +552,19 @@ def presence_percepts(scene, observer_name, co_present, display_map):
         else:
             label = display if display == name else _dim_figure()
         side = entity_side(scene, observer_name, name)
+        # `body` is the opaque per-body ledger key, carried so the
+        # orchestrator can answer "whose presence did this observer's view
+        # get composed about" from the percepts themselves rather than by
+        # re-running the subtraction above -- a second copy of an admission
+        # rule is a classifier waiting to drift. Opaque by `body_key`'s own
+        # contract: a canonical name never rides a Percept, even as
+        # bookkeeping.
         out.append(Percept(
             kind="presence", channel="sight",
             source_label=label,
             fidelity="full" if level == "full" else "degraded",
             data={"tier": tier, "side": side, "arc": arc, "sight": level,
+                  "body": body_key(name),
                   **({"room": room} if room else {})},
             salience=0.35,
             dedupe_key="presence:" + _short_hash(name, tier, arc, level),
