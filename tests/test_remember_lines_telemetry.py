@@ -57,6 +57,12 @@ NOT_LISTED = [
     "It would be a shame if the shipment were delayed",
     "Grey coats never come to this quarter alone",
     "Ask for Hensa; she still owes me",
+    # A marker begins at a word boundary, never inside another word. Bare
+    # substring matching filed these as promises: of the live corpus's 5
+    # promise-category rows, 3 were the word "compromised" (chat 6, twice,
+    # and chat 58's "TARGETING COMPROMISED").
+    "Section C and D compromised -- compromised how?",
+    "TARGETING COMPROMISED. THROWING OBJECTS WILL NOT SAVE YOU!",
 ]
 
 

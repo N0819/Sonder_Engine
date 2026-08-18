@@ -2362,8 +2362,27 @@ different linguistic rules with nothing on disk saying so. Judged acceptable
 while old pack versions are not retained, but a `story_language_pack_version`
 stamp would at least make a behaviour change explicable afterwards.
 
+### 1.49 Chats 69–80 have no self-memories, and never will
 
-## 2. Roadmap
+Between d290ca4 (2026-08-10) and the repair, no character anywhere formed a
+`category: self` memory of their own speech or acts: d290ca4 suppressed the
+row whenever a perception view existed, and 3a82657 (one day later) made
+views both universal and — correctly, per the firewall — free of the mind's
+own conduct, so the suppression fired every beat. Measured: chat 67 holds 20
+self rows over 51 turns; chats 69–80 hold 0 over 240 turns.
+
+The minting is repaired (`commit.prepare_memory_commit`,
+`tests/test_own_conduct_memory.py`); the eight days of already-played story
+are **deliberately not backfilled**. A self row is the character's own
+remembered decision (`provenance: remembered`), and the declarations that
+would source a reconstruction sit in step variants a character never
+experienced remembering — inventing a memory a mind never formed is a worse
+falsification than the absence, which at least behaves like ordinary
+forgetting. Characters in those chats permanently do not remember what they
+said and did during that window; consolidation summaries written over it are
+built from heard/witnessed rows only. If a future need arises, the honest
+shape is an authored-memory import a host chooses per character, not an
+automatic reconstruction.
 
 Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in

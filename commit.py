@@ -5829,13 +5829,26 @@ def commit_world_pressure(ctx, nonce):
 RECENT_TELLS_CAP = 6
 
 def _durable_dialogue_category(text):
+    """Category for a quote worth keeping verbatim, or None.
+
+    Each marker must BEGIN at a word boundary. A marker is a spoken word, and
+    a word does not start in the middle of another one: bare substring
+    matching made "compromised" a promise, and the live corpus proves it --
+    of its 5 promise-category rows, 3 were the word "compromised" (chat 6's
+    "Section C and D compromised", twice, and chat 58's "TARGETING
+    COMPROMISED") against 2 genuine promises. The boundary is only required
+    at the start, so inflections still match ("I promised", "she promises");
+    tools/remember_lines.py inlines this rule and
+    tests/test_remember_lines_telemetry.py holds the two in sync."""
     lowered = (text or "").lower()
-    if any(w in lowered for w in ("promise", "i swear", "i vow", "you have my word",
-                                   "i'll return", "i will return")):
+    def _spoken(marker):
+        return re.search(r"\b" + re.escape(marker), lowered) is not None
+    if any(_spoken(w) for w in ("promise", "i swear", "i vow", "you have my word",
+                                "i'll return", "i will return")):
         return "promise"
-    if any(w in lowered for w in ("my name is", "call me", "i confess", "the truth is",
-                                   "i killed", "i betrayed", "i love you", "i hate you",
-                                   "i'll kill", "i will kill")):
+    if any(_spoken(w) for w in ("my name is", "call me", "i confess", "the truth is",
+                                "i killed", "i betrayed", "i love you", "i hate you",
+                                "i'll kill", "i will kill")):
         return "dialogue"
     return None
 
@@ -5978,12 +5991,19 @@ def _salience_of(text):
 
 
 def _own_sequence_memory(seq):
-    """Render a no-view fallback as grammatical, chronological first person.
+    """Render a character's own conduct as grammatical, chronological first
+    person: ``I said 'X.' Then I tried to Y.``
 
-    The witnessed perception view is the normal episode and already contains
-    the resolved conduct.  This formatter is only for a character who acted
-    but received no usable view; it must preserve order without the old
-    ``I chose to attempted`` construction or a gist cut midway through an act.
+    This is the ONLY durable record of what a mind itself said and did. The
+    witnessed episode cannot carry it: deterministic perception structurally
+    excludes a mind's own speech and acts from its own view (`speaker == name`
+    / `actor == name` skips in `agents/perception.py`, and
+    `_strip_self_narration` above them), which is the firewall working, not a
+    gap in it. So the wording here is decision-framed on purpose -- "I said",
+    "I tried to" -- an attempt beside the perceived outcome, never a second
+    resolved event competing with it. The old ``I chose to attempted '...'``
+    construction is what actually replayed an act as though it were a second
+    happening; preserve order, and never cut a gist midway through an act.
     """
     clauses = []
     for event in (seq or []):
@@ -6454,16 +6474,35 @@ def prepare_memory_commit(ctx, *, scene=None):
                 st["last_ponder_turn"] = turn.idx
             seq = own_result.get("sequence") or []
             own_salience = float(own_result.get("salience", 0.0))
+            # The bound: everything a mind SAID is durable (conversation
+            # continuity is what measurably dies without it), a silent act is
+            # durable only when the mind's own appraisal reached 0.7 -- idle
+            # motion below that keeps its 12-turn `_recent_self_moves` window
+            # and the episode of its consequences, not a row per fidget. This
+            # is at most one extra row per speaking/salient character per
+            # beat, beside the episode row every character already gets.
             should_store_own_acts = bool(seq) and (
                 own_salience >= 0.7
                 or any(event.get("type") == "speech" for event in seq)
             )
-            # The observer-specific view is already the coherent, resolved
-            # first-person episode.  Storing the declaration again beside it
-            # split one beat into competing fragments (and often replayed an
-            # attempted act as though it were a second event).  Keep a self
-            # row only as the no-view fallback.
-            if should_store_own_acts and not episode_content:
+            # ALWAYS beside the episode, never instead of it. d290ca4 gated
+            # this on `not episode_content`, reasoning that the view was
+            # "already the coherent, resolved first-person episode" -- true
+            # under model-composed perception, which wrote "You say X" into a
+            # mind's own view. One day later 3a82657 made every view
+            # deterministic, and the composer structurally EXCLUDES a mind's
+            # own conduct from its own view (that is the firewall, and it is
+            # correct) -- so the branch went unreachable and every character
+            # in every story stopped remembering anything they said or did.
+            # Measured live: chat 67 (pre-regression) holds 20 self rows over
+            # 51 turns; chats 69-80 hold 0 over 240 turns, and chat 80's Dr.
+            # Moon restated the same three propositions on five consecutive
+            # beats with no memory of a promise she made on turn 5. The
+            # fragmentation d290ca4 was fixing was the old "I chose to
+            # attempted '...'" wording replaying an act as a second event;
+            # `_own_sequence_memory`'s decision framing is that fix, and it
+            # stands whether or not a view exists.
+            if should_store_own_acts:
                 self_content, self_gist = _own_sequence_memory(seq)
                 pending_memories.append({
                     "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
