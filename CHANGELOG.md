@@ -1,5 +1,57 @@
 # Changelog
 
+## alpha 9.4 — Nobody walks through walls, and nothing is redone for nothing
+
+- **A beat is no longer redone because it was merely repetitive.** A character
+  who said something close to what they said before used to cost you a second
+  full call to their model — measured at 36, 58 and 155 seconds, and on the
+  slowest of those the "corrected" version said the same three things in
+  different words. Repetitive is weak, not broken, and only broken output now
+  earns a redo. The repetition is still noted on the turn; the beat stands.
+
+- **Instead, a character stuck on a goal is offered a way out of it.** The
+  engine's three anti-repetition rules all say *not that*, which helps a mind
+  that has another move and does nothing for one that does not — so it
+  rephrased, every time, because rephrasing was all that was left. A goal being
+  pressed with nothing to show for it now surfaces one contrasting memory of
+  that character's own instead: *here is something else you know*.
+
+- **A goal that repeated itself no longer counts as progress.** A character
+  could restate the same three sentences on three beats running and the engine
+  recorded steady advancement each time, because progress was something the
+  character reported about itself and was only ever checked once it had nothing
+  left to gain. Found in play: a psychologist's intake goal climbed while
+  nothing whatsoever happened. She is now told the approach is spent, which is
+  the thing that lets her change tack.
+
+- **Nobody is moved somewhere they cannot reach.** Found in play, and it was
+  bad: a restrained subject was written out of a sealed interview cell, through
+  a two-way mirror, into the room she was being watched from — on a beat where
+  the player declared no movement at all, and while the prose in the same breath
+  correctly described her still in the cell. Movement declared by somebody was
+  already checked; a position nobody asked for was not. Now it is. Being
+  dragged, carried or moved by a lift are all still fine — passing through a
+  wall is not.
+
+- **Extensions can hold a campaign to its own rules.** An extension could
+  already put its rules in front of the Director; it can now check the result
+  and, if the result broke one, ask for a single corrected version before
+  anything is committed. That correction goes through every one of the engine's
+  own checks again. Previously the only recourse was throwing the whole beat
+  away after paying for it.
+
+- **Starting a campaign is one act.** Everything a campaign needs on its first
+  turn — its rules, its story-wide notes, its per-era state, its opening
+  documents — is created together with the story or not at all. Before this, a
+  campaign could appear in your list looking playable while missing the rule
+  that made it make sense.
+
+- **An extension can show you the people you know.** A structured list of
+  everyone you can currently identify, with a stable handle for each so a panel
+  keeps working when somebody is renamed — and a body you have seen but cannot
+  name appears under the label you know them by, never under a name the story
+  has not told you.
+
 ## alpha 9.3 — Hard mode, and a story an extension can start
 
 - **Hard mode.** You can now choose who decides what your declaration
