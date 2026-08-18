@@ -63,7 +63,7 @@
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1858 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 5025 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 5098 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 8091 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -754,14 +754,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3879 | 331 lines |
-| `_lenient_coerce()` | 577 | 159 lines |
-| `validate_llm_output_strict()` | 4896 | 130 lines |
-| `semantic_output_errors()` | 4713 | 103 lines |
-| `canonicalize_prose_markup()` | 3684 | 102 lines |
-| `_uncross_concealed_speech()` | 3808 | 69 lines |
+| `preprocess_llm_output()` | 3952 | 331 lines |
+| `_lenient_coerce()` | 635 | 145 lines |
+| `validate_llm_output_strict()` | 4969 | 130 lines |
+| `semantic_output_errors()` | 4786 | 103 lines |
+| `canonicalize_prose_markup()` | 3757 | 102 lines |
+| `_uncross_concealed_speech()` | 3881 | 69 lines |
 | `_coerce_list_valued_map()` | 93 | 57 lines |
-| `_coerce_evidence_refs()` | 2347 | 51 lines |
+| `_coerce_evidence_refs()` | 2420 | 51 lines |
 
 ### `spatial.py`
 
@@ -1145,9 +1145,9 @@ Sections: Turn-completion chime (`:2`); Which other waits are worth a chime (`:1
 
 Declared functions: `chimeContext()`, `chimeArm()`, `chimePlay()`, `chimeWatches()`, `chimeWorkFinished()`, `chimeSetMuted()`, `toggleChimeMute()`, `updateChimeBtn()`.
 
-### `static/js/components.js` (982 lines)
+### `static/js/components.js` (993 lines)
 
-Sections: Modal (`:38`); Book covers (`:54`); confirm()/prompt() replacements (`:167`); Toasts (`:289`); Background tasks (`:317`); Form helpers (`:403`); Model picker (`:843`).
+Sections: Modal (`:38`); Book covers (`:54`); confirm()/prompt() replacements (`:167`); Toasts (`:289`); Background tasks (`:317`); Form helpers (`:403`); Model picker (`:843`); made for every combobox that already has a provider saved -- opened its (`:873`).
 
 Declared functions: `txt()`, `el()`, `coverOfRow()`, `coverOfTitle()`, `modal()`, `modalOwnership()`, `closeModal()`, `closeAllModals()`, `_confirmOverlay()`, `confirmModal()`, `promptModal()`, `promptModalWithToggle()`, `toastHost()`, `toast()`, `renderActivity()`, `elapsedLabel()`, `activityTicking()`, `backgroundTask()`, `buttonTask()`, `loadingBlock()`, `emptyState()`, `fText()`, `fArea()`, `fSelect()`, `fNum()`, `fLineList()`, `fStrList()`, `fCoveragePicker()`, `fAttireGarments()`, `fList()`, `fAbilities()`, `fTraits()`, `fValues()`, `fBeliefs()`, `fCopingStrategies()`, `fAssociations()`, `fGoals()`, `fSenses()`, `fLatent()`, `fExtraParts()`, `fPronouns()`, `phEditor()`, `fetchModels()`, `fetchImageModels()`, `modelCombobox()`, `emitChange()`, `load()`, `showDD()`.
 

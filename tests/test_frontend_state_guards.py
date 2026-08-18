@@ -64,6 +64,31 @@ def test_model_catalogue_only_applies_to_the_latest_selected_provider():
     assert "await load(+psel.value);\n    } else {\n      showDD();" in picker
 
 
+def test_the_model_catalogue_is_primed_without_opening_the_dropdown():
+    """Opening API settings must not expand a dozen model lists nobody clicked.
+
+    `modelCombobox` ends by loading the catalogue for whichever provider is
+    already saved, so the first focus is instant. Loading and SHOWING were the
+    same act, so that priming call opened the dropdown as a side effect --
+    and Agent models builds one combobox per role, so opening the menu
+    expanded every one of them at once, each covering the rows beneath it.
+
+    Asserted on the source the way the sibling guards here are: the behaviour
+    is a browser one, and the browser tier is optional, so the invariant that
+    can be checked in the default tier is that the priming call passes
+    `open: false` and that `load` honours it.
+    """
+    picker = _between(COMPONENTS, "function modelCombobox(", "return { psel, mwrap")
+
+    assert "if (cp) load(+cp, { open: false });" in picker
+    assert "async function load(pid, { open = true } = {})" in picker
+    # Both places load() reveals the panel are behind the flag.
+    assert "if (open) showDD();" in picker
+    assert "if (open) {\n      dd.innerHTML = \"\"; dd.style.display = \"block\";" in picker
+    # And focus still opens it, which is the whole point of having a dropdown.
+    assert "minput.onfocus" in picker
+
+
 def test_modal_ownership_uses_a_unique_current_owner_token():
     guard = _between(COMPONENTS, "function modalOwnership(", "function closeModal()")
 

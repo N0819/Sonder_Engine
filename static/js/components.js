@@ -868,10 +868,19 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
   function emitChange() {
     if (onChange) onChange({ provider: psel.value ? +psel.value : null, model: minput.value || null });
   }
-  async function load(pid) {
+  // `open` separates FETCHING the catalogue from SHOWING it. They used to be
+  // the same act, which meant the priming call at the bottom of this function
+  // -- made for every combobox that already has a provider saved -- opened its
+  // dropdown as a side effect. Agent models builds one per role, so opening
+  // API settings expanded a dozen model lists that nobody had clicked on, each
+  // covering the rows beneath it.
+  async function load(pid, { open = true } = {}) {
     if (!pid) { models = []; return }
     const seq = ++loadSeq;
-    dd.innerHTML = ""; dd.style.display = "block"; dd.append(el("div", { class: "dd-opt dim" }, "Loading…"));
+    if (open) {
+      dd.innerHTML = ""; dd.style.display = "block";
+      dd.append(el("div", { class: "dd-opt dim" }, "Loading…"));
+    }
     let loaded = [];
     try {
       loaded = await fetchList(pid);
@@ -887,7 +896,7 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
     // request for the provider still selected may replace the dropdown.
     if (seq !== loadSeq || String(psel.value) !== String(pid)) return;
     models = loaded;
-    showDD();
+    if (open) showDD();
   }
   function showDD() {
     const q = minput.value.toLowerCase();
@@ -977,6 +986,8 @@ function modelCombobox(providers, cp, cm, onChange, opts) {
     }
     emitChange();
   };
-  if (cp) load(+cp);
+  // Primed, not opened: the catalogue is warmed so the first focus is instant,
+  // and the dropdown stays shut until someone asks for it.
+  if (cp) load(+cp, { open: false });
   return { psel, mwrap, minput, read: () => ({ provider: psel.value ? +psel.value : null, model: minput.value || null }) };
 }

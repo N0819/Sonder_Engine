@@ -537,7 +537,65 @@ def _coerce_member(value, declared_type):
                 for key, item in value.items()}
     if _expects_object(declared_type) and _empty_container(value):
         return {}
+    # A bare scalar where an OBJECT was declared. The model answered the
+    # object's SUBJECT and skipped the wrapper -- asked for
+    # `poses:{name:{posture,support,...}}` it sent `{"Hinami": "standing"}`,
+    # which is a complete and correct answer to "what is her posture" written
+    # in the shorter of the two spellings. Both majors refuse it, and refusing
+    # cost the OPENING turn of a story: six bodies, six strings, one dead
+    # `director_establish` and no scene at all.
+    #
+    # This is the mirror of the map-arrives-where-a-list-was-declared rule
+    # below, and it asks the same question through the same cascade -- when
+    # the model supplied only the subject, where does it go? An item model
+    # with no answerable subject slot is left to fail rather than guessed at.
+    if _expects_object(declared_type) and isinstance(
+            value, (str, int, float, bool)) and not isinstance(value, bool):
+        slot = _subject_slot(declared_type)
+        if slot:
+            return {slot: value}
     return _as_declared_scalar(value, declared_type)
+
+
+def _subject_slot(model, fields=None):
+    """Which field of an item model carries its SUBJECT, or None.
+
+    Extracted so the two places that need it -- a name-keyed map arriving
+    where a list was declared, and a bare scalar arriving where the item
+    itself was -- cannot answer it differently. Both are asking one question:
+    when the model supplied only the subject, where does it go?
+
+    Three rungs, each earned:
+
+    * What the model DECLARES (`_subject_field`). A heuristic cannot see the
+      one case where the subject carries a non-empty default:
+      `GoalImpact.serves` defaults to "situational", so it is neither required
+      nor an empty prose slot, and `{"reach the tower": {"impact": 0.6}}`
+      filed the goal in `why` -- recording the goal as its own explanation and
+      leaving `serves` generic, which commit.py's goal matching cannot use.
+    * The first REQUIRED field. The subject of these shapes is what the model
+      is obliged to supply. A guessed list of about_entity/name/entity/id
+      looked general and was not -- it missed `belief` on BeliefUpdate and
+      `cue` on AssociationUpdate.
+    * The first field declared as prose whose default is EMPTY. An empty
+      default means "nothing said yet", which is the hole a subject fills; a
+      non-empty one is a value the author already chose. Declaration order
+      alone would be wrong: it names `category` on AssertedChange (default
+      "other") and `op` on LoreOp (default "create").
+    """
+    if fields is None:
+        fields = _item_fields(model)
+    if not fields:
+        return None
+    slot = _subject_field_of(model)
+    if slot is not None and slot not in fields:
+        slot = None
+    if slot is None:
+        slot = next((name for name, field in fields.items()
+                     if _field_required(field)), None)
+    if slot is None:
+        slot = _first_empty_prose_field(fields)
+    return slot
 
 
 def _first_empty_prose_field(fields):
@@ -704,26 +762,12 @@ def _lenient_coerce(value, declared):
             # The information survived and landed where nothing reads it.
             # Declaring the slot is how a model says which field is its
             # subject, rather than the shape rules guessing.
-            slot = _subject_field_of(declared.item_type)
-            if slot is not None and slot not in fields:
-                slot = None
-            if slot is None:
-                slot = next((n for n, f in fields.items()
-                             if _field_required(f)), None)
-            if slot is None:
-                # An item model where nothing is required still has a
-                # subject, and dropping the key threw it away entirely: a
-                # `knowledge_seeds` map keyed by the seed's own text
-                # arrived with `content: ""`, which is the whole seed. The
-                # slot is the first field declared as prose whose default
-                # is EMPTY -- an empty default means "nothing said yet",
-                # which is what a key can fill; a non-empty one is a
-                # chosen value and not a hole. Declaration order alone
-                # would be wrong: it names `category` on AssertedChange
-                # (default "other") when the key is the subject, and `op`
-                # on LoreOp (default "create") when the key is the entry's
-                # own keys.
-                slot = _first_empty_prose_field(fields)
+            # An item model where nothing is required still has a subject,
+            # and dropping the key threw it away entirely: a
+            # `knowledge_seeds` map keyed by the seed's own text arrived
+            # with `content: ""`, which is the whole seed. See
+            # `_subject_slot` for the cascade and why each rung exists.
+            slot = _subject_slot(declared.item_type, fields)
             out = []
             for key, item in value.items():
                 item = dict(item)
@@ -1502,6 +1546,35 @@ class ActorDef(LenientModel):
 
 # ---- Establishment and Resolve ----
 
+class PoseEntry(LenientModel):
+    """One body's complete current pose snapshot.
+
+    Declared as a MODEL rather than as a bare `dict` so the shape the prompts
+    have always named is a shape the schema knows. `spatial._POSE_FIELDS` and
+    `_clean_pose` have enforced exactly these six since poses existed; the
+    schema said `dict` and therefore knew nothing about them, which had two
+    costs. It could not tell a model that answered in the short spelling what
+    the long one is -- `{"Hinami": "standing"}` was refused outright, killing
+    the opening turn of a story rather than reading it as the posture it
+    obviously is. And a mistyped field could not be noticed by anything.
+
+    `_subject_field` names `posture` as the subject so that short spelling
+    lands where it means: it is the only one of the six that is about the body
+    ITSELF, the others being about what supports it or what it is arranged
+    against. Extra keys are ignored rather than refused, as everywhere else
+    here -- `_clean_pose` keeps these six regardless.
+    """
+
+    _subject_field = "posture"
+
+    posture: str = ""
+    support: str = ""
+    relative_to: str = ""
+    relation: str = ""
+    constraint: str = ""
+    detail: str = ""
+
+
 class AttireState(LenientModel):
     wearing: list[str] = Field(default_factory=list)
     state: list[str] = Field(default_factory=list)
@@ -1565,7 +1638,7 @@ class DirectorEstablish(LenientModel):
     stations: dict[str, dict] = Field(default_factory=dict)
     # Complete current body-pose snapshots: posture/support plus optional
     # relative body arrangement. Separate from room/station and contact.
-    poses: dict[str, dict] = Field(default_factory=dict)
+    poses: dict[str, PoseEntry] = Field(default_factory=dict)
     # Holds the opening passage leaves standing -- same op shape as
     # StateDiff.contact_ops, routed into it by the establish tail so it reaches
     # spatial.apply_contact_ops through the one merge every other beat uses.
@@ -1869,7 +1942,7 @@ class StateDiff(LenientModel):
     # Complete replacement snapshots for touched bodies:
     # {name:{posture,support,relative_to,relation,constraint,detail}}.
     # Open strings keep fictional embodiment genre-neutral.
-    poses: dict[str, dict] = Field(default_factory=dict)
+    poses: dict[str, PoseEntry] = Field(default_factory=dict)
     # Scale: {name: factor} relative to that body's own baseline. 1.0 (or
     # omission) is normal size; the engine cancels contacts on a body whose
     # size changed, since a hold is a fact about two bodies at the sizes they
@@ -2248,7 +2321,7 @@ class DirectorSpatialSpecialist(LenientModel):
     remove_rooms: list[str] = Field(default_factory=list)
     remove_adjacent: list[dict] = Field(default_factory=list)
     stations: dict[str, dict] = Field(default_factory=dict)
-    poses: dict[str, dict] = Field(default_factory=dict)
+    poses: dict[str, PoseEntry] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
