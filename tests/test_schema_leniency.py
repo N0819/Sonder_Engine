@@ -1220,3 +1220,99 @@ def test_an_empty_narration_says_which_keys_did_arrive():
     assert semantic_output_errors("narrator", {"prose": "She turned."}) == []
     said = semantic_output_errors("narrator", {"narration": "a page", "beat": 1})
     assert said == ["prose is empty (keys present: beat, narration)"]
+
+
+class TestAScalarWhereAnObjectWasDeclared:
+    """A model that answered the subject and skipped the wrapper.
+
+    Live: the opening turn of a story with six bodies in it died on
+    `director_establish failed JSON validation: poses.Sarah Moon: value is not
+    a valid dict` -- six times over, once per body, because every one of them
+    came back as `"standing"` instead of `{"posture": "standing"}`. That is a
+    complete and correct answer to what the field is FOR, written in the
+    shorter of the two spellings, and the story got no scene at all.
+
+    The schema was the only strict layer: `spatial._clean_pose` has always
+    returned None for a non-dict and moved on.
+    """
+
+    def _establish(self, poses):
+        import schemas
+
+        out, _warnings = schemas.validate_llm_output("director_establish", {
+            "location": "a room", "time": "now", "scene_description": "x",
+            "poses": poses,
+        })
+        return out["poses"]
+
+    def test_a_bare_string_becomes_the_subject_field(self):
+        poses = self._establish({"Hinami": "seated, restrained"})
+        assert poses["Hinami"]["posture"] == "seated, restrained"
+        assert poses["Hinami"]["support"] == ""
+
+    def test_the_whole_live_payload_survives(self):
+        """Six bodies, six strings -- the shape that actually killed a turn."""
+        names = ["Sarah Moon", "Hinami", "guard_1", "guard_2", "guard_3",
+                 "guard_4"]
+        poses = self._establish({name: "standing" for name in names})
+        assert sorted(poses) == sorted(names)
+        assert all(poses[name]["posture"] == "standing" for name in names)
+
+    def test_the_long_spelling_is_untouched(self):
+        """The tolerance must not cost the models that answered correctly."""
+        poses = self._establish({"Mara": {
+            "posture": "kneeling", "support": "the floor",
+            "relative_to": "Vesk", "relation": "beneath",
+            "constraint": "pinned", "detail": "one hand braced"}})
+        assert poses["Mara"] == {
+            "posture": "kneeling", "support": "the floor",
+            "relative_to": "Vesk", "relation": "beneath",
+            "constraint": "pinned", "detail": "one hand braced"}
+
+    def test_the_strict_path_accepts_it_too(self):
+        """`_agent_json` validates strictly and RAISES -- which is the path the
+        live failure took. Passing leniently and failing strictly would fix
+        nothing."""
+        import schemas
+
+        report = schemas.validate_llm_output_strict("director_establish", {
+            "location": "a room", "time": "now", "scene_description": "x",
+            "poses": {"Sarah Moon": "standing"}})
+        # Asserted on the POSES errors specifically, not on `valid`: this
+        # deliberately minimal payload also has no rooms and no positions, and
+        # the strict path is right to say so. What must be gone is the schema
+        # complaint that killed the turn.
+        assert not [e for e in report.errors if "poses" in e], report.errors
+        assert report.output["poses"]["Sarah Moon"]["posture"] == "standing"
+
+    def test_it_holds_on_the_resolve_side_too(self):
+        """Same channel, same shortcut, different stage. A tolerance that only
+        covered the opening beat would leave the other 2,000."""
+        import schemas
+
+        out, _warnings = schemas.validate_llm_output("director_spatial", {
+            "poses": {"Vesk": "leaning against the door"}})
+        assert out["poses"]["Vesk"]["posture"] == "leaning against the door"
+
+    def test_an_empty_value_still_means_nothing_to_report(self):
+        poses = self._establish({"Ash": "", "Bel": {}})
+        assert poses["Ash"] == {} or poses["Ash"]["posture"] == ""
+        assert poses["Bel"]["posture"] == ""
+
+    def test_a_number_is_carried_as_prose(self):
+        """`_as_declared_scalar`'s job, one level in: the subject slot is prose,
+        so a model answering with a bare number still lands somewhere."""
+        poses = self._establish({"Ash": 3})
+        assert poses["Ash"]["posture"] == "3"
+
+    def test_a_model_with_no_answerable_subject_is_left_to_fail(self):
+        """The rule guesses nothing. Where there is no subject slot to put a
+        scalar in, inventing one would hide a real error."""
+        import schemas
+        from schemas import _subject_slot
+
+        class Anonymous(schemas.LenientModel):
+            count: int = 0
+            flag: bool = False
+
+        assert _subject_slot(Anonymous) is None

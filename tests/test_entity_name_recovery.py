@@ -108,19 +108,33 @@ def test_mapping_scene_patch_entities_are_named():
         == "Sake Carafe"
 
 
-def test_non_dict_entity_value_is_left_alone():
+def test_a_scalar_entity_value_keeps_the_entity():
     """Malformed input must not raise inside preprocessing.
 
-    That is what this test is for and it is unchanged. What changed on
-    2026-08-08 is the CONSEQUENCE: a malformed `state_diff` sub-field is now
-    pruned and the beat commits what it did adjudicate, rather than the whole
-    resolve being rejected. `entities` is the most consequential field to drop
-    -- a minted carafe is genuinely lost -- but losing the entity beats losing
-    the beat, the drop is warned about rather than silent, and the reconcile
-    seam exists to catch changes asserted in prose but missing from the diff.
+    That is what this test was written for and it is unchanged. The
+    CONSEQUENCE has moved twice, each time toward keeping more:
+
+    * Originally the whole resolve was rejected.
+    * 2026-08-08: the malformed sub-field was pruned and the beat committed
+      what it did adjudicate. The docstring at the time recorded the cost --
+      "`entities` is the most consequential field to drop, a minted carafe is
+      genuinely lost" -- and accepted it, because losing the entity beats
+      losing the beat.
+    * Now the carafe survives. A bare scalar where an object was declared is
+      read as that object's SUBJECT, and `SceneEntityDef`'s subject is `name`,
+      so `{"sake_carafe": "a carafe"}` is a complete answer to what the entity
+      IS written in the shorter spelling. Nothing is dropped and nothing is
+      guessed: an item model with no answerable subject slot still fails.
+
+    Found through `poses`, where the same shortcut killed the opening turn of
+    a story -- six bodies answering `"standing"` instead of
+    `{"posture": "standing"}`.
     """
     raw = {"state_diff": {"entities": {"sake_carafe": "a carafe"}}}
     report = validate_llm_output_strict("director_resolve", raw)
-    assert report.valid  # pruned, not crashed and not fatal
-    assert any("entities" in w for w in report.warnings)
-    assert not report.output["state_diff"]["entities"]
+    assert report.valid
+    entity = report.output["state_diff"]["entities"]["sake_carafe"]
+    assert entity["name"] == "a carafe"
+    # The rest of the entity is its declared defaults, not invention.
+    assert entity["description"] == ""
+    assert entity["portable"] is False
