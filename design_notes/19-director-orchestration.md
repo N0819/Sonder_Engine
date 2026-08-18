@@ -1,9 +1,13 @@
 # The Director as an orchestrator over scoped specialists
 
-**Branch `director-orchestration`, opened 2026-08-12.** Experiment, not a
-landing. `docs/UNBUILT.md` §2.18 holds the argument and the measurements; this
-note holds the architecture and the decisions already closed, so the branch
-does not re-litigate them every time it is picked up.
+**Opened as branch `director-orchestration` 2026-08-12; LANDED on `main`
+2026-08-14.** The architecture below is not a proposal any more -- it is the
+only Director path the engine has, and `AGENTS.md` cites this note as its
+contract documentation. The header used to say "Experiment, not a landing",
+which misled in the direction that costs most: a reader doing `docs/README.md`
+triage filed the shipped Director as an open experiment. What remains unbuilt
+is the short list in `docs/UNBUILT.md` §2.18; everything else here describes
+running code.
 
 ## Why, in one paragraph
 

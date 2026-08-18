@@ -380,8 +380,10 @@ def containment_chain(scene: dict, room_id: str) -> list:
 
 def ambient_scope(scene: dict, room_id: str):
     """(rooms, open_to_world): the set of rooms whose ambient signal can
-    reach room_id -- its connected component through open/open_door
-    barriers (either edge direction) in the current derived graph -- and
+    reach room_id -- its connected component through `_AMBIENT_BARRIERS`
+    (open, open_door and bars; sound carries through a cage, which is the
+    whole reason that barrier exists) in either edge direction, in the
+    current derived graph -- and
     whether that component reaches any room that is not an entity
     interior. With dock edges applied, a sealed vehicle's interior scopes
     to just itself (open_to_world False); docked with an open hatch it

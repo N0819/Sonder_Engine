@@ -2445,7 +2445,7 @@ hardening items are closed.
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
 
-### 1.52 The monolith-split audit: 43 findings, 8 repaired, 35 open
+### 1.52 The monolith-split audit: 43 findings, 20 repaired, 23 open
 
 The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and `agents/director.py`
 required somebody to read all 24,783 lines once. Nothing else in this project
@@ -2466,24 +2466,10 @@ the register, so it must shrink.
 
 **Live behaviour, still open.**
 
-- **SPATIAL F5** — `_phrase_table` re-resolves the language pack on every call
-  and swallows every exception (`except Exception: return {}`), so a pack
-  misconfiguration degrades silently to empty phrases; `sound_bearing`
-  triggers three fresh lookups per invocation.
-- **SPATIAL F12** — an authored room `size` outside the vocabulary is accepted
-  silently and grades as `medium`, indistinguishable from an unauthored room.
-- **SPATIAL F13** — a mirrored threshold hardcoded on one side only:
-  `size_facts` uses `ratio >= 6.7` as the inverse of `fits_in_other_hand`'s
-  `ratio <= 0.15`, and the two sides of one boundary can drift apart.
-- **SPATIAL F15** — the one unguarded room write in `apply_transit_dock_edges`:
-  a malformed room record raises at merge time instead of being skipped as
-  everywhere else in the file.
 - **COMMIT** — `_salience_of` and `_durable_dialogue_category` are hardcoded
   ENGLISH word lists in a language-pack engine. In a Japanese story every
   memory scores the flat length-based salience and no quote is ever kept
   verbatim, silently. `tools/remember_lines.py` inlines the same rule.
-- **DIRECTOR D7** — `if True:` and two `None` pre-initialisations, the skeleton
-  of the removed `director_orchestration` setting.
 
 **Dead code, and guards that cannot fire.**
 
@@ -2539,23 +2525,6 @@ the register, so it must shrink.
 
 **Documentation describing something else.**
 
-- **COMMIT** — `persist/commit_common.py`'s `# ---- Mapping commit ----` marker
-  labels the name-roster block; the real mapping commit sits unlabelled in
-  `commit_mapping.py`. Wrong before the move, carried verbatim through it.
-- **SPATIAL F9** — a `spatial_facts` comment describes an ordering the code
-  does not have.
-- **SPATIAL F14** — `ambient_scope`'s docstring undersells `_AMBIENT_BARRIERS`,
-  omitting `bars`.
-- **DIRECTOR D6** — a doc block names `_orchestration_gate_backstop`, which
-  does not exist.
-- **DIRECTOR D8** — a comment says interpret-side specialist dispatch is future
-  work; it is shipped and tested.
-- **DIRECTOR D12** — §2.18 below still carries the orchestration proposal the
-  code has landed, while `Design.md`'s conformance row says Built. Check
-  §2.19's cross-reference at the same time.
-- **DIRECTOR D13** — design note 19's header still reads "Branch
-  `director-orchestration` ... Experiment, not a landing." The architecture it
-  describes is the only Director path on `main`.
 - **COMMIT** — `update_place_graph` documents a `"told"` basis with no writer.
   The docstring is honest about it, so this is a register entry rather than a
   lie: a testimony-derived place-graph writer is designed, accepted by the data
@@ -2582,6 +2551,32 @@ the register, so it must shrink.
   read as a departure by all three.
 - SPATIAL F1 — `_SCENT_BARRIERS`, a declared vocabulary its own function
   ignored, now the graded table `scent_level` actually reads.
+- SPATIAL F5 — `_phrase_table`'s blanket `except Exception: return {}`, which
+  degraded a broken pack to English-shaped silence. Its other half is REFUTED
+  rather than repaired: `installed_language_packs` caches, so there was never
+  a per-call pack resolution to memoize.
+- SPATIAL F12 — an authored room `size` outside the vocabulary, and the second
+  copy of the vocabulary that let it happen (`crowds.py` held the list the
+  grader graded against). `scene_lint` now reports the authored word.
+- SPATIAL F13 — the hand-mirrored `6.7` inverse of `fits_in_other_hand`'s
+  `0.15`, now one `_HAND_HELD_RATIO` shared by all three statements of it.
+- SPATIAL F15 — the one unguarded room write in `apply_transit_dock_edges`.
+- SPATIAL F9/F14, DIRECTOR D6/D8, COMMIT's `# ---- Mapping commit ----` marker
+  — the comment-only defects, batched.
+- DIRECTOR D7 — the `if True:` vestige of the removed orchestration flag.
+- DIRECTOR D12/D13 — §2.18 rewritten to hold only what has NOT landed, and
+  design note 19's "Experiment, not a landing" header corrected.
+
+**Landed from the Phase 2 whole-codebase audit** (not one of the 43, recorded
+here because it is the most serious thing either audit found):
+
+- A live information-firewall leak. `_composer_outcome` built body records
+  without `disguise_conceals_identity` -- computed and dropped on the same
+  line -- and an absent flag reads as "does not conceal". An
+  identity-concealing disguise worked in the act view and stopped working in
+  the outcome view of the same beat, handing the canonical name to every
+  observer who had ever met the wearer. `disguise_breaks_recognition` now
+  fails CLOSED on a half-built record.
 
 **Not a defect, but the honest ceiling on what the split bought.** The three
 functions that made these files unreadable did not get smaller:
@@ -3153,192 +3148,41 @@ rather than creating another one-off question script.
 
 ---
 
-### 2.18 The Director as an orchestrator over scoped specialists
+### 2.18 The orchestrated Director: what is left after it landed
 
-**Raised 2026-08-12**, from the owner: *"the director is the single most
-complex task, and most failure prone. Anything to reduce its payload may
-increase its reliability."*
+**LANDED 2026-08-14.** The fan-out is the only Director path: there is no
+`DEFAULT_PROMPTS["director_resolve"]`, no `director_orchestration` setting,
+and `director_fanout_mode` chooses concurrency rather than a different set of
+hands. `Design.md`'s conformance row says Built, and it is right.
 
-**What is measured.** `director_resolve` reads 18,718 tokens of static
-instruction sheet plus a ~7,500-token payload — the prompt is 71% of a median
-call. Roughly 10–11k of those tokens are conditional machinery, and a typical
-beat needs 2–4k of it. Six op families have never fired once across all 2,243
-stored resolves (`courier_ops`, `crowd_ops`, `telling_ops`, `artifact_ops`,
-`offscreen_plan_ops`, `destruction`), while costing ~1,870 tokens of
-instruction on every call. Near-dead: `cast_changes` 0.5%, `overlays` 0.4%,
-`weather` 0.1%, `containment` 1.9%.
+This entry used to be the whole proposal — the argument, the measurements,
+the retracted framings and the build log — with its landing recorded in a
+paragraph at the bottom. A reader triaging §2 read the shipped architecture
+as an open experiment, and this register is supposed to WIN when the status
+lists disagree. The argument and the numbers live in
+[`design_notes/19-director-orchestration.md`](../design_notes/19-director-orchestration.md)
+and in the alpha 9.2 changelog; what belongs here is only what is still
+unbuilt:
 
-`director_resolve` is also the only stage that can produce an uncommittable
-turn: `_prepare_turn_commit` reads its `state_diff` and any raise there kills
-the beat. Character output cannot — it is not a persistence authority. And 84%
-of all rerolls begin at a Director stage, with 6.1% of turns needing three or
-more attempts.
-
-**The proposal.** An orchestrating Director over specialists, each OWNING a
-subset of `state_diff` channels, behind one prose author.
-
-**The argument that distinguishes it from conditional prompt assembly**:
-*a specialist that is not dispatched costs nothing at all.* Not a smaller
-prompt block — no prompt, no payload, no output surface, and no chance to
-emit the channel wrongly. Mechanics not in play this beat are cold-stored
-rather than merely trimmed.
-
-**RETRACTED (owner, 2026-08-12): the framing of conditional assembly as the
-ALTERNATIVE.** They are levels of one hierarchy, not competitors:
-orchestration gives ownership, parallelism and fault isolation; conditional
-assembly INSIDE each specialist gives the token savings. Measured over the
-same corpus, a specialist that runs at all almost always touches exactly one
-of its own channels (objects 1.11 of 5, social 1.10 of 4, body 1.13 of 4,
-contact 1.22 of 4, spatial 1.52 of 6), so the orchestrator grants each
-specialist a per-beat SCOPE — the set of its channels with possible work —
-and the specialist's sheet is assembled from exactly those channels' chunks.
-Dispatch is `bool(scope)`: one computation, so the two gating levels cannot
-disagree, and one backstop covers both (a channel outside every served scope
-that ships content anyway reaches `tell_director`).
-
-It also answers the prefill objection that sank the first analysis. That
-analysis assumed N shards each need the shared dynamic context, so fan-out
-multiplies prefill. Scoped specialists do not: an attire specialist needs the
-wardrobe, not the room graph, and on an ordinary beat only one or two run at
-all. Total prefill can fall below today's single 26k call rather than
-multiplying it.
-
-**The offscreen family's 0% is a placeholder, not a verdict.** Read the wrong
-way that number says "delete it"; it says the world outside the scene is
-declared and unbuilt. Crowds moving, couriers carrying news, plans advancing
-while nobody watches — plausibly as complex a task as the whole present
-Director, and the specialist most likely to become the LARGEST rather than the
-smallest. It is an argument for this architecture: a monolith cannot absorb an
-offscreen simulator without every ordinary beat paying for it, which is part of
-why the capability has stayed at zero. Pinned for development. Its gate reads
-scene contents today and will need revisiting the moment "somewhere else is
-happening" stops being visible from the current room.
-
-**Per-specialist models.** A narrow specialist may not need a frontier model.
-`agent_models` already keys configuration by role, so a lean fast model for a
-scoped structural task and a frontier model for the prose author is a
-configuration change rather than new machinery. Untested, and one of the more
-interesting things the experiment can measure.
-
-**What it must not become.** THE GATE HAS TO FAIL OPEN. If the orchestrator
-decides "no attire this beat" and there was an attire change, the change is
-silently lost — no warning, no retry, nothing in the ledger. That is this
-codebase's recurring failure class, not a hypothetical: `entry_ops`,
-`offscreen_plan_ops` and `project_ops` each cost a measurement, and the
-`ForwardRef` blind spot in `tools/project_check.py` (2026-08-12) hid the guard
-built to catch exactly it. A gating decision is a new silent-drop surface and
-is the one thing that could make the Director LESS durable.
-
-Two things make it survivable, both precedented here: gating already exists
-(`build_plan` omits stages from `interpret.flow`; `pick_background_reactor`
-returns `None` deterministically on most turns), and the backstop is a
-deterministic post-check in the shape of `changes_asserted` reconciliation —
-if the resolved prose asserts a change and no specialist owned it, say so.
-Pointed at the gate rather than at the channel.
-
-**What stays with the orchestrator, not the specialists.** The cross-channel
-judgments: the movement backstop validates against the MERGED diff, substance
-destinations derive from contact topology, a `scales` change cancels contacts
-before the beat's own contact ops, containment derives positions. These cannot
-be seen from inside one channel, which means the orchestrator is not purely a
-router.
-
-**Also settled, so the experiment does not re-litigate it.** Splitting the
-PROSE from the DIFF is refused, not deferred: prose↔diff reconciliation is the
-largest measured defect class in resolve's warnings, and blind concurrent
-peers make it structurally unfixable rather than merely error-prone. One prose
-author, structure owned against it — the alpha-8.0 perception pattern.
-
-**How it gets judged.** Not on argument. `llm/providers.py` now records the model
-that actually SERVED each call (`_note_served_model`), because the corpus
-behind every number above was served by a router silently substituting models
-and cannot be segmented. A pinned model plus per-call attribution is a
-precondition for the experiment meaning anything. The success metric is the
-existing deterministic detectors — reconciliation omissions, authority
-residuals, uncommittable turns — not a subjective read.
-
-**Built (branch `director-orchestration`):** all six specialists — `body`,
-`social`, `contact`, `objects`, `spatial` (the movement backstop stays with
-the orchestrator, judging the MERGED diff), and `offscreen` (its OPS
-surface and gate only: crowds/couriers/tellings/plans/hearsay-verdicts,
-genuinely dispatchable the moment its subjects exist in scene and cold in
-practice because the corpus has never contained them; the SIMULATOR stays
-deferred) — shared between BOTH Director stages (interpret dispatches the
-same definitions, scoped to the player's declaration, merging into
-`state_assertions` before the deterministic validators). It shipped behind
-the `director_orchestration` setting at default OFF; that flag is gone —
-see the LANDED paragraph below. Per-beat channel SCOPE
-drives dispatch AND per-specialist sheet assembly (chunked prompts,
-`prompts.specialist_prompt`; structure enforced by
-`tools/project_check.py`); the fan-out is genuinely PARALLEL and never
-streams (canonical-order assembly, failure isolation under concurrency,
-Aborted propagation — measured: five specialists at 0.5s collapse from
-2.50s sequential to 0.51s, 9ms overhead); scope_report {granted, served,
-produced} persists on each step; the single scope backstop reports through
-`tell_director`; per-specialist roles are separable in `_log_usage`;
-detector parity and every joint pinned by
-`tests/test_director_orchestration.py`.
-
-**LANDED 2026-08-14. The flag and the monolithic sheet are both gone**, which
-closes the "flag on vs. off before it may default on" measurement condition
-by answering it: the fan-out is the only Director path. It is more stable,
-costs fewer tokens and less wall clock, so a switch preserving the losing
-path only preserved a way to make the engine worse. The registry entry for
-the unsplit sheet went with it — nothing sent it, so a preset key for it was
-folklore — and every `RESOLVE_*` segment it was assembled from now belongs
-to exactly one specialist or to the prose author's sheet, held there by
-`test_every_delegated_block_has_exactly_one_owner`. What replaced the switch
-is a CONCURRENCY choice, `director_fanout_mode`, parallel by default:
-sequential exists for a provider that will not take concurrent requests, and
-is not a fallback to the monolith (same hands, same scopes, same canonical
-assembly). Two defects surfaced in the same pass and are fixed: the chunked
-sheets were assembled per beat rather than read from the registry, so their
-preset entries were editable and UNREAD — a host could rewrite the body
-specialist's sheet, save, and the engine would send the stock one (all six
-are registered now and an override replaces the sheet whole); and a
-specialist repair could only mend or stay silent, so a hand asked to encode
-something already carried shipped a staleness warning against a change it
-had just certified — its `resolved_events` echo is read back off the repair
-call now, with `already_true` verified against standing state exactly as a
-dispatch verdict is. The prose author's OWN sheet is scoped the
-same way (second carve, same mechanism): 14 prose-duty chunks
-(`prompts.PROSE_AUTHOR_SHEET`/`prose_author_prompt`) gated on scene state
-by `_PROSE_DUTY_GATES` from the same `_gate_facts` call, fail-open at
-every level, never-gated contract blocks (firewall, manifest,
-player-asserted facts, dialogue log, authority, pressure-OPEN) enforced by
-`check_prose_author_chunks`, shipped-duty audit folded into the same scope
-backstop, granted/gated_out persisted as `orchestration.prose_scope`.
-Numbers (design note 19, end): prose-author core 6.3k tok, ~6.7–7.6k
-typical, 9.3k fail-open ceiling, vs the 21.1k monolith; typical-beat floor
-~9.1k total; the heaviest fail-open physical beats reach ~21k total but
-spread over parallel sub-7.6k calls. Run 20 (14 beats, real
-models, 2026-08-12) hardened the delegation from rhetorical to structural:
-the prose author's stated output shape no longer carries the delegated
-channels at all (`_PROSE_AUTHOR_OUTPUT_SHAPE` — the full shape was the
-template the model kept filling, 18 discarded-channel emissions in 14
-beats, pure output-token latency), and interpret gets
-`INTERPRET_DELEGATION_NOTE` appended at the call site only when the flag
-is on, overriding its own "FULL state_diff structure ... no subset"
-instruction (design note 19, run-20 section). **What remains:** slicing
-the prose author's PAYLOAD (still the full monolithic payload — the next
-real token win); leaning interpret's own sheet by chunks (the delegated
-channels are suppressed at the source now, but the blocks teaching them
-still load); optional leaner rewrites of the specialist chunks (permitted
-— they exist only on the orchestrated path); the offscreen SIMULATOR
-(owner-deferred, out-of-band propose/ratify per the note above);
-re-measuring the replaced-channel warning rate on a live run (the stored
-variants hold only the MERGED output, so the after-rate cannot be read
-from run 20's own beats); provider cache affinity (run 20 diagnosed the
-19% prefix-cache rate as provider replica routing, not byte instability —
-hits were constant sheet-sized prefixes, misses all-or-nothing; honest
-ceiling ~57% with the per-beat payload inherently uncacheable; a
-pinned/dedicated instance is configuration, not code, and is recorded
-rather than chased). Two shape traps the same run surfaced are
-closed in `llm/schemas.py` rather than the prompts: a single value under a
-`dict[str, list]` channel (`overlays`/`conditions`, StateDiff and the body
-specialist) now wraps to the list of one, and a bare-string
-`evidence` citation coerces like the list-of-strings form always did —
-each had been costing a full temperature-0 repair round.
+- **The prose author's PAYLOAD is still the full monolithic one.** Its SHEET
+  was carved (14 duty chunks, `_PROSE_DUTY_GATES`); the payload was not. The
+  next real token win.
+- **`director_interpret`'s own sheet is not chunked.** The delegated channels
+  are suppressed at the source (`INTERPRET_DELEGATION_NOTE`), but the blocks
+  teaching them still load on every call.
+- **The specialist chunks have never been rewritten for leanness.** Permitted
+  — they exist only on the orchestrated path, so there is no monolith to keep
+  them compatible with.
+- **The offscreen SIMULATOR** (out-of-band propose/ratify) remains
+  owner-deferred. The `offscreen` specialist ships the ops surface only, and
+  schedules nothing.
+- **The replaced-channel warning rate has never been re-measured live.**
+  Stored variants hold only the MERGED output, so the after-rate cannot be
+  read from run 20's own beats.
+- **Provider cache affinity is configuration, not code.** Run 20 diagnosed
+  the 19% prefix-cache rate as provider replica routing rather than byte
+  instability; honest ceiling ~57%, since the per-beat payload is inherently
+  uncacheable. Recorded rather than chased.
 
 
 ### 2.19 Character: scope the sheet, do not split the judgement

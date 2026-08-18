@@ -93,7 +93,13 @@ def _monotonic_elapsed(prev_clock, time_diff):
         return was + duration, (claimed, was)
     return claimed, None
 
-# ---- Mapping commit ----
+# ---- Address forms and the name roster ----
+#
+# NOT the mapping commit, which is `commit_mapping.py`. This block carried a
+# `# ---- Mapping commit ----` marker for as long as it lived in commit.py,
+# where the real mapping commit sat 1,700 lines below it under a heading that
+# said "Background-presence tracking". The roster below is read by memory,
+# background, mapping, carriers and crowds alike.
 
 _ADDRESS_ARTICLES = ("the ", "a ", "an ")
 
