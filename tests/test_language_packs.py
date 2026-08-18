@@ -133,6 +133,10 @@ def test_japanese_deterministic_guards_use_japanese_cues():
             "agents.director", "_UNCONSCIOUSNESS_CUE").search("彼は気を失った")
         assert linguistic(
             "agents.director", "_SLEEP_CUE").search("彼女は眠っている")
+        assert linguistic(
+            "agents.director", "_STAY_UNDER_CUE").search("眠り続ける")
+        assert not linguistic(
+            "agents.director", "_STAY_UNDER_CUE").search("目を覚ます")
     finally:
         current_language_id.reset(token)
 

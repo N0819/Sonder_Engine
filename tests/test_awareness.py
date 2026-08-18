@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import time
 
+from language_runtime import english_linguistic
 from story.character_schema import default_character_data, default_persona_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.scene import (
@@ -339,26 +340,29 @@ class TestFaintIsUsuallyAnAdjective:
     ]
 
     def test_the_adjective_never_fires(self):
-        from agents.director import _UNCONSCIOUSNESS_CUE
+        cue = english_linguistic("agents.director",
+                                 "_UNCONSCIOUSNESS_CUE")
         for text in self.ADJECTIVE:
-            assert not _UNCONSCIOUSNESS_CUE.search(text.lower()), text
+            assert not cue.search(text.lower()), text
 
     def test_the_verb_still_fires(self):
-        from agents.director import _UNCONSCIOUSNESS_CUE
+        cue = english_linguistic("agents.director",
+                                 "_UNCONSCIOUSNESS_CUE")
         for text in self.VERB:
-            assert _UNCONSCIOUSNESS_CUE.search(text.lower()), text
+            assert cue.search(text.lower()), text
 
     def test_the_sleep_cue_agrees(self):
         """`_SLEEP_CUE` carried the same bare alternation, and errs toward
         KEEPING an onset -- so a false positive there puts the player under."""
-        from agents.director import _SLEEP_CUE
+        cue = english_linguistic("agents.director", "_SLEEP_CUE")
         for text in self.ADJECTIVE:
-            assert not _SLEEP_CUE.search(text.lower()), text
+            assert not cue.search(text.lower()), text
         for text in self.VERB:
-            assert _SLEEP_CUE.search(text.lower()), text
+            assert cue.search(text.lower()), text
 
     def test_the_other_cues_are_untouched(self):
-        from agents.director import _UNCONSCIOUSNESS_CUE
+        cue = english_linguistic("agents.director",
+                                 "_UNCONSCIOUSNESS_CUE")
         for text in ("he was knocked out", "she blacks out", "the blow makes "
                      "you pass out", "she is out cold", "losing consciousness"):
-            assert _UNCONSCIOUSNESS_CUE.search(text.lower()), text
+            assert cue.search(text.lower()), text
