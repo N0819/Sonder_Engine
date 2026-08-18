@@ -11,7 +11,7 @@ import copy
 import json, time
 from core.db import q, qtx, transaction, wget, wset
 from story.character_schema import character_name_from_text, persona_name
-from story.scene import set_char_status
+from story.scene import cast_change_status, set_char_status
 from world.mechanics import mechanics_sweep, stable_event_key
 from persist.commit_common import _registered_name_roster, _room_of
 from persist.commit_scene_state import prepare_scene_commit
@@ -343,6 +343,21 @@ def commit_cast_changes(ctx, nonce):
     with transaction():
         for chg in (diff.get("cast_changes") or []):
             who = str(chg.get("who") or "").lower().strip()
-            stt = chg.get("status")
-            if stt in ("active", "dormant") and who in name2id:
-                set_char_status(cid, name2id[who], stt, frame_id=frame_id)
+            status = cast_change_status(chg.get("status"))
+            if status is None:
+                # Never silently: this used to be `stt in ("active",
+                # "dormant")` with no else, so a character who walked out
+                # under any other word stayed in the live roster -- present,
+                # addressable, and running a step every beat -- while the
+                # other readers of the SAME entry treated them as gone.
+                ctx.add_warning(
+                    "cast change for %r has unrecognized status %r; the "
+                    "roster is unchanged (expected 'active' or 'dormant')"
+                    % (chg.get("who"), chg.get("status")))
+                continue
+            if who not in name2id:
+                ctx.add_warning(
+                    "cast change names %r, who is not an attached character; "
+                    "the roster is unchanged" % (chg.get("who"),))
+                continue
+            set_char_status(cid, name2id[who], status, frame_id=frame_id)

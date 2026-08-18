@@ -210,6 +210,58 @@ def chat_character_sheet(chat_id, char_id):
         return {}
 
 
+#: The two states `chat_chars.status` has, and the only two an attached
+#: character can be in: in the live scene, or out of it. `offscreen.py` reads
+#: `dormant` as the away roster, so these are not labels -- they decide which
+#: simulation a mind is in.
+CAST_STATUS_PRESENT = "active"
+CAST_STATUS_ABSENT = "dormant"
+
+#: What the Director may write in `state_diff.cast_changes[].status`, mapped
+#: to those two. PROTOCOL tokens, not prose: the social specialist is asked
+#: for these words in English whatever language the story is in, the same way
+#: it is asked for `barrier:'open'|'closed_door'`.
+#:
+#: The synonyms are here because the field is a free string on an untyped
+#: entry, and a model handed one reaches for the natural word -- `schemas.py`'s
+#: own worked example writes `"departed"`. The engine used to test
+#: `stt in ("active", "dormant")` and drop everything else without a word,
+#: which left the character `active` in the roster while three other readers
+#: of the same entry treated them as gone.
+_CAST_CHANGE_STATUS = {
+    "active": CAST_STATUS_PRESENT,
+    "arrived": CAST_STATUS_PRESENT,
+    "arrives": CAST_STATUS_PRESENT,
+    "arriving": CAST_STATUS_PRESENT,
+    "present": CAST_STATUS_PRESENT,
+    "returned": CAST_STATUS_PRESENT,
+    "rejoined": CAST_STATUS_PRESENT,
+    "joined": CAST_STATUS_PRESENT,
+    "dormant": CAST_STATUS_ABSENT,
+    "departed": CAST_STATUS_ABSENT,
+    "departs": CAST_STATUS_ABSENT,
+    "departing": CAST_STATUS_ABSENT,
+    "left": CAST_STATUS_ABSENT,
+    "leaves": CAST_STATUS_ABSENT,
+    "leaving": CAST_STATUS_ABSENT,
+    "exited": CAST_STATUS_ABSENT,
+    "gone": CAST_STATUS_ABSENT,
+    "away": CAST_STATUS_ABSENT,
+    "offscreen": CAST_STATUS_ABSENT,
+    "inactive": CAST_STATUS_ABSENT,
+}
+
+
+def cast_change_status(value):
+    """One `cast_changes` status word -> `active`, `dormant`, or None.
+
+    None means UNRECOGNIZED, and every caller must say so rather than pick a
+    default: the two answers send a mind into different simulations, and a
+    silent guess is how a character stays in the roster after walking out.
+    """
+    return _CAST_CHANGE_STATUS.get(str(value or "").strip().casefold())
+
+
 def set_char_status(chat_id, char_id, status, frame_id=None):
     """Writes to the base chat_chars row when frame_id is None (present,
     unchanged behavior), else UPSERTs the frame-specific override row --

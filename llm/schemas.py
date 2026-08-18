@@ -2040,6 +2040,12 @@ class StateDiff(LenientModel):
     vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
     attire: dict[str, AttireDiff] = Field(default_factory=dict)
+    # Who entered or left the story's live cast. {who, status, reason}, with
+    # status ∈ active|dormant -- `active` is in the scene, `dormant` is out of
+    # it (the roster `offscreen.py` simulates). A free string on an untyped
+    # entry, so the commit normalizes the natural words a model reaches for
+    # ("departed", "arrived") onto those two and WARNS on anything else rather
+    # than dropping it; see `scene.cast_change_status`.
     cast_changes: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
@@ -4610,7 +4616,7 @@ OUTPUT_EXAMPLES = {
     },
     "director_social": {
         "cast_changes": [
-            {"who": "Merek", "status": "departed",
+            {"who": "Merek", "status": "dormant",
              "reason": "rode for the garrison"},
         ],
         "introductions": [{"who": "Mara", "learns": "Sable"}],
