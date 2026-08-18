@@ -478,6 +478,23 @@ def _unfamiliar_person():
     return str(compositor_text("unknown_actor_fallback"))
 
 
+def _visible_room_label(scene, name):
+    """The display name of the room a body is standing in, or "".
+
+    Used only for a body seen from ANOTHER room, where "close by" and "across
+    the room" are both false. Naming the room is the one distance phrasing that
+    is true through a doorway, a grille and a pane of glass alike.
+    """
+    from spatial import room_of
+
+    room_id = room_of(scene, name)
+    if not room_id:
+        return ""
+    room = (scene.get("rooms") or {}).get(room_id)
+    label = str((room or {}).get("name") or room_id).strip()
+    return label
+
+
 def presence_percepts(scene, observer_name, co_present, display_map):
     """Presence -- a tier, a side, an arc -- for every co-present body the
     observer can SEE. Subtracts: a body `visual_level_between` answers "none"
@@ -494,8 +511,26 @@ def presence_percepts(scene, observer_name, co_present, display_map):
         if level == "none":
             continue
         tier = proximity_rel(scene, observer_name, name)
+        room = None
         if tier is None:
-            continue                       # co-located only
+            # NOT "not present" -- `proximity_rel` measures WITHIN a room, so
+            # None means "not in this one". A body the observer can plainly
+            # see, through a window, a grille, a one-way mirror or an open
+            # doorway, was dropped here for want of a within-room tier: the
+            # engine handed the mind the adjacent ROOM and never anyone
+            # standing in it. Live, an interviewer watching through
+            # observation glass received the cell and not the woman in it.
+            #
+            # `visual_level_between` above has already decided this is visible
+            # and already applies the cross-room caps (the opening's view cone,
+            # an authored far edge), so the only thing missing was somewhere to
+            # put the distance. It goes in as the room they are in, which is
+            # the true answer and the one that stays true whatever the barrier
+            # is made of.
+            room = _visible_room_label(scene, name)
+            if not room:
+                continue
+            tier = "beyond"
         arc = entity_arc(scene, observer_name, name)
         if arc == "rear":
             continue                       # no new visual detail from behind
@@ -521,7 +556,8 @@ def presence_percepts(scene, observer_name, co_present, display_map):
             kind="presence", channel="sight",
             source_label=label,
             fidelity="full" if level == "full" else "degraded",
-            data={"tier": tier, "side": side, "arc": arc, "sight": level},
+            data={"tier": tier, "side": side, "arc": arc, "sight": level,
+                  **({"room": room} if room else {})},
             salience=0.35,
             dedupe_key="presence:" + _short_hash(name, tier, arc, level),
         ))
@@ -951,8 +987,10 @@ _COUNT_WORDS = {
 def _presence_clause(p):
     """One body's presence as a bare clause -- no capital, no full stop, so
     it can stand alone or be joined with others."""
-    tier = _TIER_PHRASES.get(
-        str(p.data.get("tier")), _TIER_PHRASES["default"])
+    room = str(p.data.get("room") or "")
+    tier = (_en("presence_in_room", room=room) if room
+            else _TIER_PHRASES.get(str(p.data.get("tier")),
+                                   _TIER_PHRASES["default"]))
     side = p.data.get("side")
     side_clause = _en("side", side=side) if side in ("left", "right") else ""
     return f"{p.source_label} is {tier}{side_clause}"

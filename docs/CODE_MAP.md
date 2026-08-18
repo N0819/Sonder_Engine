@@ -11,7 +11,7 @@
 | `agents/background.py` | 927 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3398 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6037 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
-| `agents/composer.py` | 1679 |  | `agents.common`, `scene`, `spatial` |
+| `agents/composer.py` | 1717 |  | `agents.common`, `scene`, `spatial` |
 | `agents/director.py` | 7847 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `attire`, `character_schema`, `db`, `memory`, `paradox`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `survival` |
 | `agents/loops.py` | 1050 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
@@ -131,14 +131,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_render_view_english()` | 1207 | 91 lines |
-| `_render_episode_english()` | 1426 | 80 lines |
-| `pose_percepts()` | 573 | 75 lines |
-| `observations_from_render()` | 1605 | 75 lines |
-| `speech_percept()` | 767 | 59 lines |
-| `_episode_sentence()` | 1366 | 58 lines |
-| `_render_standing()` | 1115 | 54 lines |
-| `line_hear_level()` | 345 | 53 lines |
+| `_render_view_english()` | 1245 | 91 lines |
+| `_render_episode_english()` | 1464 | 80 lines |
+| `pose_percepts()` | 609 | 75 lines |
+| `observations_from_render()` | 1643 | 75 lines |
+| `presence_percepts()` | 498 | 67 lines |
+| `speech_percept()` | 803 | 59 lines |
+| `_episode_sentence()` | 1404 | 58 lines |
+| `_render_standing()` | 1153 | 54 lines |
 
 ### `agents/director.py`
 
