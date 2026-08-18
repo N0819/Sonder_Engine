@@ -2384,6 +2384,37 @@ built from heard/witnessed rows only. If a future need arises, the honest
 shape is an authored-memory import a host chooses per character, not an
 automatic reconstruction.
 
+### 1.50 Residuals from the speaking-device repair (chat 80)
+
+
+The repair that keyed one presence per body, gated background speech on
+personhood, and stopped `state_diff` field names becoming entities left three
+things deliberately unfixed:
+
+- **`dialogue_turns` carries no provenance.** The ledger cannot say whether a
+  dialogue turn was Director-authored (the fiction voicing this presence) or
+  backstop-authored (this stage voicing itself into its own future
+  qualification). So chat 80's merged Scranton Reality Anchors record keeps
+  the two turns the backstop should never have authored, and a kind-undecided
+  presence stays `promotable` on such history. The speech gate makes the
+  history inert — an undecided presence needs `routed_to_background` or
+  `flow.addressed_to` to speak, and auto-promotion additionally demands
+  deliberate `addressed_turns` — but splitting provenance would also let
+  ambient requalification (at-post, mentioned) return for an undecided
+  presence whose history is genuinely the Director's, which the uniform rule
+  currently denies (a "dalek war machine" standing silent until re-engaged).
+- **Not every reader of `background_presences` folds.** The gate, the stage,
+  the manager roster, the promotion list and commit read through
+  `_fold_duplicate_presences`; the known-name rosters in `agents/director.py`
+  and `agents/perception.py` and the subject index in `subjects.py` read raw
+  and see a split ledger until the next commit heals it. They consume name
+  lists, so the cost is a duplicate spelling for at most one beat.
+- **`_STATE_DIFF_SIBLING_FIELDS` is still hand-maintained.**
+  `schemas.NON_ENTITY_FIELD_KEYS` is computed from the models' own
+  declarations, but the hoist's sibling list is not, so a new StateDiff
+  channel is refused as an entity everywhere while its hoist-up repair needs
+  the list edited by hand.
+
 Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in
 [`../Design.md`](../Design.md) § Structural debt.
