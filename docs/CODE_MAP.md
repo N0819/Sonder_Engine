@@ -17,8 +17,8 @@
 | `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `character_schema`, `db`, `memory`, `prompts`, `scene` |
 | `agents/narration.py` | 1210 | Player-facing narration agent. | `agents.common`, `character_schema`, `db`, `prompts`, `scene`, `schemas`, `spatial`, `weather` |
 | `agents/perception.py` | 4341 | Opening, action-onset, and outcome observer views. | `affect`, `agents`, `agents.common`, `character_schema`, `db`, `scene`, `spatial` |
-| `agents/runtime.py` | 1094 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
-| `agents/storage.py` | 115 | Step and active-variant persistence helpers. | `db` |
+| `agents/runtime.py` | 1116 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `character_schema`, `checkpoints`, `commit`, `db`, `pipeline_context`, `providers`, `scene` |
+| `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `db` |
 | `ambience.py` | 2090 |  | `backdrops`, `db`, `outofband`, `weather` |
 | `app.py` | 5592 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `ambience`, `attire`, `auth_routes`, `backdrops`, `character_schema`, `chat_archive`, `checkpoints`, `commit`, `db`, `dialogue_colors`, `frames`, `greetings`, `guest_access`, `importers`, `memory`, `paradox`, `pipeline_context`, `prompts`, `providers`, `scene`, `survival`, `updates` |
 | `artifacts.py` | 565 |  | `prompts` |
@@ -205,27 +205,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 733 | 306 lines |
-| `build_plan()` | 528 | 85 lines |
+| `_run_pipeline()` | 755 | 306 lines |
+| `build_plan()` | 550 | 85 lines |
+| `_stream_one()` | 325 | 68 lines |
 | `_load_extra_players()` | 46 | 59 lines |
-| `run_pipeline()` | 1040 | 55 lines |
-| `resume_key_for_turn()` | 473 | 54 lines |
-| `_stream_one()` | 325 | 48 lines |
-| `_stream_parallel()` | 374 | 45 lines |
-| `_rehydrate_loop_results()` | 685 | 41 lines |
+| `run_pipeline()` | 1062 | 55 lines |
+| `resume_key_for_turn()` | 495 | 54 lines |
+| `_stream_parallel()` | 394 | 45 lines |
+| `_rehydrate_loop_results()` | 707 | 41 lines |
 
 ### `agents/storage.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `save_step()` | 21 | 28 lines |
-| `active_content()` | 50 | 17 lines |
-| `mark_steps_stale()` | 85 | 12 lines |
-| `delete_step()` | 106 | 10 lines |
-| `_set_steps_stale()` | 77 | 7 lines |
-| `clear_steps_stale()` | 98 | 7 lines |
-| `variant_count()` | 68 | 4 lines |
-| `step_is_stale()` | 73 | 3 lines |
+| `save_step()` | 21 | 36 lines |
+| `active_content()` | 58 | 17 lines |
+| `mark_steps_stale()` | 93 | 12 lines |
+| `delete_step()` | 114 | 10 lines |
+| `_set_steps_stale()` | 85 | 7 lines |
+| `clear_steps_stale()` | 106 | 7 lines |
+| `variant_count()` | 76 | 4 lines |
+| `step_is_stale()` | 81 | 3 lines |
 
 ### `ambience.py`
 
