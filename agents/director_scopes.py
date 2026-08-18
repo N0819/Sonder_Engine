@@ -19,6 +19,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+from typing import get_origin
+
 from core.db import q
 from world.survival import survival_enabled
 
@@ -124,8 +126,11 @@ SPECIALISTS = {
     },
 }
 
-_DELEGATED_CHANNELS = tuple(
-    channel for spec in SPECIALISTS.values() for channel in spec["channels"])
+#: Every channel any specialist owns, in canonical assembly order. MUTATED
+#: in place by `_rebuild_channel_owners`, never rebound: `director.py` and
+#: `director_fanout.py` bind the name at import, so a rebind would leave both
+#: readers holding the import-time list forever.
+_DELEGATED_CHANNELS = []
 
 #: `changes_asserted` category -> the delegated channel that answers for it.
 #: Categories with no delegated channel (time, transit, other, ...) stay
@@ -179,17 +184,33 @@ _CATEGORY_CHANNELS = {
     "world_facts": "world_facts",
 }
 
-#: channel -> the specialist that owns it (derived, so the two cannot
-#: disagree). The reconciliation repair router reads this: an omission in a
-#: delegated channel is that channel's OWNER's to repair, at specialist
-#: cost, never the prose author's at full-core cost.
-_LIST_DELEGATED = frozenset({
-    "cast_changes", "introductions", "world_facts", "contact_ops",
-    "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
-    "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
-    "telling_ops", "offscreen_plan_ops", "ratified_claims",
-    "contradicted_claims", "comms_ops",
-})
+#: The delegated channels whose value is a LIST rather than a keyed table.
+#: `_normalized_channel_value` coerces everything else to dict-or-`{}`, so a
+#: channel missing from here loses its whole value at assembly.
+#:
+#: DERIVED, not enumerated. For the engine's own channels the shape is already
+#: declared once, in `schemas.StateDiff` -- and a hand-copy of it was free to
+#: disagree with the model that actually parses the output. An extension's
+#: channel is in no schema, so it declares its own shape at registration
+#: (`register_specialist(list_channels=...)`) and defaults to a keyed table.
+#: Mutated in place for the same reason as `_DELEGATED_CHANNELS`.
+_LIST_DELEGATED = set()
+
+
+def _schema_list_channels():
+    """`StateDiff` fields typed as a bare list. The engine's half of the shape.
+
+    Reads the annotation rather than the default factory: the factory is what
+    an omission produces, the annotation is what the field IS.
+    """
+    from llm.schemas import StateDiff
+
+    out = set()
+    for name, field in StateDiff.__fields__.items():
+        annotation = getattr(field, "outer_type_", None)
+        if annotation is list or get_origin(annotation) is list:
+            out.add(name)
+    return out
 
 #: Per-CHANNEL work gates: does this beat have possible work in this
 #: channel? Every input is standing scene state or a structured declaration
@@ -296,14 +317,14 @@ _CHANNEL_GATES = {
 # `_CHANNEL_GATES` already states: over-dispatch costs one call, under-dispatch
 # silently drops work.
 
-#: Channels a specialist family owns, recomputed rather than frozen at import.
-#: It WAS a module-level comprehension over `SPECIALISTS`, which meant a family
-#: registered afterwards was invisible to `_route_repair_omissions` while being
-#: perfectly visible to dispatch -- a split that routes a repair to nobody.
-_CHANNEL_SPECIALISTS = {
-    channel: name
-    for name, spec in SPECIALISTS.items() for channel in spec["channels"]
-}
+#: channel -> the specialist that owns it. The reconciliation repair router
+#: reads this: an omission in a delegated channel is that channel's OWNER's to
+#: repair, at specialist cost, never the prose author's at full-core cost.
+#: Recomputed rather than frozen at import -- it WAS a module-level
+#: comprehension over `SPECIALISTS`, which meant a family registered afterwards
+#: was invisible to `_route_repair_omissions` while being perfectly visible to
+#: dispatch: a split that routes a repair to nobody.
+_CHANNEL_SPECIALISTS = {}
 
 
 def _default_channel_gate(facts):
@@ -311,19 +332,47 @@ def _default_channel_gate(facts):
 
 
 def _rebuild_channel_owners():
+    """The three channel registries, rebuilt together from `SPECIALISTS`.
+
+    Together, because they are three views of one fact and were not always
+    derived from it: an owner map, the ordered roll the scope backstop walks,
+    and the shape table assembly coerces against. Each one that stayed frozen
+    at import was a way for a family registered afterwards to be dispatched and
+    then dropped -- routed to nobody, reported by nobody, or emptied at merge.
+    """
+    schema_shapes = _schema_list_channels()
     _CHANNEL_SPECIALISTS.clear()
+    _DELEGATED_CHANNELS[:] = []
+    _LIST_DELEGATED.clear()
     for name, spec in SPECIALISTS.items():
         for channel in spec["channels"]:
             _CHANNEL_SPECIALISTS[channel] = name
+            _DELEGATED_CHANNELS.append(channel)
+        # An engine channel's shape is `StateDiff`'s to state; an extension's
+        # is its own, because no schema here has ever seen it.
+        if spec.get("ext_id"):
+            _LIST_DELEGATED.update(spec.get("list_channels") or ())
+        else:
+            _LIST_DELEGATED.update(
+                ch for ch in spec["channels"] if ch in schema_shapes)
+
+
+#: The engine's own six, populated the same way an extension's seventh will be.
+_rebuild_channel_owners()
 
 
 def register_specialist(ext_id, name, *, channels, prompt, gate=None,
-                        role="default", label=None):
+                        role="default", label=None, list_channels=None):
     """Add a Director specialist family owned by an extension.
 
     Returns its registered name. Raises on a name or channel that would
     collide with the engine's own, because a silent collision here transfers
     ownership of a real channel.
+
+    `list_channels` names the subset of `channels` whose value is a LIST.
+    Assembly coerces every other channel to a keyed table, so a list-valued
+    channel left undeclared arrives as `{}` -- dispatched, paid for and
+    discarded with nothing said.
     """
     ext_id = str(ext_id or "").strip()
     name = str(name or "").strip()
@@ -335,6 +384,12 @@ def register_specialist(ext_id, name, *, channels, prompt, gate=None,
         raise ValueError(f"specialist {full_name!r} declares no channels")
     if not str(prompt or "").strip():
         raise ValueError(f"specialist {full_name!r} declares no prompt")
+    listed = [str(channel or "").strip() for channel in (list_channels or [])]
+    unknown = sorted(set(listed) - set(wanted))
+    if unknown:
+        raise ValueError(
+            f"specialist {full_name!r} declares {unknown} list-shaped, "
+            "but does not own them")
     owned = [f"ext:{ext_id}:{channel}" for channel in wanted]
     for channel in owned:
         existing = _CHANNEL_SPECIALISTS.get(channel)
@@ -347,6 +402,7 @@ def register_specialist(ext_id, name, *, channels, prompt, gate=None,
         "role": str(role or "default"),
         "channels": tuple(owned),
         "ext_id": ext_id,
+        "list_channels": tuple(f"ext:{ext_id}:{channel}" for channel in listed),
         "prompt": str(prompt),
         "label": str(label or f"Specialist · {ext_id} · {name}"),
     }

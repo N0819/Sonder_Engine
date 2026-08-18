@@ -585,6 +585,53 @@ class TestDirectorSpecialists:
             "weather", channels=["front"], prompt="Track the weather.")
         assert "ext:seams:front" in director._CHANNEL_SPECIALISTS
 
+    def test_the_delegated_channel_list_is_rebuilt_not_frozen_at_import(
+            self, temp_db, bare):
+        """The sibling of the owner map, and it was frozen the same way.
+
+        `_DELEGATED_CHANNELS` is what the scope backstop walks to ask "did
+        anything produce content in a channel nobody was scoped to?" Frozen at
+        import, it names only the engine's own -- so the gate-mispredict report
+        is blind to every extension channel there is.
+        """
+        from agents import director
+
+        bare.add_director_specialist(
+            "morale", channels=["ops"], prompt="p")
+        assert "ext:seams:ops" in director._DELEGATED_CHANNELS
+        extension_runtime.disable_extension("seams")
+        assert "ext:seams:ops" not in director._DELEGATED_CHANNELS
+
+    def test_a_family_may_declare_a_channel_list_shaped(self, temp_db, bare):
+        """Assembly coerces a channel to dict unless it is known list-shaped.
+
+        For the engine's own that shape is derived from `StateDiff`. An
+        extension's channel is in no schema, so the shape has to be declared --
+        and before it could be, a family that emitted a list had its entire
+        output replaced by `{}` at assembly: dispatched, paid for, discarded,
+        with no warning anywhere.
+        """
+        from agents import director
+
+        bare.add_director_specialist(
+            "morale", channels=["ops", "meter"], list_channels=["ops"],
+            prompt="p")
+
+        assert director._normalized_channel_value(
+            "ext:seams:ops", [{"note": "steady"}]) == [{"note": "steady"}]
+        # Undeclared stays dict-shaped, which is the documented default.
+        assert director._normalized_channel_value(
+            "ext:seams:meter", [{"note": "steady"}]) == {}
+        assert director._normalized_channel_value(
+            "ext:seams:meter", {"level": 3}) == {"level": 3}
+
+    def test_a_list_channel_must_be_one_of_the_declared_channels(
+            self, temp_db, bare):
+        """Otherwise the typo is a shape that never applies, silently."""
+        with pytest.raises(ValueError):
+            bare.add_director_specialist(
+                "morale", channels=["ops"], list_channels=["opz"], prompt="p")
+
     def test_a_family_is_gated_and_defaults_to_failing_open(self, temp_db,
                                                             bare):
         from agents import director

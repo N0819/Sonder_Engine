@@ -1713,6 +1713,7 @@
   "source must be 'local' or 'freesound'": "ソースは'local'または'freesound'",
   "source/formative evidence": "ソース/形成証拠",
   "space opera": "スペースオペラ",
+  "specialist ${full_name} declares ${unknown} list-shaped, but does not own them": "specialist ${full_name} declares ${unknown} list-shaped, but does not own them",
   "specialist ${full_name} declares no channels": "specialist ${full_name} declares no channels",
   "specialist ${full_name} declares no prompt": "specialist ${full_name} declares no prompt",
   "stale-note small dim": "古いメモ 小さく薄暗い",
