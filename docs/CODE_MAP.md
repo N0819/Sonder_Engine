@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 783 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_background`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_mechanics`, `commit_memory`, `commit_place_graph`, `commit_room_registry`, `commit_scene_state`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 575 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_attire`, `commit_background`, `commit_common`, `commit_destruction`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_mechanics`, `commit_memory`, `commit_memory_write`, `commit_place_graph`, `commit_room_registry`, `commit_scene_state`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `commit_attire.py` | 862 |  | `attire`, `commit_common` |
 | `commit_background.py` | 1476 |  | `character_schema`, `commit_common`, `db`, `memory`, `scene`, `spatial` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
@@ -43,6 +43,7 @@
 | `commit_mapping.py` | 490 |  | `character_schema`, `commit_common`, `db`, `frames`, `memory`, `prompts`, `providers`, `spatial` |
 | `commit_mechanics.py` | 348 |  | `character_schema`, `commit_common`, `commit_scene_state`, `db`, `mechanics`, `scene` |
 | `commit_memory.py` | 1486 |  | `affect`, `character_schema`, `comfort`, `commit_background`, `commit_common`, `commit_place_graph`, `db`, `memory`, `psychology_runtime`, `survival`, `theory_of_mind` |
+| `commit_memory_write.py` | 230 |  | `character_schema`, `commit_memory`, `db`, `memory`, `scene` |
 | `commit_place_graph.py` | 274 |  | `spatial` |
 | `commit_room_registry.py` | 444 |  | `character_schema`, `commit_common`, `db`, `spatial` |
 | `commit_scene_state.py` | 709 |  | `character_schema`, `commit_attire`, `commit_common`, `commit_destruction`, `commit_room_registry`, `db`, `memory`, `spatial`, `spatial_frames`, `weather` |
@@ -413,14 +414,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 557 | 226 lines |
-| `commit_crowds()` | 437 | 82 lines |
-| `commit_memories()` | 271 | 80 lines |
-| `schedule_memory_consolidation()` | 197 | 72 lines |
-| `_consolidate_committed_memories()` | 141 | 51 lines |
-| `commit_narration_person()` | 356 | 29 lines |
-| `commit_authored_events()` | 388 | 25 lines |
-| `_prepare_turn_commit()` | 534 | 12 lines |
+| `_commit_all_locked()` | 349 | 226 lines |
+| `commit_crowds()` | 229 | 82 lines |
+| `commit_narration_person()` | 148 | 29 lines |
+| `commit_authored_events()` | 180 | 25 lines |
+| `_prepare_turn_commit()` | 326 | 12 lines |
+| `commit_offscreen_epoch()` | 207 | 11 lines |
+| `commit_all()` | 313 | 11 lines |
+| `commit_offscreen_plans()` | 220 | 7 lines |
 
 ### `commit_attire.py`
 
@@ -529,6 +530,14 @@
 | `_salience_of()` | 176 | 8 lines |
 | `_is_player()` | 172 | 3 lines |
 | `_quote_body()` | 168 | 2 lines |
+
+### `commit_memory_write.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `commit_memories()` | 151 | 80 lines |
+| `schedule_memory_consolidation()` | 77 | 72 lines |
+| `_consolidate_committed_memories()` | 21 | 51 lines |
 
 ### `commit_place_graph.py`
 

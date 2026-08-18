@@ -127,13 +127,16 @@ def test_episode_does_not_append_dialogue_again(
         captured.extend(batch)
         return list(range(1, len(batch) + 1))
 
+    # commit_memories resolves both names in commit_memory_write's
+    # globals since the split; patching the commit facade would be inert.
+    import commit_memory_write
     monkeypatch.setattr(
-        commit,
+        commit_memory_write,
         "add_memories_batch",
         fake_add_memories_batch,
     )
     monkeypatch.setattr(
-        commit,
+        commit_memory_write,
         "maybe_consolidate_character_memory",
         lambda *args, **kwargs: None,
     )

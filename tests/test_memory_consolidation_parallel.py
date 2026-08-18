@@ -68,8 +68,11 @@ def test_all_characters_are_attempted_and_one_failure_does_not_block_others(
     context.director_resolve = {"summary": "", "resolved_event": "", "dialogue_log": []}
     context.perception_outcome = {"views": {}}
 
+    # Both readers live in commit_memory_write since the split;
+    # patching the commit facade would be inert.
+    import commit_memory_write
     monkeypatch.setattr(
-        commit, "add_memories_batch",
+        commit_memory_write, "add_memories_batch",
         lambda memories=None, *, prepared_batch=None: [],
     )
 
@@ -86,7 +89,8 @@ def test_all_characters_are_attempted_and_one_failure_does_not_block_others(
         return None
 
     monkeypatch.setattr(
-        commit, "maybe_consolidate_character_memory", fake_maybe_consolidate,
+        commit_memory_write, "maybe_consolidate_character_memory",
+        fake_maybe_consolidate,
     )
 
     result = commit_memories(context, nonce=0)
