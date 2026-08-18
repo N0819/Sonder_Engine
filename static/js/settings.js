@@ -3314,6 +3314,38 @@ function extensionCapabilitySummary(caps) {
 //: time someone glances at the menu.
 let EXTENSION_UPDATES = {};
 
+function extensionSettingsSections(extId) {
+  if (!window.Sonder || typeof Sonder._settingsFor !== "function") return [];
+  const sections = Sonder._settingsFor(extId);
+  if (!sections.length) return [];
+
+  return sections.map(section => {
+    // One class token per call rather than a space-joined literal:
+    // `tools/extract_ui_catalog.py` normalises whitespace before deciding what
+    // is a message, so a two-token class name reads as prose and lands in the
+    // public translation catalog. A single token reads as machine vocabulary.
+    const body = el("div", {});
+    body.classList.add("ext-settings__body");
+    body.classList.add("hidden");
+    let drawn = false;
+    const toggle = el("button", {}, section.label);
+    toggle.classList.add("ghost");
+    toggle.classList.add("ext-settings__toggle");
+    toggle.onclick = () => {
+      body.classList.toggle("hidden");
+      if (body.classList.contains("hidden") || drawn) return;
+      drawn = true;
+      // Rendered on first open rather than on menu open: a section that
+      // fetches would otherwise cost a round trip per installed extension
+      // every time somebody glances at this list. Charged to its owner like
+      // every other extension callback, and `render` may be async.
+      Sonder._safe(section.owner, section.render, body);
+    };
+    return el("div", { class: "ext-settings", style: "margin-top:6px" },
+      toggle, body);
+  });
+}
+
 async function openExtensionsMenu() {
   let data;
   try { data = await api("GET", "/api/extensions"); }
@@ -3442,7 +3474,16 @@ async function openExtensionsMenu() {
           extensionTrustNote(ext)),
         ext.error
           ? el("div", { class: "small err", style: "margin-top:4px" }, String(ext.error))
-          : null));
+          : null,
+        // The extension's own configuration, rendered inside its own card.
+        // Only for an ENABLED one: a disabled extension's registrations are
+        // cleared, so there is nothing to render and a section that survived
+        // its owner would be configuring code that is not running.
+        //
+        // Collapsed by default. This menu is a list you scan to find one
+        // extension, and a panel expanded by default would push every card
+        // below it off the screen.
+        ...(enabled ? extensionSettingsSections(ext.id) : [])));
     }
 
     // Install sits at the BOTTOM: the list is what you came for, and the

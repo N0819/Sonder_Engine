@@ -722,6 +722,10 @@ box-shadow:var(--soft-shadow)}
 .ext-notice__body{margin-top:3px;color:#b9c4d7;font-size:12px;
 white-space:pre-wrap}
 .ext-notice__close{flex:none;align-self:flex-start}
+/* An extension's own configuration, inside its own card in the 🧩 menu. */
+.ext-settings__toggle{padding:2px 8px;font-size:12px}
+.ext-settings__body{margin-top:6px;padding:8px;border:1px solid #35435b;
+border-radius:8px;background:var(--bg3,#0002)}
 .memory-layout{display:grid;grid-template-columns:minmax(250px,320px) minmax(0,1fr);
 gap:13px;min-height:520px}
 .memory-sidebar{min-width:0}.memory-main{min-width:0}

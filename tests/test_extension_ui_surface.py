@@ -22,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = (ROOT / "static/js/extensions.js").read_text(encoding="utf-8")
 STYLES = (ROOT / "static/styles.css").read_text(encoding="utf-8")
+SETTINGS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
 
 
 def _registration_methods():
@@ -89,6 +90,44 @@ class TestModuleFacade:
 
         assert 'name.charAt(0) !== "_"' in namespaces.group(1)
         assert "not registrations" in EXTENSIONS
+
+
+class TestSettingsSections:
+    """An extension's configuration, in its own card in the 🧩 menu.
+
+    Not in the host's API settings: an extension's configuration is
+    install-scoped (`api.settings`), and the one place a reader is already
+    looking at this extension is the row carrying its name, version and enable
+    switch.
+    """
+
+    def test_sections_are_cleared_when_their_extension_retires(self):
+        unregister = re.search(r"_unregister\(extId\)\s*\{(.*?)\n  \},",
+                               EXTENSIONS, re.S)
+        assert unregister, "Sonder._unregister no longer parses"
+
+        assert "_settings" in unregister.group(1)
+
+    def test_a_disabled_extension_renders_no_section(self):
+        """Its registrations are cleared, so there is nothing to render -- and
+        a section that outlived its owner would be configuring code that is not
+        running."""
+        assert "enabled ? extensionSettingsSections(ext.id) : []" in SETTINGS
+
+    def test_a_section_is_rendered_on_first_open_not_on_menu_open(self):
+        """A section that fetches would otherwise cost a round trip per
+        installed extension every time somebody glances at the list."""
+        sections = re.search(
+            r"function extensionSettingsSections\(extId\)\s*\{(.*?)\n\}",
+            SETTINGS, re.S)
+        assert sections, "extensionSettingsSections no longer parses"
+        body = sections.group(1)
+
+        assert "let drawn = false" in body
+        assert "Sonder._safe(section.owner, section.render, body)" in body
+
+    def test_the_section_chrome_is_styled(self):
+        assert ".ext-settings__body" in STYLES
 
 
 class TestNotices:

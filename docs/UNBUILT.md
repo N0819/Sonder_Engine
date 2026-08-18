@@ -3758,6 +3758,15 @@ refactor from breaking somebody else's build:
   IS spans eras, what has HAPPENED does not. `CommitView` carries both. No
   archive/checkpoint/branch work was needed; the frame remap parses a key
   generically rather than against a list.
+- **A settings-section mount point** — `Sonder.registerSettingsSection`, which
+  renders inside the extension's OWN card in the 🧩 menu rather than in the
+  host's API settings: what belongs there is install-scoped configuration
+  (`api.settings`), and that card is the one place a reader is already looking
+  at this extension. Collapsed, drawn on first open (a section that fetched on
+  render would cost a round trip per installed extension every time somebody
+  glanced at the list), and absent for a disabled extension, whose
+  registrations are cleared and whose panel would otherwise be configuring code
+  that is not running.
 - **A notification surface** — `Sonder.notify`/`dismissNotice`/`notices`: a
   standing column, bounded, cleared by `_unregister`, actions charged to their
   owner. A toast acknowledges what the reader just did and leaves in four
@@ -3784,10 +3793,6 @@ seam, `api.llm_json`/`llm_text` give a model call on any configured role,
 
 Still missing:
 
-- **No settings-section mount point.** An extension's configuration still has
-  to live in its own panel or a modal it builds. A registry entry of the same
-  shape as the ones that landed; nothing has blocked on it yet, so it has not
-  been guessed at in advance of an extension wanting it.
 - **A model lane cannot be declared without Python.** `api.add_model_lane` is
   built (lanes are namespaced `ext:<id>:<name>`, rendered in the host's model
   settings, inherit `default` when blank, and log spend under their own role
