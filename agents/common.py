@@ -1487,6 +1487,27 @@ def jparse(text, fallback_key="text", required=False):
         return json.loads(repaired)
     except Exception:
         pass
+    # The FIRST complete object, before the greedy span below. A model that
+    # answers and then keeps talking has still answered: observed live, a
+    # narrator emitted valid JSON, then "That is my final answer... I am done.
+    # Now I will output the JSON as the final message.", then the whole object
+    # again, and again. `\{.*\}` is greedy, so it spanned from the first brace
+    # to the LAST one across every repetition -- not valid JSON -- and this
+    # function fell through to `{fallback_key: <the entire mess>}`, discarding
+    # a complete and correct answer the model had already given.
+    #
+    # `llm_quality.strict_json_parse` has carried a string-aware brace scanner
+    # for exactly this since before the loose path existed; reusing it rather
+    # than writing a second one keeps the two from disagreeing about what
+    # counts as the answer.
+    try:
+        from llm_quality import strict_json_parse
+
+        first = strict_json_parse(t)
+        if isinstance(first, dict):
+            return first
+    except Exception:
+        pass
     m = re.search(r"\{.*\}", t, re.S)
     if m:
         block = m.group(0)

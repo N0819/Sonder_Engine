@@ -1422,3 +1422,64 @@ class TestAnUnboundedListIsWhereASamplerLocks:
         text = get_prompt("character")
         assert "`serves` uses the SAME vocabulary as a want's" in text
         assert "do not list your traits" in text
+
+
+class TestAModelThatAnswersThenKeepsTalking:
+    """Valid JSON, then chatter, then the same JSON again.
+
+    Observed live on the narrator: a complete object, then "That is my final
+    answer... I am done. Now I will output the JSON as the final message.",
+    then the whole object again, and again. The output guard aborts the
+    generation partway through -- but the FIRST object was complete and
+    correct, and throwing it away to retry is paying twice for an answer
+    already given.
+
+    `jparse`'s recovery span was `\\{.*\\}`, which is greedy: it reached from
+    the first brace to the LAST one across every repetition, which is not valid
+    JSON, so the function fell through to `{"text": <the entire mess>}`. For a
+    narrator that means the prose is gone.
+    """
+
+    CHATTER = ('\n\nThat is my final answer.\n\nI have followed all '
+               'instructions.\n\nI am done.\n\nNow I will output the JSON as '
+               'the final message.\n\n')
+
+    def test_the_first_complete_object_is_the_answer(self):
+        from agents.common import jparse
+
+        one = '{"prose": "<p>The dark is thick and liquid.</p>", "paragraph_count": 6}'
+        got = jparse(one + self.CHATTER + one + self.CHATTER + one)
+        assert got["prose"] == "<p>The dark is thick and liquid.</p>"
+        assert got["paragraph_count"] == 6
+
+    def test_it_survives_braces_inside_strings(self):
+        """The scanner is string-aware, which a brace count alone is not."""
+        from agents.common import jparse
+
+        got = jparse('{"prose": "she wrote {not json} on the wall"} then chatter')
+        assert got["prose"] == "she wrote {not json} on the wall"
+
+    def test_ordinary_answers_are_untouched(self):
+        from agents.common import jparse
+
+        assert jparse('{"a": 1}') == {"a": 1}
+        assert jparse('```json\n{"a": 2}\n```') == {"a": 2}
+        assert jparse('{"a": 3,}') == {"a": 3}
+        assert jparse('Sure! {"a": 4} Hope that helps!') == {"a": 4}
+
+    def test_prose_with_no_json_still_falls_back(self):
+        from agents.common import jparse
+
+        assert jparse("just some prose") == {"text": "just some prose"}
+        assert jparse("nope", fallback_key="raw") == {"raw": "nope"}
+
+    def test_the_strict_path_already_did_this(self):
+        """Stages were never affected -- `complete_validated_json` goes through
+        `llm_quality.strict_json_parse`, which has carried a string-aware brace
+        scanner since before the loose path existed. This reuses that scanner
+        rather than spelling it a second way, so the two cannot come to
+        disagree about where the answer ends."""
+        from llm_quality import strict_json_parse
+
+        one = '{"prose": "x", "paragraph_count": 6}'
+        assert strict_json_parse(one + self.CHATTER + one)["prose"] == "x"
