@@ -271,7 +271,7 @@ proximity). Every deterministic delivery site calls it rather than
 re-implementing scattered checks.
 
 **Channel-by-channel barriers.** Sight, sound, scent and touch are gated
-separately in `spatial.py` — `_SIGHT_BARRIERS`, `_AMBIENT_BARRIERS`,
+separately in `spatial_barriers.py` — `_SIGHT_BARRIERS`, `_AMBIENT_BARRIERS`,
 `_SCENT_BARRIERS`, containment. A window passes sight only; bars pass sight and
 sound; a membrane passes passage only. Touch-only perception is deliberately
 **cause-blind**: surface sensation crosses, the act producing it does not.
@@ -329,7 +329,8 @@ tables.
 Every scene writer must keep the registry projection in sync — check both the
 commit path and the restore path before adding one.
 
-**Merging is where hygiene lives.** `spatial.merge_scene_with_diff` deep-copies
+**Merging is where hygiene lives.** `spatial_merge.merge_scene_with_diff`
+(re-exported as `spatial.merge_scene_with_diff`) deep-copies
 the scene and applies a beat's `state_diff` through a fixed order: rooms and
 adjacency, barriers, bearings, stations, scale (and the contacts scale
 invalidates), containment, derived contained positions, substance ops, contact
