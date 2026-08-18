@@ -33,8 +33,9 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 7590 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `commit_place_graph`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7193 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `commit_destruction`, `commit_place_graph`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
+| `commit_destruction.py` | 413 |  | `commit_common`, `db`, `mechanics`, `memory`, `spatial` |
 | `commit_place_graph.py` | 274 |  | `spatial` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
@@ -403,14 +404,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 5626 | 1264 lines |
-| `prepare_scene_commit()` | 1992 | 452 lines |
-| `track_background_presences()` | 3821 | 341 lines |
-| `apply_attire_diff()` | 1696 | 294 lines |
-| `commit_world_entities()` | 3020 | 287 lines |
-| `_commit_all_locked()` | 7308 | 226 lines |
-| `pick_background_reactors()` | 4305 | 178 lines |
-| `commit_transit_sweep()` | 2493 | 169 lines |
+| `prepare_memory_commit()` | 5229 | 1264 lines |
+| `prepare_scene_commit()` | 1595 | 452 lines |
+| `track_background_presences()` | 3424 | 341 lines |
+| `apply_attire_diff()` | 1299 | 294 lines |
+| `commit_world_entities()` | 2623 | 287 lines |
+| `_commit_all_locked()` | 6911 | 226 lines |
+| `pick_background_reactors()` | 3908 | 178 lines |
+| `commit_transit_sweep()` | 2096 | 169 lines |
 
 ### `commit_common.py`
 
@@ -424,6 +425,19 @@
 | `_known_name_roster()` | 223 | 27 lines |
 | `_resolve_roster_name()` | 281 | 20 lines |
 | `_form_in()` | 101 | 16 lines |
+
+### `commit_destruction.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_prepare_destruction()` | 192 | 158 lines |
+| `_destruction_cascade()` | 124 | 66 lines |
+| `_apply_destruction()` | 380 | 34 lines |
+| `_chat_book_graph()` | 51 | 30 lines |
+| `_finalize_destruction_news()` | 352 | 26 lines |
+| `_audience_book_id()` | 102 | 20 lines |
+| `_book_distances()` | 83 | 17 lines |
+| `_destruction_book()` | 33 | 16 lines |
 
 ### `commit_place_graph.py`
 
