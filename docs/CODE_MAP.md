@@ -33,7 +33,8 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 8197 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 7851 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `commit_common`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit_common.py` | 384 |  | `character_schema`, `db`, `mechanics`, `spatial` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -401,14 +402,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 6231 | 1264 lines |
-| `prepare_scene_commit()` | 2310 | 452 lines |
-| `track_background_presences()` | 4345 | 341 lines |
-| `apply_attire_diff()` | 1974 | 294 lines |
-| `commit_world_entities()` | 3338 | 287 lines |
-| `_commit_all_locked()` | 7913 | 226 lines |
-| `pick_background_reactors()` | 4829 | 178 lines |
-| `commit_transit_sweep()` | 2811 | 169 lines |
+| `prepare_memory_commit()` | 5887 | 1264 lines |
+| `prepare_scene_commit()` | 2253 | 452 lines |
+| `track_background_presences()` | 4082 | 341 lines |
+| `apply_attire_diff()` | 1957 | 294 lines |
+| `commit_world_entities()` | 3281 | 287 lines |
+| `_commit_all_locked()` | 7569 | 226 lines |
+| `pick_background_reactors()` | 4566 | 178 lines |
+| `commit_transit_sweep()` | 2754 | 169 lines |
+
+### `commit_common.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_names_heard_in()` | 168 | 53 lines |
+| `_address_forms()` | 119 | 47 lines |
+| `_entity_alias_map()` | 313 | 44 lines |
+| `_monotonic_elapsed()` | 57 | 38 lines |
+| `_registered_name_roster()` | 252 | 28 lines |
+| `_known_name_roster()` | 223 | 27 lines |
+| `_resolve_roster_name()` | 281 | 20 lines |
+| `_form_in()` | 101 | 16 lines |
 
 ### `couriers.py`
 
