@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `affect.py` | 2186 |  | `theory_of_mind` |
 | `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `scene` |
-| `agents/background.py` | 946 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
+| `agents/background.py` | 964 |  | `agents.common`, `background_claims`, `character_schema`, `commit`, `db`, `prompts`, `scene`, `schemas`, `spatial` |
 | `agents/character.py` | 3408 | Private character decision agent. | `affect`, `agents.common`, `character_schema`, `db`, `frames`, `gaps`, `memory`, `place_purpose`, `prompts`, `psychology_runtime`, `scene`, `schemas`, `spatial`, `survival`, `theory_of_mind` |
 | `agents/common.py` | 6186 | Shared normalization, lore, delivery, and perception helpers. | `attire`, `character_schema`, `crowds`, `db`, `llm_quality`, `memory`, `prompts`, `providers`, `scene`, `schemas`, `spatial`, `theory_of_mind` |
 | `agents/composer.py` | 1725 |  | `agents.common`, `scene`, `spatial` |
@@ -33,7 +33,7 @@
 | `chat_archive.py` | 1115 | Typed, atomic chat archive export/import service and HTTP routes. | `character_schema`, `checkpoints`, `db`, `memory`, `schemas` |
 | `checkpoints.py` | 1149 | Whole-chat snapshots and checkpoint restore orchestration. | `db`, `memory` |
 | `comfort.py` | 306 |  | `spatial` |
-| `commit.py` | 8183 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
+| `commit.py` | 8197 | Validated persistence of scene, entities, cast, lore, relationships, events, and memories. | `affect`, `attire`, `character_schema`, `comfort`, `db`, `frames`, `mechanics`, `memory`, `paradox`, `prompts`, `providers`, `psychology_runtime`, `scene`, `spatial`, `spatial_frames`, `survival`, `theory_of_mind`, `weather` |
 | `couriers.py` | 1090 |  | `carriers`, `crowds`, `degradation` |
 | `crowds.py` | 608 |  | — |
 | `db.py` | 1685 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -63,7 +63,7 @@
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1944 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 5228 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 5253 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 8451 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -96,11 +96,11 @@
 | `scene_life()` | 520 | 121 lines |
 | `_beat_for_presence()` | 111 | 80 lines |
 | `background_react()` | 215 | 78 lines |
-| `_react_one()` | 885 | 62 lines |
+| `_mint_blurbs()` | 710 | 75 lines |
+| `_react_one()` | 903 | 62 lines |
 | `managed_presences()` | 393 | 59 lines |
-| `_mint_blurbs()` | 710 | 57 lines |
 | `_place_block()` | 299 | 47 lines |
-| `_present_others()` | 838 | 45 lines |
+| `_present_others()` | 856 | 45 lines |
 
 ### `agents/character.py`
 
@@ -401,13 +401,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 6217 | 1264 lines |
+| `prepare_memory_commit()` | 6231 | 1264 lines |
 | `prepare_scene_commit()` | 2310 | 452 lines |
-| `track_background_presences()` | 4331 | 341 lines |
+| `track_background_presences()` | 4345 | 341 lines |
 | `apply_attire_diff()` | 1974 | 294 lines |
 | `commit_world_entities()` | 3338 | 287 lines |
-| `_commit_all_locked()` | 7899 | 226 lines |
-| `pick_background_reactors()` | 4815 | 178 lines |
+| `_commit_all_locked()` | 7913 | 226 lines |
+| `pick_background_reactors()` | 4829 | 178 lines |
 | `commit_transit_sweep()` | 2811 | 169 lines |
 
 ### `couriers.py`
@@ -755,14 +755,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4070 | 343 lines |
+| `preprocess_llm_output()` | 4094 | 343 lines |
 | `_lenient_coerce()` | 660 | 149 lines |
-| `validate_llm_output_strict()` | 5099 | 130 lines |
-| `semantic_output_errors()` | 4916 | 103 lines |
-| `canonicalize_prose_markup()` | 3875 | 102 lines |
-| `_uncross_concealed_speech()` | 3999 | 69 lines |
+| `validate_llm_output_strict()` | 5124 | 130 lines |
+| `semantic_output_errors()` | 4941 | 103 lines |
+| `canonicalize_prose_markup()` | 3899 | 102 lines |
+| `_uncross_concealed_speech()` | 4023 | 69 lines |
 | `_coerce_list_valued_map()` | 93 | 57 lines |
-| `_coerce_evidence_refs()` | 2480 | 51 lines |
+| `_coerce_evidence_refs()` | 2504 | 51 lines |
 
 ### `spatial.py`
 

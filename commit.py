@@ -3996,7 +3996,7 @@ def _presence_scene_entity(scene, name):
     return None, None
 
 
-def _presence_speech_verdict(scene, name):
+def _presence_speech_verdict(scene, name, record=None):
     """May this presence hold a background SPEAKING turn?
 
     A background reaction is a person's -- the whole stage exists to make
@@ -4029,6 +4029,20 @@ def _presence_speech_verdict(scene, name):
       such a presence a voice. Ambient salience (at post, mentioned, its own
       accrued backstop lines) never does.
     """
+    # THE FROZEN ANSWER OUTRANKS EVERY GUESS BELOW. `blurb_mint` visits each
+    # newly tracked presence once, with its place, the Director's description
+    # and the genre in front of it, and now answers what the thing IS
+    # (schemas.PRESENCE_NATURES). That is a judgement about this presence in
+    # this story; everything after it is inference from a noun the model chose
+    # in passing. An unanswered `nature` is deliberately NOT a yes -- reading
+    # an unasked question as "person" is the whole defect this closes -- so a
+    # blank falls through to the graded guesses.
+    nature = str((record or {}).get("nature") or "").strip().casefold()
+    if nature == "person":
+        return "person"
+    if nature in ("thing", "voice"):
+        return "thing"
+
     eid, ent = _presence_scene_entity(scene, name)
     if ent is None:
         return "person"
@@ -4969,7 +4983,7 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # (see _presence_speech_verdict), only the Director's own explicit
         # judgment this beat -- routing the line here, or naming this
         # presence the player's addressee -- can hand over a voice.
-        verdict = _presence_speech_verdict(sc, name)
+        verdict = _presence_speech_verdict(sc, name, record)
         if verdict == "thing":
             continue
         if verdict == "undecided" and not (routed or flow_addressed):
@@ -5009,7 +5023,7 @@ def promotable_background_presences(chat_id):
         # promotable on purpose: a "dalek war machine" the player keeps
         # engaging deserves the offer, and the auto-promotion sweep already
         # demands deliberate addressed_turns on top of this flag.
-        if promotable and _presence_speech_verdict(sc, name) == "thing":
+        if promotable and _presence_speech_verdict(sc, name, record) == "thing":
             promotable = False
         out.append({
             "name": name,
