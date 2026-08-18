@@ -271,8 +271,14 @@ proximity). Every deterministic delivery site calls it rather than
 re-implementing scattered checks.
 
 **Channel-by-channel barriers.** Sight, sound, scent and touch are gated
-separately in `spatial.py` — `_SIGHT_BARRIERS`, `_AMBIENT_BARRIERS`,
-`_SCENT_BARRIERS`, containment. A window passes sight only; bars pass sight and
+separately. Sight is decided by `spatial_barriers._SIGHT_BARRIERS` (through
+`sight_level`/`has_visual`); sound is graded per barrier inside
+`spatial_senses.hear_level`, shifted by material
+(`_MATERIAL_SOUND_STEPS`/`_SOUND_LADDER`) — `_AMBIENT_BARRIERS` gates only
+`ambient_scope`'s ambience reach, not the voice channel; scent is graded
+inline in `spatial_senses.scent_level` (the declared `_SCENT_BARRIERS` set is
+currently read by nothing — `docs/experiments/AUDIT_SPATIAL.md` F1); touch is
+containment. A window passes sight only; bars pass sight and
 sound; a membrane passes passage only. Touch-only perception is deliberately
 **cause-blind**: surface sensation crosses, the act producing it does not.
 
@@ -286,7 +292,7 @@ becomes a warning.
 
 ### Diagram 5 — Perceptual channels and barriers
 
-Each channel is gated by its own barrier table, so one wall can pass sight and
+Each channel is gated by its own barrier rule, so one wall can pass sight and
 stop scent. The four questions are answered separately and never collapsed.
 
 ```mermaid
@@ -294,8 +300,8 @@ flowchart LR
     A["actor<br/><i>speaks and acts</i>"]
 
     A --> S["<b>sight</b><br/>_SIGHT_BARRIERS"]
-    A --> H["<b>sound</b><br/>_AMBIENT_BARRIERS"]
-    A --> C["<b>scent</b><br/>_SCENT_BARRIERS"]
+    A --> H["<b>sound</b><br/>hear_level barrier grading"]
+    A --> C["<b>scent</b><br/>scent_level barrier grading"]
     A --> TCH["<b>touch</b><br/>containment / contact"]
 
     S -->|"window: passes<br/>wall: blocks"| O["observer's view"]
@@ -329,7 +335,8 @@ tables.
 Every scene writer must keep the registry projection in sync — check both the
 commit path and the restore path before adding one.
 
-**Merging is where hygiene lives.** `spatial.merge_scene_with_diff` deep-copies
+**Merging is where hygiene lives.** `spatial_merge.merge_scene_with_diff`
+(re-exported as `spatial.merge_scene_with_diff`) deep-copies
 the scene and applies a beat's `state_diff` through a fixed order: rooms and
 adjacency, barriers, bearings, stations, scale (and the contacts scale
 invalidates), containment, derived contained positions, substance ops, contact
