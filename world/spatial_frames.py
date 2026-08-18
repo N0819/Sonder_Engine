@@ -36,7 +36,8 @@ from story.character_schema import character_name, normalize_persona_data, perso
 from core.db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
-from story.scene import active_cast, persona_of, set_char_state, set_char_status
+from story.scene import (CAST_STATUS_PRESENT, active_cast, cast_change_status,
+                         persona_of, set_char_state, set_char_status)
 from world.spatial import (THRESHOLD_CROSSING_BEATS, _anchor_dir, _hiding_holders,
                      anchor_bearing_of, effective_anchors, has_visual,
                      hear_level, is_alarming, room_of, rooms_adjacent,
@@ -303,11 +304,7 @@ def infer_companion_carry(chat_id, frame_id, prev_scene, new_scene, cast_names,
     if not is_vehicle_interior:
         return False
 
-    departed = {
-        str(chg.get("who") or "").casefold()
-        for chg in (cast_changes or [])
-        if isinstance(chg, dict) and chg.get("who")
-    }
+    departed = _cast_changes_leaving(cast_changes)
 
     changed = False
     for name in cast_names:
@@ -323,6 +320,27 @@ def infer_companion_carry(chat_id, frame_id, prev_scene, new_scene, cast_names,
         changed = True
 
     return changed
+
+
+def _cast_changes_leaving(cast_changes):
+    """Casefolded names this beat's `cast_changes` send OUT of the scene.
+
+    Reads the STATUS. Three callers of `cast_changes` -- this one, the
+    stranded-occupant guard and destruction's vacate -- used to build this set
+    from the entries that EXIST, which made an arrival indistinguishable from a
+    departure: the same entry that said someone rejoined the story was read as
+    proof they had gone.
+
+    An unrecognized status still counts as leaving. That is the direction that
+    cannot lose a beat -- the guard raises rather than warns -- and
+    `commit_cast_changes` has already warned about the word itself.
+    """
+    return {
+        str(chg.get("who") or "").casefold()
+        for chg in (cast_changes or [])
+        if isinstance(chg, dict) and chg.get("who")
+        and cast_change_status(chg.get("status")) != CAST_STATUS_PRESENT
+    }
 
 
 def infer_came_from(chat_id, frame_id, prev_scene, new_scene, cast_names):

@@ -57,7 +57,7 @@
 | `persist/commit_attire.py` | 862 |  | `persist.commit_common`, `story` |
 | `persist/commit_background.py` | 1489 |  | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 387 |  | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `persist/commit_destruction.py` | 413 |  | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial` |
+| `persist/commit_destruction.py` | 411 |  | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 499 |  | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 302 |  | `core.db`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 490 |  | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
@@ -66,7 +66,7 @@
 | `persist/commit_memory_write.py` | 230 |  | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 274 |  | `world.spatial` |
 | `persist/commit_room_registry.py` | 444 |  | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 709 |  | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 707 |  | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/pipeline_trace.py` | 413 |  | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 565 |  | `llm.prompts` |
@@ -102,7 +102,7 @@
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1167 |  | `world.spatial_containment`, `world.spatial_identity` |
 | `world/spatial_containment.py` | 636 |  | `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_frames.py` | 1069 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
+| `world/spatial_frames.py` | 1087 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 951 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 345 |  | — |
 | `world/spatial_light.py` | 209 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
@@ -662,14 +662,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_prepare_destruction()` | 192 | 158 lines |
-| `_destruction_cascade()` | 124 | 66 lines |
-| `_apply_destruction()` | 380 | 34 lines |
-| `_chat_book_graph()` | 51 | 30 lines |
-| `_finalize_destruction_news()` | 352 | 26 lines |
-| `_audience_book_id()` | 102 | 20 lines |
-| `_book_distances()` | 83 | 17 lines |
-| `_destruction_book()` | 33 | 16 lines |
+| `_prepare_destruction()` | 193 | 155 lines |
+| `_destruction_cascade()` | 125 | 66 lines |
+| `_apply_destruction()` | 378 | 34 lines |
+| `_chat_book_graph()` | 52 | 30 lines |
+| `_finalize_destruction_news()` | 350 | 26 lines |
+| `_audience_book_id()` | 103 | 20 lines |
+| `_book_distances()` | 84 | 17 lines |
+| `_destruction_book()` | 34 | 16 lines |
 
 ### `persist/commit_entities.py`
 
@@ -759,13 +759,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 212 | 452 lines |
-| `sync_anchored_books()` | 47 | 66 lines |
-| `_guard_occupied_mover_removal()` | 114 | 63 lines |
-| `_advance_ground()` | 179 | 31 lines |
-| `_record_subject_last_seen()` | 686 | 24 lines |
-| `commit_scene()` | 666 | 18 lines |
-| `_anchor_current_room()` | 31 | 14 lines |
+| `prepare_scene_commit()` | 210 | 452 lines |
+| `sync_anchored_books()` | 48 | 66 lines |
+| `_guard_occupied_mover_removal()` | 115 | 60 lines |
+| `_advance_ground()` | 177 | 31 lines |
+| `_record_subject_last_seen()` | 684 | 24 lines |
+| `commit_scene()` | 664 | 18 lines |
+| `_anchor_current_room()` | 32 | 14 lines |
 
 ### `persist/pipeline_trace.py`
 
@@ -1152,14 +1152,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `infer_focus()` | 468 | 153 lines |
-| `infer_threshold_crossings()` | 370 | 96 lines |
-| `perform_split()` | 799 | 94 lines |
-| `infer_companion_carry()` | 234 | 92 lines |
-| `infer_vehicle_zones()` | 147 | 85 lines |
-| `infer_facing()` | 623 | 71 lines |
-| `perform_merge()` | 971 | 69 lines |
-| `detect_split()` | 753 | 44 lines |
+| `infer_focus()` | 486 | 153 lines |
+| `infer_threshold_crossings()` | 388 | 96 lines |
+| `perform_split()` | 817 | 94 lines |
+| `infer_companion_carry()` | 235 | 88 lines |
+| `infer_vehicle_zones()` | 148 | 85 lines |
+| `infer_facing()` | 641 | 71 lines |
+| `perform_merge()` | 989 | 69 lines |
+| `detect_split()` | 771 | 44 lines |
 
 ### `world/spatial_geometry.py`
 
