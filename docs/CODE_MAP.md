@@ -63,7 +63,7 @@
 | `psychology_runtime.py` | 502 |  | — |
 | `routines.py` | 200 |  | — |
 | `scene.py` | 1858 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `attire`, `character_schema`, `db`, `spatial` |
-| `schemas.py` | 5129 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `schemas.py` | 5147 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `spatial.py` | 8434 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `schemas`, `spatial_orientation` |
 | `spatial_frames.py` | 1069 |  | `character_schema`, `db`, `frames`, `paradox`, `scene`, `spatial` |
 | `spatial_orientation.py` | 246 | Bearing math and reciprocal spatial-edge normalization. | — |
@@ -754,12 +754,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3983 | 331 lines |
+| `preprocess_llm_output()` | 4001 | 331 lines |
 | `_lenient_coerce()` | 635 | 145 lines |
-| `validate_llm_output_strict()` | 5000 | 130 lines |
-| `semantic_output_errors()` | 4817 | 103 lines |
-| `canonicalize_prose_markup()` | 3788 | 102 lines |
-| `_uncross_concealed_speech()` | 3912 | 69 lines |
+| `validate_llm_output_strict()` | 5018 | 130 lines |
+| `semantic_output_errors()` | 4835 | 103 lines |
+| `canonicalize_prose_markup()` | 3806 | 102 lines |
+| `_uncross_concealed_speech()` | 3930 | 69 lines |
 | `_coerce_list_valued_map()` | 93 | 57 lines |
 | `_coerce_evidence_refs()` | 2451 | 51 lines |
 

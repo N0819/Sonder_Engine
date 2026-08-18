@@ -2833,6 +2833,24 @@ def _coerce_candidate_list(value):
     ]
 
 
+#: How many aims one considered response may name. A DETERMINISTIC ceiling,
+#: because the floor must not depend on a model cooperating.
+#:
+#: `serves` is the only one of the three in this schema that is a LIST -- a
+#: want serves one thing, a goal impact serves one thing, a response candidate
+#: serves several -- and it was the only one whose vocabulary the prompt never
+#: stated. Live, a character step read that as an invitation to enumerate: it
+#: began with real aims (`ia1`, `drive`, `situation`), drifted into the payload's
+#: own field NAMES (`beliefs`, `values`, `self_model`, `coping`), ran off the end
+#: of the payload into JSON Schema meta-keywords (`title`, `properties`, `$ref`),
+#: and then locked into a cycle of those. Enumeration is where a sampler locks:
+#: each comma-separated item is highly predictable from the last.
+#:
+#: Six is generous. A response that genuinely serves seven distinct aims is not
+#: being reasoned about, it is being listed.
+CANDIDATE_SERVES_LIMIT = 6
+
+
 class ResponseCandidate(LenientModel):
     response: str = ""
     serves: list[str] = Field(default_factory=list)
@@ -2843,7 +2861,7 @@ class ResponseCandidate(LenientModel):
     selected: bool = False
 
     _lists = validator("serves", pre=True, allow_reuse=True)(
-        lambda cls, value: _coerce_str_list(value)
+        lambda cls, value: _coerce_str_list(value)[:CANDIDATE_SERVES_LIMIT]
     )
     _coerce_response = validator("response", pre=True, allow_reuse=True)(
         lambda cls, value: _coerce_candidate_response(value)
