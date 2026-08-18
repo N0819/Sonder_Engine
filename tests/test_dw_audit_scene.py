@@ -50,9 +50,14 @@ def test_entity_without_a_name_is_ignored():
 
 def _ctx(monkeypatch, player="Ellie Marsh"):
     import scene
+
+    import commit_room_registry
     monkeypatch.setattr(scene, "persona_of",
                         lambda c: {"identity": {"name": player}}, raising=False)
-    monkeypatch.setattr(commit, "persona_name", lambda p: player)
+    # _refresh_relocated_location resolves persona_name in ITS module's
+    # globals -- commit_room_registry since the split; patching the commit
+    # facade would be inert.
+    monkeypatch.setattr(commit_room_registry, "persona_name", lambda p: player)
 
     class _Ctx:
         chat = {"id": 1}
