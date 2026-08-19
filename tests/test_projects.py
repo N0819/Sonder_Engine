@@ -591,3 +591,26 @@ class TestAMutatedProjectIsNotReseeded:
         assert seeded == [], (
             "an authored project already held must not seed again just "
             "because its text has moved on")
+
+
+def test_the_authored_cap_is_the_runtime_cap_and_not_a_copy_of_its_value(
+        monkeypatch):
+    """`character_projects` broke at a literal `>= 2` while its docstring
+    said "the runtime cap (affect.PROJECT_CAP) holds the same line". Two
+    numbers, one of them invisible: raising PROJECT_CAP would have let the
+    runtime adopt a third project that a card could never seed, and nothing
+    in the card path would have said why.
+
+    Moving the cap is not the point -- the point is that there is one cap.
+    """
+    from mind import affect
+    from story.character_schema import character_projects
+
+    sheet = {"identity": {"name": "Wren"}, "psychology": {"projects": [
+        "get the injured one to a doctor", "go home", "reopen the shrine"]}}
+
+    monkeypatch.setattr(affect, "PROJECT_CAP", 3)
+    assert len(character_projects(sheet)) == 3
+
+    monkeypatch.setattr(affect, "PROJECT_CAP", 1)
+    assert len(character_projects(sheet)) == 1
