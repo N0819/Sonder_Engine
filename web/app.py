@@ -458,7 +458,11 @@ def _era(cid: int, frame_id):
     The shape is `turn_new`'s, because the API already answers "which era"
     there: an optional `frame_id`, validated as existing AND belonging to
     this chat, with None meaning the present -- so a caller who says nothing
-    gets exactly the old behavior. "Default to the chat's active frame" is
+    gets exactly the old behavior. (A plain `= None` default, not
+    `Query(None)`: FastAPI infers a query parameter for a simple-typed
+    non-path argument either way, and several tests call these route
+    functions directly, where a `Query` sentinel default would arrive as
+    itself rather than as None.) "Default to the chat's active frame" is
     not an option: two frames can each be mid-turn at once (that is the point
     of `_require_frame_idle`), so there is no single active frame to default
     to. It rides as a QUERY parameter even on PUTs, since two of the bodies
@@ -3853,7 +3857,7 @@ def survival_get(cid: int):
 
 @app.put("/api/chats/{cid}/survival")
 def survival_put(cid: int, body: dict = Body(...),
-                 frame_id: int | None = Query(None)):
+                 frame_id: int | None = None):
     """Bodily condition tracking for THIS story: breath, stamina, nourishment,
     injury.
 
@@ -3904,7 +3908,7 @@ def survival_put(cid: int, body: dict = Body(...),
     return {"enabled": enabled, "show_npcs": survival_shows_npcs(cid)}
 
 @app.get("/api/chats/{cid}/vitals")
-def chat_vitals_get(cid: int, frame_id: int | None = Query(None)):
+def chat_vitals_get(cid: int, frame_id: int | None = None):
     """Every tracked body's condition in this chat, for the UI tracker.
 
     Returns an empty table when the feature is off or nothing has been
@@ -3939,7 +3943,7 @@ def chat_vitals_get(cid: int, frame_id: int | None = Query(None)):
             "player": player, "show_npcs": survival_shows_npcs(cid)}
 
 @app.get("/api/chats/{cid}/positions")
-def chat_positions_get(cid: int, frame_id: int | None = Query(None)):
+def chat_positions_get(cid: int, frame_id: int | None = None):
     """Where everyone in this story currently stands, and the rooms available.
 
     Read from the scene blob, which is the single runtime source of truth for
@@ -4007,7 +4011,7 @@ def chat_positions_get(cid: int, frame_id: int | None = Query(None)):
 
 @app.put("/api/chats/{cid}/characters/{ch}/position")
 def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
-                           frame_id: int | None = Query(None)):
+                           frame_id: int | None = None):
     """Move a character to another room in the current scene.
 
     An authoring action, deliberately silent: like the world editor and the
@@ -4210,7 +4214,7 @@ def world_put(cid: int, body: dict = Body(...)):
     return {"ok": True}
 
 @app.get("/api/chats/{cid}/attire")
-def attire_get(cid: int, frame_id: int | None = Query(None)):
+def attire_get(cid: int, frame_id: int | None = None):
     # `frame_id` names the era whose ledger is read; None is the present
     # (`_era`). A query parameter on the PUT below too, because its body is
     # an open dict keyed by wearer names.
@@ -4222,7 +4226,7 @@ def attire_get(cid: int, frame_id: int | None = Query(None)):
 
 @app.put("/api/chats/{cid}/attire")
 def attire_put(cid: int, body: dict = Body(...),
-               frame_id: int | None = Query(None)):
+               frame_id: int | None = None):
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat: raise HTTPException(404, "Chat not found")
     with _era(cid, frame_id):
