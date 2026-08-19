@@ -136,7 +136,14 @@ def mapping_stage(ctx, nonce):
         if bi in valid and bi not in rb:
             rb.append(bi)
     out["relevant_books"] = rb
-    out["candidates"] = hits
+    # The full candidate list is NOT stored back on the step. Nothing read it
+    # -- the entries the model actually cited are already merged into
+    # `relevant_lore` above, from this same in-memory `hits`, and
+    # `common.lore_for` is the only consumer of a stored mapping step. Live,
+    # it was 462 of 463 active mapping_stage variants and 4,961,385 of
+    # 7,510,198 stored bytes: 66% of the step, riding every checkpoint,
+    # branch, archive and trace as opaque content, and re-read on every
+    # rerun's hydration.
     return out
 
 
