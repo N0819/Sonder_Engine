@@ -2455,7 +2455,8 @@ install have no reader anywhere in the engine:
 
 - `director_orchestration` — the flag the orchestrated Director shipped
   behind, deleted when the monolith went (§2.18). Empty.
-- `character_reflection` — same shape, empty.
+- `character_reflection` — empty, and the last trace on `main` of a feature
+  that was built and then decided against. See below.
 - `host_secret`, `host_secret_hash` — the auth scheme that preceded the
   PBKDF2 host account (`host_pw_hash`/`host_pw_salt`, both live).
 
@@ -2464,6 +2465,28 @@ rest.** `host_secret` is empty, `host_secret_hash` is a 64-character digest
 and not a plaintext token, so `tests/test_host_secret_hashing.py`'s standing
 claim — that a readable `engine.db` never yields a working host credential —
 still holds. Inspected read-only, values never printed.
+
+**`character_reflection` deserves its own line, because the commit that
+removed it reads as more open than the decision was.** It toggled splitting
+the character step in two: CONDUCT stays pre-resolve, and a new REFLECTION
+step after `perception_outcome` lets each mind write its memory of a beat
+from what actually HAPPENED rather than from what it intended. The problem it
+addressed is real and is still here — the character loops run before
+`director_resolve`, so `remember_lines`, belief updates, mind-model updates
+and relationship updates are all authored from intent, and salience, the
+number retrieval searches on forever, tracks what a character meant to do
+rather than what landed. It also carried an engine-computed prediction-error
+gap, `choice_review`, and `held_beliefs` (a contradiction SEEN and not
+revised, recorded as an act).
+
+It landed 2026-08-12 behind a default-OFF flag and was reverted the same day
+(`415e208`), whose message says the work is intact on branch
+`character-cognition` "so nothing is lost and it can be argued again on its
+own terms later". **The owner has since decided it is not necessary
+(2026-08-18).** That is recorded here so the next reader finds the decision
+rather than the invitation: the branch and design note 23 still exist and are
+worth reading, but re-proposing this needs a new argument, not a rerun of the
+old one.
 
 So this is tidiness, not a defect, and it is registered rather than repaired
 because the repair writes to live stories: a migration deleting retired keys
