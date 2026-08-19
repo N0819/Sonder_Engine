@@ -97,11 +97,13 @@ _MAX_UNCONSCIOUSNESS_GAP = 5  # word tokens between a cue and its subject name
 
 def _sentence_break_positions(low):
     """Offsets in casefolded `low` that terminate a sentence -- a '.', '!',
-    '?' or newline -- excluding an abbreviation period (one preceded by a
-    short title word in _TITLE_ABBREV). Used as clause barriers so a cue and
-    a name on opposite sides of a real break are never paired."""
+    '?', their full-width forms, or newline -- excluding an abbreviation
+    period (one preceded by a short title word in _TITLE_ABBREV). Used as
+    clause barriers so a cue and a name on opposite sides of a real break
+    are never paired: without the full-width forms, a rope untied in one
+    Japanese sentence attributed itself to the bystander of the next."""
     breaks = []
-    for m in re.finditer(r"[.!?]|\n", low):
+    for m in re.finditer(r"[.!?。！？]|\n", low):
         if low[m.start()] == ".":
             wm = re.search(r"([a-z]+)$", low[:m.start()])
             if wm and wm.group(1) in _ling("_TITLE_ABBREV"):
