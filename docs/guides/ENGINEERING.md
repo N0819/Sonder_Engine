@@ -278,7 +278,9 @@ separately. Sight is decided by `spatial_barriers._SIGHT_BARRIERS` (through
 `ambient_scope`'s ambience reach, not the voice channel; scent is graded by
 `spatial_barriers._SCENT_BARRIER_LEVELS`, a TABLE rather than a set because
 scent is the one channel with degrees, and `spatial_senses.scent_level` is its
-only reader; touch is containment. A window passes sight only; bars pass sight and
+only reader — what it grades comes from a card's `embodiment.scent`, an
+entity's `scent` and a substance record's `scent`, and `muffled` is spent by
+withholding the SOURCE rather than the smell (`docs/design/DESIGN_SCENT.md`); touch is containment. A window passes sight only; bars pass sight and
 sound; a membrane passes passage only. Touch-only perception is deliberately
 **cause-blind**: surface sensation crosses, the act producing it does not.
 
