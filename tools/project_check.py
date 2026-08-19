@@ -73,8 +73,40 @@ def canonical_language_tokens(text: str) -> set:
     return found
 
 
+#: Decorators under which a repeated name in one body is the language working
+#: as intended: a property's setter/getter/deleter, and `typing.overload`
+#: stubs. Everything else that repeats a name discards the earlier definition.
+_LEGITIMATE_REDEFINITION = frozenset(
+    {"setter", "getter", "deleter", "overload"})
+
+
+def _decorator_names(node) -> set:
+    names = set()
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if isinstance(target, ast.Attribute):
+            names.add(target.attr)
+        elif isinstance(target, ast.Name):
+            names.add(target.id)
+    return names
+
+
+def _redefinitions(body) -> dict:
+    """`{name: [line, line]}` for every name this body defines more than once."""
+    seen: dict[str, list[int]] = defaultdict(list)
+    for node in body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                 ast.ClassDef)):
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                _decorator_names(node) & _LEGITIMATE_REDEFINITION):
+            continue
+        seen[node.name].append(node.lineno)
+    return {name: lines for name, lines in seen.items() if len(lines) > 1}
+
+
 def check_duplicate_python_symbols(errors: list[str]) -> None:
-    """A redefined top-level name silently replaces the first one.
+    """A redefined name silently replaces the first one.
 
     `tests/` is included because that is where it does the most damage and
     the least noise: a duplicated test name does not error, it DELETES the
@@ -83,19 +115,29 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
     `test_empty_and_missing_inputs_are_noops` -- and one of the lost four was
     the false-positive guard on player-speech authority, whose whole job is to
     stop the check crying wolf on ordinary narration.
+
+    CLASS BODIES are walked too, and were not: this read `tree.body` only, so
+    a method defined twice -- the exact damage the paragraph above describes,
+    and the shape a test class takes -- was invisible to the check that exists
+    to catch it. A property's setter/getter/deleter and `@overload` stubs are
+    the one legitimate way to repeat a name in a body, and are exempt.
     """
     for path in sorted(engine_python_paths()
                        + list((ROOT / "tests").glob("test_*.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        symbols: dict[str, list[int]] = defaultdict(list)
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                symbols[node.name].append(node.lineno)
-        for name, lines in symbols.items():
-            if len(lines) > 1:
+        rel = path.relative_to(ROOT)
+        for name, lines in _redefinitions(tree.body).items():
+            errors.append(
+                f"{rel} defines top-level symbol {name!r} "
+                f"more than once at lines {lines}"
+            )
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for name, lines in _redefinitions(node.body).items():
                 errors.append(
-                    f"{path.relative_to(ROOT)} defines top-level symbol {name!r} "
-                    f"more than once at lines {lines}"
+                    f"{rel} defines {node.name}.{name!r} more than once at "
+                    f"lines {lines}; the second definition replaces the first"
                 )
 
 
