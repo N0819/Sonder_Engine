@@ -550,3 +550,20 @@ def test_no_prompt_card_names_a_character_or_vehicle_from_one_story():
         assert not found, (
             f"{pack.id} prompt card names {found} -- an instance from one "
             "story, in a sheet every story reads")
+
+
+def test_every_nsfw_prompt_id_names_a_prompt_that_exists():
+    """`nsfw_prompt_ids` is an ALLOW-list, so an id naming nothing is not a
+    no-op waiting to be useful -- it is a claim that a sheet gets the overlay,
+    made in a place where being wrong is invisible. `perception` sat in both
+    packs' lists after the perception prompt was retired (perception composes
+    every view deterministically and has no model role at all)."""
+    from llm.prompts import ASSEMBLED_SHEET_IDS
+
+    for pack in installed_language_packs(refresh=True).values():
+        card = pack.card("system_prompts")
+        known = set(card["prompts"]) | set(ASSEMBLED_SHEET_IDS)
+        unmatched = sorted(set(card["nsfw_prompt_ids"]) - known)
+        assert not unmatched, (
+            f"language pack {pack.id!r} marks {unmatched} NSFW-overlaid, and "
+            "no such prompt exists")

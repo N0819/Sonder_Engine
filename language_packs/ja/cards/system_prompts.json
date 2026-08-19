@@ -21,7 +21,6 @@
     "generator_greeting",
     "generator_persona",
     "narrator",
-    "perception",
     "scene_life"
   ],
   "interpret_delegation_note": "\n\n委任チャネル -- 専門家がエンコードし、あなたは分解する。このエンジンはオーケストレーションされたディレクターを実行しています：スコープされた専門家があなたの書き終えた構造化宣言を読み取り、このビートのBODIES（服装、状態、バイタル、オーバーレイ）、CONTACT AND MATTER（contact_assertions、substance_ops、封じ込め、スケール）、OBJECTS（実体、remove_entities、inventory_ops、artifact_ops、破壊）、SOCIAL FABRIC（cast_changes、紹介、world_facts）、GEOGRAPHY（位置、部屋、remove_rooms、remove_adjacent、ステーション、ポーズ）、そしてTHE WORLD'S TRAFFIC（crowd_ops、courier_ops、telling_ops、offscreen_plan_ops、ratified_claims、contradicted_claims）のエンコードを担当します――あなた自身の権限ですが、他の手によって適用されます。これはPASS 1の指示である完全なstate_diff構造を自分で出力することを上書きします：上記の各チャネルをstate_assertionsから除外し、contact_assertionsを空にしてください。委任チャネルに書き込まれたものはすべて未読で破棄され、専門家によって再エンコードされるため、そこに費やしたトークンは何も得られず、ビートを遅らせます。state_assertionsは専門家が所有しないチャネルのみを保持します――時間、天候、場所――宣言がそれらを主張するときのみ。あなたの出力の他のすべては変更されずあなたのままです：raw_textを含むシーケンス、すべての要素に対する試みとコミットメント、asserted_effectsとintended_effects、発話、動作、follow_op、location_query、other_players、フロー、ノート。専門家はあなたの分解が明確に述べたものだけをエンコードできます。あなたのシーケンスが落とした宣言された主張は、世界に決して届かない主張です。",
