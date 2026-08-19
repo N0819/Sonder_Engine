@@ -196,3 +196,54 @@ def test_a_native_reimport_still_round_trips_its_own_uid(temp_db):
     native["identity"]["uid"] = "char_deadbeefdeadbeefdeadbeefdeadbeef"
     _, sheet = importers.import_character({"sheet": native}, reinterpret=True)
     assert sheet["identity"]["uid"] == "char_deadbeefdeadbeefdeadbeefdeadbeef"
+
+
+# --- D: and the one path that reads the sheet on every beat ---------------
+
+def test_a_live_beat_reports_the_empty_drive_the_import_check_would_have(
+        temp_db, monkeypatch):
+    """`character_import_warnings` catches this on the import path only. A
+    card built or edited any other way gets no warning at all, and
+    `character_step` is the one function that reads the sheet on every single
+    beat of every character's life -- where the cost of saying so is one line
+    and the cost of not saying so is a character who reacts for a hundred
+    beats while `serves: "drive"` stays valid against three empty strings."""
+    import time
+
+    import agents.character as character_module
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Drive", "", time.time()))
+    sheet = default_character_data("Mara")
+    sheet["psychology"]["drive"] = {"essence": "", "expression": "",
+                                    "taboo": ""}
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Mara", json.dumps(sheet), "{}", time.time(), "char_mara_nodrive"))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"))
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "Continue.", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Drive", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1,
+                      player_input="Continue.", created=time.time()),
+        cast=cast, input="Continue.")
+    ctx.director_interpret = {"flow": {"reactors": [char_id],
+                                       "tom_triggers": []}}
+    monkeypatch.setattr(character_module, "_agent_json",
+                        lambda *a, **k: {"sequence": []})
+
+    character_module.character_step(ctx, char_id, nonce=0)
+
+    assert any("drive" in w for w in ctx.warnings), ctx.warnings

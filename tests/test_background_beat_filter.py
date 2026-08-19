@@ -26,12 +26,28 @@ from agents.background import _beat_for_presence, _filtered_player_declaration
 
 SECRET = "The shipment arrives at midnight."
 
+# The player and the presence in one room unless a case moves them: the
+# declaration is delivered across a channel, so every case has to say where
+# both bodies are standing.
+DECL_ROOMS = {"The Stranger": "taproom", "Doc": "taproom"}
 
-def _ctx(temp_db, interp):
+
+def _decl_scene(positions=None):
+    rooms = dict(DECL_ROOMS)
+    rooms.update(positions or {})
+    return {
+        "rooms": {r: {"name": r, "adjacent": []} for r in set(rooms.values())},
+        "positions": rooms,
+        "entities": {}, "attire": {}, "overlays": {},
+    }
+
+
+def _ctx(temp_db, interp, positions=None):
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
         ("T", "", time.time()),
     )
+    temp_db.wset(chat_id, "scene", _decl_scene(positions))
     ctx = PipelineContext(
         chat=ChatData(id=chat_id, name="T", persona_id=None, lorebook_id=None,
                       scenario="", created=time.time()),
@@ -50,7 +66,8 @@ def test_filtered_declaration_drops_concealed_speech(temp_db):
             {"type": "speech", "text": "Evening.", "visibility": "overt"},
         ],
     })
-    decl = _filtered_player_declaration(ctx)
+    decl = _filtered_player_declaration(
+        ctx, _decl_scene(), "Doc", "taproom")
     assert "midnight" not in decl
     assert "Evening." in decl
 
@@ -59,13 +76,73 @@ def test_filtered_declaration_withholds_raw_input_when_thought_private(temp_db):
     # No structured sequence, but a private thought exists -> the raw input
     # (which contains the whispered secret) must be withheld entirely.
     ctx = _ctx(temp_db, {"sequence": [], "private_thought": "don't let Doc hear"})
-    assert _filtered_player_declaration(ctx) == ""
+    assert _filtered_player_declaration(
+        ctx, _decl_scene(), "Doc", "taproom") == ""
 
 
 def test_filtered_declaration_passes_public_raw_input(temp_db):
     ctx = _ctx(temp_db, {"sequence": []})
     ctx.input = "I wave at the crowd."
-    assert _filtered_player_declaration(ctx) == "I wave at the crowd."
+    assert _filtered_player_declaration(
+        ctx, _decl_scene(), "Doc", "taproom") == "I wave at the crowd."
+
+
+class TestTheDeclarationTravelsOnAChannel:
+    """The content filter was only half of it. `events` beside this field
+    carries a per-presence `hear_level` map and `resolved_event` is admitted
+    only where every managed presence stands in the player's room; this third
+    field carried the same beat's words past both, ungated."""
+
+    def _speaking(self, temp_db, positions=None, **element):
+        scene = _decl_scene(positions)
+        ctx = _ctx(temp_db, {"sequence": [
+            {"type": "speech", "text": "Evening.", "visibility": "overt",
+             **element}]}, positions=positions)
+        return ctx, scene
+
+    def test_a_line_from_another_room_is_not_delivered(self, temp_db):
+        ctx, scene = self._speaking(temp_db, positions={"Doc": "cellar"})
+        assert _filtered_player_declaration(ctx, scene, "Doc", "cellar") == ""
+
+    def test_a_line_heard_below_full_arrives_without_its_words(self, temp_db):
+        """Same ladder as `_beat_for_presence`, for the reason recorded there:
+        a line dropped only at "none" handed over the whole quote, so the
+        presence half-heard it and could quote it back verbatim."""
+        scene = _decl_scene({"Doc": "cellar"})
+        ctx = _ctx(temp_db, {"sequence": [
+            {"type": "speech", "text": "Evening.", "visibility": "overt",
+             "volume": "shout"}]}, positions={"Doc": "cellar"})
+        got = _filtered_player_declaration(ctx, scene, "Doc", "cellar")
+        assert got
+        assert "Evening." not in got
+
+    def test_an_unplaced_presence_receives_nothing(self, temp_db):
+        ctx, scene = self._speaking(temp_db)
+        assert _filtered_player_declaration(ctx, scene, "Doc", "") == ""
+
+    def test_an_act_reaches_only_the_room_it_happened_in(self, temp_db):
+        ctx = _ctx(temp_db, {"sequence": [
+            {"type": "action", "attempt": "I unlatch the strongbox",
+             "observable": "unlatches the strongbox"}]},
+            positions={"Doc": "cellar"})
+        assert _filtered_player_declaration(
+            ctx, _decl_scene({"Doc": "cellar"}), "Doc", "cellar") == ""
+
+    def test_an_act_is_delivered_as_its_outward_surface(self, temp_db):
+        """A bystander sees what a body does, never what it meant by it."""
+        ctx = _ctx(temp_db, {"sequence": [
+            {"type": "action", "attempt": "I palm the key while he looks away",
+             "observable": "reaches across the bar"}]})
+        got = _filtered_player_declaration(ctx, _decl_scene(), "Doc", "taproom")
+        assert got == "reaches across the bar"
+
+    def test_the_ungraded_raw_input_needs_co_location(self, temp_db):
+        """No sequence means no volume to grade by, so the one thing that can
+        still be established is standing in the same room."""
+        ctx = _ctx(temp_db, {"sequence": []}, positions={"Doc": "cellar"})
+        ctx.input = "I wave at the crowd."
+        assert _filtered_player_declaration(
+            ctx, _decl_scene({"Doc": "cellar"}), "Doc", "cellar") == ""
 
 
 def _scene_with(rooms_by_name):

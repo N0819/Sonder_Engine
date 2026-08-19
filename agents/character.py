@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from collections import deque
 
 from mind import affect
@@ -36,6 +35,7 @@ from story.character_schema import (
 from core.frames import is_recognized_in_frame
 from world.gaps import interim_for
 from mind.memory import (
+    _RECALL_LIMIT,
     build_character_memory_context,
     contrast_memory,
     knowledge_for_character,
@@ -43,7 +43,7 @@ from mind.memory import (
     provenance_context_label,
     relationships_for_payload,
 )
-from llm.prompts import character_prompt, get_prompt
+from llm.prompts import character_prompt
 from story.scene import (
     NON_AWAKE_GATED,
     active_transformations,
@@ -79,12 +79,12 @@ from .common import (
     _normalize_character_output,
     _word_shingles,
     assign_event_ids,
-    attire_view,
     compact_attire,
     extra_parts_lines,
     cap_mind_model_updates,
     character_room,
     norm_sequence,
+    player_speech_lines,
 )
 
 def _ling(name):
@@ -282,10 +282,47 @@ def _addressed_names_include(chat_id, addressed, folded_name):
     return False
 
 
-def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
-                              n_turns=3):
+def _lines_delivered_to(char_id, rows):
+    """Per turn, the prose THIS mind is recorded as having received.
+
+    Three stores, all written by gates that already ran: the composed
+    per-observer view (`perception_act` / `perception_outcome`, keyed by
+    perceiver id, `None` when a mind was admitted nothing), and the
+    micro-round's `delivered_views`, which `deterministic_micro_perception`
+    fills through `_delivery_ok` per observer per element. Read together they
+    are the engine's own answer to "what words reached this mind on this
+    beat", and no other reader needs to re-derive it.
+    """
+    key = str(char_id)
+    heard = {}
+    for row in rows:
+        if row["step_key"] == "director_interpret":
+            continue
+        try:
+            content = json.loads(row["content"]) or {}
+        except (TypeError, ValueError):
+            continue
+        parts = []
+        view = (content.get("views") or {}).get(key)
+        if isinstance(view, str):
+            parts.append(view)
+        for rnd in content.get("rounds") or []:
+            if not isinstance(rnd, dict):
+                continue
+            delivered = (rnd.get("delivered_views") or {}).get(key)
+            if isinstance(delivered, str):
+                parts.append(delivered)
+            elif isinstance(delivered, list):
+                parts.extend(str(item) for item in delivered)
+        if parts:
+            heard.setdefault(int(row["idx"]), []).extend(parts)
+    return {idx: "\n".join(parts) for idx, parts in heard.items()}
+
+
+def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
+                              frame_id, n_turns=3):
     """`{"awaiting_your_answer": {...}}` when somebody asked THIS character
-    something and they have not spoken since.
+    something, they received it, and they have not spoken since.
 
     The engine already knows this and told nobody. `interaction.expects_response`
     is declared on every character result and consumed in exactly one place --
@@ -308,8 +345,19 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
     question was outstanding and it was his. Presence is the signal, like
     `_player_silence_note` beside it -- the field is absent on any beat where
     nothing is owed.
+
+    A DEBT IS MADE BY A LINE THAT REACHED THIS MIND, never by the asker's
+    intent to address it. `expects_response` + `addresses` (and, for the
+    player, `flow.addressed_to`) say who somebody MEANT to ask; they say
+    nothing about whether it was heard, and this note read nothing else -- so
+    a question put through a shut door arrived here verbatim, three turns
+    deep, for a mind perception had correctly told nothing. Every candidate
+    now has to appear in `_lines_delivered_to`, the record of what this mind
+    was actually handed, which is also what picks WHICH line is owed: a
+    concealed aside after an overt question is not this mind's line, and a
+    line that arrived muffled arrived as a fragment rather than as words.
     """
-    if current_turn_idx is None or not char_name:
+    if current_turn_idx is None or not char_name or char_id is None:
         return {}
     try:
         lower = max(0, int(current_turn_idx) - max(1, int(n_turns)))
@@ -320,10 +368,29 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
         "FROM turns t JOIN steps s ON s.turn_id=t.id "
         "JOIN variants v ON v.step_id=s.id AND v.active=1 "
         "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
-        "AND s.key IN ('director_interpret','interaction_loop','reaction_loop') "
+        # `character:` steps too, and not as an afterthought: `build_plan`
+        # plans BARE character steps instead of an `interaction_loop`
+        # whenever `autonomy == 0` on an uncontested beat, so on those
+        # chats every declaration is stored under `character:<id>` and
+        # this note was permanently absent -- which is exactly what a beat
+        # with nothing owed looks like, so nothing could report it. The
+        # sibling ledger five hundred lines up reads both step keys.
+        "AND (s.key IN ('director_interpret','interaction_loop',"
+        "'reaction_loop','perception_act','perception_outcome') "
+        "OR s.key LIKE 'character:' || '%') "
         "ORDER BY t.idx, CASE s.key WHEN 'director_interpret' THEN 0 ELSE 1 END",
         (chat_id, lower, current_turn_idx, frame_id),
     )
+    heard = _lines_delivered_to(char_id, rows)
+
+    def _reached(text, idx):
+        """Was this line among the words this mind was handed on that beat?
+        Verbatim, because that is how a full-fidelity delivery renders a
+        quote: a muffled fragment or a contentless trace does not contain the
+        line, and a withheld one leaves no view at all."""
+        line = str(text or "").strip()
+        return bool(line) and line in (heard.get(int(idx)) or "")
+
     folded = str(char_name).casefold()
     asked = None
     for row in rows:
@@ -342,8 +409,8 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
         # query), because the player declares first and a character answering
         # in that same beat clears it.
         if row["step_key"] == "director_interpret":
-            speech = str(content.get("speech") or "").strip()
-            if not speech:
+            spoken = player_speech_lines(content)
+            if not spoken:
                 continue
             addressed = [str(a).casefold() for a in
                          ((content.get("flow") or {}).get("addressed_to_refs")
@@ -352,17 +419,27 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
             # caller already holds by asking the roster, not by matching ids.
             if not _addressed_names_include(chat_id, addressed, folded):
                 continue
+            # Per LINE, not per declaration: a declaration may carry a
+            # concealed element beside an overt one, and the whole string is
+            # what used to be copied. Only lines this mind received can be
+            # owed by it.
+            reached = [line for line in spoken if _reached(line, row["idx"])]
             # A statement aimed at somebody is not a debt. For the player the
             # question mark IS the available test -- there is no
             # `expects_response` on a player declaration, and inventing one
             # would mean guessing at intent the Director never recorded.
-            if "?" not in speech:
+            reached = [line for line in reached if "?" in line]
+            if not reached:
                 continue
-            asked = {"from": "the player", "asked": speech[:240],
+            asked = {"from": "the player", "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
             continue
-        results = (content.get("character_results")
-                   or content.get("reaction_results") or {})
+        if str(row["step_key"]).startswith("character:"):
+            # A bare character step stores the one result whole.
+            results = {row["step_key"]: content}
+        else:
+            results = (content.get("character_results")
+                       or content.get("reaction_results") or {})
         if not isinstance(results, dict):
             continue
         for result in results.values():
@@ -394,9 +471,15 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
                          for a in (interaction.get("addresses") or [])]
             if folded not in addresses:
                 continue
-            if not said:
+            # The LAST line this mind received from them, which is not
+            # necessarily their last line: an overt question followed by a
+            # concealed aside used to be reported as the aside, because the
+            # element list was filtered on `type == "speech"` and nothing
+            # else. Nothing received, nothing owed.
+            reached = [line for line in said if _reached(line, row["idx"])]
+            if not reached:
                 continue
-            asked = {"from": speaker, "asked": str(said[-1])[:240],
+            asked = {"from": speaker, "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
     return {"awaiting_your_answer": asked} if asked else {}
 
@@ -460,9 +543,14 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0):
         return {}
     if not player:
         return {}
-    positions = (sc or {}).get("positions") or {}
-    here = positions.get(character_name(sh))
-    if not here or positions.get(player) != here:
+    # The identity-tolerant resolvers, for BOTH bodies. A `positions` key may
+    # be the display name, `identity.uid`, an alias, another case or a
+    # non-Latin fold -- which is why `room_of` and `character_room` exist at
+    # all -- and a raw dict hit read a body standing right there as unplaced.
+    # The note then vanished with no warning, and an absent note is what a
+    # beat with nothing to report looks like.
+    here = character_room(sc, sh)
+    if not here or room_of(sc, player) != here:
         return {}
     note = {"player_said_nothing": True, "player_name": player}
     if quiet_beats > 1:
@@ -697,37 +785,6 @@ def _nonsteering_intention_refs(result, intentions, turn_idx):
     return sorted(normalized)
 
 
-def _sanitize_nonsteering_intention_refs(result, invalid_refs):
-    """Prevent a rejected spent aim from persisting as next beat's steering."""
-    invalid = {str(value) for value in invalid_refs or []}
-    if not invalid or not isinstance(result, dict):
-        return result
-    active = result.get("active_state") or {}
-    bad_wants = []
-    if isinstance(active, dict):
-        for want in active.get("wants") or []:
-            if not isinstance(want, dict):
-                continue
-            ref = str(want.get("serves") or "").strip()
-            if ref in invalid or ref.removeprefix("intention:") in invalid:
-                bad_wants.append(str(want.get("want") or ""))
-                want["serves"] = "situational"
-        goal = str(active.get("goal") or "")
-        if bad_wants and any(
-                affect.claim_similarity(goal, text) >= 0.4
-                for text in bad_wants if text):
-            active["goal"] = ""
-    for candidate in result.get("response_candidates") or []:
-        if not isinstance(candidate, dict):
-            continue
-        candidate["serves"] = [
-            value for value in (candidate.get("serves") or [])
-            if str(value) not in invalid
-            and str(value).removeprefix("intention:") not in invalid
-        ]
-    return result
-
-
 # ---- Unbidden recall: one contrasting memory for a measurably stuck mind ----
 #
 # The three repetition mechanisms above (`recent_self_lines`, the refrain
@@ -861,11 +918,21 @@ def _unbidden_entry(mem, turn_idx):
     return entry
 
 
-def _attach_unbidden(memory_context, entry, recall_limit=8):
+def _attach_unbidden(memory_context, entry, recall_limit=_RECALL_LIMIT):
     """Substitute, never add: the unbidden entry pays for itself out of the
     ordinary recall budget, so total recalled material per payload is
     constant. When recall came back under budget it simply takes the spare
-    slot; when full, the lowest-ranked ordinary recall yields."""
+    slot; when full, the lowest-ranked ordinary recall yields.
+
+    The budget is `memory`'s own, not a second number written down beside it.
+    The default was a hand-set 8 against a `_RECALL_LIMIT` of 16 and the one
+    caller passes nothing, so a calm mind -- the band where this fires most --
+    evicted a ranked memory with eight slots still empty, which is the exact
+    opposite of the spare-slot case the docstring describes. Absorption
+    narrows the budget further INSIDE `build_character_memory_context`; a list
+    shortened that way cannot reach this ceiling, so the substitution does not
+    fire and the entry takes a spare slot, which is the side of the rule this
+    function is written to prefer."""
     if not isinstance(memory_context, dict):
         return
     recalled = list(memory_context.get("recalled_old_memories") or [])
@@ -1210,14 +1277,44 @@ LOOP_DENSITY = 0.5
 # `unentered` sits just behind `known`: a cul-de-sac you have never looked
 # inside is worse than a route (it goes nowhere) and better than ground you
 # have already covered (it might hold what you are looking for).
-_APPEAL_ORDER = ("UNTRIED", "proven", "unentered", "known", "circling",
-                 "spent", "no way through", "closed")
+#
+# KEYED ON THE EVIDENCE, NOT THE READING. `_VERDICTS` is a pack table of
+# (marker key, label, because), and the label is the half a translator
+# changes -- so ordering on labels meant a translated pack sorted every exit
+# last (`_appeal` returns `len(_APPEAL_ORDER)` on ValueError), pruned no
+# redundant counters and never clamped a goal route, all silently, because an
+# unrecognised label is indistinguishable here from "trails everything". The
+# marker keys are protocol: they are what the engine writes onto an exit.
+_APPEAL_ORDER = ("untried", "worked_before", "unentered", "been_there",
+                 "circling_here", "no_new_ground_that_way", "no_route_onward",
+                 "visibly_no_way_through")
 # The verdicts that argue AGAINST taking an exit. For these the supporting
 # counters are redundant with the verdict itself and are dropped, so that a
 # discouraged door never outweighs the encouraged one beside it.
 # `unentered` is deliberately absent: its supporting markers are the only
 # evidence the character has about a room they have never been in.
-_DISCOURAGING = frozenset({"circling", "spent", "no way through", "closed"})
+_DISCOURAGING = frozenset({"circling_here", "no_new_ground_that_way",
+                           "no_route_onward", "visibly_no_way_through"})
+
+
+def _verdict_key(entry):
+    """Which reading this exit's own markers earn, or None.
+
+    The precedence is the pack table's order, and this is the ONE place it is
+    walked -- `_verdict` renders the reading and `_appeal` ranks it, and both
+    ask here rather than parsing the rendered string back apart.
+    """
+    if not isinstance(entry, dict):
+        return None
+    for key, _label, _because in _ling("_VERDICTS"):
+        if not entry.get(key):
+            continue
+        # A cul-de-sac you have NEVER been inside is not a spent one; see
+        # `_verdict` for the measurement.
+        if key == "visibly_no_way_through" and entry.get("untried"):
+            return "unentered"
+        return key
+    return None
 
 
 def _verdict(entry, frontier_hops=None):
@@ -1235,8 +1332,10 @@ def _verdict(entry, frontier_hops=None):
     salience inversion (the right door as the lightest entry) was fixed once
     and must not be re-created by decoration.
     """
+    verdict_key = _verdict_key(entry)
     for key, label, because in _ling("_VERDICTS"):
-        if not entry.get(key):
+        if key != verdict_key and not (
+                verdict_key == "unentered" and key == "visibly_no_way_through"):
             continue
         # A cul-de-sac you have NEVER been inside is not a spent one. `closed`
         # is a fact about where a room LEADS; it says nothing about what is
@@ -1259,7 +1358,7 @@ def _verdict(entry, frontier_hops=None):
                        "question from what it leads to, and things worth "
                        "reaching are usually not thoroughfares")
         detail = because
-        if label == "circling" and entry.get("entered_recently"):
+        if verdict_key == "circling_here" and entry.get("entered_recently"):
             detail = (f"you have been in there {entry['entered_recently']} "
                       "times in your last dozen paces")
         # The distance rides ANY verdict that has one, not only `known`.
@@ -1279,7 +1378,7 @@ def _verdict(entry, frontier_hops=None):
                 detail += ("; the nearest door you have never taken lies "
                            f"about {frontier_hops} rooms down that way")
         entry["verdict"] = f"{label} — {detail}"
-        if label in _DISCOURAGING:
+        if verdict_key in _DISCOURAGING:
             # These numbers all say the same thing as the verdict, and
             # together they were three times the text of the untried door
             # beside them. The verdict carries the reading; the rest were
@@ -1300,9 +1399,8 @@ def _appeal(entry):
     # arrived in.
     if not isinstance(entry, dict):
         return len(_APPEAL_ORDER)
-    label = str(entry.get("verdict") or "").split(" — ")[0]
     try:
-        return _APPEAL_ORDER.index(label)
+        return _APPEAL_ORDER.index(_verdict_key(entry))
     except ValueError:
         return len(_APPEAL_ORDER)
 
@@ -1813,7 +1911,7 @@ def _en_route(stored_state, here_rid, destination):
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None,
                           known_dead_ends=None, place_graph=None,
-                          destination=None):
+                          destination=None, warn=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -1845,23 +1943,36 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # a missing sense.
     seen_onward, seen_bearings = {}, {}
     if here_rid:
+        # Narrow, and it SAYS SO when it fires. The guard used to wrap the
+        # whole loop AND a local re-import of a function already imported at
+        # module scope, so an import error and a spatial failure read
+        # identically -- and either emptied `seen_onward`, the sole source of
+        # `onward_exits_visible`, `onward_bearings` and
+        # `visibly_no_way_through`. That last is the first key `_verdict`
+        # tests and the only gate on the `unentered` verdict, so the exits
+        # payload degraded to its pre-A11 shape with nothing written to
+        # `ctx.warnings` and no way to tell it had.
         try:
-            from world.spatial import visible_adjacent_rooms
-            for item in visible_adjacent_rooms(scene, here_rid) or []:
-                if isinstance(item, dict) and "onward_exits" in item:
-                    rid_seen = str(item.get("room_id"))
-                    seen_onward[rid_seen] = item["onward_exits"]
-                    # WHICH way on, not merely how many. The digest buckets
-                    # exits egocentrically (ahead/behind/left), so a count
-                    # sitting on the "behind" bucket carries no heading of its
-                    # own and gets read as "on in the direction I was already
-                    # facing" -- which is how a runner came to hunt a westward
-                    # exit, four times, out of a chamber whose only other way
-                    # out went north.
-                    if item.get("onward_bearings"):
-                        seen_bearings[rid_seen] = item["onward_bearings"]
-        except Exception:
-            seen_onward, seen_bearings = {}, {}
+            neighbours = visible_adjacent_rooms(scene, here_rid) or []
+        except Exception as exc:
+            neighbours = []
+            if warn:
+                warn("exits: what is visible through the doorways of "
+                     f"{here_rid!r} could not be read ({exc}); onward counts "
+                     "and bearings are absent this beat")
+        for item in neighbours:
+            if isinstance(item, dict) and "onward_exits" in item:
+                rid_seen = str(item.get("room_id"))
+                seen_onward[rid_seen] = item["onward_exits"]
+                # WHICH way on, not merely how many. The digest buckets
+                # exits egocentrically (ahead/behind/left), so a count
+                # sitting on the "behind" bucket carries no heading of its
+                # own and gets read as "on in the direction I was already
+                # facing" -- which is how a runner came to hunt a westward
+                # exit, four times, out of a chamber whose only other way
+                # out went north.
+                if item.get("onward_bearings"):
+                    seen_bearings[rid_seen] = item["onward_bearings"]
     worked = routes_that_worked if isinstance(routes_that_worked, dict) else {}
     route = [r for r in (visited_rooms or []) if isinstance(r, str)]
     counts = {}
@@ -2193,12 +2304,12 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 # exactly why it was the route. Clamped to `known`, never
                 # lifted above untried/proven -- goal against curiosity
                 # stays the character's call, as the appeal order promises.
-                appeal = min(appeal, _APPEAL_ORDER.index("known"))
+                appeal = min(appeal, _APPEAL_ORDER.index("been_there"))
                 near_dest = toward
             near = 10 ** 6
             if isinstance(entry, dict) and isinstance(hops, int) \
                     and hops >= 1 \
-                    and str(entry.get("verdict") or "").startswith("known"):
+                    and _verdict_key(entry) == "been_there":
                 near = hops
             return (appeal, near_dest, near)
         out[bucket] = sorted(marked, key=_rank)
@@ -2221,7 +2332,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     live = [trio for trio in all_marked
             if isinstance(trio[1], int) and trio[1] >= 0]
     if live and len(live) == 1 and all(
-            _appeal(e) >= _APPEAL_ORDER.index("circling")
+            _appeal(e) >= _APPEAL_ORDER.index("circling_here")
             for e, _, _ in all_marked if isinstance(e, dict)):
         entry, hops, _toward = live[0]
         entry["only_way_onward"] = True
@@ -2470,9 +2581,21 @@ def character_step(ctx, cid, nonce):
     # reactors; this guard protects rerun/resume paths that hydrate a stale plan
     # and makes the invariant hold no matter who calls character_step. No LLM
     # call, no manifest (which perception would otherwise deliver as tells).
-    if awareness_of(chat["id"], character_name(sh)) in NON_AWAKE_GATED:
+    _awareness = awareness_of(chat["id"], character_name(sh))
+    if _awareness in NON_AWAKE_GATED:
+        # SAY SO. `_awareness_gated` had exactly one reader in the tree, a
+        # test, so nothing downstream and nothing in the pipeline drawer could
+        # tell a mind that was asleep from one that declared nothing -- and a
+        # gated mind runs no step, so it generates no pressure and reads as a
+        # quiet one, which is precisely how a stuck sleeper stays unnoticed.
+        ctx.add_warning(
+            f"character {character_name(sh)}: {_awareness}, so no decision "
+            "was taken this beat")
+        # `name`/`char_id` because every other return path sets them and the
+        # readers of a stored result key on them.
         return {"sequence": [], "speech": None, "action": None, "actions": [],
                 "manifest": {}, "mind_model_updates": [],
+                "name": character_name(sh), "char_id": cid,
                 "_awareness_gated": True}
 
     interaction_views = ctx.get("interaction_views", {}) or {}
@@ -2702,6 +2825,22 @@ def character_step(ctx, cid, nonce):
     _psych = character_psychology(sh)
     # Tier-1: show the EFFECTIVE (possibly rupture-shifted) drive, read-only.
     _psych["drive"] = effective_drive(_psych, _interior)
+    # AND SAY SO WHEN THERE ISN'T ONE. An empty drive is the engine's worst
+    # authoring failure precisely because it is silent: every motivation then
+    # lives in goals, goals are built to be completable and abandonable, and
+    # when they decay the character simply stops wanting things -- fifty beats
+    # later, by which time it looks like a model problem. `serves: "drive"`
+    # stays valid against three empty strings, so nothing downstream objects.
+    # `importers.character_import_warnings` asks exactly this question and
+    # runs only on the import path; a card built or edited any other way was
+    # never asked. This is the one function that reads the sheet on every beat
+    # of every character's life, so it costs a line here and nothing anywhere.
+    if not str(_psych["drive"].get("essence") or "").strip():
+        ctx.add_warning(
+            f"character {character_name(sh)}: no drive is authored "
+            "(psychology.drive.essence is empty), so nothing under this "
+            "character's goals wants anything -- they will react rather than "
+            "pursue once the goals decay")
     # The authored beliefs and associations are SEEDED into the interior ledger
     # at commit, so once that has happened the payload was carrying each of them
     # twice -- `psychology.self_model.beliefs` beside `learned_beliefs`, and
@@ -2897,6 +3036,14 @@ def character_step(ctx, cid, nonce):
     # Following is a voluntary, durable decision this mind owns. Surface its
     # own relation as self-knowledge even after a fast target has pulled ahead;
     # separation does not silently decide whether it keeps chasing or stops.
+    #
+    # The RELATION, never the target's position. `same_room` is the whole of
+    # what that rationale covers -- still together, or no longer -- and a
+    # `target_room` beside it once handed over the exact room id of a body the
+    # follower may have lost through a door, into a hidden interior, or across
+    # a sight barrier, read straight off `scene.positions` with no perceptual
+    # channel of any kind. Where another body IS crosses perception like
+    # anything else does.
     _following = sc.get("following") or {}
     _my_follow = next(
         (record for follower, record in _following.items()
@@ -2910,7 +3057,6 @@ def character_step(ctx, cid, nonce):
             "target": _my_follow.get("target"),
             "since_turn": _my_follow.get("since_turn"),
             "reason": _my_follow.get("reason") or "",
-            "target_room": room_of(sc, _my_follow.get("target")),
             "same_room": (
                 room_of(sc, _my_follow.get("target")) == char_room
                 if char_room else False),
@@ -3038,7 +3184,9 @@ def character_step(ctx, cid, nonce):
                 place_graph=stored_state.get("place_graph") or {},
                 # The room his own goal text names, if he owns a node for
                 # it -- see _destination_from_goals for the double gate.
-                destination=_goal_destination),
+                destination=_goal_destination,
+                warn=lambda message: ctx.add_warning(
+                    f"character {character_name(sh)}: {message}")),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
@@ -3101,7 +3249,8 @@ def character_step(ctx, cid, nonce):
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_unanswered_question_note(
-                chat.id, character_name(sh), ctx.turn.idx, ctx.turn.frame_id),
+                chat.id, character_name(sh), cid,
+                ctx.turn.idx, ctx.turn.frame_id),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
@@ -3277,39 +3426,26 @@ def character_step(ctx, cid, nonce):
     _repeated_move = _first_repeated_move(out, _self_moves)
     _spent_refs = _nonsteering_intention_refs(
         out, _decision_intentions, ctx.turn.idx)
+    # RECORDS, so it carries only what a reader reads. Each entry used to
+    # carry an `instruction` paragraph too -- prompt text addressed to the
+    # character, assembled on every beat that tripped a screen and read by
+    # nothing since the re-ask went out with `e629d60`. Two consumers remain
+    # and both take data: the warning below, and `_barren_beat`.
     _corrections = {}
     if _repeated:
         _corrections["repeat_correction"] = {
             "you_already_said": _repeated,
-            "instruction": (
-                "Your draft reissued this line you have already spoken. "
-                "Say something else, act instead, or stay silent."),
         }
     if _repeated_move:
         _corrections["move_correction"] = {
             "turn": _repeated_move.get("turn"),
             "you_already_did": _repeated_move.get("move"),
             "your_draft_does": _repeated_move.get("current"),
-            "instruction": (
-                "This is mechanically close to a recent conversational job. "
-                "Re-read the current beat. If it invited, answered, challenged, "
-                "or materially advanced that thread -- or deliberate repetition "
-                "is itself meaningful in character -- keep it, acknowledge the "
-                "continuity, and advance it. This includes one continuous excited "
-                "riff or rant; do not flatten the character's voice. Otherwise it "
-                "is an unmotivated reset: changing the example, destination, "
-                "metaphor, or noun is not progress, so drop the move and answer "
-                "what is new, act, or stay silent."),
         }
     if _spent_refs:
         _corrections["intention_correction"] = {
             "nonsteering_ids": _spent_refs,
             "steering_ids": _steering_intention_ids,
-            "instruction": (
-                "Your draft lets a dormant/spent intention steer the choice. "
-                "Do not merely relabel that behavior as situational. Choose "
-                "from a live intention, the drive, the present situation, or "
-                "let the spent thread rest."),
         }
     # NO RE-ASK. Repetition is WEAK, not unusable, and a redo that fires on
     # anything short of broken output is a nuisance -- the owner's rule, and
@@ -3343,7 +3479,7 @@ def character_step(ctx, cid, nonce):
     # Still handed to the intent ledger, which is the one consumer that was
     # never about re-asking: a `progress` claim on a beat that repeated an
     # earlier move does not advance the goal (`affect._advance_intent`).
-    _barren_beat = bool(_corrections) and "move_correction" in _corrections
+    _barren_beat = "move_correction" in _corrections
     for _name, _correction in sorted(_corrections.items()):
         ctx.add_warning(
             f"character {character_name(sh)}: {_name} -- "
