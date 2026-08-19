@@ -915,6 +915,37 @@ def artifacts_for_room(cid, sc, room_id):
         artifacts_model.standing_artifacts(cid), room_id)]
 
 
+def _subject_spellings(sc, subject):
+    """Every handle this scene keys one being by: the string as given, plus
+    the entity id and the display name of the record it names.
+
+    A being routinely carries the pair at once -- entity `tardis_001`, display
+    name "Blue Police Box" -- and each of its ledgers is keyed by whichever
+    handle its writer had. Aliases are deliberately NOT spellings here: they
+    are lookup vocabulary, several beings may claim one, and this list decides
+    a firewall answer.
+    """
+    text = str(subject or "").strip()
+    if not text:
+        return []
+    forms = [text]
+    seen = {text.casefold()}
+    for eid, ent in ((sc or {}).get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        labels = (eid, ent.get("name"), *(ent.get("aliases") or []))
+        if not any(str(label or "").strip().casefold() == text.casefold()
+                   for label in labels):
+            continue
+        for handle in (eid, ent.get("name")):
+            form = str(handle or "").strip()
+            if form and form.casefold() not in seen:
+                seen.add(form.casefold())
+                forms.append(form)
+        break
+    return forms
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 
@@ -951,13 +982,27 @@ def _perceptible_entities(sc, perceiver_names=None):
     doing, so it does not go in.
 
     `perceiver_names` is who the payload is being built for. Concealment is
-    decided by containment only (spatial.containment_conceals): an entity in
-    the open is unaffected, so this is inert for the ordinary scene and bites
-    exactly on the enclosed case that motivated it. The entity still appears
-    -- only `state` is withheld -- because presence may reach the perceiver
-    through contact or sound even when nothing else does. Omitted (the
-    default) keeps the whole table, which is right for callers that have no
-    perceiver set to gate against.
+    decided by containment only: an entity in the open is unaffected, so this
+    is inert for the ordinary scene and bites exactly on the enclosed case
+    that motivated it. The entity still appears -- only `state` is withheld --
+    because presence may reach the perceiver through contact or sound even
+    when nothing else does. Omitted (the default) keeps the whole table, which
+    is right for callers that have no perceiver set to gate against.
+
+    BOTH PARTIES ARE ASKED UNDER EVERY SPELLING THEY ARE KEYED BY. `contained`
+    and `positions` key one being by whichever handle the writer used -- an
+    entity id for an object, fixture or unregistered presence, a display name
+    for a body already live as a subject elsewhere -- and
+    `spatial_identity.canonical_subject_map` deliberately declines to fold a
+    lone entity-id key, so the pair stays live. A gate that resolves one
+    spelling gets an answer about a being with no enclosure whenever it picks
+    the other one, which is indistinguishable from an answer about a body
+    standing in the open: it fails OPEN for an id-keyed enclosed entity (its
+    act-naming `state` shipped to every perceiver) and CLOSED for an id-keyed
+    co-occupant (denied what the body beside it is doing). Hence
+    `_enclosure_of`, which resolves an enclosure from the first spelling the
+    scene actually knows and compares the two through `same_subject` -- the
+    holder carries the same pair.
     """
     entities = (sc or {}).get("entities") or {}
     if not isinstance(entities, dict):
@@ -969,11 +1014,40 @@ def _perceptible_entities(sc, perceiver_names=None):
         if holder
     }
 
-    def _state_reaches_anyone(ent_name):
-        if not names or not ent_name:
+    def _enclosure_of(spellings):
+        """The nearest enclosure around this being, under any of its names.
+
+        The first spelling the scene knows an enclosure for wins: a spelling
+        the scene does not key answers "nothing around it", which is the
+        ignorant answer, and the informed one must outrank it.
+        """
+        for form in spellings:
+            holders = hiding_holders_of(sc, form)
+            if holders:
+                return str(holders[0]).strip()
+        return ""
+
+    observer_spellings = {
+        observer: _subject_spellings(sc, observer) for observer in names
+    }
+
+    def _state_reaches_anyone(*ent_spellings):
+        spellings = [s for s in (str(f or "").strip() for f in ent_spellings)
+                     if s]
+        if not names or not spellings:
             return True
-        return any(not containment_conceals(sc, observer, ent_name)
-                   for observer in names)
+        forms = []
+        for form in spellings:
+            forms.extend(_subject_spellings(sc, form))
+        enclosure = _enclosure_of(forms)
+        for observer in names:
+            if any(same_subject(sc, observer, form) for form in forms):
+                return True          # nothing is concealed from itself
+            around_observer = _enclosure_of(observer_spellings[observer])
+            if around_observer == enclosure or same_subject(
+                    sc, around_observer, enclosure):
+                return True          # same side of every closed thing
+        return False
 
     by_name = {}
     for eid, ent in entities.items():
@@ -993,7 +1067,7 @@ def _perceptible_entities(sc, perceiver_names=None):
         key = name if name and len(by_name.get(name.casefold(), ())) == 1 \
             else eid
         drop = set(_ENTITY_LOOKUP_ONLY_FIELDS)
-        if not _state_reaches_anyone(name or eid):
+        if not _state_reaches_anyone(name, eid):
             drop.add("state")
         if eid in _inhabited_by_a_perceiver:
             # YOU CANNOT SEE THE OUTSIDE OF WHAT YOU ARE STANDING INSIDE.

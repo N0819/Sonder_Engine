@@ -564,3 +564,96 @@ def test_outcome_payload_keeps_appearances_someone_can_see(
 # Hole 2, the ungated entity table, is real code and is tested above. A test
 # that asserts wording no model reads is not coverage of anything, and it
 # cost a translation of 28,467 characters in every language pack.
+
+
+# --- 6. one being, two spellings -------------------------------------------
+#
+# Everything in section 1 keys the enclosed body by its DISPLAY NAME: `Ada` is
+# the entities dict key, the `name` field and the `contained` key at once. That
+# is the one arrangement in which a gate that asks a single spelling cannot be
+# wrong. A scene routinely keys the same being the other way -- an entity id in
+# `positions` and `contained`, a display name on the record -- and
+# `spatial_identity.canonical_subject_map` deliberately refuses to fold a lone
+# entity-id key, so the two spellings stay live side by side.
+#
+# Both parties to the question carry the pair, so both are tested here.
+
+ENCLOSED_ID = "ada_01"
+CARRIER_ID = "bo_01"
+
+
+def _id_keyed_scene():
+    """The same story, with the enclosed body keyed by id rather than name."""
+    sc = _scene()
+    sc["entities"][ENCLOSED_ID] = sc["entities"].pop(ENCLOSED)
+    sc["contained"] = {ENCLOSED_ID: {"in": HOLDER, "mode": "container"}}
+    return sc
+
+
+def test_the_premise_two_spellings_of_one_being_answer_differently():
+    """Sanity, and the reason the gate cannot ask just one of them.
+
+    `containment_conceals` resolves the string it is given. Handed the
+    spelling the scene does not key this body by, it answers about a being
+    with no enclosure at all -- which is indistinguishable from an answer
+    about a body standing in the open.
+    """
+    sc = _id_keyed_scene()
+    assert containment_conceals(sc, CARRIER, ENCLOSED_ID)
+    assert not containment_conceals(sc, CARRIER, ENCLOSED)
+
+
+def test_enclosed_state_withheld_when_the_entity_is_keyed_by_id():
+    """The leak: the gate asked the display name, the scene keyed the id."""
+    projected = _perceptible_entities(_id_keyed_scene(), [CARRIER])
+
+    assert "state" not in projected[ENCLOSED]
+    assert "reading" not in json.dumps(projected).casefold()
+
+
+def test_an_id_keyed_body_keeps_its_own_state_when_it_is_the_perceiver():
+    """Proprioception survives the wider gate: nothing is concealed from
+    itself, under either of its own spellings."""
+    projected = _perceptible_entities(_id_keyed_scene(), [ENCLOSED])
+    assert projected[ENCLOSED]["state"]["posture"] == \
+        "unfolding a sheet of paper and reading it"
+
+
+def test_an_id_keyed_entity_in_the_open_is_unaffected():
+    """Negative control: the wider gate must subtract only from the enclosed.
+
+    `Lantern`/`lantern_01` is the same two-spelling shape with nothing shut
+    around it, so a gate that treated an unresolvable spelling as concealment
+    would silently blank the ordinary scene.
+    """
+    projected = _perceptible_entities(_id_keyed_scene(), [CARRIER])
+    assert projected["Lantern"]["state"]["posture"] == \
+        "guttering on the side table"
+
+
+def test_id_keyed_bodies_inside_the_same_enclosure_reach_each_other():
+    sc = _id_keyed_scene()
+    sc["contained"][COMPANION] = {"in": HOLDER, "mode": "container"}
+    projected = _perceptible_entities(sc, [COMPANION])
+    assert "state" in projected[ENCLOSED]
+
+
+def test_state_withheld_when_the_perceiver_is_the_id_keyed_one():
+    """The same defect on the other side of the question.
+
+    The perceiver arrives as a display name and the scene shut them in under
+    their entity id, so the gate resolved an observer standing in the open and
+    handed them the room's objective state. Being enclosed blocks the view out
+    exactly as it blocks the view in.
+    """
+    sc = _scene()
+    sc["entities"][CARRIER_ID] = {
+        "name": CARRIER, "kind": "person", "description": "",
+        "state": {"posture": "standing"},
+    }
+    sc["contained"] = {CARRIER_ID: {"in": HOLDER, "mode": "container"}}
+
+    projected = _perceptible_entities(sc, [CARRIER])
+
+    assert "state" not in projected["Lantern"]
+    assert "guttering" not in json.dumps(projected).casefold()
