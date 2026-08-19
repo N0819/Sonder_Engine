@@ -1528,22 +1528,33 @@ class Observation(LenientModel):
     channel: str = "mixed"
     fidelity: str = "rendered"
     observed: dict[str, Any] = Field(default_factory=dict)
-    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
-    suddenness: float = Field(default=0.0, ge=0.0, le=1.0)
-    ambiguity: float = Field(default=0.5, ge=0.0, le=1.0)
+    # These three ARE composer.OBSERVATION_DEFAULTS, and must stay so. The
+    # comment above says absent means the default; it said that while the two
+    # sides disagreed on every axis (0.5/0.0/0.5 here against 0.35/0.1/0.15
+    # there), so a compacted observation read back through this model came
+    # out asserting values the compactor never wrote -- half again the
+    # intensity, three times the ambiguity, no suddenness where the resting
+    # value is 0.1. Restated rather than imported: `llm` may not import
+    # `agents`, so `tests/test_schemas.py` holds the two level instead.
+    intensity: float = Field(default=0.35, ge=0.0, le=1.0)
+    suddenness: float = Field(default=0.1, ge=0.0, le=1.0)
+    ambiguity: float = Field(default=0.15, ge=0.0, le=1.0)
     directed_at_self: bool = False
 
-    _clamp_observation_axes = validator(
-        "intensity", "ambiguity", pre=True, allow_reuse=True
-    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
-    # Split out because its declared default is 0.0, not 0.5. A field
-    # validator runs BEFORE the inherited null-substitution, so the shared
-    # clamp's fallback was the effective value for `null` while an omitted
-    # field still got 0.0 -- the same field answering two different ways to
-    # two spellings of "not said", and neither matching the other.
+    # One validator per axis, because each carries its OWN resting value as
+    # the fallback. A field validator runs BEFORE the inherited null
+    # substitution, so the fallback is what an explicit `null` lands on while
+    # omission lands on the declared default -- the two spellings of "not
+    # said" have to agree, which they can only do per field.
+    _clamp_intensity = validator(
+        "intensity", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.35))
     _clamp_suddenness = validator(
         "suddenness", pre=True, allow_reuse=True
-    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.1))
+    _clamp_ambiguity = validator(
+        "ambiguity", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.15))
 
 class SensorChannel(LenientModel):
     channel_id: str

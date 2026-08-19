@@ -189,3 +189,23 @@ def test_specialist_channel_shapes_match_what_the_models_declare():
                 wrong.append(f"{step_key}.{channel}: declared {expected}, "
                              f"coerced as {classified}")
     assert not wrong, "; ".join(wrong)
+
+
+def test_observation_defaults_are_the_values_the_compactor_omits():
+    """`Observation`'s own comment says absent means the default, and names
+    `composer.OBSERVATION_DEFAULTS` as the projection that omits them. They
+    disagreed on all three advisory axes -- intensity 0.5 vs 0.35, suddenness
+    0.0 vs 0.1, ambiguity 0.5 vs 0.15 -- so a compacted observation read back
+    through the schema came out saying something the compactor never said.
+    """
+    from agents.composer import OBSERVATION_DEFAULTS
+    from llm.schemas import Observation, _declared, _fields
+
+    fields = _fields(Observation)
+    for name, expected in OBSERVATION_DEFAULTS.items():
+        assert _declared(fields[name]).default == expected, name
+    # `null` and an omitted key are two spellings of "not said" and must land
+    # on the same number: the pre-validator fallback is the other half.
+    for name in ("intensity", "suddenness", "ambiguity"):
+        parsed = Observation(**{"observation_id": "current:x:0", name: None})
+        assert getattr(parsed, name) == OBSERVATION_DEFAULTS[name], name

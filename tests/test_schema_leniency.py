@@ -730,12 +730,17 @@ class TestAValidatorMustNotContradictItsOwnFieldsDefault:
         assert GoalImpact(intentionality=None).intentionality == 0.0
         assert GoalImpact().intentionality == 0.0
 
-    def test_suddenness_answers_its_declared_default_either_way(self):
+    def test_each_observation_axis_answers_its_own_default_either_way(self):
+        # The three numbers are composer.OBSERVATION_DEFAULTS, which is what
+        # the compactor omits; a shared fallback cannot serve three different
+        # resting values, so each axis clamps to its own.
         from llm.schemas import Observation
         req = dict(observation_id="o", perceiver_id="p", source_atom_id="a",
                    channel="sight", fidelity="clear")
-        assert Observation(suddenness=None, **req).suddenness == 0.0
-        assert Observation(**req).suddenness == 0.0
+        for axis, resting in (("intensity", 0.35), ("suddenness", 0.1),
+                              ("ambiguity", 0.15)):
+            assert getattr(Observation(**{axis: None}, **req), axis) == resting
+            assert getattr(Observation(**req), axis) == resting
 
     def test_the_axes_that_do_declare_a_half_still_get_it(self):
         from llm.schemas import CharacterAppraisal
