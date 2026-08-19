@@ -224,8 +224,6 @@ class PipelineContext:
             val = getattr(self, key)
             if val is not None:
                 return val
-            if key.startswith("_") and key in self._extra:
-                return self._extra[key]
             return default
         if key.startswith("character:"):
             cid = int(key.split(":")[1])

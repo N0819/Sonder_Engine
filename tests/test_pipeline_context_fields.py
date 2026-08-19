@@ -46,6 +46,20 @@ def test_a_step_that_returned_none_is_not_materialized():
             "declared stage does")
 
 
+def test_no_declared_name_can_ever_reach_the_extra_dict():
+    # `__setitem__` routes any key `hasattr` answers for to `setattr`, so the
+    # two stores cannot both hold a declared name -- which is what made
+    # `get`'s underscore-prefixed `_extra` fallback unreachable. Underscore
+    # names are the interesting case: all five of them are declared fields.
+    ctx = _ctx()
+    for name in PipelineContext.__dataclass_fields__:
+        if name == "_extra":
+            continue
+        ctx[name] = {"probe": name}
+        assert getattr(ctx, name) == {"probe": name}
+    assert ctx._extra == {}
+
+
 def test_step_output_round_trips_through_the_declared_field():
     ctx = _ctx()
     ctx["background_react"] = {"fired": True}
