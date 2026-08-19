@@ -127,14 +127,27 @@ class TestCommitDomains:
         choosing "fail" is an extension saying its state being wrong is worse
         than the beat being lost, and it is the only way an extension can
         legitimately cost a turn.
+
+        It propagates NAMED, and writes the turn's warning trail, exactly as
+        `commit._commit_domain` does for every engine domain. Bare, this was
+        the only rollback in the engine that arrived anonymous -- and the only
+        one a third party can cause, so the one where "an engine defect or an
+        extension exercising its right?" is a real question. Found composing
+        the contract fixture through `commit_all`
+        (`tests/test_extension_contract.py`), where the host's whole account
+        of the lost beat was the extension's own sentence.
         """
         def boom(view):
             raise ValueError("roll it back")
 
+        ctx = _StubCtx(chat_id=_chat(temp_db))
         bare.add_commit_domain("strict", boom, on_error="fail")
-        with pytest.raises(ValueError, match="roll it back"):
-            extension_runtime.run_commit_domains(
-                _StubCtx(chat_id=_chat(temp_db)), {})
+        with pytest.raises(ExtensionError, match="roll it back") as excinfo:
+            extension_runtime.run_commit_domains(ctx, {})
+
+        assert "ext:seams:strict" in str(excinfo.value)
+        assert isinstance(excinfo.value.__cause__, ValueError)
+        assert any("ext:seams:strict" in note for note in ctx.warnings)
 
     def test_domains_run_in_a_deterministic_order(self, temp_db, bare):
         order = []
