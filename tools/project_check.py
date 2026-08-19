@@ -1140,6 +1140,78 @@ def check_facade_import_direction(errors: list[str]) -> None:
                         f"the name, or move the name down.")
 
 
+def _engine_module_index() -> tuple[set[str], dict[str, list[str]]]:
+    """Every engine module by dotted name, and by its bare final component."""
+    names = {"agents"}
+    for path in engine_python_paths():
+        rel = path.relative_to(ROOT).with_suffix("")
+        parts = list(rel.parts)
+        if parts[-1] == "__init__":
+            parts.pop()
+        names.add(".".join(parts))
+    names.update(SUBSYSTEM_PACKAGES)
+    by_tail: dict[str, list[str]] = {}
+    for name in names:
+        by_tail.setdefault(name.rpartition(".")[2], []).append(name)
+    return names, by_tail
+
+
+def engine_import_violations(source, names: set[str], by_tail: dict) -> list:
+    """`(lineno, message)` for every import naming a module that is not there."""
+    tree = source if isinstance(source, ast.AST) else ast.parse(source)
+    engine_roots = set(SUBSYSTEM_PACKAGES) | {"agents"}
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            targets = [node.module or ""]
+        else:
+            continue
+        for target in targets:
+            if target in names:
+                continue
+            root = target.partition(".")[0]
+            if root in engine_roots:
+                out.append((node.lineno, "imports %r, which is not a module "
+                                         "in this tree." % target))
+            elif "." not in target:
+                moved = sorted(by_tail.get(target, []))
+                if moved:
+                    out.append((node.lineno,
+                                "imports %r, a module name from before the "
+                                "package move. It is now %s."
+                                % (target, " or ".join(moved))))
+    return sorted(out)
+
+
+def check_engine_imports_resolve(errors: list[str]) -> None:
+    """An import naming an engine module that does not exist.
+
+    The class the package move created and nothing catches: `tools/` drivers
+    are imported by nothing — no test, no route, no other module — so a name
+    that stopped resolving fails only when a human runs the tool, months
+    later, and usually into a bare `except` that degrades a metric instead of
+    raising. `tools/perception_quality.py` asked for `spatial` and
+    `character_schema` for weeks; its dialogue-entitlement gate was off the
+    whole time and it exited 0.
+
+    Checked statically, by name, against the modules that actually exist: a
+    bare name matching a moved module is reported WITH where it went, so the
+    repair is in the message. Nothing is executed to run this — a driver must
+    not have to be runnable to be checked.
+    """
+    names, by_tail = _engine_module_index()
+    for path in sorted((ROOT / "tools").glob("*.py")) + engine_python_paths():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for lineno, message in engine_import_violations(tree, names, by_tail):
+            errors.append(f"{rel}:{lineno}: {message}")
+
+
 def check_conftest_not_imported(errors: list[str]) -> None:
     """`conftest.py` is pytest's to import, and only pytest's.
 
@@ -1193,6 +1265,7 @@ def main() -> int:
     check_extension_imports(errors)
     check_facade_import_direction(errors)
     check_conftest_not_imported(errors)
+    check_engine_imports_resolve(errors)
     check_duplicate_python_symbols(errors)
     check_duplicate_dict_keys(errors)
     check_install_root_derivations(errors)

@@ -76,3 +76,29 @@ def test_a_test_that_only_calls_through_the_sibling_is_still_flagged():
     )
     assert _kinds(src, is_test=True) == ["outside-in"]
     assert _kinds(src) == ["outside-in"]
+
+
+def test_pre_move_module_names_are_reported_with_where_they_went():
+    """`tools/` is imported by nothing, so a stale name fails only on use.
+
+    `tools/perception_quality.py` asked for `spatial` and `character_schema`
+    for weeks after they became `world.spatial` and `story.character_schema`;
+    both landed in a bare `except`, its entitlement gate was off for every
+    view, and it exited 0.
+    """
+    from project_check import (_engine_module_index, engine_import_violations)
+
+    names, by_tail = _engine_module_index()
+    assert "world.spatial" in names
+
+    hits = engine_import_violations("import spatial\n", names, by_tail)
+    assert [m for _, m in hits] == [
+        "imports 'spatial', a module name from before the package move. "
+        "It is now world.spatial."]
+
+    hits = engine_import_violations("from world.gone import x\n", names, by_tail)
+    assert [m for _, m in hits] == [
+        "imports 'world.gone', which is not a module in this tree."]
+
+    assert engine_import_violations(
+        "from world.spatial import room_of\nimport json\n", names, by_tail) == []
