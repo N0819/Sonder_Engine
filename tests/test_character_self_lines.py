@@ -399,28 +399,22 @@ class TestSpentIntentionCannotSteer:
         assert _nonsteering_intention_refs(
             result, self._intentions(), turn_idx=138) == []
 
-    def test_surviving_spent_refs_are_sanitized(self):
-        from agents.character import _sanitize_nonsteering_intention_refs
+    def test_a_spent_ref_cannot_survive_the_write(self):
+        """Detection is this module's; the boundary is commit's. A want
+        serving an intention that is no longer steering normalizes to
+        situational where the result is persisted (`affect.normalize_wants`
+        against `affect.steering_intent_ids`), so a rejected aim cannot become
+        next beat's steering however the payload described it."""
+        from mind import affect
 
-        result = {
-            "active_state": {
-                "goal": "offer another destination after the shrine",
-                "wants": [{
-                    "want": "offer another destination after the shrine",
-                    "serves": "i1",
-                }],
-            },
-            "response_candidates": [{
-                "response": "offer Calufrax", "serves": ["i1", "drive"],
-                "selected": True,
-            }],
-        }
+        steering = set(affect.steering_intent_ids(self._intentions(), 138))
+        assert "i1" not in steering
 
-        cleaned = _sanitize_nonsteering_intention_refs(result, ["i1"])
+        wants, _enacted, _suppressed = affect.normalize_wants(
+            [{"want": "offer another destination after the shrine",
+              "urgency": 0.8, "serves": "i1"}], steering)
 
-        assert cleaned["active_state"]["wants"][0]["serves"] == "situational"
-        assert cleaned["active_state"]["goal"] == ""
-        assert cleaned["response_candidates"][0]["serves"] == ["drive"]
+        assert wants[0]["serves"] == "situational"
 
 
 def test_character_step_combines_move_and_spent_intention_rewrite(
