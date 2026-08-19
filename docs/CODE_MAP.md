@@ -1621,9 +1621,9 @@ Sections: Modal (`:38`); Book covers (`:54`); confirm()/prompt() replacements (`
 
 Declared functions: `txt()`, `el()`, `coverOfRow()`, `coverOfTitle()`, `modal()`, `modalOwnership()`, `closeModal()`, `closeAllModals()`, `_confirmOverlay()`, `confirmModal()`, `promptModal()`, `promptModalWithToggle()`, `toastHost()`, `toast()`, `renderActivity()`, `elapsedLabel()`, `activityTicking()`, `backgroundTask()`, `buttonTask()`, `loadingBlock()`, `emptyState()`, `fText()`, `fArea()`, `fSelect()`, `fNum()`, `fLineList()`, `fStrList()`, `fCoveragePicker()`, `fAttireGarments()`, `fList()`, `fAbilities()`, `fTraits()`, `fValues()`, `fBeliefs()`, `fCopingStrategies()`, `fAssociations()`, `fGoals()`, `fSenses()`, `fLatent()`, `fExtraParts()`, `fPronouns()`, `phEditor()`, `fetchModels()`, `fetchImageModels()`, `modelCombobox()`, `emitChange()`, `load()`, `showDD()`.
 
-### `static/js/editors.js` (914 lines)
+### `static/js/editors.js` (926 lines)
 
-Sections: Carrying the fields an editor has no widget for (`:62`); Background-character promotion (`:747`); Import (file upload) (`:796`); Generate (`:867`); Lorebook generate (`:885`); Export (`:902`).
+Sections: Carrying the fields an editor has no widget for (`:62`); Background-character promotion (`:759`); Import (file upload) (`:808`); Generate (`:879`); Lorebook generate (`:897`); Export (`:914`).
 
 Declared functions: `appearanceFillButton()`, `defaultCharacterSheet()`, `carryUnpresentedFields()`, `greetingCarousel()`, `quickStartModal()`, `charEditor()`, `personaEditor()`, `promotionReviewModal()`, `promoteBackgroundPresence()`, `importModal()`, `generateModal()`, `generateLoreModal()`, `exportCharacter()`, `exportPersona()`, `exportLorebook()`.
 

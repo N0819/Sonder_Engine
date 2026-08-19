@@ -201,3 +201,55 @@ def test_a_card_edit_does_not_disturb_a_scent_it_did_not_touch():
     data["embodiment"]["scent"] = "woodsmoke and cold iron"
     again = normalize_character_data(copy.deepcopy(data))
     assert character_scent(again) == "woodsmoke and cold iron"
+
+
+# ------------------------------------------------------------------ authoring
+
+def _js_function_body(source, header):
+    """One top-level JS function's text, by brace depth.
+
+    Copied in spirit from `tests/test_attire_authoring.py`, which learned the
+    hard way that slicing a function by a blank-line convention makes a test
+    about clothing fail on a reformat.
+    """
+    start = source.index(header)
+    i, depth = source.index("(", start), 0
+    while True:
+        if source[i] == "(":
+            depth += 1
+        elif source[i] == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    i, depth = source.index("{", i), 0
+    for j in range(i, len(source)):
+        if source[j] == "{":
+            depth += 1
+        elif source[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:j + 1]
+    raise AssertionError("unbalanced braces after %r" % header)
+
+
+def test_both_card_editors_present_and_save_a_body_scent():
+    """There are two card editors and it is easy to build a field into one of
+    them. Three halves are asked per editor: a widget, its place in the
+    rendered modal, and the read back into the saved sheet -- a field
+    presented and never read is authored text that vanishes on save, and a
+    widget never appended is a field nobody can find.
+
+    `carryUnpresentedFields` would have kept an unpresented `scent` alive
+    through a card edit, which is why this is about the AUTHORING surface and
+    not about data loss.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    editors = (root / "static/js/editors.js").read_text(encoding="utf-8")
+    for header in ("function charEditor(", "function personaEditor("):
+        body = _js_function_body(editors, header)
+        assert "f.scent = fText(" in body, header
+        assert "f.scent.node" in body, header
+        assert "scent: f.scent.read()" in body, header

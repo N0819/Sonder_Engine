@@ -259,6 +259,7 @@
   "Blacklist": "ブラックリスト",
   "Body and clothing generated. Review, then save.": "身体と衣服が生成されました。確認後、保存してください。",
   "Body appearance — stable visible features, excluding clothing": "身体の外観 — 衣服を除く、安定した目に見える特徴",
+  "Body scent — what this body standingly smells of, excluding clothing": "身体の匂い — 衣服を除く、この身体が常に放っている匂い",
   "Body description under the clothes, region by region. Written onto the card only if you tick this, and used in play only while the matching switch in Settings is on.": "衣服の下の身体の記述を、部位ごとに指定します。これにチェックした場合のみカードに書き込まれ、設定内の対応するスイッチがオンのときのみプレイ中に使用されます。",
   "Book": "ブック",
   "Book ${otherId}": "ブック${otherId}",
