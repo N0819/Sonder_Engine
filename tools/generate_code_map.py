@@ -26,39 +26,39 @@ MODULE_PURPOSES = {
     "agents.perception": "Opening, action-onset, and outcome observer views.",
     "agents.runtime": "Pipeline plans, dispatch, streaming, cancellation, resume, and reruns.",
     "agents.storage": "Step and active-variant persistence helpers.",
-    "app": "FastAPI application assembly, resource CRUD, turn control, and streaming endpoints.",
-    "auth_routes": "Typed host-authentication HTTP routes and cookie transport.",
-    "chat_archive": "Typed, atomic chat archive export/import service and HTTP routes.",
-    "character_schema": "Versioned character/persona defaults, normalization, accessors, and export payloads.",
-    "checkpoints": "Whole-chat snapshots and checkpoint restore orchestration.",
-    "commit": "Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name.",
-    "commit_common": "Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation.",
-    "commit_place_graph": "Per-mind durable place graph and per-beat spatial experience.",
-    "commit_destruction": "Single- and multi-book destruction cascades, retirement, and latency-gated news.",
-    "commit_room_registry": "Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning.",
-    "commit_attire": "The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff.",
-    "commit_entities": "world_entities projection of the scene commit, awareness gate, disguise supersession.",
-    "commit_ledgers": "Pending-obligation and world-pressure debt ledgers.",
-    "commit_mapping": "Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser.",
-    "commit_background": "Background presences: tracking, identity folding, the reactor gate, promotion to cast.",
-    "commit_scene_state": "The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance.",
-    "commit_mechanics": "Transit/news sweeps, the world-event spine, information carriers, cast changes.",
-    "commit_memory": "Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them.",
-    "commit_memory_write": "The durable memory write and its out-of-band consolidation twin.",
-    "db": "SQLite schema, migrations, connection management, transactions, and key/value world access.",
-    "importers": "Native and AI-assisted character, persona, and lorebook import/generation.",
-    "llm_quality": "Strict JSON parsing, schema validation, and model-assisted repair.",
-    "logging_utils": "Structured timing and observability helpers.",
-    "memory": "Lorebook graph, memory retrieval/consolidation, relationships, and vector search.",
-    "pipeline_context": "Typed mutable context passed through a turn pipeline.",
-    "pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
-    "prompt_cache": "Provider-specific prompt-cache helpers.",
-    "prompts": "Default system prompts and prompt preset access.",
-    "providers": "Provider selection, retries, streaming, cancellation, model listing, and embeddings.",
-    "scene": "Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge.",
-    "schemas": "Pydantic output contracts and semantic validation for agent payloads.",
-    "spatial": "Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic.",
-    "spatial_orientation": "Bearing math and reciprocal spatial-edge normalization.",
+    "web.app": "FastAPI application assembly, resource CRUD, turn control, and streaming endpoints.",
+    "web.auth_routes": "Typed host-authentication HTTP routes and cookie transport.",
+    "persist.chat_archive": "Typed, atomic chat archive export/import service and HTTP routes.",
+    "story.character_schema": "Versioned character/persona defaults, normalization, accessors, and export payloads.",
+    "persist.checkpoints": "Whole-chat snapshots and checkpoint restore orchestration.",
+    "persist.commit": "Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name.",
+    "persist.commit_common": "Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation.",
+    "persist.commit_place_graph": "Per-mind durable place graph and per-beat spatial experience.",
+    "persist.commit_destruction": "Single- and multi-book destruction cascades, retirement, and latency-gated news.",
+    "persist.commit_room_registry": "Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning.",
+    "persist.commit_attire": "The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff.",
+    "persist.commit_entities": "world_entities projection of the scene commit, awareness gate, disguise supersession.",
+    "persist.commit_ledgers": "Pending-obligation and world-pressure debt ledgers.",
+    "persist.commit_mapping": "Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser.",
+    "persist.commit_background": "Background presences: tracking, identity folding, the reactor gate, promotion to cast.",
+    "persist.commit_scene_state": "The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance.",
+    "persist.commit_mechanics": "Transit/news sweeps, the world-event spine, information carriers, cast changes.",
+    "persist.commit_memory": "Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them.",
+    "persist.commit_memory_write": "The durable memory write and its out-of-band consolidation twin.",
+    "core.db": "SQLite schema, migrations, connection management, transactions, and key/value world access.",
+    "story.importers": "Native and AI-assisted character, persona, and lorebook import/generation.",
+    "llm.llm_quality": "Strict JSON parsing, schema validation, and model-assisted repair.",
+    "core.logging_utils": "Structured timing and observability helpers.",
+    "mind.memory": "Lorebook graph, memory retrieval/consolidation, relationships, and vector search.",
+    "core.pipeline_context": "Typed mutable context passed through a turn pipeline.",
+    "persist.pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
+    "llm.prompt_cache": "Provider-specific prompt-cache helpers.",
+    "llm.prompts": "Default system prompts and prompt preset access.",
+    "llm.providers": "Provider selection, retries, streaming, cancellation, model listing, and embeddings.",
+    "story.scene": "Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge.",
+    "llm.schemas": "Pydantic output contracts and semantic validation for agent payloads.",
+    "world.spatial": "Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic.",
+    "world.spatial_orientation": "Bearing math and reciprocal spatial-edge normalization.",
 }
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
@@ -261,9 +261,45 @@ def js_map(path: Path) -> tuple[list[tuple[int, str]], list[tuple[int, str]]]:
     return sections, functions
 
 
+class StalePurposeKeys(Exception):
+    """`MODULE_PURPOSES` names a module that does not exist."""
+
+
+def check_purpose_keys(local_modules: set[str]) -> None:
+    """Every purpose must belong to a module, or the table is silently empty.
+
+    `MODULE_PURPOSES` is keyed by module name and read with `.get(name, "")`,
+    so a key that matches nothing renders as a blank Purpose cell and reports
+    nothing. The 2026-08 package move made 33 of 43 keys stale in one commit —
+    bare `commit`, `db`, `spatial` became `persist.commit`, `core.db`,
+    `world.spatial` — and 100 of 110 rows in `docs/CODE_MAP.md` lost their
+    Purpose column with no diff to read, because `check_generated_map`
+    regenerates the file and compares: both sides lost the purposes together.
+
+    A hand-kept list of module names is exactly what a tree move breaks, so the
+    generator refuses to produce a map from a table it cannot resolve. The
+    tolerance that hid this — `.get(name, "")` — stays: a module with no
+    purpose is normal, an unowned purpose is not.
+    """
+    tails: dict[str, list[str]] = {}
+    for name in local_modules:
+        tails.setdefault(name.rpartition(".")[2], []).append(name)
+    stale = []
+    for key in sorted(MODULE_PURPOSES):
+        if key in local_modules:
+            continue
+        moved = sorted(tails.get(key.rpartition(".")[2], []))
+        stale.append("%s%s" % (key, " (now %s)" % ", ".join(moved) if moved else ""))
+    if stale:
+        raise StalePurposeKeys(
+            "MODULE_PURPOSES keys match no module, so their rows would render "
+            "an empty Purpose column: " + "; ".join(stale))
+
+
 def generate() -> str:
     paths = source_paths()
     local_modules = {module_name(path) for path in paths}
+    check_purpose_keys(local_modules)
     modules = [(path, parse_module(path, local_modules)) for path in paths]
     lines: list[str] = [
         "# Generated Code Map",
