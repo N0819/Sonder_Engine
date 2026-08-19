@@ -979,11 +979,20 @@ def check_extension_manifests(errors: list[str]) -> None:
         declared = {str(stage.get("key") or "")
                     for stage in (caps.get("stages") or [])
                     if isinstance(stage, dict)}
-        if not declared:
-            continue
         # A dry-run registration: load the entry against a throwaway API and
         # see what it ACTUALLY registers. Cheaper and far more honest than
         # parsing the source for `add_stage` calls.
+        #
+        # Run for EVERY extension with a python entry, not only for one that
+        # declares stages. It was gated on `if not declared: continue`, so of
+        # three bundled extensions only `cohesion-demo` was ever load-tested:
+        # `campaign-demo` and `overlay-demo` register commit domains, routes
+        # and hooks instead of stages, and an import error or a `register()`
+        # that raised in either would have reached a host's Extensions menu
+        # with nothing between. Loading is the half that must run for
+        # everyone; comparing stage keys is the half that needs a declaration.
+        if not ext.python_entry:
+            continue
         try:
             registered = _dry_run_registrations(extension_runtime, ext)
         except Exception as exc:
