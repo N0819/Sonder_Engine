@@ -85,10 +85,15 @@ from .common import (
 # The IR
 # --------------------------------------------------------------------------
 
+# The complete vocabulary of admitted percepts, ENFORCED (see Percept below).
+# It was read by nothing for long enough to go two kinds stale -- `pose` and
+# `body_part` were minted by live builders and declared here by nobody, while
+# `_STANDING_ORDER`, which IS read on every render, carried both. Two
+# hand-maintained lists of one thing, and only the unread one was wrong.
 PERCEPT_KINDS = (
-    "environment", "presence", "appearance", "act", "speech", "sensation",
-    "substance", "body_region", "body_state", "crossing", "residue",
-    "ambient",
+    "environment", "presence", "pose", "appearance", "act", "speech",
+    "sensation", "substance", "body_part", "body_region", "body_state",
+    "crossing", "residue", "ambient",
 )
 
 CHANNELS = ("sight", "hearing", "touch", "interoception", "smell", "mixed")
@@ -130,6 +135,22 @@ class Percept:
     suddenness: float = 0.1
     order_key: int | None = None    # declared/beat order; None = standing state
     dedupe_key: str = ""
+
+    def __post_init__(self):
+        """Refuse a kind or channel nobody declared.
+
+        The declarations are only a vocabulary if something asks. Both are
+        closed sets minted exclusively by the builders in this module, so an
+        undeclared value is a programming error, not a story the engine has
+        to survive -- and a kind no renderer branch matches renders as the
+        empty string, which is the failure this raise replaces: silent,
+        invisible in tests, and indistinguishable from a percept that was
+        correctly withheld.
+        """
+        if self.kind not in PERCEPT_KINDS:
+            raise ValueError(f"undeclared percept kind: {self.kind!r}")
+        if self.channel not in CHANNELS:
+            raise ValueError(f"undeclared percept channel: {self.channel!r}")
 
 
 def _short_hash(*parts):
