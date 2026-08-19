@@ -2658,49 +2658,6 @@ does not split functions, and those three are most of what made the originals
 hard to audit.
 
 
-### 1.53 The ambient perception surfaces are built, and no view renders them
-
-`agents/perception.py` assembles three per-observer ambient views into every
-perceiver record, on every pass, for every observer:
-
-- `crowds_for_room` — the crowd blob in the room, its band, and (own-room only)
-  what its murmur is about;
-- `couriers_for_room` — the rider crossing the room, which door he makes for,
-  whether he is waiting, with the `courier_id` the interception ops need;
-- `artifacts_for_room` — the notice hanging on the wall, and what kind of thing
-  it looks like.
-
-**Nothing reads any of the three keys.** Grepped 2026-08-18: `crowds`,
-`couriers` and `notices` are written at `perception.py:2410-2412`, `2438-2440`,
-`2689-2691`, `3133-3135`, `3159-3161`, `3189-3191` and appear in no reader;
-`agents/composer.py` contains the strings `crowd`, `courier` and `notice`
-exactly zero times, so no percept builder admits one and `render_view` cannot
-realise one. The only consumers of the functions are `agents/director*.py`
-(which uses its own `_couriers_view`, not this one) and their unit tests.
-
-This is residue of the retired per-observer model call: the payload used to be
-handed to a model that wrote the view, and when the composer replaced it the
-three keys kept being computed and stopped being delivered. The composer is
-right to refuse them — it may not read the world, and these come from `wget`
-against world keys — so the fix is a percept builder per surface, fed the
-already-described dicts as data, exactly as `_with_comm_channel` feeds the
-comms channel.
-
-What this costs, stated plainly, because three documents were claiming
-otherwise: **a dispatched courier cannot be seen.** He can be dispatched, moved
-on the simulation clock, questioned, silenced and made to arrive — and no mind
-in any room he crosses receives a single word about him, so the design's own
-verbs (intercept, follow, question, outrun) have no perceptual event to begin
-from. Same for a posted bill, which can be read only by a mind that was never
-told it was there. `docs/design/OFFSCREEN_WORLD_COMPLETION.md` §2 tags the
-crowd item **BUILT** on the strength of step 1 being "a stationary crowd blob
-visible to ordinary perception"; that step is not built, and neither is step 2
-(persistent location fixtures — no barkeep/vendor/regular subsystem exists in
-the tree at all). Two of that item's five ordered steps are absent. Its own §2
-already contains the warning, written about the world key nothing wrote: "The
-module shipped pure and correct and could not occur … Worth remembering when
-reading any other 'built' line in this document." It applies to itself.
-
 ### 1.54 Scent is a permission system with nothing to permit
 
 Everything that decides WHETHER a smell crosses is built and good:
@@ -2763,16 +2720,18 @@ tags are one of the four rival status surfaces `docs/README.md` names. Checked
 against source 2026-08-18; recorded here because `UNBUILT.md` is the register
 and the note is argument.
 
-- **§2 "Build crowds and persistent fixtures — BUILT (2026-08-10)"** claims all
-  five ordered steps are in the tree. Two are not. Step 1 ("a stationary crowd
-  blob visible to ordinary perception") is not built — `crowds_for_room` is
-  computed per observer and consumed by nothing (§1.53). Step 2 ("persistent
-  location fixtures": barkeeps, vendors, guards, attendants, regulars belonging
-  to a LOCATION and re-meetable) has no implementation anywhere; background
-  presences are scene-scoped and are a different thing. Steps 3–5 (density as
-  terrain, movement/splitting, one-way emergence) are real:
-  `world/crowds.py`'s `density`/`terrain`/`drift`, `advance_crowds`/`split_band`,
-  and `emerge`.
+- **§2 "Build crowds and persistent fixtures — BUILT (2026-08-10)"** claimed
+  all five ordered steps were in the tree, and two were not. Step 1 ("a
+  stationary crowd blob visible to ordinary perception") landed 2026-08-18:
+  `composer.room_content_percepts` mints the crowd, the courier and the posted
+  notice as `ambient` percepts from the per-observer dicts perception had been
+  computing and dropping. Step 2 ("persistent location fixtures": barkeeps,
+  vendors, guards, attendants, regulars belonging to a LOCATION and
+  re-meetable) still has no implementation anywhere; background presences are
+  scene-scoped and are a different thing. Steps 3–5 (density as terrain,
+  movement/splitting, one-way emergence) are real: `world/crowds.py`'s
+  `density`/`terrain`/`drift`, `advance_crowds`/`split_band`, and `emerge`.
+  **So the item is still not BUILT, for one step instead of two.**
 - **§5's "`offscreen_log` has exactly one reader, `gaps.interim_for`"** is
   wrong: there are three read sites — `world/gaps.py:268` (the consumer),
   `world/offscreen.py:464` (`append_offscreen_log`'s own read-modify-write) and
@@ -2780,6 +2739,166 @@ and the note is argument.
   The claim it supports — that no diagnostic surface exists to spoiler-gate —
   survives, since only one of the three is a reader in the sense meant. The
   sentence is what is wrong, not the conclusion.
+
+
+### 1.58 Schema-touching work deferred by owner policy 4
+
+The 2026-08-18 repair wave authorised **exactly one** schema migration
+(`persona_carrier_state`, landed as SCHEMA_VERSION 30 — the player's carrier
+envelope was the one carrier home outside `FRAME_SCOPED_WORLD_KEYS`, so what
+the player witnessed in one era survived a rewind or a branch). Every other
+schema-touching finding was deferred here rather than half-done, on the
+principle that a migration deserves its own pass, its own testing and its own
+release. This entry is that paperwork. Each row below is CONFIRMED against
+source; none is speculative.
+
+The checklist every one of them owes is `docs/guides/DATABASE.md` §
+"Schema-change checklist" — eight steps, and the ones that actually bite here
+are 4 (export/import payloads), 5 (checkpoint snapshot AND restore) and 6
+(branch/clone id remapping in `web/app.py`). A frame-scoping change owes one
+more that the checklist does not name, because it is specific to this engine:
+**a bare `wget` redirects on the AMBIENT frame and is the caller's era only by
+accident**, so every read site has to be re-examined for whether it wants
+`wget_for_frame` with an explicit frame, not merely left alone.
+
+- **PERSISTENCE-F17 — three world keys are not frame-scoped while seventeen
+  siblings are.** `world_pressures` (`persist/commit_ledgers.py:150,227,299`),
+  `background_claims` (`world/background_claims.py`, six sites) and
+  `engine_notices` (`agents/director.py:532,2550`,
+  `persist/commit_mechanics.py:184`, `persist/commit_destruction.py:403,411`)
+  are plain `wget`/`wset`. So a pressure raised in one era, a claim ratified in
+  one era and a notice raised in one era are all visible from every other era,
+  and a rewind does not retract them. Adding a key to
+  `FRAME_SCOPED_WORLD_KEYS` is not itself a migration — the scoping is a key
+  rewrite at the storage layer — but the EXISTING rows keep the unscoped key
+  and would go silent on the next read, so the data migration (re-key each row
+  to the era that wrote it, or to the ambient frame) is the work.
+- **RUNTIME-11 — `world_conditions` has no `frame_id`.** Same shape, different
+  storage: this is a real column on a real table (`core/db.py:716`), and
+  `story/scene.awareness_conditions` queries `WHERE chat_id=? AND
+  kind='awareness' AND active=1` with no era filter at all. A character
+  knocked unconscious in one era is unconscious in every era of that chat.
+  `world_events` already carries `frame_id` as an explicit FK, so the shape to
+  copy exists; the migration is the column, the backfill, and the
+  `world_conditions` readers.
+- **PERSISTENCE-F15's gate half.** The writers half is not deferred and landed;
+  moving `_backfill_resource_uids` behind the version gate bumps
+  `SCHEMA_VERSION`, so it waits for the same pass.
+- **PERSISTENCE-F5's drop half.** The three deprecated macro-geography tables
+  (`fiction_worlds`, `fiction_locations`, `transit_edges`). The doc correction
+  landed; dropping them is a schema change. `transit_edges` is the cheap one —
+  nothing snapshots, exports or restores it, so there is nothing to migrate.
+- **LLM-6's remove path.** Dropping `idx_world_conditions_due` and the
+  `next_tick` column, IF the answer to "remove `tick_interval_seconds` or build
+  the due-tick sweep" is remove. The index shipped, so this is a schema change
+  either way round; the question itself is an owner decision.
+- **RUNTIME-6's stored-data purge.** The write-side fix landed — the
+  `candidates` payload is no longer persisted with each step. The
+  already-written payloads remain: measured read-only on the owner's install
+  2026-08-18, **590 variant rows carrying 7.16 MB of `candidates`**. A purge is
+  an UPDATE over live stories' saved steps, which is why it is here and not in
+  a tidy-up commit. That number GREW between the audit (4.9 MB) and this
+  measurement, which is the argument for doing it rather than against: the
+  write side is fixed, so the cost is now fixed too and will not grow again.
+- **The four dead settings keys** — §1.51b, kept there because the diagnosis is
+  there. Listed again here because the repair is the same kind of thing: a
+  migration that deletes rows from live stories at next launch.
+
+### 1.59 Three questions the paradox subsystem cannot answer for itself
+
+`world/paradox.py` is complete enough to run and has three decisions inside it
+that are the owner's, not an engineer's. They are grouped because one
+measurement bounds all three, and it is the reason none of them is urgent:
+**no paradox has ever opened on a live story.** Measured read-only on the
+owner's install 2026-08-18 — two `paradox*` rows in the whole `world` table,
+one an empty `{}` and one a `paradox_policy` on chat 20 (`mode: hazard`,
+`escalation_rate: 1`, `toll_in_radius: true`). So the code has never run
+against a real story, every claim about its behaviour is derived from reading
+it, and the cost of getting one of these wrong today is zero.
+
+- **WORLD-F7 — four rungs or five?** `STAGE_THRESHOLDS` has five
+  (`0.0, 0.25, 0.5, 0.75, 1.0`); `_apply_hazard_stage`'s handlers stop at
+  three; and stage 4's consequence fires on the same tick that force-restores
+  and clears the paradox, so the top rung's effect and its resolution are one
+  beat. Either the ladder is four rungs and the fifth IS the resolution, or
+  stage 4 needs a beat of its own before the restore.
+- **WORLD-F24 — should `mode == "hazard"` also apply the traveler
+  memory-confidence toll?** Chat 20 is the one live chat sitting on this
+  config, and it has never opened a paradox, so nothing is riding on the
+  answer yet.
+- **WORLD-F33 — what does "force restore" mean when the projection is
+  derived?** `_force_restore_anchor` (`world/paradox.py:474`) writes
+  `world_entities` directly, and that table is a derived projection of the
+  scene commit (`Design.md` § Physical-world authority), so a direct write is
+  authority flowing the wrong way. The `# NOTE, unrepaired:` comment at `:475`
+  is honest about it and still needs an answer: restore the SCENE and let the
+  projection follow, or accept that a paradox is the one thing allowed to write
+  the projection.
+
+### 1.60 `generalization_tags` promises a mechanism that does not exist
+
+`AssociationProfile.generalization_tags` (`story/character_schema.py:225`) is
+normalized, editable (`static/js/components.js:745`), archived with the sheet,
+and serialised to the character as prose inside `learned_associations`. What it
+is NOT is a generaliser: nothing deterministic reads it, and
+`psychology_runtime.apply_association_updates` moves `appraisal_bias`,
+`response_tendency` and `strength` and never touches this one. So a tag an
+author writes is a note to the model, and a tag the runtime could have LEARNED
+never appears.
+
+Kept rather than deleted, and the measurement is the reason: read-only on the
+live database 2026-08-18, **all 78 authored associations carry tags, and 87 of
+the 152 in the interior ledgers do**. Deleting the field discards authored work
+in three quarters of the places it exists. The choice — build the generaliser,
+or withdraw the promise the field's NAME makes — is an owner's, and either way
+`static/js/components.js` is the other half of whichever answer wins. Audit
+MIND-F16.
+
+### 1.61 Half the prompt ids are outside the prompt/schema drift check
+
+`tools/project_check.py`'s `check_prompt_schema_ops` exists because the same
+defect landed three times in two days — a prompt asking for an `_ops` field the
+stage's model does not have, so Pydantic drops every op silently (`project_ops`
+cost an entire tier of psychology: "has ever held a project: 0 of 14 banks").
+It iterates `schemas.SCHEMA_MAP` plus `PROMPT_MODEL_ALIASES`.
+
+Measured 2026-08-18: **21 of 41 prompt ids are inside the check and 20 are
+outside it**, and they are outside STRUCTURALLY rather than by oversight —
+there is no Pydantic model to check them against, because their outputs are
+consumed as raw dicts. The twenty: `ambience_prompt`, `artifact_wording`,
+`fill_appearance`, `fill_character_psychology`, `generator_character`,
+`generator_greeting`, `generator_lorebook`, `generator_lorebook_entries`,
+`generator_persona`, `import_character_reinterpret`,
+`import_persona_reinterpret`, `lore_reinterpret`, `memory_consolidate`,
+`offscreen_agent_adjudicate`, `offscreen_agent_attempt`, `offscreen_profile`,
+`patch_json_field`, `position_resolver`, `promote_character`, `repair_json`.
+
+The generator group is the sharp one: `book_ops`, `link_ops` and `entry_ops`
+are asked for by name in those prompts and opened as raw dicts on the other
+side, which is exactly the `entry_ops`/`entries` defect the check was built
+for, sitting where the check cannot see it. **Blocked on an owner decision** —
+"how should the generator prompts be typed" is an API-shape question about
+`llm/schemas.py`, not a checker change, and typing them is what makes the
+checker cover them for free. Audit TOOLS-S3.
+
+### 1.62 An extra player has no opening turn
+
+Two halves of one repair, in two files, both confirmed 2026-08-18:
+
+- `agents/runtime.establishment_plan` is a fixed five-step list
+  (`mapping_stage`, `director_establish`, `perception_establish`, `narrator`,
+  `commit`) and never appends `narrator_extra`, which `build_plan` does append
+  on every normal turn when the chat has extra players in this frame.
+- `agents/perception.perception_establish` builds perceivers for `"player"` and
+  for each cast member, and no `extra:<pid>` perceiver at all — `perception_act`
+  and `perception_outcome` both do (`agents/perception.py:2051`).
+
+So a co-player attached before the story opens receives no view of the opening
+scene and no render of it; the first thing they see is turn 1. Nothing warns —
+the plan is simply shorter. `agents/narration.py:1119` already reads
+`establish_views.get(f"extra:{pid_key}")` before falling back to the outcome
+views, so the narrator half is waiting for a key nothing writes, which is why
+this reads as built until you go looking for the producer. Audit RUNTIME-4.
 
 
 ## 2. Roadmap
@@ -2818,6 +2937,33 @@ value of a better deterministic first pass.
 (`8ddcc1e`), so a heuristic import that lands sparse is reported wherever it
 was made; what is still missing is the populated-field THRESHOLD that would
 make "sparse" a warning of its own.
+
+### 2.4 A `$note` key on typed pack values
+
+The language-pack extraction moved roughly forty deterministic word lists and
+regexes out of `agents/common.py` and its siblings into
+`language_packs/*/cards/linguistics.json`. The comments explaining WHY each
+list is drawn where it is could not go with them, because the pack format has
+nowhere to put prose: only `_YOU_AGREEMENT` and `_PRONOUN_GROUPS` carry any
+extra key at all. `a5c9ef4` re-sited twenty of those rationales onto the
+`_ling(...)` call that reads each value, which is the best Python allows — but
+the data a TRANSLATOR edits still has none of them, and a translator is
+precisely the reader who most needs to know that an English verb table anchors
+`^...s?$` because it is matched against a single declared token while a
+script with no spaces has no token to anchor.
+
+The structural answer is a `$note` key alongside `$type`, which the decoder
+would ignore for free: `_decode_linguistic` reads `pattern`/`flags` for a
+regex and `items` for a tuple/frozenset/set and passes over anything else, and
+`_leaf_paths` already treats a `$type` value as a leaf, so a note on one would
+not become a required path a Japanese pack has to supply. What is missing is
+the CONVENTION and the one place it is stated — `language_runtime/__init__.py`,
+`docs/guides/LANGUAGE_PACKS.md`, and a `project_check` rule that a note is
+never load-bearing. Untyped values (a plain dict of strings) would need a
+decision of their own, since there `$note` would land in the dict.
+
+Cheap, and it is what stops the next extraction stranding its rationale the
+same way.
 
 ### 2.5 Complete automatic canon lock
 
