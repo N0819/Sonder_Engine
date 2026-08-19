@@ -1441,40 +1441,6 @@ def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
                 break
 
 
-def _observer_facing_sequence(sequence):
-    """Project a declared action sequence into what OTHER perceivers may be
-    handed. Each action element carries only its intent-free `observable`
-    surface (via observable_action_text) as `attempt`, with the causal-intent
-    ledger (intended_effects/asserted_effects) and the actor's own framing
-    (verb, raw attempt) removed; a mental element (observable "") is dropped
-    entirely, being imperceptible. Speech/event elements pass through unchanged
-    (their concealment is handled separately). This keeps the perception filter
-    from ever RECEIVING the actor's purpose ('runes of slow and soften',
-    'channel divine heritage') -- honoring the barrier rather than handing over
-    hidden intent with an instruction to ignore it (the very pattern the engine
-    forbids for character agents)."""
-    out = []
-    for e in sequence or []:
-        if not isinstance(e, dict):
-            continue
-        if e.get("type") != "action":
-            out.append(e)
-            continue
-        surface = observable_action_text(e)
-        if not surface:
-            continue
-        out.append({
-            "type": "action",
-            "event_id": e.get("event_id", ""),
-            "attempt": surface,
-            "visibility": e.get("visibility", "overt"),
-            "conceal_from": e.get("conceal_from") or [],
-            "targets": e.get("targets") or [],
-            "stage": e.get("stage", "immediate"),
-        })
-    return out
-
-
 def perception_establish(ctx, nonce):
     chat = ctx.chat
     est = ctx.director_establish or {}
@@ -1561,27 +1527,14 @@ def perception_establish(ctx, nonce):
             "room_layout": room_layout(sc, character_name(sh)),
         })
 
-    declared = {
-        "actor_id": "OPENING", "actor_name": p_name,
-        "actor_room": p_room,
-        "actor_room_name": (p_rdata or {}).get("name") or p_room,
-        "actor_present_appearance": p_appearance,
-        "entity_state": p_state,
-        "sensory_events": sensory_events,
-        "player_seed": ctx.get("input") or "",
-        "sequence": [], "player_speech": [],
-        "speech": None, "speech_volume": "normal",
-        "action_attempt": None, "visibility": "overt",
-        "conceal_from": [], "targets": [],
-    }
-
     # Consciousness gate (rare at opening, but a scenario may start someone
     # unconscious/asleep): overlay the establish diff onto committed conditions.
     amap = apply_awareness_diff(awareness_map(chat["id"]), diff)
+    # The gate itself is INSIDE the composer orchestrators, per perceiver
+    # (`if p.get("awareness") in NON_AWAKE_GATED`), so this loop stamps the
+    # verdict and nothing here needs to partition on it.
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
-    awake_perceivers = [p for p in perceivers
-                        if p.get("awareness") not in NON_AWAKE_GATED]
 
     return _composer_establish(
         ctx, sc, perceivers, known, p_name, p_appearance,
@@ -1609,7 +1562,6 @@ def perception_act(ctx, nonce):
         p_room = _resolve_player_room(sc, pers, interp, ctx.cast, ctx.input)
         ctx["_player_room"] = p_room
 
-    p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
     p_name = pers.get("name") or persona_name(pers)
     # WHAT THE PLAYER SAID HAPPENED, HAS HAPPENED -- here, before a single
     # observer's view is built. Everything the player asserted about their own
@@ -1630,7 +1582,7 @@ def perception_act(ctx, nonce):
     # p_visible is what is actually SEEN (disguised form when active), fed to
     # both the LLM and the deterministic injection below so a concealed feature
     # is never rendered as perceived.
-    (p_visible, p_disguise, p_disguise_known,
+    (p_visible, _p_disguise, p_disguise_known,
      p_disguise_conceals) = _subject_disguise_context(
         chat["id"], p_name, p_appearance, known)
     p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
@@ -1642,105 +1594,6 @@ def perception_act(ctx, nonce):
     if not speech_elems and interp.get("speech"):
         speech_elems = [{"type": "speech", "text": interp["speech"],
                          "volume": interp.get("speech_volume", "normal"), "tone": ""}]
-
-    # Observer-facing action text is the intent-free `observable` surface, never
-    # the actor's intent-laden `attempt` -- a mental beat (observable "") is
-    # skipped so it never reaches the empty-view fallback below.  Concealed
-    # actions are also skipped: action_desc feeds the deterministic
-    # _ensure_environment fallback that runs for EVERY perceiver, and a
-    # concealed action's observable surface must not reach perceivers it is
-    # hidden from (mirroring the action_elems filter below).
-    action_desc = ""
-    for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("visibility") != "concealed":
-            surface = observable_action_text(e)
-            if surface:
-                action_desc = surface
-                break
-
-    # Concealed speech elements are withheld from the perceiver payload for
-    # the same reason as concealed actions: player_speech is embedded in
-    # action_onset (declared_act) which goes to the perception LLM, and a
-    # concealed line's text must not reach perceivers it is hidden from.
-    # The conceal_from list is preserved in the concealed_actions metadata
-    # below so the LLM still knows a concealed line existed.
-    overt_player_speech = [
-        {"text": e.get("text"), "volume": e.get("volume", "normal"),
-         "tone": e.get("tone", ""),
-         "visibility": e.get("visibility", "overt"),
-         "conceal_from": e.get("conceal_from") or []}
-        for e in speech_elems
-        if e.get("visibility") != "concealed"
-    ]
-
-    # The sequence handed to the perception LLM is the observer-facing
-    # projection: intent-free surfaces only, intent ledger stripped, mental
-    # beats dropped. action_attempt (the scalar mirror) follows the same
-    # surface -- action.get("attempt") is the actor's raw framing and, being
-    # the FIRST element, is frequently the mental beat ("remember the runes").
-    # Concealed actions are filtered OUT of the sequence entirely: every
-    # perceiver in this call is a non-actor (the actor is the player), so a
-    # concealed action's observable surface has no legitimate audience here.
-    # The concealed action metadata is preserved in the concealed_actions
-    # list on the payload (see perception_outcome's equivalent).
-    observer_sequence = [
-        e for e in _observer_facing_sequence(interp.get("sequence"))
-        if e.get("visibility") != "concealed"
-    ]
-    observer_action_attempt = next(
-        (e["attempt"] for e in observer_sequence
-         if e.get("type") == "action" and e.get("attempt")), None)
-
-    # Build the concealed_actions metadata list (mirrors perception_outcome):
-    # the LLM is told a concealed action existed and who it is hidden from,
-    # without receiving the observable surface in the main sequence.
-    concealed_actions = []
-    for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("visibility") == "concealed":
-            concealed_actions.append({
-                "actor": p_name,
-                "attempt": observable_action_text(e),
-                "conceal_from": e.get("conceal_from") or [],
-            })
-    for e in speech_elems:
-        if e.get("visibility") == "concealed":
-            concealed_actions.append({
-                "actor": p_name,
-                "attempt": e.get("text"),
-                "conceal_from": e.get("conceal_from") or [],
-            })
-
-    # Determine whether the scalar speech fields are concealed.  When the
-    # primary speech is concealed, passing the raw text as an unmarked scalar
-    # would leak it to every perceiver; withhold the text and mark it.
-    raw_speech = interp.get("speech")
-    raw_speech_volume = interp.get("speech_volume") or "normal"
-    primary_speech_concealed = any(
-        e.get("visibility") == "concealed" and e.get("text") == raw_speech
-        for e in speech_elems
-    )
-
-    # Build action onset for reaction eligibility
-    action_onset = {
-        "actor_id": "PLAYER",
-        "actor": p_name,
-        "actor_name": p_name,
-        "actor_room": p_room,
-        "actor_room_name": (p_rdata or {}).get("name") or p_room,
-        "actor_present_appearance": p_visible,
-        "sequence": observer_sequence,
-        "player_speech": overt_player_speech,
-        "speech": "" if primary_speech_concealed else raw_speech,
-        "speech_volume": raw_speech_volume,
-        "speech_concealed": primary_speech_concealed,
-        "action_attempt": observer_action_attempt,
-        "visibility": action.get("visibility", "overt"),
-        "conceal_from": action.get("conceal_from") or [],
-        "targets": action.get("targets") or [],
-        "commitment": action.get("commitment", "contestable"),
-    }
-    if p_disguise:
-        action_onset["subject_disguise"] = p_disguise
 
     # Every cast body with a position, whether or not it acts this beat --
     # the raw material for `_co_present_company` (which see): pass 1 has no
@@ -1834,8 +1687,6 @@ def perception_act(ctx, nonce):
     amap = awareness_map(chat["id"])
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
-    awake_perceivers = [p for p in perceivers
-                        if p.get("awareness") not in NON_AWAKE_GATED]
 
     return _composer_act(
         ctx, sc, interp, perceivers, known, p_name, p_visible,
@@ -2036,7 +1887,6 @@ def perception_outcome(ctx, nonce):
     known = wget(chat["id"], "known", {})
     res = ctx.get("director_resolve", {})
     interp = ctx.get("director_interpret", {})
-    reactors = set((interp.get("flow") or {}).get("reactors") or [])
 
     # Room dedup runs BEFORE this stage's merge (Phase-2 re-scope of the
     # Phase-1 one-beat skew): commit will deterministically rekey/redirect
@@ -2143,60 +1993,15 @@ def perception_outcome(ctx, nonce):
             "medium": d.get("medium"),
         })
 
-    # The model receives no raw dialogue transcript. Every spoken line,
-    # including player and concealed speech, is delivered below through the
-    # deterministic per-observer hearing/concealment gate.
-    npc_dlog = list(enriched_dlog)
-
-    # ...but the no-LLM fallback is NOT that gate. _fallback_perception_views
-    # admits a line on same-room alone -- no concealment check, no hear_level --
-    # so handing it the full log would render every concealed line verbatim to
-    # every co-located perceiver on exactly the turns where the model failed.
-    # It also has no per-observer vantage to decide a partial conceal_from, so
-    # it fails closed on the whole class, and drops the player's own lines the
-    # way it always did.
-    fallback_dlog = [
-        d for d in enriched_dlog
-        if d.get("visibility") != "concealed"
-        and not is_player_speaker(d.get("speaker", ""), chat)
-    ]
-
     sources = [{"name": p_name, "room": p_room}]
     for _e in br_entries:
         sources.append({"name": _e.get("speaker"), "room": cast_room(sc, _e.get("speaker"), ctx.cast)})
-    concealed = []
-    for a in (interp.get("actions") or
-              ([interp["action"]] if interp.get("action") else [])):
-        if isinstance(a, dict) and a.get("visibility") == "concealed":
-            concealed.append({"actor": p_name,
-                              "attempt": observable_action_text(a),
-                              "conceal_from": a.get("conceal_from") or []})
-    for d in enriched_dlog:
-        if d.get("visibility") == "concealed":
-            concealed.append({"actor": d.get("speaker"), "attempt": d.get("exact_quote"),
-                              "conceal_from": d.get("conceal_from") or []})
-
     for c in ctx.cast:
         d = ctx.character_results.get(c["id"])
         sh = json.loads(c["sheet"])
         if d and (d.get("sequence") or d.get("speech") or d.get("action")):
             sources.append({"name": character_name(sh),
                             "room": character_room(sc, sh)})
-        for a in ((d or {}).get("actions") or []):
-            if a.get("visibility") == "concealed":
-                concealed.append({"actor": character_name(sh),
-                                  "attempt": observable_action_text(a),
-                                  "conceal_from": a.get("conceal_from") or []})
-        reaction = ctx.reaction_results.get(c["id"])
-        for a in ((reaction or {}).get("actions") or
-                  [e for e in ((reaction or {}).get("sequence") or [])
-                   if isinstance(e, dict) and e.get("type") == "action"]):
-            if isinstance(a, dict) and a.get("visibility") == "concealed":
-                concealed.append({
-                    "actor": character_name(sh),
-                    "attempt": observable_action_text(a),
-                    "conceal_from": a.get("conceal_from") or [],
-                })
 
     appearances = {p_name: p_appearance}
 
@@ -2215,7 +2020,6 @@ def perception_outcome(ctx, nonce):
     # first (so it had no channel to any co-player at all), and each extra
     # player's perceiver was built as its own source-append happened (so
     # extra A had no channel to extra B, only vice versa).
-    other_players = interp.get("other_players") or {}
     extra_entries = []
     for extra in ctx.extra_players:
         pid_key = str(extra["persona_id"])
@@ -2224,11 +2028,6 @@ def perception_outcome(ctx, nonce):
         sources.append({"name": e_name, "room": e_room})
         appearances[e_name] = _appearance_as_prose(appearance_of(
             e_name, extra.get("appearance") or f"{e_name}, a person of unremarkable appearance.", sc))
-        entry = other_players.get(pid_key) or {}
-        for e in (entry.get("sequence") or []):
-            if e.get("type") == "action" and e.get("attempt") and e.get("visibility") == "concealed":
-                concealed.append({"actor": e_name, "attempt": e.get("attempt"),
-                                  "conceal_from": e.get("conceal_from") or []})
         extra_entries.append((extra, pid_key, e_name, e_room))
 
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
@@ -2324,8 +2123,6 @@ def perception_outcome(ctx, nonce):
     amap = apply_awareness_diff(awareness_map(chat["id"]), diff)
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
-    awake_perceivers = [p for p in perceivers
-                        if p.get("awareness") not in NON_AWAKE_GATED]
 
     return _composer_outcome(
         ctx, sc, prev_scene, diff, interp, res, known, p_name,
