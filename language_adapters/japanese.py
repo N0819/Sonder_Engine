@@ -232,6 +232,21 @@ class JapaneseRenderer:
         return self._text("exposed_detail", subject=subject,
                           detail=detail.rstrip("。."))
 
+    def _scent(self, data, label, prefix):
+        """Three shapes, the same three the percept chose between: the smell
+        and whose it is, the smell alone, or a faint thing from beyond. A
+        muffled scent never reaches the attributed template -- the percept
+        carries no label to put in it."""
+        scent = str(data.get("scent") or "").strip()
+        if not scent:
+            return ""
+        if data.get("level") == "muffled":
+            return self._text(prefix + "scent_faint", scent=scent)
+        if data.get("attributed") and label:
+            return self._text(prefix + "scent_source", label=label,
+                              scent=scent)
+        return self._text(prefix + "scent_air", scent=scent)
+
     def _sentence(self, percept, *, episode=False):
         p = percept
         label = str(p.source_label or "")
@@ -256,6 +271,8 @@ class JapaneseRenderer:
             return self._text(prefix + direction, label=label)
         if p.kind == "pose":
             return self._pose(p, data, label, prefix)
+        if p.kind == "scent":
+            return self._scent(data, label, prefix)
         if p.kind in ("sensation", "substance", "ambient"):
             return _full_stop(data.get("clause") or data.get("text")
                               or data.get("desc") or "")

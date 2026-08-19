@@ -1143,9 +1143,11 @@ _SENSE_CHANNEL_ALIASES = {
     "sight": "sight", "vision": "sight", "visual": "sight", "eyes": "sight",
     "eyesight": "sight", "seeing": "sight",
     "hearing": "hearing", "audition": "hearing", "auditory": "hearing",
-    "ears": "hearing",
+    "ears": "hearing", "sound": "hearing", "noise": "hearing",
+    "audio": "hearing",
     "scent": "scent", "smell": "scent", "olfaction": "scent",
-    "olfactory": "scent", "nose": "scent",
+    "olfactory": "scent", "nose": "scent", "odour": "scent", "odor": "scent",
+    "aroma": "scent",
 }
 
 # Acuity vocabulary, token-matched so "super enhanced" reads as +2 and
@@ -1179,9 +1181,18 @@ _RANGE_REDUCED = frozenset({
 
 
 def _sense_channel(value) -> Optional[str]:
-    """Map a card's free-ish channel name onto an engine channel
+    """Map a free-ish channel name onto an engine channel
     (sight | hearing | scent), or None for channels the deterministic floor
-    does not model (touch, intuition, ...)."""
+    does not model (touch, intuition, ...).
+
+    Two authoring surfaces name a channel in free text and both resolve here:
+    a card's `embodiment.senses[].channel`, and the word a Director puts on an
+    authored `sensory_events[].kind`. `sound` and `visual` are what the live
+    corpus's 199 stored events actually say, which is why the table has to
+    know the ordinary English names for a sense and not only the clinical
+    ones. An unrecognised word still resolves to None: a fiction may invent a
+    sense the engine does not model, and inventing one must cost nothing.
+    """
     raw = str(value or "").strip().casefold()
     if raw in _SENSE_CHANNEL_ALIASES:
         return _SENSE_CHANNEL_ALIASES[raw]

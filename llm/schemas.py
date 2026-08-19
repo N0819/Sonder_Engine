@@ -1279,6 +1279,13 @@ class SceneEntityDef(LenientModel):
     # validation round-trip, and a lamp that comes back unlit is a character
     # standing in the dark holding it.
     light_source: Optional[str] = None
+    # What this thing SMELLS of, as a short noun phrase: bread, lamp oil, a
+    # censer, a corpse. The sibling of `light_source` -- what the thing emits
+    # on a channel other than sight -- and declared for the same reason. It is
+    # a standing property of the object, not this beat's event: matter
+    # deposited somewhere is `substance_ops`, and a body's own smell is on its
+    # card. Absent means the thing has no smell worth a percept.
+    scent: Optional[str] = None
 
 class RoomDef(LenientModel):
     name: str = ""
@@ -2057,9 +2064,11 @@ class StateDiff(LenientModel):
     # Physical matter transferred and left somewhere after the beat.
     # {op:add|release|deposit|remove|clear, source, source_part, substance,
     # target, placement:surface|interior|contained|room, target_interior,
-    # target_part, amount, detail, substance_id?}.  A release from the acting
-    # part of a unique standing interior contact derives its destination from
-    # that topology; the model names the matter, never the code.
+    # target_part, amount, detail, scent, substance_id?}.  A release from the
+    # acting part of a unique standing interior contact derives its
+    # destination from that topology; the model names the matter, never the
+    # code. `scent` is what the matter smells of and is why this ledger, not
+    # a parallel one, carries the commonest smell in play.
     substance_ops: list[dict] = Field(default_factory=list)
     # Actor-owned following changes, projected deterministically from the
     # player interpretation and character decisions. The resolve model does
@@ -4765,7 +4774,15 @@ OUTPUT_EXAMPLES = {
              "target": "Sable", "target_part": "shoulder",
              "manner": "rest", "relation": "surface", "motion": "settled"},
         ],
-        "substance_ops": [],
+        # Matter that landed somewhere is the commonest smell in play, and
+        # `scent` had to be SHOWN rather than only described: this was `[]`,
+        # and an empty list teaches the shape of nothing.
+        "substance_ops": [
+            {"op": "add", "source": "Mara", "source_part": "forearm",
+             "substance": "blood", "target": "lamp_room",
+             "placement": "room", "amount": "a few drops",
+             "scent": "wet iron"},
+        ],
         "containment": {},
         "scales": {},
         "notes": [],
@@ -4776,7 +4793,15 @@ OUTPUT_EXAMPLES = {
                               "description": "a brass storm lantern",
                               "aliases": [], "portable": True,
                               "container": False, "interior_rooms": [],
-                              "state": {"lit": True}},
+                              "state": {"lit": True},
+                              # A lit lamp is the smallest honest scent
+                              # example: the thing that emits light emits
+                              # something on the other channel too, and a
+                              # field shown as absent in the object a repair
+                              # is told to imitate reads as "not part of the
+                              # answer" -- what `ratified_claims` and
+                              # `state_diff.time` each cost a beat for.
+                              "scent": "hot brass and lamp oil"},
         },
         "remove_entities": [],
         "inventory_ops": [],
