@@ -492,6 +492,21 @@ def normalize_scene_containment(scene: dict) -> dict:
     positions = scene.get("positions") or {}
     entities = scene.get("entities") or {}
 
+    # Who the scene knows about, folded once for the whole pass. This was
+    # three probes per record -- a `_ci_get` over positions, a case-SENSITIVE
+    # `holder not in entities`, and a case-insensitive repeat of that one
+    # built by materialising a fresh `{k: 1 for k in entities}` dict every
+    # time round the loop. The middle probe was subsumed by the third, and the
+    # third's dict was thrown away unused; `_ci_get` itself is a linear scan,
+    # so the per-record cost was O(records x scene).
+    def _fold(key):
+        return str(key).lower().strip()
+
+    known = {_fold(k) for k in entities}
+    # A position of None names no room -- which is not the same as being in
+    # the scene, and `_ci_get(positions, holder) is None` did not count it.
+    known.update(_fold(k) for k, v in positions.items() if v is not None)
+
     cleaned = {}
     for name, raw in contained.items():
         subject = str(name or "").strip()
@@ -500,10 +515,8 @@ def normalize_scene_containment(scene: dict) -> dict:
         record = _clean_containment(raw, subject)
         if record is None:
             continue
-        holder = record["in"]
         # The container must be something the scene actually knows about.
-        if _ci_get(positions, holder) is None and holder not in entities \
-                and not _ci_get({k: 1 for k in entities}, holder):
+        if _fold(record["in"]) not in known:
             continue
         cleaned[subject] = record
 
