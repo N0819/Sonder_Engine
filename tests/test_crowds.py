@@ -117,6 +117,19 @@ class TestIdentity:
             crowds.new_crowd(1, "gate", **args)["uid"]
 
 
+def test_overhearing_nothing_is_not_overhearing_everything():
+    """`crowd_hearsay(crowd)[-max(0, int(cap)):]` -- in Python `-0 == 0`, so
+    the slice is `[0:]` and asking for nothing returned the whole ledger.
+    `cap=0` is the natural spelling of "this observer overhears nothing"."""
+    crowd = {"uid": "c1", "composition": "dockworkers"}
+    for i in range(3):
+        crowd = crowds.add_hearsay(crowd, {"claim": "rumour %d" % i,
+                                           "world_event_id": "we%d" % i})
+    assert crowds.talk_view(crowd, 0) == []
+    assert crowds.talk_view(crowd, -1) == []
+    assert len(crowds.talk_view(crowd, 2)) == 2
+
+
 def test_a_crowd_murmurs_and_does_not_speak():
     """Anyone who speaks has emerged and is no longer part of the crowd, so
     the description is a phrase an observer registers — never a line."""

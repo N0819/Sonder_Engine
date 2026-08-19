@@ -616,7 +616,14 @@ def crowd_voice(crowd):
 
 
 def talk_view(crowd, cap=2):
-    """What an observer standing in this crowd overhears, newest first.
+    """What an observer standing in this crowd overhears: the newest `cap`
+    reports, delivered oldest first.
+
+    Which is not "newest first", as this said for two releases. The slice
+    takes the tail of a chronological ledger and preserves its order, so the
+    Director reads the last few things said in the order they were said --
+    right for a murmur, and the reason the wording is corrected rather than
+    the code.
 
     The half of the speech door that was missing: `crowd_hearsay` existed and
     `apply_tellings` could copy it onward, but no payload ever SHOWED it, so a
@@ -632,8 +639,16 @@ def talk_view(crowd, cap=2):
     happen names it plainly. Capped: a crowd is what people are saying right
     now, not an archive read aloud.
     """
+    # `[-0:]` is `[0:]`, so a cap of nothing used to deliver the whole
+    # ledger. Asked for nothing, hand over nothing.
+    try:
+        cap = int(cap)
+    except (TypeError, ValueError):
+        cap = 0
+    if cap <= 0:
+        return []
     out = []
-    for report in crowd_hearsay(crowd)[-max(0, int(cap)):]:
+    for report in crowd_hearsay(crowd)[-cap:]:
         claim = " ".join(str(report.get("claim") or "").split())
         if not claim:
             continue
