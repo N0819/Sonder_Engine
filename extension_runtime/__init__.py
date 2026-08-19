@@ -925,6 +925,22 @@ def dispatch_character_payload(ctx, char_id, payload, names=()):
     return current
 
 
+def _live_ids() -> list[str]:
+    """Extensions that actually REGISTERED, in id order.
+
+    Not `sorted(_registered)`: a record whose `register(api)` raised is kept
+    with an `.error` so the host can read the reason, and it is that keeping
+    which made a broken extension look live to anything iterating the
+    registry. Hook dispatch escapes by accident -- it iterates the record's
+    own hook lists, which a failed record leaves empty -- but the two
+    DECLARATIVE seams read stored per-story blocks that outlive the session
+    the extension worked in, so they had nothing empty to iterate.
+    """
+    with _lock:
+        return sorted(ext_id for ext_id, record in _registered.items()
+                      if not record.error)
+
+
 def _narration_blocks(chat_id) -> list:
     """Every enabled extension's standing block for this story, in id order.
 
@@ -937,8 +953,7 @@ def _narration_blocks(chat_id) -> list:
         return []
     try:
         activate()
-        with _lock:
-            ids = sorted(_registered)
+        ids = _live_ids()
     except Exception:
         log.exception("extension narration blocks could not be resolved")
         return []
@@ -971,8 +986,7 @@ def _director_blocks(chat_id, phase) -> list:
         return []
     try:
         activate()
-        with _lock:
-            ids = sorted(_registered)
+        ids = _live_ids()
     except Exception:
         log.exception("extension director blocks could not be resolved")
         return []
