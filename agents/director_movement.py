@@ -670,6 +670,61 @@ _LONG_EDGE_DISTANCES = frozenset({"far", "remote"})
 _LONG_EDGE_BEATS = 2
 
 
+# --- one walk, read twice --------------------------------------------------
+#
+# `_travel_in_flight_view` tells the Director what is already under way;
+# `_travel_continues` advances it once the beat is resolved. They are a
+# question and its answer about the same standing records, so they have to
+# agree about which legs exist, which mover the beat exempted, and how long an
+# edge takes -- and they agreed only by both being written out (audit
+# DIRECTOR-D10). Read once here, so a change to any of the three is one edit.
+
+def _pending_legs(sc):
+    """The standing approach records, keyed by mover.
+
+    The scene-global shape (`{"who": ..., "to_room": ...}`) predates per-mover
+    records and is still read, so a save written before that does not lose its
+    walker.
+    """
+    pending = sc.get("approach") or {}
+    if "who" in pending:
+        pending = ({pending["who"]: {"to_room": pending.get("to_room")}}
+                   if pending.get("who") else {})
+    return pending if isinstance(pending, dict) else {}
+
+
+def _declared_movers(interp, p_name):
+    """Movers whose own declaration this beat carries.
+
+    Continuation fills a SILENCE and never competes with a live declaration:
+    a mover in this set goes through the ordinary movement machinery
+    untouched, and is skipped by both the view and the advance.
+    """
+    mv = interp.get("movement")
+    if not isinstance(mv, dict) or not mv.get("to_room"):
+        return set()
+    who = str(mv.get("mover") or "self")
+    return {p_name if who in ("self", "player") else who}
+
+
+def _edge_to(rooms, here, step):
+    """The adjacency record for `here -> step`, or `{}` if the map has none."""
+    return next(
+        (e for e in ((rooms.get(here) or {}).get("adjacent") or [])
+         if isinstance(e, dict) and e.get("to") == step), {})
+
+
+def _still_crossing(distance, beats_spent):
+    """Whether a long edge is mid-crossing after this many beats on it.
+
+    `distance` is already normalized, and `beats_spent` COUNTS THIS BEAT --
+    both callers pass `edge_beats + 1`, and passing the stored count instead
+    holds every walker one beat too long.
+    """
+    return (distance in _LONG_EDGE_DISTANCES
+            and int(beats_spent) < _LONG_EDGE_BEATS)
+
+
 def _travel_in_flight_view(sc, interp, p_name):
     """What the Director is told about walks already under way.
 
@@ -683,17 +738,10 @@ def _travel_in_flight_view(sc, interp, p_name):
     room this beat puts them in, narrate it -- unless the beat itself stops
     them, in which case say so in `travel_interrupted` and they stay put.
     """
-    pending = sc.get("approach") or {}
-    if "who" in pending:
-        pending = ({pending["who"]: {"to_room": pending.get("to_room")}}
-                   if pending.get("who") else {})
-    if not isinstance(pending, dict) or not pending:
+    pending = _pending_legs(sc)
+    if not pending:
         return []
-    mv = interp.get("movement")
-    declared = set()
-    if isinstance(mv, dict) and mv.get("to_room"):
-        who = str(mv.get("mover") or "self")
-        declared.add(p_name if who in ("self", "player") else who)
+    declared = _declared_movers(interp, p_name)
 
     rooms = sc.get("rooms") or {}
     view = []
@@ -707,9 +755,8 @@ def _travel_in_flight_view(sc, interp, p_name):
         step = passable_route_next_step(sc, here, destination)
         if not step:
             continue
-        edge = next(
-            (e for e in ((rooms.get(here) or {}).get("adjacent") or [])
-             if isinstance(e, dict) and e.get("to") == step), {})
+        distance = normalize_edge_distance(
+            _edge_to(rooms, here, step).get("distance"))
         entry = {
             "subject": subject,
             "destination": destination,
@@ -718,11 +765,10 @@ def _travel_in_flight_view(sc, interp, p_name):
             "from_room": here,
             "reaches_this_beat": step,
             "reaches_name": str((rooms.get(step) or {}).get("name") or step),
-            "distance": normalize_edge_distance(edge.get("distance")),
+            "distance": distance,
             "final_leg": step == destination,
         }
-        if entry["distance"] in _LONG_EDGE_DISTANCES \
-                and int(leg.get("edge_beats") or 0) + 1 < _LONG_EDGE_BEATS:
+        if _still_crossing(distance, int(leg.get("edge_beats") or 0) + 1):
             entry["reaches_this_beat"] = None
             entry["reaches_name"] = ""
             entry["still_crossing"] = True
@@ -775,23 +821,10 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
     or keep each standing record, so the ledger and the position can never
     disagree about whether somebody is still under way.
     """
-    pending = sc.get("approach") or {}
-    # The scene-global shape ({"who": ...}) predates per-mover records and is
-    # still read so a save written before that does not lose a walker.
-    if "who" in pending:
-        pending = ({pending["who"]: {"to_room": pending.get("to_room")}}
-                   if pending.get("who") else {})
-    if not isinstance(pending, dict) or not pending:
+    pending = _pending_legs(sc)
+    if not pending:
         return
-
-    # A mover who declared their own movement this beat goes through the
-    # ordinary machinery untouched: continuation fills a SILENCE and never
-    # competes with a live declaration.
-    mv = interp.get("movement")
-    declared = set()
-    if isinstance(mv, dict) and mv.get("to_room"):
-        who = str(mv.get("mover") or "self")
-        declared.add(p_name if who in ("self", "player") else who)
+    declared = _declared_movers(interp, p_name)
 
     stopped = {
         str(entry.get("subject") or "").strip().casefold(): str(
@@ -831,12 +864,10 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
             continue
         # A long edge is not crossed in a breath. Counted on the standing
         # record so the beats already spent on this leg survive a reroll.
-        edge = next(
-            (e for e in ((rooms.get(here) or {}).get("adjacent") or [])
-             if isinstance(e, dict) and e.get("to") == step), {})
+        distance = normalize_edge_distance(
+            _edge_to(rooms, here, step).get("distance"))
         spent = int(leg.get("edge_beats") or 0) + 1
-        if normalize_edge_distance(edge.get("distance")) in \
-                _LONG_EDGE_DISTANCES and spent < _LONG_EDGE_BEATS:
+        if _still_crossing(distance, spent):
             record["held"].append(
                 {"subject": subject, "reason": "still crossing",
                  "edge_beats": spent})
