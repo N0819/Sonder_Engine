@@ -4,8 +4,8 @@ classification, cleaning, and op application."""
 
 import re
 
-from world.spatial_containment import (_SCALE_CONTACT_BREAK, clamp_scale,
-                                 hiding_holders_of)
+from world.spatial_containment import (hiding_holders_of,
+                                 scale_changed_names)
 from world.spatial_identity import _ci_get, canonical_subject, same_subject
 
 
@@ -577,19 +577,7 @@ def contacts_broken_by_scale_change(scene: dict, previous_scales) -> list:
     if not isinstance(contacts, list) or not contacts:
         return []
 
-    before = previous_scales if isinstance(previous_scales, dict) else {}
-    now = scene.get("scales") or {}
-
-    changed = set()
-    for name in set(before) | set(now):
-        was = clamp_scale(_ci_get(before, name)) or 1.0
-        current = clamp_scale(_ci_get(now, name)) or 1.0
-        if was <= 0 or current <= 0:
-            continue
-        shift = max(was, current) / min(was, current)
-        if shift >= _SCALE_CONTACT_BREAK:
-            changed.add(str(name).strip().casefold())
-
+    changed = scale_changed_names(previous_scales, scene.get("scales") or {})
     if not changed:
         return []
 

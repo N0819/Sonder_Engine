@@ -84,8 +84,8 @@ from world.spatial_containment import (
     containment_broken_by_scale_change, containment_conceals,
     containment_facts, containment_hides, CONTAINMENT_MODES, contents_of,
     derive_contained_positions, hiding_holders_of,
-    normalize_scene_containment, normalize_scene_scales, scale_of,
-    scale_ratio, size_facts, size_relation, size_tier,
+    normalize_scene_containment, normalize_scene_scales, scale_changed_names,
+    scale_of, scale_ratio, size_facts, size_relation, size_tier,
 )
 
 
