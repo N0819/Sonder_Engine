@@ -487,11 +487,18 @@ class TestTheDirectorCanActuallySayIt:
     def test_the_example_the_repair_attempt_is_shown_carries_the_field(self):
         """The `required_json_example` is handed to the repair attempt too. A
         field described in prose and absent from the example is one a repair
-        can never converge on — `state_diff.time` died that way."""
+        can never converge on — `state_diff.time` died that way.
+
+        Asked of the hand that OWNS the channel. `crowd_ops` belongs to the
+        offscreen specialist, and the prose author's example carries only its
+        own four channels: showing it a delegated one asks it to spend the
+        beat writing into a diff the owner replaces in the same fan-out."""
         from llm import schemas
 
-        example = schemas.OUTPUT_EXAMPLES["director_resolve"]
-        assert "crowd_ops" in example["state_diff"]
+        assert "crowd_ops" in schemas.SPECIALIST_CHANNELS["director_offscreen"]
+        assert "crowd_ops" in schemas.OUTPUT_EXAMPLES["director_offscreen"]
+        assert "crowd_ops" not in (
+            schemas.OUTPUT_EXAMPLES["director_resolve"]["state_diff"])
 
     def test_commit_writes_them_under_the_one_key_perception_reads(self):
         """Two spellings of one world key is the whole `wearing`/`state` scar

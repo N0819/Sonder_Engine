@@ -4791,6 +4791,14 @@ OUTPUT_EXAMPLES = {
         "remove_adjacent": [],
         "stations": {"Mara": {"at": "the_lamp", "near": []}},
         "poses": {},
+        # Equipment that carries a VOICE between places, which is a spatial
+        # fact about the rooms it joins rather than an object in one of them.
+        "comms_ops": [
+            {"id": "gallery_intercom", "op": "open",
+             "name": "the gallery intercom",
+             "rooms": ["lamp_room", "gallery"], "carriers": [],
+             "mode": "voice", "source": "", "private": False, "live": True},
+        ],
         "notes": [],
     },
     "director_offscreen": {
