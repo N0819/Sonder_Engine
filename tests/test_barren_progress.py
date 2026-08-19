@@ -130,8 +130,7 @@ class TestTheSignalIsAlreadyMeasured:
         source = inspect.getsource(character.character_step) \
             if hasattr(character, "character_step") else inspect.getsource(character)
 
-        assert '_barren_beat = bool(_corrections) and "move_correction" in _corrections' \
-            in source
+        assert '_barren_beat = "move_correction" in _corrections' in source
         assert 'out["_barren_beat"] = True' in source
 
     def test_the_flag_is_set_after_validation(self):
@@ -177,8 +176,7 @@ class TestTheSignalIsAlreadyMeasured:
         source = inspect.getsource(character)
 
         assert "move_repeat_screen" not in source
-        assert '_barren_beat = bool(_corrections) and "move_correction" in _corrections' \
-            in source
+        assert '_barren_beat = "move_correction" in _corrections' in source
 
 
 class TestTheCharacterIsTold:

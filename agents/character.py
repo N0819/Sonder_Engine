@@ -3326,39 +3326,26 @@ def character_step(ctx, cid, nonce):
     _repeated_move = _first_repeated_move(out, _self_moves)
     _spent_refs = _nonsteering_intention_refs(
         out, _decision_intentions, ctx.turn.idx)
+    # RECORDS, so it carries only what a reader reads. Each entry used to
+    # carry an `instruction` paragraph too -- prompt text addressed to the
+    # character, assembled on every beat that tripped a screen and read by
+    # nothing since the re-ask went out with `e629d60`. Two consumers remain
+    # and both take data: the warning below, and `_barren_beat`.
     _corrections = {}
     if _repeated:
         _corrections["repeat_correction"] = {
             "you_already_said": _repeated,
-            "instruction": (
-                "Your draft reissued this line you have already spoken. "
-                "Say something else, act instead, or stay silent."),
         }
     if _repeated_move:
         _corrections["move_correction"] = {
             "turn": _repeated_move.get("turn"),
             "you_already_did": _repeated_move.get("move"),
             "your_draft_does": _repeated_move.get("current"),
-            "instruction": (
-                "This is mechanically close to a recent conversational job. "
-                "Re-read the current beat. If it invited, answered, challenged, "
-                "or materially advanced that thread -- or deliberate repetition "
-                "is itself meaningful in character -- keep it, acknowledge the "
-                "continuity, and advance it. This includes one continuous excited "
-                "riff or rant; do not flatten the character's voice. Otherwise it "
-                "is an unmotivated reset: changing the example, destination, "
-                "metaphor, or noun is not progress, so drop the move and answer "
-                "what is new, act, or stay silent."),
         }
     if _spent_refs:
         _corrections["intention_correction"] = {
             "nonsteering_ids": _spent_refs,
             "steering_ids": _steering_intention_ids,
-            "instruction": (
-                "Your draft lets a dormant/spent intention steer the choice. "
-                "Do not merely relabel that behavior as situational. Choose "
-                "from a live intention, the drive, the present situation, or "
-                "let the spent thread rest."),
         }
     # NO RE-ASK. Repetition is WEAK, not unusable, and a redo that fires on
     # anything short of broken output is a nuisance -- the owner's rule, and
@@ -3392,7 +3379,7 @@ def character_step(ctx, cid, nonce):
     # Still handed to the intent ledger, which is the one consumer that was
     # never about re-asking: a `progress` claim on a beat that repeated an
     # earlier move does not advance the goal (`affect._advance_intent`).
-    _barren_beat = bool(_corrections) and "move_correction" in _corrections
+    _barren_beat = "move_correction" in _corrections
     for _name, _correction in sorted(_corrections.items()):
         ctx.add_warning(
             f"character {character_name(sh)}: {_name} -- "
