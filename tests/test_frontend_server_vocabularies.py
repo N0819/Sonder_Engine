@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 
 from mind.memory import (
+    LORE_INHERITANCE_MODES,
     LOREBOOK_LINK_TYPES,
     MEMORY_CATEGORIES,
     MEMORY_PROVENANCE,
@@ -73,3 +74,14 @@ def test_there_is_exactly_one_browser_copy_of_the_lore_link_types():
 
 def test_the_lore_link_type_fallback_still_agrees_with_the_engine():
     assert _js_array(LOREBOOKS, "DEFAULT_LORE_LINK_TYPES") == LOREBOOK_LINK_TYPES
+
+
+def test_the_browser_copy_of_the_inheritance_modes_agrees_with_the_engine():
+    """The full repair for this one is not available from here: the bootstrap
+    does not ship `lore_inheritance_modes`, and `lore_create` validates the
+    field against nothing at all while `lore_edit` raises 400 on the same
+    values -- both in `web/app.py`. Until the list is shipped and the create
+    path validates against `mind/memory.py`'s constant, the least this can do
+    is refuse to let the browser's copy drift away from it unnoticed.
+    """
+    assert _js_array(LOREBOOKS, "LORE_INHERITANCE_MODES") == LORE_INHERITANCE_MODES
