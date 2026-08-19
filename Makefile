@@ -32,7 +32,7 @@ serve:
 test: test-full
 
 # NOT the tier to check your own work with -- it deselects every test that
-# touches the database, 1841 of 6329 tests, emptying 119 of 391 files and
+# touches the database, 2657 of 8217 tests, emptying 138 of 505 files and
 # with them the persistence and information-firewall suites. Since test
 # databases moved to tmpfs (tests/conftest.py) the whole suite costs about
 # what this used to, so there is no longer a speed argument for running less

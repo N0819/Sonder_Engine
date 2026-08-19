@@ -191,7 +191,7 @@ path end to end.
   default visible in the editor — the same philosophy as
   `attire.region_of`'s cue table — never an identity fold.
 
-## Residuals (deferred, tracked in docs/UNBUILT.md)
+## Residuals (deferred; `docs/UNBUILT.md` §6.10 points here)
 
 - Director-driven in-story part transformation (grow/lose a part as a beat
   outcome) — needs a scene-level override ledger with commit/archive/restore
@@ -201,4 +201,9 @@ path end to end.
 - Generator/import prompts emitting `extra_parts` (today they write prose
   summaries; the import path tolerates but does not extract).
 - `importers.character_import_warnings` for a part whose `kind` word also
-  appears in `visible.summary` prose (double description).
+  appears in `visible.summary` prose (double description). The warner is
+  part-aware in the OTHER direction only: it fires when body prose names a part
+  the sheet does not declare (`_prose_names_a_part` against `_PART_WORDS`, and
+  only when `embodiment.extra_parts` is empty), which is the failure that costs
+  a kitsune nine invisible tails. The double-describe case is the mirror and is
+  cheaper to be wrong about, so it is unflagged.

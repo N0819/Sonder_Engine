@@ -336,8 +336,7 @@ respond until the world says what happened" — `commitment: "contestable"`, a
 concealed act, or a conflict/movement verb. Deliberately NOT "the act has a
 target": in conversation every nod and glance is aimed at somebody, and gating
 on targets meant 70% of all character actions ended the beat, making an
-unprompted exchange between two characters impossible (`docs/UNBUILT.md`
-§1.11f). With that narrowed, `max_micro_rounds` is what actually bounds an
+unprompted exchange between two characters impossible. With that narrowed, `max_micro_rounds` is what actually bounds an
 exchange.
 
 **The first wave is one speaker, by default.** `initial_parallel_reactors`
@@ -358,7 +357,7 @@ declared, and the loop's early exits are evaluated for the wave as a whole.
 The person being ANSWERED is not in the wave. Its justification only holds
 when the members are reacting to the same external thing; when one is answering
 another, the asker is the addressee and steps out to the next round so they
-hear the answer before speaking (`docs/UNBUILT.md` §1.11h).
+hear the answer before speaking.
 
 Parallel in the FICTION, not in execution. The wave runs sequentially, because
 `character_step` writes through `ctx`; what is guaranteed is that no member
@@ -370,7 +369,6 @@ hand on a shoulder. With the addressed character queued first, that stranded
 everyone else: 153 of 196 beats with two or more reactors left at least one
 never called at all. A character who never ran has no appraisal, so no drive
 strain from a beat aimed at them, and no memory of having chosen to stay quiet.
-See `docs/UNBUILT.md` §1.11b.
 
 ### `character:<id>`
 

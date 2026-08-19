@@ -451,12 +451,27 @@ and is load-bearing for `recover_shed_entity_changes`, which promotes an
 explicitly-shed entity back into the attire diff when a model creates the
 object but forgets the removal. `shed: true` disambiguates it.
 
-## Left open (docs/UNBUILT.md)
+## Left open
 
-- Left/right asymmetry (one shoulder down) — no lateral axis in REGIONS.
+*(This list was mirrored in `docs/UNBUILT.md` §6.11 until 2026-08-19; the
+register now points here rather than restating it. Each item carries its
+argument above.)*
+
+- Left/right asymmetry (one shoulder down) — no lateral axis in REGIONS
+  (contacts and injury share the same coarseness). Condition prose carries the
+  asymmetry; coverage stays conservative — covered until fully off the region.
+  Adding laterality would be a whole-body vocabulary change, not an attire one.
 - Transparency ("sheer") — a garment that covers without concealing is a
-  separate perception axis; today sheerness lives in prose only.
+  separate perception axis; today sheerness lives in the garment's
+  name/description prose only, and a covered region is a concealed region to
+  `region_visibility`. A `conceals: full|sheer|net` axis on the garment would
+  be the shape, but it grades perception and needs its own design pass.
 - Retro-repair of stale displacement prose in existing corpora — editor and
   play-through healing only, by design.
 - The process clamp is scoped per BODY, not per garment: one garment being
   worked at holds every removal resolved on that body in the same beat.
+- **A garment moving between bodies keeps no identity.** `_mint_shed_garments`
+  carries a garment's condition onto the floor and back, but "the coat she lent
+  him" is a different coat record from "her coat" the moment it lands on him.
+  `resolve_garment` is per-body by construction. *(Moved from `docs/UNBUILT.md`
+  §3.9 on 2026-08-19.)*

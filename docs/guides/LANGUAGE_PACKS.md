@@ -260,3 +260,55 @@ is useful while English inventory is still changing: rerun it, inspect the
 diff, then run the validation commands above. Regeneration is never
 translation review—native-speaker review decides whether Japanese is natural
 and whether a cue is too broad.
+
+
+---
+
+## Two things the pack layer accepts and does not implement
+
+*(Moved out of `docs/UNBUILT.md` §1.48 on 2026-08-19 — both are facts a pack
+author needs before starting, not defects in a story.)*
+
+**RTL is accepted and unimplemented.** `manifest.direction: "rtl"` validates,
+reaches `document.documentElement.dir`, and nothing else: there are no
+`[dir=...]` rules in `static/`, and the stylesheets use physical `left`/`right`
+properties throughout. Both shipped packs are `ltr`, so no RTL pack has ever
+been rendered. A pack declaring `rtl` today gets a mirrored text direction over
+an unmirrored layout.
+
+**The UI catalog scanner is deliberately broad.** `tools/extract_ui_catalog.py`
+harvests string literals, so roughly 4% of the 2006 English messages are code
+fragments, selectors and markup that never render. They are carried as
+`translation_exceptions.json` entries rather than filtered, which keeps the
+parity check honest but hands translators strings they must not touch.
+
+## A `$note` key on typed pack values — the convention that does not exist yet
+
+*(Moved out of `docs/UNBUILT.md` §2.4 on 2026-08-19: it is a documentation
+convention plus a `tools/project_check.py` rule, which makes it this guide's
+business.)*
+
+The language-pack extraction moved roughly forty deterministic word lists and
+regexes out of `agents/common.py` and its siblings into
+`language_packs/*/cards/linguistics.json`. The comments explaining WHY each
+list is drawn where it is could not go with them, because the pack format has
+nowhere to put prose: only `_YOU_AGREEMENT` and `_PRONOUN_GROUPS` carry any
+extra key at all. `a5c9ef4` re-sited twenty of those rationales onto the
+`_ling(...)` call that reads each value, which is the best Python allows — but
+the data a TRANSLATOR edits still has none of them, and a translator is
+precisely the reader who most needs to know that an English verb table anchors
+`^...s?$` because it is matched against a single declared token while a
+script with no spaces has no token to anchor.
+
+The structural answer is a `$note` key alongside `$type`, which the decoder
+would ignore for free: `_decode_linguistic` reads `pattern`/`flags` for a
+regex and `items` for a tuple/frozenset/set and passes over anything else, and
+`_leaf_paths` already treats a `$type` value as a leaf, so a note on one would
+not become a required path a Japanese pack has to supply. What is missing is
+the CONVENTION and the one place it is stated — `language_runtime/__init__.py`,
+`docs/guides/LANGUAGE_PACKS.md`, and a `project_check` rule that a note is
+never load-bearing. Untyped values (a plain dict of strings) would need a
+decision of their own, since there `$note` would land in the dict.
+
+Cheap, and it is what stops the next extraction stranding its rationale the
+same way.
