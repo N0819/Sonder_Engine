@@ -5977,6 +5977,38 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         if name_words and not any(w.lower() in prose.lower() for w in name_words):
             warnings.append(f"Proper noun from view missing in narrator prose: '{name}'")
 
+    # A ONE-WORD NAME IS A NAME. The pattern above is `(?:...)+`, so it can
+    # only ever see a proper noun of two or more capitalised words -- and a
+    # single-token name is the commonest cast shape in this engine's own
+    # stories, which made the check structurally unavailable for most of the
+    # cast rather than merely quiet about them.
+    #
+    # Two questions, both of which the regex was guessing at. WHAT IS A NAME:
+    # the roster is already in this payload, so the answer comes from the cast
+    # rather than from capitalisation. WHAT COUNTS AS PRESENT: prose refers to
+    # a person by pronoun after the first mention, which is ordinary English
+    # and not a dropped body -- the multi-word arm gets that tolerance free
+    # from its surname rule and a one-word name has no shorter form to fall
+    # back on. Measured over 2,277 stored beats carrying both a view and
+    # prose: without the pronoun tolerance this fires on 29 of 217 view-named
+    # single-token cast members and 26 of those are pronoun prose; with it, 3.
+    for name, pronouns in (cast_pronouns or {}).items():
+        text = str(name or "").strip()
+        if not text or len(text.split()) != 1 or text == player_name:
+            continue
+        if not re.search(rf"(?<!\w){re.escape(text)}(?!\w)", view_text):
+            continue
+        if text.lower() in prose.lower():
+            continue
+        forms = [str(pronouns.get(k) or "").strip().lower()
+                 for k in ("subject", "object", "possessive")
+                 ] if isinstance(pronouns, dict) else []
+        if any(form and re.search(rf"(?<!\w){re.escape(form)}(?!\w)",
+                                  prose.lower()) for form in forms):
+            continue
+        warnings.append(
+            f"Proper noun from view missing in narrator prose: '{text}'")
+
     # recent_prose_for_rhythm is supplied to the narrator as a STYLE
     # reference, but nothing stops the model from reusing its content
     # instead -- especially when the current view covers similar ground
