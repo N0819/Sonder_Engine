@@ -4590,28 +4590,28 @@ OUTPUT_EXAMPLES = {
             "The fog has not lifted. Maren waits under the lamp at the head "
             "of the pier, watching the water rather than the road."),
     },
+    # This is the PROSE AUTHOR's example -- `director_resolve` is the step
+    # key its call runs under. It owns the beat's prose, its dialogue, the
+    # manifest and six `state_diff` channels; the other twenty-nine belong to
+    # the six specialists, whose own examples are below. So it shows those six
+    # and nothing else: a channel in this example that the author no longer
+    # owns is an instruction to spend the beat encoding something a specialist
+    # is being asked for in the same fan-out, and whatever it writes there is
+    # replaced by the owner anyway.
     "director_resolve": {
-        "resolved_event": "",
-        "summary": "",
-        "dialogue_order": [],
-        "dialogue_log": [],
+        "resolved_event": (
+            "Maren turns from the water as you reach the lamp. \"You're "
+            "late,\" she says. \"The boat went out an hour ago.\""),
+        "summary": "Maren says the boat left an hour ago",
+        "dialogue_order": ["Maren"],
+        "dialogue_log": [
+            {"speaker": "Maren",
+             "exact_quote": "You're late. The boat went out an hour ago.",
+             "volume": "normal", "intended_target": "{{PLAYER}}",
+             "tone": "flat"},
+        ],
         "state_diff": {
-            "positions": {},
-            "rooms": {},
-            "entities": {},
-            "remove_entities": [],
-            "remove_rooms": [],
-            "remove_adjacent": [],
-            "conditions": {},
-            "inventory_ops": [],
-            "contact_ops": [],
-            "substance_ops": [],
-            "poses": {},
-            "overlays": {},
-            "attire": {},
-            "cast_changes": [],
-            "world_facts": [],
-            "introductions": [],
+            "location": "Pier Head",
             # THE SHAPE, NOT A PLACEHOLDER. This was `None`, and the resolve
             # prompt describes the field in prose two thousand lines away
             # ("Emit state_diff.time with start_seconds, duration_seconds,
@@ -4629,17 +4629,26 @@ OUTPUT_EXAMPLES = {
             "time": {"start_seconds": 0, "duration_seconds": 60,
                      "end_seconds": 60, "mode": "action",
                      "explicit": False, "display_advance": ""},
+            # Written OVER the sky already blowing, so a beat reports what it
+            # noticed rather than restating the whole sky.
+            "weather": {"sky": "fog", "precipitation": "none",
+                        "intensity": "none", "wind": "breeze",
+                        "temperature": "cold"},
             "claim_dispositions": [],
-            "consequences": [],
-            "offscreen_plan_ops": [],
-            "crowd_ops": [],
-            "telling_ops": [],
-            "courier_ops": [],
-            "artifact_ops": [],
+            # Set in motion OFFSCREEN, fired when the clock reaches it --
+            # never this beat's own outcome, which is the prose above.
+            "consequences": [
+                {"what": "the harbourmaster's office opens for the morning",
+                 "where": "quay_road", "due_seconds": 5400,
+                 "witnessed": False},
+            ],
         },
+        # The manifest is where a change lands whose CHANNEL belongs to
+        # somebody else: the author narrated her turning, the body specialist
+        # owns `poses`, and this is how the two meet.
         "changes_asserted": [
-            {"category": "adjacency", "subject": "vault_door",
-             "change": "The vault door is sealed shut."},
+            {"category": "pose", "subject": "Maren",
+             "change": "Maren has turned from the water to face you."},
         ],
         "dice": [],
         "fiction_frame": {},

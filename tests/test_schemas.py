@@ -209,3 +209,28 @@ def test_observation_defaults_are_the_values_the_compactor_omits():
     for name in ("intensity", "suddenness", "ambiguity"):
         parsed = Observation(**{"observation_id": "current:x:0", name: None})
         assert getattr(parsed, name) == OBSERVATION_DEFAULTS[name], name
+
+
+def test_the_prose_authors_example_shows_only_channels_it_still_owns():
+    """`director_resolve` is the step key the PROSE AUTHOR's call runs under.
+    Its example carried 20 `state_diff` channels the six specialists took over
+    and omitted three of the six the author kept, so the object it was told to
+    imitate on every repair was the dead monolith's. Whatever it writes in a
+    delegated channel is replaced by that channel's owner in the same fan-out,
+    so the instruction costs output budget to produce nothing.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES, SPECIALIST_CHANNELS, StateDiff
+    from llm.schemas import _fields
+
+    delegated = {channel for channels in SPECIALIST_CHANNELS.values()
+                 for channel in channels}
+    owned = set(_fields(StateDiff)) - delegated
+    shown = set(OUTPUT_EXAMPLES["director_resolve"]["state_diff"])
+    assert not shown - owned, (
+        "the prose author's example teaches delegated channels: "
+        + ", ".join(sorted(shown - owned)))
+    # `following_ops` is the one owned channel the author must NOT author --
+    # it is projected deterministically from interpretation and character
+    # decisions -- so showing it would be its own instruction to invent one.
+    assert "following_ops" not in shown
+    assert {"time", "weather", "location", "consequences"} <= shown
