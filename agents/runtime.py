@@ -213,6 +213,49 @@ STEP_HANDLERS = {
 }
 
 
+# Every phase name the reader sees in the turn-status bar and the pipeline
+# drawer, in one module-level table.
+#
+# They were inline literals inside `build_plan`, `establishment_plan`,
+# `_background_stage_label` and one `_step_stream` call, which is why
+# `tools/extract_ui_catalog.py` could not harvest them: its
+# `READER_FACING_TABLES` has named a `STEP_LABELS` in this file for as long as
+# it has existed, and there was none, so every pipeline label shipped
+# untranslated in every language pack while the extractor's promise looked kept.
+#
+# Keyed by step key where a step has exactly one name. Three keys need more
+# than that and are spelled out rather than derived: `narrator` renders an
+# opening beat under a different name, `background_react` is named after the
+# path it will take, and `character:<id>` carries the character's own name and
+# is a template.
+STEP_LABELS = {
+    "director_interpret": "Director · interpret & flow plan",
+    "mapping_stage": "Mapping · route books & lore",
+    "mapping_quick": "Mapping · cached recall",
+    "perception_act": "Perception · pass 1 — the act",
+    "reaction_loop": "Characters · physical reactions",
+    "interaction_loop": "Characters · interaction loop",
+    "character": "Character · {name}",
+    "director_resolve": "Director · resolve",
+    "background_react": "Background · presence reaction",
+    "background_react.ambient": "Scene life · manager (ambient)",
+    "background_react.full": "Scene life · manager (full)",
+    "perception_outcome": "Perception · pass 2 — the outcome",
+    "narrator": "Narrator · render",
+    "narrator_extra": "Narrator · render (other players)",
+    "commit": "Mapping & memory · commit-up",
+    "director_establish": "Director · establish scene",
+    "perception_establish": "Perception · opening player view",
+    "narrator.establish": "Narrator · opening",
+}
+
+
+def step_label(key, **fields):
+    """The reader-facing name for a plan step, or the key if it has none."""
+    label = STEP_LABELS.get(key, key)
+    return label.format(**fields) if fields else label
+
+
 def _extension_splices(plan, chat_id):
     """Let installed extensions place their own registered steps.
 
@@ -632,16 +675,16 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if not isinstance(interp, dict):
         interp = {}
         
-    plan = [("director_interpret", "Director · interpret & flow plan")]
+    plan = [("director_interpret", step_label("director_interpret"))]
     fl = interp.get("flow")
     if not isinstance(fl, dict):
         fl = {}
         
     if fl.get("needs_mapping"):
-        plan.append(("mapping_stage", "Mapping · route books & lore"))
+        plan.append(("mapping_stage", step_label("mapping_stage")))
     else:
-        plan.append(("mapping_quick", "Mapping · cached recall"))
-    plan.append(("perception_act", "Perception · pass 1 — the act"))
+        plan.append(("mapping_quick", step_label("mapping_quick")))
+    plan.append(("perception_act", step_label("perception_act")))
 
     valid_ids = {int(row["id"]) for row in cast_rows}
     reactors = [int(char_id) for char_id in (fl.get("reactors") or [])
@@ -667,15 +710,16 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     flags = _dict(fl.get("resolution_flags"))
     contested = bool(flags.get("contested") and reactors)
     if contested:
-        plan.append(("reaction_loop", "Characters · physical reactions"))
+        plan.append(("reaction_loop", step_label("reaction_loop")))
 
     if reactors:
         if autonomy > 0:
-            plan.append(("interaction_loop", "Characters · interaction loop"))
+            plan.append(("interaction_loop", step_label("interaction_loop")))
         elif not contested:
             names = {row["id"]: character_name_from_text(row["sheet"]) for row in cast_rows}
             for char_id in reactors:
-                plan.append((f"character:{char_id}", f"Character · {names[char_id]}"))
+                plan.append((f"character:{char_id}",
+                             step_label("character", name=names[char_id])))
         # Contested at autonomy == 0: reaction_loop above already gives every
         # reactor its single character_step declaration for this beat, and
         # director_resolve consumes those via ctx.reaction_loop. Appending the
@@ -686,7 +730,7 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         # dialogue_log while perception_outcome still injected its actions.
 
     plan += [
-        ("director_resolve", "Director · resolve"),
+        ("director_resolve", step_label("director_resolve")),
         # Unconditional but self-gating: `pick_background_reactors`
         # (persist/commit_background.py) is a cheap, LLM-free check that
         # returns [] for the large majority of turns (no salient, un-voiced
@@ -695,8 +739,8 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         # them. The singular `pick_background_reactor` beside it is a
         # single-winner wrapper this stage does not call.
         (_BG_KEY, _background_stage_label(chat_id)),
-        ("perception_outcome", "Perception · pass 2 — the outcome"),
-        ("narrator", "Narrator · render"),
+        ("perception_outcome", step_label("perception_outcome")),
+        ("narrator", step_label("narrator")),
     ]
     # Prefer pre-loaded extra_players (already on ctx from _load_extra_players
     # during pipeline setup) to avoid a redundant DB query every turn. Fall
@@ -709,8 +753,8 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     else:
         _has_extras = False
     if _has_extras:
-        plan.append(("narrator_extra", "Narrator · render (other players)"))
-    plan.append(("commit", "Mapping & memory · commit-up"))
+        plan.append(("narrator_extra", step_label("narrator_extra")))
+    plan.append(("commit", step_label("commit")))
     # Last, so an extension anchors against the plan the engine actually built
     # this beat -- and only against it: splices derive from the enabled set and
     # installed manifests alone, never from anything this turn happens to be,
@@ -734,11 +778,9 @@ def _background_stage_label(chat_id):
         level = str(background_config(chat_id).get("scene_life") or "off").casefold()
     except Exception:
         level = "off"
-    if level == "ambient":
-        return "Scene life · manager (ambient)"
-    if level == "full":
-        return "Scene life · manager (full)"
-    return "Background · presence reaction"
+    if level in ("ambient", "full"):
+        return step_label(f"{_BG_KEY}.{level}")
+    return step_label(_BG_KEY)
 
 
 def _mapping_must_precede_perception(ctx):
@@ -778,11 +820,11 @@ def _chat_has_extra_players(chat_id, frame_id=None):
 
 def establishment_plan(chat_id=None):
     plan = [
-        ("mapping_stage", "Mapping · route books & lore"),
-        ("director_establish", "Director · establish scene"),
-        ("perception_establish", "Perception · opening player view"),
-        ("narrator", "Narrator · opening"),
-        ("commit", "Mapping & memory · commit-up"),
+        ("mapping_stage", step_label("mapping_stage")),
+        ("director_establish", step_label("director_establish")),
+        ("perception_establish", step_label("perception_establish")),
+        ("narrator", step_label("narrator.establish")),
+        ("commit", step_label("commit")),
     ]
     # Spliced for the same reason build_plan's return is, and it was not:
     # `mapping_stage`, `narrator` and `commit` all RUN on turn 0, so an
@@ -1111,7 +1153,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
 
     if start_key is None:
         yield from _step_stream(bus, turn_id, "director_interpret",
-            "Director · interpret & flow plan", 0, ctx,
+            step_label("director_interpret"), 0, ctx,
             variant_count(turn_id, "director_interpret"))
 
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
