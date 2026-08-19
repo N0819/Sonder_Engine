@@ -2192,13 +2192,48 @@ def _append_once(view, text, marker=None):
 # middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
 
 
+#: The word-runs of a NAME, in whatever script it is written. `[A-Za-z']+`
+#: describes the Latin script rather than a name, and returns nothing at all
+#: for the rest -- so every rule built on tokens (recognition variants,
+#: standalone forms) simply stopped having anything to work with.
+#:
+#: A run in a script that does not space its words is one token; the joiners
+#: those scripts put BETWEEN the parts of a name -- the katakana middle dot
+#: and double hyphen -- are deliberately outside the classes, so 佐藤・ヒナミ
+#: splits where a reader would split it. Latin runs are matched exactly as
+#: before, hyphen and all, so no existing name tokenises differently.
+_NAME_TOKEN_RE = re.compile(
+    r"[A-Za-z']+"
+    r"|[ぁ-ゖ]+|[ァ-ヺ]+|[㐀-䶿一-鿿豈-﫿]+|[가-힯]+|[฀-๿]+")
+
+#: A short Latin token cannot be told from an ordinary word; a short token in
+#: a script that does not space its words is a perfectly ordinary name --
+#: 佐藤 is two characters and is a family name. The same distinction
+#: `_scrub_unknown_identities` draws, for the same reason.
+_NAME_TOKEN_MIN = 3
+_UNSPACED_NAME_TOKEN_MIN = 2
+
+
+def _name_tokens(text):
+    """The word-runs of a name, in whatever script it is written."""
+    return _NAME_TOKEN_RE.findall(str(text or ""))
+
+
+def _name_token_floor(token):
+    """The shortest this token could be and still identify somebody."""
+    return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(token[:1])
+            else _NAME_TOKEN_MIN)
+
+
 def _significant_name_tokens(name):
     """Lower-cased identifying tokens of a name -- titles, ranks and single
     initials removed. 'Commander Riker' -> {'riker'}."""
     out = set()
-    for tok in re.findall(r"[A-Za-z']+", str(name or "")):
+    for tok in _name_tokens(name):
         low = tok.strip(".'").casefold()
-        if len(low) < 3 or low in _ling("_NAME_TITLE_TOKENS"):
+        if not low or len(low) < _name_token_floor(low):
+            continue
+        if low in _ling("_NAME_TITLE_TOKENS"):
             continue
         out.add(low)
     return out
@@ -3064,10 +3099,16 @@ def _player_name_forms(player_name):
     if not name:
         return []
     forms = [name]
-    for word in re.split(r"[\s,]+", name):
-        clean = word.strip()
-        if (len(clean) >= 3 and clean[:1].isupper()
-                and clean.casefold() not in _ling("_NAME_LEADERS")):
+    for clean in _name_tokens(name):
+        # The capital is what separates a name part from an ordinary word it
+        # sits beside -- in a script that HAS capitals. A caseless script
+        # offers no such signal, and demanding one there is how a Japanese
+        # player name contributed no standalone form at all; the leader list
+        # and the length floor carry it instead.
+        if len(clean) < _name_token_floor(clean):
+            continue
+        if not clean[:1].islower() \
+                and clean.casefold() not in _ling("_NAME_LEADERS"):
             forms.append(clean)
     # Longest first so "The Stranger" is preferred over "Stranger".
     return sorted(set(forms), key=len, reverse=True)
@@ -3104,8 +3145,19 @@ def _subject_opener(form):
     """
     pat = _SUBJECT_OPENERS.get(form)
     if pat is None:
+        # `name_boundary_pattern`, not a trailing `\b`: `\b` asserts a
+        # transition between word and non-word characters, which describes
+        # scripts that space their words and nothing else. A Japanese particle
+        # is a word character, so 「ヒナミは」 never matched `ヒナミ\b` -- and
+        # this is the primitive every subject-anchored guard in the file is
+        # built on, so all of them, player-act authority included, resolved
+        # NOBODY as the subject of any sentence in such a story. The boundary
+        # the pattern does apply still refuses a Latin name inside a longer
+        # word ("Hinamis"), and the leading article stays this function's own
+        # rule.
         pat = re.compile(
-            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{re.escape(form)}(?:'s|’s)?\b",
+            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
+            rf"(?:['’]s)?",
             re.I if form[:1].islower() else 0)
         _SUBJECT_OPENERS[form] = pat
     return pat
