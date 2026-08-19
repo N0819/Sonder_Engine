@@ -157,10 +157,23 @@ def test_running_out_of_patience_does_not_give_up_on_the_room(
     )
     # 30 polls x 2.5s, advanced in poll-sized steps so each timer's fetch can
     # complete before the next one is due.
-    for _ in range(32):
+    #
+    # The step is bounded by PROGRESS, not by a fixed number of iterations
+    # with a fixed real-time nap. Each poll needs its fetch to settle before
+    # the next timer is due, and 25ms of wall clock is a promise about the
+    # machine rather than about the code: on a shared CI runner it is
+    # sometimes not enough, and the run ends with the budget unspent, no
+    # toast, and a failure that reproduces nowhere. (Measured 2026-08-19: this
+    # test failed once in GitHub Actions and passed three consecutive local
+    # runs on the same commit.) Extra iterations are harmless -- a poll
+    # schedules the next one only after its own fetch resolves, so
+    # fast-forwarding while nothing is pending advances no timer.
+    for _ in range(160):
+        if page.evaluate("window.__done === true"):
+            break
         page.clock.fast_forward(2600)
         page.wait_for_timeout(25)
-    page.wait_for_function("window.__done === true", timeout=5000)
+    page.wait_for_function("window.__done === true", timeout=15000)
 
     toasts = _toasts(page)
     assert toasts, "75 quiet seconds then nothing at all reads as broken"
