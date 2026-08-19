@@ -14,7 +14,7 @@ import time
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from tests.conftest import fanout_resolve_agent
+from tests.helpers import fanout_resolve_agent
 from world.spatial import merge_scene_with_diff
 
 
