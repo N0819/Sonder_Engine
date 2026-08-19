@@ -742,3 +742,51 @@ def test_background_act_survives_a_reaction_with_no_line(temp_db):
         scene=scene, p_room="yard")
     assert [e["kind"] for e in events] == ["action"]
     assert "half-meter closer" in events[0]["action"]
+
+
+def test_a_silent_sight_channel_carries_no_standing_sight():
+    """The manifest said `status: silent, why: no light reaches this room` and
+    listed `["storm sky", "heavy rain", "light: dark"]` as standing content on
+    the same channel, because `sight_standing` was assembled BEFORE
+    `sight_status` was decided and `light: {light}` was appended
+    unconditionally. `weather_words`' sight arm gates on room EXPOSURE, never
+    on light, so any exposed room at night produced it.
+
+    Not a leak -- the storm is legitimately the player's, and it still arrives
+    on hearing and touch. But SENSORY CHANNELS is the one payload field the
+    narrator prompt is told to read as authoritative, and it contradicted
+    itself there."""
+    from agents.narration import _sensory_channels_manifest
+
+    scene = {
+        "rooms": {"yard": {"name": "Yard", "adjacent": [],
+                           "light": "dark", "outdoor": True}},
+        "positions": {"Hinami": "yard"},
+        "entities": {}, "contacts": [], "attire": {}, "overlays": {},
+        "weather": {"sky": "storm", "precipitation": "rain",
+                    "intensity": "heavy", "wind": "gale"},
+    }
+    manifest = _sensory_channels_manifest(
+        scene, "Hinami", "", [], set(), {}, "yard")
+    sight = manifest["sight"]
+
+    assert sight["status"] == "silent"
+    assert "standing" not in sight
+    # The other two channels still carry the storm, which is the whole reason
+    # this is a contradiction rather than a subtraction.
+    assert manifest["hearing"]["status"] == "live"
+
+
+def test_a_lit_room_still_lists_its_standing_sight():
+    from agents.narration import _sensory_channels_manifest
+
+    scene = {
+        "rooms": {"yard": {"name": "Yard", "adjacent": [], "light": "lit"}},
+        "positions": {"Hinami": "yard"},
+        "entities": {}, "contacts": [], "attire": {}, "overlays": {},
+    }
+    sight = _sensory_channels_manifest(
+        scene, "Hinami", "", [], set(), {}, "yard")["sight"]
+
+    assert sight["status"] == "live"
+    assert "light: lit" in sight["standing"]
