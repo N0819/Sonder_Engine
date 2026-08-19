@@ -62,19 +62,22 @@ withheld while only one zone is exposed. Other bare regions remain independent:
 for example, a bare `groin` sends its authored anatomy through the same
 observer-safe projection even while a tank top still covers the chest.
 
-The projection is an information boundary, not a guarantee that a generative
-perception model will retain every allowed detail. After the model returns,
-perception applies a deterministic body-detail fidelity floor: if the view
-itself foregrounds an exposed surface (for example, a bare stomach or parted
-legs), the corresponding authored detail is restored from that observer's
-already-filtered `body_regions`. It never inventories unrelated anatomy, and a
-covered zone cannot enter because it has no bare-surface detail in the
-projection. This is semantic fidelity, not quotation fidelity: the model may
-rephrase or integrate the description for natural flow, and the floor stays
-silent when the resulting view retains concrete distinguishing traits. It acts
-only when the view collapses them to a generic exposed body part. Positional
-words such as `inner`, `outer`, and `thighs` do not count as distinguishing
-traits merely because they also occur somewhere in an authored description.
+**No model runs in this stage.** Perception is deterministic end to end —
+there is no `perception` role in `providers.ROLES`, no entry in
+`prompts`/`schemas.SCHEMA_MAP`, and `agents/perception.py` imports no model
+seam. The projection is therefore not "an information boundary a model may
+still overrun": it is the whole of what the observer receives, composed from
+typed percepts by `agents/composer.py` and realised by `render_view`, which
+takes no scene and no database and so structurally cannot add a detail the
+percepts did not carry.
+
+The body-detail fidelity floor described here was a repair over MODEL PROSE —
+it restored an authored detail when the returned view collapsed an exposed
+surface to a generic body part. With the model gone the floor has nothing to
+repair: the percept either admits the region's authored detail or it does not,
+and there is no second, lossier account of it to compare against. Read the
+`body_region_percepts` admission rules for what an observer gets, not this
+paragraph.
 
 ### `narrator`
 
@@ -151,6 +154,16 @@ Two conditions the diagram cannot show:
   ran, it already collected each reactor's declaration; planning `character:<id>`
   steps as well would run those minds twice in one beat. `agents/runtime.py`
   records this as a deliberate fix, not an omission.
+- **An installed extension can add steps of its own.** `build_plan` returns
+  `_extension_splices(plan, chat_id)` — the LAST thing it does, so an extension
+  anchors against the plan the engine actually built this beat. Splices derive
+  only from the enabled set and installed manifests, never from anything else
+  about the turn, because resume and reroll recompute `build_plan` and must get
+  the same list back. The hook is total: any failure leaves the plan exactly as
+  the engine built it, so a broken extension cannot cost a turn. See
+  [`EXTENSIONS.md`](EXTENSIONS.md) for `register_step` and the splice manifest.
+  `establishment_plan()` takes no splices — the opening turn is a fixed
+  five-step list.
 
 ### `director_interpret`
 
@@ -267,29 +280,29 @@ removals. A contradictory explicit destination is refused. The resulting
 `scene.substances` entry persists until a bounded remove/clear operation; code
 tracks the material the fiction names but never infers one from an event label.
 
-The model supplies ambient observer-specific sensory prose, but it does not own
-the chronology of an already structured player declaration. Model-rendered
-copies of declared speech/action are removed; ambient clauses sharing a
-sentence with an action are retained; then authorized speech and visible action
-are projected last in the Director sequence's exact order. Each element still
-passes its own hearing/sight/concealment gate. Exact quote bodies and declared
-tones survive, and observer-facing action uses only the intent-free
-`observable` surface. Thus `speech -> turn -> speech` cannot become
-`turn -> speech -> speech`, even when the perception model paraphrases it that
-way. Delivery metacommentary (“the words reach you clearly”, “you hear both
-lines in full”) is discarded because it describes the filter rather than the
-fiction.
+**There is no perception model here either.** Each declared element becomes its
+own percept through its own hearing/sight/concealment gate (`speech_percept`,
+`act_percept`, `crossing_percept`), carrying the exact quote body, the
+intent-free `observable` surface and the declared tone; `Percept.order_key`
+holds the Director sequence's declared order, so chronology is a FIELD rather
+than a repair pass. `speech -> turn -> speech` cannot become
+`turn -> speech -> speech` because nothing between the declaration and the
+rendered view is free to rewrite it, and delivery metacommentary ("the words
+reach you clearly") cannot be produced because no stage writes prose about the
+filter. The strip-and-reinject machinery that enforced this over model prose
+(`_strip_onset_rendering`, `_inject_onset_sequence`, `_inject_visible_actor`,
+`_inject_action`) is dead code kept pending removal — `docs/UNBUILT.md` §1.45.
 
 Interpret reconciliation counts `tone` and `observable` as declaration-bearing
 channels. A gesture/delivery already represented there is not appended later
 as a redundant repair action, which otherwise creates a second competing
 chronology before perception begins.
 
-It also emits structured observations for appraisal. These are reconstructed
-from each final scrubbed prose view after output validation; model-authored
-observation objects are discarded. They therefore carry the same information
-budget as the view and cannot reintroduce raw event intent, private tell grounds,
-unknown identities, or another body's internal state.
+It also emits structured observations for appraisal. These are re-derived from
+each final rendered view (`composer.observations_from_render`), never assembled
+alongside it, so the second representation cannot widen the first's information
+budget: it cannot reintroduce raw event intent, private tell grounds, unknown
+identities, or another body's internal state.
 
 The projection decomposes a view into per-channel atoms (consecutive sentences
 sharing a sensory channel, capped per view), and grades intensity, suddenness
@@ -317,15 +330,20 @@ unprompted exchange between two characters impossible (`docs/UNBUILT.md`
 §1.11f). With that narrowed, `max_micro_rounds` is what actually bounds an
 exchange.
 
-**The first wave is simultaneous.** Everyone in the initial reactor queue is
-answering the same thing — the player's declaration, already fixed before this
-stage runs — and none of them has seen any other reactor's response, because
-none exists yet. So the first `initial_parallel_reactors` speakers declare
-blind: micro-perception for the whole wave is delivered only once every member
-has declared, and the loop's early exits are evaluated for the wave as a whole.
-After the wave, one speaker at a time, unchanged — a character replying to
-another character genuinely is responding to something they just heard, and
-ordering is the whole content of that.
+**The first wave is one speaker, by default.** `initial_parallel_reactors`
+defaults to **1** (`story/scene.py`'s `DEFAULT_INTERACTION_CONFIG`), so the
+beat opens with a single character and causality builds from there — a
+character replying to another character genuinely is responding to something
+they just heard, and ordering is the whole content of that. `Design.md`'s
+conformance row is the authority on why: a blind wave is right about a beat
+aimed at the ROOM and wrong about one aimed at a person, and the stranding the
+wave was introduced to fix is now fixed where it was caused (the beat-ending
+exit is gated on `commitment: "contestable"`).
+
+Raising the knob restores exactly the old behaviour, and it is the behaviour
+described here: the first `initial_parallel_reactors` speakers declare blind —
+micro-perception for the whole wave is delivered only once every member has
+declared, and the loop's early exits are evaluated for the wave as a whole.
 
 The person being ANSWERED is not in the wave. Its justification only holds
 when the members are reacting to the same external thing; when one is answering
@@ -380,13 +398,19 @@ immutable prior character variants, so a chatty speaker cannot hide a repeated
 offer or question behind four fresh lines or a substituted proper noun. The
 ledger compares completed turns, not individual speech entries: emphasis,
 lists, callbacks, and one continuous in-character rant remain legitimate. A
-lexically similar move opens a contextual review rather than proving a defect;
-the review may retain a continuation that the current beat invited, answered,
-challenged, or materially advanced. Its target is an unmotivated reset that
-reissues the old conversational job as though nobody heard it. Verbatim,
-potential semantic-move, and spent-intention findings are combined into at most
-one review call. Only an exact line that survives that review feeds the stuck
-mind signal; a semantic move deliberately retained after review does not.
+lexically similar move is a review TRIGGER, not proof of a defect — an invited
+continuation, deliberate emphasis and an in-character riff all look the same to
+it — and since `e629d60` the review costs nothing, because there is no longer a
+review call to pay for. The verbatim, semantic-move and spent-intention
+findings are RECORDED on the step as `repeat_correction` / `move_correction` /
+`intention_correction`, each raised as a warning, and the beat stands. The
+second character call they used to buy (and the `move_repeat_screen` that
+gated it) is gone: repetition is weak output, not broken output, and a negative
+constraint gives a mind that has run out of moves nothing but a rephrasing.
+Two consumers read the records — `affect._advance_intent`, where a `progress`
+claim on a repeated move does not advance the goal, and `_unbidden_trigger`,
+whose `barren_goal` reason offers the mind a contrasting memory instead of a
+further prohibition.
 
 Intentions remain visible after they stop steering for autobiographical
 continuity, but only
@@ -482,7 +506,7 @@ record (granted vs served vs produced) persists on the step under
 
 Unconditionally present in the plan but internally self-gating, with two paths chosen by the per-chat `background_config` (`story/scene.py`) key `scene_life`:
 
-- **`off` (default) — one presence.** `persist/commit.py`'s `pick_background_reactor` is a deterministic, LLM-free check that returns `None` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is raisable to 3, so "one presence" is the default rather than an invariant.
+- **`off` (default) — one presence.** `persist/commit_background.py`'s `pick_background_reactors` is a deterministic, LLM-free check that returns `[]` for the large majority of turns (no salient, un-voiced named background presence this beat), in which case this stage costs nothing. It is the function `agents/background.py` actually calls, with `cap=background_config.max_reactors`; `pick_background_reactor` (singular) is only a convenience wrapper that takes the top pick. Both are re-exported from `persist/commit.py`, which is why older notes name that module. Only when it picks a name does one small, stateless LLM call decide whether that person reacts and, if so, a single line and/or brief action for this beat only. `max_reactors` defaults to 1 and is capped at 3, so "one presence" is the default rather than an invariant.
 - **`ambient` / `full` — the scene manager.** One batched call voices every managed presence in the room at once (roster from `managed_presences`, capped by `max_managed`), partitioned by `spatial.ambient_scope` and filtered per presence by a `hear_level` audience map. The plan label changes to "Scene life · manager (ambient|full)" accordingly. Voicing is batched; **writing is not** — each attributed entry is routed to its own record at commit, which is what keeps one call from becoming one shared mind. Design and its still-unbuilt half: [`BACKGROUND_LIFE_DESIGN.md`](../design/BACKGROUND_LIFE_DESIGN.md), [`UNBUILT.md`](../UNBUILT.md) §6.1.
 
 Neither path grants persistent memory, psychology, or mind-models — that is what character promotion is for. This is a deterministic backstop for the director_resolve prompt's own background-entity voicing license (see `llm/prompts.py`), which live play showed goes unused often enough under sustained narrative pressure to need one, the same lesson already learned for spatial zone-tagging and speech concealment.
@@ -493,24 +517,32 @@ Its output is merged into `perception_outcome`'s dialogue processing rather than
 
 Filters the resolved event into separate observer experiences. This output feeds both player narration and character-specific memories.
 
-Concealed actions are sentence-level redacted from the resolved event text
-per-perceiver via `_redact_concealed_from_event` — sentences referencing a
-concealed actor (identified by structured name, not prose matching) are
-withheld; overt sentences survive. The unified delivery gate `_delivery_ok`
-in `agents/common.py` consolidates containment, awareness, sight (including
-rear-arc/`behind_sources`), and hearing (with proximity) checks for every
-deterministic delivery site.
+Concealed actions are sentence-level redacted per-perceiver by
+`_redact_concealed_from_event` — sentences referencing a concealed actor
+(identified by structured name, not prose matching) are withheld; overt
+sentences survive. **The function lives in `agents/perception.py` and this
+stage does not call it.** Its only production caller is `story/scene.py`'s
+`recent_events_for_observer`, which redacts STORED event rows as they are
+loaded into a character's context on a later turn — so the boundary it holds
+is the historical one (Pattern 4 in the debugging map), not this turn's
+outcome view. This turn's concealment is decided by the composer, per percept,
+before any prose exists.
+
+`agents/common._delivery_ok` consolidates containment, awareness, sight
+(including rear-arc/`behind_sources`), and hearing (with proximity). It is
+called from `agents/loops.py`'s two micro-round deliveries and nowhere else;
+perception and the composer re-derive the same four questions from the same
+primitives. Two families of gate, and the risk that they drift is registered
+in [`UNBUILT.md`](../UNBUILT.md) §3.8.
 
 Observer scene projections include only visible bodies' pose snapshots plus the
 observer's own. These are authoritative: visibility alone never licenses a
-default standing or “before you” relation. A legacy/current body without a
-snapshot appears in `pose_unknown`; action-onset removes model-authored static
-pose claims for that roster before restoring any genuine structured action.
-Full authored appearance is scoped
-to discovery or a structural visible change; familiar stable card description
-is withheld while dynamic clothing and exposed body regions remain available.
-This matters at the memory boundary because witnessed episodic memory is formed
-from this output, not repaired after it.
+default standing or “before you” relation. A body without a snapshot appears in
+`pose_unknown`. Full authored appearance is scoped to discovery or a structural
+visible change; familiar stable card description is withheld while dynamic
+clothing and exposed body regions remain available. This matters at the memory
+boundary because witnessed episodic memory is formed from this output, not
+repaired after it.
 
 ### `narrator`
 
@@ -518,10 +550,14 @@ Renders the player-facing prose. Fidelity checks and player-echo stripping are a
 
 ### `narrator_extra`
 
-Planned only when the chat has other human players: each needs its own perceiver
-and its own render of what *they* saw. Registered like any other stage, and
-together with `narrator` it forms the `_PRESENTATIONAL_TAIL` — rerolling either
-re-runs the remaining tail rather than the whole turn.
+Planned only when the chat has other human players *stationed in this frame*
+(`_chat_has_extra_players`; a co-player in a different frame is not in this
+scene), and only on a normal turn — `establishment_plan()` is a fixed five-step
+list, so turn 0 never carries one however many players are attached. Each extra
+player needs its own perceiver and its own render of what *they* saw.
+Registered like any other stage, and together with `narrator` it forms the
+`_PRESENTATIONAL_TAIL` — rerolling either re-runs the remaining tail rather
+than the whole turn.
 
 It does **not** yet carry the primary narrator's consciousness gate or its full
 fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
@@ -601,7 +637,14 @@ When rerunning from a stage:
 - Earlier active variants are loaded back into `PipelineContext`.
 - Later dependent stages are recomputed.
 - Each recomputation creates a new immutable variant and marks it active.
-- `_assert_plan_materialized` verifies that every planned stage has a valid result before the turn is considered complete.
+- `_assert_plan_materialized` checks two things, and only two: that every
+  planned key is present in `ctx`, and that its step has **exactly one** active
+  variant. It does not inspect the content, so "a valid result" overstates it —
+  a stage that returned a structurally poor dict passes.
+- **A single-step reroll skips that check entirely.** The `only_key` branch of
+  `_run_pipeline` runs the one step and yields `done` without calling
+  `_assert_plan_materialized`; the invariant is asserted on the two whole-plan
+  paths (establishment and normal) only.
 
 ## Portable diagnostic traces
 
@@ -648,7 +691,7 @@ model stream.
 | Correct result is narrated incorrectly | `perception_outcome`, then `narrator` |
 | Correct turn disappears after reload | `persist/commit.py`, checkpoints, or database restore |
 | Reroll leaves mixed old/new state | stale-step propagation, active variants, or resume logic |
-| Character knows a concealed action from a prior turn | `recent_events_for_observer` in `story/scene.py` (Pattern 4), `_redact_concealed_from_event` in `agents/perception.py` |
+| Character knows a concealed action from a prior turn | `recent_events_for_observer` in `story/scene.py` (Pattern 4), which is the one production caller of `_redact_concealed_from_event` in `agents/perception.py` |
 | Character remembers something from a rerolled turn | `current_turn_idx` cutoff in `mind/memory.py` `search_memories` (F1) |
 | Character keeps recalling a belief they have since revised | `reconcile_inference_confidence` in `mind/memory.py`, `belief_credence` in `mind/theory_of_mind.py` |
 | Character theorises lucidly about others while in agony or ecstasy | `cognitive_absorption` in `mind/psychology_runtime.py`, `absorbed_cap`/`formation_floor`/`sheet_capacity` in `mind/theory_of_mind.py` |

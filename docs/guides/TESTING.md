@@ -61,12 +61,22 @@ string path no import graph can see. Against a full suite in the tens of
 seconds that is not a trade worth making. Use `make test-lf` while iterating and run everything
 before you are done.
 
-A fast-tier test must also be order-independent on a clean checkout. Do not let
-pure prompt or schema tests call runtime settings helpers that implicitly open
-`engine.db`; import built-in constants directly or stub the lookup when
-database behavior is not what the test covers. Validate changes to tiering with
-`ENGINE_DB` pointing at a new path so a populated development database cannot
-mask missing initialization.
+A fast-tier test must also be order-independent on a clean checkout. The
+database half of that rule is now enforced structurally rather than by
+discipline: `tests/conftest.py` calls `_redirect_default_database()` at module
+IMPORT — before pytest imports a single test module, because collection itself
+can reach the database through a module-level import — which points `db.DB` at
+a scratch file and runs `db.init()` on it. No test, in either tier, can open
+the developer's `engine.db`, and none needs another test to have initialized
+one. Say what changed rather than what the rule used to warn about: the failure
+it guarded (a prompt test whose result depended on a checkbox in the working
+copy's own provider rows) is no longer reachable.
+
+What is still worth doing is the other half, which was never about the file:
+prefer built-in constants or an explicit stub to a runtime settings/prompt
+lookup when settings behavior is not what the test covers, so the test says
+what it depends on. `ENGINE_DB` still overrides the default path for anyone
+validating tiering by hand.
 
 Information-flow changes require adversarial tests, not only happy-path schema
 tests. For perception or cognition payloads, include hostile model output that
