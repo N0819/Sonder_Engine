@@ -10,8 +10,6 @@ Its whole value depends on never crying wolf, so most of these tests pin the
 cases it must stay silent on.
 """
 
-import json
-
 from agents.common import _check_narrator_fidelity, _check_pronoun_fidelity
 from agents.narration import _ENFORCEABLE_PREFIXES, _cast_pronouns
 
@@ -167,27 +165,20 @@ def test_character_payload_pronouns_exclude_the_speaker():
     assert _known_pronouns(cast, None, {"Vorne"}, exclude=["Vorne"]) == {}
 
 
-def test_perception_pronouns_skip_a_disguised_character(monkeypatch):
-    """Canonical pronouns are part of the identity a disguise conceals -- handing
-    them to the perception layer would out the subject in an unaware observer's
-    view."""
-    from agents import perception as perception_mod
-
-    cast = [
-        {"sheet": '{"identity": {"name": "Vorne", "pronouns": '
-                  '{"subject": "he", "object": "him", "possessive": "his"}}}'},
-        {"sheet": '{"identity": {"name": "Crusher", "pronouns": '
-                  '{"subject": "she", "object": "her", "possessive": "her"}}}'},
-    ]
-    monkeypatch.setattr(perception_mod, "sheet_state",
-                        lambda row: (json.loads(row["sheet"]), {}, {}))
-
-    monkeypatch.setattr(perception_mod, "active_disguises", lambda cid: {})
-    assert perception_mod._observed_pronouns(1, cast) == {"Vorne": HE, "Crusher": SHE}
-
-    monkeypatch.setattr(perception_mod, "active_disguises",
-                        lambda cid: {"vorne": {"description": "a Ferengi trader"}})
-    assert perception_mod._observed_pronouns(1, cast) == {"Crusher": SHE}
+# A DISGUISE EXCLUSION THAT NOW HAS NO HOME. The test that stood here pinned
+# `perception._observed_pronouns`, which dropped a character under an active
+# disguise from the pronoun map on the ground that canonical pronouns are part
+# of the identity a disguise conceals. That function has no production caller
+# -- the composer builds views from the IR and reads no pronoun map -- and
+# NEITHER of the two live builders carries the exclusion:
+# `narration._cast_pronouns` (this file's subject) reads every cast sheet, and
+# `character._known_pronouns` filters on recognition only. Both are keyed by
+# canonical name, so neither can be linked to a disguised body's descriptor by
+# a reader that only has the view; the residual is that the rule was written
+# down once, argued for, and then landed nowhere. Flagged rather than
+# retargeted, because closing it means deciding which of the two builders owns
+# `active_disguises` and that is a change to the narrator and character
+# payloads, not to a test.
 
 
 def test_cast_pronouns_builder_reads_sheets():
