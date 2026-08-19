@@ -2421,6 +2421,59 @@ function renderFullApiSettings(b) {
           parBox, el("span", {}, "Run the specialists at the same time")));
     }
 
+    // The narrator's voice anchor. `agents/narration.py` has always read
+    // `settings.exemplars` and the narrator prompt has always carried a STYLE
+    // EXEMPLARS clause -- and there was no way to put anything in it, so the
+    // clause referred to an empty list on every install that has ever run.
+    // Placed directly above the narrator's own model picker, because those
+    // are the two controls that decide how the prose reads.
+    {
+      const bounds = S.boot.exemplar_bounds || {};
+      const maxCount = bounds.max_count || 5;
+      const maxChars = bounds.max_chars || 2000;
+      const areas = [];
+      const rows = el("div", {});
+      const addRow = text => {
+        if (areas.length >= maxCount) return;
+        const ta = el("textarea", {
+          style: "width:100%", rows: "4", maxlength: String(maxChars),
+          placeholder: "A short passage at the quality you want — anyone's "
+            + "prose, or your own. Style only.",
+        }, text || "");
+        areas.push(ta);
+        rows.append(el("div", { class: "card", style: "margin-top:6px" }, ta));
+      };
+      (S.boot.exemplars || []).forEach(addRow);
+      if (!areas.length) addRow("");
+      b.append(el("h4", {}, "Narrator voice"),
+        el("div", { class: "small dim" },
+          "Up to " + maxCount + " short passages the narrator studies for "
+          + "voice, rhythm and restraint. This is the one part of a turn the "
+          + "narrator is told to IMITATE, so keep them to style: a passage "
+          + "that names people, places or events will be read as facts about "
+          + "your story. Each is capped at " + maxChars + " characters, "
+          + "because every passage rides every narrator call for the life of "
+          + "the install."),
+        rows,
+        el("div", { class: "row", style: "margin-top:6px" },
+          el("button", {
+            onclick: () => {
+              if (areas.length >= maxCount) {
+                return toast("That is the limit — " + maxCount + " passages.", "warn");
+              }
+              addRow("");
+            },
+          }, "Add a passage"),
+          el("button", { class: "primary", onclick: async () => {
+            const r = await api("PUT", "/api/exemplars",
+                                { exemplars: areas.map(ta => ta.value) });
+            await boot();
+            toast(r.count
+              ? r.count + " passage(s) saved — the narrator will study them."
+              : "Cleared. The narrator writes from the prompt alone.", "ok");
+          } }, "Save passages")));
+    }
+
     b.append(el("h4", {}, "Agent models"),
       el("div", { class: "small dim" },
         "Type to search the provider's model list. Open 'advanced' for samplers and backup models."),
