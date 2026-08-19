@@ -29,8 +29,9 @@ from agents.common import (
     _check_action_direction,
     _check_quote_attribution,
 )
+from language_runtime import linguistic
+
 from agents.narration import (
-    _ENFORCEABLE_PREFIXES,
     _ordered_beat_events,
     _position_delta_payload,
     _visible_portal_states,
@@ -40,6 +41,19 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 # ---- F1: event order ----
+
+def _enforceable():
+    """The prefixes the ACTIVE story pack calls enforceable.
+
+    Not `narration._ENFORCEABLE_PREFIXES`, which every one of these files used
+    to import: that constant is bound once at import from the ENGLISH pack and
+    is a compatibility view for tests and audits, while the three live checks
+    read the active pack at use time (`narration.py:991, 1016, 1138`). Scoring
+    against the eagerly-bound copy is scoring against an object no story
+    evaluates -- `AUDIT_DIRECTOR.md` finding 4's shape, one module over.
+    """
+    return linguistic("agents.narration", "_ENFORCEABLE_PREFIXES")
+
 
 def _events(*pairs):
     out = []
@@ -621,7 +635,7 @@ def test_reversed_direction_fires_and_is_enforceable():
     warnings = _check_action_direction(prose, order)
     assert len(warnings) == 1
     assert warnings[0].startswith("Physical direction reversed")
-    assert warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+    assert warnings[0].startswith(_enforceable())
 
 
 def test_direction_rendered_correctly_passes():
@@ -640,7 +654,7 @@ def test_missing_act_warns_but_does_not_buy_a_rewrite():
     assert warnings[0].startswith("Physical act from event_order may be missing")
     # Deliberately NOT enforceable: correct prose can render a descent with no
     # directional verb in it at all.
-    assert not warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+    assert not warnings[0].startswith(_enforceable())
 
 
 def test_direction_check_ignores_ordinary_prose():
