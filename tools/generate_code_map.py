@@ -61,6 +61,7 @@ MODULE_PURPOSES = {
     "mind.memory_snapshot": "Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore.",
     "mind.memory_relationships": "The relationship graph: axis deltas from conduct and from inference, and the history behind them.",
     "mind.memory_vectors": "Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run.",
+    "mind.memory_inference": "Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences.",
     "core.pipeline_context": "Typed mutable context passed through a turn pipeline.",
     "persist.pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "llm.prompt_cache": "Provider-specific prompt-cache helpers.",
