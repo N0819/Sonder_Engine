@@ -88,3 +88,35 @@ def test_a_language_without_articles_keeps_its_descriptor_whole():
     with language_scope("ja"):
         patterns = _actor_reference_patterns("見知らぬ女")
     assert patterns and patterns[0].search("見知らぬ女が振り向く")
+
+
+#: "What counts as a quoted span" was answered eighteen times in one module
+#: whose central job is quote fidelity: eight inline, in three spellings that
+#: disagreed about whether a span may cross a nested opening curly quote, and
+#: ten more in the pack. Every inline copy was invisible to a language pack.
+QUOTE_KEYS = ["_NARRATION_QUOTE_RE", "_VIEW_QUOTE_BODY_RE",
+              "_QUOTE_PAIRS", "_QUOTE_CHARS"]
+
+
+@pytest.mark.parametrize("name", QUOTE_KEYS)
+def test_the_quote_vocabulary_is_the_packs(name):
+    assert _has_japanese(linguistic("agents.common", name, "ja")), name
+
+
+def test_a_japanese_line_is_a_quoted_span():
+    """Corner brackets mark speech in Japanese. Eight inline patterns knew
+    only the straight and curly double quote, so for a Japanese story the
+    protected-quote list came back empty and the echo strip ran unprotected."""
+    from agents.common import _protected_view_quotes
+
+    with language_scope("ja"):
+        quotes = _protected_view_quotes("ヒナミは「もう遅い」と言った。")
+    assert quotes == ["もう遅い"], quotes
+
+
+def test_the_players_own_japanese_line_is_recognised_in_its_quotes():
+    from agents.common import _strip_player_echo
+
+    with language_scope("ja"):
+        out = _strip_player_echo("あなたは「行こう」と言った。", ["行こう"])
+    assert "行こう" not in out, out

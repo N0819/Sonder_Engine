@@ -289,6 +289,15 @@ ling[common]["_DANGLING_SPEECH"] = {
 regex(common, "_DIALOGUE_CUE_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
 regex(common, "_NPC_PRONOUN_RE", "彼女|彼|彼ら|あの人|その人")
 regex(common, "_VIEW_QUOTED_SPAN_RE", "「[^」]*」|『[^』]*』")
+# ONE capture group across every pair, so a caller reading group(1) by position
+# is right whichever pair matched. Character classes, not alternation, for that
+# reason -- `project_check` holds a pack to English's group count.
+ling[common]["_VIEW_QUOTE_BODY_RE"]["pattern"] = "[\"“「『]([^\"“”」』]{1,})[\"”」』]"
+ling[common]["_QUOTE_PAIRS"]["items"].extend([
+    {"$type": "tuple", "items": ["「", "」"]},
+    {"$type": "tuple", "items": ["『", "』"]},
+])
+add(common, "_QUOTE_CHARS", "「", "」", "『", "』")
 regex(common, "_NARRATION_QUOTE_RE", "「[^」]*」|『[^』]*』")
 regex(common, "_NARRATION_DOUBLED_QUOTE_RE", "「{2,}|『{2,}")
 regex(common, "_NARRATION_DANGLING_QUOTE_RE", "「[^」]*$|『[^』]*$")
