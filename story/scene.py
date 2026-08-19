@@ -1000,8 +1000,18 @@ NON_AWAKE_GATED = frozenset({"asleep", "sedated", "unconscious"})
 
 
 def _normalize_awareness_level(raw):
-    """Casefold a level string to the enum. Unknown/garbage degrades to the
-    MILDEST gate ('dazed') rather than vanishing; empty/awake -> 'awake'."""
+    """Casefold a level string to the enum. Unknown/garbage degrades to
+    'dazed' rather than vanishing; empty/awake -> 'awake'.
+
+    'dazed' IS NOT A GATE, and this said "the mildest gate", which is the one
+    reading that makes the fall-through look conservative. `NON_AWAKE_GATED`
+    is asleep/sedated/unconscious; a level this enum cannot read therefore
+    produces a mind that perceives normally and runs a full character step.
+    That is the right direction -- a gated mind runs no character step at all,
+    so a word nobody recognises must not be able to silence somebody -- but it
+    is fail-OPEN, and stating it as a gate is how a later reader "restores"
+    one that never existed.
+    """
     level = str(raw or "").strip().casefold()
     if level == "" or level == "awake":
         return "awake"
