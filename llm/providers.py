@@ -1597,6 +1597,50 @@ def _note_json_object_rejected(prov, model):
         _prov_field(prov, "name") or "provider", model)
 
 
+#: (role, provider) pairs already told that a request feature they have
+#: configured cannot be sent on this connection. Said once per process: it is
+#: a settings problem, not a per-call event.
+_UNSENT_ON_ANTHROPIC: set = set()
+_UNSENT_LOCK = threading.Lock()
+
+
+def _warn_unsent_on_anthropic(prov, role, json_schema):
+    """Say so when a configured request feature cannot reach this provider.
+
+    The native Anthropic branch builds its body and RETURNS before
+    `_apply_reasoning_effort` and `_apply_json_mode` are reached, so both are
+    OpenAI-path only. Neither is a small setting: reasoning effort is a
+    first-class per-role control in the settings panel, and the JSON grammar
+    is worth a measured narrator 2/5 -> 5/5 valid and character 53.4s/2029
+    tokens -> 15.3s/587. Configured against a native Anthropic connection
+    they change nothing, and nothing said so -- the host reads the panel,
+    sees the value they set, and attributes the difference to the model.
+
+    Sending them is a request-shape decision (Anthropic spells reasoning as
+    `thinking: {type, budget_tokens}` and constrains output through tools,
+    neither of which this module emits) and is the owner's to make. Saying
+    that a set dial is inert is not.
+    """
+    name = _prov_field(prov, "name") or "provider"
+    unsent = []
+    if reasoning_effort_for(role):
+        unsent.append("reasoning effort")
+    if json_schema:
+        unsent.append("the JSON grammar")
+    if not unsent:
+        return
+    key = (str(role), name, tuple(unsent))
+    with _UNSENT_LOCK:
+        if key in _UNSENT_ON_ANTHROPIC:
+            return
+        _UNSENT_ON_ANTHROPIC.add(key)
+    _logger.warning(
+        "providers: %s is a native Anthropic connection, which this engine "
+        "does not yet send %s on; the setting is configured for role %r and "
+        "is having no effect",
+        name, " or ".join(unsent), role)
+
+
 _NO_JSON_SCHEMA: set = set()
 _NO_JSON_SCHEMA_LOCK = threading.Lock()
 
@@ -2092,7 +2136,7 @@ def _chat_complete_once(
     streaming = bool(raw_sink)
 
     # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
-    # fed and judges a 4KB tail plus a 40KB loop window, so one guard shared
+    # fed and judges a 4KB tail plus a 16KB loop window, so one guard shared
     # across this function's several stream attempts -- the two json_schema
     # rejection stages and the placeholder-skeleton re-stream -- judges the
     # concatenation of two different responses. Two attempts at the same
@@ -2125,6 +2169,8 @@ def _chat_complete_once(
         for key in ANTHROPIC_SAMPLERS:
             if key in merged:
                 body[key] = merged[key]
+
+        _warn_unsent_on_anthropic(prov, role, json_schema)
 
         if streaming:
             return _sse_anthropic(
@@ -2493,7 +2539,7 @@ async def _chat_complete_async_once(
     streaming = bool(raw_sink)
 
     # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
-    # fed and judges a 4KB tail plus a 40KB loop window, so one guard shared
+    # fed and judges a 4KB tail plus a 16KB loop window, so one guard shared
     # across this function's several stream attempts -- the two json_schema
     # rejection stages and the placeholder-skeleton re-stream -- judges the
     # concatenation of two different responses. Two attempts at the same
@@ -2510,6 +2556,7 @@ async def _chat_complete_async_once(
         for k in ANTHROPIC_SAMPLERS:
             if k in merged:
                 body[k] = merged[k]
+        _warn_unsent_on_anthropic(prov, role, json_schema)
         async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
             if streaming:
                 return await _sse_anthropic_async(base, h, dict(body), guarded(), client, role=role, model=model)
