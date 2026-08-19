@@ -3477,20 +3477,16 @@ function extensionTrustNote(ext) {
     + "your world state and your provider keys. Nothing has reviewed it.";
 }
 
-function extensionCapabilitySummary(caps) {
-  const parts = [];
-  const stages = (caps && caps.stages) || [];
-  for (const stage of stages) {
-    parts.push(`pipeline stage “${stage.label || stage.key}” at ${stage.anchor}`);
-  }
-  if (caps && caps.chat_state) parts.push("per-story state");
-  if (caps && Array.isArray(caps.characters) && caps.characters.length) {
-    parts.push(`characters: ${caps.characters.join(", ")}`);
-  }
-  if (caps && caps.routing) parts.push("alters information routing");
-  if (caps && caps.system) parts.push("full pipeline access");
-  if (caps && caps.ui) parts.push("interface");
-  return parts;
+// What the manifest asks for, in the ENGINE's words. This used to be a
+// second, hand-written list here, and it had drifted: it named six of the
+// engine's ten capabilities, and the four it left out -- running code in the
+// engine's process, running inside the turn's commit transaction, serving
+// HTTP under the host session, and writing into a character's own state --
+// are the four a host would most want named. `ext.disclosures` is computed
+// from `extension_runtime.CAPABILITY_DISCLOSURES`, which is now the single
+// place that vocabulary lives.
+function extensionCapabilitySummary(ext) {
+  return (ext && ext.disclosures) || [];
 }
 
 //: id -> the row `/api/extensions/updates` last returned for it. Held across
@@ -3548,7 +3544,16 @@ async function openExtensionsMenu() {
 
     for (const err of (data.load_errors || [])) {
       b.append(el("div", { class: "card" },
-        el("b", {}, `${err.id || "an extension"} failed to load`),
+        // `err.dir`, not `err.id`. No producer has ever written an `id`
+        // here, and none can: a load error is very often the manifest's id
+        // being missing, malformed, or a duplicate, so the DIRECTORY is the
+        // only identity a failed load reliably has. Reading the field that
+        // was never written meant every broken extension reported itself as
+        // "an extension", with the reason attached and no way to tell which
+        // one -- while the loader had the directory name in hand the whole
+        // time. The empty string is the whole-listing failure, which is
+        // genuinely not about one directory.
+        el("b", {}, `${err.dir || "an extension"} failed to load`),
         el("div", { class: "small err", style: "margin-top:4px;white-space:pre-wrap" },
           String(err.error || err))));
     }
@@ -3561,14 +3566,21 @@ async function openExtensionsMenu() {
 
     for (const ext of (data.extensions || [])) {
       const enabled = !!ext.enabled;
-      const caps = extensionCapabilitySummary(ext.capabilities);
+      const caps = extensionCapabilitySummary(ext);
       const toggle = el("button", { class: enabled ? "" : "primary" },
         enabled ? "Disable" : "Enable");
       toggle.onclick = async () => {
         // Enabling is the consent moment, so the warning goes HERE rather
         // than in a page nobody reads.
+        // The consent moment is the ONE moment `capabilities` exists for, and
+        // it used to show the trust sentence alone while the capability
+        // summary was rendered into the row BEHIND the dialog. Disclosure
+        // that arrives after consent is not disclosure.
         if (!enabled && !await confirmModal(
-              `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`,
+              `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`
+              + (caps.length
+                  ? `\n\nIt asks to:\n${caps.map(line => "• " + line).join("\n")}`
+                  : ""),
               { confirmLabel: "Enable" })) return;
         try {
           await api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/`

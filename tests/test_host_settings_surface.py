@@ -312,3 +312,79 @@ class TestEveryCardProducingRouteWarns:
         helper, called wherever a card response comes back."""
         assert "function showCardWarnings(result)" in UTILS_JS
         assert EDITORS_JS.count("showCardWarnings(") >= 5
+
+
+class TestTheConsentDialogDisclosesWhatWasAskedFor:
+    """WEB-2. `capabilities` is DISCLOSURE, never enforcement, so the only
+    thing it has to do is arrive complete at the moment of consent."""
+
+    def test_the_engine_owns_the_vocabulary_and_it_is_read(self):
+        from extension_runtime import CAPABILITY_DISCLOSURES, KNOWN_CAPABILITIES
+
+        assert tuple(CAPABILITY_DISCLOSURES) == KNOWN_CAPABILITIES
+        assert len(KNOWN_CAPABILITIES) == 10
+
+    def test_every_declared_capability_is_disclosed(self):
+        """The browser's old hand-written summary named six of the ten. The
+        four it dropped are the four a host would most want named."""
+        from extension_runtime import Extension, KNOWN_CAPABILITIES
+
+        ext = Extension(
+            id="e", name="E", description="", version="1", ext_api=1,
+            trust="code", provenance="local", path=Path("."),
+            capabilities={key: True for key in KNOWN_CAPABILITIES},
+        )
+        said = " ".join(ext.disclosures()).lower()
+        for phrase in ("python code inside the engine",
+                       "commit transaction",
+                       "http endpoints",
+                       "character's own per-story state"):
+            assert phrase in said, phrase
+
+    def test_a_capability_this_engine_does_not_know_is_still_disclosed(self):
+        """Unknown keys are tolerated so a later-`ext_api` manifest stays
+        loadable. Tolerated must not mean silent."""
+        from extension_runtime import Extension
+
+        ext = Extension(
+            id="e", name="E", description="", version="1", ext_api=1,
+            trust="code", provenance="local", path=Path("."),
+            capabilities={"time_travel": True},
+        )
+        assert any("time_travel" in line for line in ext.disclosures())
+
+    def test_the_dialog_shows_them_and_the_browser_keeps_no_second_list(self):
+        assert "It asks to:" in SETTINGS_JS
+        assert "return (ext && ext.disclosures) || [];" in SETTINGS_JS
+
+    def test_the_listing_carries_them(self):
+        import extension_runtime
+
+        for row in extension_runtime.listing():
+            assert isinstance(row["disclosures"], list)
+
+
+class TestABrokenExtensionIsNamed:
+    """WEB-10. Producers write `dir`; the panel read `id`, which no producer
+    has ever written -- so every load failure reported itself as "an
+    extension" while the loader had the directory in hand."""
+
+    def test_the_panel_reads_the_field_the_loader_writes(self):
+        assert "${err.dir || \"an extension\"} failed to load" in SETTINGS_JS
+
+    def test_a_load_error_carries_the_directory(self, tmp_path, monkeypatch):
+        import extension_runtime
+
+        broken = tmp_path / "broken-ext"
+        broken.mkdir()
+        (broken / "manifest.json").write_text("{not json", encoding="utf-8")
+        monkeypatch.setenv(extension_runtime.ROOT_ENV, str(tmp_path))
+        # The scan is cached module-wide, so put the real tree back whatever
+        # this assertion does.
+        try:
+            extension_runtime.reload()
+            errors = extension_runtime.load_errors()
+            assert [e["dir"] for e in errors] == ["broken-ext"]
+        finally:
+            monkeypatch.delenv(extension_runtime.ROOT_ENV, raising=False)
+            extension_runtime.reload()
