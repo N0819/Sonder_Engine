@@ -80,3 +80,29 @@ def test_every_benchable_step_resolves_to_a_prompt():
             if contract_bench.PROMPT_KEY.get(step, step)
             not in prompts.DEFAULT_PROMPTS)
         assert unresolved == [], (tool.__name__, unresolved)
+
+
+def test_chat_export_needs_the_wired_service_not_the_class(temp_db):
+    """`ChatArchiveService.export_chat(None, cid)` is a delayed crash.
+
+    `export_chat` is an instance method that dereferences `self._remap` inside
+    the frames loop, so passing `None` for `self` works exactly until the chat
+    has a `frames` row — and a frame split happens on its own, after a paid run
+    has finished. Three drivers wrote their `story.json` that way.
+    """
+    import pytest
+    from persist.chat_archive import ChatArchiveService
+    from web.app import chat_export
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("archive probe", "", "2026-08-18T00:00:00"))
+    temp_db.qi(
+        "INSERT INTO frames(chat_id,label,ordinal,kind,created) "
+        "VALUES(?,?,?,?,?)",
+        (cid, "main", 0, "main", "2026-08-18T00:00:00"))
+
+    export = chat_export(cid)
+    assert [f["chat_id"] for f in export["frames"]] == [cid]
+
+    with pytest.raises(AttributeError):
+        ChatArchiveService.export_chat(None, cid)

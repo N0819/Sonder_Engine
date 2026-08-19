@@ -411,8 +411,14 @@ def main():
         with open(os.path.join(args.out, "transcript.md"), "w") as fh:
             fh.write(transcript(played, narration_by_turn(db_module, cid),
                                 rates))
-        from persist.chat_archive import ChatArchiveService
-        export = ChatArchiveService.export_chat(None, cid)
+        # THE WIRED SERVICE, not the class. `export_chat` is an instance
+        # method: it dereferences `self._remap` inside the frames loop, so
+        # `ChatArchiveService.export_chat(None, cid)` worked only until a
+        # chat had a `frames` row -- and a frame split happens on its own,
+        # after the run is paid for. `web.app` owns the one wiring of the
+        # remappers; borrowing it cannot drift from what the route does.
+        from web.app import chat_export
+        export = chat_export(cid)
         export["checkpoints"] = []
         with open(os.path.join(args.out, "story.json"), "w") as fh:
             json.dump(export, fh, indent=1, default=str)

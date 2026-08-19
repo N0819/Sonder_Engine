@@ -796,12 +796,17 @@ def main():
     knowledge = who_knows_what(db_module, cid)
 
     os.makedirs(args.out, exist_ok=True)
-    from persist.chat_archive import ChatArchiveService
+    # THE WIRED SERVICE, not the class. `export_chat` is an instance
+    # method: it dereferences `self._remap` inside the frames loop, so
+    # `ChatArchiveService.export_chat(None, cid)` worked only until a
+    # chat had a `frames` row -- and a frame split happens on its own,
+    # after the run is paid for. `web.app` owns the one wiring of the
+    # remappers; borrowing it cannot drift from what the route does.
+    from web.app import chat_export
 
     story_path = os.path.join(args.out, "story.json")
     with open(story_path, "w") as fh:
-        json.dump(ChatArchiveService.export_chat(None, cid), fh, indent=1,
-                  default=str)
+        json.dump(chat_export(cid), fh, indent=1, default=str)
     md_path = os.path.join(args.out, "transcript.md")
     with open(md_path, "w") as fh:
         fh.write(transcript(cid, played, fired, prose, knowledge))
