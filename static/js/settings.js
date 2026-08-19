@@ -1662,7 +1662,10 @@ function renderGuestInvitePanel(chatId) {
                   "This link works once, expires in 30 minutes, and only lets them play as "
                   + p.name + ". They'll need this to actually be reachable -- run a tunnel "
                   + "(e.g. cloudflared tunnel --url http://localhost:8008) and swap this "
-                  + "page's origin for the tunnel's public URL before sending it."),
+                  + "page's origin for the tunnel's public URL before sending it. "
+                  + "Start the server with SONDER_PUBLIC=1 when you do: without it the "
+                  + "session cookies are sent without the Secure flag, so anything that "
+                  + "reaches this origin over plain http can read them."),
                 el("input", { readonly: "", value: link, style: "width:100%", onclick: e => e.target.select() }),
                 el("div", { class: "row", style: "margin-top:8px" },
                   el("button", { class: "primary", onclick: () => { navigator.clipboard?.writeText(link); toast("Copied.", "ok") } }, "📋 Copy link"))));
@@ -3540,12 +3543,17 @@ function extensionSettingsSections(extId) {
   });
 }
 
+//: Whether the extensions dialog THIS function opened is still the one on
+//: screen. Held across calls because the menu re-opens itself to show the
+//: result of an enable, a disable, an install, a removal or an update check.
+let extensionsDialog = null;
+
 async function openExtensionsMenu() {
   let data;
   try { data = await api("GET", "/api/extensions"); }
   catch (e) { return toast(e.message, "err"); }
 
-  modal("Extensions", b => {
+  const build = b => {
     if (data.safe_mode) {
       b.append(el("div", { class: "card" },
         el("b", {}, "Safe mode"),
@@ -3753,7 +3761,37 @@ async function openExtensionsMenu() {
       "A capability list is what the extension DECLARES, checked against what "
       + "it registers. It is a statement of intent for you to judge, not a "
       + "restriction the engine enforces."));
-  });
+  };
+
+  // A REFRESH REPLACES THIS DIALOG; IT DOES NOT OPEN A SECOND ONE.
+  //
+  // Five things inside this menu re-open it to show their result — check for
+  // updates, enable, disable, install, remove — and `modal()` pushes whatever
+  // is currently open onto `S.modalStack` before drawing. So each of those
+  // stacked another copy of the extensions menu on top of the one the reader
+  // was already looking at, and every dismissal revealed the previous copy,
+  // holding data one action older each time. Reported live: enable, disable
+  // and check-for-updates each yielding another instance.
+  //
+  // Rebuilding in place rather than closing first, because closing POPS the
+  // stack and would restore whatever dialog this menu was opened over.
+  //
+  // Ownership rather than a marker on the shared box: a marker has to be
+  // CLEARED, and every path that could clear it belongs to `modal()` and
+  // `closeModal()` rather than here — so it would go stale the moment the
+  // reader closed this menu and opened something else, and the refresh would
+  // then rebuild the extensions list inside an unrelated dialog.
+  // `modalOwnership()` already answers "is the dialog I opened still the one
+  // on screen", and answers it correctly when a stacked child closes and
+  // restores us.
+  if (extensionsDialog && extensionsDialog()) {
+    const body = $("#modalbody");
+    body.innerHTML = "";
+    build(body);
+    return;
+  }
+  modal("Extensions", build);
+  extensionsDialog = modalOwnership();
 }
 
 $("#b-extensions").onclick = openExtensionsMenu;
