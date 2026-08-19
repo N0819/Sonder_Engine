@@ -762,8 +762,19 @@ def checkpoint_storage_status(chat_id=None):
     question is how the panel and the mover came to disagree in both
     directions -- a store whose first entry was already compacted reported
     done with inline vectors still in it, and a store whose vectors the mover
-    refuses reported legacy forever while every run rewrote nothing. The scan
-    stops at the first movable entry, so the common case still costs one.
+    refuses reported legacy forever while every run rewrote nothing. The entry
+    scan stops at the first movable one, so it costs a single check on a store
+    that has anything to convert.
+
+    NOT cheap in the way this docstring used to claim. It selects and
+    `json.loads` every checkpoint blob in scope -- on the corpus this module
+    was written for (4.4 GB, 94.5% of it checkpoints) that is the whole store,
+    and `start_compaction` calls it on every click before deciding whether
+    there is anything to do. The claim was written for an implementation that
+    read one entry's worth; this one reads all of it. Anyone making this
+    cheaper wants a pre-filter that never says "no" to a blob holding an
+    inline vector -- the entry scan below is the only thing allowed to answer
+    that question.
     """
     where, args = ["1=1"], []
     if chat_id is not None:
