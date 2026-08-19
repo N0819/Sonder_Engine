@@ -23,13 +23,28 @@ def _keys_str(value):
 # many call sites and tests that use it.
 _stable_event_key = stable_event_key
 
-def _clamp(value, lo=0.0, hi=1.0):
-    try:
-        return max(lo, min(hi, float(value)))
-    except Exception:
-        return lo
+# `_clamp` used to be written out here as well as in `mind/memory.py`, with
+# separate callers each and nothing reporting them if they drifted (audit
+# STORY-F11's shape). It belongs to `mind.memory`, whose confidences and
+# saliences are what it bounds; `persist/commit.py` re-exports it, so
+# `from commit import _clamp` is unaffected.
+from mind.memory import _clamp  # noqa: F401
+
 
 def _normalize_character_output(out):
+    """Legacy `inference_updates` read as `mind_model_updates`.
+
+    THIS IS THE OWNER, and `agents/common.py` imports it -- not the other way
+    round, though the character stage is the more natural home for it. The
+    import direction is forced: `agents/__init__.py` imports `background.py`,
+    which imports `persist.commit` at module scope, so `commit_common`
+    importing `agents.common` closes a cycle at interpreter start. Recorded
+    because the obvious repair is the one that does not work.
+
+    A second CALLER is legitimate and is why the shape survives: the character
+    stage runs this on what the model returned, and commit runs it again on a
+    rehydrated result, which never passed through the stage.
+    """
     if not out.get("mind_model_updates") and out.get("inference_updates"):
         converted = []
         for update in out["inference_updates"]:

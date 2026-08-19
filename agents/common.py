@@ -3072,20 +3072,13 @@ def _append_micro_view(base_view, additions):
     parts.extend(str(item).strip() for item in additions if str(item or "").strip())
     return "\n\n".join(part for part in parts if part)
 
-def _normalize_character_output(out):
-    if not out.get("mind_model_updates") and out.get("inference_updates"):
-        converted = []
-        for update in out["inference_updates"]:
-            converted.append({
-                "about_entity": str(update.get("about") or "unknown"),
-                "kind": "goal",
-                "claim": str(update.get("conclusion") or ""),
-                "confidence": float(update.get("confidence", 0.5)),
-                "evidence": [{"event_id": "", "fact": str(update.get("basis") or "")}],
-                "alternatives": [],
-            })
-        out["mind_model_updates"] = converted
-    return out
+# Defined in `persist/commit_common.py` and imported through the `commit`
+# facade rather than copied: this module and commit both run it, on the model's
+# output and on a rehydrated result respectively, and two copies of one shape
+# normalisation is how the two come to disagree about what a legacy field
+# means (audit STORY-F11's shape). The direction is forced by an import cycle
+# -- see that function's docstring.
+from persist.commit import _normalize_character_output  # noqa: E402,F401
 
 
 def declared_goal(result):
