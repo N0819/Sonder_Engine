@@ -148,6 +148,24 @@
 
 <div id="toasts" aria-live="polite" aria-atomic="false"></div>
 
+<!-- One namespace, loaded in order. Two rules follow from that, and they are
+     opposites on purpose:
+
+     A file may call FORWARD to a name a later file defines, as a bare
+     identifier, provided the call is deferred into a callback -- it resolves
+     when the click happens, by which time every script on the page has run.
+     `boot`, `renderSide`, `openChat` and `newChatWizard` are reached that way
+     from four files and are deliberately NOT `typeof`-guarded: they are the
+     host, not an accessory, and guarding one would turn a missing core script
+     from a loud throw (which the error net in app.js toasts) into a click
+     that silently does nothing -- the exact failure that net exists to end.
+
+     An OPTIONAL module is `typeof`-guarded at every call: weather, chime,
+     backdrops, ambience, the vitals HUD, extensions. None of them may be able
+     to abort a boot or a render by not being there.
+
+     What neither rule permits is calling any of it at top level from a file
+     that loads earlier. -->
 <script src="/static/js/utils.js"></script>
 <script src="/static/js/components.js"></script>
 <script src="/static/js/editors.js"></script>

@@ -78,3 +78,31 @@ def test_no_file_overwrites_a_global_another_file_declares():
                 overwrites.append(f"window.{name} in {path.name} overwrites "
                                   f"the declaration in {owner}")
     assert not overwrites, "; ".join(sorted(overwrites))
+
+
+# The host's own entry points, as opposed to an optional module. These are
+# reached FORWARD as bare identifiers from four files, deliberately unguarded:
+# guarding one would turn a missing core script from a loud throw (which the
+# error net in app.js toasts) into a click that silently does nothing.
+HOST_ENTRY_POINTS = ("boot", "renderSide", "openChat", "newChatWizard")
+
+
+def test_no_file_calls_a_host_entry_point_at_load_time():
+    """A forward reference is safe when it is DEFERRED -- it resolves when the
+    click happens, by which time every script on the page has run. What is not
+    safe is calling one at top level from a file that loads earlier, which
+    would run before the definition exists. That is the actual hazard in a
+    single namespace ordered by <script> tags, and the guard `typeof` offers is
+    not a substitute for it.
+    """
+    offenders = []
+    for path in _loaded_files():
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line or line[:1].isspace() or line.lstrip().startswith("//"):
+                continue
+            for name in HOST_ENTRY_POINTS:
+                if re.match(r"^(await\s+)?%s\s*\(" % name, line.strip()):
+                    if path.name == "app.js" and name == "boot":
+                        continue  # its own file, after its own definition
+                    offenders.append(f"{path.name}:{number} {line.strip()[:60]}")
+    assert not offenders, "; ".join(offenders)
