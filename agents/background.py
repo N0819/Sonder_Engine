@@ -258,8 +258,46 @@ def _result(selected, reactions, mode="background_react", agent_calls=None):
     }
 
 
+def _merge_stage_results(manager, backstop):
+    """One step output from both paths that ran.
+
+    When the scene manager fires for A and B while C carries an unpaid routed
+    debt, control falls through to the per-presence path -- and `out` was then
+    never referenced again. A's and B's lines went on the floor with the
+    blurbs and the claims, after the `blurb_mint` call that produced them had
+    already been paid for, and because nothing persists a blurb until commit
+    they were minted again on the next beat. The fall-through exists to pay a
+    debt the manager could not see; it was never a reason to discard what the
+    manager did see.
+
+    Reactions dedupe by presence and the manager's stand: it has already
+    spoken for them this beat.
+    """
+    if not manager:
+        return backstop
+    reactions = list(manager.get("reactions") or [])
+    spoken = {str(r.get("name") or "").casefold() for r in reactions}
+    for reaction in (backstop.get("reactions") or []):
+        if str(reaction.get("name") or "").casefold() in spoken:
+            continue
+        reactions.append(reaction)
+    selected = list(dict.fromkeys(
+        [*(manager.get("selected") or []), *(backstop.get("selected") or [])]))
+    merged = _result(
+        selected, reactions,
+        mode="+".join(m for m in (manager.get("mode"), backstop.get("mode"))
+                      if m),
+        agent_calls=[*(manager.get("agent_calls") or []),
+                     *(backstop.get("agent_calls") or [])])
+    for key in ("blurbs", "claims"):
+        if manager.get(key):
+            merged[key] = manager[key]
+    return merged
+
+
 def background_react(ctx, nonce):
     dr = ctx.get("director_resolve") or {}
+    manager = None
     try:
         from story.scene import background_config
         cfg = background_config(ctx.chat.id)
@@ -303,11 +341,19 @@ def background_react(ctx, nonce):
         # and a routed line is directed by construction.
         if not out["fired"] and level == "full" and not _unpaid:
             return out
+        # Falling through to pay `_unpaid`. Whatever the manager already did
+        # stands and is merged back in at the end.
+        manager = out
     cap = int(cfg.get("max_reactors", 1) or 1)
     cap = max(1, min(3, cap))  # hard ceiling; beyond this a crowd is a chorus
     names = pick_background_reactors(ctx, dr, cap=cap)
+    # A presence the manager already voiced has been spoken for; asking again
+    # would give them two lines in one beat and cost a call to do it.
+    _voiced = {str(r.get("name") or "").casefold()
+               for r in ((manager or {}).get("reactions") or [])}
+    names = [n for n in names if str(n).casefold() not in _voiced]
     if not names:
-        return _result([], [])
+        return _merge_stage_results(manager, _result([], []))
 
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold() for e in (ctx.extra_players or [])}
@@ -336,8 +382,10 @@ def background_react(ctx, nonce):
                            presences.get(name) or {}, nonce)
         if entry:
             reactions.append(entry)
-    return _result(names, reactions, mode="background_react",
-                   agent_calls=["background_react"] * len(reactions))
+    return _merge_stage_results(
+        manager,
+        _result(names, reactions, mode="background_react",
+                agent_calls=["background_react"] * len(reactions)))
 
 
 # ---------------------------------------------------------------------------
