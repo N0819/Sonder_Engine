@@ -62,7 +62,7 @@ from world.spatial_barriers import (
     _BARRIER_CLOSED_FORM, _BARRIER_CLOSED_QUALIFIERS, _barrier_exact,
     _BARRIER_OPEN_FORM, _BARRIER_OPEN_QUALIFIERS, _BARRIER_SEAL_QUALIFIERS,
     _BARRIER_SEALED_FORM, _OPENING_WORDS, _PASSABLE_BARRIERS, _SCENT_BARRIER_LEVELS,
-    _SIGHT_BARRIERS, _VALID_BARRIERS, normalize_barrier,
+    _SIGHT_BARRIERS, _VALID_BARRIERS, neighbor_map, normalize_barrier,
     normalize_scene_barriers, unresolved_barrier_words,
 )
 
