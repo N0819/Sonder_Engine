@@ -61,6 +61,7 @@ from world.spatial import (
     entity_arc,
     entity_side,
     hear_level,
+    _sense_channel,
     sense_adjusted,
     proximity_rel,
     same_subject,
@@ -836,6 +837,40 @@ def body_region_percepts(bare_details):
     return out
 
 
+#: Engine sense channel (world.spatial's vocabulary) -> percept channel.
+#: The two names for the olfactory channel are a genuine split rather than a
+#: synonym: `world/spatial_senses.py` grades a `scent`, and a percept rides
+#: the `smell` a mind receives.
+_ENGINE_CHANNEL_PERCEPT = {"sight": "sight", "hearing": "hearing",
+                           "scent": "smell"}
+
+
+def _ambient_channel(event):
+    """Which channel an authored sensory event rides.
+
+    THE PROMPT AND THE READER NAMED DIFFERENT FIELDS. `director_establish`
+    asks for `sensory_events:[{kind,description,source_room,...}]` in both
+    packs; this function read `channel` alone, so all 199 stored events in the
+    live corpus fell to `mixed` and the smell channel had no producer at all.
+    `channel` still wins where something emits it -- the reader's own spelling
+    is not withdrawn -- and `kind` is read because that is what is written.
+
+    A word this engine has no channel for stays `mixed`. A fiction may invent
+    a sense (`spiritual_pressure` is a real stored row) and inventing one must
+    cost the event nothing.
+    """
+    for field in ("channel", "kind", "sense"):
+        raw = str(event.get(field) or "").strip()
+        if not raw:
+            continue
+        if raw.casefold() in CHANNELS:
+            return raw.casefold()
+        mapped = _ENGINE_CHANNEL_PERCEPT.get(_sense_channel(raw) or "")
+        if mapped:
+            return mapped
+    return "mixed"
+
+
 def ambient_percepts(sensory_events, observer_room):
     """Authored opening sensory events, filtered by room scope. An event
     naming a room is admitted only to observers in that room; a roomless
@@ -844,16 +879,15 @@ def ambient_percepts(sensory_events, observer_room):
     for idx, event in enumerate(sensory_events or []):
         if not isinstance(event, dict):
             continue
-        room = str(event.get("room") or event.get("room_id") or "")
+        room = str(event.get("room") or event.get("room_id")
+                   or event.get("source_room") or "")
         if room and observer_room and room != str(observer_room):
             continue
         desc = str(event.get("desc") or event.get("description")
                    or event.get("text") or "").strip()
         if not desc:
             continue
-        channel = str(event.get("channel") or "mixed").casefold()
-        if channel not in CHANNELS:
-            channel = "mixed"
+        channel = _ambient_channel(event)
         out.append(Percept(
             kind="ambient", channel=channel, data={"desc": desc},
             salience=0.4,
