@@ -1100,11 +1100,25 @@ def _render_presence_group(percepts):
         rendered = []
         for clause in clauses:
             n = counts[clause]
-            if n > 1 and clause.startswith(DIM_FIGURE + " "):
+            # Against the ACTIVE pack's label, not the English compat export.
+            # Layer A mints this label through `_dim_figure()`, so comparing
+            # it to `DIM_FIGURE` asks whether the story is in English -- and
+            # where it is not, this `startswith` can never be true and the
+            # rule silently does not run. What that costs is the COUNT:
+            # identical clauses collapse either way, so an observer who can
+            # plainly see two figures was told about one.
+            #
+            # The wording around the label stays English on purpose. This is
+            # `_render_view_english`, the reference renderer a pack's own
+            # adapter falls back to when it raises, and its contract is that
+            # a malformed pack costs wording and never the beat. Losing a
+            # fact the observer's own eyes have is not wording.
+            singular, plural = _dim_figure(), _dim_figure(True)
+            if n > 1 and clause.startswith(singular + " "):
                 word = _COUNT_WORDS.get(n, str(n))
                 rendered.append(
-                    f"{word.casefold()} {DIM_FIGURES}"
-                    + clause[len(DIM_FIGURE):].replace(" is ", " are ", 1))
+                    f"{word.casefold()} {plural}"
+                    + clause[len(singular):].replace(" is ", " are ", 1))
             else:
                 rendered.append(clause)
         out.append((group[0], _cap(_join_clauses(rendered)) + "."))
