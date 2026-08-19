@@ -1012,18 +1012,6 @@ def _sector_phrases():
     return _phrase_table("sector_phrases")
 
 
-#: English compatibility views for tests and audits.
-_SOUND_BARRIER_PHRASES = {
-    "open": "through the opening", "open_door": "through the doorway",
-    "closed_door": "through the door", "window": "through the window",
-    "bars": "through the bars", "membrane": "through the curtain",
-    "wall": "beyond the wall",
-}
-
-_SECTOR_PHRASES = {"ahead": "ahead of you", "behind": "behind you",
-                   "left": "to your left", "right": "to your right"}
-
-
 def _edge_vertical(scene: dict, from_room, to_room) -> Optional[str]:
     """The normalized up/down of the edge between two rooms, read from
     `from_room`'s side (reciprocal edges flip, per normalize_scene_bearings)."""
