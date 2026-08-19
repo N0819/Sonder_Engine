@@ -10,9 +10,11 @@ from llm.providers import (
     chat_complete, token_sink, embed_texts, request_timeout,
     clamp_read_timeout,
 )
-from llm.prompts import EXTRA_PARTS_NOTE, get_prompt
+from llm.prompts import get_prompt
 from language_runtime import language_pack
 from story.character_schema import (
+    _outfit_items as character_schema_outfit_items,
+    character_card_warnings,
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
     character_name,
@@ -347,14 +349,10 @@ _OUTFIT_LINE_RE = re.compile(
 )
 
 
-def _outfit_items(value):
-    if isinstance(value, dict):
-        value = value.get("wearing") or value.get("items") or []
-    if isinstance(value, str):
-        value = re.split(r"[;\n]+", value)
-    if not isinstance(value, list):
-        value = [value] if value else []
-    return [str(item).strip() for item in value if str(item or "").strip()]
+#: Imported here rather than restated: the card format owns what an outfit
+#: list is, and two helpers of this name with two rules is how a duplicate
+#: garment came to survive one pass and be dropped by the next.
+_outfit_items = character_schema_outfit_items
 
 
 def _heuristic_appearance_and_outfit(card):
@@ -535,84 +533,12 @@ def import_character(payload, reinterpret=False):
     return cid, sheet
 
 
-def character_import_warnings(sheet):
-    """What is missing from an imported sheet that will make the character
-    read as passive, as a list of human-readable strings.
+#: The card-quality pass lives with the format it validates
+#: (`character_schema.character_card_warnings`). It is imported here under
+#: its old name because the import route calls it that; it was never an
+#: import check -- a sheet is missing a drive whichever surface built it.
+character_import_warnings = character_card_warnings
 
-    psychology.drive is where every proactive want comes from (prompts.py's
-    WANTS AND GOALS rule) and initial_state.goals are the durable objectives
-    on top of it. A card that supplies neither imports cleanly and then only
-    ever reacts -- which looks like a dull character rather than a missing
-    field, so it has to be said out loud at import time. The heuristic
-    (LLM-free) path cannot invent either one by construction.
-    """
-    warnings = []
-    psychology = sheet.get("psychology") or {}
-    drive = psychology.get("drive") or {}
-    if not str(drive.get("essence") or "").strip():
-        warnings.append(
-            "No drive was authored for this character, so they will react "
-            "rather than pursue anything. Add psychology.drive in the "
-            "character editor, or re-import with AI reinterpretation."
-        )
-    if not (sheet.get("initial_state") or {}).get("goals"):
-        warnings.append(
-            "No standing goals were authored, so this character has nothing "
-            "they are trying to achieve between beats."
-        )
-    # Not a defect -- the default is exactly the pair every story ran on before
-    # this dial existed, so an unset one cannot misbehave. It is named because
-    # nobody looks for a field they do not know is there, and a character who
-    # should be single-minded or should juggle will otherwise be authored at
-    # the middle rung forever by omission.
-    if not str(psychology.get("capacity") or "").strip():
-        warnings.append(
-            "No attentional capacity was authored, so this character holds the "
-            "ordinary three wants and four intentions. Set psychology.capacity "
-            "(narrow / focused / ordinary / broad / wide) to make them "
-            "single-minded or to let them keep more in the air at once."
-        )
-    if _prose_names_a_part(sheet) and not (
-            (sheet.get("embodiment") or {}).get("extra_parts")):
-        warnings.append(
-            "This card describes a body part in prose that is not declared in "
-            "embodiment.extra_parts, so the engine cannot see, cover or touch "
-            "it — nobody in the story will ever notice it. Add it under Extra "
-            "body parts in the character editor, or re-import with AI "
-            "reinterpretation."
-        )
-    return warnings
-
-
-# Nouns whose presence in a body DESCRIPTION means the body is not the human
-# default. Deliberately a small, high-precision list rather than an anatomy:
-# this only decides whether to say a sentence to the author, and a false
-# positive costs a wrong warning on a card that mentions a horn of ale.
-# `_EXTRA_PART_PLACEMENTS` in character_schema is the sibling table -- it is
-# for placing a declared part, this is for noticing an undeclared one.
-_PART_WORDS = (
-    "tail", "tails", "wing", "wings", "horn", "horns", "antler", "antlers",
-    "tentacle", "tentacles", "halo", "fox ears", "cat ears", "wolf ears",
-    "animal ears", "extra arms", "second pair of arms",
-)
-
-
-
-def _prose_names_a_part(sheet):
-    """Does this card's BODY prose describe a part the schema would want?
-
-    Only the visible-body fields, never psychology or history: a character
-    who "turned tail" or values "taking the bull by the horns" has no anatomy
-    in either sentence, and a warning about one would teach an author to stop
-    reading warnings.
-    """
-    visible = ((sheet.get("embodiment") or {}).get("visible") or {})
-    text = " ".join(str(visible.get(field) or "") for field in
-                    ("summary", "build", "face", "hair", "eyes")).casefold()
-    text += " " + " ".join(str(item or "") for item
-                           in (visible.get("distinctive_features") or [])).casefold()
-    return any(re.search(r"\b%s\b" % re.escape(word), text)
-               for word in _PART_WORDS)
 
 def recover_greetings_from_source(char_id):
     """Backfill opening.greetings for an already-imported character from its
@@ -740,7 +666,10 @@ def draft_promoted_character(chat_id, name):
     grounded in every turn's actual record of them rather than a blank
     brief. Returns the draft for review -- nothing is written to the
     characters/chat_chars tables here; see app.py's confirm endpoint for
-    the actual attach step, so the user can edit before committing.
+    the actual attach step, so the user can edit before committing. The
+    draft carries `character_card_warnings` for the same reason the import
+    response does: review is the only point at which an empty drive is still
+    cheap to fix.
     """
     evidence = _promotion_evidence(chat_id, name)
     if not evidence:
@@ -785,6 +714,11 @@ def draft_promoted_character(chat_id, name):
         "sheet": sheet,
         "memory_seeds": memory_seeds,
         "evidence_turns": [e["turn"] for e in evidence],
+        # A promotion is a card-creating surface like any other, and the one
+        # the author is least likely to audit: the sheet is model-written and
+        # the review screen is the last moment before this person starts
+        # generating beats. Same pass the import route runs.
+        "warnings": character_card_warnings(sheet),
     }
 
 def generate_character(brief, language="en"):
@@ -1094,6 +1028,31 @@ def generate_persona(brief, language="en"):
     )
     return pid, sheet
 
+#: Exactly what `guess_category` below can return -- a six-way guess over an
+#: entry's text, and NOT `memory.LORE_CATEGORIES`, which is the twelve-value
+#: vocabulary an entry's own authored `category` field uses. Confusing the two
+#: is how `guess_book_type`'s map came to carry rows for `character` and
+#: `knowledge`, which nothing feeding it can produce, while `myth` and `other`
+#: -- which it produces constantly -- had no row at all.
+GUESSABLE_CATEGORIES = ("layout", "mechanic", "myth", "event", "location",
+                        "other")
+
+#: The book type a guessed category implies. Its domain is exactly
+#: `GUESSABLE_CATEGORIES`, bound by a test, because a reader adding a branch
+#: to the guess has no other signal that this is the thing that must change.
+_BOOK_TYPE_BY_CATEGORY = {
+    "location": "location",
+    "layout": "location",
+    "mechanic": "system",
+    "event": "events",
+    # A book of legends, prophecy and religion is world lore. It fell to
+    # "general" before, along with everything genuinely unclassifiable, which
+    # made the two indistinguishable to every later reader.
+    "myth": "world",
+    "other": "general",
+}
+
+
 def guess_category(keys, content):
     t = ((keys or "") + " " + (content or "")).lower()
 
@@ -1130,14 +1089,7 @@ def guess_book_type(entries):
     if counts[top] < max(2, len(entries) * 0.5):
         return "general"
 
-    return {
-        "location": "location",
-        "layout": "location",
-        "mechanic": "system",
-        "event": "events",
-        "character": "characters",
-        "knowledge": "knowledge",
-    }.get(top, "general")
+    return _BOOK_TYPE_BY_CATEGORY.get(top, "general")
 
 def _batch_entries_by_chars(entries, max_batch_chars):
     batches, current, current_chars = [], [], 0

@@ -119,3 +119,47 @@ def test_endpoint_returns_greeting_without_persisting(temp_db, monkeypatch):
     sheet = json.loads(temp_db.q("SELECT sheet FROM characters WHERE id=?",
                                  (cid,), one=True)["sheet"])
     assert not (sheet.get("opening") or {}).get("greetings")
+
+
+# --- the wrapping a model puts around prose it was asked for straight -------
+#
+# `_strip_greeting_wrapping` promised three peels and performed one. The
+# quote branch computed a four-term condition and its whole body was `pass`,
+# so a greeting arriving inside one pair of quotes kept them -- and the
+# condition could not have fired anyway: it counts straight and curly quotes
+# against each other in a way no ordinary wrapping satisfies.
+
+class TestWholeStringQuoteWrapping:
+    def test_a_greeting_wrapped_in_one_pair_of_quotes_is_unwrapped(self):
+        assert greetings._strip_greeting_wrapping(
+            '"Mara nods at you across the bar."'
+        ) == "Mara nods at you across the bar."
+
+    def test_curly_quotes_too(self):
+        assert greetings._strip_greeting_wrapping(
+            "\u201cMara nods at you across the bar.\u201d"
+        ) == "Mara nods at you across the bar."
+
+    def test_a_greeting_that_opens_with_dialogue_is_untouched(self):
+        text = '"You\'re late," Mara says, and pushes a glass across.'
+        assert greetings._strip_greeting_wrapping(text) == text
+
+    def test_a_greeting_that_is_all_dialogue_is_untouched(self):
+        """Starts and ends with a quote, and every one of them is content."""
+        text = '"You\'re late." Mara pushes a glass across. "Drink."'
+        assert greetings._strip_greeting_wrapping(text) == text
+
+    def test_a_greeting_that_ends_on_dialogue_is_untouched(self):
+        text = 'Mara looks up. "You\'re late."'
+        assert greetings._strip_greeting_wrapping(text) == text
+
+    def test_the_fence_still_comes_off_and_takes_the_quotes_with_it(self):
+        assert greetings._strip_greeting_wrapping(
+            '```\n"Mara nods."\n```'
+        ) == "Mara nods."
+
+    def test_a_leading_label_is_left_alone(self):
+        """Not peeled, deliberately: a short prefix before a colon is
+        indistinguishable from a speaker attribution, which is content."""
+        text = "Mara: You're late."
+        assert greetings._strip_greeting_wrapping(text) == text

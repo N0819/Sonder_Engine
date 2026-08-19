@@ -242,7 +242,7 @@ class PsychologyProfile(_PsychologyModel):
     # `affect.normalize_capacity`, so behaviour is `ordinary` either way -- but
     # backfilling it here would make "the author chose the middle" and "nobody
     # ever saw this field" the same stored value, and
-    # `importers.character_import_warnings` would then never fire on any card,
+    # `character_card_warnings` would then never fire on any card,
     # which is the exact silent-failure shape this dial was written to avoid.
     capacity: str = ""
 
@@ -395,8 +395,24 @@ def _float_or(value: Any, default: float) -> float:
 
 
 def _outfit_items(value: Any) -> list[str]:
+    """Whatever a card says it is wearing, as a list of garment names, once
+    each.
+
+    THE ONE READER, and it has to accept every shape the field arrives in
+    because there were two of these. `story/importers.py` had its own copy
+    that unwrapped a wrapper dict and did not dedupe, and this one deduped
+    and did not unwrap -- and both ran on the same import
+    (`heuristic_character_sheet` builds the outfit with one,
+    `normalize_character_data` re-reads it with the other), so which rule
+    applied to a card was decided by which same-named helper ran last. Each
+    failed at exactly what the other did: an outfit written
+    `{"wearing": [...]}` -- what older cards, imports and the generators all
+    produce -- came back here as ONE garment whose name is a Python dict.
+    """
     if value is None:
         return []
+    if isinstance(value, dict):
+        value = value.get("wearing") or value.get("items") or []
     if isinstance(value, str):
         value = [part for part in re.split(r"[;\n]+", value) if part.strip()]
     elif not isinstance(value, (list, tuple, set)):
@@ -646,14 +662,6 @@ def default_character_data(name: str = "Unnamed") -> dict:
     }
     return result
 
-def default_character_document(name: str = "Unnamed") -> dict:
-    return {
-        "schema": CHARACTER_SCHEMA,
-        "version": CHARACTER_VERSION,
-        "data": default_character_data(name),
-        "source": {"format": "native", "original": None},
-    }
-
 def default_persona_data(name: str = "Player") -> dict:
     return {
         "identity": {
@@ -679,14 +687,6 @@ def default_persona_data(name: str = "Player") -> dict:
         "competence": {"abilities": []},
         "knowledge": {"public_history": "", "private_history": []},
         "narration": {"voice_setting": ""},
-    }
-
-def default_persona_document(name: str = "Player") -> dict:
-    return {
-        "schema": PERSONA_SCHEMA,
-        "version": PERSONA_VERSION,
-        "data": default_persona_data(name),
-        "source": {"format": "native", "original": None},
     }
 
 def _list(value: Any) -> list:
@@ -1514,13 +1514,17 @@ def character_projects(sheet: dict) -> list[dict]:
     barren stretches, single successes, and the death of the tactics that
     serve it. See docs/design/DESIGN_LONG_TERM_GOALS.md.
 
-    At most two, because scarcity is what makes the tier mean anything --
-    the runtime cap (affect.PROJECT_CAP) holds the same line. Ids are
+    Capped at `affect.PROJECT_CAP` -- READ, not restated, because scarcity is
+    what makes the tier mean anything and two numbers for one line is how a
+    card comes to be allowed fewer projects than the runtime will adopt. Ids
+    are
     namespaced 'pa<n>' so they never collide with runtime-adopted 'p<n>'.
     Accepts plain strings as well as dicts, for the same reason
     character_standing_intentions does: a card written the obvious way must
     not silently get nothing.
     """
+    from mind import affect
+
     psych = normalize_character_data(sheet).get("psychology", {})
     out = []
     for i, p in enumerate(psych.get("projects") or [], 1):
@@ -1538,7 +1542,7 @@ def character_projects(sheet: dict) -> list[dict]:
             "satisfied_when": str(p.get("satisfied_when") or "").strip(),
             "authored": True, "adopted_turn": 0,
         })
-        if len(out) >= 2:
+        if len(out) >= affect.PROJECT_CAP:
             break
     return out
 
@@ -1614,9 +1618,6 @@ def senses_as_text(senses: Any) -> str:
         parts.append(part)
     return "; ".join(parts) if parts else "ordinary senses"
 
-def visible_appearance_payload(sheet: dict) -> dict:
-    return copy.deepcopy(normalize_character_data(sheet).get("embodiment", {}).get("visible", {}))
-
 def character_export_document(sheet: dict, source: dict | None = None) -> dict:
     return {
         "schema": CHARACTER_SCHEMA,
@@ -1632,3 +1633,90 @@ def persona_export_document(sheet: dict, source: dict | None = None) -> dict:
         "data": normalize_persona_data(sheet),
         "source": source or {"format": "native", "original": None},
     }
+
+
+def character_card_warnings(sheet):
+    """What is missing from a character CARD that will make them read as
+    passive, as a list of human-readable strings.
+
+    A sheet, not an import: this ran on one of the nine surfaces that create
+    or edit a card, and the blank-card route produces by construction the
+    exact sheet the first three warnings exist to catch -- empty drive, no
+    goals, unset capacity -- while saying nothing. Every card-producing
+    surface should ask; nothing about the answer depends on where the sheet
+    came from.
+
+    psychology.drive is where every proactive want comes from (prompts.py's
+    WANTS AND GOALS rule) and initial_state.goals are the durable objectives
+    on top of it. A card that supplies neither imports cleanly and then only
+    ever reacts -- which looks like a dull character rather than a missing
+    field, so it has to be said out loud at import time. The heuristic
+    (LLM-free) path cannot invent either one by construction.
+    """
+    warnings = []
+    psychology = sheet.get("psychology") or {}
+    drive = psychology.get("drive") or {}
+    if not str(drive.get("essence") or "").strip():
+        warnings.append(
+            "No drive was authored for this character, so they will react "
+            "rather than pursue anything. Add psychology.drive in the "
+            "character editor, or re-import with AI reinterpretation."
+        )
+    if not (sheet.get("initial_state") or {}).get("goals"):
+        warnings.append(
+            "No standing goals were authored, so this character has nothing "
+            "they are trying to achieve between beats."
+        )
+    # Not a defect -- the default is exactly the pair every story ran on before
+    # this dial existed, so an unset one cannot misbehave. It is named because
+    # nobody looks for a field they do not know is there, and a character who
+    # should be single-minded or should juggle will otherwise be authored at
+    # the middle rung forever by omission.
+    if not str(psychology.get("capacity") or "").strip():
+        warnings.append(
+            "No attentional capacity was authored, so this character holds the "
+            "ordinary three wants and four intentions. Set psychology.capacity "
+            "(narrow / focused / ordinary / broad / wide) to make them "
+            "single-minded or to let them keep more in the air at once."
+        )
+    if _prose_names_a_part(sheet) and not (
+            (sheet.get("embodiment") or {}).get("extra_parts")):
+        warnings.append(
+            "This card describes a body part in prose that is not declared in "
+            "embodiment.extra_parts, so the engine cannot see, cover or touch "
+            "it — nobody in the story will ever notice it. Add it under Extra "
+            "body parts in the character editor, or re-import with AI "
+            "reinterpretation."
+        )
+    return warnings
+
+
+# Nouns whose presence in a body DESCRIPTION means the body is not the human
+# default. Deliberately a small, high-precision list rather than an anatomy:
+# this only decides whether to say a sentence to the author, and a false
+# positive costs a wrong warning on a card that mentions a horn of ale.
+# `_EXTRA_PART_PLACEMENTS` in character_schema is the sibling table -- it is
+# for placing a declared part, this is for noticing an undeclared one.
+_PART_WORDS = (
+    "tail", "tails", "wing", "wings", "horn", "horns", "antler", "antlers",
+    "tentacle", "tentacles", "halo", "fox ears", "cat ears", "wolf ears",
+    "animal ears", "extra arms", "second pair of arms",
+)
+
+
+
+def _prose_names_a_part(sheet):
+    """Does this card's BODY prose describe a part the schema would want?
+
+    Only the visible-body fields, never psychology or history: a character
+    who "turned tail" or values "taking the bull by the horns" has no anatomy
+    in either sentence, and a warning about one would teach an author to stop
+    reading warnings.
+    """
+    visible = ((sheet.get("embodiment") or {}).get("visible") or {})
+    text = " ".join(str(visible.get(field) or "") for field in
+                    ("summary", "build", "face", "hair", "eyes")).casefold()
+    text += " " + " ".join(str(item or "") for item
+                           in (visible.get("distinctive_features") or [])).casefold()
+    return any(re.search(r"\b%s\b" % re.escape(word), text)
+               for word in _PART_WORDS)
