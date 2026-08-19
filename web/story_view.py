@@ -56,6 +56,15 @@ from core.db import q, wget, wset
 #: schema-2 ids for continuity will see every anonymous id change exactly
 #: once, which is a break worth a version: silence would look like every
 #: stranger in the story being replaced.
+#:
+#: Still 3: `player_view` gained `frame` (matching `story_view`'s), with no
+#: bump, and the difference from the `people` bump is the reason. `people`
+#: collided with "absent means absent" -- after the change an omitted key
+#: meant "empty roster", so absence changed meaning and only a version could
+#: disambiguate. `frame` is ALWAYS present once it exists (`None` is the
+#: present era's identifier, not a default), so absence still unambiguously
+#: means "engine predates the field" and the key itself is the capability
+#: check.
 STORY_VIEW_SCHEMA = 3
 
 #: How many committed world events a view carries by default. Bounded because
@@ -77,13 +86,27 @@ def _chat_row(chat_id):
     return q("SELECT * FROM chats WHERE id=?", (int(chat_id),), one=True)
 
 
+#: "The frame of the latest committed turn, whichever frame that is" -- the
+#: default frame selection, and a SENTINEL rather than a default of `None`,
+#: because `None` is not available to mean "unselected" here: it is the
+#: engine's own identifier for the implicit present era (`turns.frame_id IS
+#: NULL`, `db.active_frame_id`'s default, `frames.get_frame(None)`), and a
+#: caller must be able to ask for the present explicitly. Module-private twin
+#: in `extension_runtime/api.py`; the two are deliberately different objects
+#: so a facade-layer sentinel can never travel into this module as a value.
+_LATEST_FRAME = object()
+
+
 def latest_turn(chat_id, frame_id=None):
     """The newest committed turn, in one frame or across the story.
 
     `frame_id=None` means "whatever frame the story is actually on", which is
     what a caller outside the pipeline wants: `db.active_frame_id` is a
     ContextVar set for the duration of a turn, so a route reading it gets the
-    default and not the answer.
+    default and not the answer. (Note the spelling collision this predates:
+    everywhere else in the frame machinery `None` names the PRESENT era. The
+    view functions below therefore never pass `None` here to mean a frame --
+    an explicit frame, the present included, goes through `_turn_in_frame`.)
     """
     if frame_id is None:
         return q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",
@@ -92,28 +115,81 @@ def latest_turn(chat_id, frame_id=None):
              "ORDER BY idx DESC LIMIT 1", (int(chat_id), frame_id), one=True)
 
 
-def _frame_of(turn):
-    if not turn or turn["frame_id"] is None:
+def _turn_in_frame(chat_id, frame_id):
+    """The newest committed turn of ONE era, `None` (the present) included.
+
+    `IS ?` rather than `=?` so a bound `None` matches the present's
+    `frame_id IS NULL` turns instead of matching nothing.
+    """
+    return q("SELECT * FROM turns WHERE chat_id=? AND frame_id IS ? "
+             "ORDER BY idx DESC LIMIT 1", (int(chat_id), frame_id), one=True)
+
+
+def _frame_from_id(frame_id):
+    """One frame as the view reports it. `None` is the implicit present era;
+    a frame row that no longer exists is also reported as `None`, matching
+    what an orphaned turn's frame has always been reported as."""
+    if frame_id is None:
         return None
-    row = q("SELECT * FROM frames WHERE id=?", (turn["frame_id"],), one=True)
+    row = q("SELECT * FROM frames WHERE id=?", (frame_id,), one=True)
     if not row:
         return None
     return {"id": row["id"], "label": row["label"], "ordinal": row["ordinal"],
             "kind": row["kind"]}
 
 
-def _reading_frame(turn):
-    """Read everything in ONE frame: the frame of the turn being reported.
+def _require_frame(chat_id, frame_id):
+    """An explicitly selected frame, validated, or a refusal.
 
-    `latest_turn(chat_id)` deliberately picks the newest turn across every
-    frame -- "whatever frame the story is actually on". Every world read
-    beside it routes through `db.active_frame_id`, a ContextVar that is unset
-    outside a pipeline run and therefore answers for the PRESENT frame. A
-    projection built from both reported one frame's label beside another
-    frame's rooms, positions, clock and recognition ledger, which is a world
-    nobody is standing in. Resolving the frame once and holding it for the
-    whole read is the only way the two can agree; the alternative is
-    remembering to pass a frame to every `wget` in the module, forever.
+    `None` (the present) is valid for every chat. A frame id that does not
+    exist and a frame id belonging to ANOTHER chat get the same refusal on
+    purpose: a caller holding chat A must not be able to use this read to
+    confirm which frame ids exist in chat B.
+    """
+    if frame_id is None:
+        return None
+    from core.frames import get_frame
+
+    frame = get_frame(frame_id)
+    if frame is None or int(frame["chat_id"]) != int(chat_id):
+        raise ValueError(f"no frame {frame_id!r} in chat {int(chat_id)}")
+    return int(frame_id)
+
+
+def _resolve_reading(chat_id, frame_id):
+    """`(turn, frame_id)` for one view: the turn being reported and the ONE
+    frame every read beside it will be held in.
+
+    Omitted (`_LATEST_FRAME`) resolves the latest committed turn across every
+    frame, ONCE -- the frame is then fixed for the whole view, and for any
+    sibling view a caller builds with the resolved id, rather than re-derived
+    per read. A story with no turns at all is standing in the present.
+
+    An explicit frame (the present's `None` included) is validated and then
+    reported even when it holds no turns: a frame's state can legitimately
+    exist before any turn runs there (provisioning seeds it), so "no turn yet"
+    is `turn=None` beside that frame's state, not an error and not a silent
+    fallback to a different frame.
+    """
+    if frame_id is _LATEST_FRAME:
+        turn = latest_turn(chat_id)
+        return turn, (turn["frame_id"] if turn else None)
+    frame_id = _require_frame(chat_id, frame_id)
+    return _turn_in_frame(chat_id, frame_id), frame_id
+
+
+def _reading_frame_id(frame_id):
+    """Read everything in ONE frame, resolved once by `_resolve_reading`.
+
+    Every world read in a view routes through `db.active_frame_id`, a
+    ContextVar that is unset outside a pipeline run and therefore answers for
+    the PRESENT frame. A projection built without holding the resolved frame
+    reported one frame's label beside another frame's rooms, positions, clock
+    and recognition ledger, which is a world nobody is standing in. Resolving
+    the frame once and holding it for the whole read is the only way the two
+    can agree; the alternative is remembering to pass a frame to every `wget`
+    in the module, forever. The token is reset in `finally`, so nothing
+    ambient leaks past the view into the caller.
     """
     from contextlib import contextmanager
 
@@ -121,7 +197,7 @@ def _reading_frame(turn):
 
     @contextmanager
     def scope():
-        token = active_frame_id.set(turn["frame_id"] if turn else None)
+        token = active_frame_id.set(frame_id)
         try:
             yield
         finally:
@@ -188,6 +264,17 @@ def _rooms(chat_id):
 
 
 def _events(chat_id, limit):
+    """Recent committed world events. STORY-GLOBAL, deliberately, and the
+    frame selection above does not narrow them: `world_events` is the
+    objective record of what happened in the story, and objective truth is
+    not era-sliced in this engine -- entities, conditions and scheduled
+    events are chat-global too (`core/frames.py`'s module docstring calls the
+    slicing real follow-on work, not attempted). The frame machinery is an
+    EPISTEMIC cursor: it governs what a mind standing in an era may reach,
+    never what is true. So a frame-bound view still reports the whole
+    ledger's tail, and a consumer that wants one era's events filters on
+    `turn_id` itself, knowingly. Do not quietly add a frame filter here --
+    that would be inventing frame-partitioned truth nowhere else has."""
     rows = q("SELECT event_id, kind, location_id, occurred_at, turn_id, payload "
              "FROM world_events WHERE chat_id=? "
              "ORDER BY occurred_at DESC, rowid DESC LIMIT ?",
@@ -199,24 +286,33 @@ def _events(chat_id, limit):
             for row in reversed(rows)]
 
 
-def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT):
+def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT, frame_id=_LATEST_FRAME):
     """Canonical story state, versioned, read-only, serialisable.
 
     Ordinary values throughout: no ORM rows, no live scene dict, no mutation
     handle. A caller that receives the engine's own objects inherits every
     future change to them, which is the thing a facade exists to prevent.
+
+    `frame_id` selects the ONE era the whole view is read in. Omitted, it is
+    the latest committed turn's frame -- whatever frame the story is actually
+    on. `None` is an explicit selection: the implicit present era, which is
+    what `None` names throughout the frame machinery. An integer selects that
+    declared frame after verifying it belongs to this chat, and is honoured
+    even when the frame holds no turns yet (`turn` is then `None` beside the
+    frame's own state). `events` stays story-global whatever is selected --
+    see `_events` for why.
     """
     chat_id = int(chat_id)
     chat = _chat_row(chat_id)
     if not chat:
         raise ValueError(f"no chat {chat_id}")
 
-    turn = latest_turn(chat_id)
-    with _reading_frame(turn):
-        return _story_view_in_frame(chat_id, chat, turn, events)
+    turn, frame_id = _resolve_reading(chat_id, frame_id)
+    with _reading_frame_id(frame_id):
+        return _story_view_in_frame(chat_id, chat, turn, events, frame_id)
 
 
-def _story_view_in_frame(chat_id, chat, turn, events):
+def _story_view_in_frame(chat_id, chat, turn, events, frame_id):
     """The body of `story_view`, run with the reported frame held open."""
     from story.scene import get_scene, player_authority, simulation_clock
 
@@ -237,7 +333,7 @@ def _story_view_in_frame(chat_id, chat, turn, events):
             "scenario": chat["scenario"],
             "branched_from": _json(chat["branched_from"], []),
         },
-        "frame": _frame_of(turn),
+        "frame": _frame_from_id(frame_id),
         "turn": ({"id": turn["id"], "idx": turn["idx"],
                   "player_input": turn["player_input"]} if turn else None),
         "clock": simulation_clock(chat_id),
@@ -348,21 +444,32 @@ def _viewer_identity(chat_id, viewer_id):
     return None
 
 
-def _viewer_memories(chat_id, char_id, limit):
+def _viewer_memories(chat_id, char_id, limit, frame_id):
     """This character's own memories, newest last, with their provenance.
 
-    Their OWN: `char_id` is the whole filter, and it is the same filter the
-    character's payload is built with. A memory bank is per mind by
-    construction, so this cannot leak sideways -- there is no query here that
-    could return another mind's row.
+    Their OWN, twice over: `char_id` is the row filter, the same filter the
+    character's payload is built with -- a memory bank is per mind by
+    construction, so this cannot leak sideways. And the rows go through
+    `memory.visible_memory_rows`, the one seam that applies the
+    frame-visibility rule, so a view read in one era carries only what this
+    mind can reach FROM that era. This function used to be exactly the sixth
+    raw read that seam's comment predicts -- a fresh path that reproduced the
+    char_id filter and forgot the frame filter -- and the miss was invisible
+    until views became frame-selectable: a projection bound to a past era
+    handed its consumer the character's future-era memories, which is the one
+    thing a frame-bound read must never widen into. `before_turn_idx=None`
+    because a projection is a host browsing, not a mind deciding a beat.
     """
-    from mind.memory import provenance_context_label
+    from mind.memory import provenance_context_label, visible_memory_rows
 
-    rows = q("SELECT turn_idx, kind, category, provenance, gist, content, "
-             "salience, confidence FROM memories "
-             "WHERE chat_id=? AND char_id=? AND archived=0 "
-             "ORDER BY turn_idx DESC, id DESC LIMIT ?",
-             (int(chat_id), int(char_id), int(limit)))
+    rows = visible_memory_rows(int(chat_id), int(char_id),
+                               before_turn_idx=None, viewer_frame_id=frame_id,
+                               include_archived=False)
+    # Newest first -- highest turn_idx then id, turnless rows last -- matching
+    # the `ORDER BY turn_idx DESC, id DESC` this read had as raw SQL.
+    rows.sort(key=lambda row: (row["turn_idx"] is not None,
+                               row["turn_idx"] or 0, row["id"]), reverse=True)
+    rows = rows[:max(0, int(limit))]
     return [{"turn_idx": row["turn_idx"], "kind": row["kind"],
              "category": row["category"],
              "epistemic_origin": provenance_context_label(row["provenance"]),
@@ -661,7 +768,8 @@ def _people(chat_id, identity, turn):
                                       person["id"]))
 
 
-def player_view(chat_id, viewer="player", *, memories=12):
+def player_view(chat_id, viewer="player", *, memories=12,
+                frame_id=_LATEST_FRAME):
     """What this viewer may be shown. A security boundary, not a convenience.
 
     Every section is something the engine already decided this viewer has:
@@ -687,18 +795,31 @@ def player_view(chat_id, viewer="player", *, memories=12):
     Anything this cannot answer is missing from the result. There is no
     "unknown" filler and no default, because a UI cannot tell a guess from a
     fact and would render both the same way.
+
+    `frame_id` selects the ONE era the whole view is read in, with exactly
+    `story_view`'s vocabulary: omitted is the latest committed turn's frame,
+    `None` is explicitly the present, an integer is a declared frame verified
+    to belong to this chat. The selection is REPORTED under `frame`, so a
+    consumer composing this beside other frame-bound reads can check the
+    frames agree instead of trusting that they do. Selecting a frame is not a
+    wider read: the sections are still built only from what the engine
+    delivered to this viewer in that era -- that era's perception steps, that
+    era's recognition ledger, the frame-visibility slice of their own
+    memories -- so a frame this viewer's story never reached simply answers
+    with less, never with somebody else's view.
     """
     chat_id = int(chat_id)
     identity = _viewer_identity(chat_id, viewer)
     if identity is None:
         raise ValueError(f"no viewer {viewer!r} in chat {chat_id}")
 
-    turn = latest_turn(chat_id)
-    with _reading_frame(turn):
-        return _player_view_in_frame(chat_id, identity, turn, memories)
+    turn, frame_id = _resolve_reading(chat_id, frame_id)
+    with _reading_frame_id(frame_id):
+        return _player_view_in_frame(chat_id, identity, turn, memories,
+                                     frame_id)
 
 
-def _player_view_in_frame(chat_id, identity, turn, memories):
+def _player_view_in_frame(chat_id, identity, turn, memories, frame_id):
     """The body of `player_view`, run with the reported frame held open."""
     from story.scene import get_scene, simulation_clock
     from world.spatial import room_of
@@ -710,6 +831,7 @@ def _player_view_in_frame(chat_id, identity, turn, memories):
         "schema": STORY_VIEW_SCHEMA,
         "viewer": dict(identity),
         "story": {"chat_id": chat_id},
+        "frame": _frame_from_id(frame_id),
         "turn": ({"id": turn["id"], "idx": turn["idx"]} if turn else None),
         "clock": simulation_clock(chat_id),
     }
@@ -734,13 +856,26 @@ def _player_view_in_frame(chat_id, identity, turn, memories):
 
     if identity["kind"] == "character":
         char_id = int(identity["id"])
-        state = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
-                  (chat_id, char_id), one=True)
+        # The frame OVERLAY first (`chat_char_frames`), base row where the
+        # era never diverged. A stance is held by a mind being portrayed in
+        # one era -- the same rule the pipeline's own character reads follow
+        # -- and this read used to go straight to `chat_chars`, which is the
+        # present's row: one more world nobody is standing in, inside the
+        # very module that exists to prevent one. `=?` not `IS ?`: the
+        # present has no overlay rows, so a `None` frame must match nothing
+        # and fall through to the base row.
+        state = q("SELECT COALESCE(ccf.state, cc.state) AS state "
+                  "FROM chat_chars cc "
+                  "LEFT JOIN chat_char_frames ccf "
+                  "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id "
+                  " AND ccf.frame_id=? "
+                  "WHERE cc.chat_id=? AND cc.char_id=?",
+                  (frame_id, chat_id, char_id), one=True)
         stored = _json(state["state"], {}) if state else {}
         relationships = stored.get("relationships")
         if isinstance(relationships, dict) and relationships:
             view["relationships"] = relationships
-        remembered = _viewer_memories(chat_id, char_id, memories)
+        remembered = _viewer_memories(chat_id, char_id, memories, frame_id)
         if remembered:
             view["memories"] = remembered
     return view
