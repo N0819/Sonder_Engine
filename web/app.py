@@ -1622,8 +1622,15 @@ def _extension_id(eid: str) -> str:
 
 @app.get("/api/extensions")
 def extensions_list():
+    # `ext_api` and `host_capabilities` are the same discovery answer
+    # `api.api_version` / `api.capabilities` give the Python half, for the
+    # browser half, which cannot import anything. Named apart from each row's
+    # own `capabilities` on purpose: a row's are what that extension ASKED
+    # FOR; these are what the host PROVIDES.
     return {"extensions": extension_runtime.listing(),
             "load_errors": extension_runtime.load_errors(),
+            "ext_api": extension_runtime.EXT_API_VERSION,
+            "host_capabilities": sorted(extension_runtime.HOST_CAPABILITIES),
             "safe_mode": extension_runtime.safe_mode()}
 
 

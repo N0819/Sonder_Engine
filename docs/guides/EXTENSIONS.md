@@ -164,10 +164,50 @@ half-written directory that fails to load forever. Specifically:
 - `provenance` (`url:…` or `local:…`) and, for URL installs, `sha256` are
   written into the installed manifest — so a future reviewed-registry phase can
   tell a reviewed install from a sideloaded one without re-deriving it.
-- A repository is audited on the same ceilings as an archive — no symlinks, no
-  more than 4096 files, no more than 256 MB expanded — because a repository can
-  hold all three just as happily as a zip can.
+- A repository or folder is audited on the same ceilings as an archive — no
+  symlinks, no more than 4096 files, no more than 256 MB expanded — because a
+  directory can hold all three just as happily as a zip can.
+- **The audited set is the copied set.** One manifest is measured and then
+  copied, with no ignore pattern running in between, so nothing can pass the
+  ceilings and then not be installed (or the reverse). The install record
+  reports what was measured: `file_count` and `extracted_bytes`.
 - Installing over an existing id is **refused**. Remove first.
+
+**What a folder or checkout ships.** For a **git checkout** the manifest is
+`git ls-files --cached --others --exclude-standard`: tracked files plus the
+untracked ones nobody ignored. `.git` is not installed, and neither is anything
+your `.gitignore` already declares is no part of the package — so
+`node_modules`, build output and test fixtures are neither installed nor
+counted. Installing your own development checkout works; you do not have to
+package first.
+
+Two things are read from git's index rather than from the filesystem, because
+the filesystem cannot answer them: mode `120000` is refused as a **symlink**
+even where a checkout wrote it as an ordinary file holding the target path, and
+mode `160000` is refused as a **submodule**, the same rule clone follows.
+
+For a **plain directory** the strict recursive walk applies to everything under
+it. No ignore list is invented: a folder you point the installer at is already
+an explicit package, and if it holds 100,000 files the limit is the answer. (If
+git's manifest for a directory holds no `manifest.json` — a bundle staged under
+a `build/` that some enclosing repository ignores — git was asked the wrong
+question and the strict walk is used instead.)
+
+An audit failure names the observed number beside the allowed one, so "which
+ceiling, and how far over" is answerable from the message alone. To check a
+package **without installing it**, in your own CI:
+
+```python
+import extension_runtime
+extension_runtime.audit_extension_source("/path/to/my-extension")
+# -> {"file_count": 144, "extracted_bytes": 6250000, "git": True,
+#     "max_files": 4096, "max_bytes": 268435456, "source": "..."}
+```
+
+It runs the same manifest and the same ceilings as an install, and writes
+nothing. It is deliberately not a `pack` command: packing would be a second way
+to produce bytes `git ls-files` already names, with its own artifact format and
+its own way of disagreeing with what install actually measures.
 
 **Enable / disable** — `POST /api/extensions/{id}/enable` / `…/disable`. The
 enabled set is a JSON list in the `enabled_extensions` setting. Enabling imports
@@ -314,9 +354,13 @@ def register(api):
   (`director_interpret`, `mapping_stage`, `perception_act`, `interaction_loop`,
   `director_resolve`, `background_react`, `perception_outcome`, `narrator`,
   `commit`, …). See [`PIPELINE.md`](PIPELINE.md) for the full plan.
-- Anchoring on `character:*` or `ext:*` is **ignored**. The character group is
-  planned as a parallel fan-out and splicing into the middle of it would silently
-  serialize it.
+- Anchoring on `character:*` or `ext:*` is **refused at registration**, with a
+  reason the host can read. The character group is planned as a parallel
+  fan-out and splicing into the middle of it would silently serialize it;
+  `ext:<id>:<key>` is another extension's stage, which the splice pass has not
+  placed yet. (The planner also skips such an anchor as a backstop, for a stage
+  recorded before the check existed.) Full grammar in
+  [section 4a](#4a-the-contract-and-what-a-version-of-it-promises).
 - An anchor naming a step **this particular turn does not run** means your stage
   is simply not planned that turn. Not an error, and — importantly — not bolted
   onto a different position, which would make the plan differ between the live
@@ -868,6 +912,165 @@ somebody else's save.
 
 ---
 
+## 4a. The contract, and what a version of it promises
+
+Everything above is API. This section is the part you are allowed to *rely* on
+— what the host will tell you about itself, what shapes it accepts, what it
+does when two extensions want the same thing, and what order it runs you in.
+
+### Asking the host what it can do
+
+```python
+def register(api):
+    api.api_version        # -> 1, the `ext_api` your manifest must declare
+    api.capabilities       # -> frozenset of names
+    if "list_channels" in api.capabilities:
+        api.add_director_specialist(..., list_channels=["morale_ops"])
+```
+
+The browser half gets the same answer from `GET /api/extensions`, as `ext_api`
+and `host_capabilities`.
+
+A version number alone cannot answer "may I call this". `ext_api` moves once
+per **breaking** change, and everything added between two breaks is invisible
+to it — which is why an integrator ends up importing host internals to find
+out, and internals move. A name in `api.capabilities` is a promise: it is added
+when the behaviour lands, and it is not removed or repurposed while `ext_api`
+stays 1.
+
+The names today:
+
+| Name | What it promises |
+|---|---|
+| `stage_anchors` | `api.add_stage` with the anchor grammar below |
+| `list_channels` | `api.add_director_specialist(list_channels=…)` |
+| `commit_domains` | `api.add_commit_domain`, including `on_error="fail"` |
+| `director_corrections` | `api.on_director_result` + `api.correction` |
+| `payload_routing` | `api.on_character_payload`, with attribution |
+| `context_blocks` | `api.narration_context` / `api.director_context` |
+| `documents` | `api.documents()` with `verify` |
+| `char_state` | `api.char_state(chat_id, char_id)` |
+| `frame_state` | `api.frame_state(chat_id)` — state scoped to one era |
+| `model_lanes` | `api.add_model_lane` |
+| `provision_story` | `api.provision_story` |
+| `routes` | `api.add_route` |
+| `install_limits` | the installer audits one manifest against bounded counts and bytes, and reports what it measured |
+
+**Absent on purpose.** `frame_state` is a claim about *scope*, not about
+*coherence*: it says state can belong to one era, not that several reads made
+in one request resolve against one chosen frame. Coordinated frame selection
+across `frame_state`, `char_state` and `player_view` is not declared here,
+because it does not exist yet. A capability set that named work in progress
+would be worse than no capability set at all.
+
+### The anchor grammar
+
+```
+anchor := ("after" | "before") ":" <step-key>
+```
+
+- `<step-key>` names a **core** step (`director_interpret`, `mapping_stage`,
+  `perception_act`, `interaction_loop`, `director_resolve`, `background_react`,
+  `perception_outcome`, `narrator`, `commit`, …). See [`PIPELINE.md`](PIPELINE.md).
+- Any other mode (`beside:`, a bare key, an empty core) is **refused** by
+  `api.add_stage` with an `ExtensionError` naming your extension.
+- `character:*` and `ext:*` are **reserved** and refused. They are the two
+  namespaces the planner owns: the character group is a parallel fan-out that
+  splicing would serialize, and another extension's stage has not been placed
+  when yours is.
+- Your own key matches `^[a-z][a-z0-9_-]{0,63}$` and becomes
+  `ext:<your-id>:<key>`.
+- An anchor naming a step **this turn does not run** is not an error and not a
+  reason to place your stage somewhere else. Your stage is simply not planned
+  that turn.
+
+### Collisions
+
+Every registration is namespaced by your extension id, so *across* extensions
+there is nothing to collide — with one exception, which is loud.
+
+| Surface | Same extension registers twice | Two extensions |
+|---|---|---|
+| stage key | replaced; one stage, one `STEP_HANDLERS` entry | impossible — `ext:<id>:<key>` |
+| commit domain | replaced by name | impossible — `ext:<id>:<name>` |
+| route | replaced by `METHOD path` | impossible — served under `/api/extensions/<id>/x/` |
+| model lane | replaced by name | impossible — role is `ext:<id>:<name>` |
+| specialist channel | replaced by name | **refused** — see below |
+
+A Director specialist's channels are the exception because they are not
+addressed by owner: the merge resolves a channel to exactly one family. A
+second family claiming a channel that already has an owner is refused at
+registration with an `ExtensionError` naming both, rather than silently taking
+it. A name that would collide with an engine channel (`attire`, `positions`, …)
+cannot arise: yours are namespaced `ext:<id>:<channel>` for you.
+
+Re-registration is what an **enable after disable** does, and it is exactly
+once: disable drops the whole record — stages, routes, hooks, commit domains,
+specialists and the imported Python package with every submodule it pulled in —
+so the next enable executes the files as they are on disk now, not the copy
+that was loaded before.
+
+### Ordering
+
+- **Stages** spliced at the same anchor run in `(extension id, stage key)`
+  order. Deterministic, and a pure function of durable settings plus manifests
+  — `resume_key_for_turn` rebuilds the same plan from stored content, so a
+  splice that varied with anything else would break resume.
+- **Commit domains** run in `(extension id, domain name)` order, inside the
+  turn's transaction.
+- **Standing context blocks** (narration, Director) are composed in extension
+  id order.
+- **Hooks** (`on_character_payload`, `on_narration_payload`,
+  `on_director_payload`, `on_step`, `on_turn_committed`) run in registration
+  order, which is extension id order at process start but not after a
+  mid-session enable. Do not build anything that depends on running before or
+  after another extension's hook; each is handed the previous one's result, and
+  every top-level key you change is attributed to you either way.
+
+### List channels, validation, and the merge
+
+`add_director_specialist(channels=[...], list_channels=[...])`.
+
+- `list_channels` must be a **subset of `channels`**. Naming one you do not own
+  is refused at registration.
+- Validation is otherwise shape-only: a channel is a name, and what your
+  specialist returns for it is yours.
+- At merge, every channel **not** declared list-shaped is coerced to a keyed
+  table. A list-valued channel you forgot to declare therefore arrives as `{}`
+  — dispatched, paid for, and discarded with nothing said. This is the failure
+  the flag exists to prevent; it has happened to the engine's own channels once
+  already (`_schema_list_channels`, seventeen op-lists silently emptied under
+  Pydantic 2).
+- Engine channels do not use this flag. Their shape is read from
+  `schemas.StateDiff`'s annotations, because it is already declared once there.
+  Yours is in no schema, so you declare it.
+- Your channels are **evidence, not causality**: no engine commit domain reads
+  an `ext:` channel. Act on it from your own commit domain or stage.
+
+### Failure, and what a failed extension can still do
+
+Nothing. "Enabled" and "live" are two different states: if your `register(api)`
+raises, you are switched on and have registered nothing, and the host treats
+you as absent everywhere —
+
+- no stage in the plan, no `STEP_HANDLERS` entry, no route, no commit domain,
+  no hook, no specialist;
+- **no assets**: `/asset/…`, your `ui.js` and your `ui.css` are all refused, so
+  your browser half is not left calling routes that do not exist;
+- **no stored context**: standing narration and Director blocks written in a
+  session where you worked are not injected;
+- your Python package and every submodule it imported are dropped from
+  `sys.modules`, so fixing the file and re-enabling runs the fixed file.
+
+The reason is readable at `GET /api/extensions` (each row's `error`) and in the
+🧩 menu, and it carries the exception type and its cause chain —
+`ValueError: sheet is incomplete <- KeyError: 'drive'` — rather than the bare
+`str(exc)`, which is empty for a bare `KeyError`.
+
+Disable is the same teardown, and safe mode
+(`SONDER_EXTENSIONS_SAFE=1`) is the same again for every extension at once —
+without forgetting the enabled set, so recovery is not destructive.
+
 ## 5. Persistence
 
 Five homes, all namespaced under `ext:<your-id>`, and nothing else:
@@ -1394,7 +1597,7 @@ migration of everything already installed.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/extensions` | listing, `load_errors`, `safe_mode` |
+| `GET /api/extensions` | listing, `load_errors`, `safe_mode`, and the host's own `ext_api` + `host_capabilities` |
 | `POST /api/extensions/install` | `{"source": "<folder, zip URL, or repository>"}` |
 | `GET /api/extensions/updates` | ask every repository-sourced extension's remote |
 | `POST /api/extensions/{id}/update` | take the newer commit |

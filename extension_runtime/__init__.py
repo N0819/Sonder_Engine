@@ -44,7 +44,7 @@ from typing import Any, Callable
 from .api import (
     CharacterAccess, CharacterHandle, CommitView, CommittedTurn,
     DirectorBlock, DirectorContext, DocumentStore, ExtState,
-    ExtensionError, NarrationBlock, NarrationContext,
+    ExtensionError, HOST_CAPABILITIES, NarrationBlock, NarrationContext,
     PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
     SonderExtensionAPI, StepView, document_path, enter_commit_scope,
     in_commit_scope, leave_commit_scope,
@@ -479,7 +479,8 @@ def _record_stage(ext_id, key, full_key, *, anchor, label, handler) -> None:
 
 def _record_step_observer(ext_id, pattern, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_step needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_step needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.step_observers.append((pattern, fn))
@@ -487,7 +488,8 @@ def _record_step_observer(ext_id, pattern, fn) -> None:
 
 def _record_commit_observer(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_turn_committed needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_turn_committed needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.commit_observers.append(fn)
@@ -504,7 +506,8 @@ def _record_commit_domain(ext_id, name, fn, on_error) -> None:
 
 def _record_payload_hook(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_character_payload needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_character_payload needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.payload_hooks.append(fn)
@@ -512,7 +515,8 @@ def _record_payload_hook(ext_id, fn) -> None:
 
 def _record_result_validator(ext_id, fn, on_error) -> None:
     if not callable(fn):
-        raise ExtensionError("on_director_result needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_director_result needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.result_validators.append(
@@ -522,7 +526,8 @@ def _record_result_validator(ext_id, fn, on_error) -> None:
 
 def _record_director_hook(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_director_payload needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_director_payload needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.director_hooks.append(fn)
@@ -530,7 +535,8 @@ def _record_director_hook(ext_id, fn) -> None:
 
 def _record_narration_hook(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_narration_payload needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_narration_payload needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.narration_hooks.append(fn)
@@ -634,6 +640,27 @@ def _drop_extension_modules(package: str) -> None:
         sys.modules.pop(name, None)
 
 
+def _error_chain(exc: BaseException) -> str:
+    """`ValueError: bad sheet <- KeyError: 'drive'` -- the whole chain.
+
+    `str(exc)` alone was what a host read for a failed extension, and it is
+    the least informative line in the traceback: `None` for a bare
+    `KeyError`, and silent about the `__cause__` that actually explains it.
+    The type is always named; the chain is followed while it says something
+    new, and stops at four so a deep re-raise cannot become the error message.
+    """
+    parts: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and len(parts) < 4 and id(current) not in seen:
+        seen.add(id(current))
+        text = str(current).strip()
+        parts.append(f"{type(current).__name__}: {text}" if text
+                     else type(current).__name__)
+        current = current.__cause__ or current.__context__
+    return " <- ".join(parts)
+
+
 def _deregister(ext_id: str, *, error: str | None = None) -> None:
     record = _registered.get(ext_id)
     if record is None:
@@ -656,9 +683,13 @@ def _deregister(ext_id: str, *, error: str | None = None) -> None:
         except Exception:
             log.exception(
                 "could not unregister specialists for extension %s", ext_id)
+    # Modules go in BOTH cases. A failed `register(api)` leaves the entry and
+    # every sibling it imported in `sys.modules`, and the next enable then
+    # executes a stale copy of a file the host may have replaced in between --
+    # which is exactly what fixing the failure consists of.
+    _drop_extension_modules(_module_name(ext_id))
     if error is None:
         _registered.pop(ext_id, None)
-        _drop_extension_modules(_module_name(ext_id))
     else:
         _registered[ext_id] = _Registration(ext_id, error=error)
 
@@ -686,7 +717,7 @@ def _activate_one(ext_id: str) -> None:
         # Isolated exactly like discovery: this extension is disabled with a
         # reason the host can read, and every sibling stays live.
         log.exception("extension %s failed to register", ext_id)
-        _deregister(ext_id, error=str(exc))
+        _deregister(ext_id, error=_error_chain(exc))
 
 
 def activate(*, refresh: bool = False) -> None:
@@ -733,6 +764,35 @@ def disabled_reasons() -> dict[str, str]:
     with _lock:
         return {ext_id: record.error for ext_id, record in _registered.items()
                 if record.error}
+
+
+def _serving_ids() -> set[str]:
+    """Enabled AND loaded: the set whose browser half may be served."""
+    try:
+        activate()
+    except Exception:                             # pragma: no cover - defensive
+        log.exception("extension activation failed while serving assets")
+    return set(enabled_ids()) - set(disabled_reasons())
+
+
+def failure_reason(ext_id: str) -> str:
+    """Why this extension is not live, or `""`.
+
+    Enabled and LIVE are two different states, and everything an extension
+    serves has to read the second. `is_enabled` answers "did the host switch
+    it on"; a `register(api)` that raised leaves it switched on and registered
+    NOTHING -- no stage, no route, no hook -- while its browser half went on
+    being served, so the UI of an extension whose Python never loaded was
+    calling routes that do not exist and reading state nothing writes.
+    """
+    ext_id = str(ext_id or "")
+    try:
+        activate()
+    except Exception:                             # pragma: no cover - defensive
+        log.exception("extension activation failed while checking %s", ext_id)
+    with _lock:
+        record = _registered.get(ext_id)
+    return (record.error or "") if record else ""
 
 
 def registered_stages() -> list[dict]:
@@ -1390,8 +1450,20 @@ def dispatch_route(ext_id: str, method: str, path: str, query=None, body=None):
         record = _registered.get(ext_id)
         entry = record.routes.get(f"{str(method).upper()} {path}") if record else None
     if entry is None:
+        # A failed extension registered NOTHING, so every one of its routes
+        # is missing and "serves no GET /x" is true of all of them and
+        # explains none. The host needs the reason it did not load, not the
+        # symptom -- its browser half is what is calling this.
+        failed = record.error if record else ""
+        if failed:
+            raise ExtensionError(
+                f"extension {ext_id!r} did not load, so it serves no routes: "
+                f"{failed}")
+        known = sorted(entry["path"] for entry in (record.routes.values()
+                                                   if record else ()))
         raise ExtensionError(
-            f"extension {ext_id!r} serves no {str(method).upper()} {path}")
+            f"extension {ext_id!r} serves no {str(method).upper()} {path}"
+            + (f"; it serves {', '.join(known)}" if known else ""))
     api = _apis.get(ext_id)
     if api is None:
         raise ExtensionError(f"extension {ext_id!r} is not active")
@@ -1526,22 +1598,32 @@ def asset_path(ext_id: str, relative: str) -> Path:
     Enabled as well as installed, which is the same rule `extension_script`
     and `extension_styles` apply: switching an extension off has to reach
     everything it serves, or `/asset/extension.py` hands back the source of
-    an extension the host believes is inert. Safe mode counts as off.
+    an extension the host believes is inert. Safe mode counts as off, and so
+    does a `register(api)` that raised -- see `failure_reason`.
     """
     ext = installed_extensions().get(str(ext_id or ""))
     if ext is None:
         raise ExtensionError(f"no installed extension {ext_id!r}")
     if not is_enabled(ext.id):
         raise ExtensionError(f"extension {ext.id!r} is not enabled")
+    failed = failure_reason(ext.id)
+    if failed:
+        raise ExtensionError(
+            f"extension {ext.id!r} did not load, so it serves nothing: "
+            f"{failed}")
     candidate = Path(str(relative or ""))
     if not str(relative or "").strip() or candidate.is_absolute():
-        raise ExtensionError("asset path must be relative")
+        raise ExtensionError(
+            f"extension {ext.id!r}: asset path must be relative")
     if any(part in ("..", "") for part in candidate.parts):
-        raise ExtensionError("asset path may not traverse directories")
+        raise ExtensionError(
+            f"extension {ext.id!r}: asset path may not traverse directories")
     base = ext.path.resolve()
     target = (base / candidate).resolve()
     if base not in target.parents:
-        raise ExtensionError("asset path escapes the extension directory")
+        raise ExtensionError(
+            f"extension {ext.id!r}: asset path escapes the extension "
+            f"directory")
     if not target.is_file():
         raise ExtensionError(f"extension {ext.id!r} has no asset {relative!r}")
     return target
@@ -1616,7 +1698,7 @@ def extension_script(ext_id: str) -> str:
     if safe_mode():
         return ""
     ext = installed_extensions().get(str(ext_id or ""))
-    if ext is None or not is_enabled(ext.id):
+    if ext is None or not is_enabled(ext.id) or failure_reason(ext.id):
         return ""
     parts = []
     if ext.ui_entry:
@@ -1633,7 +1715,8 @@ def extension_styles(ext_id: str) -> str:
     if safe_mode():
         return ""
     ext = installed_extensions().get(str(ext_id or ""))
-    if ext is None or not ext.css_entry or not is_enabled(ext.id):
+    if ext is None or not ext.css_entry or not is_enabled(ext.id) \
+            or failure_reason(ext.id):
         return ""
     source = _read_asset(ext, ext.css_entry)
     return "" if source is None else source
@@ -1649,7 +1732,7 @@ def ui_bundle() -> str:
     if safe_mode():
         return ""
     parts = []
-    enabled = set(enabled_ids())
+    enabled = _serving_ids()
     for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
         if ext.id not in enabled:
             continue
@@ -1677,7 +1760,7 @@ def ui_styles() -> str:
     if safe_mode():
         return ""
     parts = []
-    enabled = set(enabled_ids())
+    enabled = _serving_ids()
     for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
         if ext.id not in enabled or not ext.css_entry:
             continue
@@ -1692,7 +1775,8 @@ __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
     "DirectorBlock", "DirectorContext", "DocumentStore",
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
-    "ExtensionError", "NarrationBlock", "NarrationContext",
+    "ExtensionError", "HOST_CAPABILITIES", "NarrationBlock",
+    "NarrationContext",
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
     "SonderExtensionAPI", "StepView", "TreeAudit", "activate",
     "apply_plan_splices", "asset_path", "audit_extension_source",
@@ -1703,7 +1787,8 @@ __all__ = [
     "dispatch_narration_payload",
     "dispatch_route", "dispatch_turn_committed", "document_path",
     "enable_extension", "enabled_ids", "extension", "extension_root",
-    "extension_script", "extension_styles", "in_commit_scope",
+    "extension_script", "extension_styles", "failure_reason",
+    "in_commit_scope",
     "installed_extensions", "is_enabled", "keep_orphan_lane_rows", "listing",
     "load_errors",
     "notify_step_saved", "observer_failures", "registered_commit_domains",
