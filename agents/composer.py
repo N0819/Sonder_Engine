@@ -441,6 +441,15 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
 
 
 def _addresses(intended_target, observer_name):
+    """True when a dialogue line's intended_target names this observer. The
+    target may be a single name or a list; comparison is casefolded. Used to
+    route a comm-channel transmission to the party it was addressed to, across
+    a physical barrier (see the medium:'comm' handling in perception_outcome).
+
+    One definition. `perception.py` carried a byte-identical twin that no
+    production path called and one test imported, so the tested copy and the
+    running copy were different objects free to drift apart.
+    """
     if not intended_target or not observer_name:
         return False
     targets = intended_target if isinstance(intended_target, (list, tuple)) \
