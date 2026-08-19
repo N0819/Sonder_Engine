@@ -128,6 +128,49 @@ resolved to 2.x — invisibly, because a dev machine on 1.10 cannot see it, and
 `@validator("*", pre=True)` with a `field` parameter is a hard error on 2.x for
 the same reason.
 
+### A local green is not evidence about the shipped stack
+
+**`make check` runs whatever `python` resolves to, and that is very unlikely to
+be the pinned baseline.** Measured on the owner's own machine, 2026-08-18: the
+system interpreter that runs `make check` carried **Pydantic 1.10.14 and NumPy
+1.26.4**, while `.venv` — which is what both launchers build and what every
+player's engine serves from, and what `constraints.txt` pins — carried
+**Pydantic 2.11.7 and NumPy 2.2.6**. Two defects were live in that gap at once,
+and the suite was green through both:
+
+- `agents/director_scopes._schema_list_channels` read `field.outer_type_`,
+  which exists only on Pydantic 1. On the shipped major it returned the empty
+  set, so `_LIST_DELEGATED` was empty and every one of the seventeen op-list
+  Director channels — `contact_ops`, `introductions`, `crowd_ops`,
+  `remove_rooms` — was coerced to `{}`: dispatched, paid for, and discarded
+  without a word.
+- `tests/test_lore_blind_scoring.py` built its fixtures as
+  `np.ones(dims, dtype=np.float32) / np.sqrt(dims)`, which stays float32 under
+  NumPy 1's value-based casting and becomes float64 under NumPy 2's NEP 50 — so
+  on the shipped NumPy the buffer held twice the values the test claimed, and
+  every dimension-mismatch assertion in the file measured the fixture instead of
+  the engine.
+
+Neither was found here. Both were found by the Directive team running the
+declared CI matrix against `reorganization`. Two structural guards now exist —
+`check_pydantic_major_reads_are_owned` confines major-specific field attributes
+to `llm/schemas.py`, and `check_minimum_python_syntax` catches source the
+declared minimum interpreter cannot parse — but a guard covers the class it
+names and nothing else.
+
+**Before believing a green run means the engine works, run the suite once on
+the pinned stack:**
+
+```bash
+python3.12 -m venv /tmp/sonder-ci && \
+  /tmp/sonder-ci/bin/pip install -c constraints.txt -r requirements-dev.txt && \
+  /tmp/sonder-ci/bin/python -m pytest -q
+```
+
+CI does this on every push, and CI is the authority. The local gate is a fast
+approximation of it, and the approximation is exactly as wide as the difference
+between two dependency resolutions.
+
 Because the constraints pin is 2.x, the other side of that range needs its own
 job: `pydantic1` installs the pinned set, downgrades past the constraint, and
 runs the suite. It exists because a range is only a promise if something

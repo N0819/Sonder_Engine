@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import ast
+import io
 import json
 import re
 import sys
+import tokenize
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from pathlib import Path
@@ -1555,6 +1557,128 @@ def check_conftest_not_imported(errors: list[str]) -> None:
                         f"module (tests/helpers.py) and import that.")
 
 
+def check_minimum_python_syntax(errors: list[str]) -> None:
+    """No source may need a parser newer than the declared minimum.
+
+    Both launchers declare 3.11-3.13, and 3.11's parser reads an f-string as
+    ONE string token -- so a quote inside a replacement field that matches the
+    opening quote ends the literal early and the FILE WILL NOT COMPILE. PEP 701
+    lifted that in 3.12, which is why nobody developing on 3.12 or 3.13 can see
+    it: the code is correct, the interpreter is not the declared one.
+
+    Found by the Directive team, who ran the declared minimum in CI and got a
+    compile failure on `agents/director_floors.py` -- three `_ling("...")` calls
+    inside `rf"..."` patterns. `make check` was green the whole time.
+
+    Detected through 3.12's own TOKENIZER rather than by regex or by having
+    3.11 installed: 3.12 emits FSTRING_START/END around the parts, so a STRING
+    token inside those bounds whose quote matches the opening one is exactly
+    the construct 3.11 cannot read. A multi-line replacement field in a
+    single-quoted f-string is the same class and is caught here too. A grep for
+    nested quotes reported 108 sites; this reports the 3 that are real.
+    """
+    if not hasattr(tokenize, "FSTRING_START"):
+        return                       # pre-3.12 host: it is the minimum itself
+    for path in engine_python_paths() + sorted((ROOT / "tests").rglob("*.py")):
+        try:
+            src = path.read_text(encoding="utf-8")
+            toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+        except (OSError, SyntaxError, tokenize.TokenError):
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        stack = []
+        for tok in toks:
+            if tok.type == tokenize.FSTRING_START:
+                quote = tok.string[-1]
+                stack.append((quote, tok.string.endswith(quote * 3)))
+            elif tok.type == tokenize.FSTRING_END:
+                if stack:
+                    stack.pop()
+            elif not stack:
+                continue
+            elif tok.type == tokenize.STRING:
+                quote, triple = stack[-1]
+                inner = tok.string.lstrip("rRbBuUfF")
+                if not triple and inner[:1] == quote:
+                    errors.append(
+                        f"{rel}:{tok.start[0]}: an f-string delimited by {quote}"
+                        f" contains {quote} inside a replacement field. Python "
+                        f"3.12 accepts this (PEP 701); the declared minimum "
+                        f"3.11 cannot parse the file at all. Use the other "
+                        f"quote inside the braces.")
+            elif tok.type == tokenize.NL:
+                quote, triple = stack[-1]
+                if not triple:
+                    errors.append(
+                        f"{rel}:{tok.start[0]}: a replacement field spans a "
+                        f"line break inside a single-quoted f-string. PEP 701 "
+                        f"again: 3.12 parses it, the declared minimum 3.11 "
+                        f"does not.")
+
+
+#: The field attributes that exist on exactly one Pydantic major. Reading one
+#: outside the module that owns the branch is how a check silently becomes a
+#: no-op on the OTHER major -- which is not hypothetical: the suite runs
+#: whatever `python` resolves to and the engine serves from `.venv`, and those
+#: were pydantic 1 and pydantic 2 on the owner's own machine.
+_PYDANTIC_MAJOR_ATTRS = {
+    "outer_type_": 1, "allow_none": 1, "type_": 1, "field_info": 1,
+    "model_fields": 2, "annotation": 2,
+}
+
+#: Modules allowed to read them: the one that OWNS the compatibility branch,
+#: and this checker, which deliberately reads both and says so at the site.
+_PYDANTIC_BRANCH_OWNERS = {"llm/schemas.py", "tools/project_check.py"}
+
+
+def check_pydantic_major_reads_are_owned(errors: list[str]) -> None:
+    """Only `llm/schemas.py` may read a Pydantic-major-specific field attribute.
+
+    `agents/director_scopes._schema_list_channels` read `field.outer_type_`,
+    which exists only on Pydantic 1. On a Pydantic-2 install it returned the
+    empty set, `_LIST_DELEGATED` was empty, and `_normalized_channel_value`
+    coerced all seventeen op-list channels to `{}` -- so every `contact_ops`,
+    `introductions` and `crowd_ops` a Director specialist wrote was dispatched,
+    paid for, and discarded without a word. It had replaced a hand-written
+    frozenset that was correct under BOTH majors.
+
+    The suite never saw it: `make check` ran on Pydantic 1, where the attribute
+    exists. A green gate on one major is not evidence about the other, and the
+    engine ships on the other. So the rule is structural rather than a test --
+    `llm.schemas` already branches once (`_fields`, `_declared`,
+    `_outer_annotation`, `list_shaped_fields`) and a second branch anywhere
+    else is how the two drift apart again.
+    """
+    for path in engine_python_paths():
+        rel = path.relative_to(ROOT).as_posix()
+        if rel in _PYDANTIC_BRANCH_OWNERS:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            attr = None
+            if isinstance(node, ast.Attribute):
+                attr = node.attr
+            elif (isinstance(node, ast.Call)
+                  and isinstance(node.func, ast.Name)
+                  and node.func.id == "getattr"
+                  and len(node.args) >= 2
+                  and isinstance(node.args[1], ast.Constant)
+                  and isinstance(node.args[1].value, str)):
+                attr = node.args[1].value
+            major = _PYDANTIC_MAJOR_ATTRS.get(attr)
+            if major is None:
+                continue
+            errors.append(
+                f"{rel}:{node.lineno}: reads {attr!r}, which exists only on "
+                f"Pydantic {major}. On the other major this silently reads "
+                f"nothing rather than failing. Go through llm.schemas "
+                f"(_fields / _declared / list_shaped_fields), which owns the "
+                f"one version branch.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
@@ -1562,6 +1686,8 @@ def main() -> int:
     check_extension_imports(errors)
     check_facade_import_direction(errors)
     check_conftest_not_imported(errors)
+    check_minimum_python_syntax(errors)
+    check_pydantic_major_reads_are_owned(errors)
     check_engine_imports_resolve(errors)
     check_asgi_targets(errors)
     check_duplicate_python_symbols(errors)

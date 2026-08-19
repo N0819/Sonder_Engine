@@ -198,19 +198,28 @@ _LIST_DELEGATED = set()
 
 
 def _schema_list_channels():
-    """`StateDiff` fields typed as a bare list. The engine's half of the shape.
+    """`StateDiff` fields typed as a list. The engine's half of the shape.
 
     Reads the annotation rather than the default factory: the factory is what
     an omission produces, the annotation is what the field IS.
-    """
-    from llm.schemas import StateDiff
 
-    out = set()
-    for name, field in StateDiff.__fields__.items():
-        annotation = getattr(field, "outer_type_", None)
-        if annotation is list or get_origin(annotation) is list:
-            out.add(name)
-    return out
+    Through `llm.schemas`'s own Pydantic-major compatibility layer, and NOT by
+    reading a field attribute directly. The first version of this function read
+    `field.outer_type_`, which exists only on Pydantic 1 -- so on a Pydantic 2
+    install `_LIST_DELEGATED` was the EMPTY SET, `_normalized_channel_value`
+    coerced all seventeen op-list channels to `{}`, and every `contact_ops`,
+    `introductions`, `crowd_ops` and `remove_rooms` a specialist wrote was
+    dispatched, paid for and discarded in silence. It replaced a hand-written
+    frozenset that had been correct under both majors, and the suite did not
+    catch it because the suite runs on Pydantic 1 while the venv the engine
+    serves from runs Pydantic 2 -- a green gate saying nothing about the
+    installed engine. Reported by the Directive team against `reorganization`;
+    `_fields`/`_declared` is the seam that already answers this for every other
+    caller, and a second version check here is how the two drift again.
+    """
+    from llm.schemas import StateDiff, list_shaped_fields
+
+    return list_shaped_fields(StateDiff)
 
 #: Per-CHANNEL work gates: does this beat have possible work in this
 #: channel? Every input is standing scene state or a structured declaration

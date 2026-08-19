@@ -225,6 +225,9 @@ if _PYDANTIC_V2:
 
     def _fields(model_cls):
         return model_cls.model_fields
+
+    def _outer_annotation(field):
+        return field.annotation
 else:
     # v1 records a field's container kind as an int enum on the ModelField.
     # There is no v2 equivalent; `_declared` reads the annotation there.
@@ -238,6 +241,33 @@ else:
 
     def _fields(model_cls):
         return model_cls.__fields__
+
+    def _outer_annotation(field):
+        return field.outer_type_
+
+
+def list_shaped_fields(model_cls):
+    """Field names whose OUTER annotation is a list, parametrized or not.
+
+    Deliberately wider than `_declared(field).is_list`, and the difference is
+    the point: that flag drives the wrap-a-single-item coercion, which needs a
+    known item type, so a bare `list` is excluded there on purpose. Channel
+    SHAPE is a different question -- "does this field hold a sequence" -- and
+    `StateDiff.world_facts` is annotated bare. Reading it through `is_list`
+    dropped exactly that one channel.
+
+    Here rather than in the caller because this module already owns the
+    Pydantic-major branch; a caller reading `outer_type_` for itself is how a
+    Pydantic-2 install silently disagreed with a Pydantic-1 test suite
+    (`agents/director_scopes._schema_list_channels`).
+    """
+    out = set()
+    for name, field in _fields(model_cls).items():
+        annotation = _outer_annotation(field)
+        if annotation is list or get_origin(annotation) is list:
+            out.add(name)
+    return out
+
 
 # ---- Enums ----
 
