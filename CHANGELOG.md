@@ -1,5 +1,71 @@
 # Changelog
 
+## alpha 9.6.2 — Every gate here runs on POSIX, which is why nobody saw it
+
+A point release answering the Directive team's post-refactor review of
+alpha 9.6.1. All three of their Sonder-owned findings were confirmed against
+source and fixed; none needed refuting, which is worth recording because the
+previous round's response was mostly two refutations.
+
+One of them could not have been found here. Every gate in this project runs on
+POSIX.
+
+The suite is 8,226 tests, green on both dependency resolutions, and the CI
+matrix is green including a browser job that executed its tests.
+
+- **The structural checker false-failed on Windows, and the file looked
+  consistent.** `tools/project_check.py` compared `str(path.relative_to(ROOT))`
+  against the constant `"core/paths.py"`. On Windows that is `core\paths.py`,
+  so the one file PERMITTED to derive a filesystem root audited itself as a
+  violation and no maintainer on Windows could get a green result out of the
+  tool this project calls its local evidence gate. Eight other sites in the
+  same file already normalised to POSIX; this was the lone survivor of an
+  earlier sweep, which is exactly why it was invisible. All four derivations
+  are uniform now, message-only sites included, so nobody has to remember
+  which kind theirs is.
+
+- **The installer told a host to shrink an extension that was never too big.**
+  `_git_source_files` caught every git error and returned "this is not a
+  repository", so git refusing a checkout for dubious ownership sent the
+  installer down the plain-directory walk: it counted `.git`, `node_modules`
+  and every ignored artifact and reported "at least 4097 files, more than the
+  4096 an extension may install". What git would have shipped was 207 files and
+  8MB. The actionable cause — one `git config` away — was never mentioned. A
+  git FAILURE is now distinguished from git's ANSWER and re-raised with its
+  reason. A second instance of the same swallow is gone outright: `ls-files`
+  failing after `rev-parse` has already said `true` cannot mean "not a work
+  tree".
+
+- **The release commit had no browser evidence.** The step timeout added in
+  9.6.1 worked — fifty minutes of silent hang became twelve minutes of reported
+  failure — but it made the failure legible rather than making provisioning
+  deterministic, and apt is the part that is not: the same command succeeded on
+  the runs either side, which is the signature of a mirror and not of a missing
+  dependency. `--with-deps` is gone, since the libraries are on the runner
+  image and that flag exists for bare containers, and the browser payload is
+  cached on the pinned Playwright version. If an image ever does drop a
+  library, Chromium fails to launch and names it, which is a better failure
+  than twelve minutes of Ubuntu font packages.
+
+- **Two doors onto one room, and only one could name the era.** `api.at_frame`
+  gained frame selection in 9.6 and the `story_view`/`player_view` HTTP routes
+  did not, so an in-process caller could compose a frame-coherent read while
+  the out-of-process caller — a companion app, a script, a second machine,
+  which is the only thing those routes are for — could not say which era it
+  wanted. Both routes take `frame`, omitted rather than defaulted when the
+  caller does not ask: the underlying default is a sentinel meaning "the latest
+  committed turn across every frame", and `None` is a different question that
+  would be validated as a frame id.
+
+- **Two proposals declined, with their own arguments.** The archive still does
+  not declare its extension schema, because a completeness contract designed
+  against exactly one extension encodes that extension's shape as the standard,
+  and a version number with one member is one nobody reads. There is still no
+  read-snapshot token, because it is a different axis from the frame work —
+  `at_frame` chooses an ERA, a snapshot would fix a MOMENT — and a test exists
+  specifically to stop that capability being declared before the machinery is
+  real. Both remain in the register where the review expects to find them.
+
 ## alpha 9.6.1 — A guard is only as true as the text it is handed
 
 A point release, and a narrow one: one live scene was read stage by stage and
