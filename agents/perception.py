@@ -70,6 +70,7 @@ from world.spatial import (
     comms_link,
     same_subject,
     scent_level,
+    sense_adjusted,
     spatial_facts,
     spatial_rel,
     spatial_rel_between,
@@ -1406,24 +1407,54 @@ def _ubiquitous_names(sc):
         return frozenset()
 
 
-def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel):
+def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel,
+                     senses=None):
     """Visual channel to one source, over the whole beat (see _source_channels).
 
     Per-body and light-aware via `visual_level_between` when the perceiver has
     a position, room-level otherwise. Answered against the outcome scene first;
     only if that says no does the pre-diff scene get asked, so this can add a
     channel the beat closed and can never remove one it opened.
+
+    `senses` is the observer's card, run through the same gate every other
+    admission now uses (`composer._sense_graded`): an authored-blind body has
+    no visual channel to anything, however the world is lit.
     """
     def _at(scene):
         if not scene:
             return False
         if room_of(scene, perceiver_name) is not None:
-            return visual_level_between(scene, perceiver_name, source_name) != "none"
-        return has_visual(rel)
+            return composer._sense_graded(
+                visual_level_between(scene, perceiver_name, source_name),
+                "sight", senses) != "none"
+        if not has_visual(rel):
+            return False
+        return composer._sense_graded("full", "sight", senses) != "none"
     return _at(sc) or _at(prev_sc)
 
 
-def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
+def _sense_card(sheet):
+    """The STRUCTURED card senses, which are what the G4 gate takes.
+
+    `scene.senses_of` returns senses_as_text -- a prose sentence, built for a
+    model prompt. `spatial.sense_adjusted` wants the list of
+    `{channel, acuity, range}` records, and the perceiver dicts carried only
+    the prose, which is half of why the gate reached no composed view: even a
+    reader of the `senses` key would have handed the gate a string and got the
+    level back unchanged. Same dispatch as `senses_of`, so a persona and a
+    character card resolve the same way they do everywhere else.
+    """
+    if not isinstance(sheet, dict):
+        return []
+    if "psychology" in sheet or "core" in sheet:
+        return character_senses(sheet)
+    if "narration" in sheet:
+        return persona_senses(sheet)
+    return []
+
+
+def _source_channels(sc, perceiver_name, perceiver_room, sources,
+                     prev_sc=None, senses=None):
     """spatial_to_sources / visual_channel_to_sources for ONE perceiver.
 
     Concealment by containment belongs here rather than at the call sites. A
@@ -1508,10 +1539,13 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
     return {
         "spatial_to_sources": rels,
         "visual_channel_to_sources": {
-            n: (_saw_across_beat(sc, prev_sc, perceiver_name, n, rels[n]))
+            n: (_saw_across_beat(sc, prev_sc, perceiver_name, n, rels[n],
+                                 senses))
             for n in rels
         },
-        "scent_channel_to_sources": {n: scent_level(r) for n, r in rels.items()},
+        "scent_channel_to_sources": {
+            n: composer._sense_graded(scent_level(r), "scent", senses)
+            for n, r in rels.items()},
     }
 
 
@@ -2389,10 +2423,12 @@ def perception_establish(ctx, nonce):
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
-        "senses": senses_of(pers), "attention": "engaged",
+        "senses": senses_of(pers), "sense_card": _sense_card(pers),
+        "attention": "engaged",
         "knows_identity": True,
         "entity_state": p_state,
-        **_source_channels(sc, p_name, p_room, sources),
+        **_source_channels(sc, p_name, p_room, sources,
+                           senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -2415,10 +2451,12 @@ def perception_establish(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "senses": senses_of(sh), "attention": act.get("goal") or "ambient",
+            "senses": senses_of(sh), "sense_card": _sense_card(sh),
+            "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "entity_state": entity_states.get(character_name(sh)) or {},
-            **_source_channels(sc, character_name(sh), r, c_sources),
+            **_source_channels(sc, character_name(sh), r, c_sources,
+                               senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
             "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -2664,11 +2702,13 @@ def perception_act(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "senses": senses_of(sh),
+            "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "spatial_to_actor": rel,
-            "visual_channel_to_actor": has_visual(rel),
-            "scent_channel_to_actor": scent_level(rel),
+            "visual_channel_to_actor": has_visual(rel) and composer._sense_graded(
+                "full", "sight", _sense_card(sh)) != "none",
+            "scent_channel_to_actor": composer._sense_graded(
+                scent_level(rel), "scent", _sense_card(sh)),
             "proximity_to_actor": proximity_rel(
                 sc, character_name(sh), p_name),
             "proximity_to_sources": prox_to_others,
@@ -3106,9 +3146,11 @@ def perception_outcome(ctx, nonce):
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
-        "senses": senses_of(pers), "attention": "engaged",
+        "senses": senses_of(pers), "sense_card": _sense_card(pers),
+        "attention": "engaged",
         "knows_identity": True,
-        **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene),
+        **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene,
+                           senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -3130,9 +3172,11 @@ def perception_outcome(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, e_room),
             "notices": artifacts_for_room(ctx.chat.id, sc, e_room),
             "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
-            "senses": senses_of(extra), "attention": "engaged",
+            "senses": senses_of(extra), "sense_card": _sense_card(extra),
+            "attention": "engaged",
             "knows_identity": True,
-            **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene),
+            **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene,
+                               senses=_sense_card(extra)),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
             "room_layout": room_layout(sc, e_name),
@@ -3158,10 +3202,11 @@ def perception_outcome(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "senses": senses_of(sh),
+            "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            **_source_channels(sc, character_name(sh), r, sources, prev_sc=prev_scene),
+            **_source_channels(sc, character_name(sh), r, sources,
+                               prev_sc=prev_scene, senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -3738,14 +3783,19 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         effective_light(sc, room) if room else "")
     if env:
         percepts.append(env)
-    percepts.extend(composer.presence_percepts(sc, name, others, display_map))
-    percepts.extend(composer.pose_percepts(sc, name, others, display_map))
+    senses = p.get("sense_card")
+    percepts.extend(composer.presence_percepts(
+        sc, name, others, display_map, senses))
+    percepts.extend(composer.pose_percepts(
+        sc, name, others, display_map, senses))
     recognized = set(known.get(name) or [])
     for body in others:
         b_name = body.get("name")
         if not b_name:
             continue
-        if visual_level_between(sc, name, b_name) != "full":
+        if composer._sense_graded(
+                visual_level_between(sc, name, b_name),
+                "sight", senses) != "full":
             continue
         if entity_arc(sc, name, b_name) == "rear":
             continue
@@ -4026,7 +4076,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         entry, speech_rel, name, display=display,
                         can_see=can_see,
                         proximity=p.get("proximity_to_actor"),
-                        order_key=idx, observer_id=pid)
+                        order_key=idx, observer_id=pid,
+                        senses=p.get("sense_card"))
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "action":
@@ -4378,7 +4429,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         speaker_room=d.get("speaker_room")),
                     name, display=display, can_see=can_see,
                     proximity=measured_proximity_rel(sc, name, speaker),
-                    order_key=order, observer_id=pid)
+                    order_key=order, observer_id=pid,
+                    senses=p.get("sense_card"))
                 if percept:
                     percepts.append(percept)
                 order += 1
@@ -4417,10 +4469,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     continue
                 if p.get("room") not in (from_room, to_room):
                     continue
-                seen = visual_level_between(sc, name, mover) != "none" or (
-                    prev_scene
-                    and visual_level_between(prev_scene, name, mover)
-                    != "none")
+                _graded = (lambda scene: composer._sense_graded(
+                    visual_level_between(scene, name, mover),
+                    "sight", p.get("sense_card")))
+                seen = _graded(sc) != "none" or (
+                    prev_scene and _graded(prev_scene) != "none")
                 if not seen:
                     continue
                 label = display_map.get(mover)

@@ -61,6 +61,7 @@ from world.spatial import (
     entity_arc,
     entity_side,
     hear_level,
+    sense_adjusted,
     proximity_rel,
     same_subject,
     visual_level_between,
@@ -151,6 +152,24 @@ class Percept:
             raise ValueError(f"undeclared percept kind: {self.kind!r}")
         if self.channel not in CHANNELS:
             raise ValueError(f"undeclared percept channel: {self.channel!r}")
+
+
+def _sense_graded(level, channel, senses):
+    """Shift one admission grade by the observer's card senses.
+
+    `spatial.sense_adjusted` is THE senses gate (G4), and for a long time the
+    only deterministic delivery path that asked it was the interaction
+    micro-loop. Every builder in this module graded on the world alone, so an
+    authored-blind card saw the room in its onset view, its outcome view and
+    its memory of the beat, and was correctly blind for the length of one
+    micro-round in between.
+
+    `None` and an ordinary card return the level unchanged, byte-identical to
+    before; the one direction that adds is capped inside `sense_adjusted`
+    itself. Kept as a named wrapper rather than a bare call so the gate has
+    one spelling here and every builder that grades can be seen to use it.
+    """
+    return sense_adjusted(level, channel, senses) if senses else level
 
 
 def _short_hash(*parts):
@@ -363,7 +382,8 @@ def concealed_from_observer(entry, observer_name, observer_id=None):
     )
 
 
-def line_hear_level(entry, rel, observer_name, proximity=None):
+def line_hear_level(entry, rel, observer_name, proximity=None,
+                    senses=None):
     """Audibility of one dialogue entry to an observer.
 
     Ordinary spatial hearing (`hear_level`) decides first -- including the
@@ -404,7 +424,9 @@ def line_hear_level(entry, rel, observer_name, proximity=None):
     # and who is on the channel.
     if isinstance(rel.get("comm_channel"), dict):
         return "full"
-    base = hear_level(rel, entry.get("volume", "normal"), proximity=proximity)
+    base = _sense_graded(
+        hear_level(rel, entry.get("volume", "normal"), proximity=proximity),
+        "hearing", senses)
     if base != "none":
         return base
     if not _addresses(entry.get("intended_target"), observer_name):
@@ -516,7 +538,8 @@ def _visible_room_label(scene, name):
     return label
 
 
-def presence_percepts(scene, observer_name, co_present, display_map):
+def presence_percepts(scene, observer_name, co_present, display_map,
+                      senses=None):
     """Presence -- a tier, a side, an arc -- for every co-present body the
     observer can SEE. Subtracts: a body `visual_level_between` answers "none"
     for (unlit, concealed by containment, behind a barrier) does not arrive;
@@ -528,7 +551,8 @@ def presence_percepts(scene, observer_name, co_present, display_map):
         name = str(body.get("name") or "")
         if not name or name == observer_name:
             continue
-        level = visual_level_between(scene, observer_name, name)
+        level = _sense_graded(
+            visual_level_between(scene, observer_name, name), "sight", senses)
         if level == "none":
             continue
         tier = proximity_rel(scene, observer_name, name)
@@ -635,7 +659,8 @@ def body_part_percepts(rows):
     return out
 
 
-def pose_percepts(scene, observer_name, co_present, display_map):
+def pose_percepts(scene, observer_name, co_present, display_map,
+                  senses=None):
     """How bodies are arranged: posture, what holds them up, who they are
     against, what pins them.
 
@@ -682,7 +707,9 @@ def pose_percepts(scene, observer_name, co_present, display_map):
             # cannot outrun it.
             if proximity_rel(scene, observer_name, name) is None:
                 continue
-            level = visual_level_between(scene, observer_name, name)
+            level = _sense_graded(
+                visual_level_between(scene, observer_name, name),
+                "sight", senses)
             if level == "none":
                 continue
             if entity_arc(scene, observer_name, name) == "rear":
@@ -830,7 +857,8 @@ def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
 # --------------------------------------------------------------------------
 
 def speech_percept(entry, rel, observer_name, *, display, can_see,
-                   proximity=None, order_key=0, observer_id=None):
+                   proximity=None, order_key=0, observer_id=None,
+                   senses=None):
     """Admit one spoken line for one observer, or None.
 
     Gates, in order: concealment (absolute exclusion, never a volume),
@@ -845,7 +873,8 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if not body:
         return None
     volume = str(entry.get("volume") or "normal")
-    level = line_hear_level(entry, rel, observer_name, proximity=proximity)
+    level = line_hear_level(entry, rel, observer_name, proximity=proximity,
+                            senses=senses)
     if level == "none" and rel.get("open_group_continuity") \
             and volume.casefold() in ("normal", "loud", "shout"):
         # Compatibility floor for a rerolled checkpoint predating the
