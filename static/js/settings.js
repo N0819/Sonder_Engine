@@ -1,4 +1,14 @@
 // ---- Chat tool modals ----
+
+// The era the reader is currently viewing (chat.js's frame pills), as a
+// query string for the scene-authoring routes -- positions, attire, vitals,
+// survival seeding. Empty for the present, which is also the frameless-chat
+// case. The raw world editor deliberately takes no frame: it shows every
+// era's rows verbatim (web/app.py world_get).
+function frameQuery() {
+  return S.currentFrameId != null ? `?frame_id=${S.currentFrameId}` : "";
+}
+
 $("#b-world").onclick = async () => {
   if (!S.chatId) return;
   const chatId = S.chatId;
@@ -19,7 +29,7 @@ $("#b-world").onclick = async () => {
 $("#b-attire").onclick = async () => {
   if (!S.chatId) return;
   const chatId = S.chatId;
-  const a = await api("GET", `/api/chats/${chatId}/attire`);
+  const a = await api("GET", `/api/chats/${chatId}/attire${frameQuery()}`);
   if (S.chatId !== chatId) return;
   const ta = el("textarea", { style: "width:100%;height:340px" }, JSON.stringify(a, null, 2));
   modal("Attire — {name:{wearing:[],state:[]}}", b => b.append(
@@ -29,7 +39,7 @@ $("#b-attire").onclick = async () => {
       + "directly only to correct something or set up a scene's starting appearance by hand."),
     ta,
     el("div", { class: "row", style: "margin-top:8px" },
-      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/attire`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
+      el("button", { class: "primary", onclick: async () => { let j; try { j = JSON.parse(ta.value) } catch (e) { return toast("Invalid JSON", "err") } await api("PUT", `/api/chats/${chatId}/attire${frameQuery()}`, j); closeModal(); toast("Attire saved.", "ok"); } }, "Save"))));
 };
 
 // Genre & style: the author's standing instruction for anything the engine
@@ -200,7 +210,7 @@ $("#b-style").onclick = async () => {
       el("button", { class: "primary", onclick: async () => {
         const uiChanged = uiLanguage.value !== S.uiLanguage;
         const languageChanged = language.value !== languageState.stored;
-        await api("PUT", `/api/chats/${chatId}/survival`,
+        await api("PUT", `/api/chats/${chatId}/survival${frameQuery()}`,
                   { enabled: survivalBox.checked,
                     show_npcs: npcBox.checked });
         const out = await api("PUT", `/api/chats/${chatId}/style_guide`, {
@@ -702,7 +712,7 @@ async function hydrateConditionTab(panel, chatId) {
 
   let data;
   try {
-    data = await api("GET", `/api/chats/${chatId}/vitals`);
+    data = await api("GET", `/api/chats/${chatId}/vitals${frameQuery()}`);
   } catch (error) {
     panel.append(emptyState("Could not read condition."));
     return;
@@ -990,7 +1000,7 @@ async function refreshVitalsHud() {
 
   let data;
   try {
-    data = await api("GET", `/api/chats/${wanted}/vitals`);
+    data = await api("GET", `/api/chats/${wanted}/vitals${frameQuery()}`);
   } catch (error) {
     if (S.chatId === wanted) {
       hideVitalsHud(host);        // a tracker must never break the story view
@@ -1068,7 +1078,7 @@ async function hydrateCastLocations(slots, sceneSlot, chatId) {
 
   let data;
   try {
-    data = await api("GET", `/api/chats/${chatId}/positions`);
+    data = await api("GET", `/api/chats/${chatId}/positions${frameQuery()}`);
   } catch (error) {
     // Relocation is an addition to this tab, not its purpose -- a failed
     // lookup must leave the rest of the cast panel working.
@@ -1144,7 +1154,7 @@ function castRoomSelect(charId, person, rooms, chatId) {
     try {
       await api(
         "PUT",
-        `/api/chats/${chatId}/characters/${charId}/position`,
+        `/api/chats/${chatId}/characters/${charId}/position${frameQuery()}`,
         { room: target }
       );
 

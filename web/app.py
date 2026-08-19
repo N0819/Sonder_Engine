@@ -1,6 +1,6 @@
 import contextvars, json, queue, random, re, time, threading, os, zlib
 from core import updates
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
 from starlette.datastructures import Headers
 from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
@@ -444,6 +444,48 @@ def _require_frame_idle(chat_id: int, frame_id):
             "This frame still has an active pipeline. Abort it and wait "
             "for the aborted response before submitting another turn.",
         )
+
+@contextmanager
+def _era(cid: int, frame_id):
+    """Scope a route body's frame-scoped world reads/writes to one era.
+
+    WEB-8: the scene-authoring routes (positions, attire, vitals, survival
+    seeding) read the scene blob through `wget`, which routes a frame-scoped
+    key by the ambient `active_frame_id` contextvar -- set only inside a
+    pipeline run, so every route read landed on the PRESENT frame and a
+    multi-frame story had no spelling of "edit the era we are playing".
+
+    The shape is `turn_new`'s, because the API already answers "which era"
+    there: an optional `frame_id`, validated as existing AND belonging to
+    this chat, with None meaning the present -- so a caller who says nothing
+    gets exactly the old behavior. (A plain `= None` default, not
+    `Query(None)`: FastAPI infers a query parameter for a simple-typed
+    non-path argument either way, and several tests call these route
+    functions directly, where a `Query` sentinel default would arrive as
+    itself rather than as None.) "Default to the chat's active frame" is
+    not an option: two frames can each be mid-turn at once (that is the point
+    of `_require_frame_idle`), so there is no single active frame to default
+    to. It rides as a QUERY parameter even on PUTs, since two of the bodies
+    are open dicts keyed by fiction names where a reserved key could collide
+    with a character called "frame_id".
+
+    Setting the contextvar rather than threading a frame argument through
+    `get_scene` and every helper is the same repair `_crowd_index` got
+    (`wget_for_frame` is this token dance, one call at a time): the scoping
+    mechanism IS the contextvar, and the routes were wrong only because
+    nobody set it. Chat-global keys (`survival_enabled`, ...) are unaffected
+    -- `_scoped_world_key` redirects only keys declared frame-scoped.
+    """
+    if frame_id is not None:
+        fr = get_frame(int(frame_id))
+        if fr is None or fr["chat_id"] != cid:
+            raise HTTPException(404, f"Frame {frame_id} not found")
+    token = db.active_frame_id.set(
+        int(frame_id) if frame_id is not None else None)
+    try:
+        yield
+    finally:
+        db.active_frame_id.reset(token)
 
 def _begin_pipeline_or_409(chat_id: int, frame_id):
     """Thin wrapper translating begin_pipeline's PipelineBusyError into
@@ -3814,12 +3856,17 @@ def survival_get(cid: int):
             "show_npcs": survival_shows_npcs(cid)}
 
 @app.put("/api/chats/{cid}/survival")
-def survival_put(cid: int, body: dict = Body(...)):
+def survival_put(cid: int, body: dict = Body(...),
+                 frame_id: int | None = None):
     """Bodily condition tracking for THIS story: breath, stamina, nourishment,
     injury.
 
     Off by default and off means ABSENT -- turning it off stops the ticking and
     leaves whatever a scene already recorded alone rather than zeroing bodies.
+
+    The TOGGLES are chat-global -- one story either tracks bodies or does
+    not, whatever era the panel was open on. `frame_id` scopes the SEEDING:
+    the bodies land in the vitals table of the era's own scene (`_era`).
     """
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
@@ -3830,7 +3877,7 @@ def survival_put(cid: int, body: dict = Body(...)):
     # seeding the scene fails.
     _require_chat_idle(cid)
     enabled = bool(body.get("enabled"))
-    with transaction():
+    with _era(cid, frame_id), transaction():
         set_survival_enabled(cid, enabled)
         if "show_npcs" in body:
             set_survival_shows_npcs(cid, bool(body.get("show_npcs")))
@@ -3861,11 +3908,12 @@ def survival_put(cid: int, body: dict = Body(...)):
     return {"enabled": enabled, "show_npcs": survival_shows_npcs(cid)}
 
 @app.get("/api/chats/{cid}/vitals")
-def chat_vitals_get(cid: int):
+def chat_vitals_get(cid: int, frame_id: int | None = None):
     """Every tracked body's condition in this chat, for the UI tracker.
 
     Returns an empty table when the feature is off or nothing has been
-    recorded, so the tracker can simply not render.
+    recorded, so the tracker can simply not render. `frame_id` names the era
+    whose bodies are read; None is the present (`_era`).
     """
     from world.survival import vital_label
 
@@ -3873,7 +3921,8 @@ def chat_vitals_get(cid: int):
     if not chat:
         raise HTTPException(404, "Chat not found")
 
-    scene = get_scene(cid, dict(chat))
+    with _era(cid, frame_id):
+        scene = get_scene(cid, dict(chat))
     table = scene.get("vitals") if isinstance(scene.get("vitals"), dict) else {}
     player = persona_name(persona_of(dict(chat)))
 
@@ -3894,12 +3943,14 @@ def chat_vitals_get(cid: int):
             "player": player, "show_npcs": survival_shows_npcs(cid)}
 
 @app.get("/api/chats/{cid}/positions")
-def chat_positions_get(cid: int):
+def chat_positions_get(cid: int, frame_id: int | None = None):
     """Where everyone in this story currently stands, and the rooms available.
 
     Read from the scene blob, which is the single runtime source of truth for
     live positions -- not from `world_placements` (decommissioned) or
     `world_entities` (a derived projection). See docs/guides/DATABASE.md.
+    `frame_id` names the era whose scene is read; None is the present
+    (`_era`).
     """
     from world.spatial import room_of
 
@@ -3908,7 +3959,8 @@ def chat_positions_get(cid: int):
         raise HTTPException(404, "Chat not found")
 
     chat = dict(chat)
-    scene = get_scene(cid, chat)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
     rooms = scene.get("rooms") or {}
 
     room_list = []
@@ -3958,7 +4010,8 @@ def chat_positions_get(cid: int):
     }
 
 @app.put("/api/chats/{cid}/characters/{ch}/position")
-def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
+def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
+                           frame_id: int | None = None):
     """Move a character to another room in the current scene.
 
     An authoring action, deliberately silent: like the world editor and the
@@ -3969,6 +4022,9 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
     naming a room that does not exist would leave the character nowhere that
     perception, adjacency, or the narrator can reason about. An empty room
     means offscreen (no position at all), which is a legitimate state.
+
+    `frame_id` names the era whose scene is edited -- and whose rooms the
+    validation runs against; None is the present (`_era`).
     """
     from world.spatial import room_of
 
@@ -3986,39 +4042,40 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...)):
     _require_chat_idle(cid)
 
     room = str(body.get("room") or "").strip()
-    scene = get_scene(cid, dict(chat))
-    rooms = scene.get("rooms") or {}
-    if room and room not in rooms:
-        raise HTTPException(
-            400,
-            f"No room '{room}' in this scene. "
-            f"Known rooms: {', '.join(sorted(rooms)) or '(none)'}",
-        )
+    with _era(cid, frame_id):
+        scene = get_scene(cid, dict(chat))
+        rooms = scene.get("rooms") or {}
+        if room and room not in rooms:
+            raise HTTPException(
+                400,
+                f"No room '{room}' in this scene. "
+                f"Known rooms: {', '.join(sorted(rooms)) or '(none)'}",
+            )
 
-    positions = scene.setdefault("positions", {})
-    name = character_name(sheet)
+        positions = scene.setdefault("positions", {})
+        name = character_name(sheet)
 
-    # room_of resolves a name case- and punctuation-insensitively, so the key
-    # already in the scene may not be spelled the way the character row is.
-    # Rewrite THAT key rather than adding a second spelling: two keys for one
-    # person puts them in two rooms at once for every reader that walks
-    # positions to find a room's occupants.
-    # fold_identity_key, and only when it is non-empty. The old ASCII-only
-    # fold mapped every Japanese name to "", so all of them compared equal and
-    # the pop below removed EVERY other character's position -- the two
-    # sibling folds in spatial.py and commit.py both guard for this.
-    folded_name = fold_identity_key(name)
-    existing_keys = [
-        key for key in positions
-        if folded_name and fold_identity_key(key) == folded_name
-    ]
-    for key in existing_keys:
-        positions.pop(key)
+        # room_of resolves a name case- and punctuation-insensitively, so the
+        # key already in the scene may not be spelled the way the character
+        # row is. Rewrite THAT key rather than adding a second spelling: two
+        # keys for one person puts them in two rooms at once for every reader
+        # that walks positions to find a room's occupants.
+        # fold_identity_key, and only when it is non-empty. The old ASCII-only
+        # fold mapped every Japanese name to "", so all of them compared equal
+        # and the pop below removed EVERY other character's position -- the
+        # two sibling folds in spatial.py and commit.py both guard for this.
+        folded_name = fold_identity_key(name)
+        existing_keys = [
+            key for key in positions
+            if folded_name and fold_identity_key(key) == folded_name
+        ]
+        for key in existing_keys:
+            positions.pop(key)
 
-    if room:
-        positions[name] = room
+        if room:
+            positions[name] = room
 
-    wset(cid, "scene", scene)
+        wset(cid, "scene", scene)
     return {"ok": True, "name": name, "room": room or None}
 
 @app.get("/api/chats/{cid}/characters/{ch}/private_history")
@@ -4112,6 +4169,12 @@ def pph_put(cid: int, body: dict = Body(...)):
 
 @app.get("/api/chats/{cid}/world")
 def world_get(cid: int):
+    # Deliberately takes NO `frame_id`, unlike its scene-authoring siblings
+    # (`_era`): this pair operates on raw storage rows below the frame
+    # abstraction, where every era's keys ("scene<sep>frN") are already
+    # visible -- and writable back through the PUT -- verbatim. A frame
+    # parameter here would make one era's rows special in a surface whose
+    # whole point is that none are.
     return {w["key"]: json.loads(w["value"]) for w in q("SELECT * FROM world WHERE chat_id=?", (cid,))}
 
 @app.put("/api/chats/{cid}/world")
@@ -4151,28 +4214,36 @@ def world_put(cid: int, body: dict = Body(...)):
     return {"ok": True}
 
 @app.get("/api/chats/{cid}/attire")
-def attire_get(cid: int):
+def attire_get(cid: int, frame_id: int | None = None):
+    # `frame_id` names the era whose ledger is read; None is the present
+    # (`_era`). A query parameter on the PUT below too, because its body is
+    # an open dict keyed by wearer names.
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat: raise HTTPException(404, "Chat not found")
-    scene = get_scene(cid, chat)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
     return scene.get("attire") or {}
 
 @app.put("/api/chats/{cid}/attire")
-def attire_put(cid: int, body: dict = Body(...)):
+def attire_put(cid: int, body: dict = Body(...),
+               frame_id: int | None = None):
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat: raise HTTPException(404, "Chat not found")
-    scene = get_scene(cid, chat)
-    # Re-derived, not stored verbatim. `wearing`, `state` and `regions` are one
-    # wardrobe said three ways, and only the commit path was keeping them in
-    # step -- so renaming a garment in the region editor left `wearing` still
-    # naming the old spelling, and the next beat's reconciliation read the two
-    # spellings as two garments and began putting one on while taking the other
-    # off. That is where the measured fork actually started.
-    scene["attire"] = {
-        name: (attire.rederive_entry(entry) if isinstance(entry, dict) else entry)
-        for name, entry in (body or {}).items()
-    }
-    wset(cid, "scene", scene)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, chat)
+        # Re-derived, not stored verbatim. `wearing`, `state` and `regions`
+        # are one wardrobe said three ways, and only the commit path was
+        # keeping them in step -- so renaming a garment in the region editor
+        # left `wearing` still naming the old spelling, and the next beat's
+        # reconciliation read the two spellings as two garments and began
+        # putting one on while taking the other off. That is where the
+        # measured fork actually started.
+        scene["attire"] = {
+            name: (attire.rederive_entry(entry) if isinstance(entry, dict)
+                   else entry)
+            for name, entry in (body or {}).items()
+        }
+        wset(cid, "scene", scene)
     return {"ok": True}
 
 @app.get("/api/chats/{cid}/style_guide")
