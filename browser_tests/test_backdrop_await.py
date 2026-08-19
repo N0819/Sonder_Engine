@@ -133,10 +133,22 @@ def test_running_out_of_patience_does_not_give_up_on_the_room(
         [TURN_ID, SIG],
     )
     # 70 polls x 3s, advanced poll-sized so each timer's fetch completes.
-    for _ in range(72):
+    #
+    # Bounded by PROGRESS rather than by a fixed iteration count with a fixed
+    # real-time nap, for the reason its twin in `test_ambience_await.py`
+    # carries at length: 20ms of wall clock is a promise about the machine,
+    # not about the code, and a shared runner that misses it ends the loop
+    # with the budget unspent and no toast. Extra iterations are harmless --
+    # a poll schedules the next only after its own fetch resolves, so
+    # fast-forwarding while nothing is pending advances no timer. Fixed here
+    # at the same time as the ambience one because it is the same loop; the
+    # ambience one is simply the one that happened to be observed failing.
+    for _ in range(320):
+        if page.evaluate("window.__done === true"):
+            break
         page.clock.fast_forward(3100)
         page.wait_for_timeout(20)
-    page.wait_for_function("window.__done === true", timeout=5000)
+    page.wait_for_function("window.__done === true", timeout=15000)
 
     toasts = _toasts(page)
     assert toasts, "minutes of silence then nothing at all reads as broken"
