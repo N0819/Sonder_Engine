@@ -2969,6 +2969,14 @@ def character_step(ctx, cid, nonce):
     # Following is a voluntary, durable decision this mind owns. Surface its
     # own relation as self-knowledge even after a fast target has pulled ahead;
     # separation does not silently decide whether it keeps chasing or stops.
+    #
+    # The RELATION, never the target's position. `same_room` is the whole of
+    # what that rationale covers -- still together, or no longer -- and a
+    # `target_room` beside it once handed over the exact room id of a body the
+    # follower may have lost through a door, into a hidden interior, or across
+    # a sight barrier, read straight off `scene.positions` with no perceptual
+    # channel of any kind. Where another body IS crosses perception like
+    # anything else does.
     _following = sc.get("following") or {}
     _my_follow = next(
         (record for follower, record in _following.items()
@@ -2982,7 +2990,6 @@ def character_step(ctx, cid, nonce):
             "target": _my_follow.get("target"),
             "since_turn": _my_follow.get("since_turn"),
             "reason": _my_follow.get("reason") or "",
-            "target_room": room_of(sc, _my_follow.get("target")),
             "same_room": (
                 room_of(sc, _my_follow.get("target")) == char_room
                 if char_room else False),

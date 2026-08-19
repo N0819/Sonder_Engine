@@ -135,9 +135,75 @@ def test_character_knows_its_own_following_state(temp_db, monkeypatch):
 
     assert captured["payload"]["self"]["following"] == {
         "target": "The Stranger", "since_turn": 3,
-        "reason": "travelling together", "target_room": "road",
+        "reason": "travelling together",
         "same_room": True,
     }
+
+
+def test_a_follower_is_not_told_where_a_target_it_cannot_see_went(
+        temp_db, monkeypatch):
+    """Following is a decision this mind owns; the target's POSITION is not
+    part of it. `room_of` reads the objective ledger, so a target who stepped
+    through a door -- or into a hidden interior, or across a sight barrier --
+    used to hand its follower the exact room id it had moved to. Whether they
+    are still together is the relation the follower has standing to feel;
+    where the other body actually is has to cross perception like anything
+    else."""
+    import agents.character as character_module
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Following", "", time.time()),
+    )
+    sheet = default_character_data("Mara")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Mara", json.dumps(sheet), "{}", time.time(), "char_mara_lost"),
+    )
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"),
+    )
+    scene = _scene()
+    scene["rooms"]["vault"] = {"name": "Vault", "adjacent": []}
+    scene["positions"] = {"Mara": "road", "The Stranger": "vault"}
+    scene["following"] = {
+        "Mara": {"target": "The Stranger", "since_turn": 3,
+                 "reason": "travelling together"},
+    }
+    temp_db.wset(chat_id, "scene", scene)
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,),
+    )
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 4, "Continue.", time.time()),
+    )
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Following", persona_id=None,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=4,
+                      player_input="Continue.", created=time.time()),
+        cast=cast, input="Continue.",
+    )
+    ctx.director_interpret = {
+        "flow": {"reactors": [char_id], "tom_triggers": []},
+    }
+    captured = {}
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        captured["payload"] = payload
+        return {"sequence": []}
+
+    monkeypatch.setattr(character_module, "_agent_json", fake_agent_json)
+    character_module.character_step(ctx, char_id, nonce=0)
+
+    following = captured["payload"]["self"]["following"]
+    assert following["same_room"] is False
+    assert "vault" not in json.dumps(following)
 
 
 def test_prompts_define_following_as_voluntary_and_speed_bounded():
