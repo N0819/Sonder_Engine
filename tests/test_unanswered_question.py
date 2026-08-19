@@ -298,8 +298,14 @@ class TestADebtNeedsAChannel:
     never reached.
     """
 
-    def _seed_turn(self, temp_db, *, speech=None, results=None, heard=None):
-        """One turn, with an explicit record of what this mind received."""
+    def _seed_turn(self, temp_db, *, speech=None, results=None, heard=None,
+                   bare=None):
+        """One turn, with an explicit record of what this mind received.
+
+        `bare` seeds `character:<id>` steps -- one result per step, which is
+        what `build_plan` writes instead of an `interaction_loop` on an
+        uncontested beat at `autonomy == 0`.
+        """
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)", ("T", "", 0.0))
         char_id = temp_db.qi(
@@ -318,6 +324,8 @@ class TestADebtNeedsAChannel:
                            "flow": {"addressed_to": [char_id]}}))
         if results is not None:
             steps.append(("interaction_loop", {"character_results": results}))
+        for other_id, result in (bare or {}).items():
+            steps.append(("character:%s" % other_id, result))
         for key, content in steps:
             sid = temp_db.qi(
                 "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
@@ -382,3 +390,27 @@ class TestADebtNeedsAChannel:
                                   ["The Doctor"])})
         assert _unanswered_question_note(
             chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]
+
+    def test_a_question_asked_in_a_bare_character_step_is_owed_too(
+            self, temp_db):
+        """At `autonomy == 0` on an uncontested beat there is no
+        `interaction_loop` at all -- every declaration is stored under
+        `character:<id>` -- so on those chats no character-asked question ever
+        became a debt, and the absence looked exactly like a beat with nothing
+        owed."""
+        chat_id, char_id = self._seed_turn(
+            temp_db, heard='Tamamo says, "Doctor, describe its nature."',
+            bare={41: _asked("Tamamo", "Doctor, describe its nature.",
+                             ["The Doctor"])})
+        owed = _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]
+        assert owed["from"] == "Tamamo"
+
+    def test_answering_in_a_bare_character_step_clears_it(self, temp_db):
+        chat_id, char_id = self._seed_turn(
+            temp_db, heard='Tamamo says, "Doctor, describe its nature."',
+            bare={41: _asked("Tamamo", "Doctor, describe its nature.",
+                             ["The Doctor"]),
+                  99: _said("The Doctor", "It is only a machine.")})
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None) == {}
