@@ -210,16 +210,6 @@ def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
     checkpoints.restore_checkpoint(ctx.chat.id, 12)
     assert cancelled == [(ctx.chat.id, commit.MEMORY_CONSOLIDATION_JOB_KEY)]
 
-
-def test_the_commit_tail_no_longer_blocks_on_consolidation():
-    """Superseded by `tests/test_commit_tail_producers.py`.
-
-    This asserted a substring of `inspect.getsource`, which cannot fail on a
-    behavioural change: `job = None if True else schedule_memory_consolidation(ctx)`
-    keeps the text and never runs the call. The replacement drives a real
-    commit and asserts the producer was reached.
-    """
-    import tests.test_commit_tail_producers  # noqa: F401  (the real cover)
 def test_utility_is_configured_not_inherited(monkeypatch):
     """`utility` is the background helper lane (memory consolidation above
     all), and unset it follows `default` -- the model hosts pick for their
