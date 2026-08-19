@@ -172,6 +172,95 @@ def test_restore_books_replaces_existing_link_metadata(temp_db):
         "sort_order": 3,
     }
 
+def test_restore_books_recreates_a_book_deleted_since_the_snapshot(
+    temp_db, monkeypatch,
+):
+    """A book the chat owned at snapshot time comes back.
+
+    Deleting one is not a special case: the general one is a snapshot book
+    with no counterpart in this database, which the id -> origin -> name
+    matching already has to answer. Rolling back past the turn that minted a
+    book is the ordinary way to reach it -- a restore deletes the books no
+    snapshot book maps onto, so the next restore forward found nothing to
+    match and the lore, the canon binding and the links between those books
+    were all gone.
+    """
+    from persist import checkpoints
+    from persist.checkpoints import _restore_books
+    from mind import memory as memory_mod
+    from mind.memory import add_lorebook_link
+
+    monkeypatch.setattr(
+        memory_mod, "embed_texts", lambda texts: [[0.5, 0.5] for _ in texts]
+    )
+
+    chat_id, first, second = _chat_with_two_books(temp_db)
+    temp_db.qi(
+        "UPDATE chats SET lorebook_id=? WHERE id=?", (first, chat_id)
+    )
+    add_lorebook_link(first, second, "related", label="saved link")
+    temp_db.qi(
+        "INSERT INTO lore_entries(lorebook_id,keys,content,category,entry_uid) "
+        "VALUES(?,?,?,?,?)",
+        (second, "harbor", "The harbor freezes in winter.", "place",
+         "harbor_entry"),
+    )
+    snapshot = [
+        {**_book_snapshot(first, "First"), "canon": True},
+        {
+            **_book_snapshot(second, "Second"),
+            "entries": [{
+                "keys": "harbor",
+                "content": "The harbor freezes in winter.",
+                "category": "place",
+                "entry_uid": "harbor_entry",
+            }],
+        },
+    ]
+    links = [{
+        "source_book_id": first,
+        "target_book_id": second,
+        "relation_type": "related",
+        "label": "saved link",
+        "notes": "",
+        "bidirectional": 1,
+        "follow_for_retrieval": 1,
+        "weight": 0.75,
+        "sort_order": 0,
+    }]
+
+    temp_db.qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (chat_id,))
+    temp_db.qi("DELETE FROM lorebooks WHERE chat_id=?", (chat_id,))
+    assert temp_db.q(
+        "SELECT id FROM lorebooks WHERE chat_id=?", (chat_id,)
+    ) == []
+
+    old_to_new = _restore_books(chat_id, snapshot, links)
+
+    names = {
+        row["name"]: row["id"]
+        for row in temp_db.q(
+            "SELECT id,name FROM lorebooks WHERE chat_id=?", (chat_id,)
+        )
+    }
+    assert set(names) == {"First", "Second"}
+    assert old_to_new == {first: names["First"], second: names["Second"]}
+    assert temp_db.q(
+        "SELECT content FROM lore_entries WHERE lorebook_id=?",
+        (names["Second"],),
+        one=True,
+    )["content"] == "The harbor freezes in winter."
+    assert temp_db.q(
+        "SELECT lorebook_id FROM chats WHERE id=?", (chat_id,), one=True
+    )["lorebook_id"] == names["First"]
+    assert temp_db.q(
+        "SELECT label FROM lorebook_links "
+        "WHERE source_book_id=? AND target_book_id=?",
+        (names["First"], names["Second"]),
+        one=True,
+    )["label"] == "saved link"
+
+
 def test_restore_preserves_archived_without_event_key(
     temp_db,
     monkeypatch,

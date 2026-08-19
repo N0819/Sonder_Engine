@@ -125,7 +125,15 @@ def test_branch_mints_event_id_and_remaps_payload_and_foreign_keys(temp_db):
             assert event["frame_id"] != frame_id
 
 
-def test_v26_migration_adds_frame_scope_and_chat_partition(temp_db):
+def test_v26_to_v27_migration_adds_frame_scope_and_chat_partition(temp_db):
+    """Named at both ends, like its sibling in test_world_entity_chat_scope.
+
+    "the v26 migration" does not say which list runs. Stamping `26` runs the
+    v26 -> v27 block -- `MIGRATIONS[i - 1]` for i starting at the stored
+    version -- so the one-ended name pointed at the migration BEFORE the one
+    under test, and would have gone on doing so while somebody edited the
+    wrong entry to make it pass.
+    """
     cid, _, turn_id = _story(temp_db)
     temp_db.qi("DROP TABLE world_events")
     temp_db.qi(

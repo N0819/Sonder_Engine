@@ -182,13 +182,44 @@ def snapshot_state(chat_id):
         "fiction_locations": fiction_locations,
     }
 
+def _recreate_snapshot_book(chat_id, snapshot):
+    """Re-create a snapshot book this chat no longer has, or decline.
+
+    A restore already DELETES the chat-owned books no snapshot book maps
+    onto -- a book minted by a since-discarded timeline must not survive
+    into canon. Without the inverse the pair is one-way: rolling back past
+    the turn that minted a book and then forward again found nothing to
+    match, and the book, its entries, the canon binding and every link
+    between those books were gone for good. Rolling all of a chat's books
+    away is only the extreme of that, not a separate case.
+
+    Declines when the snapshot's id still names a live row: this chat does
+    not own that book (the id-, origin- and name-matching above would have
+    claimed it if it did), so it is a library book other chats read, and
+    rewriting a shared resource from one chat's checkpoint is not this
+    function's business. The re-created book is chat-owned and attached at
+    the snapshot's `enabled`, which is also what makes the next restore
+    match it by id instead of minting a second copy."""
+    old_id = snapshot.get("lorebook_id")
+    if old_id is not None and q(
+            "SELECT id FROM lorebooks WHERE id=?", (old_id,), one=True):
+        return None
+    new_id = qi(
+        "INSERT INTO lorebooks(chat_id,name,book_type,origin_id) "
+        "VALUES(?,?,?,?)",
+        (chat_id, snapshot.get("name") or "Lorebook",
+         snapshot.get("book_type") or "general", snapshot.get("origin_id")),
+    )
+    qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,enabled) "
+       "VALUES(?,?,?)",
+       (chat_id, new_id, 1 if snapshot.get("enabled", 1) else 0))
+    return new_id
+
 def _restore_books(chat_id, books, links=None):
     """Restore lorebook rows/entries from a snapshot. Returns the
     {snapshot book id: current book id} map so the caller can remap other
     snapshot data that embeds book ids (room_registry.owning_book_id)."""
     current_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
-    if not current_ids:
-        return {}
     current = {
         row["id"]: row
         for row in q("SELECT * FROM lorebooks WHERE chat_id=?", (chat_id,))
@@ -210,7 +241,11 @@ def _restore_books(chat_id, books, links=None):
         if target not in current:
             target = by_name.get(snapshot.get("name"))
         if target not in current:
-            continue
+            target = _recreate_snapshot_book(chat_id, snapshot)
+            if target is None:
+                continue
+            current[target] = q(
+                "SELECT * FROM lorebooks WHERE id=?", (target,), one=True)
         old_id = snapshot.get("lorebook_id")
         if old_id:
             old_to_new[old_id] = target
@@ -547,6 +582,13 @@ def _preserved_settings(chat_id):
     Only keys that currently EXIST are preserved. A fresh chat (branch,
     import) has none, so it still inherits the source's settings from the
     snapshot -- which is the behavior branching wants.
+
+    A key that exists and will not parse is a different case, and it is the
+    one this list was built to prevent: the restore falls through to the
+    checkpoint's older dial and the reader's own value is gone. Left silent,
+    that is indistinguishable from never having turned the dial, so it is
+    logged. The restore still proceeds -- an unreadable preference is not a
+    reason to refuse a rollback of the story.
     """
     preserved = {}
     for key in PRESERVED_SETTING_KEYS:
@@ -555,8 +597,11 @@ def _preserved_settings(chat_id):
         if row is not None:
             try:
                 preserved[key] = json.loads(row["value"])
-            except (TypeError, ValueError):
-                continue
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "checkpoints: chat %s setting %r is unreadable (%s); the "
+                    "restore will roll it back to the checkpoint's value",
+                    chat_id, key, exc)
     return preserved
 
 
@@ -709,8 +754,27 @@ def _lore_cache_fingerprint(entry):
 
 def checkpoint_storage_status(chat_id=None):
     """How much of the checkpoint store is still in the legacy inline-vector
-    format, for the maintenance panel. Cheap: one scan of sizes plus a probe of
-    each blob's first memory entry rather than a full parse.
+    format, for the maintenance panel.
+
+    "Legacy" here means exactly one thing: this checkpoint holds at least one
+    entry `compact_checkpoints` would move. It asks with `_movable_entry`, the
+    same predicate `_candidate_blob` decides by, because two spellings of one
+    question is how the panel and the mover came to disagree in both
+    directions -- a store whose first entry was already compacted reported
+    done with inline vectors still in it, and a store whose vectors the mover
+    refuses reported legacy forever while every run rewrote nothing. The entry
+    scan stops at the first movable one, so it costs a single check on a store
+    that has anything to convert.
+
+    NOT cheap in the way this docstring used to claim. It selects and
+    `json.loads` every checkpoint blob in scope -- on the corpus this module
+    was written for (4.4 GB, 94.5% of it checkpoints) that is the whole store,
+    and `start_compaction` calls it on every click before deciding whether
+    there is anything to do. The claim was written for an implementation that
+    read one entry's worth; this one reads all of it. Anyone making this
+    cheaper wants a pre-filter that never says "no" to a blob holding an
+    inline vector -- the entry scan below is the only thing allowed to answer
+    that question.
     """
     where, args = ["1=1"], []
     if chat_id is not None:
@@ -725,12 +789,29 @@ def checkpoint_storage_status(chat_id=None):
             mems = json.loads(blob["blob"]).get("memories") or []
         except (TypeError, ValueError):
             continue
-        # An inline entry carries the payload; a compacted one carries `vkey`.
-        if any(isinstance(m, dict) and m.get("embedding") for m in mems[:1]):
+        if any(_movable_entry(m) is not None for m in mems):
             legacy += 1
             legacy_bytes += r["sz"] or 0
     return {"checkpoints": len(rows), "legacy": legacy,
             "bytes": total_bytes, "legacy_bytes": legacy_bytes}
+
+
+def _movable_entry(m):
+    """The (full, cue) payload the compactor would move, or None.
+
+    BOTH vectors have to decode. The store is addressed by the pair
+    (`vector_address`), so an entry carrying half of one has no address to be
+    filed under and there is nothing safe to move. Written once, and read by
+    the storage panel as well as by the mover, so the answer to "is there
+    anything left to convert" cannot depend on who is asking.
+    """
+    if not isinstance(m, dict) or not m.get("embedding"):
+        return None
+    full = _b64_to_blob(m.get("embedding"))
+    cue = _b64_to_blob(m.get("cue_embedding"))
+    if full is None or cue is None:
+        return None
+    return full, cue
 
 
 def _candidate_blob(blob):
@@ -742,12 +823,10 @@ def _candidate_blob(blob):
     candidate = json.loads(json.dumps(blob))     # deep copy, cheap enough here
     pending, moved = [], 0
     for m in candidate.get("memories") or []:
-        if not isinstance(m, dict) or not m.get("embedding"):
+        payload = _movable_entry(m)
+        if payload is None:
             continue
-        full = _b64_to_blob(m.get("embedding"))
-        cue = _b64_to_blob(m.get("cue_embedding"))
-        if full is None or cue is None:
-            continue                              # nothing safe to move
+        full, cue = payload
         vkey = vector_address(full, cue)
         pending.append((vkey, full, cue, m.get("embedding_model"),
                         m.get("embedding_dim")))
@@ -854,10 +933,15 @@ def compact_checkpoints(chat_id=None, *, dry_run=True, progress=None):
     chats = q("SELECT DISTINCT chat_id FROM checkpoints WHERE " + clause, tuple(args))
     total = q("SELECT COUNT(*) n FROM checkpoints WHERE " + clause, tuple(args),
               one=True)["n"]
+    # No `error` key. A per-story failure is `skipped` -- named, with its
+    # reason, which is the only failure this function has -- and a failure of
+    # the RUN raises out of here into `_run_compaction`, which is where
+    # `_COMPACT_STATE["error"]` is filled. The key used to sit here
+    # initialized to "" and assigned by nothing, so a caller reading it was
+    # told "no failure" by a run that had one.
     report = {"checkpoints": total, "rewritten": 0, "vectors_stored": 0,
               "bytes_before": 0, "bytes_after": 0, "stories": len(chats),
-              "stories_done": 0, "skipped": [], "dry_run": bool(dry_run),
-              "error": ""}
+              "stories_done": 0, "skipped": [], "dry_run": bool(dry_run)}
     seen = 0
     for row in chats:
         cid = row["chat_id"]
