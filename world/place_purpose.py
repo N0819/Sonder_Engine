@@ -100,6 +100,7 @@ from __future__ import annotations
 import re
 from collections import deque
 
+from world.comfort import SOFT_SUPPORT_TOKENS, WARMTH_TOKENS
 from world.comfort import _is_body as _body_guard
 from world.comfort import rest_affording
 from world.spatial import effective_light, hiding_holders_of, room_of
@@ -151,19 +152,15 @@ _NAME_LEXICON = {
 }
 
 # Structural tokens for the live echo: entity/anchor ids, kinds, names and
-# descriptions. Soft-support and warmth sets are in parity with comfort.py's
-# vocabulary (kept separate because comfort's are private and its module
-# must stay free to evolve them for pleasure math without moving perception).
+# descriptions. Rest and warmth are comfort.py's own sets, IMPORTED. They
+# used to be hand-copied under a comment asserting parity, and the copy fell
+# 18 tokens behind: a room furnished entirely in featherbeds, settees,
+# cushions, furs and quilts echoed no rest at all, while comfort scored a
+# body lying on one of them as comfortable. Two readings of one scene that
+# disagree about what a bed is are worse than either reading alone.
 _HERE_LEXICON = {
-    "rest": frozenset({
-        "bed", "beds", "bedroll", "bedrolls", "bunk", "bunks", "cot",
-        "cots", "couch", "couches", "sofa", "sofas", "divan", "divans",
-        "hammock", "hammocks", "mattress", "mattresses",
-    }),
-    "warmth": frozenset({
-        "hearth", "hearths", "fireplace", "fireplaces", "brazier",
-        "braziers", "campfire", "campfires", "stove", "stoves",
-    }),
+    "rest": SOFT_SUPPORT_TOKENS,
+    "warmth": WARMTH_TOKENS,
     "food": frozenset({
         "food", "bread", "stew", "meal", "meals", "cheese", "meat",
         "fruit", "rations", "provisions",

@@ -58,8 +58,17 @@ _LEVEL_NEAR = 0.1      # standing by warmth or beside a soft feature
 # "furniture" and "furnace". Small and generic on purpose -- the same
 # lexicon-creep failure mode place purpose has. It will want to grow into an
 # unversioned ontology of furniture; refuse it.
+#
+# PUBLIC, and the single definition: `place_purpose._HERE_LEXICON` asks the
+# same two questions of the same scene ("is there somewhere to rest here",
+# "is there warmth here") and used to restate these sets by hand under a
+# comment claiming parity. They drifted by 18 tokens -- a room furnished in
+# featherbeds, settees, cushions, furs and quilts echoed no rest at all. A
+# vocabulary two modules share is one vocabulary; where one of them needs a
+# different answer, the difference belongs in an explicit delta over this
+# set, never in a second copy of it.
 
-_SOFT_TOKENS = frozenset({
+SOFT_SUPPORT_TOKENS = frozenset({
     "bed", "beds", "featherbed", "featherbeds", "bedroll", "bedrolls",
     "bunk", "bunks", "cot", "cots", "couch", "couches", "sofa", "sofas",
     "settee", "settees", "divan", "divans", "armchair", "armchairs",
@@ -68,7 +77,7 @@ _SOFT_TOKENS = frozenset({
     "hammock", "hammocks", "mattress", "mattresses",
 })
 
-_WARMTH_TOKENS = frozenset({
+WARMTH_TOKENS = frozenset({
     "hearth", "hearths", "fireplace", "fireplaces", "brazier", "braziers",
     "campfire", "campfires", "stove", "stoves",
 })
@@ -106,11 +115,11 @@ def _tokens(*texts):
 
 
 def _soft(tokens):
-    return any(t in _SOFT_TOKENS for t in tokens)
+    return any(t in SOFT_SUPPORT_TOKENS for t in tokens)
 
 
 def _warm(tokens):
-    if any(t in _WARMTH_TOKENS for t in tokens):
+    if any(t in WARMTH_TOKENS for t in tokens):
         return True
     return any(a in _WARM_QUALIFIERS and b in _WARM_MEDIA
                for a, b in zip(tokens, tokens[1:]))
