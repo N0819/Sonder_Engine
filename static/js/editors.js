@@ -883,7 +883,7 @@ function generateModal(kind) {
 }
 
 // ---- Lorebook generate ----
-function generateLoreModal(lid, isChat) {
+function generateLoreModal(lid) {
   const ta = el("textarea", { style: "width:100%;height:170px", placeholder: "Describe the entries to create…" });
   modal("Generate lorebook entries", b => {
     b.append(ta,

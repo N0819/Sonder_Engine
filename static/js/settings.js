@@ -1247,7 +1247,7 @@ function renderLorebooksTab(d, b, chatId) {
             el("button", {
               title: "Generate entries",
               onclick: () =>
-                generateLoreModal(lb.id, true)
+                generateLoreModal(lb.id)
             }, "✨"),
             !isCanon
               ? el("button", {
