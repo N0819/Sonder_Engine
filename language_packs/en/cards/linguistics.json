@@ -1204,6 +1204,38 @@
       "modifier": "\\b{state}(?:\\s+\\w+)?\\s+{name}\\b",
       "predicate": "\\b{name}\\b[^.!?\\n,;]{0,60}?\\b{state}\\b",
       "join": "\\s+"
+    },
+    "_VIEW_QUOTE_BODY_RE": {
+      "$type": "regex",
+      "pattern": "[\"“]([^\"“”]{1,})[\"”]",
+      "flags": 32
+    },
+    "_QUOTE_PAIRS": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            "\"",
+            "\""
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "“",
+            "”"
+          ]
+        }
+      ]
+    },
+    "_QUOTE_CHARS": {
+      "$type": "tuple",
+      "items": [
+        "\"",
+        "“",
+        "”"
+      ]
     }
   },
   "agents.director": {

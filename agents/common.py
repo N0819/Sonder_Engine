@@ -3386,7 +3386,7 @@ def _check_character_speech_authority(resolved_event, silent_names,
         # this one: what this catches is the contentless attribution a quote
         # check cannot see -- "X adds a comment" quotes nothing, so nothing
         # downstream can tell it was invented.
-        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         for head, _clause in _predicate_heads(tail, _SPEECH_VERB_WINDOW):
             if re.search(cue_boundary_pattern(_ling("_ATTRIBUTION_VERBS")), head, re.I):
@@ -3457,7 +3457,7 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
     for sentence, subject in _sentence_subjects(resolved_event, all_names):
         if subject != name:
             continue
-        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         for head, clause in _predicate_heads(tail, 3):
             if re.search(rf"\b(?:{verbs})\b", head, re.I) or (
@@ -3997,7 +3997,7 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
         # Speech attribution ("Hinami says, ...") is not a physical act; the
         # quote itself is guarded separately by the dialogue_log check and by
         # `_check_prose_quote_authority`.
-        without_quotes = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+        without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         # Per conjunct, not three words from the subject: one subject governs
         # several verbs, and a window measured from the name sees only the
@@ -4865,7 +4865,7 @@ def _protected_view_quotes(view, player_lines=None):
         if _quote_body(line)
     }
     quotes = []
-    for match in re.finditer(r'["“]([^"“”]{1,})["”]', str(view or "")):
+    for match in _ling("_VIEW_QUOTE_BODY_RE").finditer(str(view or "")):
         body = _quote_body(match.group(1))
         if not body:
             continue
@@ -4911,7 +4911,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         body = _quote_body(quote)
         if not body:
             continue
-        forms = ['"%s"' % body, "“%s”" % body]
+        forms = [o + body + c for o, c in _ling("_QUOTE_PAIRS")]
         if len(body) >= 8:
             forms.append(body)
         for form in forms:
@@ -4934,7 +4934,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # corrupting unrelated words ("know", "not"). Without this split,
         # short player lines (e.g. "Stop!", "Wait!") were never stripped at
         # all and echoed verbatim in narrator prose.
-        quoted_forms = ('"%s"' % body, "\u201c%s\u201d" % body)
+        quoted_forms = tuple(o + body + c for o, c in _ling("_QUOTE_PAIRS"))
         matched = any(q in prose for q in quoted_forms)
         if len(body) >= 8 and body in prose:
             matched = True
@@ -5158,11 +5158,11 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
     # sentence terminators OUTSIDE any quote, plus the END of each quoted span
     # (a new clause almost always begins after a quoted line).
     quote_spans = [(m.start(), m.end(), m.group(1))
-                   for m in re.finditer(r'["“]([^"”]*)["”]', view)]
+                   for m in _ling("_VIEW_QUOTE_BODY_RE").finditer(view)]
     boundaries = {0}
     inside = False
     for i, ch in enumerate(view):
-        if ch in '"“”':
+        if ch in _ling("_QUOTE_CHARS"):
             inside = not inside
         elif ch in ".!?…" and not inside:
             boundaries.add(i + 1)
@@ -5258,8 +5258,9 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
 
 _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
 # Double-quote characters only: curly/straight single quotes double as
-# apostrophes in ordinary prose and cannot mark dialogue reliably.
-_VIEW_QUOTE_CHARS = ('"', "“", "”")
+# apostrophes in ordinary prose and cannot mark dialogue reliably. The
+# pack names them, because which glyphs open a spoken line is the one
+# thing about dialogue that every language answers differently.
 _VIEW_DEDUPE_MIN_WORDS = 5
 
 _VIEW_MASK = "\x00Q%d\x00"
@@ -5344,7 +5345,7 @@ def _dedupe_view_sentences(text):
             # check stays alongside it for an UNTERMINATED quote, which the
             # span regex cannot match and which must still be protected.
             and "\x00" not in sent
-            and not any(qc in sent for qc in _VIEW_QUOTE_CHARS)
+            and not any(qc in sent for qc in _ling("_QUOTE_CHARS"))
         )
         if droppable:
             if key in seen:
@@ -5504,7 +5505,7 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
     # A pronoun inside quoted dialogue belongs to the speaker talking about
     # whoever they mean -- often someone the clause never names -- so it can't
     # be scored against the clause's named subject.
-    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
+    scan = _ling("_NARRATION_QUOTE_RE").sub(" ", prose)
 
     warnings = []
     flagged = set()
@@ -5857,10 +5858,11 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         # OPENING delimiter sits just before `start` and must not truncate
         # the context it opens.
         prefix = prose[:start].rstrip()
-        while prefix and prefix[-1] in '"“':
+        while prefix and prefix[-1] in _ling("_QUOTE_CHARS"):
             prefix = prefix[:-1]
         cut = max(prefix.rfind("\n"),
-                  max((prefix.rfind(qc) for qc in ('"', "”", "“")), default=-1))
+                  max((prefix.rfind(qc) for qc in _ling("_QUOTE_CHARS")),
+                      default=-1))
         prefix = prefix[cut + 1:]
         best = None  # (pos, actor)
         for actor, pats in pat_map.items():
@@ -5938,7 +5940,7 @@ def _check_position_fidelity(prose, position_facts, room_names):
         own_name = str(usable_rooms.get(own_room) or "").lower()
         for sentence in _SENTENCE_SPLIT.split(prose):
             # Quoted speech is a speaker's claim, not narration.
-            scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+            scan = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
             best = max((mm.start() for p in pats for mm in p.finditer(scan)),
                        default=-1)
             if best < 0:
@@ -5985,7 +5987,7 @@ def _check_portal_fidelity(prose, portal_states):
     player can currently see (built in agents/narration.py)."""
     if not prose or not portal_states:
         return []
-    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
+    scan = _ling("_NARRATION_QUOTE_RE").sub(" ", prose)
     warnings = []
     for name, state in portal_states.items():
         name = str(name or "").strip()
