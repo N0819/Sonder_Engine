@@ -664,7 +664,7 @@ def test_speech_only_record_is_unaffected():
 def _bg_ctx(temp_db, scene, action, quote="STOP WHERE YOU ARE."):
     ctx = _mk_ctx(temp_db, scene)
     ctx.director_interpret = {"sequence": []}
-    ctx._extra["background_react"] = {
+    ctx["background_react"] = {
         "fired": True, "name": "A Machine",
         "reactions": [{
             "name": "A Machine",

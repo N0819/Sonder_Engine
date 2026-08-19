@@ -82,6 +82,57 @@ def _cut_into_last_element(sequence):
     return False
 
 
+def rehydrate_loop_views(ctx, key, content):
+    """Rebuild the per-mind micro-views this module stashes on `ctx._extra`.
+
+    `interaction_views` and `reaction_views` are cross-stage side channels: a
+    loop writes them, `character.py` reads them, and NO step content carries
+    them -- so a resumed or rerolled turn reconstructed neither, and every
+    character step fell through to `perception_act`'s base onset view. The
+    fallback subtracts (safe direction, no leak), but it makes a resumed turn
+    decide from different input than the uninterrupted one, which is the
+    property `storage.active_content` calls the worst kind of difference.
+
+    Rebuilt here rather than in `runtime.py` because the SHAPE is this
+    module's: `reaction_views` is exactly `perception_act`'s view for that
+    reactor, and `interaction_views` is that base view with each round's
+    already-persisted `delivered_views` appended in round order -- the same
+    `_append_micro_view` the live path uses. Both are therefore exact, not
+    approximations, and neither costs a provider call.
+    """
+    if not isinstance(content, dict):
+        return
+    base = {
+        int(cid): view
+        for cid, view in ((ctx.perception_act or {}).get("views") or {}).items()
+        if str(cid).isdigit()
+    }
+    rounds = _dict_list(content.get("rounds"))
+    if key == "reaction_loop":
+        views = ctx._extra.setdefault("reaction_views", {})
+        for round_data in rounds:
+            try:
+                rid = int(round_data.get("reactor_id"))
+            except (TypeError, ValueError):
+                continue
+            if rid in base:
+                views.setdefault(rid, base[rid])
+        return
+    if key != "interaction_loop":
+        return
+    local_views = dict(base)
+    for round_data in rounds:
+        for observer, additions in _dict(
+                round_data.get("delivered_views")).items():
+            try:
+                observer_id = int(observer)
+            except (TypeError, ValueError):
+                continue
+            local_views[observer_id] = _append_micro_view(
+                local_views.get(observer_id, ""), _list(additions))
+    ctx._extra["interaction_views"] = local_views
+
+
 def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     actor_row = _character_by_id(ctx, actor_id)
     actor_sheet = json.loads(actor_row["sheet"])
