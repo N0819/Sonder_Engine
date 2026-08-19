@@ -941,11 +941,11 @@ def _destruction_name_pattern(name_cf):
     name = name_boundary_pattern(name_cf)
     gap = r"[,\s]*"
     return re.compile(
-        rf"{name}(?:'s)?{gap}(?:\S+\s+){{0,4}}?{_ling("_DESTRUCTION_TERMINAL_CUES")}"
-        rf"|{_ling("_DESTRUCTION_VERB_OBJECT")}{gap}"
+        rf"{name}(?:'s)?{gap}(?:\S+\s+){{0,4}}?{_ling('_DESTRUCTION_TERMINAL_CUES')}"
+        rf"|{_ling('_DESTRUCTION_VERB_OBJECT')}{gap}"
         rf"(?:the\s+|all\s+of\s+|the\s+whole\s+|the\s+entire\s+|most\s+of\s+)?"
         rf"{name}"
-        rf"|{_ling("_DESTRUCTION_OF_PHRASE")}{gap}(?:the\s+)?{name}"
+        rf"|{_ling('_DESTRUCTION_OF_PHRASE')}{gap}(?:the\s+)?{name}"
     )
 
 def _narrated_destruction_subjects(resolved_event, dialogue_log, sd, sc,

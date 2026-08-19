@@ -50,7 +50,13 @@ jobs:
     # install. Both directions now run the WHOLE suite, which is affordable
     # since it costs ~40s.
     name: Schemas on Pydantic 1.x
+    # `needs: fast` is ORDERING, not a precondition. Without an
+    # always() guard GitHub SKIPS this job when either `fast` matrix
+    # leg fails, so a 3.11 parse error erased the evidence from two
+    # unrelated gates and the run reported neither. Reported by the
+    # Directive team, who read a run where exactly that happened.
     needs: fast
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -81,7 +87,13 @@ jobs:
 
   browser:
     name: Browser behavior
+    # `needs: fast` is ORDERING, not a precondition. Without an
+    # always() guard GitHub SKIPS this job when either `fast` matrix
+    # leg fails, so a 3.11 parse error erased the evidence from two
+    # unrelated gates and the run reported neither. Reported by the
+    # Directive team, who read a run where exactly that happened.
     needs: fast
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

@@ -180,9 +180,7 @@ def _output_field_names():
                                     ).items() if key.startswith("director_")]
     names = set()
     for cls in models:
-        fields = getattr(cls, "model_fields", None) or getattr(
-            cls, "__fields__", None) or {}
-        names.update(str(f).casefold() for f in fields)
+        names.update(str(f).casefold() for f in schemas._fields(cls))
     # Container names that ARE legitimate diff keys are not room ids either,
     # but they are already handled above; what matters here is that a room
     # can never be called one of these.

@@ -22,13 +22,36 @@ import numpy as np
 from mind import memory
 
 
+def _unit_vector(dims):
+    """Exactly `dims` float32s, and the assertion is the point.
+
+    `np.ones(dims, dtype=np.float32) / np.sqrt(dims)` looks like it stays
+    float32, and does under NumPy 1.x value-based casting. Under NumPy 2's NEP
+    50 the float64 scalar wins, so the buffer holds `dims` float64s -- and
+    since `_vec(..., dtype=np.float32)` reads the bytes correctly, production
+    sees 2*dims values and the test's own claim of `dims` becomes false. Every
+    dimension-mismatch assertion in this file then measures the fixture rather
+    than the engine.
+
+    The fault is the fixture's, never `_vec`'s: do not widen production
+    decoding to accommodate a wrongly encoded vector. Reported by the Directive
+    team, who ran the pinned NumPy (2.2.6, `constraints.txt`) while the local
+    gate was resolving 1.26.
+    """
+    value = np.float32(1.0 / np.sqrt(dims))
+    vec = np.full(dims, value, dtype=np.float32)
+    assert vec.dtype == np.float32
+    assert vec.nbytes == dims * np.dtype(np.float32).itemsize
+    return vec
+
+
 def _book(db, name="Tamamo's Shrine"):
     return db.qi("INSERT INTO lorebooks(name) VALUES(?)", (name,))
 
 
 def _entry(db, book_id, title, content, dims, keys=""):
     """One lore entry carrying a vector of exactly `dims` float32s."""
-    vec = np.ones(dims, dtype=np.float32) / np.sqrt(dims)
+    vec = _unit_vector(dims)
     return db.qi(
         "INSERT INTO lore_entries(lorebook_id,title,keys,content,category,"
         "embedding) VALUES(?,?,?,?,?,?)",
@@ -38,7 +61,7 @@ def _entry(db, book_id, title, content, dims, keys=""):
 def _stub_embedder(monkeypatch, dims):
     """The configured model, emitting `dims`-wide query vectors."""
     def embed_texts(texts):
-        v = np.ones(dims, dtype=np.float32) / np.sqrt(dims)
+        v = _unit_vector(dims)
         return [v for _ in texts]
     monkeypatch.setattr(memory, "embed_texts", embed_texts)
 
@@ -137,7 +160,7 @@ def _live_embedder(monkeypatch, dims=2560):
     from llm.providers import EmbeddingBatch
 
     def meta(texts, **_k):
-        v = np.ones(dims, dtype=np.float32) / np.sqrt(dims)
+        v = _unit_vector(dims)
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="test:1:model", dimensions=dims,
                               fallback=False)
@@ -183,7 +206,7 @@ def test_a_rebuild_uses_the_same_document_update_lore_builds(temp_db,
 
     def meta(texts, **_k):
         seen.extend(texts)
-        v = np.ones(2560, dtype=np.float32) / np.sqrt(2560)
+        v = _unit_vector(2560)
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="test:1:model", dimensions=2560,
                               fallback=False)
@@ -210,7 +233,7 @@ def test_a_provider_hiccup_never_writes_a_fallback_over_lore(temp_db,
     from llm.providers import EmbeddingBatch
 
     def degraded(texts, **_k):
-        v = np.ones(256, dtype=np.float32) / np.sqrt(256)
+        v = _unit_vector(256)
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="cheap:crc32:256", dimensions=256,
                               fallback=True, error="provider down")

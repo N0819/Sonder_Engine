@@ -425,3 +425,70 @@ def test_greeting_interpret_asks_only_for_what_the_launch_reads():
             # request for `positions`.
             assert not re.search(r"\b%s\b" % dropped, prompt), (
                 f"{pack.id} still asks for {dropped!r}, which nothing reads")
+
+
+# ---------------------------------------------------------------------------
+# The Pydantic-major seam. Reported by the Directive team against
+# `reorganization`, and the failure it names is the reason these are here:
+# `agents/director_scopes._schema_list_channels` read `field.outer_type_`,
+# which exists ONLY on Pydantic 1. On a Pydantic-2 install `_LIST_DELEGATED`
+# was the empty set, so `_normalized_channel_value` coerced every op-list
+# channel a specialist wrote to `{}` -- dispatched, paid for, discarded in
+# silence. The suite did not catch it because the suite runs on Pydantic 1
+# while the venv the engine serves from runs Pydantic 2: a green gate saying
+# nothing at all about the installed engine.
+#
+# Both tests below are written to fail on EITHER major. The first names the
+# roll literally, because a test that re-derives the answer the same way the
+# code does agrees with the code about being empty.
+# ---------------------------------------------------------------------------
+
+def test_list_shaped_fields_reads_the_same_shapes_on_either_pydantic():
+    """A bare `list` is list-shaped; a parametrized one is; a dict is not.
+
+    `list_shaped_fields` is deliberately WIDER than `_declared(f).is_list`,
+    which counts only a parametrized list because it drives the
+    wrap-a-single-item coercion and that needs a known item type. Channel
+    shape asks a different question, and `StateDiff.world_facts` is annotated
+    bare -- reading it through `is_list` dropped exactly that one channel, so
+    the fix for an empty set nearly shipped as a set missing one.
+    """
+    from typing import Optional
+
+    from pydantic import BaseModel, Field
+
+    from llm.schemas import list_shaped_fields
+
+    class Shapes(BaseModel):
+        bare: list = Field(default_factory=list)
+        parametrized: list[dict] = Field(default_factory=list)
+        keyed: dict = Field(default_factory=dict)
+        scalar: str = ""
+        optional_scalar: Optional[int] = None
+
+    assert list_shaped_fields(Shapes) == {"bare", "parametrized"}
+
+
+def test_every_list_valued_director_channel_is_registered_as_one():
+    """The roll is named, not re-derived. An empty `_LIST_DELEGATED` passes
+    any assertion that computes the expected set the way the code does."""
+    from agents.director import _DELEGATED_CHANNELS, _LIST_DELEGATED
+    from llm.schemas import StateDiff, list_shaped_fields
+
+    expected = {
+        "cast_changes", "introductions", "world_facts", "contact_ops",
+        "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
+        "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
+        "telling_ops", "offscreen_plan_ops", "ratified_claims",
+        "contradicted_claims", "comms_ops",
+    }
+    assert expected <= _LIST_DELEGATED, sorted(expected - _LIST_DELEGATED)
+
+    # And it stays derived: a channel `StateDiff` declares as a list, owned by
+    # a specialist, must be registered as one without anybody editing the roll
+    # above. The roll is the floor; the schema is the source.
+    schema_lists = list_shaped_fields(StateDiff)
+    assert schema_lists, "list_shaped_fields returned nothing at all"
+    for channel in _DELEGATED_CHANNELS:
+        if channel in schema_lists:
+            assert channel in _LIST_DELEGATED, channel
