@@ -1861,9 +1861,15 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
     Strain is the deterministic ledger behind drive rupture. The previous
     value first decays toward 0 (half-life _STRAIN_HALF_LIFE over
     `turns_since` — the same 0.5**(t/hl) idiom as decay_affect), then
-    moves by at most one delta from the appraisal's *dominant* impact,
-    and only when that impact serves the drive and is confirmed
-    (certainty >= _CERTAINTY_THRESHOLD):
+    moves by at most one delta from the impact that serves the DRIVE this
+    beat (`_drive_serving_impact`: `appraise`'s dedicated `drive_impact`,
+    falling back to `dominant` only when the dominant one serves the drive
+    — a drive wound out-ranked by an intention wound still registers), and
+    only when that impact is confirmed at certainty >=
+    _STRAIN_CERTAINTY_MIN (0.5, NOT the mood-appraisal
+    _CERTAINTY_THRESHOLD of 0.8 — see the constant's own note: a
+    pre-rupture signal is inherently uncertain, and demanding certainty
+    about the self-doubt discarded the most authentic version of it):
 
     - contradiction (impact < 0): +_STRAIN_CONTRADICTION_GAIN * |impact|
       * certainty, x_STRAIN_SELF_MULT when self-caused — UNLESS its
@@ -1936,10 +1942,11 @@ def detect_drive_rupture(strain, appraisal_out, turn_idx, last_shift_turn):
     """Decide whether this beat opens a drive-rupture window.
 
     Fires only when BOTH keys turn: accumulated strain >=
-    _RUPTURE_STRAIN_MIN AND this beat's dominant impact is a confirmed
-    drive-scale event — event_score = |impact| * certainty
-    (x_RUPTURE_SELF_MULT when self-caused), valid only when it serves
-    the drive at certainty >= _CERTAINTY_THRESHOLD, else 0. High strain
+    _RUPTURE_STRAIN_MIN AND this beat's drive-serving impact
+    (`_drive_serving_impact`, the same one strain accrues from) is a
+    confirmed drive-scale event — event_score = |impact| * certainty
+    (x_RUPTURE_SELF_MULT when self-caused), valid only at certainty >=
+    _STRAIN_CERTAINTY_MIN (0.5), else 0. High strain
     alone smolders without igniting; one catastrophic beat from a cold
     start bounces off. A shift within the last _RUPTURE_COOLDOWN turns
     closes the window entirely.
