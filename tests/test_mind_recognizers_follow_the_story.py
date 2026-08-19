@@ -117,3 +117,53 @@ def test_trust_moves_on_the_story_languages_vocabulary(
     moved = entry.trust
     assert moved != 0.0, conclusion
     assert (1 if moved > 0 else -1) == expected_sign
+
+
+def test_out_of_band_consolidation_runs_in_the_storys_language(
+        temp_db, monkeypatch):
+    """The consolidation job is a fresh thread with fresh contextvars.
+
+    It already pins the scheduling turn's FRAME for exactly that reason, and
+    did not pin the language -- so a Japanese story's autobiographical summary
+    was written under the English prompt policy, and (once the recognizers
+    above moved into the packs) tokenized with English regexes that match
+    nothing in it. Neither raises: the summary simply comes back wrong.
+
+    Found while landing MIND-F4; not on the wave-2 plan.
+    """
+    import time
+    from types import SimpleNamespace
+
+    from core import jobs
+    from core.db import wset
+    from language_runtime import current_language_id
+    from persist import commit_memory_write
+
+    chat_id = temp_db.qi("INSERT INTO chats(name,scenario,created) "
+                         "VALUES(?,?,?)", ("Lang", "", time.time()))
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+        ("Mara", '{"name": "Mara"}', "{}", time.time()))
+    wset(chat_id, "story_language", "ja")
+
+    produced = {}
+    monkeypatch.setattr(jobs, "submit",
+                        lambda cid, key, fn, base_turn=None: produced.setdefault(
+                            "fn", fn) or SimpleNamespace(fn=fn))
+    seen = []
+    monkeypatch.setattr(
+        commit_memory_write, "maybe_consolidate_character_memory",
+        lambda *a, **k: seen.append(current_language_id.get()))
+
+    ctx = SimpleNamespace(
+        chat=SimpleNamespace(id=chat_id),
+        turn=SimpleNamespace(idx=4, frame_id=None),
+        cast=[{"id": char_id, "sheet": '{"name": "Mara"}'}])
+    commit_memory_write.schedule_memory_consolidation(ctx)
+
+    produced["fn"](SimpleNamespace(cancelled=SimpleNamespace(
+        is_set=lambda: False)))
+    assert seen == ["ja"]
+    # And the scope is released with the job, never leaked into the thread
+    # that scheduled it.
+    assert current_language_id.get() != "ja"
