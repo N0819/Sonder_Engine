@@ -2813,6 +2813,22 @@ def character_step(ctx, cid, nonce):
     _psych = character_psychology(sh)
     # Tier-1: show the EFFECTIVE (possibly rupture-shifted) drive, read-only.
     _psych["drive"] = effective_drive(_psych, _interior)
+    # AND SAY SO WHEN THERE ISN'T ONE. An empty drive is the engine's worst
+    # authoring failure precisely because it is silent: every motivation then
+    # lives in goals, goals are built to be completable and abandonable, and
+    # when they decay the character simply stops wanting things -- fifty beats
+    # later, by which time it looks like a model problem. `serves: "drive"`
+    # stays valid against three empty strings, so nothing downstream objects.
+    # `importers.character_import_warnings` asks exactly this question and
+    # runs only on the import path; a card built or edited any other way was
+    # never asked. This is the one function that reads the sheet on every beat
+    # of every character's life, so it costs a line here and nothing anywhere.
+    if not str(_psych["drive"].get("essence") or "").strip():
+        ctx.add_warning(
+            f"character {character_name(sh)}: no drive is authored "
+            "(psychology.drive.essence is empty), so nothing under this "
+            "character's goals wants anything -- they will react rather than "
+            "pursue once the goals decay")
     # The authored beliefs and associations are SEEDED into the interior ledger
     # at commit, so once that has happened the payload was carrying each of them
     # twice -- `psychology.self_model.beliefs` beside `learned_beliefs`, and
