@@ -1348,6 +1348,127 @@
       "$type": "regex",
       "pattern": "(?:\\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|hoist(?:s|ed|ing)?|upwards?)\\b|上げる|持ち上げる|昇る)",
       "flags": 34
+    },
+    "_CONFLICT_VERBS": {
+      "$type": "tuple",
+      "items": [
+        "attack",
+        "grab",
+        "restrain",
+        "steal",
+        "break",
+        "force",
+        "cast",
+        "shoot",
+        "stab",
+        "strike",
+        "move into",
+        "leave",
+        "enter",
+        "攻撃",
+        "掴む",
+        "拘束",
+        "盗む",
+        "壊す",
+        "破る",
+        "押し入る",
+        "撃つ",
+        "刺す",
+        "殴る",
+        "斬る",
+        "入る",
+        "出る",
+        "立ち去る"
+      ]
+    },
+    "_LEADING_SUBJECT_PRONOUNS": {
+      "$type": "frozenset",
+      "items": [
+        "she",
+        "he",
+        "they",
+        "it",
+        "彼",
+        "彼女",
+        "彼ら",
+        "それ"
+      ]
+    },
+    "_VISUAL_CONTRADICTION_RES": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "regex",
+          "pattern": "\\bno visual sign of the speaker is visible\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "\\bno clear figure visible\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "\\bthe speaker is not visible\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "\\bcannot see (?:them|the speaker|anyone)\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "話し手の姿は見えない",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "はっきりした人影は見えない",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "(?:相手|話し手|誰)の?姿は見えない",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "(?:相手|話し手|誰も)を?見ることはできない",
+          "flags": 34
+        }
+      ]
+    },
+    "_PARTIAL_QUOTE_PREFIXES": {
+      "$type": "tuple",
+      "items": [
+        "something about ",
+        "何か",
+        "……何か"
+      ]
+    },
+    "_GENERIC_ROOM_WORDS": {
+      "$type": "frozenset",
+      "items": [
+        "room",
+        "area",
+        "here",
+        "部屋",
+        "場所",
+        "ここ",
+        "区画"
+      ]
+    },
+    "_PLACEMENT_PHRASE": {
+      "pattern": "(?:\\b(?:back\\s+)?(?:in|inside|within|into|at)\\s+(?:the\\s+)?(?:\\w+[ -]){0,2}?{room}\\b|{room}(?:の(?:中|なか|奥))?(?:に|で|へ|にて))",
+      "flags": 34
+    },
+    "_PORTAL_STATE": {
+      "open": "(?:open|ajar|wide[- ]open|開いて|開いた|開け放たれ|開け放た)",
+      "shut": "(?:shut|closed|sealed|locked|閉じ|閉ま|閉ざされ|施錠され)",
+      "modifier": "(?:\\b{state}(?:\\s+\\w+)?\\s+{name}\\b|{state}(?:た|ている)?{name})",
+      "predicate": "(?:\\b{name}\\b[^.!?\\n,;]{0,60}?\\b{state}\\b|{name}[^。！？\\n、；]{0,60}?{state})",
+      "join": "\\s*"
     }
   },
   "agents.director": {
