@@ -2304,6 +2304,39 @@ function renderFullApiSettings(b) {
           + "appearance supplies the rest."));
     }
 
+    // Whether a story may acquire cast on its own. It lives here because the
+    // per-story "turns till auto-promotion" dial in the Dialogue panel has
+    // always told the host that promotion "also has to be switched on
+    // globally in ⚙ API" -- and there was no such control anywhere in the
+    // browser, so the sentence named a switch that did not exist.
+    {
+      const promoteBox = el("input", {
+        type: "checkbox", ...(S.boot.auto_promote ? { checked: "" } : {})
+      });
+      promoteBox.onchange = async () => {
+        await api("PUT", "/api/auto_promote", { enabled: promoteBox.checked });
+        await boot();
+        toast(promoteBox.checked
+          ? "Stories may promote an extra into a full character on their own."
+          : "Extras will only become characters when you promote them.", "ok");
+      };
+      b.append(el("h4", {}, "Acquiring cast"),
+        el("div", { class: "small dim" },
+          "Off by default, and deliberately: promoting an extra is not a small "
+          + "event. It writes a character sheet with a model call, attaches a "
+          + "permanent cast member, seeds mutual recognition with everyone "
+          + "present, and starts keeping that mind's psychology every beat. "
+          + "With this off you can still promote anyone by hand from the Cast "
+          + "panel."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, promoteBox,
+            " Let a story promote an extra on its own")),
+        el("div", { class: "small dim" },
+          "This is the global permission. Each story also sets how many turns "
+          + "of deliberate interaction it takes, under 💬 Dialogue — 0 there "
+          + "means never, whatever this switch says."));
+    }
+
     // Room ambience. Not an agent-model row for the same reason backdrops is
     // not: the thing being configured is a SOURCE of media (a folder, or a
     // sound library's API), not a chat model. The optional `ambience_prompt`

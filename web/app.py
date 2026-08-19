@@ -71,7 +71,11 @@ from story.importers import (
 )
 from persist.commit import (promotable_background_presences,
                     promote_background_character,
-                    sync_room_registry_with_scene)
+                    sync_room_registry_with_scene,
+                    # The gate itself, not a second reading of the same
+                    # setting. `"" != "0"` is True, so an unset setting read
+                    # as ON here and OFF at the gate -- see get_auto_promote.
+                    _auto_promote_enabled)
 from llm.prompts import (
     presets, active_preset, DEFAULT_PROMPTS,
     default_prompts_for, preset_export_document, preset_import_document,
@@ -1214,7 +1218,7 @@ def bootstrap():
         # sent back, only whether one is set.
         "ambience": {k: v for k, v in ambience_settings().items() if k != "key"},
         "ambience_licenses": list(FREESOUND_LICENCES),
-        "auto_promote": get_setting("auto_promote") != "0",
+        "auto_promote": _auto_promote_enabled(),
         "default_prompts": DEFAULT_PROMPTS,
         "prompt_presets": presets(),
         "active_preset": active_preset(),
@@ -3375,7 +3379,16 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
 
 @app.get("/api/auto_promote")
 def get_auto_promote():
-    return {"enabled": get_setting("auto_promote") != "0"}
+    """What the gate will actually do, not a second reading of the setting.
+
+    These two disagreed on the case that matters most -- a fresh install,
+    where the setting has never been written. `"" != "0"` is True, so the API
+    and the bootstrap payload both reported auto-promotion ON while
+    `_auto_promote_enabled` (which reads the same row as a truthy WORD, and
+    is the only thing that decides) had it OFF. A host reading a control that
+    says ON learns nothing about whether cast will be acquired.
+    """
+    return {"enabled": _auto_promote_enabled()}
 
 @app.put("/api/auto_promote")
 def set_auto_promote(body: dict = Body(...)):
