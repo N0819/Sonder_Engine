@@ -217,6 +217,92 @@ class TestRestraintView:
         assert "vine_mass" in pool
 
 
+# --- the cue's precision, measured rather than designed ----------------------
+#
+# There are no historical release sentences to measure `_RELEASE_CUE` against
+# -- across the whole live corpus, no restraint has ever ended -- so its
+# precision was designed, not measured. This battery is the substitute: every
+# false-positive class an adversarial pass found, each asserted with the
+# genuine release phrasing nearest to it, so a tightening that buys precision
+# by silently dropping recall fails here too. The classes, and who answers
+# them: dialogue is masked (a quoted "I will untie you" is a plan spoken by
+# someone still holding the rope); an act introduced as TRYING is not
+# completed; a transitive release names its object NEXT to the verb, so a
+# restrained name further than a short reach after the cue -- or past the
+# cue's own "free"/"loose" -- is a bystander, not the thing released; and a
+# possession coming loose ("Hinami's hair pulls loose") is not the person
+# coming free, so a possessive name never carries subject-side attribution.
+
+class TestReleasePrecision:
+    def test_a_quoted_promise_inside_resolved_prose_is_a_plan(self):
+        assert _release_attempts(
+            '"I will untie you," Sarah tells Hinami, settling in to wait.',
+            [SUBJECT]) == set()
+
+    def test_a_try_is_not_a_completion(self):
+        assert _release_attempts(
+            "Hinami tries to work her wrists free, but the straps hold.",
+            [SUBJECT]) == set()
+
+    def test_a_release_still_in_progress_is_not_a_completion(self):
+        assert _release_attempts(
+            "Sarah begins to unbuckle the straps around Hinami's wrists.",
+            [SUBJECT]) == set()
+
+    def test_an_earlier_unrelated_try_does_not_suppress_the_release(self):
+        assert _release_attempts(
+            "No longer trying to be gentle, Sarah cuts Hinami loose.",
+            [SUBJECT]) == {SUBJECT}
+
+    def test_managing_it_is_completing_it(self):
+        assert _release_attempts(
+            "Sarah manages to cut Hinami loose.", [SUBJECT]) == {SUBJECT}
+
+    def test_untying_something_else_near_the_restrained_name(self):
+        assert _release_attempts(
+            "Sarah unties her apron and hands Hinami the tray.",
+            [SUBJECT]) == set()
+        assert _release_attempts(
+            "Sarah unties the boat from the dock while Hinami watches.",
+            [SUBJECT]) == set()
+
+    def test_letting_go_of_an_object_frees_nobody(self):
+        assert _release_attempts(
+            "Sarah lets go of the ladder and waves to Hinami.",
+            [SUBJECT]) == set()
+
+    def test_a_name_past_the_cues_own_loose_is_not_the_thing_released(self):
+        assert _release_attempts(
+            "Sarah works the cork loose and pours Hinami a glass.",
+            [SUBJECT]) == set()
+
+    def test_a_possession_coming_loose_is_not_the_person_coming_free(self):
+        assert _release_attempts(
+            "Hinami's hair pulls loose from its braid as she struggles.",
+            [SUBJECT]) == set()
+
+    def test_the_person_coming_free_still_reads(self):
+        assert _release_attempts(
+            "Hinami works her wrists free of the straps.",
+            [SUBJECT]) == {SUBJECT}
+        assert _release_attempts(
+            "Hinami is finally untied.", [SUBJECT]) == {SUBJECT}
+        assert _release_attempts(
+            "Sarah unties the ropes binding Hinami.", [SUBJECT]) == {SUBJECT}
+        assert _release_attempts(
+            "Sarah sets Hinami free.", [SUBJECT]) == {SUBJECT}
+
+    def test_the_japanese_attempt_is_not_a_completion(self):
+        from language_runtime import language_scope
+
+        with language_scope("ja"):
+            assert _release_attempts(
+                "サラは縄を解こうとしたが、結び目は固かった。",
+                ["ヒナミ"]) == set()
+            assert _release_attempts(
+                "サラはヒナミの縄をほどいた。", ["ヒナミ"]) == {"ヒナミ"}
+
+
 # --- the vocabulary the body specialist is finally handed --------------------
 
 class TestPublishedVocabulary:

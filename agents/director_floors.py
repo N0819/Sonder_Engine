@@ -23,6 +23,7 @@ from story.scene import (
 )
 from world.spatial import room_of
 
+from .common import _mask_quoted_spans
 from .director_lingua import _ling
 
 # Keep the keyword list small and specific so it does not fire on ordinary
@@ -647,20 +648,108 @@ def _restraint_blocked_moves(sd, sc, records, amap, candidate_names):
 # contests, and contests are the Director's.
 
 
+#: How far after a release verb its object can sit. Deliberately tighter than
+#: `_MAX_UNCONSCIOUSNESS_GAP`: a transitive release names what it releases
+#: NEXT to the verb ("unties the ropes binding Hinami" is the long form), and
+#: every measured false positive of the wider window was a restrained name
+#: further out in the clause than any object ever sits ("unties her apron and
+#: hands Hinami the tray").
+_MAX_RELEASE_OBJECT_GAP = 3
+
+
 def _release_attempts(resolved_event, restrained_names):
     """Restrained subjects whose release the resolved prose asserts.
 
     Reads ONLY resolved_event -- the Director's own adjudicated account --
-    never declared acts (an attempt is not a completion) and never dialogue
-    quotes ("I'll untie you" is a plan spoken by someone still holding the
-    rope). Cues are completed-release verbs; attribution is the same
-    clause-pinned idiom as the rouse scan, object-side first, because a
-    release is transitive ("Sarah uncuffs Hinami")."""
+    never declared acts (an attempt is not a completion). Cues are
+    completed-release verbs (`_RELEASE_CUE`); attribution is DELIBERATELY
+    stricter than `_clause_attributed_subjects`, because ending a restraint
+    on prose that did not assert a release frees a body the fiction still
+    holds. The cue battery in `tests/test_restraint_exits.py` is the measure
+    for every rule here -- there are no historical release sentences to
+    measure against, since no live restraint has ever ended:
+
+    - QUOTED SPANS ARE MASKED FIRST. "I will untie you" is a plan spoken by
+      someone still holding the rope, and resolved prose embeds dialogue
+      routinely.
+    - AN ACT INTRODUCED AS TRYING IS NOT COMPLETED. A cue immediately
+      preceded by an attempt marker ("tries to", "begins to", "cannot"), or
+      carrying one inside its own span (Japanese volitional-plus-とする
+      attaches to the verb the cue matched), is an attempt or a
+      failure -- and escape attempts are contests, which are the Director's.
+    - A TRANSITIVE RELEASE NAMES ITS OBJECT NEXT TO THE VERB. An object-side
+      name is accepted only within `_MAX_RELEASE_OBJECT_GAP` words of the
+      cue, and never past the cue's own "free"/"loose" token
+      (`_RELEASE_OBJECT_BOUNDARY`) -- past it, the freed thing was something
+      else and the name is a bystander ("works the cork loose and pours
+      Hinami a glass").
+    - A POSSESSION COMING LOOSE IS NOT THE PERSON COMING FREE. Subject-side
+      attribution ("Hinami wriggles free") never rides a possessive
+      occurrence: "Hinami's hair pulls loose" frees hair, not Hinami.
+
+    Names are matched with `name_boundary_pattern`, not `\\b`, because a
+    kana name has no word boundary against the particle that follows it --
+    under the shared idiom a Japanese release could never be pinned to its
+    subject at all."""
     if not restrained_names:
         return set()
-    return _clause_attributed_subjects(
-        [str(resolved_event or "")], _ling("_RELEASE_CUE"), restrained_names,
-        prefer_object=True)
+    masked, _spans = _mask_quoted_spans(str(resolved_event or ""))
+    low = masked.casefold()
+    if not low:
+        return set()
+    name_hits = []
+    for name in restrained_names:
+        label = str(name or "").strip()
+        if not label:
+            continue
+        for m in re.finditer(name_boundary_pattern(label.casefold()), low):
+            name_hits.append((m.start(), m.end(), label))
+    if not name_hits:
+        return set()
+    marker = _ling("_RELEASE_ATTEMPT_MARKER")
+    boundary = _ling("_RELEASE_OBJECT_BOUNDARY")
+    breaks = _sentence_break_positions(low)
+    released = set()
+    for cm in _ling("_RELEASE_CUE").finditer(low):
+        cs, ce = cm.start(), cm.end()
+        if marker.search(low, cs, ce):
+            continue                      # the attempt rode into the span
+        last = None
+        for mm in marker.finditer(low, 0, cs):
+            last = mm
+        if (last is not None
+                and not any(last.end() <= p < cs for p in breaks)
+                and len(re.findall(r"\w+", low[last.end():cs])) <= 1):
+            continue                      # "tries to work ... free"
+        bm = boundary.search(low, ce, ce + 40)
+        limit = bm.start() if bm else None
+        best = None                       # (side_rank, word_gap, name)
+        for ns, ne, name in name_hits:
+            if ns >= ce:                  # object side: the thing released
+                if limit is not None and ns >= limit:
+                    continue
+                if any(ce <= p < ns for p in breaks):
+                    continue
+                gap = len(re.findall(r"\w+", low[ce:ns]))
+                if gap > _MAX_RELEASE_OBJECT_GAP:
+                    continue
+                side = 0
+            elif ne <= cs:                # subject side: "Hinami slips free"
+                if low[ne:ne + 2] in ("'s", "’s"):
+                    continue
+                if any(ne <= p < cs for p in breaks):
+                    continue
+                gap = len(re.findall(r"\w+", low[ne:cs]))
+                if gap > _MAX_UNCONSCIOUSNESS_GAP:
+                    continue
+                side = 1
+            else:
+                continue
+            if best is None or (side, gap) < best[:2]:
+                best = (side, gap, name)
+        if best is not None:
+            released.add(best[2])
+    return released
 
 
 def _restraint_view(records, sc, amap, clock, sd_time, candidate_names):
