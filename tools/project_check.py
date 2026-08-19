@@ -283,13 +283,6 @@ def check_duplicate_dict_keys(errors: list[str]) -> None:
 #: The one module allowed to derive the install root from `__file__`.
 INSTALL_ROOT_OWNER = "core/paths.py"
 
-#: Packages whose modules sit one level below the install root, so a bare
-#: `dirname(abspath(__file__))` in them names the PACKAGE and not the install.
-_ROOT_PATTERNS = (
-    "os.path.dirname(os.path.abspath(__file__))",
-    "Path(__file__).resolve().parent.parent",
-    "Path(__file__).parent.parent",
-)
 
 
 def check_install_root_derivations(errors: list[str]) -> None:
@@ -308,6 +301,20 @@ def check_install_root_derivations(errors: list[str]) -> None:
     answer; the asset directories were simply created empty. That is why this
     is a structural check and not a test: the symptom of getting it wrong is
     an engine that quietly does less.
+
+    The rule is `__file__` itself, not three spellings of walking up from it.
+    It used to be a substring match on
+    `os.path.dirname(os.path.abspath(__file__))`,
+    `Path(__file__).resolve().parent.parent` and `Path(__file__).parent.parent`
+    -- a literal guard, evaded by `parents[1]`, by an aliased `Path`, or by
+    splitting the walk across two statements, none of which is exotic. The
+    stronger rule costs nothing HERE and only here: measured 2026-08-19,
+    `__file__` appears four times across the twelve engine roots, once in
+    `core/paths.py` itself and three times inside comments explaining this very
+    rule. An AST walk does not see a comment, so the check ships with **no
+    exemption list at all** -- which will stop being true the first time
+    someone adds one, and that is the point at which the exemption should be
+    argued rather than inherited.
     """
     for path in sorted(engine_python_paths()):
         # `.as_posix()`, not `str()`. `INSTALL_ROOT_OWNER` is written with a
@@ -321,14 +328,17 @@ def check_install_root_derivations(errors: list[str]) -> None:
         rel = path.relative_to(ROOT).as_posix()
         if rel == INSTALL_ROOT_OWNER:
             continue
-        text = path.read_text(encoding="utf-8")
-        for pattern in _ROOT_PATTERNS:
-            if pattern in text:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id == "__file__":
                 errors.append(
-                    f"{rel} derives a filesystem root from __file__ "
-                    f"({pattern}); import INSTALL_ROOT from core.paths "
-                    "instead -- a module that moves takes its own wrong "
-                    "answer with it")
+                    f"{rel}:{node.lineno} reads __file__; import INSTALL_ROOT "
+                    f"from core.paths instead -- a module that moves takes "
+                    f"its own wrong answer with it. Only {INSTALL_ROOT_OWNER} "
+                    f"may ask where the install is.")
 
 
 def check_patch_debris(errors: list[str]) -> None:
@@ -953,14 +963,56 @@ SUBSYSTEM_PACKAGES = ("core", "llm", "world", "mind", "story", "dressing", "pers
 NON_PACKAGE_ENGINE_DIRS = ("agents", "extension_runtime", "language_runtime",
                            "language_adapters")
 
+#: The engine's own importable modules: eight subsystem packages plus four
+#: loose directories. This is the set every structural rule below is
+#: answerable for.
+ENGINE_PACKAGE_ROOTS = SUBSYSTEM_PACKAGES + NON_PACKAGE_ENGINE_DIRS
+
+#: EVERY directory in this repository that holds Python this project wrote.
+#: One tuple, because there were four hand-kept inventories of the same thing
+#: -- this file's `SUBSYSTEM_PACKAGES` + `NON_PACKAGE_ENGINE_DIRS`, a third
+#: ad-hoc list inside `check_undefined_names` that redundantly re-appended
+#: three directories `engine_python_paths()` already returned, and the
+#: `make compile` argument list. Four copies of "where the source is" is four
+#: chances for a new directory to be covered by some of the checks and not
+#: others, which is exactly how `demo/` came to be compiled by the Makefile
+#: and scanned by nothing here.
+#:
+#: `make compile` now reads this tuple rather than repeating it:
+#: `python tools/project_check.py --source-roots` prints it, one per line.
+#: `extensions/` is deliberately absent -- it holds INSTALLED third-party
+#: trees, not this project's source, and `_extension_dirs()` covers what the
+#: engine actually promises about them.
+ENGINE_SOURCE_ROOTS = ENGINE_PACKAGE_ROOTS + (
+    "tools", "tests", "browser_tests", "demo")
+
+
+def _python_files(root: str) -> list[Path]:
+    """Every `.py` under one repository directory, `__pycache__` excluded.
+
+    `rglob`, never `glob`. The packages were walked one level deep and the
+    loose directories recursively, for no reason anyone recorded; measured
+    2026-08-19 the difference was zero files, which is precisely why it was
+    invisible and why the first `core/sub/thing.py` anyone adds would have
+    been checked by nothing.
+    """
+    return [path for path in (ROOT / root).rglob("*.py")
+            if "__pycache__" not in path.parts]
+
 
 def engine_python_paths():
     """Every .py file the engine itself owns, packages plus the loose dirs."""
     out = []
-    for pkg in SUBSYSTEM_PACKAGES:
-        out.extend((ROOT / pkg).glob("*.py"))
-    for extra in NON_PACKAGE_ENGINE_DIRS:
-        out.extend((ROOT / extra).rglob("*.py"))
+    for root in ENGINE_PACKAGE_ROOTS:
+        out.extend(_python_files(root))
+    return sorted(out)
+
+
+def repository_python_paths():
+    """Every .py file this project wrote, engine plus tools/tests/demo."""
+    out = []
+    for root in ENGINE_SOURCE_ROOTS:
+        out.extend(_python_files(root))
     return sorted(out)
 
 
@@ -1025,19 +1077,14 @@ def check_undefined_names(errors: list[str]) -> None:
     import builtins
     import symtable
 
-    # Enumerated rather than rglob'd. `ROOT` contains `.claude/worktrees/`,
-    # which holds several complete checkouts of this repository, and a
-    # whole-tree walk therefore scans the engine seven times over and takes
-    # minutes. These are the directories the engine actually ships from.
-    paths = (
-        engine_python_paths()
-        + list((ROOT / "tools").glob("*.py"))
-        + list((ROOT / "tests").glob("*.py"))
-        + list((ROOT / "extension_runtime").glob("*.py"))
-        + list((ROOT / "language_runtime").glob("*.py"))
-        + list((ROOT / "language_adapters").glob("*.py"))
-        + list((ROOT / "extensions").glob("*/*.py"))
-    )
+    # Enumerated rather than rglob'd from ROOT. `ROOT` contains
+    # `.claude/worktrees/`, which holds several complete checkouts of this
+    # repository, and a whole-tree walk therefore scans the engine seven times
+    # over and takes minutes. `ENGINE_SOURCE_ROOTS` is the enumeration; the
+    # three redundant re-appends that used to sit here (`extension_runtime`,
+    # `language_runtime`, `language_adapters`, all already returned by
+    # `engine_python_paths()`) are gone with it.
+    paths = repository_python_paths() + list((ROOT / "extensions").glob("*/*.py"))
     scanned = 0
     for path in sorted(paths):
         if "__pycache__" in path.parts:
@@ -1702,6 +1749,765 @@ def check_pydantic_major_reads_are_owned(errors: list[str]) -> None:
                 f"one version branch.")
 
 
+# ---------------------------------------------------------------------------
+# Version agreement across the four places the supported Python is written
+# ---------------------------------------------------------------------------
+
+#: Where the supported interpreter range is stated. Four files, because three
+#: of them are executed by something that cannot read the fourth: pip reads
+#: `pyproject.toml`, a Windows player runs the `.bat`, everyone else runs the
+#: `.sh`, and CI runs the matrix. They agreed on 3.11-3.13 in three places and
+#: on 3.11-3.12 in the fourth for the whole life of the 3.13 support, so the
+#: interpreter a fresh player was MOST likely to get (both launchers try 3.13
+#: first) was the one no gate had ever run.
+_PYPROJECT_RANGE = re.compile(
+    r'^requires-python\s*=\s*"\s*>=\s*3\.(\d+)\s*,\s*<\s*3\.(\d+)\s*"',
+    re.MULTILINE)
+_BAT_CANDIDATES = re.compile(r"^\s*for %%V in \(([^)]*)\)", re.MULTILINE)
+_SH_CANDIDATES = re.compile(r"^\s*for candidate in ([^\n;]+?)(?:;|\s*do)",
+                            re.MULTILINE)
+_CI_MATRIX = re.compile(r"^\s*python-version:\s*\[([^\]]*)\]", re.MULTILINE)
+_VERSION_TOKEN = re.compile(r"3\.\d+")
+
+
+def declared_python_series() -> list[str]:
+    """`["3.11", "3.12", "3.13"]`, read from `pyproject.toml`'s own bound."""
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = _PYPROJECT_RANGE.search(text)
+    if not match:
+        return []
+    low, high = int(match.group(1)), int(match.group(2))
+    return ["3.%d" % minor for minor in range(low, high)]
+
+
+def check_python_version_agreement(errors: list[str]) -> None:
+    """`pyproject.toml`, both launchers and the CI matrix must name one range.
+
+    `requires-python` is the declaration; the launchers are what a player
+    actually runs; the matrix is the only one of the four that PROVES the range
+    works. When the matrix is a subset, the versions outside it are supported
+    in writing and untested in fact -- and the gap is worst at the top of the
+    range, because both launchers are ordered newest-first and therefore
+    select precisely the untested end.
+
+    Reported as a set difference in both directions: a matrix entry outside
+    `requires-python` is the same defect wearing the other sign.
+    """
+    supported = declared_python_series()
+    if not supported:
+        errors.append("pyproject.toml: could not read a "
+                      "`requires-python = \">=3.X,<3.Y\"` bound; the launcher "
+                      "and CI agreement check has nothing to compare against")
+        return
+    expected = set(supported)
+
+    def report(where, found, note=""):
+        if found == expected:
+            return
+        missing = sorted(expected - found)
+        extra = sorted(found - expected)
+        parts = []
+        if missing:
+            parts.append("does not cover " + ", ".join(missing))
+        if extra:
+            parts.append("names " + ", ".join(extra)
+                         + " which requires-python excludes")
+        errors.append(
+            "%s %s (pyproject.toml declares %s)%s"
+            % (where, " and ".join(parts), ", ".join(supported), note))
+
+    bat = (ROOT / "Start_Sonder.bat").read_text(encoding="utf-8",
+                                                errors="replace")
+    match = _BAT_CANDIDATES.search(bat)
+    report("Start_Sonder.bat's candidate list",
+           set(_VERSION_TOKEN.findall(match.group(1) if match else "")))
+
+    sh = (ROOT / "Start_Sonder.sh").read_text(encoding="utf-8",
+                                              errors="replace")
+    match = _SH_CANDIDATES.search(sh)
+    report("Start_Sonder.sh's candidate list",
+           set(_VERSION_TOKEN.findall(match.group(1) if match else "")))
+
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    match = _CI_MATRIX.search(ci)
+    report("the CI matrix in .github/workflows/ci.yml",
+           set(_VERSION_TOKEN.findall(match.group(1) if match else "")),
+           note=" -- a version outside the matrix is supported in writing and "
+                "untested in fact, and both launchers pick the newest one "
+                "first")
+
+
+# ---------------------------------------------------------------------------
+# Absolute paths in anything executable
+# ---------------------------------------------------------------------------
+
+#: A path that names one machine. Drive letters are matched only where a
+#: quote or whitespace precedes them, so `C:` inside prose or a URL scheme is
+#: not mistaken for one.
+#: The one file allowed to contain these strings, because it is where they
+#: are DEFINED. Named rather than special-cased silently, like
+#: `INSTALL_ROOT_OWNER` above.
+MACHINE_PATH_OWNER = "tools/project_check.py"
+
+_MACHINE_PATHS = (
+    re.compile(r"/home/[A-Za-z0-9._-]+/"),
+    re.compile(r"/Users/[A-Za-z0-9._-]+/"),
+    re.compile(r"""['"\s]([A-Za-z]:[\\/])"""),
+    re.compile(r"\.claude/worktrees"),
+)
+
+
+def check_no_machine_paths_in_scripts(errors: list[str]) -> None:
+    """No runnable file may name one machine's filesystem.
+
+    Measured 2026-08-19: eleven sites across six `demo/` trees hard-coded
+    `/home/<user>/Documents/Fiction-improved/Fiction`, a project name from
+    before this repository was renamed, and four of them additionally named a
+    git worktree that exists on nobody's disk. Those scripts could not run
+    anywhere, including on the machine that wrote them -- and nothing noticed,
+    because `demo/` was compiled by the Makefile and scanned by no check here.
+
+    The rule is the path, not the directory: a driver in `demo/` derives the
+    repository root from its own location exactly as an engine module does.
+    Documentation is excluded (an absolute path in prose is often the point);
+    `.log` and `.jsonl` transcripts are excluded because a recorded run is
+    evidence of where it ran.
+    """
+    paths = list(repository_python_paths())
+    for pattern in ("*.sh", "*.bat", "*.ps1"):
+        for root in ENGINE_SOURCE_ROOTS:
+            paths.extend(p for p in (ROOT / root).rglob(pattern)
+                         if "__pycache__" not in p.parts)
+        paths.extend(ROOT.glob(pattern))
+    for path in sorted(set(paths)):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel == MACHINE_PATH_OWNER:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            # A comment saying where something used to live, or why this rule
+            # exists, is not an execution path. Both comment syntaxes, since
+            # this walks `.py`, `.sh` and `.bat` alike.
+            if line.lstrip()[:1] == "#" or line.lstrip()[:4].lower() == "rem ":
+                continue
+            for pattern in _MACHINE_PATHS:
+                found = pattern.search(line)
+                if found:
+                    errors.append(
+                        f"{rel}:{lineno} hard-codes an absolute path "
+                        f"({found.group(0).strip()}); derive it from the "
+                        f"file's own location -- a machine path is wrong on "
+                        f"every machine but one, including after a rename")
+                    break
+
+
+# ---------------------------------------------------------------------------
+# Documentation that names a file, or an import, that is not there
+# ---------------------------------------------------------------------------
+
+#: Docs that are maintained guidance or argument about the CURRENT tree. The
+#: archive is superseded by definition and `CHANGELOG.md` is history: both are
+#: SUPPOSED to name files that no longer exist.
+def live_doc_paths() -> list[Path]:
+    out = [ROOT / name for name in
+           ("README.md", "CLAUDE.md", "AGENTS.md", "Design.md")]
+    out.extend(p for p in (ROOT / "docs").rglob("*.md")
+               if "archive" not in p.relative_to(ROOT / "docs").parts)
+    return sorted(p for p in out if p.is_file())
+
+
+def authority_doc_paths() -> list[Path]:
+    """`live_doc_paths()` minus the records of one moment.
+
+    `docs/experiments/` reports an unrepeatable run and quotes the tree as it
+    stood that day; a filename in one is EVIDENCE, and correcting it would be
+    falsifying the record. Excluded from the "this file must exist" rule and
+    kept in the "this import must work" rule, because a broken import is bad
+    advice whenever it was written.
+    """
+    return [p for p in live_doc_paths()
+            if "experiments" not in p.relative_to(ROOT).parts]
+
+
+_BACKTICKED = re.compile(r"`([^`\n]+)`")
+_MD_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+#: `agents/director.py:3484-3527` is a citation, not a claim that a file named
+#: `director.py:3484-3527` exists. Line numbers go stale by design here (the
+#: audit documents say so in their own headers); the FILE is the claim.
+_LINE_CITATION = re.compile(r":\d+(?:-\d+)?$")
+#: Extensions whose presence makes a backticked token a claim about a FILE.
+_PATH_SUFFIXES = (".py", ".md", ".sh", ".bat", ".js", ".css", ".html",
+                  ".json", ".yml", ".yaml", ".toml", ".txt")
+#: Characters that mean the token is prose, a glob, or a code expression
+#: rather than one path.
+_NOT_A_PATH = set("()[]{}<>,;|\"'=*?`")
+#: Directories that are generated, downloaded, or a player's own data. Walking
+#: them costs minutes (`.claude/worktrees` holds whole checkouts of this
+#: repository) and none of them is something documentation names by filename.
+_UNWALKED = {".git", ".claude", ".venv", ".venv-browser", ".pytest_cache",
+             "__pycache__", "node_modules", "backdrops", "backups",
+             "artefacts", "ambience"}
+
+
+def _repository_files() -> tuple[set[str], set[str], set[str]]:
+    """Every relative path, every directory, and every basename in the tree."""
+    paths: set[str] = set()
+    dirs: set[str] = set()
+    names: set[str] = set()
+    stack = [ROOT]
+    while stack:
+        here = stack.pop()
+        for child in here.iterdir():
+            if child.name in _UNWALKED or child.name.startswith("."):
+                continue
+            rel = child.relative_to(ROOT).as_posix()
+            if child.is_dir():
+                dirs.add(rel)
+                stack.append(child)
+            else:
+                paths.add(rel)
+                names.add(child.name)
+    return paths, dirs, names
+
+
+def _top_level_dirs() -> set[str]:
+    return {child.name for child in ROOT.iterdir()
+            if child.is_dir() and child.name not in _UNWALKED
+            and not child.name.startswith(".")}
+
+
+def check_docs_name_real_paths(errors: list[str]) -> None:
+    """Live documentation must not name a file, or a link, that is not there.
+
+    The class, measured 2026-08-19: the launchers were renamed
+    `Start Sonder.bat` -> `Start_Sonder.bat` in `e7fee15`, and a grep for the
+    new name across every `*.md` returned ZERO -- so `README.md`'s own "run
+    this" instruction, the first command a macOS or Linux player types,
+    produced `No such file or directory`. A rename is exactly the change that
+    leaves documentation wrong, and it was the change nothing here could see.
+
+    Three rules, each decidable, none guessing:
+
+    1. A markdown LINK target must resolve relative to the document. This is
+       the exact one: in ``[`TESTING.md`](guides/TESTING.md)`` the backticked
+       half is only link text, and the parenthesised half is a promise that the
+       reader's click works.
+    2. A backticked token whose FIRST segment is a top-level directory here,
+       and which carries a file extension, is a claim about where something
+       lives, and must be true.
+    3. A bare `.sh`/`.bat` name is a launcher a reader will type. Spaces are
+       allowed in this one on purpose -- `Start Sonder.bat` was the wrong name,
+       and a rule that skipped tokens containing a space could not see the very
+       rename that motivates the check.
+
+    Deliberately silent about a token naming some OTHER project's source, since
+    its first segment is not a directory here, and about `agents/common.foo`,
+    which is a module and a symbol rather than a path. `docs/archive/` and
+    `CHANGELOG.md` are excluded entirely: naming a file that has since gone is
+    what they are FOR, and `docs/experiments/` is excluded from this rule for
+    the same reason (see `authority_doc_paths`).
+    """
+    paths, dirs, names = _repository_files()
+    tops = _top_level_dirs()
+    for path in authority_doc_paths():
+        rel = path.relative_to(ROOT).as_posix()
+        here = path.parent
+        text = path.read_text(encoding="utf-8")
+        seen: set[str] = set()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for target in _MD_LINK.findall(line):
+                target = target.split("#")[0]
+                if not target or "://" in target or target.startswith(
+                        ("http", "mailto:", "#")):
+                    continue
+                if (here / target).exists() or ("link:" + target) in seen:
+                    continue
+                seen.add("link:" + target)
+                errors.append(
+                    f"{rel}:{lineno} links to `{target}`, which does not "
+                    f"resolve. A dead link in maintained documentation is a "
+                    f"rename nobody followed through.")
+            for token in _BACKTICKED.findall(line):
+                token = _LINE_CITATION.sub("", token.strip().rstrip(".,;:"))
+                directory = token.endswith("/")
+                token = token.rstrip("/")
+                if not token or token in seen:
+                    continue
+                if token[0] in ".-/$#~" or _NOT_A_PATH & set(token):
+                    continue
+                if "/" in token:
+                    if directory or " " in token:
+                        continue      # a directory, not a file
+                    if token.partition("/")[0] not in tops:
+                        continue
+                    if not token.endswith(_PATH_SUFFIXES):
+                        continue      # a module and a symbol, not a path
+                    if token.rpartition("/")[0] not in dirs:
+                        # The DIRECTORY does not exist here either, so the
+                        # token is a path in some other tree -- `docs/CREDITS.md`
+                        # cites Directive's `docs/architecture/...` by its own
+                        # repository-relative path, and that is not a claim
+                        # about this one. Only a file whose parent directory is
+                        # here is being said to be here.
+                        continue
+                    if token in paths:
+                        continue
+                elif token.endswith((".sh", ".bat")):
+                    if token in names:
+                        continue
+                else:
+                    continue
+                seen.add(token)
+                errors.append(
+                    f"{rel}:{lineno} names `{token}`, which is not in the "
+                    f"tree. Documentation that names a moved or renamed file "
+                    f"is an instruction that fails on the reader's first try.")
+
+
+_DOC_IMPORT = re.compile(
+    r"^(?:from\s+([A-Za-z_][\w.]*)\s+import\s+|import\s+([A-Za-z_][\w.]*))")
+
+
+def guidance_doc_paths() -> list[Path]:
+    """The maintained guidance set, per `AGENTS.md`'s own definition.
+
+    `AGENTS.md`, `Design.md` and `docs/guides/` are "current implementation
+    authority", and `README.md`/`CLAUDE.md` are read as instructions by every
+    human and every coding agent that arrives. An import spelled out in one of
+    these is something a reader will TYPE.
+
+    Everything else is deliberately outside: `docs/design/` argues about a
+    change and quotes the spellings that existed before it
+    (`DESIGN_MODULE_LAYOUT.md` reproduces `from db import q` to describe what
+    the move replaced), and `docs/experiments/` records what was true on the
+    day it was measured. Correcting a quotation is not a fix.
+    """
+    out = [ROOT / name for name in
+           ("README.md", "CLAUDE.md", "AGENTS.md", "Design.md")]
+    out.extend((ROOT / "docs" / "guides").glob("*.md"))
+    return sorted(p for p in out if p.is_file())
+
+
+def check_docs_imports_resolve(errors: list[str]) -> None:
+    """An import spelled out in maintained guidance must actually work.
+
+    `CLAUDE.md` and `AGENTS.md` both told coding agents that
+    `from commit import X` "stays the universal import path" for the thirteen
+    split persistence modules. Measured 2026-08-19: `import commit` raises
+    `ModuleNotFoundError`, and all 256 real call sites say `persist.commit`.
+    An instruction to an agent that cannot execute is worse than a missing one
+    -- it is followed, and then debugged.
+
+    Read out of BACKTICKED spans only. Unquoted prose is not code: "generator
+    /import prompts" and "two import paths of very different quality" both
+    contain an import statement to a regex and neither contains one to a
+    reader. Only imports naming an engine package, or a bare name that used to
+    be one, are judged; a doc quoting `import json` is nobody's business here.
+    """
+    names, by_tail = _engine_module_index()
+    engine_roots = (set(SUBSYSTEM_PACKAGES) | {"agents"}
+                    | set(NON_PACKAGE_ENGINE_DIRS))
+    for path in guidance_doc_paths():
+        rel = path.relative_to(ROOT).as_posix()
+        for lineno, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), 1):
+            for span in _BACKTICKED.findall(line):
+                match = _DOC_IMPORT.match(span.strip())
+                if not match:
+                    continue
+                target = match.group(1) or match.group(2) or ""
+                if not target or target in names:
+                    continue
+                root = target.partition(".")[0]
+                if root in engine_roots:
+                    errors.append(
+                        f"{rel}:{lineno} spells `{span.strip()}`; "
+                        f"{target!r} is not a module in this tree")
+                elif "." not in target and by_tail.get(target):
+                    moved = " or ".join(sorted(by_tail[target]))
+                    errors.append(
+                        f"{rel}:{lineno} spells `{span.strip()}`; {target!r} "
+                        f"is a module name from before the package move and "
+                        f"does not import. It is now {moved}.")
+
+
+# ---------------------------------------------------------------------------
+# Turn-scoped contextvars must be cleared before background work
+# ---------------------------------------------------------------------------
+
+#: Contextvars in the two turn-scoped modules that a background job may keep.
+#: Each needs a reason, because the default answer is "clear it": a job
+#: inherits a COPY of the commit step's context (`core/jobs.py::submit`), so a
+#: var nobody thought about rides into work that outlives the turn.
+BACKGROUND_SAFE_CONTEXTVARS = {
+    "last_reasoning":
+        "an OUTPUT slot: every call overwrites it before anything reads it, "
+        "so an inherited value is unreachable rather than stale",
+    "last_finish_reason":
+        "an OUTPUT slot, same as last_reasoning",
+    "read_timeout_override":
+        "a knob a caller sets around its own call and resets after; it names "
+        "no turn, holds no sink, and cancels nothing",
+}
+
+_TURN_SCOPED_CONTEXTVAR_MODULES = ("llm/providers.py", "core/pipeline_context.py")
+
+
+def _contextvar_names(path: Path) -> set[str]:
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return set()
+    out = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not isinstance(value, ast.Call):
+            continue
+        func = value.func
+        name = func.attr if isinstance(func, ast.Attribute) else getattr(
+            func, "id", "")
+        if name != "ContextVar":
+            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                out.add(target.id)
+    return out
+
+
+def check_turn_scoped_contextvars_are_cleared(errors: list[str]) -> None:
+    """Every contextvar in the two turn-scoped modules is cleared, or named.
+
+    `core/jobs.py::submit` copies the WHOLE context so a job inherits the story
+    language across the thread hop, and `_clear_turn_scoped_context` is the
+    denylist that takes the turn's own things back out -- the live stream's
+    `token_sink`, the abort `cancel_event`, sinks writing into a
+    `PipelineContext` whose variants are already persisted. That function's own
+    docstring records the obligation this check enforces: a new contextvar in
+    `llm/providers.py` or `core/pipeline_context.py` must be added to the tuple
+    or it rides into background work by DEFAULT.
+
+    A denylist with a standing obligation and no enforcement is a denylist that
+    is one commit from being incomplete, and the symptom is a background
+    consolidation streaming tokens into a finished turn -- not an exception.
+    The escape hatch is `BACKGROUND_SAFE_CONTEXTVARS`, which costs a sentence
+    saying why the var outlives the turn safely.
+    """
+    try:
+        jobs = ast.parse((ROOT / "core" / "jobs.py").read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as exc:
+        errors.append(f"core/jobs.py could not be parsed for the turn-scoped "
+                      f"contextvar check: {exc}")
+        return
+    cleared: set[str] = set()
+    for node in ast.walk(jobs):
+        if (isinstance(node, ast.FunctionDef)
+                and node.name == "_clear_turn_scoped_context"):
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Name):
+                    cleared.add(inner.id)
+    if not cleared:
+        errors.append("core/jobs.py has no `_clear_turn_scoped_context`; the "
+                      "turn-scoped contextvar guard cannot run")
+        return
+    for rel in _TURN_SCOPED_CONTEXTVAR_MODULES:
+        for name in sorted(_contextvar_names(ROOT / rel)):
+            if name in cleared or name in BACKGROUND_SAFE_CONTEXTVARS:
+                continue
+            errors.append(
+                f"{rel} defines the contextvar {name!r}, which "
+                f"core/jobs.py::_clear_turn_scoped_context does not clear. A "
+                f"background job inherits a copy of the commit step's context, "
+                f"so an unlisted var rides into work that outlives the turn. "
+                f"Clear it there, or add it to "
+                f"BACKGROUND_SAFE_CONTEXTVARS with the reason it is safe.")
+
+
+# ---------------------------------------------------------------------------
+# A facade patch that a sibling's own reader cannot see
+# ---------------------------------------------------------------------------
+
+def _calls_and_imports(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Names this module imports by value, and names it calls bare."""
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                imported.add(alias.asname or alias.name)
+    called = {node.func.id for node in ast.walk(tree)
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    return imported, called
+
+
+def check_facade_patch_targets(errors: list[str]) -> None:
+    """A test may not patch a facade name a sibling calls through its own globals.
+
+    The narrow, decidable half of a rule that is wrong in general. Patching
+    where a name is USED is the ordinary idiom and 71 correct sites in this
+    suite do it, so "patch the owner, not the re-export" is not the rule. What
+    IS always broken is patching the facade of a SPLIT family when a sibling of
+    that family imported the name into its own globals and calls it there: the
+    sibling's call resolves in `persist/commit_memory.__dict__`, never in
+    `persist/commit.__dict__`, so the patch is applied, the test passes, and
+    nothing was intercepted (`docs/experiments/AUDIT_COMMIT.md`).
+
+    Zero violations when written. It exists because the failure mode is a
+    GREEN test that proves nothing, which is the only kind that survives.
+    """
+    families = {}
+    for family, (home, stem) in FACADE_FAMILIES.items():
+        siblings = {}
+        for name in facade_siblings(home, stem):
+            path = home / (name + ".py")
+            if not path.is_file():
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            imported, called = _calls_and_imports(tree)
+            shadowed = imported & called
+            if shadowed:
+                siblings[home.name + "/" + name + ".py"] = shadowed
+        families[stem] = (family, siblings)
+
+    for path in sorted((ROOT / "tests").rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "setattr"
+                    and len(node.args) >= 2):
+                continue
+            target, attr = node.args[0], node.args[1]
+            if not isinstance(attr, ast.Constant) or not isinstance(
+                    attr.value, str):
+                continue
+            if isinstance(target, ast.Name):
+                module = target.id
+            elif isinstance(target, ast.Attribute):
+                module = target.attr
+            else:
+                continue
+            if module not in families:
+                continue
+            family, siblings = families[module]
+            for sibling, shadowed in sorted(siblings.items()):
+                if attr.value not in shadowed:
+                    continue
+                owner = sibling[:-3].replace("/", ".")
+                errors.append(
+                    f"{rel}:{node.lineno} patches `{module}.{attr.value}` on "
+                    f"the {family} facade, but {sibling} imports that name "
+                    f"into its own globals and calls it there -- the patch is "
+                    f"applied and intercepts nothing. Patch {owner} instead.")
+
+
+# ---------------------------------------------------------------------------
+# Package import cycles
+# ---------------------------------------------------------------------------
+
+PACKAGE_EDGES = ROOT / "tools" / "package_edges.json"
+
+
+def _import_kind_edges(path: Path, pkg: str) -> list[tuple[str, str, str]]:
+    """`(src_pkg, dst_pkg, kind)` for every cross-package import in one file.
+
+    Three kinds, because they are three different couplings. `eager` is a
+    module-level import: it must be satisfiable at import time, so it is what
+    makes a cycle a cycle. `deferred` is an import inside a function body -- a
+    real dependency, but one that costs nothing at import time and is how every
+    existing two-cycle here is survivable. `typing` is inside
+    `if TYPE_CHECKING:` and does not exist at runtime at all.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return []
+    known = set(ENGINE_PACKAGE_ROOTS)
+    out: list[tuple[str, str, str]] = []
+
+    def targets(node) -> list[str]:
+        if isinstance(node, ast.Import):
+            return [alias.name for alias in node.names]
+        if isinstance(node, ast.ImportFrom) and node.level == 0:
+            return [node.module or ""]
+        return []
+
+    def walk(body, kind: str) -> None:
+        for node in body:
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for target in targets(node):
+                    dst = target.partition(".")[0]
+                    if dst in known and dst != pkg:
+                        out.append((pkg, dst, kind))
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                walk(node.body, "deferred")
+            elif isinstance(node, ast.If) and kind != "deferred":
+                test = node.test
+                names = {n.id for n in ast.walk(test) if isinstance(n, ast.Name)}
+                inner = "typing" if "TYPE_CHECKING" in names else kind
+                walk(node.body, inner)
+                walk(node.orelse, kind)
+            elif isinstance(node, (ast.ClassDef, ast.Try, ast.With,
+                                   ast.AsyncWith, ast.For, ast.AsyncFor,
+                                   ast.While)):
+                walk(node.body, kind)
+                for extra in ("orelse", "finalbody", "handlers"):
+                    for item in getattr(node, extra, []) or []:
+                        walk(getattr(item, "body", [item]), kind)
+    walk(tree.body, "eager")
+    return out
+
+
+def package_import_graph() -> dict[str, Counter]:
+    """`{kind: Counter[(src, dst)]}` over every engine package."""
+    graph: dict[str, Counter] = {"eager": Counter(), "deferred": Counter(),
+                                 "typing": Counter()}
+    for pkg in ENGINE_PACKAGE_ROOTS:
+        for path in _python_files(pkg):
+            for src, dst, kind in _import_kind_edges(path, pkg):
+                graph[kind][(src, dst)] += 1
+    return graph
+
+
+def _strongly_connected(edges) -> list[list[str]]:
+    """Tarjan. Returns only the cycles -- components of more than one node."""
+    successors: dict[str, set[str]] = defaultdict(set)
+    nodes = set()
+    for src, dst in edges:
+        successors[src].add(dst)
+        nodes.update((src, dst))
+    index: dict[str, int] = {}
+    low: dict[str, int] = {}
+    on_stack: set[str] = set()
+    stack: list[str] = []
+    counter = [0]
+    out: list[list[str]] = []
+
+    def strongconnect(node: str) -> None:
+        # Iterative: the recursion depth is bounded by the package count, but
+        # an explicit stack is what keeps this readable when a family grows.
+        work = [(node, iter(sorted(successors[node])))]
+        index[node] = low[node] = counter[0]
+        counter[0] += 1
+        stack.append(node)
+        on_stack.add(node)
+        while work:
+            head, children = work[-1]
+            advanced = False
+            for child in children:
+                if child not in index:
+                    index[child] = low[child] = counter[0]
+                    counter[0] += 1
+                    stack.append(child)
+                    on_stack.add(child)
+                    work.append((child, iter(sorted(successors[child]))))
+                    advanced = True
+                    break
+                if child in on_stack:
+                    low[head] = min(low[head], index[child])
+            if advanced:
+                continue
+            work.pop()
+            if work:
+                low[work[-1][0]] = min(low[work[-1][0]], low[head])
+            if low[head] == index[head]:
+                component = []
+                while True:
+                    member = stack.pop()
+                    on_stack.discard(member)
+                    component.append(member)
+                    if member == head:
+                        break
+                if len(component) > 1:
+                    out.append(sorted(component))
+
+    for node in sorted(nodes):
+        if node not in index:
+            strongconnect(node)
+    return sorted(out)
+
+
+def package_edge_report() -> dict:
+    """The whole measurement, in the shape the baseline file stores."""
+    graph = package_import_graph()
+    eager = sorted(graph["eager"])
+    return {
+        "cycles": _strongly_connected(eager),
+        "edges": {
+            "%s->%s" % pair: {
+                "eager": graph["eager"].get(pair, 0),
+                "deferred": graph["deferred"].get(pair, 0),
+                "typing": graph["typing"].get(pair, 0),
+            }
+            for pair in sorted(set(graph["eager"]) | set(graph["deferred"])
+                               | set(graph["typing"]))
+        },
+    }
+
+
+def check_package_edge_budget(errors: list[str]) -> None:
+    """No NEW import cycle between subsystem packages.
+
+    Not a budget on edges. `web -> *` and `agents -> *` are supposed to grow --
+    they are the orchestration layers, and a check that made adding a legitimate
+    dependency a fight would be waived within a week. What must not grow is the
+    set of packages that cannot be imported independently of each other, and
+    that is measurable exactly: the strongly connected components of the EAGER
+    (module-level, non-`TYPE_CHECKING`) import graph.
+
+    Measured across one day of green gates -- `a6d823f` to `73a380a` -- three
+    edges gained eager module-level imports inside existing cycles
+    (`agents->persist` 8/3 -> 11/4, `story->mind` 6/2 -> 9/3,
+    `persist->story` 47/18 -> 52/19). Nothing anywhere built an import graph, so
+    the direction of travel was invisible; `DESIGN_MODULE_LAYOUT.md` declined an
+    import linter and in the same paragraph named its table "the baseline a
+    future cleanup should measure itself against", and that table had already
+    drifted (33 for `persist->story` against 52 measured).
+
+    The baseline in `tools/package_edges.json` is GENERATED, never hand-written:
+    `python tools/project_check.py --write-package-edges`. Shrinking a cycle is
+    always allowed; the file is only rewritten deliberately.
+    """
+    report = package_edge_report()
+    if not PACKAGE_EDGES.is_file():
+        errors.append(
+            f"{PACKAGE_EDGES.relative_to(ROOT).as_posix()} is missing; "
+            f"regenerate it with "
+            f"`python tools/project_check.py --write-package-edges`")
+        return
+    try:
+        baseline = json.loads(PACKAGE_EDGES.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        errors.append(f"tools/package_edges.json could not be read: {exc}")
+        return
+    allowed = [set(cycle) for cycle in baseline.get("cycles", [])]
+    for cycle in report["cycles"]:
+        members = set(cycle)
+        if any(members <= known for known in allowed):
+            continue
+        errors.append(
+            "a new eager import cycle between packages: "
+            + " <-> ".join(cycle)
+            + ". A module-level import is what makes a cycle real -- move the "
+            "import into the function that needs it, or invert the dependency. "
+            "If the cycle is genuinely intended, regenerate the baseline with "
+            "`python tools/project_check.py --write-package-edges` and say why "
+            "in the commit message.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
@@ -1724,6 +2530,13 @@ def main() -> int:
     check_specialist_prompt_chunks(errors)
     check_prose_author_chunks(errors)
     check_language_pack_surfaces(errors)
+    check_python_version_agreement(errors)
+    check_no_machine_paths_in_scripts(errors)
+    check_docs_name_real_paths(errors)
+    check_docs_imports_resolve(errors)
+    check_turn_scoped_contextvars_are_cleared(errors)
+    check_facade_patch_targets(errors)
+    check_package_edge_budget(errors)
     check_generated_map(errors)
 
     if errors:
@@ -1737,4 +2550,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # `--source-roots` exists so `make compile` can read the inventory instead
+    # of keeping a fifth copy of it. It prints one directory per line and runs
+    # no check.
+    if "--source-roots" in sys.argv[1:]:
+        print("\n".join(ENGINE_SOURCE_ROOTS))
+        sys.exit(0)
+    # The package-cycle baseline is GENERATED. Writing it by hand is how a
+    # baseline comes to record what someone believed rather than what is there
+    # -- which is what happened to the table in DESIGN_MODULE_LAYOUT.md.
+    if "--write-package-edges" in sys.argv[1:]:
+        PACKAGE_EDGES.write_text(
+            json.dumps(package_edge_report(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+        print("wrote %s" % PACKAGE_EDGES.relative_to(ROOT).as_posix())
+        sys.exit(0)
     sys.exit(main())

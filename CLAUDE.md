@@ -23,16 +23,21 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn web.app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-full  # every Python regression test (8217 tests, ~3m40s — run this freely)
+make test-full  # every Python regression test (run this freely; pytest reports the count)
 make test       # alias for test-full
 make test-lf    # last-failed first, then the rest — the fix-verify loop
-make test-fast  # NOT a tier to check your own work with; deselects 119 of 391 files,
-                #   including the persistence and firewall suites (see docs/guides/TESTING.md)
+make test-fast  # NOT a tier to check your own work with; deselects every
+                #   database-backed test file, including the persistence and
+                #   firewall suites (see docs/guides/TESTING.md)
 make test-browser # optional real Chromium behavior tests
 make map        # regenerate docs/CODE_MAP.md
 make structure  # run tools/project_check.py (duplicate-symbol, patch-debris, empty-test,
-                #   prompt/schema-op drift, specialist + prose-author chunk ownership, stale map)
-make compile    # python -m compileall on all source
+                #   prompt/schema-op drift, specialist + prose-author chunk ownership,
+                #   supported-Python agreement across pyproject/launchers/CI, machine
+                #   paths in runnable files, docs naming files or imports that do not
+                #   resolve, uncleared turn-scoped contextvars, new package import
+                #   cycles, stale map)
+make compile    # compileall over ENGINE_SOURCE_ROOTS (tools/project_check.py --source-roots)
 make check-fast # compile + structure/map freshness + full suite
 make check      # compile + map + structure + full suite — run this before considering a change done
 ```
@@ -92,7 +97,7 @@ Key ownership boundaries (see `AGENTS.md` for the full table):
 - **Character agents** (`agents/character.py`, `agents/loops.py`) declare behavior from private perception/memory/relationships only; they never decide their own success. `mind/psychology_runtime.py` deterministically persists bounded stress, current-event pain/pleasure, beliefs, and learned associations from those permitted inputs.
 - **`agents/background.py`** gives named, unregistered background presences a stateless reaction per beat — no persistent memory or psychology (that requires promotion to a real character). Deterministically gated by `persist/commit_background.py`'s `pick_background_reactors`, which returns `[]` (no LLM call) for the large majority of turns; the cap is the chat's `background_config.max_reactors` (default 1, hard ceiling 3), and `pick_background_reactor` is only a single-winner wrapper. Above `scene_life: ambient`/`full` the stage instead runs the scene-manager path (`scene_life`, `docs/design/BACKGROUND_LIFE_DESIGN.md`), which returns the same shape.
 - The **Narrator** (`agents/narration.py`) renders only the player-facing slice and cannot originate new player conduct or reveal unperceived facts.
-- **`persist/commit.py`** is the sole persistence boundary — model output is provisional until deterministic commit code validates it. Slow lore/memory preparation happens before the write lock, then all primary turn mutations commit inside one outer transaction. Any domain failure rolls the entire turn back; reconstructible autobiographical-summary consolidation is scheduled afterward as an out-of-band job (`schedule_memory_consolidation` → `core/jobs.py`), never inside the turn's wall clock. Since the 2026-08 split the domain code lives in thirteen `commit_*` modules (`commit_common`, `commit_place_graph`, `commit_destruction`, `commit_room_registry`, `commit_attire`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_background`, `commit_scene_state`, `commit_mechanics`, `commit_memory`, `commit_memory_write`); `persist/commit.py` keeps the per-turn lock, the thin tail domains, `commit_all`/`_commit_all_locked`, and a facade that re-exports every moved name — private names included — so `from commit import X` stays the universal import path. **A test that monkeypatches must patch the module that DEFINES the function it wants intercepted**, not the facade: a moved function resolves names in its own module's globals, and a patch on `commit.<name>` whose reader moved is silently inert (see `docs/experiments/AUDIT_COMMIT.md`).
+- **`persist/commit.py`** is the sole persistence boundary — model output is provisional until deterministic commit code validates it. Slow lore/memory preparation happens before the write lock, then all primary turn mutations commit inside one outer transaction. Any domain failure rolls the entire turn back; reconstructible autobiographical-summary consolidation is scheduled afterward as an out-of-band job (`schedule_memory_consolidation` → `core/jobs.py`), never inside the turn's wall clock. Since the 2026-08 split the domain code lives in thirteen `commit_*` modules (`commit_common`, `commit_place_graph`, `commit_destruction`, `commit_room_registry`, `commit_attire`, `commit_entities`, `commit_ledgers`, `commit_mapping`, `commit_background`, `commit_scene_state`, `commit_mechanics`, `commit_memory`, `commit_memory_write`); `persist/commit.py` keeps the per-turn lock, the thin tail domains, `commit_all`/`_commit_all_locked`, and a facade that re-exports every moved name — private names included — so `from persist.commit import X` stays the universal import path. The package root is part of it: there is no top-level `commit` module and never was one after the move, so the bare spelling raises `ModuleNotFoundError`. **A test that monkeypatches must patch the module that DEFINES the function it wants intercepted**, not the facade: a moved function resolves names in its own module's globals, and a patch on `commit.<name>` whose reader moved is silently inert (see `docs/experiments/AUDIT_COMMIT.md`).
 
 `agents/__init__.py` is a compatibility facade. The enforced direction is one-way: role modules import `agents/common.py`, and `common.py` imports no role module. Role modules importing *each other* is discouraged but real and untested — `loops.py → character.py` and `background.py → perception.py` both do it — so do not assume that graph is clean. `runtime.py` owns the plan and the `STEP_HANDLERS` registry, but it is not the only place a stage is named: `runtime.STEP_LABELS` (the reader-facing phase name, harvested into the language packs), `schemas.SCHEMA_MAP` and `core/pipeline_context.py`'s fields enumerate them too — four registries, not three. Adding a stage is a checklist, in `agents/README.md`.
 

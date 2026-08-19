@@ -1950,5 +1950,9 @@
   "🔊 Mute": "🔊 ミュート",
   "🔒 persona secrets": "🔒 ペルソナの秘密",
   "🔗 Generate invite": "🔗 招待を生成",
-  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}"
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}",
+  "Chat archive is version ${typed_data.version}, but this engine reads archives up to version ${ARCHIVE_VERSION}. Importing it would silently drop the newer data; update the engine first.": "チャットアーカイブはバージョン ${typed_data.version} ですが、このエンジンが読み込めるアーカイブはバージョン ${ARCHIVE_VERSION} までです。このままインポートすると新しいデータが黙って失われます。先にエンジンを更新してください。",
+  "First-run setup can only be completed from the machine running Sonder.": "初回セットアップは、Sonder を実行しているマシンからのみ完了できます。",
+  "memory vector ${vkey}: bytes do not hash to their own address": "メモリベクトル ${vkey}: バイト列が自身のアドレスとハッシュ一致しません",
+  "memory vector ${vkey}: payload is not a well-formed float32 blob": "メモリベクトル ${vkey}: ペイロードが正しい float32 ブロブではありません"
 }

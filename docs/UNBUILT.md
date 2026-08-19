@@ -1478,12 +1478,46 @@ payloads through `_payloads_sent`. The class it warned about survives and is
 now stated in [`guides/TESTING.md`](guides/TESTING.md) § Assertions that read
 source instead of running it.)*
 
-**Not a defect, but the honest ceiling on what the split bought.** The three
+**Not a defect, but the honest ceiling on what the split bought.** The
 functions that made these files unreadable did not get smaller — re-measured
-2026-08-19: `director_resolve` **1,482** lines, `prepare_memory_commit`
-**1,270**, `merge_scene_with_diff` **322** while reaching into nine modules.
-Splitting files does not split functions, and those three are most of what made
-the originals hard to audit.
+2026-08-19 over the twelve engine roots, so this is the whole population and
+not a sample:
+
+| function | lines | file |
+|---|---|---|
+| `director_resolve` | 1,519 | `agents/director.py` |
+| `prepare_memory_commit` | 1,270 | `persist/commit_memory.py` |
+| **`character_step`** | **1,001** | `agents/character.py` |
+| `interaction_loop` | 558 | `agents/loops.py` |
+| `import_chat` | 541 | `persist/chat_archive.py` |
+| `director_interpret` | 538 | `agents/director.py` |
+| `prepare_scene_commit` | 510 | `persist/commit_scene_state.py` |
+
+Seven functions over 500 lines, and `character_step` is the one this entry did
+not previously name — the earlier version of this paragraph listed
+`director_resolve`, `prepare_memory_commit` and `merge_scene_with_diff` (322
+lines, reaching into nine modules). Splitting files does not split functions.
+
+**The file-level census, recorded so it stops being rediscovered.** Measured
+the same day, `engine_python_paths()` as the denominator: **116 engine modules,
+8 over 3,000 lines, 21 over 1,500** — `agents/common.py` 6,838, `web/app.py`
+6,206, `mind/memory.py` 5,676, `llm/schemas.py` 5,358, `agents/director.py`
+3,767, `agents/perception.py` 3,637, `agents/character.py` 3,560,
+`llm/providers.py` 3,283. (Counts drift by tens of lines between commits;
+the shape is the point.)
+
+This is a MEASUREMENT, not a proposal, and specifically not a proposal for a
+per-file line budget. A 1,500/3,000 gate would fire on 21 of 116 files on the
+day it shipped, so it would ship with a 21-entry exception list — the shape of
+gate that gets waived rather than obeyed. And three of the eight largest are
+already spoken for by decisions recorded elsewhere: `agents/director.py`'s
+residual is Phase 2 by design
+([`design/DESIGN_MODULE_LAYOUT.md`](design/DESIGN_MODULE_LAYOUT.md)),
+`agents/character.py` decomposition is declined by name in §2.19, and
+`web/app.py` and `mind/memory.py` are named in `CLAUDE.md` as orchestration
+seams not to be broadly rewritten. The number that is actionable is the
+function column above; the file column exists so the next reader does not
+spend an afternoon re-deriving it and conclude it is news.
 
 
 ### 1.56 The project tier's occasion now arrives, and is declined

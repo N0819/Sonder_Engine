@@ -1,0 +1,302 @@
+{
+  "cycles": [
+    [
+      "agents",
+      "persist",
+      "story",
+      "world"
+    ]
+  ],
+  "edges": {
+    "agents->core": {
+      "deferred": 3,
+      "eager": 16,
+      "typing": 0
+    },
+    "agents->extension_runtime": {
+      "deferred": 7,
+      "eager": 0,
+      "typing": 0
+    },
+    "agents->language_runtime": {
+      "deferred": 3,
+      "eager": 9,
+      "typing": 0
+    },
+    "agents->llm": {
+      "deferred": 5,
+      "eager": 17,
+      "typing": 0
+    },
+    "agents->mind": {
+      "deferred": 0,
+      "eager": 10,
+      "typing": 0
+    },
+    "agents->persist": {
+      "deferred": 5,
+      "eager": 4,
+      "typing": 0
+    },
+    "agents->story": {
+      "deferred": 17,
+      "eager": 31,
+      "typing": 0
+    },
+    "agents->world": {
+      "deferred": 11,
+      "eager": 23,
+      "typing": 0
+    },
+    "core->llm": {
+      "deferred": 1,
+      "eager": 0,
+      "typing": 0
+    },
+    "dressing->agents": {
+      "deferred": 2,
+      "eager": 0,
+      "typing": 0
+    },
+    "dressing->core": {
+      "deferred": 1,
+      "eager": 7,
+      "typing": 0
+    },
+    "dressing->language_runtime": {
+      "deferred": 2,
+      "eager": 0,
+      "typing": 0
+    },
+    "dressing->llm": {
+      "deferred": 5,
+      "eager": 0,
+      "typing": 0
+    },
+    "dressing->world": {
+      "deferred": 0,
+      "eager": 3,
+      "typing": 0
+    },
+    "extension_runtime->agents": {
+      "deferred": 7,
+      "eager": 0,
+      "typing": 0
+    },
+    "extension_runtime->core": {
+      "deferred": 22,
+      "eager": 1,
+      "typing": 0
+    },
+    "extension_runtime->llm": {
+      "deferred": 4,
+      "eager": 0,
+      "typing": 0
+    },
+    "extension_runtime->story": {
+      "deferred": 2,
+      "eager": 0,
+      "typing": 0
+    },
+    "extension_runtime->web": {
+      "deferred": 5,
+      "eager": 0,
+      "typing": 0
+    },
+    "language_adapters->agents": {
+      "deferred": 2,
+      "eager": 0,
+      "typing": 0
+    },
+    "language_adapters->language_runtime": {
+      "deferred": 0,
+      "eager": 1,
+      "typing": 0
+    },
+    "language_runtime->core": {
+      "deferred": 4,
+      "eager": 1,
+      "typing": 0
+    },
+    "llm->core": {
+      "deferred": 2,
+      "eager": 4,
+      "typing": 0
+    },
+    "llm->language_runtime": {
+      "deferred": 1,
+      "eager": 2,
+      "typing": 0
+    },
+    "llm->story": {
+      "deferred": 1,
+      "eager": 0,
+      "typing": 0
+    },
+    "mind->core": {
+      "deferred": 0,
+      "eager": 4,
+      "typing": 0
+    },
+    "mind->language_runtime": {
+      "deferred": 1,
+      "eager": 3,
+      "typing": 0
+    },
+    "mind->llm": {
+      "deferred": 1,
+      "eager": 2,
+      "typing": 0
+    },
+    "persist->agents": {
+      "deferred": 4,
+      "eager": 0,
+      "typing": 0
+    },
+    "persist->core": {
+      "deferred": 4,
+      "eager": 17,
+      "typing": 0
+    },
+    "persist->extension_runtime": {
+      "deferred": 2,
+      "eager": 0,
+      "typing": 0
+    },
+    "persist->language_runtime": {
+      "deferred": 2,
+      "eager": 2,
+      "typing": 0
+    },
+    "persist->llm": {
+      "deferred": 3,
+      "eager": 5,
+      "typing": 0
+    },
+    "persist->mind": {
+      "deferred": 1,
+      "eager": 16,
+      "typing": 0
+    },
+    "persist->story": {
+      "deferred": 29,
+      "eager": 19,
+      "typing": 0
+    },
+    "persist->world": {
+      "deferred": 11,
+      "eager": 24,
+      "typing": 0
+    },
+    "story->agents": {
+      "deferred": 3,
+      "eager": 2,
+      "typing": 0
+    },
+    "story->core": {
+      "deferred": 14,
+      "eager": 6,
+      "typing": 0
+    },
+    "story->language_runtime": {
+      "deferred": 0,
+      "eager": 2,
+      "typing": 0
+    },
+    "story->llm": {
+      "deferred": 5,
+      "eager": 6,
+      "typing": 0
+    },
+    "story->mind": {
+      "deferred": 5,
+      "eager": 3,
+      "typing": 0
+    },
+    "story->persist": {
+      "deferred": 4,
+      "eager": 0,
+      "typing": 0
+    },
+    "story->world": {
+      "deferred": 3,
+      "eager": 7,
+      "typing": 0
+    },
+    "web->agents": {
+      "deferred": 3,
+      "eager": 1,
+      "typing": 0
+    },
+    "web->core": {
+      "deferred": 3,
+      "eager": 7,
+      "typing": 0
+    },
+    "web->dressing": {
+      "deferred": 0,
+      "eager": 2,
+      "typing": 0
+    },
+    "web->extension_runtime": {
+      "deferred": 0,
+      "eager": 1,
+      "typing": 0
+    },
+    "web->language_runtime": {
+      "deferred": 0,
+      "eager": 1,
+      "typing": 0
+    },
+    "web->llm": {
+      "deferred": 0,
+      "eager": 3,
+      "typing": 0
+    },
+    "web->mind": {
+      "deferred": 2,
+      "eager": 2,
+      "typing": 0
+    },
+    "web->persist": {
+      "deferred": 0,
+      "eager": 3,
+      "typing": 0
+    },
+    "web->story": {
+      "deferred": 8,
+      "eager": 8,
+      "typing": 0
+    },
+    "web->world": {
+      "deferred": 6,
+      "eager": 2,
+      "typing": 0
+    },
+    "world->core": {
+      "deferred": 22,
+      "eager": 12,
+      "typing": 0
+    },
+    "world->language_runtime": {
+      "deferred": 2,
+      "eager": 0,
+      "typing": 0
+    },
+    "world->llm": {
+      "deferred": 4,
+      "eager": 3,
+      "typing": 0
+    },
+    "world->mind": {
+      "deferred": 4,
+      "eager": 3,
+      "typing": 0
+    },
+    "world->story": {
+      "deferred": 21,
+      "eager": 3,
+      "typing": 0
+    }
+  }
+}

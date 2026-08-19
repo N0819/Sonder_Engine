@@ -6,7 +6,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 os.environ["ENGINE_DB"] = os.path.join(HERE, "run.db")
-sys.path.insert(0, "/home/nathan/Documents/Fiction-improved/Fiction/.claude/worktrees/background-life-design")
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from core import db
 from core.db import q, qi, transaction, wget

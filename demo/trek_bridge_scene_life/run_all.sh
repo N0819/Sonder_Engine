@@ -2,7 +2,7 @@
 # Enterprise-D bridge: Picard is the only real character, the crew are
 # background presences, the player is a near-silent observation officer.
 set -u
-cd /home/nathan/Documents/Fiction-improved/Fiction/.claude/worktrees/background-life-design
+cd "$(dirname "$(dirname "$(dirname "$(readlink -f "$0")")")")" || exit 1
 D=demo/trek_bridge_scene_life
 rm -f $D/run_log.jsonl
 python3 $D/seed.py || exit 1

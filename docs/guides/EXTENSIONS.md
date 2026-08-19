@@ -36,7 +36,7 @@ badly enough that you cannot reach the menu to disable it.
 
 Discovery is **per-item**: a malformed extension lands in `load_errors()` with a
 reason and every sibling loads normally. Nothing an extension does can make
-`import app` fail — discovery is lazy, and every dispatch helper the engine calls
+`import web.app` fail — discovery is lazy, and every dispatch helper the engine calls
 is total (on internal failure it logs and returns the safe value).
 
 ---
@@ -1618,7 +1618,7 @@ has already told the player; a DIRECTOR given too much has changed what
 happened, and that propagates into state, perception and memory for the rest of
 the story.
 
-None of that is a wall. Your Python runs in-process: `import db`, reach into
+None of that is a wall. Your Python runs in-process: `import core.db`, reach into
 `agents.runtime`, monkeypatch `agents.character`, reroute whatever you like. Your
 JavaScript runs same-origin in the host document with the session cookie: no
 iframe, no CSP, no sandbox. You can replace `document.body`, wrap `renderChat`,

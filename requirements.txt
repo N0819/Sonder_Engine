@@ -1,6 +1,27 @@
-fastapi>=0.101,<1
-httpx>=0.24,<1
-numpy>=1.26,<3
+# Runtime dependencies.
+#
+# A FLOOR here is a promise that the version works, and until 2026-08-19 five
+# of these six were promises nobody had ever tested: every install path in the
+# project -- both launchers, the README recipe, and all three CI jobs -- passes
+# `-c constraints.txt`, so the pinned version is what gets installed and the
+# declared minimum is reachable only in a pre-existing environment. The floors
+# said 0.101 / 0.24 / 1.26 / 2.31 / 0.27; none of those had been run against
+# this code by anything.
+#
+# They now name the version CI actually installs (constraints.txt), which is
+# the only version anyone can point at and say it worked. Raising a floor
+# uninstalls nothing -- it constrains a FRESH resolution -- and lowering one
+# again is a claim that wants evidence behind it.
+#
+# `numpy` is the sharpest case: with 3.13 in the CI matrix, `>=1.26` was a
+# floor that cannot install there at all (no 1.26 wheel for 3.13).
+#
+# `pydantic` is the deliberate exception and stays wide, because both majors
+# ARE run: `schemas.py` carries a branch per major and `.github/workflows/
+# ci.yml`'s `pydantic1` job installs `>=1.10.13,<2` and runs the whole suite.
+fastapi>=0.115.14,<1
+httpx>=0.28.1,<1
+numpy>=2.2.6,<3
 pydantic>=1.10.13,<3
-requests>=2.31,<3
-uvicorn[standard]>=0.27,<1
+requests>=2.32.4,<3
+uvicorn[standard]>=0.35.0,<1

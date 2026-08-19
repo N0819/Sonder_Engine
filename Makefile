@@ -32,8 +32,10 @@ serve:
 test: test-full
 
 # NOT the tier to check your own work with -- it deselects every test that
-# touches the database, 2657 of 8217 tests, emptying 138 of 505 files and
-# with them the persistence and information-firewall suites. Since test
+# touches the database, and with them the persistence and information-firewall
+# suites. (Counts are deliberately not written down here: they were re-synced
+# twice and drifted twice. `make test-full` reports the real number, and
+# `$(PYTEST) -q -m "not slow" --collect-only` reports what this tier skips.) Since test
 # databases moved to tmpfs (tests/conftest.py) the whole suite costs about
 # what this used to, so there is no longer a speed argument for running less
 # of it -- and CI no longer calls this at all (the matrix runs check-fast).
@@ -61,13 +63,15 @@ map:
 structure:
 	$(PYTHON) tools/project_check.py
 
-# `extension_runtime` and `language_runtime` were missing until 2026-08-18.
-# The first is the public extension API -- an integrator's production code is
-# told to depend on it, and a syntax error there was caught by nothing.
+# The directory list is NOT written here. `extension_runtime` and
+# `language_runtime` were missing until 2026-08-18 -- the first is the public
+# extension API, an integrator's production code is told to depend on it, and a
+# syntax error there was caught by nothing. That happened because "where the
+# source is" was written down in four places and only one of them was updated.
+# There is now one: `ENGINE_SOURCE_ROOTS` in tools/project_check.py, which the
+# structural checks walk and which `--source-roots` prints for this rule.
 compile:
-	$(PYTHON) -m compileall -q core llm world mind story dressing persist web \
-		 agents extension_runtime language_runtime language_adapters \
-		 demo tools tests browser_tests
+	$(PYTHON) -m compileall -q $$($(PYTHON) tools/project_check.py --source-roots)
 
 # Both tiers now run every test. The difference is `map`: `check` regenerates
 # docs/CODE_MAP.md, `check-fast` only verifies the copy on disk is current.

@@ -1,3 +1,28 @@
+# Sonder is run from a checkout, not installed (README.md "Run locally",
+# CLAUDE.md "Commands"). This section exists anyway because its absence made
+# `pip install -e .` fail for a reason that had nothing to do with anything
+# below it: with no build backend declared, setuptools' flat-layout
+# auto-discovery found twelve top-level packages beside `demo/`, `tools/` and
+# `tests/` and refused with "Multiple top-level packages discovered in a
+# flat-layout". That error fired FIRST -- before `requires-python` was ever
+# consulted -- so the comment on that field, which claims the bound makes an
+# install "fail with the reason instead of a build log", could not be true.
+# Declaring the backend and naming the packages explicitly costs nothing and
+# makes the bound able to do what it says.
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Enumerated, never auto-discovered. `demo/`, `tools/`, `tests/` and
+# `browser_tests/` are in the repository and are not the engine, and
+# auto-discovery cannot tell the difference. This list is the same set as
+# `ENGINE_SOURCE_ROOTS` in tools/project_check.py minus those four.
+packages = [
+  "agents", "core", "llm", "world", "mind", "story", "dressing", "persist",
+  "web", "extension_runtime", "language_runtime", "language_adapters",
+]
+
 [project]
 name = "sonder-engine"
 # The release name is "alpha 9.6.1" and the git tag is `alpha9.6.1`; "alpha"
@@ -9,21 +34,29 @@ version = "9.6.2"
 description = "Sonder Engine — a local multi-agent interactive-fiction engine"
 # Upper bound is real, not caution: the pinned pydantic-core has no wheel
 # above 3.13, so pip falls back to compiling it and fails inside a Rust
-# toolchain. Both launchers already enforce this range; saying it here too
-# means a plain `pip install -e .` fails with the reason instead of a build log.
+# toolchain. Both launchers enforce this range, and CI's matrix runs every
+# version in it -- keep those three lists equal; `tools/project_check.py`'s
+# `check_python_version_agreement` fails when they drift. Saying it here too
+# means a plain `pip install -e .` fails with the reason instead of a build
+# log, which only became true once `[build-system]` was declared above.
 requires-python = ">=3.11,<3.14"
+# Kept equal to requirements.txt, whose header carries the argument: a floor
+# is a promise the version works, every install path here passes
+# `-c constraints.txt`, and so five of these six were minimums nothing had ever
+# resolved. They now name what CI installs. `pydantic` stays wide because both
+# majors are genuinely run.
 dependencies = [
-  "fastapi>=0.101,<1",
-  "httpx>=0.24,<1",
-  "numpy>=1.26,<3",
+  "fastapi>=0.115.14,<1",
+  "httpx>=0.28.1,<1",
+  "numpy>=2.2.6,<3",
   "pydantic>=1.10.13,<3",
-  "requests>=2.31,<3",
-  "uvicorn[standard]>=0.27,<1",
+  "requests>=2.32.4,<3",
+  "uvicorn[standard]>=0.35.0,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8,<10",
+  "pytest>=8.4.1,<10",
 ]
 browser = [
   "playwright>=1.50,<2",

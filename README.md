@@ -53,10 +53,10 @@ flow, including the different opening-turn path.
 
 Python 3.11, 3.12 or 3.13. **Not newer yet** — the pinned dependencies have no prebuilt wheel above 3.13, so pip falls back to compiling pydantic-core from source and fails inside a Rust toolchain.
 
-**Windows:** double-click `Start Sonder.bat` — it creates the environment,
+**Windows:** double-click `Start_Sonder.bat` — it creates the environment,
 installs dependencies, and opens the app.
 
-**macOS / Linux:** run `./"Start Sonder.sh"` — it does the same: finds a
+**macOS / Linux:** run `./Start_Sonder.sh` — it does the same: finds a
 a supported Python (3.11-3.13), builds the environment, installs dependencies, starts the server
 and opens the app. It never touches a database. `--port N`, `--host ADDR` and
 `--no-browser` are there when the defaults do not suit; `--help` lists them.
@@ -103,9 +103,9 @@ pip install -c constraints.txt -r requirements-dev.txt
 
 make check       # compile + regenerate the map + structure + full tests — run before calling a change done
 make check-fast  # the same, but only checks the map on disk is current instead of rewriting it
-make test-full   # every Python regression test (8217 tests, ~3m40s)
+make test-full   # every Python regression test
 make test-lf     # last-failed first, then the rest — the fix-verify loop
-make structure   # duplicate symbols, patch debris, stale map
+make structure   # duplicate symbols, patch debris, doc/version/path drift, import cycles, stale map
 make map         # regenerate docs/CODE_MAP.md
 make run         # start the server, watching for code changes
 make serve       # start the server with no watcher — for playing
