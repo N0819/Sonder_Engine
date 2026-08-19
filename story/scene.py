@@ -1695,8 +1695,6 @@ DEFAULT_INTERACTION_CONFIG = {
     # story and its first live run would be its first exercise. OFF until
     # there is offscreen life to run through it.
     "parallel_isolated_reactors": False,
-    "max_director_calls": 4,
-    "max_perception_calls": 4,
     "allow_npc_initiative": True,
     "allow_npc_to_npc_dialogue": True,
     "stop_on_player_address": True,
@@ -1727,21 +1725,29 @@ DEFAULT_REACTION_CONFIG = {
 }
 
 def interaction_limits(autonomy):
+    """The per-beat budget an autonomy rung buys.
+
+    Two numbers, not four. This used to carry `max_director_calls` and
+    `max_perception_calls` as well, from a design where the interaction loop
+    called both per micro-round. Neither survived: the Director is now a PLAN
+    stage (`director_interpret`/`director_resolve`), so how many times it runs
+    is decided by `agents/runtime.build_plan` and not by a dial, and
+    perception is deterministic -- there is no `perception` model role at all,
+    so a budget on perception CALLS bounds nothing that costs anything. They
+    were still derived per rung and persisted by the dialogue route, which is
+    the worst arrangement available: a maintained ladder of four numbers of
+    which two were decoration (AUDIT_MINDS finding 9).
+    """
     try:
         value = max(0, min(100, int(autonomy)))
     except Exception:
         value = 50
     presets = [
-        (0, {"max_micro_rounds": 1, "max_character_calls": 1,
-             "max_director_calls": 1, "max_perception_calls": 1}),
-        (25, {"max_micro_rounds": 2, "max_character_calls": 3,
-              "max_director_calls": 2, "max_perception_calls": 2}),
-        (50, {"max_micro_rounds": 4, "max_character_calls": 6,
-              "max_director_calls": 4, "max_perception_calls": 4}),
-        (75, {"max_micro_rounds": 7, "max_character_calls": 10,
-              "max_director_calls": 7, "max_perception_calls": 7}),
-        (100, {"max_micro_rounds": 12, "max_character_calls": 18,
-               "max_director_calls": 12, "max_perception_calls": 12}),
+        (0, {"max_micro_rounds": 1, "max_character_calls": 1}),
+        (25, {"max_micro_rounds": 2, "max_character_calls": 3}),
+        (50, {"max_micro_rounds": 4, "max_character_calls": 6}),
+        (75, {"max_micro_rounds": 7, "max_character_calls": 10}),
+        (100, {"max_micro_rounds": 12, "max_character_calls": 18}),
     ]
     return min(presets, key=lambda item: abs(item[0] - value))[1]
 
