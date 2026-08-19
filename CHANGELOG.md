@@ -1,5 +1,218 @@
 # Changelog
 
+## alpha 9.6 — Nothing works only on paper, and nothing is lost in silence
+
+A housekeeping release, and it should read like one: 467 commits across 716
+files, and no major standout feature among them. What happened instead is
+that the engine was read end to end — every line of roughly 112,000 across
+twelve package audits, over three hundred findings triaged, and about two
+hundred of them repaired, one commit apiece, every leak fix with a test that
+failed on the unfixed tree. The regression suite grew from the 6,329 tests
+the last release claimed to a measured 8,028, green on two dependency
+stacks. Most of what changed is invisible and is meant to stay that way;
+what follows is the part you would have noticed.
+
+- **A reroll now happens in the world its beat happened in.** Rerolling the
+  narration quietly restored the pre-turn world and re-rendered against it:
+  the turn's movement, opened doors and sensory picture were all the OLD
+  ones, because three pieces of the outcome lived only in transient context
+  no reroll could recover — so a rerolled telling could seat somebody in the
+  room the beat had them leave. Measured: 450 of 451 multi-variant narrator
+  steps in the live corpus sat on already-committed turns, which is to say
+  almost every reroll ever taken went through that path.
+
+- **Being restrained now restrains, and only the aware are offered the
+  turn.** The engine has carried two deterministic gates — one to stop a
+  bound body acting as if free, one to stop an unconscious mind being asked
+  to act — and neither had fired once in the engine's life, because each
+  keyed on an exact spelling no beat ever writes: 24 live restraints spell
+  their kind `physical_restraint` or `restrained` and the gate asked for a
+  third; nine awareness rows carry the level word in the slot where the gate
+  looked for the word `awareness`. The exits were built BEFORE the entrances
+  opened — a flat fix was reverted because it would have immobilised all 24
+  bodies at once while nothing anywhere could end a restraint. A restraint
+  is now a relation, not a flag: `bound` holds unattended, a `held` grip
+  binds only while its named holder is present and conscious, and the
+  release cue was measured against an adversarial battery — nine false
+  positives became one, and untying an apron no longer frees the person you
+  hand it to. Read through the shipped logic, the 24 become 10 standing
+  restraints, 6 live holds, and 8 that bind nobody: the embraces and lever
+  grips stop pretending. And underneath both, found on the way and worth
+  more than either: name matching used a word boundary that cannot fire
+  between a kana name and its particle, so for kana-named minds the rouse
+  scan, the unconsciousness scan and the release scan were all dead — a body
+  could be shaken and never wake.
+
+- **A disguise that conceals your identity now conceals it all beat long.**
+  The flag saying a disguise hides who you are was computed and discarded on
+  the same line while building the after-view of a beat, and an absent flag
+  reads as "does not conceal" — the right default for a glamour over fox
+  ears, the wrong one for a hood over a face. So an identity-concealing
+  disguise held in the first view of a beat and failed in the second: every
+  observer who had ever met the wearer got the real name back, and one turn
+  contained both "a hooded pilgrim is present" and what Tamamo did. Both
+  views carry the flag now, and this one branch fails CLOSED — a missing
+  answer here is the engine failing to state its own rule, and a leak is an
+  engine failure, never a model's.
+
+- **What never reached a mind no longer turns up inside it.** Five firewall
+  leaks, each fixed with a test that fails on the previous engine. The
+  worst: a question asked through a shut door was copied verbatim into the
+  payload of the mind it never reached — no delivery gate, no room test, no
+  concealment check — while the guard five lines above refused to reveal so
+  much as whether the player had spoken. Its family: a background presence
+  told who stood in front of it by reading the whole cast list; the player's
+  line delivered to a presence the audience map had already answered "none"
+  for; a follower handed the room its target had walked out of sight into;
+  and a name said in a whisper still drawing the story's attention toward
+  the presence it was whispered about.
+
+- **A packed square now reaches you as a packed square.** Crowds, couriers
+  and posted notices each fed a carefully gated perception seam — the
+  figure and which door he makes for, never the message — and each seam's
+  only consumer was a dead payload key, so none of it reached any mind at
+  all. They arrive as ambient percepts now, keyed so an unchanged crowd is
+  furniture and a thinning one re-renders. In the same pass, authored
+  blindness, deafness and keen hearing now reach a mind's onset view,
+  outcome view and memory, where before they lasted one micro-round and no
+  view at all; and authored sensory events stopped collapsing into a
+  shapeless `mixed` channel delivered to every observer regardless of room —
+  which is where all 199 in the live corpus had gone, the only two authored
+  smells included. Perception itself lost 1,123 lines of retired machinery
+  on the way: passes that read finished prose back and repaired it, replaced
+  by decisions made on the record before a sentence exists, where an
+  admission gate cannot be phrased around.
+
+- **An absent mind now takes its own convictions with it.** Every offscreen
+  think the engine ever paid for — its most expensive rung — went in
+  believing nothing: the fail-closed allowlist read a path no code has ever
+  written, and an entry that reads the wrong path looks exactly like a mind
+  that happens to hold no beliefs. Measured read-only: 0 of 100 minds carry
+  the path it read, 31 carry the real one. A gatekeeper who believes the
+  gate still holds behaves differently from one who believes nothing, and
+  every offscreen tick in the corpus was the second. A mind's own theory of
+  other minds now travels too, with the argument written down: that ledger
+  has exactly one writer — the mind's own firewalled turn — so withholding
+  it was never a boundary, it was an amnesia. 72 of 100 minds hold one;
+  1,148 hypotheses came back into use.
+
+- **A story now opens with everyone already someone.** A greeting could
+  establish what a character KNOWS and nothing about who they were when it
+  began, so every mind launched at zero: no stance toward you, no mood, no
+  belief that could be wrong. All 46 greetings across 32 cards were read
+  first, and they are full of exactly that — a raised wrench, a skipped
+  heartbeat, a lock described as iced over. One card carries both ends:
+  Sarah Moon has a greeting that opens at week-three warmth and another at
+  day-one ignorance, and both launched identically at zero. Four channels
+  now seed the stores the runtime already revises — memories, beliefs,
+  stances with their provenance on the relationship graph, and opening
+  affect on the surface only, so the mood still decays back to the card.
+  A seeded belief deliberately carries no truth flag: the gap between what
+  is established and what is believed IS the false belief, and the firewall
+  exists to keep it. Your own mind is refused seeding, because it is the
+  human's.
+
+- **Things can smell of something now, and the Director can say so.** Scent
+  had been a permission system with nothing to permit: barriers graded how
+  far a smell carries, cards could author a nose, and no ledger anywhere
+  said what anything smelled LIKE — the narrator's own manifest read
+  "nothing ledgered rides this channel". The fact now sits on the record
+  each thing already has: a body's standing scent beside its appearance, an
+  object's beside its light, a spill's on the substance itself, and a smell
+  stops at the same walls everything else does. Two rules were argued rather
+  than assumed: a scent through a wall crosses as material but arrives
+  unattributed — naming the body would hand over what only sight had earned,
+  and the same rule covers a body standing in the dark — and a scent never
+  defeats a disguise, though a mind may still conclude whose it is from its
+  own memories: legitimately, and defeasibly, since two bodies can wear one
+  perfume.
+
+- **A Japanese story is now played in Japanese all the way down.** The
+  language packs were decoration over deterministic code that read only
+  English: every recognizer in the mind package — theory-of-mind cues, the
+  affect lexicon, salience, mood, durable quotes — degraded to "no signal"
+  in a Japanese story, which every caller reads as an answer, and
+  out-of-band memory consolidation ran in English regardless. The guards
+  assumed spaces and capitals: a word boundary that cannot fire in CJK, a
+  four-character display floor that swallows a whole Japanese room name, an
+  article strip applying three English words to a pack that declares none.
+  And the prompts had drifted where nothing compared them: seventeen pasted
+  copies of four shared fragments, each translated independently, one of
+  which had INVERTED its rule — the Japanese lorebook prompt told the model
+  the opposite of what every neighbouring prompt said about vehicles.
+  Fragments are now references resolved at load, identical by construction;
+  English renders byte-identical across all 41 prompts, which is the proof
+  the mechanism is faithful.
+
+- **When the engine drops a piece of model output, it now says so.** To
+  save a beat the engine will subtract — prune one malformed channel and
+  commit the rest — and the trade is right, but about a dozen sites did it
+  in silence: a beat could commit with its whole `weather`, `attire` or
+  `positions` channel removed and leave no trace in the pipeline drawer,
+  and a deliberation truncated at the runaway ceiling was indistinguishable
+  from one that simply ended. Every countable loss now writes a note on the
+  step that suffered it, so the drawer tells you what went, and why.
+
+- **The gate now runs on the stack you actually play.** An external
+  integrator's CI matrix caught what `make check` structurally could not:
+  the interpreter the local gate resolves to carried Pydantic 1 and NumPy
+  1.26, while the launchers build — and every player runs — Pydantic 2 and
+  NumPy 2.2.6. Two defects were live in that gap on the unreleased tree,
+  the suite green through both: a schema read that exists only on Pydantic
+  1 emptied a routing table, so on the shipped major all seventeen
+  list-valued Director channels — `contact_ops`, `introductions`,
+  `crowd_ops` among them — were dispatched, paid for and discarded in
+  silence; and NumPy 2 silently doubled the size of a test fixture, so
+  every dimension check in one file measured the fixture rather than the
+  engine.
+  Both were caught between tags and reached no release. The whole suite now
+  runs green on both stacks, at 8,028, and two structural guards confine
+  major-specific reads to a single module so the class stays closed.
+
+- **Installing now goes by version, not by luck.** Reported from a Windows
+  install by MentallyQuill: the launcher asked for the NEWEST Python and got
+  3.14, for which the pinned dependency set has no built wheel — so pip
+  compiled from source and the reporter saw a Rust compiler error, three
+  layers below anything they had chosen, naming neither Python nor Sonder.
+  Both launchers now enforce 3.11–3.13 by checking the version rather than
+  trusting the name, say a Python is too NEW when that is the truth, and
+  detect a venv already built on the wrong interpreter — printing the one
+  command that clears it, a rename and never a delete, because removing
+  somebody's environment is not a launcher's call to make. And Unix has a
+  real installer now: on a clean Linux or macOS box, `./Start Sonder.sh`
+  picks a Python by version (stock macOS's `python3` is 3.9), builds the
+  venv against the pinned constraints and opens the browser; later runs
+  skip all of it.
+
+And, in brief, from the same reading. Opening a character card and pressing
+Save no longer deletes every field the editor has no widget for — including
+projects a character had adopted in play, their authored sampler, and a
+curiosity silently reset to 0.5. Booting into safe mode to switch off one
+broken extension no longer erases every other extension's enablement. An
+interruption now cuts only the line it landed in, not every line its victim
+spoke that beat, including ones already heard and answered. A loosened,
+wine-stained kimono no longer comes back pristine when a character's several
+names are healed into one attire record. A portable archive's memory vectors
+are read on import instead of thrown away and re-embedded at provider cost.
+Canon can no longer be ratified by a substring brush-past, and the lore
+writer stopped putting engine ids into established truth — one live row read
+"a8becaa367e148be said ..." and stamped a denial as fact. One unreadable
+co-player sheet no longer kills every turn in its chat, and a chat can no
+longer wedge itself into a plan it can neither advance nor resume. Fifty of
+168 character sheets state what their character will not give up, and the
+engine finally reads it. Checking extensions for updates against an
+unreachable network has a wall-clock budget, and what runs out of time is
+reported uncheckable rather than "up to date" — the same claim with the
+truth taken out. A latent era leak closed: a report handed to you in one era
+no longer survives a rewind into an era that never produced it. The rest is
+the invisible bulk, and it is meant to be invisible: the three monolith
+files — Director, spatial, commit — are now 37 modules behind facades, the
+81 root modules live in eight subsystem packages, and 2,714 import
+statements moved while no behaviour did. Because a green suite never runs a
+model, the repaired engine was also played against the one it was repaired
+from — ten live turns each, zero rollbacks, identical plans, and a stance
+ledger that went from 0 rows to 27.
+
 ## alpha 9.5 — Everyone remembers what they said, and nothing speaks that is not somebody
 
 - **Characters remember their own conduct again.** Since 12 August no
