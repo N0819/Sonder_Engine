@@ -2601,8 +2601,6 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # article/preposition/conjunction/possessive so the label ends on a
         # content word.
         dangling = frozenset(compositor_value("label_dangling"))
-        while words and words[-1].lower() in dangling:
-            words = words[:-1]
         # One preposition over from the participle fix above: the cap can
         # also cut a phrase just AFTER the dangler took one word with it --
         # "towering hooded stranger with smooth [skin...]" keeps "with
@@ -2612,12 +2610,29 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # tail with at most one word after it is an amputated phrase: cut
         # back to the content head. "the figure in mourning" survives when
         # nothing was truncated; a cap-cut label ends on a whole phrase.
-        if truncated:
-            for _i in range(len(words) - 1, 0, -1):
-                if words[_i].lower() in dangling:
-                    if len(words) - 1 - _i <= 1:
-                        words = words[:_i]
-                    break
+        # ...and the two trims have to CONVERGE, because each one exposes a
+        # new tail for the other. Measured live 2026-08-19, in an A/B run: "a
+        # lean courier in a rain-darkened canvas coat, hair cropped short"
+        # capped to "lean courier in a rain-darkened", lost "a rain-darkened"
+        # to the amputated-phrase rule, and was left as "the lean courier IN"
+        # -- ending on a preposition, which the comment above says in so many
+        # words must not happen. Every unrecognised body in that story was
+        # labelled that way, in views, in prose and in the memories written
+        # from them: "the broad man in", "the old porter in". Each rule ran
+        # once and neither looked at what the other uncovered. The leading
+        # article strip above already knew this and used a `while`.
+        while True:
+            before = len(words)
+            while words and words[-1].lower() in dangling:
+                words = words[:-1]
+            if truncated:
+                for _i in range(len(words) - 1, 0, -1):
+                    if words[_i].lower() in dangling:
+                        if len(words) - 1 - _i <= 1:
+                            words = words[:_i]
+                        break
+            if len(words) == before:
+                break
         if words:
             return _text(
                 "unknown_actor",

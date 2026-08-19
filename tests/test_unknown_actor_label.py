@@ -76,3 +76,45 @@ def test_trims_trailing_dangling_function_word():
     assert _unknown_actor_label(
         "Grey", "A veiled figure in mourning",
     ) == "the veiled figure in mourning"
+
+
+def test_a_label_never_ends_on_a_function_word():
+    """The two tail trims must CONVERGE, because each exposes a tail for the
+    other.
+
+    Found in a live A/B run, 2026-08-19, not by any test here: a persona
+    summary of "a lean courier in a rain-darkened canvas coat, hair cropped
+    short" capped to "lean courier in a rain-darkened", lost "a rain-darkened"
+    to the amputated-phrase rule, and stood as "the lean courier IN". Every
+    unrecognised body in that story wore one -- in perception views, in
+    narrated prose, and in the memories written from them, where it is durable.
+    "the broad man in". "the old porter in".
+
+    Neither rule was wrong; they ran once each and neither re-read what the
+    other uncovered. The failure needs a summary long enough to be capped AND
+    a preposition in the first five words, which is why five earlier fixes to
+    this function never produced it.
+    """
+    for summary in ("a lean courier in a rain-darkened canvas coat, "
+                    "hair cropped short",
+                    "a broad man in a lift operator's uniform",
+                    "an old porter in a green coat",
+                    "a tall figure with a long scar across one cheek",
+                    "a stooped clerk of the outer registry office",
+                    "a young runner and a battered leather satchel"):
+        label = _unknown_actor_label("Nobody", summary)
+        last = label.split()[-1]
+        assert last not in ("in", "with", "of", "a", "an", "the", "and",
+                            "at", "by", "for", "from", "on", "or", "to",
+                            "as", "his", "her", "its", "their"), (
+            f"{summary!r} -> {label!r} ends on a function word")
+
+
+def test_a_short_phrase_that_was_never_capped_keeps_its_preposition():
+    """The converse, and the reason the trim is conditional on `truncated`:
+    a summary that fits was not cut off, so its trailing phrase is whole."""
+    assert _unknown_actor_label("Nobody", "the figure in mourning") == \
+        "the figure in mourning"
+    assert _unknown_actor_label("Nobody", "a small woman with ink-stained "
+                                "fingers") == \
+        "the small woman with ink-stained fingers"
