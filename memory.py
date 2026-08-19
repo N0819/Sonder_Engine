@@ -3951,23 +3951,43 @@ def dump_lorebook_links(book_ids):
 
 
 def restore_lorebook_links(chat_id, old_to_new, links):
+    """Put a chat's lorebook link graph back, and SAY what did not go back.
+
+    Every way this can fail was silent. Four `continue`s drop a link whose
+    books the id map never learned, whose endpoints collapsed onto one book, or
+    whose endpoints now sit outside this chat; a bare `except Exception: pass`
+    swallowed the insert itself. A restore that puts back half the graph and
+    returns None is indistinguishable from one that put back all of it -- and
+    the loss is not visible in the chat either, because a missing link is a
+    retrieval edge that stops being followed, not an error anybody sees.
+
+    Returns `{"restored": int, "dropped": int, "reasons": {...}}` and warns
+    when anything was dropped. Restoration itself is unchanged: a link that
+    cannot be put back is still skipped rather than allowed to take the rest
+    of the graph down with it.
+    """
+    restored = 0
+    reasons = defaultdict(int)
+
     for link in links or []:
         source = old_to_new.get(link.get("source_book_id"))
         target = old_to_new.get(link.get("target_book_id"))
 
         if source is None or target is None:
+            reasons["book_not_in_id_map"] += 1
             continue
         if source == target:
+            reasons["endpoints_merged"] += 1
             continue
 
         source_row = q("SELECT chat_id FROM lorebooks WHERE id=?", (source,), one=True)
         target_row = q("SELECT chat_id FROM lorebooks WHERE id=?", (target,), one=True)
 
         if not source_row or not target_row:
+            reasons["book_missing"] += 1
             continue
-        if source_row["chat_id"] != chat_id:
-            continue
-        if target_row["chat_id"] != chat_id:
+        if source_row["chat_id"] != chat_id or target_row["chat_id"] != chat_id:
+            reasons["book_outside_this_chat"] += 1
             continue
 
         try:
@@ -3980,8 +4000,22 @@ def restore_lorebook_links(chat_id, old_to_new, links):
                 weight=link.get("weight", 0.75),
                 sort_order=link.get("sort_order", 0),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            reasons["insert_failed"] += 1
+            logger.warning(
+                "memory: lorebook link %s->%s not restored for chat %s: %s",
+                source, target, chat_id, exc)
+            continue
+        restored += 1
+
+    dropped = sum(reasons.values())
+    if dropped:
+        logger.warning(
+            "memory: restored %d of %d lorebook links for chat %s (%s)",
+            restored, restored + dropped, chat_id,
+            ", ".join(f"{name}={count}"
+                      for name, count in sorted(reasons.items())))
+    return {"restored": restored, "dropped": dropped, "reasons": dict(reasons)}
 
 def restore_lorebook(lb_id, entries):
     import hashlib, uuid
