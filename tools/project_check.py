@@ -1386,7 +1386,7 @@ def check_asgi_targets(errors: list[str]) -> None:
     """
     names, by_tail = _engine_module_index()
     launchers = [ROOT / "Makefile"] + sorted((ROOT / "tools").glob("*.sh"))
-    launchers += sorted(ROOT.glob("*.bat"))
+    launchers += sorted(ROOT.glob("*.bat")) + sorted(ROOT.glob("*.sh"))
     for path in launchers:
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
