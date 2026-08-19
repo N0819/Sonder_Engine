@@ -1672,18 +1672,29 @@ over identically -- the flag is written and nothing reads it. Giving it force
 is a Director rule about which of two colliding attempts survives intact, and
 it is the natural companion to `commitment: "contestable"`.
 
-### 1.30 The background-claims lane has never once fired
+### 1.30 The background-claims lane has fired seven times, all one way
 
-Measured 2026-08-08, against the live corpus: **0 claims ever recorded, across
-17 chats playing at `scene_life=full` over the corpus's 2,114 turns and 46
-tracked presences.** That is the real denominator -- an earlier 0-of-29 was
-measured against beats, which undercounts the opportunities and made the
-silence look like sparse data instead of a dead lane. The lane's entire
-downstream -- `background_claims.record_claims`, `unratified_claims` riding
-every resolve payload, `settle_claims`, `write_canon`, `canon_provenance` --
-has processed nothing, ever. It is built, tested, documented, and has never
-run on a single live datum: the exact shape the fire-rate rule in `AGENTS.md`
-exists for.
+**Updated 2026-08-18.** The entry used to read "has never once fired", and that
+was true when measured 2026-08-08: 0 claims across 17 chats playing at
+`scene_life=full` over 2,114 turns and 46 tracked presences. Re-measured
+read-only against the live database, the lane has now produced **7 claims, all
+7 ratified, 0 contradicted, 0 expired**, in one chat.
+
+Seven is not evidence the lane works. Until `5ab591e` `_verdicts` inferred
+adoption from any four-character reference appearing anywhere in the resolved
+event of the beat being settled, and `background_react` runs AFTER
+`director_resolve` — so the text was written before the presence spoke, every
+claim settled on the beat that produced it, and contradiction and expiry could
+not fire. A three-outcome design collapsed onto its one irreversible branch,
+and it is invisible because ratification is the branch that looks like success.
+Inferred adoption now requires a LATER beat. **The seven rows stay** (owner
+decision 3): canon is write-once, and repairing persisted story data is the
+owner's call. Two of the seven carry a raw engine uid as a speaker and one
+establishes a DENIAL as truth.
+
+So the fire rate still has to be measured, on a run under the repaired gate. A
+lane whose only firings happened through a defect gives no chances, not a
+rate.
 
 Why, structurally: a claim only enters the lane when `scene_life` output
 survives `_claimed_refs` -- either the model volunteers `asserts` (it never
