@@ -5200,7 +5200,7 @@ def validate_llm_output_strict(
                 return ValidationReport(
                     valid=True,
                     output=_dump(model),
-                    warnings=[
+                    warnings=repairs + [
                         "Dropped malformed state_diff.%s so the beat could "
                         "commit what it did adjudicate (%s)" % (field, detail)
                         for field, detail in
@@ -5224,7 +5224,7 @@ def validate_llm_output_strict(
                 return ValidationReport(
                     valid=True,
                     output=_dump(model),
-                    warnings=[
+                    warnings=repairs + [
                         "Dropped malformed specialist channel %s so the "
                         "beat could keep what it did encode (%s)"
                         % (field, detail)
