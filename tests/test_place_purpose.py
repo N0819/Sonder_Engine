@@ -110,6 +110,24 @@ class TestHereAffords:
         sc["attire"] = {"Karen": {"worn": ["fur cloak"]}}
         assert here_affords(sc, "Orrin") == []
 
+    def test_everything_comfort_calls_a_soft_support_affords_rest(self):
+        """The two lexicons claim parity in a comment and were hand-copied,
+        so they drifted: 18 of comfort's soft-support tokens -- featherbed,
+        settee, armchair, cushion, pillow, fur, blanket, quilt and their
+        plurals -- were missing here, and a room furnished entirely in them
+        echoed no rest at all. One set, imported."""
+        from world.comfort import SOFT_SUPPORT_TOKENS
+
+        for token in sorted(SOFT_SUPPORT_TOKENS):
+            sc = _scene(
+                rooms={"r1": {"name": "Room", "light": "lit", "adjacent": []}},
+                entities={"e1": {"name": token.title(), "kind": "furniture",
+                                 "description": "a %s" % token}},
+                positions={"Orrin": "r1", "e1": "r1"},
+            )
+            got = here_affords(sc, "Orrin")
+            assert any(a.startswith("rest") for a in got), token
+
     def test_an_entity_elsewhere_is_not_here(self):
         sc = self._tavern()
         sc["positions"]["bed1"] = "r2"

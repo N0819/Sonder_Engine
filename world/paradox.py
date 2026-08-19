@@ -61,6 +61,7 @@ import time as _time
 from story.character_schema import character_name
 from core.db import active_frame_id, q, qi, transaction, wget, wset
 from core.frames import get_frame
+from world.spatial import room_of
 
 MODES = ("dread", "hazard", "toll", "warden", "bureau")
 DEFAULT_MODE = "hazard"
@@ -90,12 +91,31 @@ _HAZARD_WOUND_NOTE = (
 )
 
 
+DEFAULT_ESCALATION_RATE = 1.0
+#: The setter's floor, applied on READ as well. A rate of 0 freezes escalation
+#: forever and a negative one runs it backwards, and a stored row is not a
+#: setter call: archives, checkpoints and hand edits all write this key.
+MIN_ESCALATION_RATE = 0.1
+
+
+def _escalation_rate(value):
+    """A usable rate, or the default. Validated like its `mode` neighbour --
+    `get_policy` is called from the commit domain, so a bare `float()` over a
+    stored value meant an unreadable row took the TURN down rather than the
+    setting."""
+    try:
+        return max(MIN_ESCALATION_RATE, float(value))
+    except (TypeError, ValueError):
+        return DEFAULT_ESCALATION_RATE
+
+
 def get_policy(chat_id):
     stored = wget(chat_id, "paradox_policy", {}) or {}
     mode = stored.get("mode")
     return {
         "mode": mode if mode in MODES else DEFAULT_MODE,
-        "escalation_rate": float(stored.get("escalation_rate", 1.0)),
+        "escalation_rate": _escalation_rate(
+            stored.get("escalation_rate", DEFAULT_ESCALATION_RATE)),
         "toll_in_radius": bool(stored.get("toll_in_radius", DEFAULT_TOLL_IN_RADIUS)),
     }
 
@@ -107,7 +127,8 @@ def set_policy(chat_id, *, mode=None, escalation_rate=None, toll_in_radius=None)
             raise ValueError(f"mode must be one of {MODES}")
         policy["mode"] = mode
     if escalation_rate is not None:
-        policy["escalation_rate"] = max(0.1, float(escalation_rate))
+        policy["escalation_rate"] = max(MIN_ESCALATION_RATE,
+                                        float(escalation_rate))
     if toll_in_radius is not None:
         policy["toll_in_radius"] = bool(toll_in_radius)
     wset(chat_id, "paradox_policy", policy)
@@ -335,12 +356,20 @@ def _apply_warden_stage(chat_id, state, stage):
     sc = wget(chat_id, "scene", None)
     if not isinstance(sc, dict):
         return
+    # A `positions` value names a ROOM. Writing None there is the category
+    # error every spatial query answers as `unknown`, which is
+    # indistinguishable from distance -- so a warden nobody can see, reach or
+    # flee would stand in the ledger for the rest of the story. A wound with
+    # no place has nowhere to put a hunter; it escalates without one.
+    epicenter = state.get("epicenter_room")
+    if not epicenter or epicenter not in (sc.get("rooms") or {}):
+        return
     entities = sc.setdefault("entities", {})
     positions = sc.setdefault("positions", {})
     warden_id = state.get("warden_entity_name") or f"the {state.get('label', 'paradox')} warden"
     state["warden_entity_name"] = warden_id
     entities.setdefault(warden_id, {"kind": "creature", "subtype": "paradox_warden", "hostile": True})
-    positions[warden_id] = state.get("epicenter_room")
+    positions[warden_id] = epicenter
     wset(chat_id, "scene", sc)
 
 
@@ -360,6 +389,21 @@ def _apply_stage_consequence(chat_id, state, stage, policy):
         return
 
 
+def _player_room(chat_id, sc):
+    """The room the player's own body stands in, or None.
+
+    Resolved through the chat's persona, which is the name `positions` keys
+    the player by (`agents/common._resolve_player_room` reads the same one).
+    None is a real answer: a scene the player is not placed in has no
+    player room, and inventing one is how a wound acquires a place nobody
+    was standing in.
+    """
+    row = q("SELECT p.name AS name FROM chats c JOIN personas p "
+            "ON p.id = c.persona_id WHERE c.id=?", (chat_id,), one=True)
+    name = str((row["name"] if row else "") or "").strip()
+    return room_of(sc, name) if name else None
+
+
 def _trigger_paradox(chat_id, anchor, frame_id):
     """frame_id here is the OPERATIVE frame -- whichever frame's commit
     actually triggered the violation (ctx.turn.frame_id), NOT
@@ -376,9 +420,12 @@ def _trigger_paradox(chat_id, anchor, frame_id):
     positions = sc.get("positions") or {}
     epicenter = positions.get(anchor["entity_id"])
     if not epicenter:
-        # Fall back to wherever the player is -- there's always a scene
-        # in progress when a commit runs.
-        epicenter = next(iter(positions.values()), None)
+        # Where the PLAYER is -- there is always a scene in progress when a
+        # commit runs, and the player is who committed the violation. This
+        # used to be `next(iter(positions.values()))`, which is whichever
+        # body the dict happened to yield first; a wound is opened where the
+        # violation happened, and insertion order is not that place.
+        epicenter = _player_room(chat_id, sc)
     state = {
         "anchor_id": anchor["anchor_id"], "label": anchor["label"],
         "frame_id": frame_id, "epicenter_room": epicenter,
@@ -425,6 +472,18 @@ def _advance_paradox(chat_id, state):
 
 
 def _force_restore_anchor(chat_id, anchor):
+    # NOTE, unrepaired: these two statements write `world_entities` directly,
+    # and `world_entities` is a DERIVED PROJECTION of the scene commit -- the
+    # INSERT mints a durable row for a body the scene blob does not hold, and
+    # the retire semantics the projection has since grown do not know about
+    # it. The right restore path writes the anchor back into `world.scene` and
+    # lets the projection follow, which needs a decision about what "force
+    # restore" means when reality wins. Recorded rather than guessed at.
+    #
+    # The `world_placements` DELETE that stood beside them is gone: that table
+    # is decommissioned, nothing on the live path has written it for
+    # releases, and a delete against a table nobody fills is a statement that
+    # a second ledger still matters.
     exists = _entity_exists(chat_id, anchor["entity_id"])
     if anchor["required_exists"] and not exists:
         qi(
@@ -434,13 +493,27 @@ def _force_restore_anchor(chat_id, anchor):
         )
     elif not anchor["required_exists"] and exists:
         qi("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?", (chat_id, anchor["entity_id"]))
-        qi("DELETE FROM world_placements WHERE chat_id=? AND subject_id=?", (chat_id, anchor["entity_id"]))
 
 
 def check_and_apply_paradox(ctx, nonce):
-    """The commit-time entry point: call once per turn, after commit_scene
-    and commit_world_entities have applied this turn's state_diff, so the
-    check runs against what actually just got committed.
+    """The commit-time entry point, called once per turn.
+
+    `nonce` is unread, like every other commit domain's (all thirteen take it
+    and none reads it): it is the REROLL SEED the orchestrator threads
+    uniformly, not an idempotency token -- a rerun of a turn gets a DIFFERENT
+    nonce, which is the whole point of it, so keying idempotency on it would
+    fail open exactly where it was needed.
+
+    Rerunning this domain is safe for a different reason, which is worth
+    stating because it is not obvious: `severity` is computed ABSOLUTELY from
+    the simulation clock against the wound's stored onset, never incremented,
+    and a stage consequence fires only when the derived stage exceeds the
+    stored one. Two runs at the same clock reach the same severity and apply
+    nothing twice.
+
+    Call after commit_scene and commit_world_entities have applied this
+    turn's state_diff, so the check runs against what actually just got
+    committed.
 
     world_entities has no per-frame partitioning (a documented Stage-3
     limitation, not attempted here -- see Design.md), so an anchor's

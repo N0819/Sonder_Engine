@@ -58,9 +58,14 @@ def _seen(db, cid, sid=SID, turn=2, room="garden", seconds=100.0):
 
 
 def _no_model(monkeypatch):
+    """Patched at the PROVIDER seam: `gaps` is deterministic at every tier and
+    no longer imports a model seam of its own, so a module attribute is the
+    wrong place to catch a call from it."""
+    import llm.providers as providers
+
     def _refuse(*a, **k):
-        raise AssertionError("the low rung made a model call")
-    monkeypatch.setattr(gaps, "chat_complete", _refuse)
+        raise AssertionError("the gap generator made a model call")
+    monkeypatch.setattr(providers, "chat_complete", _refuse)
 
 
 class TestOffscreenLogProvenance:

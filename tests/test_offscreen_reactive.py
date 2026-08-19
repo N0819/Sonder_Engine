@@ -154,6 +154,58 @@ class TestPlanAuthoring:
         assert wget(cid, "offscreen_plans", []) == original
 
 
+class TestTheStoredListIsNotTheActiveCeiling:
+    def test_a_plan_the_ceiling_just_approved_is_not_evicted_by_history(
+            self, temp_db):
+        """One constant did three jobs: a per-beat op budget, the ACTIVE
+        ceiling, and a truncation of the stored list that counted cancelled
+        and completed rows. So a chat with a full history of finished plans
+        could have an open accepted by the ceiling (0 active) and dropped by
+        the truncation in the same call."""
+        from core.db import wget, wset
+        from world.offscreen import apply_plan_ops
+
+        cid, _, scene, ctx, _ = _world(temp_db)
+        standing = {"plan_id": "hold-the-bridge", "actor_id": "mora_uid",
+                    "status": "active", "objective": "x", "stages": []}
+        wset(cid, "offscreen_plans", [standing] + [
+            {"plan_id": "done-%d" % i, "actor_id": "mora_uid",
+             "status": "completed", "objective": "x", "stages": []}
+            for i in range(7)])
+        result = apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
+        assert result["applied"] == 1
+        stored = {p["plan_id"] for p in wget(cid, "offscreen_plans", [])}
+        assert "seal-the-gate" in stored
+        # The standing plan is the OLDEST row, and history pushed it out.
+        assert "hold-the-bridge" in stored
+
+    def test_history_is_what_gets_dropped_first(self, temp_db):
+        """Terminal rows are the ones a truncation may forget: they are
+        history, and an active plan is a promise the world is still keeping."""
+        from core.db import wget, wset
+        from world.offscreen import PLAN_CAP, PLAN_HISTORY_CAP, apply_plan_ops
+
+        # History is bounded by its OWN constant. Sharing the active ceiling's
+        # made "how many plans may run at once" and "how much of what already
+        # happened is worth keeping" one number, and they are not one
+        # question.
+        assert PLAN_HISTORY_CAP > PLAN_CAP
+        cid, _, scene, ctx, _ = _world(temp_db)
+        wset(cid, "offscreen_plans", [
+            {"plan_id": "done-%d" % i, "actor_id": "mora_uid",
+             "status": "cancelled", "objective": "x", "stages": []}
+            for i in range(40)])
+        apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
+        stored = wget(cid, "offscreen_plans", [])
+        assert [p["plan_id"] for p in stored
+                if p.get("status") == "active"] == ["seal-the-gate"]
+        # The oldest history goes, the newest stays: a record only ever
+        # truncated from one end is still a record.
+        kept = [p["plan_id"] for p in stored if p.get("status") == "cancelled"]
+        assert len(kept) == PLAN_HISTORY_CAP
+        assert kept[-1] == "done-39"
+
+
 class TestPlanFiring:
     def test_crossing_a_plan_deadline_creates_its_own_epoch(self, temp_db):
         from core.db import transaction, wget

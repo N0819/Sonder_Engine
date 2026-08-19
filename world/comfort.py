@@ -58,8 +58,17 @@ _LEVEL_NEAR = 0.1      # standing by warmth or beside a soft feature
 # "furniture" and "furnace". Small and generic on purpose -- the same
 # lexicon-creep failure mode place purpose has. It will want to grow into an
 # unversioned ontology of furniture; refuse it.
+#
+# PUBLIC, and the single definition: `place_purpose._HERE_LEXICON` asks the
+# same two questions of the same scene ("is there somewhere to rest here",
+# "is there warmth here") and used to restate these sets by hand under a
+# comment claiming parity. They drifted by 18 tokens -- a room furnished in
+# featherbeds, settees, cushions, furs and quilts echoed no rest at all. A
+# vocabulary two modules share is one vocabulary; where one of them needs a
+# different answer, the difference belongs in an explicit delta over this
+# set, never in a second copy of it.
 
-_SOFT_TOKENS = frozenset({
+SOFT_SUPPORT_TOKENS = frozenset({
     "bed", "beds", "featherbed", "featherbeds", "bedroll", "bedrolls",
     "bunk", "bunks", "cot", "cots", "couch", "couches", "sofa", "sofas",
     "settee", "settees", "divan", "divans", "armchair", "armchairs",
@@ -68,7 +77,7 @@ _SOFT_TOKENS = frozenset({
     "hammock", "hammocks", "mattress", "mattresses",
 })
 
-_WARMTH_TOKENS = frozenset({
+WARMTH_TOKENS = frozenset({
     "hearth", "hearths", "fireplace", "fireplaces", "brazier", "braziers",
     "campfire", "campfires", "stove", "stoves",
 })
@@ -91,29 +100,63 @@ _SITTING_TOKENS = frozenset({
 })
 
 # Contact manners that mean the surface is SUPPORTING the body rather than
-# the body doing something to it (spatial's _CONTACT_KEY_MANNERS vocabulary).
-_SUPPORT_MANNERS = frozenset({
-    "rest", "lean", "press", "touch", "lie", "sit", "hold",
+# the body doing something to it. A SUBSET of the real contact vocabulary,
+# `spatial_contacts.CONTACT_MANNERS` -- the comment here used to cite
+# `_CONTACT_KEY_MANNERS`, which is the identity key rather than the manner
+# list, so nothing tied this to the vocabulary it grades and `support` (the
+# canonical word for exactly this relation) was never in it. A Director
+# writing the plainest available word got the same answer as one writing
+# nothing.
+_SUPPORTING_CONTACT_MANNERS = frozenset({
+    "rest", "lean", "press", "touch", "hold", "support",
 })
+# NOT contact manners, and kept anyway: a Director asked for a manner reaches
+# for the posture word about as often as the contact word, and normalization
+# stores whichever it wrote. Dropping these would silently lose every "lying
+# on the bed" already standing in a live scene.
+_POSTURE_MANNERS = frozenset({"lie", "sit"})
+
+_SUPPORT_MANNERS = _SUPPORTING_CONTACT_MANNERS | _POSTURE_MANNERS
 
 
 def _tokens(*texts):
+    """One flat token stream. For membership questions only."""
     out = []
     for text in texts:
-        out.extend(t for t in re.split(r"[^a-z0-9]+",
-                                       str(text or "").casefold()) if t)
+        out.extend(_field_tokens(text))
     return out
 
 
-def _soft(tokens):
-    return any(t in _SOFT_TOKENS for t in tokens)
+def _field_tokens(text):
+    return [t for t in re.split(r"[^a-z0-9]+", str(text or "").casefold()) if t]
 
 
-def _warm(tokens):
-    if any(t in _WARMTH_TOKENS for t in tokens):
-        return True
-    return any(a in _WARM_QUALIFIERS and b in _WARM_MEDIA
-               for a, b in zip(tokens, tokens[1:]))
+def _fields(*texts):
+    """Tokens PER FIELD, one list each.
+
+    Kept separate because ADJACENCY is meaningful here: `_warm` reads a
+    qualifier beside a medium ("warm spring", "hot bath"), since the bare
+    nouns cannot tell a cold spring from a heated one. A flat stream made the
+    last word of one field adjacent to the first word of the next -- an entity
+    named "Runoff, Never Warm" beside a description opening "Pool of
+    snowmelt..." read as warm water. Two fields are two sentences; nothing is
+    adjacent across them.
+    """
+    return [_field_tokens(text) for text in texts]
+
+
+def _soft(fields):
+    return any(t in SOFT_SUPPORT_TOKENS for field in fields for t in field)
+
+
+def _warm(fields):
+    for field in fields:
+        if any(t in WARMTH_TOKENS for t in field):
+            return True
+        if any(a in _WARM_QUALIFIERS and b in _WARM_MEDIA
+               for a, b in zip(field, field[1:])):
+            return True
+    return False
 
 
 def _ci_eq(a, b):
@@ -237,7 +280,7 @@ def _derive(scene, name):
         display = str((ent or {}).get("name") or other or "").strip()
         if _is_body(scene, eid, ent, other):
             continue
-        tokens = _tokens(other, eid, (ent or {}).get("kind"),
+        tokens = _fields(other, eid, (ent or {}).get("kind"),
                          (ent or {}).get("name"),
                          (ent or {}).get("description"))
         if _soft(tokens):
@@ -260,7 +303,7 @@ def _derive(scene, name):
         desc = str((anchor if isinstance(anchor, dict) else {}).get("desc")
                    or "").strip()
         display = desc or str(at).replace("_", " ")
-        tokens = _tokens(at, desc)
+        tokens = _fields(at, desc)
         if _soft(tokens):
             if posture == "lying":
                 consider(_LEVEL_LYING, display, lying_support=True)
@@ -279,7 +322,7 @@ def _derive(scene, name):
             continue
         if _is_body(scene, eid, ent, other):
             continue
-        tokens = _tokens(other, eid, ent.get("kind"), ent.get("name"),
+        tokens = _fields(other, eid, ent.get("kind"), ent.get("name"),
                          ent.get("description"))
         if _soft(tokens) or _warm(tokens):
             consider(_LEVEL_NEAR, str(ent.get("name") or other).strip())

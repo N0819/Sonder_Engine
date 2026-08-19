@@ -101,6 +101,52 @@ def test_sitting_at_a_cushioned_anchor_uses_posture():
     assert comfort_level(scene, "Mira") == (0.2, "a cushioned corner bench")
 
 
+def test_the_word_that_means_supported_counts_as_support():
+    """`support` is in `spatial_contacts.CONTACT_MANNERS` and is the canonical
+    manner for exactly the relation this list describes -- and it was the one
+    word missing from it. A Director writing the plainest available word got
+    the same answer as one writing nothing."""
+    scene = _contact(_posture(_scene(), "Mira", "lying"),
+                     "Mira", "bed_1", manner="support")
+    assert comfort_level(scene, "Mira")[0] == 0.3
+
+
+def test_the_support_manners_come_from_the_contact_vocabulary():
+    """The comment cited `_CONTACT_KEY_MANNERS`, which is the identity key
+    rather than the manner list, so nothing tied the two together and the
+    real vocabulary grew a word this never saw."""
+    from world.comfort import _SUPPORTING_CONTACT_MANNERS
+    from world.spatial_contacts import CONTACT_MANNERS
+
+    assert _SUPPORTING_CONTACT_MANNERS <= set(CONTACT_MANNERS)
+
+
+def test_a_qualifier_does_not_reach_across_a_field_boundary():
+    """`_warm` reads a qualifier BESIDE a medium -- "warm spring", "hot bath"
+    -- because the bare nouns cannot tell a cold spring from a hot one. The
+    tokeniser flattened every field into one stream, so the last word of the
+    name became adjacent to the first word of the description: a name ending
+    "...Warm" beside a description opening "Pool of..." read as warm water.
+    Two fields are two sentences; nothing is adjacent across them."""
+    scene = _scene()
+    scene["entities"]["runoff_1"] = {
+        "kind": "object", "name": "Runoff, Never Warm",
+        "description": "Pool of snowmelt at the foot of the stair"}
+    scene["positions"]["runoff_1"] = "hall"
+    scene["stations"] = {"Mira": {"at": None, "near": ["runoff_1"]}}
+    assert comfort_level(scene, "Mira") == (0.0, "")
+
+
+def test_a_qualifier_beside_its_medium_within_one_field_still_reads():
+    scene = _scene()
+    scene["entities"]["spring_1"] = {
+        "kind": "object", "name": "Spring",
+        "description": "a warm spring welling out of the rock"}
+    scene["positions"]["spring_1"] = "hall"
+    scene["stations"] = {"Mira": {"at": None, "near": ["spring_1"]}}
+    assert comfort_level(scene, "Mira")[0] == 0.1
+
+
 def test_a_bare_crate_is_not_comfort():
     """Lexicon honesty: contact the vocabulary cannot name says nothing."""
     scene = _contact(_posture(_scene(), "Mira", "lying across it"),

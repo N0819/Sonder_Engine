@@ -131,7 +131,20 @@ RESOLUTIONS = ("inert", "low", "medium")
 EPOCH_SECONDS = 60 * 60
 EPOCH_KEY = "offscreen_epoch"
 PLAN_KEY = "offscreen_plans"
+#: How many plans may be ACTIVE at once. One number used to answer three
+#: questions -- this ceiling, the per-beat op budget, and how long the stored
+#: list may be -- and the third counts cancelled and completed rows, so a chat
+#: with a full history could have an open approved by the ceiling and dropped
+#: by the truncation in the same call. Three questions, three constants.
 PLAN_CAP = 8
+#: Plan ops read from one beat's `state_diff`. A budget on the Director's
+#: appetite, not on the world's commitments.
+PLAN_OPS_PER_BEAT = 8
+#: Terminal (cancelled/completed) rows kept beside the active ones. History,
+#: which is why it is bounded separately and generously: what a mind set out
+#: to do and abandoned is the record a later beat gets to show, and it costs
+#: nothing to run.
+PLAN_HISTORY_CAP = 16
 PLAN_STAGE_CAP = 6
 REACTIVE_FIRE_CAP = 3
 PLAN_TRIGGER_MIN_SECONDS = 60.0
@@ -679,6 +692,41 @@ def _normalize_plan_stages(cid, scene, frame_id, ctx, actor, stages,
     return normalized, warnings
 
 
+_TERMINAL_PLAN_STATUSES = frozenset({"cancelled", "completed", "failed"})
+
+
+def _truncate_plans(plans, warnings):
+    """The stored list, bounded without forgetting a live commitment.
+
+    Order is preserved, so the ledger still reads chronologically. What gets
+    dropped is HISTORY, oldest first -- a cancelled or completed plan is
+    something that already happened, while an active one is a promise the
+    world is still keeping and the reactive rung will still fire. The old
+    `plans[-PLAN_CAP:]` counted both, so a chat carrying a full history could
+    lose the oldest ACTIVE plan to make room for a new one the ceiling had
+    just approved -- silently, on the write, one line after the check.
+
+    An active plan is dropped only when there are more of them than the
+    ceiling allows, which the ceiling should have prevented; it is warned
+    about rather than done quietly.
+    """
+    def _terminal(plan):
+        return (str((plan or {}).get("status") or "").casefold()
+                in _TERMINAL_PLAN_STATUSES)
+
+    live = [p for p in plans if not _terminal(p)]
+    history = [p for p in plans if _terminal(p)]
+    dropped_live = max(0, len(live) - PLAN_CAP)
+    if dropped_live:
+        warnings.append(
+            f"active plan cap {PLAN_CAP} exceeded on write; dropped "
+            f"{dropped_live} of the oldest active plan(s)")
+        live = live[-PLAN_CAP:]
+    # Identity, not equality: two plans may legitimately be equal dicts.
+    keep = {id(p) for p in live} | {id(p) for p in history[-PLAN_HISTORY_CAP:]}
+    return [p for p in plans if id(p) in keep]
+
+
 def apply_plan_ops(ctx, scene, clock):
     """Persist grounded `open|cancel` operations for the reactive rung.
 
@@ -712,7 +760,7 @@ def apply_plan_ops(ctx, scene, clock):
     applied = 0
     warnings = []
 
-    for index, raw in enumerate(raw_ops[:PLAN_CAP]):
+    for index, raw in enumerate(raw_ops[:PLAN_OPS_PER_BEAT]):
         if hasattr(raw, "dict"):
             raw = raw.dict()
         if not isinstance(raw, dict):
@@ -783,7 +831,7 @@ def apply_plan_ops(ctx, scene, clock):
         applied += 1
 
     if applied:
-        wset(cid, PLAN_KEY, plans[-PLAN_CAP:])
+        wset(cid, PLAN_KEY, _truncate_plans(plans, warnings))
     for warning in warnings:
         ctx.add_warning(f"off-screen plan refused: {warning}")
     return {"offered": len(raw_ops), "applied": applied,
@@ -1122,8 +1170,7 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
     from llm.providers import chat_complete
 
     trail = gap_for(cid, subject.get("kind", "character"), subject["id"],
-                    since_turn, until_turn, resolution="low", scene=scene,
-                    frame_id=frame_id)
+                    since_turn, until_turn, scene=scene, frame_id=frame_id)
     record = {
         "disposition": "provisional",
         "subject": dict(trail.get("subject") or subject),
@@ -1521,11 +1568,19 @@ AGENT_CONTEXT_KEYS = (
     "drive",           # their own, singular
     "memories",        # their own autobiographical rows
     "beliefs",         # what they think is true, including wrongly
+                       #   (state["interior"]["beliefs"] -- the only place
+                       #   commit_memory writes one)
     "plans",           # authored plans they own
     "carried_reports", # what reached them, already degraded
     "last_known",      # where they were and when, by their own reckoning
     "elapsed_seconds", # how long they have been on their own
 )
+# NOT here, and deliberately open: `state["mind_models"]` -- this mind's own
+# theory of other minds, built entirely from what it perceived, and already
+# handed to it on the ON-SCREEN character step (agents/character.py). It would
+# arguably belong. Adding a key to the one fail-closed allowlist in the engine
+# is a widening, not a repair, so it stays an owner's decision rather than a
+# patch's.
 
 
 def agent_context(cid, entry, *, frame_id=None, clock=None):
@@ -1579,7 +1634,14 @@ def agent_context(cid, entry, *, frame_id=None, clock=None):
         "psychology": psychology.get("traits") or {},
         "drive": psychology.get("drive") or {},
         "memories": memories,
-        "beliefs": state.get("beliefs") or {},
+        # `commit_memory` writes the belief ledger to state["interior"], and
+        # only there. Reading a top-level `beliefs` handed this rung `{}` on
+        # every tick it has ever run: measured live, 0 of 100 `chat_chars`
+        # rows carry the top-level key and 31 carry the interior one. An
+        # allowlist entry that reads the wrong path is not a smaller payload,
+        # it is a field that documents a capability the mind never had.
+        "beliefs": (state.get("interior") or {}).get("beliefs")
+        or state.get("beliefs") or [],
         "plans": plans,
         # Already degraded by `degradation` at the moment each was heard, so
         # this hands over what they believe rather than what is true.
