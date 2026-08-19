@@ -1224,6 +1224,29 @@ def facade_siblings(home: Path, stem: str) -> set:
     return found
 
 
+#: Every facade family this rule covers, as `name -> (package dir, stem)`.
+#:
+#: A MODULE-LEVEL map rather than a local, so a test can ask which facades are
+#: covered without re-parsing the tree or reading this function's source.
+#: `world.spatial` was the third of the three and sat outside the check for as
+#: long as the check existed, behind a comment saying adding the line was all
+#: it took. It took the line plus eight import sites -- `world/crowds.py`
+#: reaching for `world.spatial_geometry`'s `ROOM_SIZES`, and seven test sites
+#: naming `spatial_orientation`/`spatial_senses`/`spatial_contacts` to CALL
+#: through rather than to patch -- each of which is the drift a facade rule
+#: exists to stop: a caller that knows which sibling defines a name, and
+#: therefore pins where the name lives.
+#:
+#: `facade_siblings` reads each family's members off the facade's own import
+#: block, never off a filename glob, which is why `world/spatial_frames.py`
+#: (prefix match, not behind the facade) is correctly outside `world.spatial`.
+FACADE_FAMILIES = {
+    "agents.director": (ROOT / "agents", "director"),
+    "commit": (ROOT / "persist", "commit"),
+    "world.spatial": (ROOT / "world", "spatial"),
+}
+
+
 def check_facade_import_direction(errors: list[str]) -> None:
     """A split family's facade must stay the only way in, and the only way out.
 
@@ -1247,24 +1270,8 @@ def check_facade_import_direction(errors: list[str]) -> None:
     The rule is about CALLERS. `facade_import_violations` carries the one
     exception, and why a test is not always a caller.
     """
-    #: `world.spatial` is the third facade of this shape and is NOT here yet.
-    #: Adding the line is all it takes -- `facade_siblings` reads its fourteen
-    #: re-exported siblings correctly, and deliberately excludes
-    #: `world/spatial_frames.py`, which matches the prefix and is not behind
-    #: the facade. Measured, adding it reports five sites that must be
-    #: repaired first, by the owners of those files: `world/crowds.py:57`
-    #: imports `world.spatial_geometry` for `ROOM_SIZES`/`DEFAULT_ROOM_SIZE`,
-    #: both of which the facade re-exports, and four tests
-    #: (`test_barrier_vocabulary`, `test_bearing_integrity`, `test_orientation`,
-    #: `test_sound_bearing`) name `spatial_orientation`/`spatial_senses` to
-    #: CALL through rather than to patch. None is a defect this check invented;
-    #: each is one import line.
-    families = {
-        "agents.director": (ROOT / "agents", "director"),
-        "commit": (ROOT / "persist", "commit"),
-    }
     tests_dir = ROOT / "tests"
-    for facade, (home, stem) in families.items():
+    for facade, (home, stem) in FACADE_FAMILIES.items():
         pkg = home.name
         siblings = facade_siblings(home, stem)
         if not siblings:
