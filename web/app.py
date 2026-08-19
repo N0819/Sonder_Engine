@@ -1006,6 +1006,23 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         ev["turn_id"] = turn_idmap.get(ev.get("turn_id"))
         ev["frame_id"] = frame_idmap.get(ev.get("frame_id"))
 
+    # A stance's history belongs to a character and happened in a frame, and
+    # both are local integer ids. An unmappable character DROPS the row: the
+    # same integer means a different person in the target chat, and hanging a
+    # grudge on whoever inherited the number is worse than losing it.
+    if "relationship_events" in blob:
+        remapped_relationship_events = []
+        for rev in blob.get("relationship_events") or []:
+            row = dict(rev)
+            if char_idmap is not None:
+                new_char_id = char_idmap.get(row.get("char_id"))
+                if new_char_id is None:
+                    continue
+                row["char_id"] = new_char_id
+            row["frame_id"] = frame_idmap.get(row.get("frame_id"))
+            remapped_relationship_events.append(row)
+        blob["relationship_events"] = remapped_relationship_events
+
     # room_registry rows embed turn FKs (same rule as world_entities) plus
     # the owning book's INTEGER id, which the generic string remap below
     # never touches -- remap it through bookmap (None when the book wasn't
@@ -1020,8 +1037,8 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
 
     if world_id_remap:
         for key in ("world_entities", "world_placements", "world_conditions",
-                    "scheduled_events", "world_events", "room_registry",
-                    "fiction_worlds", "fiction_locations"):
+                    "scheduled_events", "world_events", "relationship_events",
+                    "room_registry", "fiction_worlds", "fiction_locations"):
             if blob.get(key):
                 blob[key] = _deep_remap_ids(blob[key], world_id_remap)
                 _remap_row_json_fields(blob[key], world_id_remap)
@@ -3028,9 +3045,9 @@ def chat_del(cid: int):
             "chat_chars", "chat_lorebooks", "chat_personas",
             "chat_char_frames", "turn_player_inputs", "frames",
             "guest_grants", "scheduled_events", "room_registry",
-            "world_events", "world_entities", "world_placements",
-            "world_conditions", "fiction_worlds", "fiction_locations",
-            "transit_edges",
+            "world_events", "relationship_events", "world_entities",
+            "world_placements", "world_conditions",
+            "fiction_worlds", "fiction_locations", "transit_edges",
         ):
             qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
         # FTS table stores chat_id as text
@@ -4972,8 +4989,8 @@ def turn_branch(tid: int):
         world_tables = json.loads(json.dumps({
             k: (blob.get(k) or [])
             for k in ("world_entities", "world_placements", "world_conditions",
-                      "scheduled_events", "world_events", "room_registry",
-                      "fiction_worlds", "fiction_locations")
+                      "scheduled_events", "world_events", "relationship_events",
+                      "room_registry", "fiction_worlds", "fiction_locations")
         }))
         if world_id_remap:
             for k in world_tables:
@@ -4992,6 +5009,12 @@ def turn_branch(tid: int):
             rr["created_turn_id"] = idmap.get(rr.get("created_turn_id"))
             rr["retired_turn_id"] = idmap.get(rr.get("retired_turn_id"))
             rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
+        # A stance's history is frame-scoped: why somebody stopped trusting
+        # you happened in a particular era. char_id needs no map here (a
+        # branch reuses the source's character rows), but the frame does, or
+        # the branch's ledger points at the source's frames.
+        for rev in world_tables["relationship_events"]:
+            rev["frame_id"] = frame_idmap.get(rev.get("frame_id"))
         _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
         insert_world_tables(ncid, world_tables)
 
