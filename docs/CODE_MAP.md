@@ -8,8 +8,8 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 95 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1100 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 3544 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/common.py` | 6365 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
+| `agents/character.py` | 3560 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/common.py` | 6486 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 1951 |  | `agents.common`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 3649 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 421 |  | `story.character_schema`, `world.spatial` |
@@ -137,27 +137,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2560 | 985 lines |
+| `character_step()` | 2560 | 1001 lines |
 | `_annotate_known_exits()` | 1911 | 458 lines |
-| `_ground_observation_citations()` | 948 | 263 lines |
-| `_unanswered_question_note()` | 322 | 163 lines |
+| `_ground_observation_citations()` | 951 | 263 lines |
+| `_unanswered_question_note()` | 325 | 163 lines |
 | `_destination_from_goals()` | 1477 | 109 lines |
 | `sprint_offers()` | 2404 | 97 lines |
-| `_recent_self_moves()` | 155 | 90 lines |
-| `_verdict()` | 1320 | 74 lines |
+| `_recent_self_moves()` | 158 | 90 lines |
+| `_verdict()` | 1323 | 71 lines |
 
 ### `agents/common.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 1930 | 204 lines |
-| `_check_narrator_fidelity()` | 5972 | 157 lines |
-| `_scrub_invented_dialogue()` | 5034 | 145 lines |
-| `_extract_authority_claims()` | 1438 | 122 lines |
-| `observer_body_regions()` | 679 | 117 lines |
-| `_perceptible_entities()` | 1005 | 109 lines |
-| `_strip_player_echo()` | 4837 | 101 lines |
-| `_check_presence_knowledge_channel()` | 3536 | 95 lines |
+| `norm_sequence()` | 2025 | 224 lines |
+| `_check_narrator_fidelity()` | 6083 | 157 lines |
+| `_scrub_invented_dialogue()` | 5094 | 151 lines |
+| `_extract_authority_claims()` | 1537 | 120 lines |
+| `observer_body_regions()` | 732 | 117 lines |
+| `_perceptible_entities()` | 1059 | 109 lines |
+| `_strip_player_echo()` | 4907 | 101 lines |
+| `_check_presence_knowledge_channel()` | 3626 | 100 lines |
 
 ### `agents/composer.py`
 
