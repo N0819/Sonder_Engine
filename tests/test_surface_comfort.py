@@ -101,6 +101,26 @@ def test_sitting_at_a_cushioned_anchor_uses_posture():
     assert comfort_level(scene, "Mira") == (0.2, "a cushioned corner bench")
 
 
+def test_the_word_that_means_supported_counts_as_support():
+    """`support` is in `spatial_contacts.CONTACT_MANNERS` and is the canonical
+    manner for exactly the relation this list describes -- and it was the one
+    word missing from it. A Director writing the plainest available word got
+    the same answer as one writing nothing."""
+    scene = _contact(_posture(_scene(), "Mira", "lying"),
+                     "Mira", "bed_1", manner="support")
+    assert comfort_level(scene, "Mira")[0] == 0.3
+
+
+def test_the_support_manners_come_from_the_contact_vocabulary():
+    """The comment cited `_CONTACT_KEY_MANNERS`, which is the identity key
+    rather than the manner list, so nothing tied the two together and the
+    real vocabulary grew a word this never saw."""
+    from world.comfort import _SUPPORTING_CONTACT_MANNERS
+    from world.spatial_contacts import CONTACT_MANNERS
+
+    assert _SUPPORTING_CONTACT_MANNERS <= set(CONTACT_MANNERS)
+
+
 def test_a_qualifier_does_not_reach_across_a_field_boundary():
     """`_warm` reads a qualifier BESIDE a medium -- "warm spring", "hot bath"
     -- because the bare nouns cannot tell a cold spring from a hot one. The
