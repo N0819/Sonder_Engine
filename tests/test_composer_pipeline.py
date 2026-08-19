@@ -384,3 +384,56 @@ def test_the_no_model_guard_can_actually_fire(monkeypatch):
     assert ("agents.mapping", "_agent_json") in patched
     with pytest.raises(AssertionError):
         mapping._agent_json("mapping", "mapping_stage", "", {})
+
+
+def test_room_content_reaches_the_view_it_was_read_for():
+    """Crowds, couriers and posted notices are three built subsystems whose
+    entire perception seam is `common.crowds_for_room` and its two twins. Every
+    admission decision they make -- room scope, what a bystander takes in, what
+    is deliberately withheld (the message, the wording) -- was being made for a
+    payload key nothing read, so a player standing in a packed square was told
+    about the square and not the crowd in it."""
+    from agents import composer
+
+    percepts = composer.room_content_percepts(
+        [{"uid": "crowd_1", "what": "a dense press of market-goers",
+          "density": "crush"}],
+        [{"uid": "courier_2", "what": "a courier waiting by the north door"}],
+        [{"artifact_id": "bill_3", "what": "a printed bill nailed to the post"}],
+    )
+    text = composer.render_view(percepts, mode="character").text
+
+    assert [p.kind for p in percepts] == ["ambient"] * 3
+    assert [p.channel for p in percepts] == ["sight"] * 3
+    assert "dense press of market-goers" in text
+    assert "courier waiting by the north door" in text
+    assert "printed bill nailed to the post" in text
+
+
+def test_room_content_is_standing_state_and_dedupes_on_content():
+    """A crowd that has not changed is furniture: it keeps its dedupe key, so a
+    delta view leaves it out and a memory episode does not mint it as an event.
+    A crowd that thins is a different percept and re-renders."""
+    from agents import composer
+
+    before = composer.room_content_percepts(
+        [{"uid": "crowd_1", "what": "a crush at the gate"}])[0]
+    same = composer.room_content_percepts(
+        [{"uid": "crowd_1", "what": "a crush at the gate"}])[0]
+    thinned = composer.room_content_percepts(
+        [{"uid": "crowd_1", "what": "a loose scatter at the gate"}])[0]
+
+    assert before.order_key is None
+    assert before.dedupe_key == same.dedupe_key
+    assert before.dedupe_key != thinned.dedupe_key
+    assert composer.render_view(
+        [same], mode="player", prev_standing={before.dedupe_key}).text == ""
+    assert "loose scatter" in composer.render_view(
+        [thinned], mode="player", prev_standing={before.dedupe_key}).text
+
+
+def test_room_content_admits_nothing_it_was_not_handed():
+    from agents import composer
+
+    assert composer.room_content_percepts(None, [], [{}]) == []
+    assert composer.room_content_percepts([{"what": "   "}]) == []
