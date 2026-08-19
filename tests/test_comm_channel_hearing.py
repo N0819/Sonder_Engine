@@ -16,7 +16,11 @@ already audible is never altered."""
 
 from __future__ import annotations
 
-from agents.perception import _addresses, _dialogue_hear_level
+# `_addresses` is the composer's. `perception.py` carried a byte-identical
+# twin that no production path called, and this file imported THAT one --
+# so the guard below covered a copy nothing ran.
+from agents.composer import _addresses
+from agents.perception import _dialogue_hear_level
 from world.spatial import hear_level
 
 

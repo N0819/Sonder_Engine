@@ -61,6 +61,7 @@ from world.spatial import (
     entity_arc,
     entity_side,
     hear_level,
+    sense_adjusted,
     proximity_rel,
     same_subject,
     visual_level_between,
@@ -85,10 +86,15 @@ from .common import (
 # The IR
 # --------------------------------------------------------------------------
 
+# The complete vocabulary of admitted percepts, ENFORCED (see Percept below).
+# It was read by nothing for long enough to go two kinds stale -- `pose` and
+# `body_part` were minted by live builders and declared here by nobody, while
+# `_STANDING_ORDER`, which IS read on every render, carried both. Two
+# hand-maintained lists of one thing, and only the unread one was wrong.
 PERCEPT_KINDS = (
-    "environment", "presence", "appearance", "act", "speech", "sensation",
-    "substance", "body_region", "body_state", "crossing", "residue",
-    "ambient",
+    "environment", "presence", "pose", "appearance", "act", "speech",
+    "sensation", "substance", "body_part", "body_region", "body_state",
+    "crossing", "residue", "ambient",
 )
 
 CHANNELS = ("sight", "hearing", "touch", "interoception", "smell", "mixed")
@@ -130,6 +136,40 @@ class Percept:
     suddenness: float = 0.1
     order_key: int | None = None    # declared/beat order; None = standing state
     dedupe_key: str = ""
+
+    def __post_init__(self):
+        """Refuse a kind or channel nobody declared.
+
+        The declarations are only a vocabulary if something asks. Both are
+        closed sets minted exclusively by the builders in this module, so an
+        undeclared value is a programming error, not a story the engine has
+        to survive -- and a kind no renderer branch matches renders as the
+        empty string, which is the failure this raise replaces: silent,
+        invisible in tests, and indistinguishable from a percept that was
+        correctly withheld.
+        """
+        if self.kind not in PERCEPT_KINDS:
+            raise ValueError(f"undeclared percept kind: {self.kind!r}")
+        if self.channel not in CHANNELS:
+            raise ValueError(f"undeclared percept channel: {self.channel!r}")
+
+
+def _sense_graded(level, channel, senses):
+    """Shift one admission grade by the observer's card senses.
+
+    `spatial.sense_adjusted` is THE senses gate (G4), and for a long time the
+    only deterministic delivery path that asked it was the interaction
+    micro-loop. Every builder in this module graded on the world alone, so an
+    authored-blind card saw the room in its onset view, its outcome view and
+    its memory of the beat, and was correctly blind for the length of one
+    micro-round in between.
+
+    `None` and an ordinary card return the level unchanged, byte-identical to
+    before; the one direction that adds is capped inside `sense_adjusted`
+    itself. Kept as a named wrapper rather than a bare call so the gate has
+    one spelling here and every builder that grades can be seen to use it.
+    """
+    return sense_adjusted(level, channel, senses) if senses else level
 
 
 def _short_hash(*parts):
@@ -342,7 +382,8 @@ def concealed_from_observer(entry, observer_name, observer_id=None):
     )
 
 
-def line_hear_level(entry, rel, observer_name, proximity=None):
+def line_hear_level(entry, rel, observer_name, proximity=None,
+                    senses=None):
     """Audibility of one dialogue entry to an observer.
 
     Ordinary spatial hearing (`hear_level`) decides first -- including the
@@ -383,7 +424,9 @@ def line_hear_level(entry, rel, observer_name, proximity=None):
     # and who is on the channel.
     if isinstance(rel.get("comm_channel"), dict):
         return "full"
-    base = hear_level(rel, entry.get("volume", "normal"), proximity=proximity)
+    base = _sense_graded(
+        hear_level(rel, entry.get("volume", "normal"), proximity=proximity),
+        "hearing", senses)
     if base != "none":
         return base
     if not _addresses(entry.get("intended_target"), observer_name):
@@ -398,6 +441,15 @@ def line_hear_level(entry, rel, observer_name, proximity=None):
 
 
 def _addresses(intended_target, observer_name):
+    """True when a dialogue line's intended_target names this observer. The
+    target may be a single name or a list; comparison is casefolded. Used to
+    route a comm-channel transmission to the party it was addressed to, across
+    a physical barrier (see the medium:'comm' handling in perception_outcome).
+
+    One definition. `perception.py` carried a byte-identical twin that no
+    production path called and one test imported, so the tested copy and the
+    running copy were different objects free to drift apart.
+    """
     if not intended_target or not observer_name:
         return False
     targets = intended_target if isinstance(intended_target, (list, tuple)) \
@@ -495,7 +547,8 @@ def _visible_room_label(scene, name):
     return label
 
 
-def presence_percepts(scene, observer_name, co_present, display_map):
+def presence_percepts(scene, observer_name, co_present, display_map,
+                      senses=None):
     """Presence -- a tier, a side, an arc -- for every co-present body the
     observer can SEE. Subtracts: a body `visual_level_between` answers "none"
     for (unlit, concealed by containment, behind a barrier) does not arrive;
@@ -507,7 +560,8 @@ def presence_percepts(scene, observer_name, co_present, display_map):
         name = str(body.get("name") or "")
         if not name or name == observer_name:
             continue
-        level = visual_level_between(scene, observer_name, name)
+        level = _sense_graded(
+            visual_level_between(scene, observer_name, name), "sight", senses)
         if level == "none":
             continue
         tier = proximity_rel(scene, observer_name, name)
@@ -614,7 +668,8 @@ def body_part_percepts(rows):
     return out
 
 
-def pose_percepts(scene, observer_name, co_present, display_map):
+def pose_percepts(scene, observer_name, co_present, display_map,
+                  senses=None):
     """How bodies are arranged: posture, what holds them up, who they are
     against, what pins them.
 
@@ -647,21 +702,37 @@ def pose_percepts(scene, observer_name, co_present, display_map):
             if not any(same_subject(scene, name, body.get("name"))
                        for body in co_present or []):
                 continue
-            # A POSE IS NEVER MORE REACHABLE THAN A PRESENCE. Caught by a
-            # pose-bearing drive scenario, not by the corpus: Kai stood in
-            # the yard, Reya knelt in the forge behind a closed door, and
-            # his view read "Reya is kneeling on the anvil block". Presence
-            # had already declined to mention her -- `proximity_rel`
-            # answers None across rooms -- while this gate checked only
-            # sight and arc, so a body he was not even told was there
-            # arrived with her posture, her support and her breathing.
+            # A POSE NEEDS A WITHIN-ROOM TIER. Caught by a pose-bearing
+            # drive scenario, not by the corpus: Kai stood in the yard, Reya
+            # knelt in the forge behind a closed door, and his view read
+            # "Reya is kneeling on the anvil block". Presence had already
+            # declined to mention her -- `proximity_rel` answers None across
+            # rooms -- while this gate checked only sight and arc, so a body
+            # he was not even told was there arrived with her posture, her
+            # support and her breathing.
             #
-            # Same rule as `presence_percepts`, and for the same reason: how
-            # a body is held is finer-grained than the fact of it, so it
-            # cannot outrun it.
+            # It was written as "a pose is never more reachable than a
+            # presence", borrowing `presence_percepts`' gate. That is no
+            # longer what either function does. Presence has since grown a
+            # cross-room branch: where `proximity_rel` is None it does not
+            # decline, it falls back to `tier="beyond"` plus the room label,
+            # so an interviewer watching through observation glass is told
+            # about the woman in the cell. Pose still declines there, and so
+            # presence now outruns pose rather than the other way round.
+            #
+            # The subtraction is defensible on its own terms, which is why it
+            # stays: a pose is rendered AGAINST the furniture and the bodies
+            # around it ("kneeling on the anvil block", "leaning against
+            # her"), and those referents belong to a room the observer is
+            # not in. Seeing that someone across a barrier is kneeling is
+            # not seeing what they are kneeling on. State it that way rather
+            # than as a rule about presence, so the next body percept added
+            # here inherits the reason and not a comparison that has flipped.
             if proximity_rel(scene, observer_name, name) is None:
                 continue
-            level = visual_level_between(scene, observer_name, name)
+            level = _sense_graded(
+                visual_level_between(scene, observer_name, name),
+                "sight", senses)
             if level == "none":
                 continue
             if entity_arc(scene, observer_name, name) == "rear":
@@ -809,7 +880,8 @@ def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
 # --------------------------------------------------------------------------
 
 def speech_percept(entry, rel, observer_name, *, display, can_see,
-                   proximity=None, order_key=0, observer_id=None):
+                   proximity=None, order_key=0, observer_id=None,
+                   senses=None):
     """Admit one spoken line for one observer, or None.
 
     Gates, in order: concealment (absolute exclusion, never a volume),
@@ -824,7 +896,8 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if not body:
         return None
     volume = str(entry.get("volume") or "normal")
-    level = line_hear_level(entry, rel, observer_name, proximity=proximity)
+    level = line_hear_level(entry, rel, observer_name, proximity=proximity,
+                            senses=senses)
     if level == "none" and rel.get("open_group_continuity") \
             and volume.casefold() in ("normal", "loud", "shout"):
         # Compatibility floor for a rerolled checkpoint predating the
@@ -1050,11 +1123,25 @@ def _render_presence_group(percepts):
         rendered = []
         for clause in clauses:
             n = counts[clause]
-            if n > 1 and clause.startswith(DIM_FIGURE + " "):
+            # Against the ACTIVE pack's label, not the English compat export.
+            # Layer A mints this label through `_dim_figure()`, so comparing
+            # it to `DIM_FIGURE` asks whether the story is in English -- and
+            # where it is not, this `startswith` can never be true and the
+            # rule silently does not run. What that costs is the COUNT:
+            # identical clauses collapse either way, so an observer who can
+            # plainly see two figures was told about one.
+            #
+            # The wording around the label stays English on purpose. This is
+            # `_render_view_english`, the reference renderer a pack's own
+            # adapter falls back to when it raises, and its contract is that
+            # a malformed pack costs wording and never the beat. Losing a
+            # fact the observer's own eyes have is not wording.
+            singular, plural = _dim_figure(), _dim_figure(True)
+            if n > 1 and clause.startswith(singular + " "):
                 word = _COUNT_WORDS.get(n, str(n))
                 rendered.append(
-                    f"{word.casefold()} {DIM_FIGURES}"
-                    + clause[len(DIM_FIGURE):].replace(" is ", " are ", 1))
+                    f"{word.casefold()} {plural}"
+                    + clause[len(singular):].replace(" is ", " are ", 1))
             else:
                 rendered.append(clause)
         out.append((group[0], _cap(_join_clauses(rendered)) + "."))
@@ -1356,9 +1443,20 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:
-            return selected.render_view(
+            out = selected.render_view(
                 percepts, mode=mode, prev_standing=prev_standing,
                 prev_described=prev_described, full_render=full_render)
+            # The tolerance below covered only a RAISE. An adapter that
+            # returned successfully with a dict, a tuple or the bare text --
+            # the shapes a pack gets wrong first -- went straight through,
+            # and the caller read `.text`, `.standing_keys` and `.described`
+            # off it one stage later, outside every guard. Checked here so a
+            # malformed return costs the same as a malformed raise.
+            if not isinstance(out, RenderedView):
+                raise TypeError(
+                    f"language renderer returned {type(out).__name__}, "
+                    "not RenderedView")
+            return out
         except Exception:
             # A view is what an observer perceives at all. A malformed pack
             # must cost wording, never the whole beat, so fall through to the
@@ -1612,6 +1710,22 @@ _MAX_OBSERVATION_ATOMS = 8
 # text -- the citation namespace `_ground_observation_citations` grounds
 # against, and the content itself -- are never trimmed. Observations stored
 # before this change carry the full shape and read identically.
+#
+# THAT MEASUREMENT IS OF A DERIVATION THAT NO LONGER RUNS, and one of the six
+# rows no longer holds. It was taken against
+# `perception._observations_from_clean_views`, which computed
+# `0.35 + 0.2 * cue_hits` and therefore sat on the base whenever no cue
+# matched. `observations_from_render` computes `0.35 + 0.4 * salience`, and
+# the lowest salience any builder in this module assigns is 0.2
+# (`environment_percept`), so intensity is >= 0.43 on every atom the composer
+# can produce. The field the note above says is dropped 99% of the time is
+# now dropped 0% of the time.
+#
+# The entry stays regardless, because `OBSERVATION_DEFAULTS` is also the
+# EXPANSION table: rows stored under the old derivation omitted intensity,
+# and removing the key would read those rows as having no intensity rather
+# than the base. `suddenness`, `fidelity`, `ambiguity`, `source_atom_id` and
+# `perceiver_id` still compact as measured.
 OBSERVATION_DEFAULTS = {
     "source_atom_id": "current",
     "fidelity": "rendered",
