@@ -6,7 +6,7 @@
 
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
-| `agents/__init__.py` | 89 | Backward-compatible facade for the role-specific agent package. | `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
+| `agents/__init__.py` | 95 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1100 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 3544 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 6365 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
@@ -21,11 +21,11 @@
 | `agents/director_reconcile.py` | 424 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 601 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 453 |  | `agents.common`, `story.character_schema`, `story.scene` |
-| `agents/loops.py` | 1077 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `agents/mapping.py` | 297 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
+| `agents/loops.py` | 1128 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/mapping.py` | 330 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `agents/narration.py` | 1210 | Player-facing narration agent. | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 4695 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `agents/runtime.py` | 1116 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1302 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 1769 | SQLite schema, migrations, connection management, transactions, and key/value world access. | — |
@@ -34,7 +34,7 @@
 | `core/logging_utils.py` | 45 | Structured timing and observability helpers. | — |
 | `core/outofband.py` | 279 |  | `core.logging_utils` |
 | `core/paths.py` | 32 |  | — |
-| `core/pipeline_context.py` | 312 | Typed mutable context passed through a turn pipeline. | `core.db` |
+| `core/pipeline_context.py` | 343 | Typed mutable context passed through a turn pipeline. | `core.db` |
 | `core/updates.py` | 399 |  | `core.paths` |
 | `dressing/__init__.py` | 6 |  | — |
 | `dressing/ambience.py` | 2064 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
@@ -297,23 +297,24 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 449 | 558 lines |
-| `deterministic_micro_perception()` | 85 | 133 lines |
-| `reaction_loop()` | 1008 | 70 lines |
-| `_isolated_wave()` | 406 | 41 lines |
-| `_defer_to_unrun_reactor()` | 263 | 37 lines |
-| `_standing_pressure()` | 302 | 37 lines |
+| `interaction_loop()` | 500 | 558 lines |
+| `deterministic_micro_perception()` | 136 | 133 lines |
+| `reaction_loop()` | 1059 | 70 lines |
+| `rehydrate_loop_views()` | 85 | 49 lines |
+| `_isolated_wave()` | 457 | 41 lines |
+| `_defer_to_unrun_reactor()` | 314 | 37 lines |
+| `_standing_pressure()` | 353 | 37 lines |
 | `_cut_into_last_element()` | 48 | 35 lines |
-| `_perceptually_isolated()` | 369 | 35 lines |
 
 ### `agents/mapping.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `mapping_stage()` | 32 | 109 lines |
-| `mapping_quick()` | 199 | 64 lines |
-| `merge_lore()` | 265 | 33 lines |
-| `_join_relevant_lore()` | 165 | 32 lines |
+| `mapping_stage()` | 32 | 116 lines |
+| `mapping_quick()` | 231 | 65 lines |
+| `merge_lore()` | 298 | 33 lines |
+| `_join_relevant_lore()` | 172 | 32 lines |
+| `mapping_request_stages_a_room()` | 224 | 5 lines |
 
 ### `agents/narration.py`
 
@@ -345,14 +346,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 755 | 306 lines |
-| `build_plan()` | 550 | 85 lines |
-| `_stream_one()` | 325 | 68 lines |
-| `_load_extra_players()` | 46 | 59 lines |
-| `run_pipeline()` | 1062 | 55 lines |
-| `resume_key_for_turn()` | 495 | 54 lines |
-| `_stream_parallel()` | 394 | 45 lines |
-| `_rehydrate_loop_results()` | 707 | 41 lines |
+| `_run_pipeline()` | 935 | 312 lines |
+| `resume_key_for_turn()` | 581 | 92 lines |
+| `build_plan()` | 674 | 89 lines |
+| `_load_extra_players()` | 47 | 74 lines |
+| `_stream_one()` | 384 | 68 lines |
+| `_stream_parallel()` | 453 | 60 lines |
+| `run_pipeline()` | 1248 | 55 lines |
+| `_run_parallel_group()` | 518 | 46 lines |
 
 ### `agents/storage.py`
 
