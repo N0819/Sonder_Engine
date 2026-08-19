@@ -152,6 +152,8 @@
   "tgl small": "identifier, route, enum, class, or filename",
   "tgl small dim": "identifier, route, enum, class, or filename",
   "transition:width .3s ease": "source, style, selector, or markup fragment",
+  "undeclared percept channel: ${self.channel}": "developer-facing engine assertion, never player text",
+  "undeclared percept kind: ${self.kind}": "developer-facing engine assertion, never player text",
   "url(": "source, style, selector, or markup fragment",
   "url(\"${url}\")": "source, style, selector, or markup fragment",
   "use strict": "source, style, selector, or markup fragment",
