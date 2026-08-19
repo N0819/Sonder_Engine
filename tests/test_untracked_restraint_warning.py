@@ -139,6 +139,11 @@ class TestRestraintWordsTheEnumCannotRead:
     def test_a_word_nothing_recognises_still_restrains(self):
         """Fail-mild, deliberately: a body the story says is restrained stays
         restrained. Only the RUNG is guessed, and the mildest rung is the
-        one that claims least."""
+        one that claims least -- for EMPTY wording too. The live corpus
+        holds a restraint row whose whole state is the string "active"
+        (chat 44); the old empty default was `bound`, which handed the
+        strongest reading to the weakest evidence, and now that the rung
+        decides whether a body can move with nobody holding it, that
+        default would jail a body on a record that says nothing."""
         assert _normalize_restraint_level("flabbergasted") == "held"
-        assert _normalize_restraint_level("") == "bound"
+        assert _normalize_restraint_level("") == "held"
