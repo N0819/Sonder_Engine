@@ -6,6 +6,12 @@ const LORE_INHERITANCE_MODES = [
   "reference_only"
 ];
 
+// The one browser-side copy of `mind/memory.py`'s LOREBOOK_LINK_TYPES, kept
+// for a tab whose cached JavaScript is running ahead of its first bootstrap
+// response. There were two, and `boot()` wrote its own into
+// `S.boot.lorebook_link_types` unconditionally -- so the fallback below could
+// never be taken and the copy that was actually live sat in the file with no
+// lore code in it at all. A test holds this list equal to the Python one.
 const DEFAULT_LORE_LINK_TYPES = [
   "related",
   "references",
@@ -16,7 +22,12 @@ const DEFAULT_LORE_LINK_TYPES = [
   "contradicts",
   "alternate_version",
   "same_setting",
-  "portal"
+  "portal",
+  // Added to `LOREBOOK_LINK_TYPES` and never to either browser copy. It cost
+  // nothing only because the copies were unreachable: `boot()` installed one
+  // of them into the bootstrap value unconditionally, so neither fallback
+  // could ever be taken and the drift had nowhere to show.
+  "currently_within"
 ];
 
 const loreUI = {
@@ -633,7 +644,6 @@ async function openLoreWorkspace(selectedId) {
   await renderLoreWorkspaceBody(selectedId);
 }
 
-window.loreModal = openLoreWorkspace;
 
 function renderLoreInspector(state, container) {
   container.innerHTML = "";

@@ -1,17 +1,9 @@
 // ---- Boot & sidebar ----
 
-const LORE_LINK_TYPES = [
-  "related",
-  "references",
-  "depends_on",
-  "supplements",
-  "overlaps",
-  "supersedes",
-  "contradicts",
-  "alternate_version",
-  "same_setting",
-  "portal"
-];
+// A language pack the server could not use is reported once per session.
+// `boot()` reruns on every import, save and NSFW toggle, and a report
+// repeated on each of those is a nag rather than a report.
+let languagePackErrorReported = false;
 
 async function boot() {
   S.boot = await api("GET", "/api/bootstrap");
@@ -22,8 +14,13 @@ async function boot() {
   watchUILanguage();
   S.nsfw = S.boot.nsfw_enabled || false;
 
-  if (!Array.isArray(S.boot.lorebook_link_types)) {
-    S.boot.lorebook_link_types = LORE_LINK_TYPES;
+  // The bootstrap refuses to die on a malformed pack and reports why instead
+  // -- and then nothing showed the report, so a host who installed a pack got
+  // English with no reason given. The wording is the server's because the
+  // reason IS the pack's own error, naming the file and what was wrong with it.
+  if (S.boot.language_error && !languagePackErrorReported) {
+    languagePackErrorReported = true;
+    toast(S.boot.language_error, "warn", 8000);
   }
 
   updateNSFWBtn();
@@ -707,7 +704,7 @@ function renderLegacyLoreSidebar(list, actions) {
       "div",
       {
         class: "item",
-        onclick: () => loreModal(book.id)
+        onclick: () => openLoreWorkspace(book.id)
       },
       el(
         "span",
@@ -734,7 +731,7 @@ function renderLegacyLoreSidebar(list, actions) {
           });
 
           await boot();
-          await loreModal(result.id);
+          await openLoreWorkspace(result.id);
         }
       },
       "+ Lorebook"
@@ -895,15 +892,41 @@ window.addEventListener("unhandledrejection", event => {
   toast(reason?.message || String(reason || "Something went wrong"), "err", 8000);
 });
 
+// The other half of the same net, and the half that was missing: a handler
+// that throws SYNCHRONOUSLY never produces a rejection, so it reached nothing.
+// A bare `JSON.parse` over a malformed sheet, a `.map` over a bootstrap key
+// that did not arrive -- each is the identical "clicking does nothing" the
+// listener above exists to eliminate, and each was still silent.
+//
+// `error` also fires for a failed script or image load, which carries no
+// usable message; those stay in the console rather than becoming a toast the
+// reader can do nothing with.
+window.addEventListener("error", event => {
+  const thrown = event.error;
+  if (thrown && thrown.__handled) return;
+  const message = thrown?.message || event.message;
+  if (!message) return;
+  toast(String(message), "err", 8000);
+});
+
 
 // ---- Embedding reconciler progress -----------------------------------------
 //
 // Changing the embeddings provider does not re-embed anything already stored,
 // and a memory embedded by a different model scores 0 on both vector rankings
 // for good -- so the server reconciles the bank in the background at startup
-// and whenever the `embeddings` role changes. This is the only place a host
-// ever sees that happen: a card that appears when there is work, counts it
-// down, says so when it is finished, and removes itself.
+// and whenever the `embeddings` role changes. This card is what a host sees
+// while that runs: it appears when there is work, counts it down, says so when
+// it is finished, and removes itself.
+//
+// It covers ONE of the two occasions, and the smaller one. `erWatch` is the
+// only thing that starts the poll and `erOfferRebuild` is its only caller, so
+// the card appears only for a rebuild the host has just confirmed in the offer
+// dialog. A reconcile the server begins at STARTUP is never polled for and runs
+// entirely unseen. Making the sentence above true again means calling
+// `erWatch()` once from boot -- one request, and the interval clears itself
+// when nothing is running -- which is a decision about how much a background
+// maintenance task should announce itself, not an oversight to patch quietly.
 //
 // Deliberately not a modal and not a toast. It can run for a while on a large
 // bank, nothing is blocked while it does, and interrupting the reader to say
@@ -1034,9 +1057,6 @@ boot()
     // reader is dropped onto the story and the menu looks like it crashed.
     if (typeof reopenPromptsIfRequested === "function") {
       reopenPromptsIfRequested();
-    }
-    if (typeof reopenExtensionsIfRequested === "function") {
-      reopenExtensionsIfRequested();
     }
   })
   .catch(e => toast(`Could not load the app: ${(e?.message || e)}`, "err", 0));
