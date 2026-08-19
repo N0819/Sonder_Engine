@@ -157,3 +157,35 @@ def test_every_worked_example_validates_against_the_schema_it_illustrates():
     assert not broken, (
         "worked examples that their own validator rejects: "
         + "; ".join(f"{step}: {errors}" for step, errors in broken.items()))
+
+
+def test_specialist_channel_shapes_match_what_the_models_declare():
+    """The empty-value coercion is chosen from a hand-kept list, and a hand-
+    kept list drifts. `comms_ops` was declared `list[CommsOp]` and classified
+    as a dict channel, so an empty `comms_ops: []` -- the ordinary way a model
+    says "no voice channel changed this beat" -- was rewritten to `{}` on the
+    way in. Inert only because `LenientModel` reversed it on the way out,
+    which is a second mechanism covering for the first rather than a reason
+    the first is right.
+    """
+    from llm import schemas
+
+    wrong = []
+    for step_key, channels in schemas.SPECIALIST_CHANNELS.items():
+        fields = schemas._fields(schemas.SCHEMA_MAP[step_key])
+        for channel in channels:
+            declared = schemas._declared(fields[channel])
+            if declared.is_list:
+                expected = "list"
+            elif declared.expects_object:
+                expected = "dict"
+            else:
+                continue
+            classified = (
+                "dict" if channel in schemas._SPECIALIST_DICT_CHANNELS
+                else "list" if channel in schemas._SPECIALIST_LIST_CHANNELS
+                else "unclassified")
+            if classified != expected:
+                wrong.append(f"{step_key}.{channel}: declared {expected}, "
+                             f"coerced as {classified}")
+    assert not wrong, "; ".join(wrong)
