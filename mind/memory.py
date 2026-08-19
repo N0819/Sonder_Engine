@@ -4681,8 +4681,6 @@ def record_relationship_event(chat_id, char_id, target, axis, delta, *,
     the live corpus already carried `trigger_event_ids`. The model had been
     saying why the entire time. This keeps what it said.
     """
-    from core.db import qi
-
     if not target or not axis or not float(delta or 0.0):
         return None
     return qi(
@@ -4701,8 +4699,6 @@ def relationship_history(chat_id, char_id, target, limit=20):
     The question the scalar graph could never answer, and the reason item 4 of
     the off-screen roadmap exists.
     """
-    from core.db import q
-
     rows = q("SELECT axis,delta,triggers,note,provenance,turn_idx "
              "FROM relationship_events WHERE chat_id=? AND char_id=? "
              "AND target=? ORDER BY id DESC LIMIT ?",
