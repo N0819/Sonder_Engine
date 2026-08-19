@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from agents.director import (_evidence_present, _normalize_diff_shape,
                              _opening_pose_snapshots)
-from agents.perception import (_novel_visible_appearances,
-                               _observer_scene_payload,
-                               _strip_unknown_pose_claims)
+from agents import composer
 from llm.prompts import DEFAULT_PROMPTS
 from llm.schemas import DirectorEstablish, StateDiff, validate_llm_output_strict
 from world.spatial import merge_scene_with_diff, pose_facts
@@ -134,65 +132,90 @@ class TestPosePersistence:
 
 
 class TestObserverProjection:
-    def test_visible_pose_reaches_perception_without_becoming_standing(self):
-        payload = _observer_scene_payload(
-            _scene(), {"name": "Mara", "room": "studio", "visible_rooms": []},
-            {"Mara": "you", "Ivo": "Ivo", "Witness": "Witness"})
-        assert payload["poses"]["Ivo"] == _scene()["poses"]["Ivo"] | {
-            "relative_to": "you",
-        }
-        assert "standing" not in str(payload["poses"]["Ivo"]).casefold()
-        assert payload["pose_unknown"] == ["Witness"]
+    """The pose reaches a mind as a typed percept, not as a scene payload for
+    a model to read. `perception._observer_scene_payload` built that payload
+    and `_strip_unknown_pose_claims` swept a model's invented postures back out
+    of finished prose; neither has a caller since the composer became the
+    writer, and the second has no successor because the failure it swept up
+    -- prose asserting a posture the ledger never recorded -- cannot be
+    produced by a renderer that only realises percepts."""
 
-    def test_legacy_missing_pose_is_explicit_uncertainty_not_a_default(self):
+    CO_PRESENT = [{"name": "Ivo"}, {"name": "Mara"}, {"name": "Witness"}]
+
+    def _poses(self, scene, observer, display_map):
+        return composer.pose_percepts(
+            scene, observer, self.CO_PRESENT, display_map)
+
+    def test_visible_pose_reaches_perception_without_becoming_standing(self):
+        percepts = self._poses(
+            _scene(), "Mara",
+            {"Mara": "you", "Ivo": "Ivo", "Witness": "Witness"})
+        ivo = [p for p in percepts if p.source_label == "Ivo"]
+
+        assert ivo
+        assert ivo[0].data["posture"] == "lying supine"
+        assert ivo[0].data["constraint"] == "pinned"
+        assert ivo[0].data["relative_to"] == "you"
+        view = composer.render_view(percepts, mode="character").text
+        assert "standing" not in view.casefold()
+
+    def test_a_missing_pose_makes_no_claim_at_all(self):
+        """The absence IS the uncertainty. The scene payload spelled it as an
+        explicit `pose_unknown` roll-call because a model was reading it and
+        silence would have been filled in; nothing reads a percept list but the
+        renderer, and a posture nobody recorded produces no sentence."""
         scene = _scene()
         scene["poses"] = {}
-        payload = _observer_scene_payload(
-            scene,
-            {"name": "Mara", "room": "lab", "visible_rooms": []},
-            {"Mara": "you", "Ivo": "Ivo"},
-        )
-        assert payload["poses"] == {}
-        assert payload["pose_unknown"] == ["you", "Ivo"]
+        percepts = self._poses(scene, "Mara", {"Mara": "you", "Ivo": "Ivo"})
 
-    def test_unsupported_static_pose_is_removed_but_other_detail_survives(self):
-        view, dropped = _strip_unknown_pose_claims(
-            "Ivo, a traveler in a red coat, stands before you. "
-            "His sleeve is wet. Mara's voice stands out clearly.",
-            ["Ivo", "Mara"],
-        )
-        assert "stands before" not in view
-        assert "His sleeve is wet." in view
-        assert "Mara's voice stands out clearly." in view
-        assert dropped == [
-            "Ivo, a traveler in a red coat, stands before you."]
+        assert percepts == []
+        assert composer.render_view(percepts, mode="character").text == ""
+
+    def test_a_body_with_no_within_room_tier_yields_no_pose(self):
+        """Posture is rendered AGAINST the furniture and bodies around it, and
+        those referents belong to a room the observer is not in."""
+        scene = _scene()
+        scene["positions"]["Ivo"] = "elsewhere"
+        percepts = self._poses(
+            scene, "Mara", {"Mara": "you", "Ivo": "Ivo"})
+
+        assert [p.source_label for p in percepts] == ["you"]
 
     def test_unseen_relative_identity_is_not_leaked(self):
+        """Ivo's own pose still names its relation -- he can feel he is pinned
+        beneath someone -- but the someone is the label his display map earned,
+        never the canonical name of a body he cannot see."""
         scene = _scene()
         scene["positions"]["Mara"] = "elsewhere"
-        payload = _observer_scene_payload(
-            scene, {"name": "Ivo", "room": "studio", "visible_rooms": []},
-            {"Ivo": "you"})
-        own = payload["poses"]["you"]
-        assert "relative_to" not in own
-        assert "relation" not in own
-        assert own["constraint"] == "pinned"
+        percepts = self._poses(scene, "Ivo", {"Ivo": "you"})
+        own = [p for p in percepts if p.source_label == "you"][0]
+
+        assert own.channel == "interoception"
+        assert own.data["constraint"] == "pinned"
+        assert own.data["relative_to"] == "someone"
+        assert "Mara" not in composer.render_view(
+            percepts, mode="character").text
 
     def test_familiar_stable_appearance_is_not_reintroduced(self):
-        result = _novel_visible_appearances(
-            _scene(), {"Ivo": "Ivo, a beautiful six-tailed person."},
-            {"Ivo": True}, observer_name="Mara", recognized=["Ivo"])
-        assert result == {}
+        """First mention only, in every mode. `_novel_visible_appearances`
+        answered the same question one layer up and by name; `prev_described`
+        answers it by source key, so a re-described body cannot slip through on
+        a spelling."""
+        ivo = composer.appearance_percept(
+            "Ivo", "Ivo", "Ivo, a beautiful six-tailed person.")
+        first = composer.render_view([ivo], mode="character")
 
-    def test_unknown_or_visibly_changed_appearance_is_included(self):
-        appearances = {"Ivo": "Ivo, a beautiful six-tailed person."}
-        visual = {"Ivo": True}
-        assert "Ivo" in _novel_visible_appearances(
-            _scene(), appearances, visual,
-            observer_name="Mara", recognized=[])
-        assert "Ivo" in _novel_visible_appearances(
-            _scene(), appearances, visual,
-            observer_name="Mara", recognized=["Ivo"], changed=["Ivo"])
+        assert "six-tailed" in first.text
+        assert composer.render_view(
+            [ivo], mode="character", prev_described=first.described).text == ""
+
+    def test_a_visibly_changed_appearance_is_included_again(self):
+        ivo = composer.appearance_percept(
+            "Ivo", "Ivo", "Ivo, a beautiful six-tailed person.", force=True)
+        described = composer.render_view([ivo], mode="character").described
+
+        assert "six-tailed" in composer.render_view(
+            [ivo], mode="character", prev_described=described).text
 
     def test_prompts_forbid_default_standing_and_appearance_roll_calls(self):
         # The perception half of this test asserted a prompt no model reads --

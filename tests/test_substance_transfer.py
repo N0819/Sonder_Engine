@@ -14,8 +14,7 @@ from agents.director import (_character_material_effects, _evidence_present,
                              _manifest_items,
                              _merge_character_material_effects,
                              _normalize_diff_shape)
-from agents.perception import (_deliver_substance_events,
-                               _observer_scene_payload)
+from agents import composer
 from story.character_schema import character_embodiment_capabilities
 from llm.prompts import DEFAULT_PROMPTS
 from llm.schemas import CharacterOutput, StateDiff, validate_llm_output_strict
@@ -317,49 +316,57 @@ class TestPerceptionBoundary:
         assert "coolant" in source_clause
         assert substance_event_clause(event, you="Witness", scene=_scene()) == ""
 
-    def test_deterministic_floor_delivers_once(self):
+    def test_the_delta_is_admitted_as_one_percept_for_a_party(self):
+        """The clause builder IS the admission gate: `substance_percept`
+        returns None when the clause is empty, so a non-party contributes
+        nothing and a party contributes exactly one percept, once."""
         event = self._event()
-        view = _deliver_substance_events(
-            "The reservoir shudders.", "Vessel", _scene(), [event])
-        assert "coolant" in view
-        assert _deliver_substance_events(
-            view, "Vessel", _scene(), [event]) == view
+        scene = _scene()
+        vessel = composer.substance_percept(
+            event, substance_event_clause(event, you="Vessel", scene=scene))
+        witness = composer.substance_percept(
+            event, substance_event_clause(event, you="Witness", scene=scene))
 
-    def test_persistent_interior_state_is_cause_blind_and_not_for_bystanders(self):
-        scene = apply_substance_ops(_scene(), [_release()])
-        vessel = _observer_scene_payload(
-            scene, {"name": "Vessel", "room": "lab", "visible_rooms": []},
-            {"Emitter": "Emitter", "Vessel": "you", "Witness": "Witness"})
-        record = vessel["substances"][0]
-        assert record["target"] == "you"
-        assert "source" not in record
-        assert "source_part" not in record
+        assert witness is None
+        assert vessel is not None
+        assert "coolant" in composer.render_view(
+            [vessel], mode="character").text
+        # One event is one dedupe key, so a delta view renders it on the beat
+        # it happened and never again.
+        assert composer.render_view(
+            [vessel], mode="player",
+            prev_standing={vessel.dedupe_key}).text.count("coolant") == 1
 
-        emitter = _observer_scene_payload(
-            scene, {"name": "Emitter", "room": "lab", "visible_rooms": []},
-            {"Emitter": "you", "Vessel": "Vessel", "Witness": "Witness"})
-        # The source received the add event when it happened; persistent
-        # interior state is not a remote telemetry feed on later beats.
-        assert emitter["substances"] == []
+    def test_the_recipients_percept_carries_no_source(self):
+        """A recipient has direct access to the material and its location, not
+        automatically to its cause. The clause is the whole percept payload, so
+        what the clause withholds is withheld structurally -- there is no
+        second, wider record of the same event for a reader to reach.
 
-        witness = _observer_scene_payload(
-            scene, {"name": "Witness", "room": "lab", "visible_rooms": []},
-            {"Emitter": "Emitter", "Vessel": "Vessel", "Witness": "you"})
-        assert witness["substances"] == []
+        The persistent-state half of this property used to live on
+        `perception._observer_scene_payload`'s `substances` projection, which
+        the model-era scene payload carried and the composer path does not
+        build at all: on later beats persistent interior matter reaches no
+        observer through any percept. Recorded rather than asserted, because
+        the successor does not exist yet."""
+        event = self._event()
+        vessel = composer.substance_percept(
+            event, substance_event_clause(event, you="Vessel", scene=_scene()))
 
-    def test_visible_surface_residue_does_not_reveal_an_unseen_source(self):
+        assert set(vessel.data) == {"clause", "directed_at_self"}
+        assert "Emitter" not in vessel.data["clause"]
+
+    def test_a_surface_residue_does_not_reveal_an_unseen_source(self):
         scene = _scene()
         scene["contacts"] = []
         scene["positions"]["Emitter"] = "elsewhere"
-        scene = apply_substance_ops(scene, [_release(
+        event = resolve_substance_ops(scene, [_release(
             source_part="vent", target="Vessel", placement="surface",
-            target_part="casing")])
-        witness = _observer_scene_payload(
-            scene, {"name": "Witness", "room": "lab", "visible_rooms": []},
-            {"Vessel": "Vessel", "Witness": "you"})
-        record = witness["substances"][0]
-        assert record["target"] == "Vessel"
-        assert "source" not in record
+            target_part="casing")])[0]
+        witness = composer.substance_percept(
+            event, substance_event_clause(event, you="Witness", scene=scene))
+
+        assert witness is None
 
 
 class TestOneReleaseIsOneRecord:
