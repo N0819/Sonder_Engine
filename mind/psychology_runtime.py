@@ -234,7 +234,7 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
 
 
 def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
-                   proposed_mode=""):
+                   proposed_mode="", *, goal_impacts=None):
     """Resolve acute activation and slower cumulative load.
 
     Stress biases the next deliberation but does not select behavior. Inputs are
@@ -250,6 +250,22 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     zero. Pleasure still damps the accumulation of chronic load; it no longer
     damps the acute arousal of the moment. `overloaded` and `load` remain
     strain-only, because a demanding drive is not a coping failure.
+
+    THREAT IS 55% OF STRAIN AND WAS ALWAYS 0.0. This read the beat's goal
+    impacts off `appraisal["goal_impacts"]`; `affect.appraise` returns them
+    normalised under `"impacts"` and returns no key by that name at all. So
+    the loop below never ran, threat never rose, and the aversive half of the
+    model has not executed once since it was written. Measured live: across 33
+    resolved stress blocks `overloaded` has fired ZERO times ever and strain
+    never reached half its threshold. Characters could be excited and could
+    not be threatened.
+
+    `goal_impacts` is therefore an EXPLICIT PARAMETER rather than a dict key.
+    The defect was a caller and a callee agreeing about a payload's shape and
+    being wrong about it, silently, for the life of the feature; a named
+    argument makes the next omission a TypeError instead of a zero. The dict
+    is still read when the parameter is absent, under both spellings, so an
+    older caller keeps working rather than quietly losing the channel twice.
     """
     previous = previous if isinstance(previous, dict) else {}
     appraisal = appraisal if isinstance(appraisal, dict) else {}
@@ -274,7 +290,10 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     # public seam and tests/imports may call it directly.
     memory_threat = _clamp(memory_echo.get("threat_bias"), 0.0, 0.2, 0.0)
 
-    impacts = appraisal.get("goal_impacts") or []
+    impacts = goal_impacts
+    if impacts is None:
+        impacts = (appraisal.get("goal_impacts")
+                   or appraisal.get("impacts") or [])
     threat = 0.0
     for impact in impacts:
         if not isinstance(impact, dict):

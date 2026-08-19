@@ -136,6 +136,67 @@ class TestRoomOf:
         assert room_of({"positions": {"Alice": "kitchen"}}, "") is None
         assert room_of({"positions": {"Alice": "kitchen"}}, None) is None
 
+    # A being routinely carries two spellings at once -- a cast display name
+    # and a scene entity id or alias -- and `room_of` is what everything
+    # spatial asks first. A miss here is not a small wrong answer: every
+    # relation downstream fails closed and reads as distance.
+    def test_resolves_a_spelling_the_entity_answers_to(self):
+        scene = {
+            "positions": {"Dr. Sarah Moon": "annex"},
+            "entities": {"Dr. Sarah Moon": {
+                "name": "Dr. Sarah Moon",
+                "aliases": ["Sarah Moon", "Dr. Moon"]}},
+        }
+        assert room_of(scene, "Sarah Moon") == "annex"
+        assert room_of(scene, "Dr. Moon") == "annex"
+
+    def test_resolves_a_name_onto_an_id_keyed_position(self):
+        scene = {
+            "positions": {"tenth_doctor": "console_room"},
+            "entities": {"tenth_doctor": {"name": "The Doctor"}},
+        }
+        assert room_of(scene, "The Doctor") == "console_room"
+
+    def test_a_spelling_two_beings_claim_resolves_to_nothing(self):
+        scene = {
+            "positions": {"dalek_one": "hall", "dalek_two": "yard"},
+            "entities": {
+                "dalek_one": {"name": "Dalek Sec", "aliases": ["A Dalek"]},
+                "dalek_two": {"name": "Dalek Thay", "aliases": ["A Dalek"]},
+            },
+        }
+        assert room_of(scene, "A Dalek") is None
+
+    def test_a_name_outranks_somebody_elses_alias(self):
+        scene = {
+            "positions": {"real": "study", "impostor": "cellar"},
+            "entities": {
+                "real": {"name": "Moriarty"},
+                "impostor": {"name": "The Stranger", "aliases": ["Moriarty"]},
+            },
+        }
+        assert room_of(scene, "Moriarty") == "study"
+
+    def test_identity_false_asks_only_where_this_spelling_is(self):
+        """The narrow form, for readers holding a better authority than the
+        entity table -- a cast sheet, which lists every key its character
+        answers to and outranks a stray entity row wearing the same name."""
+        scene = {
+            "positions": {"tenth_doctor": "alley", "ghost": "yard"},
+            "entities": {"ghost": {"name": "The Doctor"}},
+        }
+        assert room_of(scene, "The Doctor") == "yard"
+        assert room_of(scene, "The Doctor", identity=False) is None
+        assert room_of(scene, "tenth_doctor", identity=False) == "alley"
+
+    def test_an_exact_position_key_still_wins_over_identity(self):
+        scene = {
+            "positions": {"Sarah Moon": "cell", "Dr. Sarah Moon": "annex"},
+            "entities": {"Dr. Sarah Moon": {
+                "name": "Dr. Sarah Moon", "aliases": ["Sarah Moon"]}},
+        }
+        assert room_of(scene, "Sarah Moon") == "cell"
+
 class TestSpatialRel:
     def test_same_room(self):
         scene = {}

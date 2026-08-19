@@ -612,6 +612,7 @@ from .common import (
     cast_room,
     character_room,
     character_scene_keys,
+    split_sentences,
 )
 
 
@@ -1530,6 +1531,25 @@ def perception_establish(ctx, nonce):
         ctx, sc, perceivers, known, p_name, p_appearance,
         entity_states, sensory_events)
 
+def _present_cast_bodies(scene, cast):
+    """Every cast member the SCENE places somewhere -- [{id, name, room}].
+
+    Presence is a fact about the world, not a judgement about the beat, and
+    two loops in `perception_act` need the same answer: who is standing here
+    (for `_co_present_company`) and who therefore perceives what happens
+    (for the perceiver list). They were separate reads with separate tests
+    and only one of them was about presence.
+    """
+    out = []
+    for c in cast or []:
+        sh, _, _ = sheet_state(c)
+        name = character_name(sh)
+        room = character_room(scene, sh)
+        if name and room:
+            out.append({"id": c["id"], "name": name, "room": room})
+    return out
+
+
 def perception_act(ctx, nonce):
     chat = ctx.chat
     interp = ctx.director_interpret
@@ -1608,13 +1628,34 @@ def perception_act(ctx, nonce):
             "disguise_conceals_identity": _ci,
         })
 
+    # WHO PERCEIVED THE ACT IS NOT WHO MAY ANSWER IT, and one list was
+    # answering both questions. `flow.reactors` is the Director's PACING
+    # judgement -- who speaks this beat -- and gating this loop on it made a
+    # present, awake, watching character perceive the onset never and then
+    # answer the aftermath. Measured over the corpus: a witness was missing
+    # from `reactors` in 757 of 975 multi-witness beats (77.6%), and 1,639 of
+    # 4,292 character-presences (38.2%) got no act view at all.
+    #
+    # It is felt through `loops.py`: `local_views` starts from these views, so
+    # a body drawn into the interaction loop later -- deferred, addressed,
+    # answering next beat -- began from an EMPTY base and never held the act
+    # it was reacting to, only the dialogue after it.
+    #
+    # THE WIDENING IS FREE. Perception makes no model call (there is no
+    # `perception` role in `providers.ROLES`, and
+    # `tests/test_perception_has_no_model.py` pins it), and `loops.py` reads
+    # `flow.reactors` for itself -- so who SPEAKS, how many calls the beat
+    # costs and the whole pacing question are byte-for-byte unchanged. What
+    # changes is that being in the room is what decides whether you saw it.
+    #
+    # Presence is the scene's answer, not the Director's: a cast body with a
+    # room. `co_present` above is built from exactly that test, for exactly
+    # that reason.
     perceivers = []
-    flow = interp.get("flow")
-    if not isinstance(flow, dict):
-        flow = {}
+    present_ids = {b["id"] for b in _present_cast_bodies(sc, ctx.cast)}
 
     for c in ctx.cast:
-        if c["id"] not in flow.get("reactors", []):
+        if c["id"] not in present_ids:
             continue
         sh, act, _ = sheet_state(c)
         r = character_room(sc, sh)
@@ -1840,7 +1881,9 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
     if not concealed_names:
         return event_text
 
-    sentences = [s.strip() for s in _SENTENCE_SPLIT.split(event_text) if s.strip()]
+    sentences = [s.strip()
+                 for s in split_sentences(event_text, _SENTENCE_SPLIT)
+                 if s.strip()]
     if not sentences:
         # A single unpunctuated clause cannot be split, so there is no safe
         # subset to keep.
@@ -2344,9 +2387,30 @@ def _composer_identity_space(ctx, p_name, p_appearance):
         space.append({"name": name,
                       "appearance": (extra or {}).get("appearance") or "",
                       "aliases": []})
+    # AN OBJECT'S NAME IS NOT AN IDENTITY. `background_presences` answers
+    # "might this thing act?", and its kind filter is deliberately generous
+    # both ways so a sentient robot tagged `device` is never dropped. This
+    # space answers a different question -- whose name must be withheld from
+    # somebody who has not met them -- and the generous answer is wrong for
+    # it: a body in the room can read "Scranton Reality Anchors" off the wall,
+    # and doing so tells it nothing about a person.
+    #
+    # Measured live, chat 82 t1. That array, the PA panel and the elevator car
+    # were all tracked presences, so the scrub rewrote the cell's own room
+    # note into "the unfamiliar person powered on and functional" -- and the
+    # guard who actually spoke that beat got the same label, because every
+    # presence with no appearance falls to the same fallback. `commit`'s
+    # speech gate already refuses these three by name (its docstring records
+    # this exact array interrogating a restrained player twice); it is the
+    # same question, so it is the same answer, read from the same function.
+    from persist.commit import presence_has_an_identity
+
+    _scene_now = wget(ctx.chat.id, "scene", {}) or {}
     for name, rec in (wget(ctx.chat.id, "background_presences", {}) or {}).items():
         name = str(name or "").strip()
         if not name or name.casefold() in seen:
+            continue
+        if not presence_has_an_identity(_scene_now, name, rec):
             continue
         seen.add(name.casefold())
         sketch = (rec or {}).get("sketch") if isinstance(rec, dict) else {}

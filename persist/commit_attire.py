@@ -112,40 +112,19 @@ def _heal_attire_identity_keys(sc, cast):
     Merging (rather than preferring one) is what makes this heal an
     existing save: whichever record holds the clothes keeps them.
     """
-    from agents.common import character_scene_keys
+    from agents.common import cast_spelling_policy
 
-    alias_to_canonical = {}
-    # A name somebody actually GOES BY, as opposed to also answers to. One
-    # character's alias is another's name often enough in fiction -- a nickname,
-    # a family name, a title -- and folding on it merges two bodies. Measured:
-    # with a character named Yuki and a second whose aliases include "Yuki",
-    # this collapsed Yuki's wardrobe onto the other woman, who was wearing
-    # nothing and acquired a yukata; Yuki's own record disappeared.
-    own_names = set()
-    for row in cast or []:
-        try:
-            keys = character_scene_keys(json.loads(row["sheet"]))
-        except Exception:
-            continue
-        if keys:
-            own_names.add(keys[0].casefold())
-
-    for row in cast or []:
-        try:
-            keys = character_scene_keys(json.loads(row["sheet"]))
-        except Exception:
-            continue
-        if not keys:
-            continue
-        for key in keys[1:]:
-            folded = key.casefold()
-            # A registered name always outranks somebody else's alias for it.
-            if folded in own_names and folded != keys[0].casefold():
-                continue
-            alias_to_canonical[folded] = keys[0]
-
-    def canonical(name):
-        return alias_to_canonical.get(str(name or "").strip().casefold(), name)
+    # ONE POLICY, shared with `common.canonicalize_positions`. This function
+    # and that one were two hand-rolled tables of the same rule that disagreed
+    # about aliases, and the disagreement was a live defect: in chat 82 this
+    # side folded "Dr. Sarah Moon" onto the sheet's "Sarah Moon" and positions
+    # did not, so one woman was keyed two ways across the ledgers describing
+    # her. Attire keys BODIES only, so matching aliases here is safe and is
+    # what heals the split; positions keys objects too and passes
+    # `aliases=False`. The Yuki guard -- a real name outranks somebody else's
+    # alias for it, measured when Yuki's wardrobe collapsed onto another
+    # woman -- now lives in the shared policy, where both callers get it.
+    canonical, _forms = cast_spelling_policy(cast)
 
     attire = sc.get("attire")
     if isinstance(attire, dict):
@@ -631,6 +610,72 @@ def _mint_shed_garments(sc, shed, diff=None):
             positions[key] = where
 
 
+def _overlay_texts_by_subject(diff):
+    """{casefolded subject: {casefolded overlay description}} for THIS diff.
+
+    `overlays` is where the Director says what a BODY currently looks like
+    this beat. A garment `condition` says what a GARMENT looks like. They are
+    two channels about two different things, and one string cannot be a true
+    answer in both.
+    """
+    out = {}
+    for rows in (diff.get("overlays") or {}).values():
+        for row in (rows if isinstance(rows, list) else [rows]):
+            if not isinstance(row, dict):
+                continue
+            subject = str(row.get("subject") or "").strip().casefold()
+            text = str(row.get("description") or "").strip().casefold()
+            if subject and text:
+                out.setdefault(subject, set()).add(text)
+    return out
+
+
+def _drop_overlay_conditions(marks, name, overlay_texts, ctx, report):
+    """Strip garment conditions that are this body's own overlay, verbatim.
+
+    Live, chat 82 t1. The body specialist emitted, for one body:
+
+        "attire": {"Hinami": {"conditions": {
+            "lightweight travel jacket":
+                "golden fox ears drooping limply atop copper-gold hair",
+            "fitted tank top": "unfocused amber eyes blink open slowly"}}}
+
+    and emitted both strings into `overlays` for the same body in the same
+    beat, where they belong. The garment copies committed, so every observer's
+    attire row rendered "lightweight travel jacket (golden fox ears drooping
+    limply atop copper-gold hair)" and the ledger panel showed the same. Same
+    class as the three contradictory `bare at the` notes: the symptom is in
+    the ledger, the origin is `state_diff.attire`.
+
+    NOT a judgment about what a condition may say -- "soaked through" is a
+    true thing to write about a coat and about the body in it, and this would
+    never see it, because it only fires when the SAME beat filed the SAME
+    string to both channels. That is a contradiction the engine can read
+    without understanding either sentence: one fact, two answers, and the
+    channel that says what a body looks like is the one that was right.
+    """
+    if not marks or not overlay_texts:
+        return marks
+    own = overlay_texts.get(str(name or "").strip().casefold()) or set()
+    if not own:
+        return marks
+    kept = {}
+    for garment, text in marks.items():
+        if str(text or "").strip().casefold() in own:
+            if report:
+                ctx.tell_director(
+                    f"attire: dropped your condition on {garment!r} -- it is "
+                    f"word for word {name}'s own body overlay this beat, and "
+                    "a condition describes the GARMENT (torn, soaked, "
+                    "unfastened), never the body wearing it.")
+                ctx.add_warning(
+                    f"attire: {name}'s overlay {str(text)[:60]!r} was also "
+                    f"filed as a condition on {garment!r}; kept the overlay")
+            continue
+        kept[garment] = text
+    return kept
+
+
 def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
     """Apply one validated attire diff to a scene copy.
 
@@ -654,6 +699,7 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                 f"{recovered['garment']!r} from {recovered['owner']!r}.")
 
     att = sc.setdefault("attire", {})
+    _overlay_by_subject = _overlay_texts_by_subject(diff)
     canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
     # WHOSE clothes this beat tore off, not merely whether somebody's did —
     # and whose undressing the prose leaves still IN PROGRESS. The two
@@ -756,6 +802,9 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
 
         _before = attire_model.normalize_regions(cur)
         _marks = d.get("conditions")
+        if isinstance(_marks, dict):
+            _marks = _drop_overlay_conditions(
+                _marks, name, _overlay_by_subject, ctx, report)
         # THE STEAL GUARD (design note 17 §3): a coverage entry that empties
         # every region a garment covers, named by a removal-directed decisive
         # phrase in this beat's words, is the removal it plainly was — filed
@@ -861,6 +910,28 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                         f"{name}'s {_handle!r}; coverage unchanged")
         cur["regions"] = _after
         cur["wearing"] = attire_model.flat_wearing(_after)
+        # A GARMENT WHOSE COVERAGE NOTHING KNEW, said out loud. `region_of`
+        # never fails -- it falls to the torso -- and the fallback was silent,
+        # so a qipao, a thawb, a sari or a nagajuban the cue tables have not
+        # learnt sits on the torso alone and the body reports legs and groin
+        # bare while wearing one. `guessed_spans` has been able to spot that
+        # since it was written and had no production caller: its own docstring
+        # described this hand-off in the present tense while the loop stayed
+        # open. Measured while open: 110 of 560 live worn garment records
+        # carry a guessed span, twenty of them a full-length under-kimono.
+        #
+        # Told to the DIRECTOR rather than repaired here, because repairing it
+        # needs the fiction: the cue tables are the thing that does not know,
+        # so a second deterministic guess would be the same guess. The
+        # Director can answer with `coverage`, and authored coverage is never
+        # re-guessed, so this cannot nag about a choice somebody has made.
+        if report:
+            for _guessed in attire_model.guessed_spans(_after):
+                ctx.tell_director(
+                    f"attire: nothing knows what {name}'s {_guessed!r} "
+                    "covers, so it is on the torso by default. If it covers "
+                    "more, say so once: attire." + str(name) + ".coverage = "
+                    "{" + repr(str(_guessed)) + ": {<region>: []}}.")
         # A derived-shaped note is always ours to rebuild, current or not --
         # the same rule `rederive_entry` applies on every read path
         # (`attire.is_derived_state_note`; chat 52 carried three stale notes

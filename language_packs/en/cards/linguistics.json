@@ -633,14 +633,14 @@
           "$type": "tuple",
           "items": [
             "; clothing state:",
-            ","
+            "; with"
           ]
         },
         {
           "$type": "tuple",
           "items": [
             "; currently:",
-            ","
+            "; currently"
           ]
         }
       ]
@@ -1235,6 +1235,38 @@
         "\"",
         "“",
         "”"
+      ]
+    },
+    "_SENTENCE_ABBREVIATIONS": {
+      "$type": "set",
+      "items": [
+        "adm",
+        "capt",
+        "cmdr",
+        "col",
+        "cpl",
+        "dr",
+        "fr",
+        "gen",
+        "hon",
+        "jr",
+        "lt",
+        "maj",
+        "messrs",
+        "mr",
+        "mrs",
+        "ms",
+        "mt",
+        "mx",
+        "no",
+        "prof",
+        "professor",
+        "pvt",
+        "rev",
+        "sgt",
+        "sr",
+        "st",
+        "vs"
       ]
     }
   },

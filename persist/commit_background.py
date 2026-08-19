@@ -210,6 +210,67 @@ def presence_room(scene, name, record=None):
     return ((record or {}).get("sketch") or {}).get("station_room")
 
 
+def presence_has_an_identity(scene, name, record=None):
+    """Is this presence's NAME somebody's to withhold?
+
+    The identity floor exists because a stranger's name is theirs to give. An
+    object has no such claim: a body in the room can read "Scranton Reality
+    Anchors" off the wall, and doing so tells it nothing about a person. So
+    the floor asks personhood before it protects a name -- and where the
+    answer is `undecided` it asks for CONDUCT, which is this engine's standard
+    of proof everywhere else.
+
+    THE NOUN CANNOT SETTLE IT, and both live examples prove it: `device` and
+    `dalek war machine` land in `undecided` together, one a suppression
+    fixture and one a body whose name absolutely is an identity. Measured
+    across the corpus: 16 presences resolve `undecided` -- 14 machines
+    (device, transit_car, body_interior) and 2 Daleks -- and the Daleks are
+    the only two that have ever SPOKEN (2 and 10 dialogue turns against 0 for
+    every machine). Something that has taken a turn at speech is acting as a
+    person whatever noun the model reached for.
+
+    Deliberately NOT the same reading as `presence_personhood`'s speech gate,
+    which keeps `undecided` mute unless the Director routes it explicitly. The
+    two gates ask different questions of one verdict: may this thing act (be
+    conservative, silence is cheap) versus is this name protected (be
+    conservative the other way, a wrongly-protected name renders a machine as
+    "the unfamiliar person" in the room's own description).
+
+    The gap left open: a genuine person who has never spoken AND whose kind is
+    neither animate nor inert. Narrow -- an unregistered body has no entity
+    record at all, which already answers "person" -- and the cost is one name
+    reaching an observer through the same room note that describes the room.
+    The real answer is `blurb_mint`'s `nature` field, which settles this per
+    presence and today only runs under `scene_life: ambient|full`; see
+    `docs/UNBUILT.md` 1.71.
+    """
+    verdict = presence_personhood(scene, name, record)
+    if verdict == "person":
+        return True
+    if verdict == "thing":
+        return False
+    return bool((record or {}).get("dialogue_turns"))
+
+
+def presence_personhood(scene, name, record=None):
+    """What a tracked presence DENOTES: "person", "thing" or "undecided".
+
+    Public because two different gates need the same answer and used to have
+    only one of them. This one decides whether a presence may SPEAK; the
+    identity floor (`perception._composer_identity_space`) decides whether its
+    name must be concealed from someone who has not met it, and an object's
+    name is nobody's to withhold -- a body in the room can read "Scranton
+    Reality Anchors" off the wall, and doing so tells it nothing about a
+    person. Answering that question from `background_presences` alone put
+    machines into the identity space, where every one of them rendered as
+    "the unfamiliar person" (chat 82 t1: the room note "Scranton Reality
+    Anchors powered on and functional" reached the player as "the unfamiliar
+    person powered on and functional", sharing a label with the guard who was
+    actually speaking).
+    """
+    return _presence_speech_verdict(scene, name, record)
+
+
 def _presence_speech_verdict(scene, name, record=None):
     """May this presence hold a background SPEAKING turn?
 

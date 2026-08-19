@@ -12,7 +12,8 @@ from core.db import q, qi, transaction, wget, wset
 from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
 from world.weather import advance_weather, normalize_weather
-from world.spatial import merge_scene_with_diff, guessed_room_sizes
+from world.spatial import (contradictory_sight_edges, guessed_room_sizes,
+                           merge_scene_with_diff)
 from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
                             infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
@@ -280,6 +281,25 @@ def prepare_scene_commit(ctx):
             for _who, _st in _mstations.items():
                 if isinstance(_st, dict):
                     _stations.setdefault(_who, _st)
+
+    # THE CAST SHEET DECIDES A CAST BODY'S CANONICAL SPELLING, and the merge
+    # fold that makes every ledger agree is cast-free by design -- it folds
+    # onto the scene ENTITY's own `name`. So the entity record is reconciled
+    # against the cast on both sides of the merge, here, where the cast is in
+    # scope: the standing scene (which heals a save written before this rule
+    # and is why no migration is needed) and this beat's diff (so a body the
+    # Director just minted under an honorific is spelled the sheet's way from
+    # its first beat). Idempotent, and it must stay so -- a checkpoint restore
+    # replays it. Argument: `docs/design/DESIGN_SUBJECT_SPELLING_AUTHORITY.md`.
+    from agents.common import reconcile_cast_entity_names
+
+    for _scope in (prev_scene, diff):
+        for _eid, _old, _new in reconcile_cast_entity_names(
+                _scope, ctx.cast, player_name=_player_name_or_none(ctx)):
+            ctx.add_warning(
+                f"identity: scene entity {_eid!r} was named {_old!r}; the cast "
+                f"sheet spells that character {_new!r}, so the ledgers are "
+                f"keyed {_new!r} and {_old!r} is kept as an alias.")
 
     _contact_report = []
     _substance_report = []
@@ -637,6 +657,38 @@ def prepare_scene_commit(ctx):
     # room nobody sized is a perception grade the engine chose for itself.
     # It chooses silently, on 45% of live rooms. Say so on the beat the room
     # becomes shared -- once, not every beat the scene stays in it.
+    # A one-way window declared from BOTH sides is a contradiction: the value
+    # is declared in the direction it LOOKS, so two of them cancel and nothing
+    # says which was meant. Sight subtracts in both directions
+    # (`mutual_one_way_window` carries the argument), which costs the watching
+    # side a view it should have had -- so the report is not decoration, it is
+    # the only channel that produces the RIGHT answer instead of a guess. It
+    # speaks to the developer and to the Director, whose next beat can name
+    # the blind side and give both directions back.
+    # `sight_contradictions_told` marks a chat that has already heard about
+    # its standing pairs. Without it a scene contradictory since before this
+    # check existed compares equal to its own previous beat every turn and is
+    # never reported at all -- silently walled, with nothing saying why.
+    _told = wget(cid, "sight_contradictions_told", False)
+    _contradictions = contradictory_sight_edges(
+        sc, prev_scene if _told else None)
+    if _contradictions:
+        _notices = wget(cid, "engine_notices", []) or []
+        for _pair in _contradictions:
+            _msg = (
+                f"{_pair['names'][0]!r} and {_pair['names'][1]!r} each declare "
+                "a one_way_window into the other. A one-way window is "
+                "declared in the direction it LOOKS, so two of them "
+                "contradict each other and nothing says which way was meant "
+                "-- neither room can see the other until this is resolved. "
+                "Redeclare the edge from the watching side only, with `wall` "
+                "on the blind side.")
+            ctx.warnings.append(_msg)
+            _notices.append(_msg)
+        wset(cid, "engine_notices", _notices)
+    if not _told:
+        wset(cid, "sight_contradictions_told", True)
+
     for _room in guessed_room_sizes(sc, prev_scene):
         ctx.warnings.append(
             f"Room {_room['name']!r} holds {_room['occupants']} and has no "

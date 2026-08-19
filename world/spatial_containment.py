@@ -2,7 +2,7 @@
 """Relative scale and enclosure: how big a body is, what encloses it, what that
 hides, and what a size change breaks."""
 
-from world.spatial_identity import _ci_get, _entity_named, _position_of, same_subject
+from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
 from world.spatial_transit import _is_body_entity
 
 
@@ -363,7 +363,7 @@ def _body_interior_holder(scene: dict, name: str):
     room = rooms.get(room_id) if room_id else None
     if isinstance(room, dict):
         parent = str(room.get("parent_entity") or "").strip()
-        if (parent and _position_of(scene, parent) is not None
+        if (parent and room_of(scene, parent) is not None
                 and parent.casefold() != str(name or "").strip().casefold()):
             return parent
     # The ledger form. `mode` decides: being carried in an open palm is not
@@ -391,7 +391,7 @@ def _body_interior_holder(scene: dict, name: str):
         return None
     if not _is_body_entity(scene, holder, entity):
         return None
-    if _position_of(scene, holder) is None:
+    if room_of(scene, holder) is None:
         return None
     return holder
 
@@ -566,7 +566,7 @@ def derive_contained_positions(scene: dict) -> dict:
             # the contained body wherever it happened to be -- which, when the
             # Director wrote the carrier's id into `positions` as though it
             # were a room, is a room that does not exist.
-            room = _position_of(scene, holder)
+            room = room_of(scene, holder)
             if room is not None:
                 break
         if room is None:

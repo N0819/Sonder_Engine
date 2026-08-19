@@ -77,6 +77,190 @@ def normalize_edge_distance(value) -> str:
     return "remote"
 
 
+def _one_way_edges(rooms: dict, source, target):
+    """Every `one_way_window` edge `source` declares toward `target`."""
+    return [edge for edge in ((rooms.get(source) or {}).get("adjacent") or [])
+            if isinstance(edge, dict) and edge.get("to") == target
+            and normalize_barrier(edge.get("barrier")) == "one_way_window"]
+
+
+def _declares_one_way(rooms: dict, source, target) -> bool:
+    """Does `source` declare a one-way window looking into `target`?"""
+    return bool(_one_way_edges(rooms, source, target))
+
+
+def sight_direction(rooms: dict, a_room, b_room):
+    """Which room a one-way window between these two LOOKS FROM, or None.
+
+    THE DIRECTION IS A FIELD, because as a property of which side declared
+    the edge it could not survive the way scenes are actually written. Every
+    other barrier is symmetric -- a door is a door from both ends -- so
+    writing adjacency from both sides is the universal habit, and it is
+    correct for every value except this one. `one_way_window` alone meant
+    something different depending on who wrote it, so the habit silently
+    cancelled it: two "sight passes this way" declarations name no direction
+    at all.
+
+    Measured live, chat 82 ("Sarah Moon -- Hinami attempt 2"): the interview
+    suite declared the mirror from the annex AND from the cell, and both
+    prompts had asked for `wall` on the blind side. The model wrote the edge
+    the way edges are written. A deterministic floor that depends on a model
+    breaking a habit every other barrier rewards is not a floor.
+
+    `sight_from` fixes that by making the two declarations AGREE instead of
+    contradict: both sides name the same watching room, so writing it twice
+    is right rather than fatal, and a scene can be repaired by naming a room
+    rather than by deleting a declaration from the correct side.
+
+    Returns the room id sight passes FROM, or None when no edge says. Both
+    sides are read, and a disagreement resolves to None -- two edges naming
+    different watchers is the same contradiction in a new spelling, and
+    picking one would be the guess this field exists to remove.
+    """
+    named = set()
+    for source, target in ((a_room, b_room), (b_room, a_room)):
+        for edge in _one_way_edges(rooms, source, target):
+            room = str(edge.get("sight_from") or "").strip()
+            if room:
+                named.add(room)
+    if len(named) != 1:
+        return None
+    watcher = named.pop()
+    return watcher if watcher in (a_room, b_room) else None
+
+
+def mutual_one_way_window(scene: dict, a_room, b_room) -> bool:
+    """Do BOTH rooms declare a one-way window into each other? Then neither
+    sees, and the contradiction is reported.
+
+    `one_way_window` carries its asymmetry on ONE edge -- declared in the
+    direction it looks, with the way back a wall -- so writing it from both
+    sides says "sight passes each way", which is a `window`, a word the
+    vocabulary already has. Nobody reaches for the asymmetric value meaning
+    the symmetric one; the pair is a mistake every time, and nothing in it
+    says which direction was meant.
+
+    ADMITTING WAS TRIED FIRST AND IS WRONG. Measured live, chat 82 ("Sarah
+    Moon -- Hinami attempt 2"): the interview suite declared it from the annex
+    to the cell AND from the cell back, so the restrained subject watched her
+    interviewer through a mirror her own room note called opaque, and the view
+    said both things two sentences apart. A barrier whose entire meaning is
+    asymmetry, written symmetrically by a writer who had `window` available
+    and did not use it, is not evidence that everyone should see.
+
+    Subtracting costs the other direction too, and that cost is real: the
+    interviewer loses the body she is there to watch until somebody names the
+    blind side. It is accepted because a gap is visible and a leak is not --
+    the beat plays wrong, obviously, and the notice below tells the Director
+    exactly what to fix, where showing a mind what the fiction told it it
+    could not see is a thing nobody notices until it has been true for fifty
+    beats.
+
+    The RIGHT answer is neither guess. Sight through the glass belongs to the
+    edge, what the glass looks like from each side belongs to the edge as
+    well (so the blind side reads "a mirror" and the seeing side "transparent
+    glass"), and KNOWING the glass is one-way is prior knowledge -- an
+    interviewer was briefed, a subject was not -- which is not a property of a
+    room at all. `docs/UNBUILT.md` 1.68 carries that design.
+    """
+    rooms = scene.get("rooms") or {}
+    if not (_declares_one_way(rooms, a_room, b_room)
+            and _declares_one_way(rooms, b_room, a_room)):
+        return False
+    # ...unless the pair says which way it looks, which is exactly what
+    # `sight_from` is for: two declarations that AGREE are one fact written
+    # twice, the way every other barrier is written.
+    return sight_direction(rooms, a_room, b_room) is None
+
+
+def stamp_sight_direction(scene: dict) -> list:
+    """Write down which way an unambiguous one-way window looks. Idempotent.
+
+    THIS IS WHAT MAKES THE FEATURE SURVIVE ITS OWN SCENE. A one-sided
+    declaration already says the direction -- the edge looks the way it was
+    written -- but it says it in a form that the next beat can destroy without
+    touching it: the moment anything redeclares the far side, the pair reads as
+    two contradicting claims and the mirror is gone. Nothing malicious has to
+    happen. Adjacency is normally written from both rooms, because for every
+    other barrier that is correct.
+
+    So the direction is promoted to a FIELD at the merge, on the beat it is
+    still knowable. After that the mirror is habit-proof: a later redeclaration
+    from the blind side agrees with the stamp instead of cancelling it, because
+    `sight_direction` reads the field before it reads who declared what.
+
+    Only where exactly one side declares it and neither side has said
+    otherwise. A pair already carrying `sight_from` is left alone (it has an
+    author), and a bare two-sided pair is NOT stamped -- nothing in it names a
+    direction, and inventing one is the guess the field exists to remove. That
+    case stays a contradiction and stays reported.
+
+    Returns [(room, other, watcher)] for what it stamped.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return []
+    stamped = []
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            other = edge.get("to")
+            if not other or normalize_barrier(edge.get("barrier")) \
+                    != "one_way_window":
+                continue
+            if sight_direction(rooms, room_id, other) is not None:
+                continue                       # somebody already said
+            if _declares_one_way(rooms, other, room_id):
+                continue                       # ambiguous; report, never guess
+            edge["sight_from"] = room_id
+            stamped.append((str(room_id), str(other), str(room_id)))
+    return stamped
+
+
+def contradictory_sight_edges(scene: dict, prev_scene: dict = None) -> list:
+    """Room pairs that both declare a one-way window into each other.
+
+    See `mutual_one_way_window` for why this is reported rather than resolved.
+    Sight is unchanged: the pair reads as an ordinary window, which is what
+    two "sight passes this way" declarations literally say, and which of the
+    two the author meant is not recoverable from the scene.
+
+    Reported the beat it APPEARS -- the same subtraction `guessed_room_sizes`
+    makes, because a standing condition repeated every beat is one the reader
+    learns to skip. `prev_scene=None` asks for it unconditionally, which is
+    how a scene that was ALREADY contradictory before this check existed gets
+    told once instead of never: the appearance test compares against the
+    previous beat, and for those scenes the previous beat was contradictory
+    too, so the pair would sit silent forever while the rooms stayed walled
+    off from each other.
+
+    Returns rows, not warnings -- the seam that knows whose warning list to
+    write to does the reporting.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    prev_rooms = (prev_scene or {}).get("rooms") if prev_scene is not None \
+        else None
+    out = []
+    for a_id in rooms:
+        for b_id in rooms:
+            if str(a_id) >= str(b_id):
+                continue            # one row per pair, not two
+            if not mutual_one_way_window(scene, a_id, b_id):
+                continue
+            if prev_rooms is not None and mutual_one_way_window(
+                    prev_scene, a_id, b_id):
+                continue            # already contradictory, already reported
+            out.append({
+                "rooms": (str(a_id), str(b_id)),
+                "names": (str((rooms.get(a_id) or {}).get("name") or a_id),
+                          str((rooms.get(b_id) or {}).get("name") or b_id)),
+            })
+    return out
+
+
 def spatial_rel(
     scene: dict,
     a_room: Optional[str],
@@ -126,8 +310,21 @@ def spatial_rel(
             # contradict each other. Sound and scent land in the same place a
             # wall does either way, so nothing else is lost by saying it this
             # way.
-            if index == 1 and barrier == "one_way_window":
-                barrier = "wall"
+            if barrier == "one_way_window":
+                # `sight_from` names the watching room outright, so it holds
+                # however many sides declared the edge -- which is the point
+                # of it being a field (`sight_direction`).
+                watcher = sight_direction(rooms, a_room, b_room)
+                if watcher is not None:
+                    if watcher != a_room:
+                        barrier = "wall"
+                # Nothing said which way. Fall back to the older rule: the
+                # edge looks in the direction it was declared, so finding it
+                # on the second pass means standing behind it -- and finding
+                # it on BOTH sides is a contradiction that subtracts in both
+                # directions (`mutual_one_way_window`).
+                elif index == 1 or _declares_one_way(rooms, target, source):
+                    barrier = "wall"
 
             return {
                 "same_room": False,
@@ -792,6 +989,16 @@ def visible_adjacent_rooms(
             or adjacent_id in seen
         ):
             continue
+
+        # The room record and the sightline have to agree, or the blind side
+        # is refused a view and handed the neighbour's whole room anyway.
+        if barrier == "one_way_window":
+            _watcher = sight_direction(all_rooms, room_id, adjacent_id)
+            if _watcher is not None:
+                if _watcher != room_id:
+                    continue
+            elif _declares_one_way(all_rooms, adjacent_id, room_id):
+                continue
 
         # This list is delivered as literal sight -- a perceiver's
         # `visible_rooms` admits the whole room record into their payload --
