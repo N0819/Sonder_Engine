@@ -129,3 +129,31 @@ def test_director_establish_dict_fields_as_empty_lists_are_coerced():
     assert report.output["entities"] == {}
     assert report.output["attire"] == {}
     assert report.output["entity_states"] == {}
+
+
+def test_every_worked_example_validates_against_the_schema_it_illustrates():
+    """An example is instruction, and a wrong one instructs wrongly.
+
+    `OUTPUT_EXAMPLES[step]` is handed to the model verbatim as
+    `required_json_example` on every repair and every fallback candidate -- so
+    a call that just failed validation is answered with an object the same
+    validator also rejects. Two were live when this test was written:
+    `scene_life` omitted the required `speech.speaker` on its first entry, and
+    `director_establish` failed its own semantic check with empty `rooms` and
+    `positions`. Both were teaching a shape that cannot commit.
+
+    This is the second time a wrong example has been found (the first cost a
+    complete 4,000-token resolve, whose repair was handed the same broken
+    example that caused the failure and could not converge), so the guard is
+    the class rather than the two.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES, validate_llm_output_strict
+
+    broken = {}
+    for step_key, example in sorted(OUTPUT_EXAMPLES.items()):
+        report = validate_llm_output_strict(step_key, example)
+        if not report.valid:
+            broken[step_key] = report.errors[:4]
+    assert not broken, (
+        "worked examples that their own validator rejects: "
+        + "; ".join(f"{step}: {errors}" for step, errors in broken.items()))
