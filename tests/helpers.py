@@ -64,10 +64,22 @@ def scratch_db_path():
 
 
 def remove_scratch_db(path):
-    """Delete a scratch database and the WAL/SHM sidecars it leaves behind."""
+    """Delete a scratch database and the WAL/SHM sidecars it leaves behind.
+
+    Ask forgiveness, not permission. `if exists(): remove()` is a race, and it
+    lost once in a pinned-stack run: `FileNotFoundError: /dev/shm/....db-wal`
+    in teardown, one error out of 8,450 tests, gone on a re-run. The engine
+    keeps daemon threads alive across a test -- `memory_write`'s embedding
+    repair loop is one -- and SQLite checkpoints and unlinks a `-wal` on its
+    own schedule, so the file can go between the check and the removal. A
+    teardown that fails because something ALREADY did its job is noise that
+    reads exactly like a real failure.
+    """
     for leftover in (path, path + "-wal", path + "-shm"):
-        if os.path.exists(leftover):
+        try:
             os.remove(leftover)
+        except FileNotFoundError:
+            pass
 
 
 def fanout_resolve_agent(output, *, per_step=None, calls=None):
