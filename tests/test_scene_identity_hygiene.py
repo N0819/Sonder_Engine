@@ -59,6 +59,76 @@ def test_attire_records_collapse_onto_the_display_name():
                                   "smudged with light soot"}
 
 
+def test_the_folded_record_keeps_its_per_garment_facts():
+    """`regions` is the authoring surface, and the fold has to carry it.
+
+    A garment's `state`, `condition`, `covered_zones` and hand-placed region
+    live only there -- `wearing` is a list of names. Merging the two flat
+    lists and dropping the folded record's regions leaves the ledger
+    self-consistent (`rederive_entry` rebuilds regions from the merged
+    `wearing` through the cue tables) and amnesiac: a loosened, wine-stained,
+    hand-placed kimono comes back pristine and torso-anchored.
+    """
+    scene = {"attire": {
+        "char_f0ef86a7c2dd44f99160fa746e263263": {
+            "wearing": ["silk kimono", "obi sash"],
+            "state": [],
+            "regions": {
+                "legs": {"garments": [{
+                    "name": "silk kimono", "state": "loosened",
+                    "condition": "wine-stained", "attaches": False,
+                    "description": "deep indigo"}],
+                    "beneath": "bare skin"},
+                "waist": {"garments": [{
+                    "name": "obi sash", "state": "worn", "attaches": True}],
+                    "beneath": ""},
+            }},
+        "Dr. Moon": {"wearing": [], "state": []},
+    }}
+    _heal_attire_identity_keys(scene, _cast())
+
+    regions = scene["attire"]["Dr. Moon"].get("regions") or {}
+    kimono = [g for entry in regions.values()
+              for g in (entry.get("garments") or [])
+              if g.get("name") == "silk kimono"]
+    assert kimono, "the folded record's regions were dropped"
+    assert kimono[0]["state"] == "loosened"
+    assert kimono[0]["condition"] == "wine-stained"
+    # The region it was actually placed on, not the one the cue table guesses.
+    assert "legs" in regions
+    assert regions["legs"]["beneath"] == "bare skin"
+
+
+def test_a_surviving_garment_fact_is_not_overwritten_by_the_folded_one():
+    """The fold heals a save; it does not decide between two statements.
+
+    `wearing` merges target-first for the same reason: whichever record holds
+    the clothes keeps them, and a fact the canonical record already states is
+    not somebody else's to replace.
+    """
+    scene = {"attire": {
+        "Sarah Moon": {
+            "wearing": ["lab coat"], "state": [],
+            "regions": {"torso": {"garments": [{
+                "name": "lab coat", "state": "worn",
+                "condition": "scorched"}], "beneath": "shirt"}}},
+        "Dr. Moon": {
+            "wearing": ["lab coat"], "state": [],
+            "regions": {"torso": {"garments": [{
+                "name": "lab coat", "state": "removed",
+                "condition": ""}], "beneath": ""}}},
+    }}
+    _heal_attire_identity_keys(scene, _cast())
+
+    torso = scene["attire"]["Dr. Moon"]["regions"]["torso"]
+    coat = torso["garments"][0]
+    assert len(torso["garments"]) == 1
+    assert coat["state"] == "removed"
+    # ...and a field the survivor leaves blank is still worth recovering.
+    assert coat["condition"] == "scorched"
+    assert torso["beneath"] == "shirt"
+
+
 def test_incoming_attire_keys_are_canonicalized():
     canonical = _heal_attire_identity_keys({"attire": {}}, _cast())
     assert canonical("char_f0ef86a7c2dd44f99160fa746e263263") == "Dr. Moon"
