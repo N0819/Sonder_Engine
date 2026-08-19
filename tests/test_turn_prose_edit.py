@@ -106,3 +106,38 @@ def test_edit_prose_404s_when_turn_has_no_narrator_step(temp_db):
     with pytest.raises(HTTPException) as exc_info:
         app.edit_prose(turn_id, {"prose": "x"})
     assert exc_info.value.status_code == 404
+
+
+def test_a_failed_insert_leaves_the_step_with_its_active_variant(temp_db,
+                                                                 monkeypatch):
+    """Deactivate-then-insert is one operation, not two.
+
+    "Exactly one active variant per materialized step" is a named invariant,
+    and a crash between these two statements leaves the narrator step with
+    ZERO -- a turn that renders as blank prose forever, with no error anywhere
+    to say why. Both siblings that write this same pair (`step_edit`,
+    `turn_narration_select`) already wrap it.
+    """
+    chat_id = _make_chat(temp_db)
+    turn_id = _make_turn(temp_db, chat_id)
+    save_step(turn_id, "narrator", "Narrator \u00b7 render", 6,
+              {"prose": "The original line."})
+
+    real_qi = app.qi
+
+    def failing_qi(sql, args=()):
+        if sql.lstrip().startswith("INSERT INTO variants"):
+            raise RuntimeError("the process died here")
+        return real_qi(sql, args)
+
+    monkeypatch.setattr(app, "qi", failing_qi)
+    with pytest.raises(RuntimeError):
+        app.edit_prose(turn_id, {"prose": "Never written."})
+    monkeypatch.undo()
+
+    active = temp_db.q(
+        "SELECT v.content FROM steps s JOIN variants v "
+        "ON v.step_id=s.id AND v.active=1 "
+        "WHERE s.turn_id=? AND s.key='narrator'", (turn_id,))
+    assert len(active) == 1
+    assert json.loads(active[0]["content"])["prose"] == "The original line."

@@ -114,6 +114,40 @@ def test_a_symlink_member_is_refused(root, tmp_path):
             ext._safe_extract(archive, root / "probe")
 
 
+def test_a_folder_install_is_audited_like_every_other_source(root, tmp_path):
+    """"The rules that govern what may be installed should not depend on how
+    it travelled" -- `_audit_tree`'s own words. A folder was bound by none of
+    them, and `copytree(symlinks=False)` DEREFERENCES a link rather than
+    refusing it, so a link in the source arrived as a copy of its target."""
+    origin = tmp_path / "folder"
+    origin.mkdir()
+    (origin / "manifest.json").write_text(
+        json.dumps({"id": "folder-ext", "version": "1.0.0", "ext_api": 1}),
+        encoding="utf-8")
+    try:
+        (origin / "secrets").symlink_to("/etc/passwd")
+    except (OSError, NotImplementedError):
+        pytest.skip("this platform does not make symlinks")
+
+    with pytest.raises(ext.ExtensionError, match="symlink"):
+        ext.install_extension(str(origin))
+    assert not (root / "folder-ext").exists()
+
+
+def test_a_folder_install_obeys_the_size_ceiling(root, tmp_path, monkeypatch):
+    origin = tmp_path / "folder"
+    origin.mkdir()
+    (origin / "manifest.json").write_text(
+        json.dumps({"id": "folder-ext", "version": "1.0.0", "ext_api": 1}),
+        encoding="utf-8")
+    (origin / "blob.bin").write_text("x" * 200, encoding="utf-8")
+
+    monkeypatch.setattr(ext, "MAX_EXTRACTED_BYTES", 10)
+    with pytest.raises(ext.ExtensionError, match="larger than"):
+        ext.install_extension(str(origin))
+    assert not (root / "folder-ext").exists()
+
+
 def test_an_ordinary_archive_still_extracts(root, tmp_path):
     bundle = _zip(tmp_path / "ok.zip", {"a.txt": "1", "sub/b.txt": "2"})
     destination = root / "probe"
@@ -570,3 +604,66 @@ class TestGitSources:
             pytest.skip("this platform does not make symlinks")
         with pytest.raises(ext.ExtensionError, match="symlink"):
             ext._audit_tree(tree)
+
+
+class TestTheUpdateSweepIsBounded:
+    """A route's cost is latency, not bandwidth.
+
+    `check_update` is one `ls-remote` each with no download, which is what
+    makes checking everything at once cheap in BYTES. Serially, against an
+    unreachable network, ten installed extensions is ten times the 120s git
+    timeout -- a twenty-minute request holding a threadpool worker.
+    """
+
+    def _slow_extension(self, root, ext_id):
+        directory = root / ext_id
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "manifest.json").write_text(json.dumps({
+            "id": ext_id, "version": "1.0.0", "ext_api": 1,
+            "source_url": "https://example.invalid/repo.git",
+            "commit": "deadbeef",
+        }), encoding="utf-8")
+
+    def test_a_sweep_stops_at_its_budget_and_says_so(self, root, monkeypatch):
+        for name in ("a-ext", "b-ext", "c-ext"):
+            self._slow_extension(root, name)
+        ext.reload()
+
+        monkeypatch.setattr(ext, "UPDATE_SWEEP_SECONDS", 0.05)
+
+        def slow_head(url, ref, *, timeout=None):
+            import time as _time
+            _time.sleep(0.06)
+            return "deadbeef"
+
+        monkeypatch.setattr(ext, "_git_remote_head", slow_head)
+        rows = {row["id"]: row for row in ext.check_updates()}
+
+        assert len(rows) == 3
+        exhausted = [row for row in rows.values()
+                     if "budget" in (row["reason"] or "")]
+        assert exhausted, "the sweep ran every remote with no ceiling"
+        # Never "up to date" with the truth taken out.
+        assert all(row["update"] is False and row["checkable"] is False
+                   for row in exhausted)
+
+    def test_each_remote_gets_only_what_is_left_of_the_budget(
+            self, root, monkeypatch):
+        self._slow_extension(root, "a-ext")
+        ext.reload()
+        seen = {}
+
+        def record(url, ref, *, timeout=None):
+            seen["timeout"] = timeout
+            return "deadbeef"
+
+        monkeypatch.setattr(ext, "_git_remote_head", record)
+        # `raising=False` so this test states the BEHAVIOUR rather than the
+        # existence of a constant: without a sweep budget the call below still
+        # runs, and the recorded timeout is None.
+        monkeypatch.setattr(ext, "UPDATE_SWEEP_SECONDS", 3.0, raising=False)
+        ext.check_updates()
+
+        assert seen["timeout"] is not None, (
+            "each remote must be given its share of the sweep's budget")
+        assert seen["timeout"] <= 3.0

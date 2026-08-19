@@ -1350,6 +1350,18 @@ class CommittedTurn:
 _STAGE_KEY = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _ANCHOR_MODES = ("after", "before")
 
+#: Step-key namespaces an anchor may not name, because the planner has no
+#: single position to splice beside. `character:<id>` is the runtime's
+#: reserved dynamic namespace, planned as a PARALLEL GROUP -- splicing into
+#: the middle of one would silently serialize it. `ext:<id>:<key>` is another
+#: extension's stage, which is itself only spliced in during this same pass
+#: and so is not in the plan when anchors are resolved.
+#:
+#: Refused here rather than dropped by the planner: a stage anchored on one
+#: of these used to register cleanly, appear in `registered_stages()`, and
+#: never run on any turn, with nothing anywhere saying so.
+_UNSPLICEABLE_ANCHOR_PREFIXES = ("character:", "ext:")
+
 
 class ChatAccess:
     """`api.chats` -- the story lifecycle, declared rather than merely reachable.
@@ -1452,6 +1464,10 @@ class SonderExtensionAPI:
             raise ExtensionError(
                 f"stage {key!r} anchor must be 'after:<step>' or "
                 f"'before:<step>', not {anchor!r}")
+        if core.strip().startswith(_UNSPLICEABLE_ANCHOR_PREFIXES):
+            raise ExtensionError(
+                f"stage {key!r} anchor {anchor!r} names a step the plan "
+                f"cannot splice beside; anchor on a core step key")
         if on_error not in ("warn", "fail"):
             raise ExtensionError(
                 f"stage {key!r} on_error must be 'warn' or 'fail'")

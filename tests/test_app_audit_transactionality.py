@@ -311,3 +311,44 @@ class TestValidationStatusCodes:
             "SELECT 1 FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
             (chat_id, out["lorebook_id"]), one=True,
         )
+
+
+class TestARequiredKeyIsMissingNotMalformed:
+    """A body that omits a required key is the caller's mistake, and the
+    engine's own model for saying so is `chat_add_char`: `body.get(...)`, then
+    `HTTPException(400, "<key> required")`. Four routes indexed the key
+    directly, so an omission raised `KeyError` and surfaced as a 500 -- the
+    status that means "the server broke", which sends the caller looking in
+    the wrong place entirely.
+    """
+
+    def test_bind_lore_wants_the_key_present(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        with pytest.raises(HTTPException) as exc_info:
+            app.bind_lore(chat_id, {})
+        assert exc_info.value.status_code == 400
+
+    def test_bind_lore_still_unbinds_on_an_explicit_null(self, temp_db):
+        """Present-and-null is the caller SAYING none, which is how a lorebook
+        is unbound. Only absence is the error."""
+        chat_id = _make_chat(temp_db)
+        assert app.bind_lore(chat_id, {"lorebook_id": None}) == {
+            "lorebook_id": None}
+
+    def test_chat_add_persona_wants_the_key_present(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        with pytest.raises(HTTPException) as exc_info:
+            app.chat_add_persona(chat_id, {})
+        assert exc_info.value.status_code == 400
+
+    def test_submit_extra_player_input_wants_the_key_present(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        with pytest.raises(HTTPException) as exc_info:
+            app.submit_extra_player_input(chat_id, 0, {"input": "wait"})
+        assert exc_info.value.status_code == 400
+
+    def test_create_guest_invite_wants_the_key_present(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        with pytest.raises(HTTPException) as exc_info:
+            app.create_guest_invite(chat_id, {})
+        assert exc_info.value.status_code == 400

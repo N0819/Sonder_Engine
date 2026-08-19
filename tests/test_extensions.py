@@ -206,6 +206,53 @@ class TestDiscovery:
         extension_runtime.activate(refresh=True)
         assert extension_runtime.registered_stages() == []
 
+    def test_safe_mode_toggles_do_not_destroy_the_stored_set(
+            self, temp_db, ext_root):
+        """The documented recovery workflow -- boot safe, disable the culprit
+        -- must not be the action that wipes everything else.
+
+        `enabled_ids()` is a filtered READ (empty in safe mode, and narrowed
+        to what currently loads); the stored set is what survives a reboot.
+        Computing the second from the first means one toggle persists the
+        filter."""
+        from core.db import get_setting
+
+        for ext_id in ("alpha", "beta", "gamma"):
+            _write_extension(ext_root, ext_id, {
+                "id": ext_id, "version": "1", "ext_api": 1})
+        _enable("alpha", "beta", "gamma")
+
+        monkeypatch = pytest.MonkeyPatch()
+        try:
+            monkeypatch.setenv(extension_runtime.SAFE_MODE_ENV, "1")
+            extension_runtime.disable_extension("beta")
+        finally:
+            monkeypatch.undo()
+
+        stored = json.loads(get_setting(extension_runtime.ENABLED_SETTING))
+        assert sorted(stored) == ["alpha", "gamma"]
+
+    def test_a_toggle_does_not_forget_an_extension_that_will_not_load(
+            self, temp_db, ext_root):
+        """An extension whose manifest breaks is filtered out of the read.
+        Disabling an unrelated one must not make that filtering durable --
+        fixing the manifest has to bring it back switched on."""
+        from core.db import get_setting
+
+        for ext_id in ("alpha", "broken"):
+            _write_extension(ext_root, ext_id, {
+                "id": ext_id, "version": "1", "ext_api": 1})
+        _enable("alpha", "broken")
+
+        (ext_root / "broken" / "manifest.json").write_text(
+            "{not json", encoding="utf-8")
+        extension_runtime.installed_extensions(refresh=True)
+        assert extension_runtime.enabled_ids() == ["alpha"]
+
+        extension_runtime.disable_extension("alpha")
+        stored = json.loads(get_setting(extension_runtime.ENABLED_SETTING))
+        assert stored == ["broken"]
+
     def test_a_python_entry_that_raises_disables_only_itself(self, temp_db,
                                                              ext_root):
         _write_extension(ext_root, "explodes", {
@@ -292,6 +339,47 @@ class TestPlanSplice:
         _enable("nowhere")
         keys = [key for key, _ in build_plan({}, [], chat_id=_chat(temp_db))]
         assert not any(key.startswith("ext:") for key in keys)
+
+    def test_an_anchor_the_planner_cannot_splice_is_refused_at_registration(
+            self, temp_db, ext_root):
+        """Ordering two of your own stages -- `anchor="after:ext:<id>:<key>"`
+        -- is the obvious thing to reach for and the planner cannot do it.
+        It was ACCEPTED: the stage registered, appeared in
+        `registered_stages()`, and was never planned on any turn, with no
+        warning and no load error anywhere. Silence is the defect; the
+        refusal has to happen where the extension can read it."""
+        from agents.runtime import build_plan
+
+        _write_extension(ext_root, "chained", {
+            "id": "chained", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py"}},
+            files={"extension.py":
+                   "def register(api):\n"
+                   "    api.add_stage('first', anchor='after:narrator',\n"
+                   "                  handler=lambda v, x, n: {})\n"
+                   "    api.add_stage('second',\n"
+                   "                  anchor='after:ext:chained:first',\n"
+                   "                  handler=lambda v, x, n: {})\n"})
+        _enable("chained")
+
+        assert "anchor" in extension_runtime.disabled_reasons()["chained"]
+        keys = [key for key, _ in build_plan({}, [], chat_id=_chat(temp_db))]
+        assert not any(key.startswith("ext:") for key in keys)
+
+    def test_an_anchor_on_the_dynamic_character_group_is_refused_too(
+            self, ext_root):
+        """Same rule, same reason: `character:<id>` is planned as a parallel
+        group, so there is no single position to splice beside."""
+        _write_extension(ext_root, "chatty", {
+            "id": "chatty", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py"}},
+            files={"extension.py":
+                   "def register(api):\n"
+                   "    api.add_stage('note', anchor='after:character:5',\n"
+                   "                  handler=lambda v, x, n: {})\n"})
+        _enable("chatty")
+
+        assert "anchor" in extension_runtime.disabled_reasons()["chatty"]
 
     def test_two_extensions_at_one_anchor_order_by_id(self, temp_db, ext_root):
         from agents.runtime import build_plan
@@ -667,12 +755,74 @@ class TestCharacterTargeting:
 
 
 class TestHostSurface:
+    def test_a_disabled_extension_serves_no_assets(self, temp_db, ext_root):
+        """The same rule the two sibling servers apply: an extension the host
+        has switched off, or one that safe mode has switched off for them,
+        serves nothing. Without it `/asset/extension.py` returns the Python
+        source of an extension that is supposed to be inert."""
+        _write_extension(ext_root, "quiet", {
+            "id": "quiet", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py"}},
+            files={"extension.py": "def register(api):\n    pass\n"})
+        _enable("quiet")
+        assert extension_runtime.asset_path("quiet", "manifest.json").is_file()
+
+        extension_runtime.disable_extension("quiet")
+        with pytest.raises(ExtensionError, match="not enabled"):
+            extension_runtime.asset_path("quiet", "extension.py")
+
+    def test_safe_mode_serves_no_assets_either(self, temp_db, ext_root,
+                                               monkeypatch):
+        _write_extension(ext_root, "quiet", {
+            "id": "quiet", "version": "1", "ext_api": 1})
+        _enable("quiet")
+        monkeypatch.setenv(extension_runtime.SAFE_MODE_ENV, "1")
+        with pytest.raises(ExtensionError, match="not enabled"):
+            extension_runtime.asset_path("quiet", "manifest.json")
+
     def test_asset_paths_cannot_escape_the_extension_directory(
-            self, real_ext_root):
+            self, temp_db, real_ext_root):
+        _enable(DEMO)   # asset_path serves an ENABLED extension; see above
         assert extension_runtime.asset_path(DEMO, "manifest.json").is_file()
         for bad in ("../../db.py", "/etc/passwd", "", "ui/../../../db.py"):
             with pytest.raises(ExtensionError):
                 extension_runtime.asset_path(DEMO, bad)
+
+    def test_the_state_route_answers_for_both_of_an_extensions_homes(
+            self, temp_db, ext_root):
+        """An extension has TWO per-story homes since `frame_state` landed --
+        `ext:<id>` spanning eras and `extf:<id>` scoped to one. The route knew
+        about the first, so an extension whose mission state lives where the
+        docstring recommends put it read `null` from its own panel."""
+        from web import app
+
+        _write_extension(ext_root, "keeper", {
+            "id": "keeper", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py", "chat_state": True}},
+            files={"extension.py": "def register(api):\n    pass\n"})
+        _enable("keeper")
+        chat_id = _chat(temp_db)
+        api = extension_runtime._apis["keeper"]
+        api.state(chat_id).set_now({"provenance": "spans eras"})
+        api.frame_state(chat_id).set_now({"mission": "this era only"})
+
+        out = app.extension_state("keeper", chat_id)
+
+        assert out["state"] == {"provenance": "spans eras"}
+        assert out["frame_state"] == {"mission": "this era only"}
+
+    def test_the_state_route_404s_an_unknown_story(self, temp_db, ext_root):
+        """`{"state": null}` for a chat that does not exist is indistinguishable
+        from a chat that has stored nothing."""
+        from fastapi import HTTPException
+        from web import app
+
+        _write_extension(ext_root, "keeper", {
+            "id": "keeper", "version": "1", "ext_api": 1})
+        _enable("keeper")
+        with pytest.raises(HTTPException) as exc_info:
+            app.extension_state("keeper", 987654)
+        assert exc_info.value.status_code == 404
 
     def test_ui_bundle_wraps_each_enabled_extension(self, temp_db, ext_root):
         _write_extension(ext_root, "painter", {

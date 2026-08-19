@@ -38,6 +38,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 from typing import Any, Callable
 
 from .api import (
@@ -273,10 +274,17 @@ def _scan() -> tuple[dict[str, Extension], list[dict]]:
     except OSError:
         return found, errors
     for directory in children:
-        # `.staging-*` and friends: a half-written download in flight is not an
-        # installed extension, and reporting it as a broken one is noise.
+        # A dotted directory is not an extension: hidden entries under this
+        # root belong to the host or the filesystem, never to the scan.
         if directory.name.startswith("."):
             continue
+        # THIS is what keeps an install in flight out of the scan, and it is
+        # the reason a half-written download is never reported as a broken
+        # extension. Staging happens in a `tempfile.TemporaryDirectory` under
+        # this same root, which is named `tmpXXXXXXXX` and holds the bundle
+        # one level DEEPER -- so it has no manifest of its own here. Nothing
+        # in this tree has ever created a dot-prefixed staging directory; the
+        # guard above has never fired for that reason.
         if not (directory / "manifest.json").is_file():
             continue
         try:
@@ -313,10 +321,15 @@ def extension(ext_id: str) -> Extension | None:
 # ------------------------------------------------------------------ enabling
 
 
-def enabled_ids() -> list[str]:
-    """The host's enabled set, filtered to what is actually installed."""
-    if safe_mode():
-        return []
+def _stored_enabled_ids() -> list[str]:
+    """The DURABLE enabled set, exactly as the host last chose it.
+
+    Unfiltered on purpose. Safe mode and a broken manifest are reasons not to
+    RUN an extension; neither is the host changing their mind about it, and a
+    toggle that rewrote this from the filtered view would make them the same
+    thing -- boot safe, disable the culprit, and the recovery workflow is what
+    destroys every other extension's enablement.
+    """
     try:
         from core.db import get_setting
         raw = get_setting(ENABLED_SETTING)
@@ -328,8 +341,18 @@ def enabled_ids() -> list[str]:
         return []
     if not isinstance(stored, list):
         return []
+    return sorted({str(item) for item in stored})
+
+
+def enabled_ids() -> list[str]:
+    """What may run right now: the stored set, filtered to what will load.
+
+    A READ. Never the input to a write -- see `_stored_enabled_ids`.
+    """
+    if safe_mode():
+        return []
     installed = installed_extensions()
-    return sorted({str(item) for item in stored if str(item) in installed})
+    return [item for item in _stored_enabled_ids() if item in installed]
 
 
 def is_enabled(ext_id: str) -> bool:
@@ -347,7 +370,7 @@ def enable_extension(ext_id: str) -> dict:
     ext_id = str(ext_id or "")
     if ext_id not in installed_extensions():
         raise ExtensionError(f"no installed extension {ext_id!r}")
-    _write_enabled(enabled_ids() + [ext_id])
+    _write_enabled(_stored_enabled_ids() + [ext_id])
     activate(refresh=True)
     with _lock:
         record = _registered.get(ext_id)
@@ -357,7 +380,8 @@ def enable_extension(ext_id: str) -> dict:
 
 def disable_extension(ext_id: str) -> dict:
     ext_id = str(ext_id or "")
-    _write_enabled([item for item in enabled_ids() if item != ext_id])
+    _write_enabled([item for item in _stored_enabled_ids()
+                    if item != ext_id])
     activate(refresh=True)
     return {"id": ext_id, "enabled": False, "error": None}
 
@@ -711,10 +735,15 @@ def apply_plan_splices(plan, chat_id=None):
             core = core.strip()
             if mode not in ("after", "before") or not core:
                 continue
-            # `character:<id>` is the runtime's reserved dynamic namespace and
-            # is planned as a parallel group; splicing into the middle of one
-            # would silently serialize it.
-            if core.startswith("character:") or core.startswith("ext:"):
+            # Backstop only. `api.add_stage` refuses both of these at
+            # registration now, with a reason the host can read
+            # (`_UNSPLICEABLE_ANCHOR_PREFIXES`): `character:<id>` is the
+            # runtime's reserved dynamic namespace, planned as a parallel
+            # group that splicing would silently serialize, and
+            # `ext:<id>:<key>` is another extension's stage, which this very
+            # pass has not placed yet. A stage recorded before that check
+            # existed still must not be planned somewhere arbitrary.
+            if core.startswith(("character:", "ext:")):
                 continue
             (after if mode == "after" else before).setdefault(core, []).append(
                 (stage["full_key"], stage["label"]))
@@ -909,6 +938,22 @@ def dispatch_character_payload(ctx, char_id, payload, names=()):
     return current
 
 
+def _live_ids() -> list[str]:
+    """Extensions that actually REGISTERED, in id order.
+
+    Not `sorted(_registered)`: a record whose `register(api)` raised is kept
+    with an `.error` so the host can read the reason, and it is that keeping
+    which made a broken extension look live to anything iterating the
+    registry. Hook dispatch escapes by accident -- it iterates the record's
+    own hook lists, which a failed record leaves empty -- but the two
+    DECLARATIVE seams read stored per-story blocks that outlive the session
+    the extension worked in, so they had nothing empty to iterate.
+    """
+    with _lock:
+        return sorted(ext_id for ext_id, record in _registered.items()
+                      if not record.error)
+
+
 def _narration_blocks(chat_id) -> list:
     """Every enabled extension's standing block for this story, in id order.
 
@@ -921,8 +966,7 @@ def _narration_blocks(chat_id) -> list:
         return []
     try:
         activate()
-        with _lock:
-            ids = sorted(_registered)
+        ids = _live_ids()
     except Exception:
         log.exception("extension narration blocks could not be resolved")
         return []
@@ -955,8 +999,7 @@ def _director_blocks(chat_id, phase) -> list:
         return []
     try:
         activate()
-        with _lock:
-            ids = sorted(_registered)
+        ids = _live_ids()
     except Exception:
         log.exception("extension director blocks could not be resolved")
         return []
@@ -1422,10 +1465,17 @@ def asset_path(ext_id: str, relative: str) -> Path:
 
     Containment is checked on the RESOLVED path, so a symlink pointing out of
     the tree is refused the same way `../` is.
+
+    Enabled as well as installed, which is the same rule `extension_script`
+    and `extension_styles` apply: switching an extension off has to reach
+    everything it serves, or `/asset/extension.py` hands back the source of
+    an extension the host believes is inert. Safe mode counts as off.
     """
     ext = installed_extensions().get(str(ext_id or ""))
     if ext is None:
         raise ExtensionError(f"no installed extension {ext_id!r}")
+    if not is_enabled(ext.id):
+        raise ExtensionError(f"extension {ext.id!r} is not enabled")
     candidate = Path(str(relative or ""))
     if not str(relative or "").strip() or candidate.is_absolute():
         raise ExtensionError("asset path must be relative")
@@ -1771,7 +1821,7 @@ def _source_kind(source: str) -> str:
     return "zip"
 
 
-def _git(*args, cwd=None) -> str:
+def _git(*args, cwd=None, timeout=None) -> str:
     """Run one git command with the environment held still.
 
     `GIT_TERMINAL_PROMPT=0` is the load-bearing one: without it a private or
@@ -1791,13 +1841,14 @@ def _git(*args, cwd=None) -> str:
     try:
         done = subprocess.run(
             ("git",) + tuple(args), cwd=str(cwd) if cwd else None, env=env,
-            capture_output=True, text=True, timeout=GIT_TIMEOUT_SECONDS)
+            capture_output=True, text=True,
+            timeout=GIT_TIMEOUT_SECONDS if timeout is None else timeout)
     except FileNotFoundError as exc:
         raise ExtensionError(
             "git is not installed, so a repository cannot be cloned") from exc
     except subprocess.TimeoutExpired as exc:
-        raise ExtensionError(
-            f"git gave up after {GIT_TIMEOUT_SECONDS}s") from exc
+        spent = GIT_TIMEOUT_SECONDS if timeout is None else timeout
+        raise ExtensionError(f"git gave up after {spent:g}s") from exc
     if done.returncode != 0:
         detail = (done.stderr or done.stdout or "").strip().splitlines()
         raise ExtensionError(
@@ -1824,13 +1875,14 @@ def _git_clone(source: str, destination: Path) -> tuple[str, str, str]:
     return url, ref, commit
 
 
-def _git_remote_head(url: str, ref: str | None) -> str:
+def _git_remote_head(url: str, ref: str | None, *, timeout=None) -> str:
     """The commit a remote's branch or tag points at, without cloning it.
 
     One round trip and no download, which is what makes an update CHECK cheap
     enough to run for every installed extension at once.
     """
-    out = _git("ls-remote", "--heads", "--tags", "--", url, *( [ref] if ref else [] ))
+    out = _git("ls-remote", "--heads", "--tags", "--", url,
+               *([ref] if ref else []), timeout=timeout)
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 2:
@@ -1959,6 +2011,12 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
             origin = Path(source).expanduser()
             if not origin.is_dir():
                 raise ExtensionError(f"not a directory: {source}")
+            # Audited BEFORE the copy, and for the same reason the git branch
+            # audits the checkout: `copytree(symlinks=False)` DEREFERENCES a
+            # link rather than refusing it, so a link audited afterwards is
+            # already a copy of whatever it pointed at. A folder is a source
+            # like any other -- the rules must not depend on how it travelled.
+            _audit_tree(origin)
             shutil.copytree(origin, staged, dirs_exist_ok=True,
                             symlinks=False, ignore=shutil.ignore_patterns(
                                 "__pycache__", "*.pyc", ".git"))
@@ -2013,7 +2071,7 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
     raise ExtensionError(f"{candidate.id!r} did not load after install")
 
 
-def check_update(extension_id: str) -> dict:
+def check_update(extension_id: str, *, timeout=None) -> dict:
     """Is there a newer commit for one installed extension?
 
     Never raises. A network failure, a repository that has moved, a git that
@@ -2043,7 +2101,9 @@ def check_update(extension_id: str) -> dict:
         row["reason"] = "installed before update checking existed"
         return row
     try:
-        row["latest"] = _git_remote_head(ext.source_url, ext.source_ref or None)
+        row["latest"] = _git_remote_head(ext.source_url,
+                                         ext.source_ref or None,
+                                         timeout=timeout)
     except ExtensionError as exc:
         row["checkable"] = False
         row["reason"] = str(exc)
@@ -2056,10 +2116,47 @@ def check_update(extension_id: str) -> dict:
     return row
 
 
+#: Wall-clock ceiling for one whole update sweep, in seconds.
+#:
+#: `check_update` is cheap in BANDWIDTH -- one `ls-remote` each, no download --
+#: which is what makes checking everything at once reasonable, and says
+#: nothing about latency, which is what actually bounds a request. Serially,
+#: ten installed extensions against an unreachable network is ten times
+#: `GIT_TIMEOUT_SECONDS`: a twenty-minute HTTP request holding a threadpool
+#: worker for a question whose answer is "maybe later".
+UPDATE_SWEEP_SECONDS = 60.0
+
+
 def check_updates() -> list[dict]:
-    """`check_update` for everything installed, in id order."""
-    return [check_update(ext_id)
-            for ext_id in sorted(installed_extensions())]
+    """`check_update` for everything installed, in id order.
+
+    Bounded by `UPDATE_SWEEP_SECONDS` overall: each remote gets what is left
+    of the budget, and once it is spent the remaining extensions are reported
+    UNCHECKABLE with the reason rather than skipped or reported up to date --
+    "up to date" with the truth taken out is the one answer this must never
+    give, which `check_update` already says about its own failures.
+    """
+    deadline = time.monotonic() + UPDATE_SWEEP_SECONDS
+    rows = []
+    for ext_id in sorted(installed_extensions()):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            ext = installed_extensions().get(ext_id)
+            rows.append({
+                "id": ext_id, "name": getattr(ext, "name", ext_id),
+                "version": getattr(ext, "version", ""),
+                "current": getattr(ext, "commit", ""), "latest": "",
+                "update": False, "checkable": False,
+                "source_url": getattr(ext, "source_url", ""),
+                "source_ref": getattr(ext, "source_ref", ""),
+                "reason": (f"the update check ran out of its "
+                           f"{UPDATE_SWEEP_SECONDS:g}s budget before "
+                           f"reaching this one"),
+            })
+            continue
+        rows.append(check_update(ext_id, timeout=min(remaining,
+                                                     GIT_TIMEOUT_SECONDS)))
+    return rows
 
 
 def update_extension(extension_id: str) -> dict:

@@ -102,6 +102,34 @@ def _frame_of(turn):
             "kind": row["kind"]}
 
 
+def _reading_frame(turn):
+    """Read everything in ONE frame: the frame of the turn being reported.
+
+    `latest_turn(chat_id)` deliberately picks the newest turn across every
+    frame -- "whatever frame the story is actually on". Every world read
+    beside it routes through `db.active_frame_id`, a ContextVar that is unset
+    outside a pipeline run and therefore answers for the PRESENT frame. A
+    projection built from both reported one frame's label beside another
+    frame's rooms, positions, clock and recognition ledger, which is a world
+    nobody is standing in. Resolving the frame once and holding it for the
+    whole read is the only way the two can agree; the alternative is
+    remembering to pass a frame to every `wget` in the module, forever.
+    """
+    from contextlib import contextmanager
+
+    from core.db import active_frame_id
+
+    @contextmanager
+    def scope():
+        token = active_frame_id.set(turn["frame_id"] if turn else None)
+        try:
+            yield
+        finally:
+            active_frame_id.reset(token)
+
+    return scope()
+
+
 def _step_content(turn_id, key):
     """The active variant of one step, or `None`.
 
@@ -183,9 +211,15 @@ def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT):
     if not chat:
         raise ValueError(f"no chat {chat_id}")
 
+    turn = latest_turn(chat_id)
+    with _reading_frame(turn):
+        return _story_view_in_frame(chat_id, chat, turn, events)
+
+
+def _story_view_in_frame(chat_id, chat, turn, events):
+    """The body of `story_view`, run with the reported frame held open."""
     from story.scene import get_scene, player_authority, simulation_clock
 
-    turn = latest_turn(chat_id)
     scene = get_scene(chat_id, chat) or {}
     try:
         limit = max(0, min(MAX_EVENT_LIMIT, int(events)))
@@ -227,6 +261,21 @@ def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT):
 # ------------------------------------------------------------ player-safe
 
 
+def _persona_sheet_name(sheet):
+    """An extra player's identity name, from their sheet. Same rule as the
+    primary persona -- `story/scene.py` seeds them under `persona_name(sheet)`
+    too, so that is the key the scene and the ledger will answer to."""
+    from story.character_schema import persona_name
+
+    try:
+        parsed = json.loads(sheet or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    return persona_name(parsed) or ""
+
+
 def viewers(chat_id):
     """Who this story can be projected for, as `{id, name, kind}`.
 
@@ -234,16 +283,30 @@ def viewers(chat_id):
     and a character's numeric id -- so a caller never has to guess the spelling
     of the thing it is about to ask for.
     """
+    from story.character_schema import persona_name
+    from story.scene import persona_of
+
     chat_id = int(chat_id)
     out = []
-    persona = q("SELECT p.id, p.name FROM personas p JOIN chats c "
-                "ON c.persona_id=p.id WHERE c.id=?", (chat_id,), one=True)
-    if persona:
-        out.append({"id": "player", "name": persona["name"], "kind": "player"})
-    for row in q("SELECT cp.persona_id, p.name FROM chat_personas cp "
+    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    if chat:
+        # The name here is a JOIN KEY, not a label: `known` and the scene's
+        # `positions` are both keyed by the sheet's identity name. The
+        # denormalised `personas.name` column is a copy taken at insert time
+        # and free to diverge from the sheet forever after -- where it has,
+        # every lookup keyed on it misses silently and reads as "recognises
+        # nobody" rather than as a miss. `persona_of` also answers for a chat
+        # with no persona attached, with the same "The Stranger" the scene is
+        # seeded under; emitting nothing there made this the only reader in
+        # the engine that cannot see the default player.
+        out.append({"id": "player",
+                    "name": persona_name(persona_of(dict(chat))),
+                    "kind": "player"})
+    for row in q("SELECT cp.persona_id, p.name, p.sheet FROM chat_personas cp "
                  "JOIN personas p ON p.id=cp.persona_id WHERE cp.chat_id=? "
                  "ORDER BY cp.persona_id", (chat_id,)):
-        out.append({"id": f"extra:{row['persona_id']}", "name": row["name"],
+        out.append({"id": f"extra:{row['persona_id']}",
+                    "name": _persona_sheet_name(row["sheet"]) or row["name"],
                     "kind": "player"})
     for member in _cast(chat_id):
         out.append({"id": str(member["char_id"]), "name": member["name"],
@@ -623,10 +686,16 @@ def player_view(chat_id, viewer="player", *, memories=12):
     if identity is None:
         raise ValueError(f"no viewer {viewer!r} in chat {chat_id}")
 
+    turn = latest_turn(chat_id)
+    with _reading_frame(turn):
+        return _player_view_in_frame(chat_id, identity, turn, memories)
+
+
+def _player_view_in_frame(chat_id, identity, turn, memories):
+    """The body of `player_view`, run with the reported frame held open."""
     from story.scene import get_scene, simulation_clock
     from world.spatial import room_of
 
-    turn = latest_turn(chat_id)
     scene = get_scene(chat_id) or {}
     name = identity["name"]
 
