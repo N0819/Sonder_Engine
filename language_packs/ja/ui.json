@@ -133,6 +133,7 @@
   "<path d=\"": "<path d=\"",
   "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0": "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0",
   "?frame_id=${run.frameId}": "?frame_id=${run.frameId}",
+  "?frame_id=${S.currentFrameId}": "?frame_id=${S.currentFrameId}",
   "A bed is meant to be true to the room, so the engine can decline to lay one under a place that has none. 🎲 below overrules that and finds a sound anyway.": "ベッドは部屋に忠実であるべきなので、エンジンはベッドがない場所にベッドを置くことを拒否できます。下の🎲はそれを覆し、とにかく音を見つけます。",
   "A bystander reacts": "傍観者が反応する",
   "A capability list is what the extension DECLARES, checked against what it registers. It is a statement of intent for you to judge, not a restriction the engine enforces.": "機能一覧は拡張機能が「宣言」した内容であり、実際に登録した内容と照合されます。これはあなたが判断するための意思表明であって、エンジンが強制する制限ではありません。",

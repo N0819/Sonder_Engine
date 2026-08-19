@@ -107,3 +107,88 @@ def test_ordinary_world_state_is_still_rolled_back(temp_db):
 
     assert temp_db.wget(cid, "pending", None) == []
     assert "pending" not in PRESERVED_SETTING_KEYS
+
+
+def test_the_dials_the_audit_left_undecided_survive_reroll(temp_db):
+    """WEB-7's residue: four world keys written by host routes were not on
+    the preserve list, so a reroll or branch silently reverted them.
+
+    Three are dials by the docstring's own test -- a preference the host set,
+    not a fact the fiction produced:
+
+    * `living_world` -- what the world does on its own. Same family as
+      `background_config`; the CONSEQUENCES it mints are diegetic and still
+      roll back, exactly as vitals roll back while `survival_enabled` stands.
+    * `player_authority` -- the dial a story's whole premise can rest on
+      (`Design.md` hard mode). Switch to `actor_only` at turn 40, reroll
+      turn 40, and getting `world_author` back with no notice is the exact
+      bug this list exists to prevent.
+    * `survival_track_npcs` -- display sibling of `survival_enabled`, which
+      is already preserved; the pair was split when the toggle joined.
+    """
+    cid = _chat(temp_db)
+    temp_db.wset(cid, "scene", {"rooms": {}, "positions": {}})
+    ensure_checkpoint(cid, 1)
+
+    temp_db.wset(cid, "living_world", {"routine_residue": "floor"})
+    temp_db.wset(cid, "player_authority",
+                 {"mode": "actor_only",
+                  "changes": [{"turn_idx": 1, "mode": "actor_only"}]})
+    temp_db.wset(cid, "survival_track_npcs", True)
+
+    restore_checkpoint(cid, 1)
+
+    assert temp_db.wget(cid, "living_world", {}).get("routine_residue") == "floor"
+    assert temp_db.wget(cid, "player_authority", {}).get("mode") == "actor_only"
+    assert temp_db.wget(cid, "survival_track_npcs") is True
+
+
+def test_the_authority_change_record_is_not_rolled_back_with_the_beat(temp_db):
+    """The change history rides in the same blob as the mode, and it is
+    wall-clock history OF THE DIAL -- when the host moved it -- not story
+    state. Rolling it back would erase the only record that explains why an
+    earlier beat granted what the current mode refuses
+    (scene.player_authority's own docstring). Same argument that keeps
+    `fixed_points` past the turn they were declared on."""
+    cid = _chat(temp_db)
+    temp_db.wset(cid, "player_authority",
+                 {"mode": "world_author", "changes": []})
+    temp_db.wset(cid, "scene", {"rooms": {}})
+    ensure_checkpoint(cid, 1)
+
+    temp_db.wset(cid, "player_authority",
+                 {"mode": "explicit_outcomes",
+                  "changes": [{"turn_idx": 4, "mode": "explicit_outcomes"}]})
+
+    restore_checkpoint(cid, 1)
+
+    stored = temp_db.wget(cid, "player_authority", {})
+    assert stored.get("mode") == "explicit_outcomes"
+    assert stored.get("changes") == [
+        {"turn_idx": 4, "mode": "explicit_outcomes"}]
+
+
+def test_the_presence_namespace_survives_a_restore_from_before_its_mint(temp_db):
+    """`presence_id_namespace` is the fourth key, preserved on a CORRECTNESS
+    argument rather than a preference one: it is the secret nonce that keeps
+    every viewer-scoped anonymous `body:` id stable (web/story_view.py).
+
+    It is minted lazily on first projection, so a checkpoint taken before
+    that mint does not carry it -- and a restore that wipes it forces a
+    re-mint, which re-keys every anonymous id a viewer has ever seen,
+    mid-story. The projection schema's whole point is that those ids hold
+    still while the labels around them move.
+
+    An archive import minting a fresh one
+    (chat_archive.UNEXPORTED_WORLD_KEYS) is the OTHER case and stays as it
+    is: a different chat is a different projection. A restore is the same
+    story, so the namespace must hold."""
+    cid = _chat(temp_db)
+    temp_db.wset(cid, "scene", {"rooms": {}})
+    ensure_checkpoint(cid, 1)  # predates the mint
+
+    temp_db.wset(cid, "presence_id_namespace", "aa" * 16)
+
+    restore_checkpoint(cid, 1)
+
+    assert temp_db.wget(cid, "presence_id_namespace") == "aa" * 16
