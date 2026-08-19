@@ -528,3 +528,25 @@ def test_the_quadrant_fallback_label_exists_in_every_packs_lexicon():
             assert entry is not None, (pack.id, label)
             assert (entry["v"], entry["a"]) == (v_sign, a_sign), (
                 pack.id, label, entry)
+
+
+#: Names that reached the shipped prompt cards from one of the owner's live
+#: stories. A prompt is read by EVERY story, so an example drawn from one of
+#: them narrows what the model thinks the field is for (CLAUDE.md, fix the
+#: class not the instance). This is a tripwire, not the rule: the rule is that
+#: a prompt names the distinction -- "any craft whose inside is rooms you
+#: stand in", "the perceiver is you" -- and these two are what taught it.
+_STORY_INSTANCE_NAMES = ("TARDIS", "Hinami")
+
+
+def test_no_prompt_card_names_a_character_or_vehicle_from_one_story():
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        body = json.dumps(
+            (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json")
+            .read_text(encoding="utf-8"))
+        found = [name for name in _STORY_INSTANCE_NAMES if name in body]
+        assert not found, (
+            f"{pack.id} prompt card names {found} -- an instance from one "
+            "story, in a sheet every story reads")
