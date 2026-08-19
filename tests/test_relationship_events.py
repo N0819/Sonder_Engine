@@ -16,7 +16,8 @@ from __future__ import annotations
 import pytest
 
 from memory import (apply_relationship_updates, get_relationships,
-                    relationship_history)
+                    relationship_history,
+                    update_relationships_from_inference)
 
 
 def _chat(db):
@@ -66,6 +67,59 @@ class TestTheReasonSurvives:
         cid = _chat(db_module)
         turns = [e["turn_idx"] for e in _history(db_module, cid)]
         assert turns == sorted(turns)
+
+
+class TestEveryPathThatMovesAStanceLeavesAReason:
+    """There are two of them, and only one was writing rows.
+
+    `apply_relationship_updates` carries a declared stance change and records
+    an event per axis. `update_relationships_from_inference` moves trust from
+    what a character CONCLUDED about someone -- the same scalar, the same
+    graph, saved by the same call -- and wrote nothing at all. A whole class of
+    trust movement was missing from a ledger whose entire purpose is that it is
+    never updated and never deleted, so the gap does not show as a wrong row;
+    it shows as a stance the history cannot explain.
+    """
+
+    def test_an_inferred_trust_move_is_recorded(self):
+        import db as db_module
+        cid = _chat(db_module)
+
+        update_relationships_from_inference(cid, 7, 12, [{
+            "about": "Mora", "confidence": 0.8,
+            "conclusion": "she lied about the gate"}])
+
+        history = relationship_history(cid, 7, "Mora")
+        assert [e["axis"] for e in history] == ["trust"]
+        assert history[0]["delta"] < 0
+        assert "lied" in history[0]["note"]
+
+    def test_the_reason_is_marked_as_inferred_not_declared(self):
+        """Concluding someone is dangerous and being TOLD you distrust them are
+        different provenances, and the ledger already distinguishes evidenced
+        from unevidenced for exactly this reason."""
+        import db as db_module
+        cid = _chat(db_module)
+
+        update_relationships_from_inference(cid, 7, 12, [{
+            "about": "Mora", "confidence": 0.9,
+            "conclusion": "she saved me from the water"}])
+
+        history = relationship_history(cid, 7, "Mora")
+        assert history[0]["provenance"] == "inference"
+        assert history[0]["delta"] > 0
+
+    def test_a_conclusion_that_moves_nothing_writes_nothing(self):
+        """Familiarity creeps up on every mention; that is not a reason for
+        anything and must not fill the ledger with rows carrying no delta."""
+        import db as db_module
+        cid = _chat(db_module)
+
+        update_relationships_from_inference(cid, 7, 12, [{
+            "about": "Mora", "confidence": 0.5,
+            "conclusion": "she is standing by the window"}])
+
+        assert relationship_history(cid, 7, "Mora") == []
 
 
 class TestTheProjectionStillAgrees:

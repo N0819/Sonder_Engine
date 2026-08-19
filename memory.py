@@ -4758,8 +4758,32 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
     save_relationships(chat_id, char_id, graph)
     return graph
 
-def update_relationships_from_inference(chat_id, char_id, turn_idx, inference_updates, existing=None):
+def update_relationships_from_inference(chat_id, char_id, turn_idx,
+                                        inference_updates, existing=None,
+                                        frame_id=_UNSET):
+    """Move a stance from what the character CONCLUDED about someone.
+
+    The second of the two paths that move the scalar graph, and the one that
+    left no trace. `apply_relationship_updates` writes a `relationship_events`
+    row per axis that moved -- a ledger that is never updated and never deleted,
+    because the graph holds one `salient_event` string and overwrites it
+    whenever the character feels anything at all. This path moved the same
+    scalar, on the same graph, saved by the same call, and recorded nothing. A
+    whole class of trust movement was missing from the record of why trust is
+    where it is, and the gap does not surface as a wrong row: it surfaces as a
+    stance whose history cannot explain it.
+
+    The reason is stamped `inference` rather than `character`, because
+    concluding somebody is dangerous and being told so are different
+    provenances and the ledger already exists to keep that difference.
+
+    NOTE, still open: the word list below decides trust movement in English
+    only. It is the class registered as MIND-F4 -- routing it through
+    `language_runtime` needs a `mind.*` linguistics key that no pack has yet.
+    """
     graph = existing or get_relationships(chat_id, char_id)
+    resolved_frame_id = (
+        _active_frame_id.get() if frame_id is _UNSET else frame_id)
     for u in inference_updates:
         about = u.get("about", "")
         if not about:
@@ -4774,6 +4798,14 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx, inference_up
             trust_delta = -0.15 * confidence
         if trust_delta != 0:
             graph.adjust_trust(about, trust_delta, conclusion[:200])
+            # The conclusion IS the reason, so it is the note. No trigger ids:
+            # an inference cites the events it was drawn from upstream, and
+            # inventing one here would put a fabricated citation in a ledger
+            # that is never corrected.
+            record_relationship_event(
+                chat_id, char_id, about, "trust", trust_delta,
+                note=conclusion, provenance="inference",
+                turn_idx=turn_idx, frame_id=resolved_frame_id)
         graph.update(about,
             familiarity=min(1.0, (graph.get(about).familiarity + 0.05) if graph.get(about) else 0.05),
             last_interaction_turn=turn_idx)
