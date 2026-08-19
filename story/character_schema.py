@@ -1530,13 +1530,17 @@ def character_projects(sheet: dict) -> list[dict]:
     barren stretches, single successes, and the death of the tactics that
     serve it. See docs/design/DESIGN_LONG_TERM_GOALS.md.
 
-    At most two, because scarcity is what makes the tier mean anything --
-    the runtime cap (affect.PROJECT_CAP) holds the same line. Ids are
+    Capped at `affect.PROJECT_CAP` -- READ, not restated, because scarcity is
+    what makes the tier mean anything and two numbers for one line is how a
+    card comes to be allowed fewer projects than the runtime will adopt. Ids
+    are
     namespaced 'pa<n>' so they never collide with runtime-adopted 'p<n>'.
     Accepts plain strings as well as dicts, for the same reason
     character_standing_intentions does: a card written the obvious way must
     not silently get nothing.
     """
+    from mind import affect
+
     psych = normalize_character_data(sheet).get("psychology", {})
     out = []
     for i, p in enumerate(psych.get("projects") or [], 1):
@@ -1554,7 +1558,7 @@ def character_projects(sheet: dict) -> list[dict]:
             "satisfied_when": str(p.get("satisfied_when") or "").strip(),
             "authored": True, "adopted_turn": 0,
         })
-        if len(out) >= 2:
+        if len(out) >= affect.PROJECT_CAP:
             break
     return out
 
