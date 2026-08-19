@@ -27,8 +27,12 @@ grounding drop working as designed or the tool's quote matching being strict.
 
 The discriminator that made all of this possible needs no schema change: the
 phrase list is a pure function of the quote, so a kept line the list would have
-REJECTED is one only this character preserved. That only holds while the copy
-of the list in the tool matches the real one, which is what this file pins.
+REJECTED is one only this character preserved. That only holds while the tool
+asks the same question the engine asked, which is what this file pins. Both
+now read one table -- `persist.commit_memory._DURABLE_QUOTE_MARKERS` in the
+story's own language pack -- so the two can no longer drift apart by editing
+one of them; what they can still do is read it differently, and that is what
+is checked here.
 """
 
 from __future__ import annotations
@@ -66,11 +70,13 @@ NOT_LISTED = [
 ]
 
 
-class TestTheInlinedPhraseListStaysInSync:
-    """The tool deliberately does not import the engine -- importing `commit`
-    pulls in the database configuration behind it, and a read-only analysis
-    tool that opens a live database for writing is worse than a duplicated
-    list. The duplicate is safe only while this test exists."""
+class TestTheToolAsksTheSameQuestionTheEngineAsked:
+    """The tool still does not import the engine -- importing `commit` pulls
+    the database configuration in behind it, and a read-only analysis tool
+    that opens a live database for writing is worse than a second copy of a
+    word list. It does not need to: `language_runtime` defers every `core.db`
+    import into a function body, so both sides can read the one pack table
+    without either of them configuring a database."""
 
     def test_every_listed_phrase_agrees(self):
         for text in LISTED:
@@ -86,6 +92,19 @@ class TestTheInlinedPhraseListStaysInSync:
         for text in ("", None, "   "):
             assert (remember_lines._phrase_list_would_keep(text)
                     == _durable_dialogue_category(text))
+
+    def test_the_tool_reads_the_language_the_story_was_played_in(self):
+        """COMMIT-12: the discriminator is "would the list have kept this",
+        and asking it in English of a Japanese line answers no every time --
+        which counts every kept line in that story as the character's own
+        judgement and silently inflates the one number this tool produces."""
+        from language_runtime import language_scope
+
+        line = "必ず戻ると約束する"
+        assert remember_lines._phrase_list_would_keep(line, "en") is None
+        assert remember_lines._phrase_list_would_keep(line, "ja") == "promise"
+        with language_scope("ja"):
+            assert _durable_dialogue_category(line) == "promise"
 
 
 class TestWhatTheListCannotCatch:

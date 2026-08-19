@@ -44,31 +44,49 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from language_runtime import DEFAULT_LANGUAGE, STORY_LANGUAGE_KEY, linguistic
 
-def _phrase_list_would_keep(text):
-    """`persist/commit_memory.py`'s `_durable_dialogue_category` (re-exported
-    by the `commit` facade), inlined rather than imported so this tool never
-    pulls the engine -- and its database configuration -- in behind it. Kept in
-    sync by test_remember_lines_telemetry.py, which asserts the two agree on
-    every phrase."""
+
+def _phrase_list_would_keep(text, language_id=DEFAULT_LANGUAGE):
+    """`persist/commit_memory.py`'s `_durable_dialogue_category`, reading the
+    same pack table rather than a second copy of the phrases.
+
+    The list used to be inlined here so the tool never pulled the engine -- and
+    its database configuration -- in behind it. `language_runtime` is not the
+    engine: it defers every `core.db` import into a function body, so importing
+    it configures no database. What it buys is that the tool measures the rule
+    the STORY was judged by. A copy of the English phrases would have counted
+    every Japanese kept line as "only this character's judgement", which is the
+    one number this tool exists to produce.
+    """
     lowered = (text or "").lower()
-
-    def _spoken(marker):
-        # Word boundary at the marker's start, inflection allowed at its end
-        # -- "I promised" matches, "compromised" does not. Mirrors
-        # commit_memory.
-        return re.search(r"\b" + re.escape(marker), lowered) is not None
-
-    if any(_spoken(w) for w in ("promise", "i swear", "i vow",
-                                "you have my word", "i'll return",
-                                "i will return")):
-        return "promise"
-    if any(_spoken(w) for w in ("my name is", "call me", "i confess",
-                                "the truth is", "i killed", "i betrayed",
-                                "i love you", "i hate you", "i'll kill",
-                                "i will kill")):
-        return "dialogue"
+    markers = linguistic("persist.commit_memory", "_DURABLE_QUOTE_MARKERS",
+                         language_id)
+    for category, patterns in markers.items():
+        if any(re.search(pattern, lowered) for pattern in patterns):
+            return category
     return None
+
+
+def _story_language(con, chat_id, _cache={}):
+    """The language a chat was played in, read straight from `world`.
+
+    Raw SQL rather than `wget` for the same reason the rest of this file uses
+    raw SQL: the tool opens its own read-only connection and must not import
+    the engine's database layer.
+    """
+    if chat_id not in _cache:
+        row = con.execute(
+            "SELECT value FROM world WHERE chat_id=? AND key=?",
+            (chat_id, STORY_LANGUAGE_KEY)).fetchone()
+        stored = DEFAULT_LANGUAGE
+        if row is not None:
+            try:
+                stored = json.loads(row["value"]) or DEFAULT_LANGUAGE
+            except (TypeError, ValueError):
+                stored = DEFAULT_LANGUAGE
+        _cache[chat_id] = str(stored)
+    return _cache[chat_id]
 
 
 def _norm(text):
@@ -151,7 +169,8 @@ def collect(con):
             continue
         landed += 1
         slot["landed"] += 1
-        was_listed = _phrase_list_would_keep(mark["quote"]) is not None
+        was_listed = _phrase_list_would_keep(
+            mark["quote"], _story_language(con, mark["chat_id"])) is not None
         if was_listed:
             redundant += 1
             slot["redundant"] += 1
