@@ -892,6 +892,23 @@ window.addEventListener("unhandledrejection", event => {
   toast(reason?.message || String(reason || "Something went wrong"), "err", 8000);
 });
 
+// The other half of the same net, and the half that was missing: a handler
+// that throws SYNCHRONOUSLY never produces a rejection, so it reached nothing.
+// A bare `JSON.parse` over a malformed sheet, a `.map` over a bootstrap key
+// that did not arrive -- each is the identical "clicking does nothing" the
+// listener above exists to eliminate, and each was still silent.
+//
+// `error` also fires for a failed script or image load, which carries no
+// usable message; those stay in the console rather than becoming a toast the
+// reader can do nothing with.
+window.addEventListener("error", event => {
+  const thrown = event.error;
+  if (thrown && thrown.__handled) return;
+  const message = thrown?.message || event.message;
+  if (!message) return;
+  toast(String(message), "err", 8000);
+});
+
 
 // ---- Embedding reconciler progress -----------------------------------------
 //
