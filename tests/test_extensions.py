@@ -788,6 +788,42 @@ class TestHostSurface:
             with pytest.raises(ExtensionError):
                 extension_runtime.asset_path(DEMO, bad)
 
+    def test_the_state_route_answers_for_both_of_an_extensions_homes(
+            self, temp_db, ext_root):
+        """An extension has TWO per-story homes since `frame_state` landed --
+        `ext:<id>` spanning eras and `extf:<id>` scoped to one. The route knew
+        about the first, so an extension whose mission state lives where the
+        docstring recommends put it read `null` from its own panel."""
+        from web import app
+
+        _write_extension(ext_root, "keeper", {
+            "id": "keeper", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py", "chat_state": True}},
+            files={"extension.py": "def register(api):\n    pass\n"})
+        _enable("keeper")
+        chat_id = _chat(temp_db)
+        api = extension_runtime._apis["keeper"]
+        api.state(chat_id).set_now({"provenance": "spans eras"})
+        api.frame_state(chat_id).set_now({"mission": "this era only"})
+
+        out = app.extension_state("keeper", chat_id)
+
+        assert out["state"] == {"provenance": "spans eras"}
+        assert out["frame_state"] == {"mission": "this era only"}
+
+    def test_the_state_route_404s_an_unknown_story(self, temp_db, ext_root):
+        """`{"state": null}` for a chat that does not exist is indistinguishable
+        from a chat that has stored nothing."""
+        from fastapi import HTTPException
+        from web import app
+
+        _write_extension(ext_root, "keeper", {
+            "id": "keeper", "version": "1", "ext_api": 1})
+        _enable("keeper")
+        with pytest.raises(HTTPException) as exc_info:
+            app.extension_state("keeper", 987654)
+        assert exc_info.value.status_code == 404
+
     def test_ui_bundle_wraps_each_enabled_extension(self, temp_db, ext_root):
         _write_extension(ext_root, "painter", {
             "id": "painter", "version": "1", "ext_api": 1,
