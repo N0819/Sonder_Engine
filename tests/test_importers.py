@@ -325,3 +325,51 @@ def test_png_character_card_imports_end_to_end(temp_db, monkeypatch):
 
     assert character_id
     assert imported["identity"]["name"] == "PNG Character"
+
+# --- the book type a guessed category maps to -------------------------------
+#
+# `guess_book_type` mapped six categories to book types. Two of them,
+# `character` and `knowledge`, are categories `guess_category` cannot return
+# -- they belong to `memory.LORE_CATEGORIES`, the vocabulary an entry's own
+# `category` field uses, not to the six-way guess feeding this map. And two
+# categories it DOES return, `myth` and `other`, were absent, so a book of
+# legends and a book of nothing recognisable both fell through to "general".
+#
+# The map's domain is now exactly the guess's range, with a test binding
+# them: a reader adding a branch to one has no signal that the other is the
+# thing that must change.
+
+class TestBookTypeFollowsTheGuessedCategory:
+    def test_the_map_answers_for_every_category_the_guess_can_return(self):
+        from story.importers import GUESSABLE_CATEGORIES, _BOOK_TYPE_BY_CATEGORY
+        assert set(_BOOK_TYPE_BY_CATEGORY) == set(GUESSABLE_CATEGORIES)
+
+    def test_the_guess_never_returns_a_category_outside_its_range(self):
+        from story.importers import GUESSABLE_CATEGORIES, guess_category
+        for keys, content in [
+            ("Great Hall", "A stair leads to the basement."),
+            ("Aether", "The spell works by drawing on the ley lines."),
+            ("The Drowned God", "Folklore holds that the goddess sleeps."),
+            ("Siege of Anvil", "The battle happened in the third year."),
+            ("Kestrel", "A fishing village on the island."),
+            ("", ""),
+            ("Aunt Marla", "She keeps bees."),
+        ]:
+            assert guess_category(keys, content) in GUESSABLE_CATEGORIES
+
+    def test_a_book_of_legends_is_world_lore(self):
+        from story.importers import guess_book_type
+        entries = [("The Drowned God", "Folklore holds that the goddess sleeps.", 0),
+                   ("The Long Night", "A prophecy the villagers still believe.", 0)]
+        assert guess_book_type(entries) == "world"
+
+    def test_a_book_of_nothing_recognisable_stays_general(self):
+        from story.importers import guess_book_type
+        entries = [("Aunt Marla", "She keeps bees.", 0),
+                   ("Tuesday", "It rained.", 0)]
+        assert guess_book_type(entries) == "general"
+
+    def test_every_book_type_it_can_produce_is_a_real_one(self):
+        from mind.memory import LOREBOOK_TYPES
+        from story.importers import _BOOK_TYPE_BY_CATEGORY
+        assert set(_BOOK_TYPE_BY_CATEGORY.values()) <= set(LOREBOOK_TYPES)
