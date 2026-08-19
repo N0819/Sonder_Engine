@@ -30,6 +30,7 @@ import pytest
 from mind import memory
 from persist import checkpoints
 from core.db import q, qi
+from tests.helpers import patch_provider_seam
 
 
 @pytest.fixture
@@ -51,7 +52,7 @@ def _consolidator(monkeypatch):
             "unresolved_threads": [], "stable_facts": [],
         })
 
-    monkeypatch.setattr(memory, "chat_complete", fake)
+    patch_provider_seam(monkeypatch, "chat_complete", fake)
     return seen
 
 

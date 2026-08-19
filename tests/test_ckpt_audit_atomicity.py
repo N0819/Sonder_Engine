@@ -10,7 +10,7 @@ import time
 import pytest
 
 from mind import memory
-from tests.helpers import patch_embedding_seam
+from tests.helpers import patch_provider_seam
 from story.character_schema import default_character_data
 from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 from mind.memory import add_memory
@@ -22,8 +22,8 @@ def _install_stub(monkeypatch):
         return EmbeddingBatch(vectors=[[1.0] * 8 for _ in texts],
                               model_key="test:model", dimensions=8)
 
-    patch_embedding_seam(monkeypatch, "embed_texts_meta", fake_meta)
-    patch_embedding_seam(monkeypatch, "embed_texts", lambda texts: fake_meta(texts).vectors)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", fake_meta)
+    patch_provider_seam(monkeypatch, "embed_texts", lambda texts: fake_meta(texts).vectors)
 
 
 def _chat_and_character(db):

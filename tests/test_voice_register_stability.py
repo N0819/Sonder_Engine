@@ -29,6 +29,7 @@ import time
 from mind import memory
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.helpers import patch_provider_seam
 
 
 def _make_verbose_doctor_chat(temp_db, verbosity):
@@ -178,7 +179,7 @@ def test_consolidator_is_forbidden_from_describing_manner(temp_db, monkeypatch):
         captured["system"] = system
         return json.dumps({"summary": "stub", "key_phrases": [], "unresolved_threads": []})
 
-    monkeypatch.setattr(memory, "chat_complete", fake_chat_complete)
+    patch_provider_seam(monkeypatch, "chat_complete", fake_chat_complete)
     memory.consolidate_character_memory(chat_id, char_id, through_turn_idx=10)
 
     assert "speaking manner" in captured["system"]

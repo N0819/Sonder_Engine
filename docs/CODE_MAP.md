@@ -48,11 +48,12 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 3316 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory.py` | 2664 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_retrieval.py` | 796 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
+| `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 594 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
@@ -558,14 +559,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 630 | 275 lines |
-| `rebuild_embeddings()` | 2688 | 213 lines |
-| `embedding_bank_status()` | 2538 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 2940 | 124 lines |
-| `_with_reading()` | 400 | 101 lines |
-| `_origin_on_drift()` | 531 | 97 lines |
-| `restore_lorebook()` | 1725 | 95 lines |
-| `backfill_memory_summary_windows()` | 1059 | 89 lines |
+| `build_character_memory_context()` | 319 | 275 lines |
+| `rebuild_embeddings()` | 2036 | 213 lines |
+| `embedding_bank_status()` | 1886 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 2288 | 124 lines |
+| `_with_reading()` | 89 | 101 lines |
+| `_origin_on_drift()` | 220 | 97 lines |
+| `restore_lorebook()` | 1073 | 95 lines |
+| `prepare_chat_memory_restore()` | 817 | 75 lines |
 
 ### `mind/memory_common.py`
 
@@ -618,6 +619,19 @@
 | `_warn_stranded_embeddings()` | 243 | 29 lines |
 | `_exact_cue_score()` | 50 | 18 lines |
 | `_lexical_memory_ranking()` | 30 | 11 lines |
+
+### `mind/memory_summaries.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `backfill_memory_summary_windows()` | 490 | 89 lines |
+| `search_memory_summaries()` | 69 | 77 lines |
+| `consolidate_character_memory()` | 581 | 75 lines |
+| `derive_summary_support()` | 165 | 59 lines |
+| `_write_consolidated_window()` | 392 | 57 lines |
+| `save_memory_summary()` | 247 | 39 lines |
+| `get_memory_summary()` | 30 | 38 lines |
+| `memory_summary_coverage()` | 451 | 37 lines |
 
 ### `mind/memory_write.py`
 

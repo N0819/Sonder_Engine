@@ -30,6 +30,7 @@ from agents.character import (
 )
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.helpers import patch_provider_seam
 
 
 # ---- fixtures -------------------------------------------------------------
@@ -440,7 +441,7 @@ class TestTheSemanticAxisAndItsInversionTrap:
             seen["model"] = got.model_key
             return got
 
-        monkeypatch.setattr(memory, "embed_texts_meta", fake)
+        patch_provider_seam(monkeypatch, "embed_texts_meta", fake)
         # No rows at all -> no crash, no picks, and never an exception from
         # the embedding path taking the function down with it.
         assert memory.contrast_memory(1, 1, "anything", 5) == []

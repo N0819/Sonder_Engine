@@ -219,12 +219,15 @@ def patch_seam(monkeypatch, module_name, attr, replacement):
     return patched
 
 
-def patch_embedding_seam(monkeypatch, attr, replacement):
-    """`patch_seam` for the four `llm.providers` names the memory family reads.
+def patch_provider_seam(monkeypatch, attr, replacement):
+    """`patch_seam` for the `llm.providers` names other packages import by name.
 
     `embed_texts`, `embed_texts_meta`, `embedding_model_key` and
-    `chat_complete` are each imported into several `mind/memory_*` modules,
-    and which ones depends on the path under test. A test that does not care
-    calls this; a test that does care names its module.
+    `chat_complete` are each bound into several `mind/memory_*` modules, and
+    which ones depends on the path under test -- the consolidator's
+    `chat_complete` is in `memory_summaries`, the write path's
+    `embed_texts_meta` is in `memory_write`, and a checkpoint restore crosses
+    four modules in one call. A test that does not care which calls this; a
+    test that does care names its module.
     """
     return patch_seam(monkeypatch, "llm.providers", attr, replacement)

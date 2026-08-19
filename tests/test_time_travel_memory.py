@@ -40,6 +40,7 @@ from core import frames
 from mind import memory
 from core.frames import create_frame, is_memory_visible
 from mind.memory import add_memory, search_memories, visible_memory_rows
+from tests.helpers import patch_provider_seam
 
 PRESENT = None
 
@@ -204,7 +205,7 @@ class TestConsolidationAfterAnExcursion:
             return _json.dumps({"summary": "A long journey and a return home.",
                                 "key_phrases": [], "unresolved_threads": []})
 
-        monkeypatch.setattr(memory, "chat_complete", _fake)
+        patch_provider_seam(monkeypatch, "chat_complete", _fake)
         memory.maybe_consolidate_character_memory(
             story["chat_id"], story["traveller"], 61, frame_id=PRESENT)
         gists = {m["gist"] for m in seen["payload"]["memories_chronological"]}
@@ -230,7 +231,7 @@ class TestConsolidationAfterAnExcursion:
             return _json.dumps({"summary": "An ordinary season.",
                                 "key_phrases": [], "unresolved_threads": []})
 
-        monkeypatch.setattr(memory, "chat_complete", _fake)
+        patch_provider_seam(monkeypatch, "chat_complete", _fake)
         memory.maybe_consolidate_character_memory(
             story["chat_id"], story["native"], 61, frame_id=PRESENT)
         gists = {m["gist"] for m in seen["payload"]["memories_chronological"]}

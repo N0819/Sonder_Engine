@@ -28,6 +28,7 @@ import pytest
 from mind import memory
 from llm import providers
 from story.character_schema import default_character_data
+from tests.helpers import patch_provider_seam
 
 
 @pytest.fixture
@@ -218,7 +219,7 @@ def test_a_restore_reuses_the_stored_vector_rather_than_re_embedding(
         calls.append(texts)
         raise AssertionError("restore must not call the provider")
 
-    monkeypatch.setattr(memory, "embed_texts_meta", _boom)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", _boom)
     memory.restore_memory_summaries(bank["chat"], dumped)
     assert calls == []
     assert len(memory.dump_memory_summaries(bank["chat"])) == 2
@@ -249,7 +250,7 @@ def test_a_summary_with_no_stored_vector_does_reach_the_embedder(
         calls.append(texts)
         return _Embedded()
 
-    monkeypatch.setattr(memory, "embed_texts_meta", _record)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", _record)
     memory.restore_memory_summaries(bank["chat"], legacy)
     assert calls, ("a summary with no stored vector did not reach the "
                    "embedder: the stub cannot fire")
@@ -272,8 +273,8 @@ def _stub_consolidator(monkeypatch):
             "key_phrases": [], "unresolved_threads": [], "stable_facts": [],
         })
 
-    monkeypatch.setattr(memory, "chat_complete", fake)
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **k: type(
+    patch_provider_seam(monkeypatch, "chat_complete", fake)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", lambda texts, **k: type(
         "E", (), {"vectors": [providers.cheap_embed(t) for t in texts],
                   "model_key": "stub", "dimensions": 256})())
 
