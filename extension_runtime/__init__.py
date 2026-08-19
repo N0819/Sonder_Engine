@@ -38,6 +38,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 from typing import Any, Callable
 
 from .api import (
@@ -1813,7 +1814,7 @@ def _source_kind(source: str) -> str:
     return "zip"
 
 
-def _git(*args, cwd=None) -> str:
+def _git(*args, cwd=None, timeout=None) -> str:
     """Run one git command with the environment held still.
 
     `GIT_TERMINAL_PROMPT=0` is the load-bearing one: without it a private or
@@ -1833,13 +1834,14 @@ def _git(*args, cwd=None) -> str:
     try:
         done = subprocess.run(
             ("git",) + tuple(args), cwd=str(cwd) if cwd else None, env=env,
-            capture_output=True, text=True, timeout=GIT_TIMEOUT_SECONDS)
+            capture_output=True, text=True,
+            timeout=GIT_TIMEOUT_SECONDS if timeout is None else timeout)
     except FileNotFoundError as exc:
         raise ExtensionError(
             "git is not installed, so a repository cannot be cloned") from exc
     except subprocess.TimeoutExpired as exc:
-        raise ExtensionError(
-            f"git gave up after {GIT_TIMEOUT_SECONDS}s") from exc
+        spent = GIT_TIMEOUT_SECONDS if timeout is None else timeout
+        raise ExtensionError(f"git gave up after {spent:g}s") from exc
     if done.returncode != 0:
         detail = (done.stderr or done.stdout or "").strip().splitlines()
         raise ExtensionError(
@@ -1866,13 +1868,14 @@ def _git_clone(source: str, destination: Path) -> tuple[str, str, str]:
     return url, ref, commit
 
 
-def _git_remote_head(url: str, ref: str | None) -> str:
+def _git_remote_head(url: str, ref: str | None, *, timeout=None) -> str:
     """The commit a remote's branch or tag points at, without cloning it.
 
     One round trip and no download, which is what makes an update CHECK cheap
     enough to run for every installed extension at once.
     """
-    out = _git("ls-remote", "--heads", "--tags", "--", url, *( [ref] if ref else [] ))
+    out = _git("ls-remote", "--heads", "--tags", "--", url,
+               *([ref] if ref else []), timeout=timeout)
     for line in out.splitlines():
         parts = line.split()
         if len(parts) >= 2:
@@ -2061,7 +2064,7 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
     raise ExtensionError(f"{candidate.id!r} did not load after install")
 
 
-def check_update(extension_id: str) -> dict:
+def check_update(extension_id: str, *, timeout=None) -> dict:
     """Is there a newer commit for one installed extension?
 
     Never raises. A network failure, a repository that has moved, a git that
@@ -2091,7 +2094,9 @@ def check_update(extension_id: str) -> dict:
         row["reason"] = "installed before update checking existed"
         return row
     try:
-        row["latest"] = _git_remote_head(ext.source_url, ext.source_ref or None)
+        row["latest"] = _git_remote_head(ext.source_url,
+                                         ext.source_ref or None,
+                                         timeout=timeout)
     except ExtensionError as exc:
         row["checkable"] = False
         row["reason"] = str(exc)
@@ -2104,10 +2109,47 @@ def check_update(extension_id: str) -> dict:
     return row
 
 
+#: Wall-clock ceiling for one whole update sweep, in seconds.
+#:
+#: `check_update` is cheap in BANDWIDTH -- one `ls-remote` each, no download --
+#: which is what makes checking everything at once reasonable, and says
+#: nothing about latency, which is what actually bounds a request. Serially,
+#: ten installed extensions against an unreachable network is ten times
+#: `GIT_TIMEOUT_SECONDS`: a twenty-minute HTTP request holding a threadpool
+#: worker for a question whose answer is "maybe later".
+UPDATE_SWEEP_SECONDS = 60.0
+
+
 def check_updates() -> list[dict]:
-    """`check_update` for everything installed, in id order."""
-    return [check_update(ext_id)
-            for ext_id in sorted(installed_extensions())]
+    """`check_update` for everything installed, in id order.
+
+    Bounded by `UPDATE_SWEEP_SECONDS` overall: each remote gets what is left
+    of the budget, and once it is spent the remaining extensions are reported
+    UNCHECKABLE with the reason rather than skipped or reported up to date --
+    "up to date" with the truth taken out is the one answer this must never
+    give, which `check_update` already says about its own failures.
+    """
+    deadline = time.monotonic() + UPDATE_SWEEP_SECONDS
+    rows = []
+    for ext_id in sorted(installed_extensions()):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            ext = installed_extensions().get(ext_id)
+            rows.append({
+                "id": ext_id, "name": getattr(ext, "name", ext_id),
+                "version": getattr(ext, "version", ""),
+                "current": getattr(ext, "commit", ""), "latest": "",
+                "update": False, "checkable": False,
+                "source_url": getattr(ext, "source_url", ""),
+                "source_ref": getattr(ext, "source_ref", ""),
+                "reason": (f"the update check ran out of its "
+                           f"{UPDATE_SWEEP_SECONDS:g}s budget before "
+                           f"reaching this one"),
+            })
+            continue
+        rows.append(check_update(ext_id, timeout=min(remaining,
+                                                     GIT_TIMEOUT_SECONDS)))
+    return rows
 
 
 def update_extension(extension_id: str) -> dict:
