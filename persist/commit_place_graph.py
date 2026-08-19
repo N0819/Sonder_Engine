@@ -5,8 +5,20 @@ Extracted verbatim from commit.py, which re-exports every name here.
 See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
-from world.spatial import (normalize_barrier, normalize_bearing, opposite_bearing,
+from world.spatial import (_PASSABLE_BARRIERS, normalize_barrier,
+                     normalize_bearing, opposite_bearing,
                      passable_path, rooms_adjacent, visible_adjacent_rooms)
+
+
+#: The edges a remembering mind records as routes: a way through, now or by
+#: opening it. This is `spatial_barriers._ROUTE_MEMORY_BARRIERS`, spelled
+#: from the facade's exports only because `world/spatial.py` does not yet
+#: re-export the predicate; the two are pinned byte-identical by
+#: tests/test_world_model_route_memory.py, and the moment the facade line
+#: lands this local spelling should collapse into the import. The full
+#: judgement (locked doors, `unknown`, why neither `_SIGHT_BARRIERS` nor
+#: `_PASSABLE_BARRIERS` alone is right) lives on the canonical set.
+_ROUTE_MEMORY_BARRIERS = frozenset(_PASSABLE_BARRIERS) | {"closed_door"}
 
 
 # How much of a body's own route it carries. Bounded because it rides
@@ -123,12 +135,21 @@ def update_place_graph(graph, scene, here_rid, turn_idx, came_from=None,
     if came_from or not here_node.get("visits"):
         here_node["visits"] = int(here_node.get("visits") or 0) + 1
 
-    # Every doorway of the standing room, from either side's declaration. A
-    # wall is visible adjacency but not a doorway, so it earns no edge.
+    # Every doorway of the standing room, from either side's declaration.
+    # DOORWAY means a route-memory edge, not merely "not a wall": the old
+    # `!= "wall"` reading minted a walkable graph edge through a `window`,
+    # `bars`, a `one_way_window` and even a `separated` non-adjacency --
+    # everything you can see and cannot walk -- and `_frontier_hops` then
+    # rendered the false edge to its owner as a specific remembered distance
+    # (docs/UNBUILT.md 1.6). Narrowing this filter is also the retraction
+    # path: a glass edge remembered from before is no longer in `doorways`,
+    # so the contradiction pass below stamps it `disproven` the next time
+    # the character stands here.
     doorways = {}
     for e in here_room.get("adjacent") or []:
         if isinstance(e, dict) and e.get("to") \
-                and normalize_barrier(e.get("barrier")) != "wall":
+                and normalize_barrier(e.get("barrier")) \
+                in _ROUTE_MEMORY_BARRIERS:
             doorways.setdefault(str(e["to"]), normalize_bearing(e.get("dir")))
     for oid, other in rooms.items():
         oid = str(oid)
@@ -136,7 +157,8 @@ def update_place_graph(graph, scene, here_rid, turn_idx, came_from=None,
             continue
         for e in other.get("adjacent") or []:
             if isinstance(e, dict) and str(e.get("to")) == here_rid \
-                    and normalize_barrier(e.get("barrier")) != "wall":
+                    and normalize_barrier(e.get("barrier")) \
+                    in _ROUTE_MEMORY_BARRIERS:
                 doorways.setdefault(
                     oid, opposite_bearing(normalize_bearing(e.get("dir"))))
                 break
@@ -172,7 +194,15 @@ def update_place_graph(graph, scene, here_rid, turn_idx, came_from=None,
             rec["closed"] = True
         elif isinstance(onward, int) and onward > 0:
             rec.pop("closed", None)
-        _confirm(here_rid, rid_seen, bearing=doorways.get(rid_seen))
+        # The NODE above is sight's to give: a room seen through glass is a
+        # place the character now knows exists. The EDGE is not -- sight
+        # crosses a window/bars/one-way pane that a body never will, and
+        # this unconditional confirm was the third writer minting a walkable
+        # remembered route through them (`visible` is `visible_adjacent_rooms`
+        # output, which walks `_SIGHT_BARRIERS`). Only a route-memory doorway
+        # earns the edge.
+        if rid_seen in doorways:
+            _confirm(here_rid, rid_seen, bearing=doorways.get(rid_seen))
 
     overflow = len(nodes) - PLACE_GRAPH_NODE_CAP
     if overflow > 0:
@@ -250,7 +280,14 @@ def record_spatial_experience(st, sc, here_room, turn_idx):
             came_from = crossed[-2]
     st["visited_rooms"] = visited[-VISITED_ROOMS_CAP:]
     # The exits visible FROM a room they actually stood in. Not oracle
-    # knowledge: standing in a room is how you see its doorways.
+    # knowledge: standing in a room is how you see its doorways. ROUTE-MEMORY
+    # edges only, the same filter the place graph applies: this legacy ledger
+    # recorded every declared adjacency including solid `wall` edges, and
+    # `_annotate_known_exits` merges it into the same BFS adjacency the graph
+    # feeds -- so without the filter here, a wall or a pane of glass simply
+    # re-entered the remembered map through the older door (docs/UNBUILT.md
+    # 1.6's scope note). Overwritten wholesale on each standing, so a stale
+    # wall edge written before this filter heals on the next visit.
     known = st.get("known_exits")
     if not isinstance(known, dict):
         known = {}
@@ -258,6 +295,7 @@ def record_spatial_experience(st, sc, here_room, turn_idx):
     known[here_room] = sorted({
         str(e.get("to")) for e in (room.get("adjacent") or [])
         if isinstance(e, dict) and e.get("to")
+        and normalize_barrier(e.get("barrier")) in _ROUTE_MEMORY_BARRIERS
     })
     # Which of those neighbours he could SEE were closed -- the same fact
     # visible_adjacent_rooms reports live, written down so the frontier test

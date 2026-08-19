@@ -303,9 +303,32 @@ def prepare_scene_commit(ctx):
 
     _contact_report = []
     _substance_report = []
+    # WHO IS ASLEEP, from the ledger that actually answers that question.
+    # `merge_scene_with_diff` used to read it off `contained[...]["mode"]`,
+    # which is a containment vocabulary (carried/held/pocket/enclosed) and has
+    # never carried an awareness value -- so the sleep-recovery branch in
+    # `world/survival.py` was unreachable and a character who slept eight hours
+    # on a surface that affords no rest DRAINED stamina (UNBUILT §1.3: "nobody
+    # has ever recovered stamina by sleeping"). Computed here rather than
+    # inside the merge because awareness lives in `story/`, and `world/`
+    # importing up into `story/` would deepen an existing package cycle.
+    #
+    # `asleep` ONLY, and the exclusions are a decision rather than an
+    # oversight: `dazed` is awake; `sedated` and `unconscious` are states
+    # something else PUT a body into, and letting them restore stamina would
+    # make drugging or concussing someone a way to rest them -- an incentive
+    # that would propagate into how the Director resolves violence. A body
+    # under-recovering is fixed by the next beat; a perverse incentive is not.
+    from story.scene import awareness_map
+
+    _sleeping = {
+        _subject for _subject, _level in (awareness_map(cid) or {}).items()
+        if _level == "asleep"
+    }
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
-        substance_report=_substance_report.append)
+        substance_report=_substance_report.append,
+        sleeping=_sleeping)
     # Tell the Director how its contact ops were read -- a re-description taken
     # as the same limb moving, a part refused as not being one, an envelopment
     # folded onto the enclosed side. Corrections it can only make if it knows

@@ -226,6 +226,39 @@ _ENTITY_DEFAULT_FIELDS = {
 }
 
 
+#: Entity `state` keys that name exertion OF THE MOMENT rather than a
+#: configuration -- true for exactly one beat unless the next beat says so
+#: again. They EXPIRE on the next merge instead of surviving it.
+#:
+#: `state` is deliberately open free text and the standing doctrine
+#: (`_ENTITY_DEFAULT_FIELDS`, `_merge_entity`) is that silence is never an
+#: erasure -- which is right for a held wrench or a transit phase, and
+#: exactly wrong for a breath: an omitted momentary key survived FOREVER,
+#: and the stale copy is not merely bad prose -- entity state feeds
+#: `composer.body_state_percept`, the subject's OWN interoception (source
+#: "you"), so each later model call receives the beat-old value as current
+#: evidence: a read-back loop, measured at 2,074 byte-identical unchanged
+#: runs with `"breath": "caught"` and
+#: `"voice_quality": "held_breath_steadying"` stuck verbatim
+#: (docs/UNBUILT.md 1.10).
+#:
+#: Membership is deliberately narrow and evidence-based: a key belongs here
+#: only when a beat-old value of it is ALREADY FALSE by being beat-old, and
+#: only when nothing downstream reads it as standing state. `posture` and
+#: `held_items` stay durable -- sitting stays sitting and a hand keeps what
+#: it holds until something says otherwise (the attire doctrine).
+#: `activity` is the sharpest remaining read-back key and is NOT here,
+#: because the engine currently reads it as load-bearing standing state
+#: (movement/portals/perception backstops; pinned by
+#: tests/test_body_position.py's never-touched parametrization) -- expiring
+#: it means first deciding those readers' contract, which is the
+#: reconciliation problem the S3-A8 detector watches, not an expiry rule to
+#: slip in beside it.
+_TRANSIENT_ENTITY_STATE_KEYS = frozenset({
+    "breath", "breathing", "voice_quality",
+})
+
+
 def _merge_entity(entity_id, existing: dict, incoming: dict) -> dict:
     """Merge an incoming entity redeclaration into an already-known entity.
 
@@ -281,6 +314,45 @@ def _merge_entity(entity_id, existing: dict, incoming: dict) -> dict:
         merged[key] = value
 
     return merged
+
+
+def _expire_transient_entity_state(entities, incoming_entities):
+    """Drop momentary state keys the incoming diff did not re-assert.
+
+    The counterpart of `_merge_entity`'s key-wise state merge: everything
+    durable keeps the silence-is-not-erasure doctrine, and the few keys in
+    `_TRANSIENT_ENTITY_STATE_KEYS` live for exactly the beat that asserted
+    them. Runs over EVERY merged entity, not only the ones this diff
+    mentions -- an entity the diff is silent about is precisely the one
+    whose "running" has gone stale.
+
+    Assertion is matched by id, name and aliases, folded, because a diff may
+    key an entity by any of them (`_dedup_duplicate_entity_keys` exists for
+    the same reason). Mutates `entities` in place.
+    """
+    incoming = incoming_entities if isinstance(incoming_entities, dict) else {}
+    asserted: dict[str, set] = {}
+    for iid, ient in incoming.items():
+        if not isinstance(ient, dict):
+            continue
+        istate = ient.get("state")
+        keys = set(istate) if isinstance(istate, dict) else set()
+        for alias in (iid, ient.get("name"), *(ient.get("aliases") or [])):
+            alias = str(alias or "").strip().casefold()
+            if alias:
+                asserted.setdefault(alias, set()).update(keys)
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict):
+            continue
+        state = ent.get("state")
+        if not isinstance(state, dict):
+            continue
+        kept: set = set()
+        for alias in (eid, ent.get("name"), *(ent.get("aliases") or [])):
+            kept |= asserted.get(str(alias or "").strip().casefold(), set())
+        for key in [k for k in state
+                    if k in _TRANSIENT_ENTITY_STATE_KEYS and k not in kept]:
+            state.pop(key, None)
 
 
 def _dedupe_adjacent(edges):
@@ -528,6 +600,103 @@ def _shield_standing_passage(prior_rooms, incoming_rooms, add_warning=None):
     return out
 
 
+def _shield_minted_edges(prior_rooms, incoming_rooms, add_warning=None):
+    """Care at the MINTING of an edge, to match the care taken merging one.
+
+    The upsert-with-silence doctrine above is scrupulous about not ERASING an
+    edge's fields, and that scruple was entirely absent from creating one: a
+    previously unseen edge was accepted verbatim, so a model asserting an
+    adjacency invented a doorway with no check at all -- measured as
+    `r0204 <-> r0303`, a diagonal in a grid maze that is impossible by
+    construction, standing in the world model for hundreds of turns and
+    walked as a real doorway (docs/UNBUILT.md 1.2). One check is decidable
+    everywhere and lands here; a NEW edge is one with no standing declaration
+    in either direction, so a re-declaration of a known doorway from its
+    other side is untouched.
+
+    RECIPROCITY OF UNSEALING. `_shield_standing_passage` above establishes
+    that sealing a passage takes a two-sided declaration. The same holds in
+    reverse, through a hole it could not see: with only `B -> A: wall`
+    standing, a model minting a fresh `A -> B: open` created passage through
+    the wall one-sidedly, because the walks are undirected and cross an edge
+    either side declares. So a new PASSABLE edge whose standing reciprocal
+    reads `wall` is refused unless the same diff re-declares that reciprocal
+    as passable too. Scoped to `wall` exactly as the sealing shield is: a
+    standing `closed_door` reciprocal stays one-sidedly openable (opening a
+    door is an ordinary act, declared from whichever side the actor stands),
+    and a standing `window`/`one_way_window` reciprocal is left to the basis
+    work this deliberately does not attempt.
+
+    What this does NOT check, on the record. GEOMETRY: the model has no
+    coordinates, so a general scene cannot say what a grid maze could.
+    BASIS: whether anything witnessed, walked or authored the doorway --
+    that needs a stated basis on the edge itself, a schema-and-prompt change
+    across the mapping and spatial specialists. And EXISTENCE of the target
+    room: a dangling edge is a tolerated forward reference in this engine
+    (`neighbor_map`'s walks tolerate it by design, and the west-wing live
+    flow pinned at tests/test_spatial.py's redeclaration test mints the
+    corridor's edge before the room), so refusing it would break a real
+    mapping flow -- an existence rule has to wait for room-and-edge minting
+    to become atomic. Refusing to guess any of the three is why this shield
+    is small. Returns a sanitized copy; never mutates the caller's diff.
+    """
+    if not isinstance(incoming_rooms, dict) or not isinstance(
+            prior_rooms, dict):
+        return incoming_rooms
+
+    def _edge_barrier(rooms, room_id, to_id):
+        room = rooms.get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return normalize_barrier(e.get("barrier"))
+        return None
+
+    out = {}
+    for room_id, room in incoming_rooms.items():
+        if not isinstance(room, dict) or not room.get("adjacent"):
+            out[room_id] = room
+            continue
+        edges = []
+        touched = False
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                edges.append(edge)
+                continue
+            to_id = str(edge["to"])
+            if _edge_barrier(prior_rooms, room_id, to_id) is not None:
+                # A re-declaration of an edge this side already holds:
+                # upsert territory, ruled by the shields above.
+                edges.append(edge)
+                continue
+            back = _edge_barrier(prior_rooms, to_id, room_id)
+            if back is None:
+                # A brand-new PAIR: no declaration stands in either
+                # direction, so there is nothing here to contradict -- this
+                # is the case that wants a BASIS, deliberately not guessed
+                # (see the docstring).
+                edges.append(edge)
+                continue
+            # The pair is known from the OTHER side only, and this diff is
+            # minting the near side.
+            recip = _edge_barrier(incoming_rooms, to_id, room_id)
+            if back == "wall" \
+                    and normalize_barrier(edge.get("barrier")) \
+                    in _PASSABLE_BARRIERS \
+                    and recip not in _PASSABLE_BARRIERS:
+                touched = True
+                if add_warning:
+                    add_warning(
+                        "refused a new passable edge %s -> %s: the standing "
+                        "reciprocal reads wall, and unsealing a passage "
+                        "takes a two-sided declaration" % (room_id, to_id))
+                continue
+            edges.append(edge)
+        out[room_id] = {**room, "adjacent": edges} if touched else room
+    return out
+
+
 def connect_orphan_new_rooms(scene: dict, prev_scene: dict) -> list:
     """A room created this turn must be reachable from somewhere.
 
@@ -699,6 +868,7 @@ def merge_scene_with_diff(
     *,
     contact_report=None,
     substance_report=None,
+    sleeping=(),
 ) -> dict:
     diff = diff or {}
     # A scene is a nested mutable structure.  A shallow copy allowed
@@ -719,6 +889,8 @@ def merge_scene_with_diff(
     incoming_rooms = _shield_standing_bearings(
         _prior_rooms, diff.get("rooms") or {})
     incoming_rooms = _shield_standing_passage(
+        _prior_rooms, incoming_rooms)
+    incoming_rooms = _shield_minted_edges(
         _prior_rooms, incoming_rooms)
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
@@ -764,6 +936,11 @@ def merge_scene_with_diff(
     # live story needs no migration.
     for _bad in [k for k in merged["entities"] if k in NON_ENTITY_FIELD_KEYS]:
         merged["entities"].pop(_bad, None)
+
+    # Momentary state expires unless this diff re-asserted it -- the one
+    # deliberate exception to key-wise state merging; see
+    # `_TRANSIENT_ENTITY_STATE_KEYS` for the read-back loop it closes.
+    _expire_transient_entity_state(merged["entities"], incoming_entities)
 
     if isinstance(incoming_positions, dict):
         merged["positions"].update(incoming_positions)
@@ -1009,9 +1186,21 @@ def merge_scene_with_diff(
         time_block = diff.get("time")
         if isinstance(time_block, dict):
             elapsed = time_block.get("duration_seconds") or 0
+        # WHO IS ASLEEP comes from the caller (`sleeping=`), because the
+        # answer lives in the conditions ledger's awareness levels
+        # (story/scene.AWARENESS_LEVELS via awareness_map) -- a layer above
+        # this package, which world/ must not reach up into. The old sole
+        # source below read `contained[*].mode == "asleep"`, but `mode` is a
+        # CONTAINMENT vocabulary (carried/held/pocket/enclosed), never an
+        # awareness level, so the set was always effectively empty and
+        # nobody has ever recovered stamina by sleeping (docs/UNBUILT.md
+        # 1.3). The containment reading is kept only as a union: it cannot
+        # subtract, and an accidental "asleep" spelling someone stored there
+        # keeps what little it had.
         tick_vitals(
             merged, elapsed,
-            asleep=[n for n, r in (merged.get("contained") or {}).items()
-                    if isinstance(r, dict) and r.get("mode") == "asleep"],
+            asleep=(set(str(n) for n in (sleeping or ()))
+                    | {n for n, r in (merged.get("contained") or {}).items()
+                       if isinstance(r, dict) and r.get("mode") == "asleep"}),
         )
     return merged

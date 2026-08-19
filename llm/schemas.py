@@ -293,6 +293,31 @@ class ActionStage(str, Enum):
     contact = "contact"
     sustained = "sustained"
 
+
+#: Near-miss stage spellings models actually produce, folded onto the enum
+#: member that means the same thing -- the `_VOLUME_ALIASES` treatment.
+#: Without it each one raised a pydantic ValidationError and cost the beat a
+#: whole repair model call for a value whose meaning was never in doubt.
+#: Deliberately small: a spelling belongs here only when it is an unambiguous
+#: synonym of one member; anything else should still be refused, so the
+#: repair path keeps seeing genuinely alien answers.
+_ACTION_STAGE_ALIASES = {
+    "initiation": "preparation",
+    "setup": "preparation",
+    "ongoing": "sustained",
+}
+
+
+def normalize_action_stage(value: Any) -> Any:
+    """Fold case, whitespace and known synonyms; pass anything else through
+    untouched so the enum still refuses it (and the error names what the
+    model actually said, not this function's rewrite of it)."""
+    if not isinstance(value, str):
+        return value
+    token = value.strip().casefold()
+    token = _ACTION_STAGE_ALIASES.get(token, token)
+    return token if token in {m.value for m in ActionStage} else value
+
 class PlayerAuthorityMode(str, Enum):
     actor_only = "actor_only"
     explicit_outcomes = "explicit_outcomes"
@@ -1012,6 +1037,10 @@ class ActionElement(LenientModel):
     verb: str = ""
     commitment: ActionCommitment = ActionCommitment.contestable
     stage: ActionStage = ActionStage.immediate
+
+    _norm_stage = validator("stage", pre=True, allow_reuse=True)(
+        lambda cls, v: normalize_action_stage(v)
+    )
     targets: list[str] = Field(default_factory=list)
     instruments: list[str] = Field(default_factory=list)
     intended_effects: list[IntendedEffect] = Field(default_factory=list)
