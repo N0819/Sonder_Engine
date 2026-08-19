@@ -182,11 +182,49 @@ class TestItSurvivesTheThingsTheGateRequires:
 
         assert "relationship_events" in ChatArchiveData.__fields__
 
-    def test_the_archive_exports_and_imports_it(self):
-        import inspect
+    def test_the_archive_exports_and_imports_it(self, temp_db):
+        """Asked of the round trip, not of the source text.
 
-        from persist import chat_archive
-        source = inspect.getsource(chat_archive)
-        # Present in both table tuples, not just one.
-        assert source.count('"relationship_events",') >= 2
-        assert "old_char_map.get(row.get(\"char_id\")) is not None" in source
+        Counting `"relationship_events",` in the module answered a question
+        about how the two table tuples were SPELLED, which stops being true
+        the moment they are named once instead of twice -- and was never
+        evidence that the ledger arrives, only that the string appears.
+        """
+        import json
+        import time
+
+        from web import app
+
+        cid = _chat(temp_db)
+        char_id = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+            "VALUES(?,?,?,?,?)",
+            ("Mora", json.dumps({"identity": {"name": "Mora"}}), "{}",
+             time.time(), "rel_mora"),
+        )
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state) "
+            "VALUES(?,?,'active','{}')", (cid, char_id))
+        apply_relationship_updates(cid, char_id, 12, [{
+            "target_entity": "Mora", "trust_delta": -0.2,
+            "trigger_event_ids": ["ev:she-lied"],
+            "reason": "she lied about the gate"}])
+
+        archive = json.loads(json.dumps(app.chat_export(cid)))
+        assert len(archive["relationship_events"]) == 1
+
+        # A stance whose character does not remap is dropped rather than
+        # reattached to whoever inherited the number in the new chat.
+        archive["relationship_events"].append(
+            dict(archive["relationship_events"][0], char_id=999999,
+                 note="belongs to nobody here"))
+
+        new_cid = app.chat_import({"data": archive})["id"]
+        new_char = temp_db.q(
+            "SELECT char_id FROM chat_chars WHERE chat_id=?",
+            (new_cid,), one=True)["char_id"]
+        restored = relationship_history(new_cid, new_char, "Mora")
+        assert [e["note"] for e in restored] == ["she lied about the gate"]
+        assert temp_db.q(
+            "SELECT COUNT(*) n FROM relationship_events WHERE chat_id=?",
+            (new_cid,), one=True)["n"] == 1
