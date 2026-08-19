@@ -425,3 +425,48 @@ class TestOneCreatureIsOnePresence:
         }
         assert list(_fold_duplicate_presences(dict(ledger), alone)) == ["A Dalek"]
         assert _resolve_presence_name("Dalek", ledger, alone) == "A Dalek"
+
+
+class TestAWhisperAddressesNobody:
+    """The `addressed_turns` ledger read the raw player input.
+
+    `overt_declaration` exists because the pre-commit gate and the payload
+    builder disagreed about what a bystander may be judged against, and
+    `pick_background_reactors` was routed through it. The COMMIT-time writer
+    one function over was not, so a concealed line naming a presence still
+    accrued that presence a durable "the story turned toward you on purpose"
+    debt -- the counter that earns a passer-by a character sheet, and the one
+    that survives the beat.
+    """
+
+    def _whisper_ctx(self, chat_id, turn_idx, visibility):
+        line = "Say nothing to Crusher about the readout."
+        ctx = _ctx(chat_id, turn_idx, [], {
+            "dialogue_log": [{"speaker": "Dr. Crusher",
+                              "exact_quote": "Hold still."}],
+            "resolved_event": "The ward is quiet.",
+        })
+        ctx.input = line
+        ctx.turn.player_input = line
+        ctx.director_interpret = {"sequence": [
+            {"type": "speech", "text": line, "visibility": visibility},
+        ]}
+        return ctx
+
+    def test_a_concealed_line_naming_a_presence_owes_them_nothing(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        track_background_presences(self._whisper_ctx(chat_id, 3, "concealed"),
+                                   nonce=0)
+
+        record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
+        assert record.get("addressed_turns", []) == []
+
+    def test_the_same_line_spoken_openly_still_does(self, temp_db):
+        """The control: the repair subtracts the concealed half and nothing
+        else, or it is a guard that makes minds conclude less."""
+        chat_id = _make_chat(temp_db)
+        track_background_presences(self._whisper_ctx(chat_id, 3, "public"),
+                                   nonce=0)
+
+        record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
+        assert record.get("addressed_turns", []) == [3]
