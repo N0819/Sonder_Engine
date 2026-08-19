@@ -129,3 +129,97 @@ class TestDraftPromotedCharacter:
 
         with pytest.raises(RuntimeError):
             importers.draft_promoted_character(chat_id, "Dr. Crusher")
+
+
+# --- the warnings are about a CARD, not about an import --------------------
+#
+# `character_import_warnings` ran on exactly one of the nine surfaces that
+# create or edit a character card: the import route. Every other way a sheet
+# comes into being -- the blank-card route, the editor's save, the generator,
+# the psychology fill, a promotion from a background presence -- produced a
+# sheet nobody checked. The blank-card route produces, BY CONSTRUCTION, the
+# sheet the first three warnings exist to catch: `default_character_data`
+# ships `{"essence": "", "expression": "", "taboo": ""}`, no goals and an
+# empty capacity, and says nothing.
+#
+# CLAUDE.md names that shape as the worst failure mode in the engine: it
+# reads as complete, never errors, and surfaces fifty beats later as a
+# character who stopped wanting things. The check is a property of a sheet
+# and always was; only its name and its home said "import".
+
+class TestCardWarningsAreASheetProperty:
+    def test_the_check_is_reachable_from_the_module_that_owns_the_card(self):
+        """A validator named for one route is a validator nine other
+        surfaces will not find. It lives with the format it validates."""
+        from story.character_schema import character_card_warnings
+        assert callable(character_card_warnings)
+
+    def test_the_import_name_still_answers(self):
+        """The import route is a caller, not the owner; it keeps working."""
+        from story import importers
+        from story.character_schema import character_card_warnings
+        assert importers.character_import_warnings is character_card_warnings
+
+    def test_the_blank_card_route_is_told_what_it_just_made(self):
+        from story.character_schema import (character_card_warnings,
+                                            default_character_data)
+        warnings = character_card_warnings(default_character_data("Tamamo"))
+        assert any("drive" in w for w in warnings)
+        assert any("goals" in w for w in warnings)
+        assert any("capacity" in w for w in warnings)
+
+    def test_an_authored_card_says_nothing(self):
+        from story.character_schema import (character_card_warnings,
+                                            normalize_character_data)
+        sheet = normalize_character_data({
+            "identity": {"name": "Tamamo"},
+            "psychology": {
+                "drive": {"essence": "to be seen as she truly is",
+                          "expression": "tests whether a kindness is real",
+                          "taboo": "being pitied"},
+                "capacity": "focused",
+            },
+            "initial_state": {"goals": [{"text": "reach the shrine"}]},
+        })
+        assert character_card_warnings(sheet) == []
+
+
+class TestAPromotedCharacterIsCheckedToo:
+    """A promotion mints a real character from a background presence, from a
+    model-written sheet, and hands it to a review screen -- which is the one
+    moment an author can still fix an empty drive. The draft carried its
+    evidence and its memory seeds and no word about what the sheet was
+    missing."""
+
+    def test_the_draft_carries_its_own_warnings(self, temp_db, monkeypatch):
+        chat_id = _make_chat(temp_db)
+        _add_event(temp_db, chat_id, 5, "Crusher tends to the patient.")
+
+        def fake_chat_complete(role, system, user, **kwargs):
+            return json.dumps({"sheet": {"identity": {"name": "Dr. Crusher"}}})
+
+        monkeypatch.setattr(importers, "chat_complete", fake_chat_complete)
+        draft = importers.draft_promoted_character(chat_id, "Dr. Crusher")
+
+        assert any("drive" in w for w in draft["warnings"])
+
+    def test_a_complete_draft_warns_about_nothing(self, temp_db, monkeypatch):
+        chat_id = _make_chat(temp_db)
+        _add_event(temp_db, chat_id, 5, "Crusher tends to the patient.")
+
+        def fake_chat_complete(role, system, user, **kwargs):
+            return json.dumps({"sheet": {
+                "identity": {"name": "Dr. Crusher"},
+                "psychology": {
+                    "drive": {"essence": "nobody dies on her watch",
+                              "expression": "puts herself between them and it",
+                              "taboo": "being ordered to stand down"},
+                    "capacity": "broad",
+                },
+                "initial_state": {"goals": [{"text": "stabilise the patient"}]},
+            }})
+
+        monkeypatch.setattr(importers, "chat_complete", fake_chat_complete)
+        draft = importers.draft_promoted_character(chat_id, "Dr. Crusher")
+
+        assert draft["warnings"] == []
