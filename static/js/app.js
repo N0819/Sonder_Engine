@@ -511,6 +511,7 @@ async function runWizard(state) {
       const r = await api("POST", "/api/characters/generate", {
         prompt: text, language: state.language
       });
+      showCardWarnings(r);
       characterIds.push(r.id);
       if (state.characterBriefsKnown[i]) knownIds.add(r.id);
     }
