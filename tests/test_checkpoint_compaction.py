@@ -179,6 +179,9 @@ def test_a_story_that_cannot_be_proved_lossless_is_left_alone(temp_db, monkeypat
 
     assert [s["name"] for s in rep["skipped"]] == ["Bad Story"]
     assert "salience changed" in rep["skipped"][0]["reason"]
+    # And named ONCE. A report field that is initialized and never assigned
+    # reads as "no failure" on exactly the run that had one.
+    assert "error" not in rep
     bad_ids = {x["id"] for x in temp_db.q(
         "SELECT id FROM checkpoints WHERE chat_id=?", (bad,))}
     assert all(before[i] == after[i] for i in bad_ids), "the original must be untouched"
