@@ -1,8 +1,9 @@
-"""Host switches: what the engine does, what the API reports, what the host sees.
+"""The host surface: what the engine does, what the API reports, what the host sees.
 
-A host setting has three faces -- the gate that decides, the route that reports
-it, and the control that changes it -- and nothing in the tree makes them agree.
-Each of these tests pins one place they were measured to disagree.
+A host-facing capability has three faces -- the code that decides, the route
+that reports or changes it, and the control that reaches the route -- and
+nothing in the tree makes them agree. Each of these tests pins one place they
+were measured to disagree.
 
 Two failure shapes recur, and both are silent:
 
@@ -14,6 +15,10 @@ Two failure shapes recur, and both are silent:
   * **A control the copy names and the browser does not have.** Help text that
     says "switch it on in X" is a promise; if X has no such switch, the setting
     is unreachable and the host has no way to learn that.
+  * **A route with no caller.** The handler is written, validated and tested,
+    and no page in the app can reach it. Half a lifecycle -- attach with no
+    detach, sign in with no sign out -- reads as a deliberate product decision
+    when it is an omission.
 """
 
 from __future__ import annotations
@@ -101,3 +106,46 @@ class TestTheNarratorsVoiceAnchorIsReachable:
         assert json.loads(get_setting("exemplars")) == ["A short passage.",
                                                         "Another."]
         assert app.bootstrap()["exemplars"] == ["A short passage.", "Another."]
+
+
+class TestBothHalvesOfALifecycleHaveAControl:
+    """WEB-9 / FRONTEND-8. Routes whose other half was already reachable.
+
+    Half a lifecycle reads as a product decision when it is an omission: the
+    host sees an Attach button and no Detach, a sign-in page and no sign-out,
+    and has no way to tell "not offered" from "not built".
+    """
+
+    def test_an_attached_extra_player_can_be_detached(self):
+        """`POST .../personas` had a button; `DELETE .../personas/{pid}` did
+        not, so a player who joined a story once could not be removed except
+        by editing the database."""
+        assert '"POST", `/api/chats/${chatId}/personas`' in SETTINGS_JS
+        assert '"DELETE", `/api/chats/${chatId}/personas/${p.id}`' in SETTINGS_JS
+
+    def test_detaching_is_what_the_button_says_it_is(self, temp_db):
+        """The copy promises their invite or live session stops working --
+        the route does both in one transaction, so the promise is checkable."""
+        import time
+
+        from web import app
+        from web import guest_access as guest
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        pid = app.persona_create({"name": "Second Player"})["id"]
+        app.chat_add_persona(cid, {"persona_id": pid})
+        invite = guest.create_guest_invite(cid, pid)
+        session = guest.redeem_code(invite["code"])
+        assert guest.verify_guest_token(session["token"]) is not None
+
+        app.chat_del_persona(cid, pid)
+
+        assert app.chat_list_extra_personas(cid)["personas"] == []
+        assert guest.verify_guest_token(session["token"]) is None
+
+    def test_a_host_can_sign_out(self):
+        """The host cookie lasts thirty days and is SameSite=Strict.
+        `POST /api/auth/logout` destroys the session row and clears the
+        cookie, and no page in the app offered it."""
+        assert '"POST", "/api/auth/logout"' in SETTINGS_JS
