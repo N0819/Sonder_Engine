@@ -769,37 +769,6 @@ def _nonsteering_intention_refs(result, intentions, turn_idx):
     return sorted(normalized)
 
 
-def _sanitize_nonsteering_intention_refs(result, invalid_refs):
-    """Prevent a rejected spent aim from persisting as next beat's steering."""
-    invalid = {str(value) for value in invalid_refs or []}
-    if not invalid or not isinstance(result, dict):
-        return result
-    active = result.get("active_state") or {}
-    bad_wants = []
-    if isinstance(active, dict):
-        for want in active.get("wants") or []:
-            if not isinstance(want, dict):
-                continue
-            ref = str(want.get("serves") or "").strip()
-            if ref in invalid or ref.removeprefix("intention:") in invalid:
-                bad_wants.append(str(want.get("want") or ""))
-                want["serves"] = "situational"
-        goal = str(active.get("goal") or "")
-        if bad_wants and any(
-                affect.claim_similarity(goal, text) >= 0.4
-                for text in bad_wants if text):
-            active["goal"] = ""
-    for candidate in result.get("response_candidates") or []:
-        if not isinstance(candidate, dict):
-            continue
-        candidate["serves"] = [
-            value for value in (candidate.get("serves") or [])
-            if str(value) not in invalid
-            and str(value).removeprefix("intention:") not in invalid
-        ]
-    return result
-
-
 # ---- Unbidden recall: one contrasting memory for a measurably stuck mind ----
 #
 # The three repetition mechanisms above (`recent_self_lines`, the refrain
