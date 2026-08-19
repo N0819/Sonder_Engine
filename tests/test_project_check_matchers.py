@@ -125,17 +125,27 @@ def test_facade_siblings_are_read_off_the_facade_not_the_filenames():
     assert "commit_memory_write" in commit
 
 
-def test_all_three_facade_families_are_checked():
+def test_every_facade_family_is_checked():
     """`world.spatial` was the third facade of this shape and sat outside the
     check for as long as the check existed, behind a comment saying adding the
     line was all it took. It took the line plus eight import sites -- one in
     `world/crowds.py` and seven in tests -- each of which is the drift a facade
     rule exists to stop: a caller that knows which sibling defines a name, and
     therefore pins where the name lives.
+
+    `mind.memory` is the fourth (2026-08-19, `docs/design/SPLIT_MEMORY.md`) and
+    cost the same shape of debt on registration: seven monkeypatches across
+    four test files aimed at a facade name whose reader had moved. Not one of
+    them had failed -- they stub an embedding provider, and an uninstalled stub
+    falls back silently -- so this check is what found them.
+
+    The set is asserted whole, and deliberately. A family that is split but not
+    registered is invisible exactly the way `world.spatial` was.
     """
     from project_check import FACADE_FAMILIES, facade_siblings
 
-    assert set(FACADE_FAMILIES) == {"agents.director", "commit", "world.spatial"}
+    assert set(FACADE_FAMILIES) == {
+        "agents.director", "commit", "mind.memory", "world.spatial"}
     for facade, (home, stem) in FACADE_FAMILIES.items():
         assert facade_siblings(home, stem), facade
 
