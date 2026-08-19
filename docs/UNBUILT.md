@@ -2482,11 +2482,30 @@ revised, recorded as an act).
 It landed 2026-08-12 behind a default-OFF flag and was reverted the same day
 (`415e208`), whose message says the work is intact on branch
 `character-cognition` "so nothing is lost and it can be argued again on its
-own terms later". **The owner has since decided it is not necessary
-(2026-08-18).** That is recorded here so the next reader finds the decision
-rather than the invitation: the branch and design note 23 still exist and are
-worth reading, but re-proposing this needs a new argument, not a rerun of the
-old one.
+own terms later".
+
+**The owner's answer, 2026-08-18: minds already reflect — it happens on the
+next turn.** And checking that against the code turns up the stronger
+version, which is worth stating because the reflection split's premise does
+not survive it.
+
+There are TWO numbers on a memory, deliberately. `salience` is how much it
+mattered WHEN IT WAS FORMED — intent-shaped by definition, because intent is
+what the mind knew then. `importance` is the revisable one, and
+`effective_importance` falls back to salience until something revises it.
+**Retrieval ranks on `effective_importance`**, so a later correction reaches
+the ordering the split was worried about. `raise_importance` states the
+division outright: *"Never lowers, and never touches `salience` -- how much
+it mattered when it was FORMED is a different fact."* The dispute path goes
+further and moves importance UP when a memory turns out to have been wrong,
+on the grounds that "a memory whose meaning changed is more central to this
+mind, not less."
+
+So intent-shaped salience is not a defect to be fixed at write time. It is a
+true record of what a mind understood then, and the correction is a separate
+fact that arrives when the consequence does — one beat later, through a
+channel that already exists. Re-proposing the split needs an argument against
+THAT, not a rerun of the old one.
 
 So this is tidiness, not a defect, and it is registered rather than repaired
 because the repair writes to live stories: a migration deleting retired keys
