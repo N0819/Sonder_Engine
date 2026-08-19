@@ -241,3 +241,61 @@ def test_a_dropped_specialist_channel_says_so(monkeypatch, sink):
     assert not out.get("attire")
     assert any("attire" in note for note in sink), (
         f"a specialist channel was dropped with nothing said: {sink}")
+
+
+# --- LLM-11: the drops that had no way to say so ---------------------------
+
+
+def test_every_major_prune_in_schemas_says_what_it_dropped(sink):
+    """`llm/schemas.py` subtracts in about a dozen places and every one was
+    silent. Each is individually argued and mostly right -- a dropped
+    alternative beats a crashed beat -- but the third option was always
+    available and only `_uncross_concealed_speech` took it: keep the beat AND
+    say what went. A list truncated at 64 and a well-formed list of 64 were
+    indistinguishable in the stored variant.
+    """
+    from llm.schemas import FREE_STRING_LIST_LIMIT, validate_llm_output_strict
+
+    cases = {
+        "the free-string runaway ceiling": (
+            "character",
+            {"response_candidates": [
+                {"response": "wait", "serves": ["x"] * 9}]},
+            "serves"),
+        "a line with no quote": (
+            "director_resolve",
+            {"resolved_event": "a", "summary": "a",
+             "dialogue_log": [{"speaker": "Mara", "exact_quote": ""}]},
+            "dialogue_log"),
+        "a sequence entry that is neither object nor prose": (
+            "character",
+            {"sequence": [{"type": "action", "observable": "stands"}, 7]},
+            "sequence"),
+        "a scalar where the beat's clock belongs": (
+            "director_resolve",
+            {"resolved_event": "a", "summary": "a",
+             "state_diff": {"time": "a minute passes"}},
+            "state_diff.time"),
+        "a memory dispute with no locator": (
+            "character",
+            {"memory_disputes": [{"now_reads": "he lied"}]},
+            "memory_disputes"),
+        "the whole deliberation": (
+            "character",
+            {"response_candidates": {"unrelated": 3}},
+            "response_candidates"),
+    }
+    for label, (step_key, raw, expected) in cases.items():
+        del sink[:]
+        validate_llm_output_strict(step_key, raw)
+        assert any(expected in note for note in sink), (
+            f"{label}: nothing said about {expected} ({sink})")
+
+    # The runaway ceiling itself: the shape a stuck sampler produces, which
+    # is the one prune whose whole point is that the tail is not content.
+    del sink[:]
+    validate_llm_output_strict(
+        "character",
+        {"considered_responses":
+            [f"option {n}" for n in range(FREE_STRING_LIST_LIMIT + 5)]})
+    assert any("runaway ceiling" in note for note in sink), sink
