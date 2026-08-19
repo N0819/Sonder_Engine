@@ -836,35 +836,25 @@ class ChatArchiveService:
                     (new_canon, new_chat_id),
                 )
 
+            # Carried through whole, with only the three id columns remapped
+            # onto this database's rows -- the same shape the summaries
+            # projection below uses. A hand-listed projection here would have
+            # to track `dump_chat_memories` column by column, and whatever it
+            # failed to name would be dropped in silence rather than fail:
+            # that is how the inlined vectors (which exist precisely so an
+            # import need not re-embed the whole bank, downgrading every
+            # vector to the crc32 fallback on one provider hiccup) and the
+            # post-appraisal encoding affect (not re-derivable from the row's
+            # text, any more than importance or a recorded re-reading is) were
+            # both thrown away here. `prepare_chat_memory_restore` names the
+            # keys it accepts and supplies their defaults, so an unknown key
+            # in an archive reaches no statement.
             memories = [
                 {
+                    **memory,
                     "char_id": old_char_map.get(memory.get("char_id")),
                     "turn_id": turn_idmap.get(memory.get("turn_id")),
-                    "turn_idx": memory.get("turn_idx"),
                     "frame_id": frame_idmap.get(memory.get("frame_id")),
-                    "kind": memory.get("kind", "episodic"),
-                    "category": memory.get("category"),
-                    "provenance": memory.get("provenance", "witnessed"),
-                    "salience": memory.get("salience", 0.5),
-                    "content": memory.get("content", ""),
-                    "gist": memory.get("gist"),
-                    "key_phrases": memory.get("key_phrases"),
-                    "entities": memory.get("entities"),
-                    "location": memory.get("location", ""),
-                    "emotional_context": memory.get(
-                        "emotional_context", ""
-                    ),
-                    "valence": memory.get("valence", 0.0),
-                    "arousal": memory.get("arousal", 0.0),
-                    "confidence": memory.get("confidence", 1.0),
-                    "archived": memory.get("archived", False),
-                    "event_key": memory.get("event_key", ""),
-                    # How central the memory became, and the character's own
-                    # later re-reading of it. Neither is re-derivable from the
-                    # row's text, so an archive that dropped them would import
-                    # a bank that had forgotten what it learned.
-                    "importance": memory.get("importance"),
-                    "disputed": memory.get("disputed") or "",
                 }
                 for memory in data.get("memories", [])
                 if memory.get("content")

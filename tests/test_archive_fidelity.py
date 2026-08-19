@@ -355,3 +355,74 @@ def test_native_entry_list_import_does_not_require_book_metadata(
     assert temp_db.q(
         "SELECT id FROM lorebooks WHERE id=?", (book_id,), one=True
     ) is not None
+
+
+def test_chat_import_keeps_every_column_the_memory_dump_carried(
+    temp_db, monkeypatch,
+):
+    """An archive's memory rows survive the import with what the dump carried.
+
+    `dump_chat_memories` inlines the vectors precisely so an import does not
+    have to re-embed, and carries the encoding affect because it is not
+    re-derivable from the row's text. Both are worth nothing if the import
+    re-lists the columns by hand: a hand-written projection is what decides
+    which of the dump's keys reach the new database, and it silently drops
+    whichever key the dump grew last.
+    """
+    from mind import memory as memory_mod
+    from llm.providers import EmbeddingBatch
+
+    calls = {"n": 0}
+
+    def fake_meta(texts):
+        calls["n"] += 1
+        return EmbeddingBatch(
+            vectors=[[0.25 + i] * 8 for i, _ in enumerate(texts)],
+            model_key="openai:1:text-embedding-real",
+            dimensions=8,
+        )
+
+    monkeypatch.setattr(memory_mod, "embed_texts_meta", fake_meta)
+    monkeypatch.setattr(
+        memory_mod, "embed_texts", lambda texts: fake_meta(texts).vectors
+    )
+
+    chat_id = _chat(temp_db, "Fidelity")
+    alice = _character(temp_db, "Alice", "fidelity_alice")
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, alice, "active", "{}"),
+    )
+    memory_mod.add_memory(
+        chat_id, alice, None, "episodic", "witnessed", 0.7,
+        "Alice watched the cellar door swing open.",
+        turn_idx=1, valence=-0.4, arousal=0.6,
+        encoding_valence=-0.8, encoding_arousal=0.9,
+    )
+    columns = (
+        "embedding,cue_embedding,embedding_model,embedding_dim,"
+        "encoding_valence,encoding_arousal"
+    )
+    before = temp_db.q(
+        f"SELECT {columns} FROM memories WHERE chat_id=?",
+        (chat_id,), one=True,
+    )
+    assert before["embedding_model"] == "openai:1:text-embedding-real"
+
+    archive = app.chat_export(chat_id)
+    calls["n"] = 0
+    result = app.chat_import({"data": json.loads(json.dumps(archive))})
+
+    after = temp_db.q(
+        f"SELECT {columns} FROM memories WHERE chat_id=?",
+        (result["id"],), one=True,
+    )
+    assert after is not None
+    # The carried vectors were used, not paid for again.
+    assert calls["n"] == 0
+    assert bytes(after["embedding"]) == bytes(before["embedding"])
+    assert bytes(after["cue_embedding"]) == bytes(before["cue_embedding"])
+    assert after["embedding_model"] == before["embedding_model"]
+    assert after["embedding_dim"] == before["embedding_dim"]
+    assert after["encoding_valence"] == before["encoding_valence"]
+    assert after["encoding_arousal"] == before["encoding_arousal"]
