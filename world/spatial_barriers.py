@@ -431,3 +431,46 @@ _PASSABLE_BARRIERS = {"open", "open_door", "membrane"}
 
 
 _AMBIENT_BARRIERS = {"open", "open_door", "bars"}
+
+
+def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False) -> dict:
+    """{room_id: {rooms one step away}}, undirected, over the edges a caller
+    is willing to cross.
+
+    Undirected because an edge declared from either side is real from both --
+    asymmetric declarations happen, and every walk in this package had already
+    decided independently to treat them that way (the `nearby_rooms`
+    precedent).
+
+    `barriers` is the allowlist of normalized barrier names an edge must be in
+    to count. It is a PARAMETER and not a default because the four walks that
+    use this genuinely disagree, and each is right: a body walks
+    `_PASSABLE_BARRIERS`, sound walks `_SOUND_WALK_BARRIERS` (bars carry
+    voices), an ambient bed walks `_AMBIENT_BARRIERS`, and payload trimming
+    (`nearby_rooms`) walks every declared edge because it is asking about
+    RELEVANCE and not about reachability. Passing `None` crosses everything.
+
+    `known_rooms_only` drops an edge whose target the scene does not have a
+    room record for. Only `ambient_scope` asks for that, because its answer is
+    a connected component it then reads `parent_entity` off; the walks that
+    only need ids tolerate a dangling edge.
+    """
+    rooms = scene.get("rooms") or {}
+    neighbors: dict[str, set] = {}
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict):
+                continue
+            target = edge.get("to")
+            if not target:
+                continue
+            if known_rooms_only and target not in rooms:
+                continue
+            if barriers is not None \
+                    and normalize_barrier(edge.get("barrier")) not in barriers:
+                continue
+            neighbors.setdefault(room_id, set()).add(target)
+            neighbors.setdefault(target, set()).add(room_id)
+    return neighbors

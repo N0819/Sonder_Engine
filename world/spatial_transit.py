@@ -4,7 +4,8 @@ nesting-aware ambient scope."""
 
 from typing import Optional
 
-from world.spatial_barriers import _AMBIENT_BARRIERS, normalize_barrier
+from world.spatial_barriers import (_AMBIENT_BARRIERS, neighbor_map,
+                                    normalize_barrier)
 from world.spatial_identity import _ci_get
 
 
@@ -392,19 +393,7 @@ def ambient_scope(scene: dict, room_id: str):
     rooms = scene.get("rooms") or {}
     if not room_id or room_id not in rooms:
         return ({room_id} if room_id else set()), True
-    graph: dict[str, set] = {}
-    for rid, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict):
-                continue
-            to = edge.get("to")
-            if to not in rooms:
-                continue
-            if normalize_barrier(edge.get("barrier")) in _AMBIENT_BARRIERS:
-                graph.setdefault(rid, set()).add(to)
-                graph.setdefault(to, set()).add(rid)
+    graph = neighbor_map(scene, _AMBIENT_BARRIERS, known_rooms_only=True)
     seen = {room_id}
     queue = [room_id]
     while queue:

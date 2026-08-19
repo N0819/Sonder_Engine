@@ -275,3 +275,60 @@ def test_a_wall_that_is_only_described_stays_a_wall():
     ]}}}
     edges = normalize_scene_barriers(scene)["rooms"]["r"]["adjacent"]
     assert [e["barrier"] for e in edges] == ["wall"] * 3
+
+
+class TestOneNeighbourMapForFourDifferentWalks:
+    """SPATIAL-F11. Four walks each rebuilt the same undirected room graph
+    from `scene.rooms`, differing only in which barriers they were willing to
+    cross -- and one of the four in whether it tolerated a dangling edge. The
+    shared builder had to be PARAMETERISED rather than substituted: the four
+    barrier sets disagree because the four questions do.
+    """
+
+    def _scene(self):
+        return {"rooms": {
+            "hall": {"adjacent": [
+                {"to": "cell", "barrier": "bars"},
+                {"to": "office", "barrier": "closed_door"},
+                {"to": "yard", "barrier": "open"},
+                {"to": "nowhere", "barrier": "open"},
+            ]},
+            "cell": {"adjacent": []},
+            "office": {"adjacent": []},
+            "yard": {"adjacent": []},
+        }}
+
+    def test_no_allowlist_crosses_every_declared_edge(self):
+        from world.spatial import neighbor_map
+        assert neighbor_map(self._scene())["hall"] == {
+            "cell", "office", "yard", "nowhere"}
+
+    def test_a_body_does_not_walk_through_bars_and_sound_does(self):
+        from world.spatial import _PASSABLE_BARRIERS, neighbor_map
+        from world.spatial_senses import _SOUND_WALK_BARRIERS
+        scene = self._scene()
+        assert "cell" not in neighbor_map(scene, _PASSABLE_BARRIERS)["hall"]
+        assert "cell" in neighbor_map(scene, _SOUND_WALK_BARRIERS)["hall"]
+
+    def test_a_closed_door_is_crossed_by_none_of_the_three_sets(self):
+        from world.spatial import (_AMBIENT_BARRIERS, _PASSABLE_BARRIERS,
+                                   neighbor_map)
+        from world.spatial_senses import _SOUND_WALK_BARRIERS
+        scene = self._scene()
+        for barriers in (_PASSABLE_BARRIERS, _AMBIENT_BARRIERS,
+                         _SOUND_WALK_BARRIERS):
+            assert "office" not in neighbor_map(scene, barriers)["hall"]
+
+    def test_a_dangling_edge_survives_unless_the_caller_refuses_it(self):
+        """`ambient_scope` reads `parent_entity` off every room in the
+        component it gets back, so a target with no room record is not one."""
+        from world.spatial import neighbor_map
+        scene = self._scene()
+        assert "nowhere" in neighbor_map(scene)["hall"]
+        assert "nowhere" not in neighbor_map(
+            scene, known_rooms_only=True)["hall"]
+
+    def test_an_edge_declared_from_one_side_is_walkable_from_both(self):
+        from world.spatial import neighbor_map
+        graph = neighbor_map(self._scene())
+        assert graph["yard"] == {"hall"}

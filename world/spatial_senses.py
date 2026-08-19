@@ -14,7 +14,7 @@ from world.spatial_orientation import (
 )
 
 from world.spatial_barriers import (_SCENT_BARRIER_LEVELS, _SIGHT_BARRIERS,
-                                    normalize_barrier)
+                                    neighbor_map, normalize_barrier)
 from world.spatial_containment import (_body_interior_holder, _shares_enclosure,
                                  containment_conceals)
 from world.spatial_contacts import contacts_of
@@ -890,16 +890,7 @@ def sound_path(scene: dict, from_room, to_room, max_hops: int = 2):
     nearby_rooms precedent) and deterministic (sorted neighbour order)."""
     if not from_room or not to_room or from_room == to_room:
         return None
-    neighbors: dict[str, set] = {}
-    for rid, room in (scene.get("rooms") or {}).items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict) or not edge.get("to"):
-                continue
-            if normalize_barrier(edge.get("barrier")) in _SOUND_WALK_BARRIERS:
-                neighbors.setdefault(rid, set()).add(edge["to"])
-                neighbors.setdefault(edge["to"], set()).add(rid)
+    neighbors = neighbor_map(scene, _SOUND_WALK_BARRIERS)
     prev = {from_room: None}
     frontier = [from_room]
     for _ in range(max(0, int(max_hops))):

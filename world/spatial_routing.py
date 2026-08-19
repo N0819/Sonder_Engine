@@ -8,7 +8,7 @@ from typing import Optional
 from world.spatial_orientation import normalize_bearing, opposite_bearing
 
 from world.spatial_barriers import (_PASSABLE_BARRIERS, _SIGHT_BARRIERS,
-                              normalize_barrier)
+                              neighbor_map, normalize_barrier)
 from world.spatial_containment import container_of
 from world.spatial_light import _LIGHT_SIGHT, effective_light, light_blocks_sight
 
@@ -158,21 +158,7 @@ def passable_neighbors(scene: dict) -> dict:
     on the one graph everyone else walks, and §5 of the crowd proposal asks for
     exactly no second pathfinder.
     """
-    neighbors: dict[str, set] = {}
-    for room_id, room in (scene.get("rooms") or {}).items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict):
-                continue
-            target = edge.get("to")
-            if not target:
-                continue
-            if normalize_barrier(edge.get("barrier")) not in _PASSABLE_BARRIERS:
-                continue
-            neighbors.setdefault(room_id, set()).add(target)
-            neighbors.setdefault(target, set()).add(room_id)
-    return neighbors
+    return neighbor_map(scene, _PASSABLE_BARRIERS)
 
 
 def passable_route_next_step(
@@ -288,19 +274,9 @@ def nearby_rooms(
     makes for what's visible through an open doorway.
     """
     rooms = scene.get("rooms") or {}
-
-    neighbors: dict[str, set] = {}
-    for room_id, room in rooms.items():
-        if not isinstance(room, dict):
-            continue
-        for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict):
-                continue
-            target = edge.get("to")
-            if not target:
-                continue
-            neighbors.setdefault(room_id, set()).add(target)
-            neighbors.setdefault(target, set()).add(room_id)
+    # No barrier allowlist: this trims a PAYLOAD, and a room behind a locked
+    # door is still a room the beat may be about.
+    neighbors = neighbor_map(scene)
 
     included = {r for r in (center_room_ids or []) if r}
     frontier = set(included)
