@@ -318,3 +318,62 @@ def test_it_becomes_available_again_when_legacy_data_arrives(temp_db):
         if not checkpoints.compaction_progress()["running"]:
             break
         time.sleep(0.05)
+
+
+# --- the panel and the mover have to be asking the same question -----------
+
+def _rewrite_first_checkpoint(temp_db, cid, mutate):
+    row = temp_db.q("SELECT id, blob FROM checkpoints WHERE chat_id=?",
+                    (cid,), one=True)
+    blob = json.loads(row["blob"])
+    mutate(blob)
+    temp_db.qi("UPDATE checkpoints SET blob=? WHERE id=?",
+               (json.dumps(blob), row["id"]))
+
+
+def test_inline_vectors_past_the_first_entry_are_still_counted(temp_db):
+    """A probe of entry zero answers about entry zero.
+
+    The checkpoint's memories are ordered by turn, not by storage format, so
+    "does this checkpoint still carry payload" is a question about all of
+    them. Reported done, the panel offers no conversion and the inline
+    vectors stand -- which on the corpus this module exists for is the whole
+    reason it exists.
+    """
+    cid, _ = _story(temp_db, "Iota")
+    ensure_checkpoint(cid, 0)
+    _make_legacy(temp_db, cid)
+
+    def only_the_first_is_compacted(blob):
+        first = blob["memories"][0]
+        first.pop("embedding", None)
+        first.pop("cue_embedding", None)
+        first["vkey"] = "vec_already_moved"
+
+    _rewrite_first_checkpoint(temp_db, cid, only_the_first_is_compacted)
+
+    assert checkpoint_storage_status()["legacy"] == 1
+
+
+def test_a_checkpoint_the_mover_would_skip_is_not_reported_as_legacy(temp_db):
+    """The panel must not promise work compaction will never do.
+
+    `_candidate_blob` moves an entry only when BOTH vectors decode -- the
+    store is addressed by the pair, so half of one has no address. Counting
+    it legacy leaves the panel reporting the same outstanding bytes after
+    every completed run, for a checkpoint no run will ever touch.
+    """
+    cid, _ = _story(temp_db, "Kappa")
+    ensure_checkpoint(cid, 0)
+    _make_legacy(temp_db, cid)
+
+    def drop_every_cue(blob):
+        for m in blob["memories"]:
+            m.pop("cue_embedding", None)
+
+    _rewrite_first_checkpoint(temp_db, cid, drop_every_cue)
+
+    status = checkpoint_storage_status()
+    rep = compact_checkpoints(dry_run=False)
+    assert rep["rewritten"] == 0
+    assert status["legacy"] == 0

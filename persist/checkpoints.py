@@ -754,8 +754,16 @@ def _lore_cache_fingerprint(entry):
 
 def checkpoint_storage_status(chat_id=None):
     """How much of the checkpoint store is still in the legacy inline-vector
-    format, for the maintenance panel. Cheap: one scan of sizes plus a probe of
-    each blob's first memory entry rather than a full parse.
+    format, for the maintenance panel.
+
+    "Legacy" here means exactly one thing: this checkpoint holds at least one
+    entry `compact_checkpoints` would move. It asks with `_movable_entry`, the
+    same predicate `_candidate_blob` decides by, because two spellings of one
+    question is how the panel and the mover came to disagree in both
+    directions -- a store whose first entry was already compacted reported
+    done with inline vectors still in it, and a store whose vectors the mover
+    refuses reported legacy forever while every run rewrote nothing. The scan
+    stops at the first movable entry, so the common case still costs one.
     """
     where, args = ["1=1"], []
     if chat_id is not None:
@@ -770,12 +778,29 @@ def checkpoint_storage_status(chat_id=None):
             mems = json.loads(blob["blob"]).get("memories") or []
         except (TypeError, ValueError):
             continue
-        # An inline entry carries the payload; a compacted one carries `vkey`.
-        if any(isinstance(m, dict) and m.get("embedding") for m in mems[:1]):
+        if any(_movable_entry(m) is not None for m in mems):
             legacy += 1
             legacy_bytes += r["sz"] or 0
     return {"checkpoints": len(rows), "legacy": legacy,
             "bytes": total_bytes, "legacy_bytes": legacy_bytes}
+
+
+def _movable_entry(m):
+    """The (full, cue) payload the compactor would move, or None.
+
+    BOTH vectors have to decode. The store is addressed by the pair
+    (`vector_address`), so an entry carrying half of one has no address to be
+    filed under and there is nothing safe to move. Written once, and read by
+    the storage panel as well as by the mover, so the answer to "is there
+    anything left to convert" cannot depend on who is asking.
+    """
+    if not isinstance(m, dict) or not m.get("embedding"):
+        return None
+    full = _b64_to_blob(m.get("embedding"))
+    cue = _b64_to_blob(m.get("cue_embedding"))
+    if full is None or cue is None:
+        return None
+    return full, cue
 
 
 def _candidate_blob(blob):
@@ -787,12 +812,10 @@ def _candidate_blob(blob):
     candidate = json.loads(json.dumps(blob))     # deep copy, cheap enough here
     pending, moved = [], 0
     for m in candidate.get("memories") or []:
-        if not isinstance(m, dict) or not m.get("embedding"):
+        payload = _movable_entry(m)
+        if payload is None:
             continue
-        full = _b64_to_blob(m.get("embedding"))
-        cue = _b64_to_blob(m.get("cue_embedding"))
-        if full is None or cue is None:
-            continue                              # nothing safe to move
+        full, cue = payload
         vkey = vector_address(full, cue)
         pending.append((vkey, full, cue, m.get("embedding_model"),
                         m.get("embedding_dim")))
