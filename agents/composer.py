@@ -1696,6 +1696,22 @@ _MAX_OBSERVATION_ATOMS = 8
 # text -- the citation namespace `_ground_observation_citations` grounds
 # against, and the content itself -- are never trimmed. Observations stored
 # before this change carry the full shape and read identically.
+#
+# THAT MEASUREMENT IS OF A DERIVATION THAT NO LONGER RUNS, and one of the six
+# rows no longer holds. It was taken against
+# `perception._observations_from_clean_views`, which computed
+# `0.35 + 0.2 * cue_hits` and therefore sat on the base whenever no cue
+# matched. `observations_from_render` computes `0.35 + 0.4 * salience`, and
+# the lowest salience any builder in this module assigns is 0.2
+# (`environment_percept`), so intensity is >= 0.43 on every atom the composer
+# can produce. The field the note above says is dropped 99% of the time is
+# now dropped 0% of the time.
+#
+# The entry stays regardless, because `OBSERVATION_DEFAULTS` is also the
+# EXPANSION table: rows stored under the old derivation omitted intensity,
+# and removing the key would read those rows as having no intensity rather
+# than the base. `suddenness`, `fidelity`, `ambiguity`, `source_atom_id` and
+# `perceiver_id` still compact as measured.
 OBSERVATION_DEFAULTS = {
     "source_atom_id": "current",
     "fidelity": "rendered",
