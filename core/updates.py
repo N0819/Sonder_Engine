@@ -3,9 +3,10 @@ fast-forward the working tree onto them.
 
 Kept deliberately small and side-effect-free at import time. All git work
 happens through :func:`_git`, a thin subprocess wrapper scoped to the repo
-root (the directory containing this file). The routes in ``app.py`` are
-host-only by virtue of the global access-control middleware, so nothing
-here re-checks auth.
+root -- ``paths.INSTALL_ROOT``, the directory holding `Makefile`, `static/`
+and the subsystem packages, which is this file's PARENT since the tree move.
+The routes in ``web/app.py`` are host-only by virtue of the global
+access-control middleware, so nothing here re-checks auth.
 
 The install path only ever fast-forwards (``git merge --ff-only``): it will
 never create a merge commit, rewrite history, or discard local work. A dirty

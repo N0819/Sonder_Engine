@@ -425,3 +425,98 @@ class TestOneCreatureIsOnePresence:
         }
         assert list(_fold_duplicate_presences(dict(ledger), alone)) == ["A Dalek"]
         assert _resolve_presence_name("Dalek", ledger, alone) == "A Dalek"
+
+
+class TestTheTwoTitleListsAreNotOneList:
+    """COMMIT-3. Two title lists sit four lines apart with a comment saying
+    they must stay separate, and nothing held them apart.
+
+    `_NAME_TITLE_PREFIXES` is the wider list: what `strip_name_titles` peels
+    off a display name so "Captain Jean-Luc Picard" matches the roster's
+    "Jean-Luc Picard". `_BACKGROUND_NAME_TITLE_WORDS` is the narrower one, and
+    it does the opposite job -- a word in it is NOT significant enough to
+    count as naming somebody, so widening it makes mention-detection stricter.
+
+    Merging them looks like tidying and is a behaviour change: every presence
+    whose only distinguishing word is a rank stops being mentionable. The
+    comment says so; these tests are what makes it true.
+
+    Read through `persist.commit`'s facade, which is what `make structure`
+    requires of a test that only CALLS: naming the defining sibling is
+    reserved for a test that PATCHES one, because a patch on a re-export is
+    inert. Nothing here patches anything.
+    """
+
+    def _lists(self):
+        from persist.commit import (_BACKGROUND_NAME_TITLE_WORDS,
+                                    _NAME_TITLE_PREFIXES)
+        return set(_BACKGROUND_NAME_TITLE_WORDS), set(_NAME_TITLE_PREFIXES)
+
+    def test_the_mention_list_is_strictly_the_smaller(self):
+        mention, prefixes = self._lists()
+        assert mention < prefixes
+
+    def test_a_rank_only_the_wider_list_holds_still_names_somebody(self):
+        from persist.commit import _background_name_mentioned
+
+        mention, prefixes = self._lists()
+        ranks = sorted(w for w in prefixes - mention if len(w) >= 3)
+        assert ranks, "the two lists have collapsed into one"
+        for word in ranks:
+            # Prose that does NOT repeat the tracked name, so the significant-
+            # word arm is the only thing that can answer.
+            assert _background_name_mentioned(
+                f"The {word.title()}", f"An unfamiliar {word} crosses the room."
+            ), f"{word!r} stopped counting as a mention"
+
+    def test_the_wider_list_is_what_strips_a_rank_off_a_roster_name(self):
+        from persist.commit import strip_name_titles
+
+        mention, prefixes = self._lists()
+        for word in sorted(prefixes - mention):
+            assert strip_name_titles(f"{word.title()} Ro") == "Ro"
+
+
+class TestAWhisperAddressesNobody:
+    """The `addressed_turns` ledger read the raw player input.
+
+    `overt_declaration` exists because the pre-commit gate and the payload
+    builder disagreed about what a bystander may be judged against, and
+    `pick_background_reactors` was routed through it. The COMMIT-time writer
+    one function over was not, so a concealed line naming a presence still
+    accrued that presence a durable "the story turned toward you on purpose"
+    debt -- the counter that earns a passer-by a character sheet, and the one
+    that survives the beat.
+    """
+
+    def _whisper_ctx(self, chat_id, turn_idx, visibility):
+        line = "Say nothing to Crusher about the readout."
+        ctx = _ctx(chat_id, turn_idx, [], {
+            "dialogue_log": [{"speaker": "Dr. Crusher",
+                              "exact_quote": "Hold still."}],
+            "resolved_event": "The ward is quiet.",
+        })
+        ctx.input = line
+        ctx.turn.player_input = line
+        ctx.director_interpret = {"sequence": [
+            {"type": "speech", "text": line, "visibility": visibility},
+        ]}
+        return ctx
+
+    def test_a_concealed_line_naming_a_presence_owes_them_nothing(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        track_background_presences(self._whisper_ctx(chat_id, 3, "concealed"),
+                                   nonce=0)
+
+        record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
+        assert record.get("addressed_turns", []) == []
+
+    def test_the_same_line_spoken_openly_still_does(self, temp_db):
+        """The control: the repair subtracts the concealed half and nothing
+        else, or it is a guard that makes minds conclude less."""
+        chat_id = _make_chat(temp_db)
+        track_background_presences(self._whisper_ctx(chat_id, 3, "public"),
+                                   nonce=0)
+
+        record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
+        assert record.get("addressed_turns", []) == [3]

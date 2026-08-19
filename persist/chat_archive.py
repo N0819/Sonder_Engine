@@ -69,6 +69,48 @@ WORLD_TABLES = (
     "fiction_locations",
 )
 
+# `world` keys that belong to this INSTALL rather than to the story, and must
+# not leave it. An archive is a file a host hands to somebody else; a
+# checkpoint or a branch is not, so these stay in both of those.
+#
+# `presence_id_namespace` (minted by `web/story_view.py`, spelled again here
+# because `persist` does not import `web` -- `tests/test_archive_fidelity.py`
+# holds the two spellings together) is the salt under every anonymous
+# presence id. Every OTHER input to that hash is canonical data the caller
+# can already read, so the salt is the entire reason a guessed identity
+# cannot be confirmed by enumeration. It rode an archive twice: as its own
+# `world` row, and again inside every checkpoint blob, which carries
+# `snapshot_state`'s copy of the same table.
+UNEXPORTED_WORLD_KEYS = frozenset({"presence_id_namespace"})
+
+
+def _exportable_world(rows):
+    """`{key: value}` for the story's own world state, secrets removed."""
+    return {row["key"]: json.loads(row["value"]) for row in rows
+            if parse_scoped_world_key(row["key"])[0] not in UNEXPORTED_WORLD_KEYS}
+
+
+def _exportable_checkpoint_blob(blob):
+    """One checkpoint blob with the same keys removed from its `world` copy.
+
+    Re-serialised only when something was actually dropped: a blob is the
+    largest thing in the archive and every other byte of it must survive
+    verbatim.
+    """
+    try:
+        snapshot = json.loads(blob)
+    except (TypeError, ValueError):
+        return blob                       # unreadable here is unreadable later
+    world = snapshot.get("world")
+    if not isinstance(world, dict):
+        return blob
+    kept = {k: v for k, v in world.items()
+            if parse_scoped_world_key(k)[0] not in UNEXPORTED_WORLD_KEYS}
+    if len(kept) == len(world):
+        return blob
+    snapshot["world"] = kept
+    return json.dumps(snapshot)
+
 
 def _model_validate(model_type, value):
     """Validate on Pydantic 1.x and 2.x without version-specific callers."""
@@ -256,10 +298,8 @@ class ChatArchiveService:
                 turn_data["steps"].append(step_data)
             export["turns"].append(turn_data)
 
-        export["world"] = {
-            row["key"]: json.loads(row["value"])
-            for row in q("SELECT * FROM world WHERE chat_id=?", (cid,))
-        }
+        export["world"] = _exportable_world(
+            q("SELECT * FROM world WHERE chat_id=?", (cid,)))
         export["participants"] = [
             dict(row)
             for row in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,))
@@ -275,7 +315,7 @@ class ChatArchiveService:
         export["checkpoints"] = [
             {
                 "turn_idx": row["turn_idx"],
-                "blob": row["blob"],
+                "blob": _exportable_checkpoint_blob(row["blob"]),
                 "created": row["created"],
             }
             for row in q(

@@ -74,6 +74,11 @@ def snapshot_state(chat_id):
                 (chat_id, lid), one=True)
         books.append({
             "lorebook_id": lid, "origin_id": lbrow["origin_id"],
+            # A book's PORTABLE identity, carried so a re-created book comes
+            # back as the same resource rather than as a stranger with the
+            # same name (see _recreate_snapshot_book). Absent from older
+            # blobs, which is why every reader of it falls back to a mint.
+            "resource_uid": lbrow["resource_uid"],
             "name": lbrow["name"], "book_type": lbrow["book_type"] or "general",
             "summary": lbrow["summary"] or "",
             "parent_id": lbrow["parent_id"],
@@ -182,6 +187,30 @@ def snapshot_state(chat_id):
         "fiction_locations": fiction_locations,
     }
 
+def _recreated_book_uid(snapshot_uid):
+    """The identity a re-created book comes back with.
+
+    Its own, when the snapshot carried one and nothing else on this install
+    has claimed it: a rewind past the turn that minted a book and forward
+    again should leave the same resource, and an archive matching it later
+    should recognise it.
+
+    A fresh one otherwise, and never NULL. `resource_uid` is UNIQUE where not
+    null, so reusing a name some other row now holds would abort the whole
+    restore over a bookkeeping field; and leaving it empty hands the row to
+    `db.init()`'s `_backfill_resource_uids`, which is a repair pass that
+    should have nothing left to repair -- it runs on every open of every
+    database precisely because writers kept leaving work for it.
+    """
+    from story.character_schema import new_uid
+
+    uid = str(snapshot_uid or "").strip()
+    if uid and not q("SELECT id FROM lorebooks WHERE resource_uid=?",
+                     (uid,), one=True):
+        return uid
+    return new_uid("book")
+
+
 def _recreate_snapshot_book(chat_id, snapshot):
     """Re-create a snapshot book this chat no longer has, or decline.
 
@@ -205,10 +234,11 @@ def _recreate_snapshot_book(chat_id, snapshot):
             "SELECT id FROM lorebooks WHERE id=?", (old_id,), one=True):
         return None
     new_id = qi(
-        "INSERT INTO lorebooks(chat_id,name,book_type,origin_id) "
-        "VALUES(?,?,?,?)",
+        "INSERT INTO lorebooks(chat_id,name,book_type,origin_id,resource_uid) "
+        "VALUES(?,?,?,?,?)",
         (chat_id, snapshot.get("name") or "Lorebook",
-         snapshot.get("book_type") or "general", snapshot.get("origin_id")),
+         snapshot.get("book_type") or "general", snapshot.get("origin_id"),
+         _recreated_book_uid(snapshot.get("resource_uid"))),
     )
     qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,enabled) "
        "VALUES(?,?,?)",

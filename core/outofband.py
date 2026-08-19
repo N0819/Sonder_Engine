@@ -23,15 +23,18 @@ being fixed twice and drifting a third time.
 
 Two things this is deliberately not:
 
-  * **Not a replacement for `jobs.py`** (branch `agent-engine`), which solves
-    the same two problems for offscreen ticks and gap generation. It is not
-    merged, so importing it is not available; copying it here would fork the
-    one module whose entire purpose is to stop this pattern being forked, and
-    the merge would then be a three-way conflict on a concurrency primitive.
-    This is the same shape deliberately -- terminal work leaves the active
-    table, cancellation is cooperative and BETWEEN steps -- so that when
-    `jobs.py` lands, this module is the single seam to delete rather than two
-    hand-written queues to reconcile.
+  * **Not a replacement for `core/jobs.py`**, which solves the same two
+    problems for offscreen ticks, artifact generation and memory
+    consolidation. It has LANDED -- `world/offscreen.py`, `story/artifacts.py`,
+    `persist/checkpoints.py` and `persist/commit_memory_write.py` all import
+    it -- so "it is not merged, importing it is not available", which this
+    paragraph used to say, is no longer why the two are separate. Nothing
+    replaced this module when jobs.py arrived, and the two are still the same
+    shape on purpose: terminal work leaves the active table, cancellation is
+    cooperative and BETWEEN steps. Collapsing them is therefore one merge with
+    a single seam to delete, and it is UNFINISHED rather than unavailable --
+    which is a different question from the one this comment was answering, and
+    the one a reader should be left with.
 
   * **Not a thread pool.** Each unit of work gets a thread, exactly as before.
     These are two or three concurrent network calls, not a workload, and

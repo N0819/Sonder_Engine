@@ -934,3 +934,182 @@ class TestCrowdIndexIsFrameScoped:
              [{"uid": "market_throng", "room_uid": "square"}])
 
         assert set(carriers._crowd_index(cid, None)) == {"market_throng"}
+
+
+# --- the player's envelope belongs to an era too (STORY-F27) ----------------
+#
+# Every other carrier home is per-era: a cast member's reports ride
+# `chat_chars.state`/`chat_char_frames.state`, and `crowds`, `couriers` and
+# `artifacts` are all in `db.FRAME_SCOPED_WORLD_KEYS`. The PLAYER's was the
+# one that was not, so `persona_carrier_state` was a single row every era of
+# a story read and wrote. What the player learned in one era survived a
+# rewind or a branch, and could be told onward by `couriers.run_couriers` in
+# an era that never produced it -- a channel where the design says there is
+# none.
+
+class TestThePlayersEnvelopeBelongsToAnEra:
+    def _framed(self, db):
+        from web import app
+
+        cid, _chars, scene, ctx = _world(db, persona="Corin")
+        scene["positions"] = {"Mora": "road", "Tavi": "road", "Corin": "square"}
+        # Spelled as edges so a courier has a door to walk through.
+        scene["rooms"]["square"]["adjacent"] = [{"to": "road", "barrier": "open"}]
+        scene["rooms"]["road"]["adjacent"] = [{"to": "square", "barrier": "open"}]
+        past = app.frames_create(
+            cid, {"label": "Past", "ordinal": -10, "kind": "past"})["id"]
+        future = app.frames_create(
+            cid, {"label": "Future", "ordinal": 10, "kind": "future"})["id"]
+        db.qi("UPDATE world_events SET frame_id=? WHERE chat_id=?", (past, cid))
+        db.qi("UPDATE turns SET frame_id=? WHERE chat_id=?", (past, cid))
+        ctx.turn.frame_id = past
+        return cid, scene, ctx, past, future
+
+    def test_the_key_is_declared_frame_scoped(self):
+        from core.db import FRAME_SCOPED_WORLD_KEYS
+        from story.carriers import PERSONA_STATE_KEY
+
+        assert PERSONA_STATE_KEY in FRAME_SCOPED_WORLD_KEYS
+
+    def test_what_one_era_witnessed_is_not_held_in_another(self, temp_db):
+        from core.db import wget_for_frame
+        from story.carriers import PERSONA_STATE_KEY, advance_carriers
+
+        cid, scene, ctx, past, future = self._framed(temp_db)
+        assert advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})["acquired"] == 1
+
+        held = (wget_for_frame(cid, PERSONA_STATE_KEY, past, {}) or {}).get(
+            "carried_reports") or []
+        assert [r["claim"] for r in held] == ["the warning bell rang twice"]
+        assert wget_for_frame(cid, PERSONA_STATE_KEY, future, {}) == {}
+
+    def test_the_frame_passed_in_is_the_frame_read(self, temp_db):
+        """`persona_entry` read through a bare `wget`, so it answered with
+        whatever era the ambient `active_frame_id` happened to name -- the
+        same defect `_crowd_index` was repaired for one function above."""
+        from story import carriers
+
+        cid, scene, ctx, past, future = self._framed(temp_db)
+        advance_carriers = carriers.advance_carriers
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+
+        in_past = carriers.persona_entry(cid, ctx.chat, scene, frame_id=past)
+        in_future = carriers.persona_entry(cid, ctx.chat, scene, frame_id=future)
+        assert (in_past["state"].get("carried_reports") or [])
+        assert in_future["state"] == {}
+
+    def test_the_player_cannot_send_on_what_another_era_witnessed(self, temp_db):
+        """The leak with a mouth attached. `run_couriers` checks the sender
+        holds the report, and before this the check passed in an era that
+        never saw the bell."""
+        from story.carriers import advance_carriers
+        from story.couriers import run_couriers
+
+        cid, scene, ctx, past, future = self._framed(temp_db)
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+
+        ctx.turn.frame_id = future
+        metrics, rejected = run_couriers(ctx, scene, [{
+            "op": "send", "sender": "Corin", "to_room": "road",
+            "world_event_id": "world_bell", "method": "word",
+            "pace": "riding", "description": "a boy on a borrowed pony"}])
+        assert metrics["dispatched"] == 0
+        assert rejected and "world_bell" in json.dumps(rejected)
+
+
+class TestThePersonaEnvelopeMigratesIntoItsEra:
+    """v29 -> v30, the data half of the same repair.
+
+    Every persona envelope already written is one bare row per chat holding
+    whatever every era of that story put in it. The era is recoverable rather
+    than guessed: a report records the turn it was `acquired_turn` on, and a
+    turn records its frame.
+    """
+
+    def _at_v29(self, db):
+        """A database holding rows written under the pre-frame-scoped key."""
+        db.init()
+        cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                    ("Migrating", "", time.time()))
+        frames = {}
+        for label, ordinal, kind in (("Past", -10, "past"),
+                                     ("Future", 10, "future")):
+            frames[label] = db.qi(
+                "INSERT INTO frames(chat_id,label,ordinal,kind,created) "
+                "VALUES(?,?,?,?,?)", (cid, label, ordinal, kind, time.time()))
+        for idx, frame_id in ((0, None), (1, frames["Past"]),
+                              (2, frames["Future"])):
+            db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+                  "VALUES(?,?,?,?,?)", (cid, idx, "", time.time(), frame_id))
+        db.qi("INSERT INTO world(chat_id,key,value) VALUES(?,?,?)",
+              (cid, "persona_carrier_state", json.dumps({"carried_reports": [
+                  {"world_event_id": "now", "claim": "the present",
+                   "acquired_turn": 0},
+                  {"world_event_id": "then", "claim": "the past",
+                   "acquired_turn": 1},
+                  {"world_event_id": "soon", "claim": "the future",
+                   "acquired_turn": 2},
+                  {"world_event_id": "gone", "claim": "a rewound turn",
+                   "acquired_turn": 99},
+              ]})))
+        self._rewind_version(db)
+        return cid, frames
+
+    def _rewind_version(self, db):
+        db.qi("INSERT INTO schema_meta(key,value) VALUES('version','29') "
+              "ON CONFLICT(key) DO UPDATE SET value='29'")
+        db.close_connection()
+
+    def _claims(self, db, cid, frame_id):
+        from story.carriers import PERSONA_STATE_KEY
+
+        held = db.wget_for_frame(cid, PERSONA_STATE_KEY, frame_id, {}) or {}
+        return [r["claim"] for r in held.get("carried_reports") or []]
+
+    def test_each_report_lands_in_the_era_that_acquired_it(self):
+        from core import db
+        from tests.helpers import remove_scratch_db, scratch_db_path
+
+        path = scratch_db_path()
+        old_path = db.DB
+        db.configure(path)
+        try:
+            cid, frames = self._at_v29(db)
+            db.init()
+
+            assert self._claims(db, cid, frames["Past"]) == ["the past"]
+            assert self._claims(db, cid, frames["Future"]) == ["the future"]
+            # NULL frame_id is the present, whose storage key is the bare one:
+            # what the present witnessed stays, and so does a report whose turn
+            # a rewind has since deleted.
+            assert self._claims(db, cid, None) == ["the present",
+                                                   "a rewound turn"]
+        finally:
+            db.close_connection()
+            db.configure(old_path)
+            remove_scratch_db(path)
+
+    def test_a_malformed_envelope_survives_untouched(self):
+        """A migration that raised on one story's junk would refuse to open
+        every other story on the same install."""
+        from core import db
+        from tests.helpers import remove_scratch_db, scratch_db_path
+
+        path = scratch_db_path()
+        old_path = db.DB
+        db.configure(path)
+        try:
+            cid, _frames = self._at_v29(db)
+            db.qi("UPDATE world SET value='not json at all' "
+                  "WHERE chat_id=? AND key='persona_carrier_state'", (cid,))
+            self._rewind_version(db)
+            db.init()
+
+            row = db.q("SELECT value FROM world WHERE chat_id=? AND key=?",
+                       (cid, "persona_carrier_state"), one=True)
+            assert row["value"] == "not json at all"
+        finally:
+            db.close_connection()
+            db.configure(old_path)
+            remove_scratch_db(path)
