@@ -2047,9 +2047,16 @@ async function relationshipModal(p, boundChatId = null) {
         relMeter("familiarity", r.familiarity, false),
         relMeter("warmth (emotional valence)", r.emotional_valence, true),
         relMeter("fear", r.fear, false),
-        (r.salient_event || r.notes)
+        // `r.notes` used to be preferred here and no engine path has ever
+        // passed `notes=` to `graph.update`, so the preferred branch was
+        // always empty and every relationship fell through to the fallback
+        // anyway (MIND-F22). Reading the empty half first only hid that.
+        // Whether `Relationship.notes` survives on the dataclass is a
+        // separate question; if a writer arrives, this branch comes back
+        // with it.
+        r.salient_event
           ? el("div", { class: "small dim", style: "margin-top:4px" },
-              r.notes || ("last shift triggered by event " + r.salient_event))
+              "last shift triggered by event " + r.salient_event)
           : null));
     }
   });

@@ -1249,6 +1249,24 @@ function renderLorebooksTab(d, b, chatId) {
               onclick: () =>
                 generateLoreModal(lb.id)
             }, "✨"),
+            // Silencing is not detaching. `chat_lorebooks.enabled` was read
+            // by retrieval, checkpoints, the archive and both browser
+            // payloads, and written by nothing -- so a host could only
+            // remove a body of lore, never set it aside. Detaching a
+            // story-owned book deletes its entries; this leaves them.
+            !isCanon
+              ? el("button", {
+                  title: lb.enabled === false
+                    ? "Let this book be retrieved again"
+                    : "Keep this book but stop retrieving from it",
+                  onclick: async () => {
+                    await api("PUT",
+                      `/api/chats/${chatId}/lorebooks/${lb.id}`,
+                      { enabled: lb.enabled === false });
+                    refreshBooks();
+                  }
+                }, lb.enabled === false ? "🔇" : "🔊")
+              : null,
             !isCanon
               ? el("button", {
                   title: "Detach from story",
@@ -1642,6 +1660,27 @@ function renderGuestInvitePanel(chatId) {
             }
           }, "🔗 Generate invite"));
         }
+        // Attaching was the only half with a control. `DELETE
+        // /api/chats/{cid}/personas/{pid}` has always existed and marks the
+        // attachment dormant AND revokes that player's live guest sessions in
+        // one transaction -- the two halves of the same lifecycle. Without a
+        // button, an extra player who joined once could never be removed
+        // except by editing the database.
+        row.append(el("button", {
+          title: "Detach this player",
+          style: "margin-left:auto",
+          onclick: async () => {
+            if (!await confirmModal(
+              `Detach ${p.name}? Any invite or live session of theirs stops `
+              + `working. The persona itself is kept, and you can attach them `
+              + `again later.`,
+              { danger: true, confirmLabel: "Detach" })) return;
+            await api("DELETE", `/api/chats/${chatId}/personas/${p.id}`);
+            await boot();
+            refresh();
+            toast(`${p.name} detached.`, "ok");
+          }
+        }, "detach"));
         panel.append(row);
       }
     } else {
@@ -2304,6 +2343,39 @@ function renderFullApiSettings(b) {
           + "appearance supplies the rest."));
     }
 
+    // Whether a story may acquire cast on its own. It lives here because the
+    // per-story "turns till auto-promotion" dial in the Dialogue panel has
+    // always told the host that promotion "also has to be switched on
+    // globally in ⚙ API" -- and there was no such control anywhere in the
+    // browser, so the sentence named a switch that did not exist.
+    {
+      const promoteBox = el("input", {
+        type: "checkbox", ...(S.boot.auto_promote ? { checked: "" } : {})
+      });
+      promoteBox.onchange = async () => {
+        await api("PUT", "/api/auto_promote", { enabled: promoteBox.checked });
+        await boot();
+        toast(promoteBox.checked
+          ? "Stories may promote an extra into a full character on their own."
+          : "Extras will only become characters when you promote them.", "ok");
+      };
+      b.append(el("h4", {}, "Acquiring cast"),
+        el("div", { class: "small dim" },
+          "Off by default, and deliberately: promoting an extra is not a small "
+          + "event. It writes a character sheet with a model call, attaches a "
+          + "permanent cast member, seeds mutual recognition with everyone "
+          + "present, and starts keeping that mind's psychology every beat. "
+          + "With this off you can still promote anyone by hand from the Cast "
+          + "panel."),
+        el("div", { class: "row", style: "margin:6px 0" },
+          el("label", { class: "small" }, promoteBox,
+            " Let a story promote an extra on its own")),
+        el("div", { class: "small dim" },
+          "This is the global permission. Each story also sets how many turns "
+          + "of deliberate interaction it takes, under 💬 Dialogue — 0 there "
+          + "means never, whatever this switch says."));
+    }
+
     // Room ambience. Not an agent-model row for the same reason backdrops is
     // not: the thing being configured is a SOURCE of media (a folder, or a
     // sound library's API), not a chat model. The optional `ambience_prompt`
@@ -2386,6 +2458,61 @@ function renderFullApiSettings(b) {
           + "same specialists, the same scopes, the same order."),
         el("label", { class: "row", style: "margin-top:6px" },
           parBox, el("span", {}, "Run the specialists at the same time")));
+    }
+
+    // The narrator's voice anchor. `agents/narration.py` has always read
+    // `settings.exemplars` and the narrator prompt has always carried a STYLE
+    // EXEMPLARS clause -- and there was no way to put anything in it, so the
+    // clause referred to an empty list on every install that has ever run.
+    // Placed directly above the narrator's own model picker, because those
+    // are the two controls that decide how the prose reads.
+    {
+      const bounds = S.boot.exemplar_bounds || {};
+      const maxCount = bounds.max_count || 5;
+      const maxChars = bounds.max_chars || 2000;
+      const areas = [];
+      const rows = el("div", {});
+      const addRow = text => {
+        if (areas.length >= maxCount) return;
+        const ta = el("textarea", {
+          style: "width:100%", rows: "4", maxlength: String(maxChars),
+          placeholder: "A short passage at the quality you want — anyone's "
+            + "prose, or your own. Style only.",
+        }, text || "");
+        areas.push(ta);
+        rows.append(el("div", { class: "card", style: "margin-top:6px" }, ta));
+      };
+      (S.boot.exemplars || []).forEach(addRow);
+      if (!areas.length) addRow("");
+      b.append(el("h4", {}, "Narrator voice"),
+        // One string rather than three around the two numbers: a sentence
+        // split at an interpolation reaches the UI catalog as fragments no
+        // translator can put back together in another word order.
+        el("div", { class: "small dim" },
+          `Up to ${maxCount} short passages the narrator studies for voice, `
+          + `rhythm and restraint. This is the one part of a turn the narrator `
+          + `is told to IMITATE, so keep them to style: a passage that names `
+          + `people, places or events will be read as facts about your story. `
+          + `Each is capped at ${maxChars} characters, because every passage `
+          + `rides every narrator call for the life of the install.`),
+        rows,
+        el("div", { class: "row", style: "margin-top:6px" },
+          el("button", {
+            onclick: () => {
+              if (areas.length >= maxCount) {
+                return toast(`That is the limit — ${maxCount} passages.`, "warn");
+              }
+              addRow("");
+            },
+          }, "Add a passage"),
+          el("button", { class: "primary", onclick: async () => {
+            const r = await api("PUT", "/api/exemplars",
+                                { exemplars: areas.map(ta => ta.value) });
+            await boot();
+            toast(r.count
+              ? `${r.count} passage(s) saved — the narrator will study them.`
+              : "Cleared. The narrator writes from the prompt alone.", "ok");
+          } }, "Save passages")));
     }
 
     b.append(el("h4", {}, "Agent models"),
@@ -2850,6 +2977,27 @@ function renderFullApiSettings(b) {
         closeModal();
         toast("Agent models saved.", "ok");
       } }, "Save all")));
+
+  // Signing out. The host cookie lasts thirty days and is SameSite=Strict,
+  // `POST /api/auth/logout` has always destroyed the session row and cleared
+  // the cookie -- and no page in the app offered it, so the only way off a
+  // shared or borrowed machine was to clear cookies by hand. It lives at the
+  // foot of this panel because this is where the host's own account settings
+  // are, and because it is not a control anyone should hit by accident.
+  b.append(el("h4", { style: "margin-top:18px" }, "Host sign-in"),
+    el("div", { class: "small dim" },
+      "Your sign-in lasts thirty days on this browser. Signing out ends it "
+      + "everywhere it was issued and returns you to the sign-in page. Guest "
+      + "invites are separate and are not affected."),
+    el("div", { class: "row", style: "margin-top:6px" },
+      el("button", {
+        onclick: async () => {
+          if (!await confirmModal("Sign out of this host session?",
+                                  { confirmLabel: "Sign out" })) return;
+          await api("POST", "/api/auth/logout", {});
+          window.location.href = "/login";
+        },
+      }, "Sign out")));
 }
 
 $("#b-api").onclick = () => {
@@ -3331,20 +3479,16 @@ function extensionTrustNote(ext) {
     + "your world state and your provider keys. Nothing has reviewed it.";
 }
 
-function extensionCapabilitySummary(caps) {
-  const parts = [];
-  const stages = (caps && caps.stages) || [];
-  for (const stage of stages) {
-    parts.push(`pipeline stage “${stage.label || stage.key}” at ${stage.anchor}`);
-  }
-  if (caps && caps.chat_state) parts.push("per-story state");
-  if (caps && Array.isArray(caps.characters) && caps.characters.length) {
-    parts.push(`characters: ${caps.characters.join(", ")}`);
-  }
-  if (caps && caps.routing) parts.push("alters information routing");
-  if (caps && caps.system) parts.push("full pipeline access");
-  if (caps && caps.ui) parts.push("interface");
-  return parts;
+// What the manifest asks for, in the ENGINE's words. This used to be a
+// second, hand-written list here, and it had drifted: it named six of the
+// engine's ten capabilities, and the four it left out -- running code in the
+// engine's process, running inside the turn's commit transaction, serving
+// HTTP under the host session, and writing into a character's own state --
+// are the four a host would most want named. `ext.disclosures` is computed
+// from `extension_runtime.CAPABILITY_DISCLOSURES`, which is now the single
+// place that vocabulary lives.
+function extensionCapabilitySummary(ext) {
+  return (ext && ext.disclosures) || [];
 }
 
 //: id -> the row `/api/extensions/updates` last returned for it. Held across
@@ -3402,7 +3546,16 @@ async function openExtensionsMenu() {
 
     for (const err of (data.load_errors || [])) {
       b.append(el("div", { class: "card" },
-        el("b", {}, `${err.id || "an extension"} failed to load`),
+        // `err.dir`, not `err.id`. No producer has ever written an `id`
+        // here, and none can: a load error is very often the manifest's id
+        // being missing, malformed, or a duplicate, so the DIRECTORY is the
+        // only identity a failed load reliably has. Reading the field that
+        // was never written meant every broken extension reported itself as
+        // "an extension", with the reason attached and no way to tell which
+        // one -- while the loader had the directory name in hand the whole
+        // time. The empty string is the whole-listing failure, which is
+        // genuinely not about one directory.
+        el("b", {}, `${err.dir || "an extension"} failed to load`),
         el("div", { class: "small err", style: "margin-top:4px;white-space:pre-wrap" },
           String(err.error || err))));
     }
@@ -3415,14 +3568,21 @@ async function openExtensionsMenu() {
 
     for (const ext of (data.extensions || [])) {
       const enabled = !!ext.enabled;
-      const caps = extensionCapabilitySummary(ext.capabilities);
+      const caps = extensionCapabilitySummary(ext);
       const toggle = el("button", { class: enabled ? "" : "primary" },
         enabled ? "Disable" : "Enable");
       toggle.onclick = async () => {
         // Enabling is the consent moment, so the warning goes HERE rather
         // than in a page nobody reads.
+        // The consent moment is the ONE moment `capabilities` exists for, and
+        // it used to show the trust sentence alone while the capability
+        // summary was rendered into the row BEHIND the dialog. Disclosure
+        // that arrives after consent is not disclosure.
         if (!enabled && !await confirmModal(
-              `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`,
+              `Enable ${ext.name || ext.id}?\n\n${extensionTrustNote(ext)}`
+              + (caps.length
+                  ? `\n\nIt asks to:\n${caps.map(line => "• " + line).join("\n")}`
+                  : ""),
               { confirmLabel: "Enable" })) return;
         try {
           await api("POST", `/api/extensions/${encodeURIComponent(ext.id)}/`

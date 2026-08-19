@@ -1373,7 +1373,52 @@ function renderLoreBookEditor(state, container) {
         "button",
         { onclick: () => exportLorebook(book.id) },
         "⤓ Export"
-      )
+      ),
+      // Canon. `chats.lorebook_id` is the book the mapping stage treats as
+      // this story's settled truth (agents/mapping.py reads it as `canon`),
+      // and the tree has shown a "canon" badge for it all along -- with no
+      // way to set or clear it once the story had started, since it was only
+      // ever chosen on the greeting screen. `POST` and `DELETE
+      // /api/chats/{cid}/lorebook` do exactly that and had no caller
+      // anywhere in the repository.
+      book.chat_id == null
+        ? null
+        : el(
+            "button",
+            {
+              title: book.canon
+                ? "Stop treating this book as the story's settled truth"
+                : "Treat this book as the story's settled truth",
+              onclick: async event => {
+                await buttonTask(
+                  event.currentTarget,
+                  book.canon ? "Clearing…" : "Setting…",
+                  async () => {
+                    if (book.canon) {
+                      await api(
+                        "DELETE",
+`/api/chats/${book.chat_id}/lorebook`
+                      );
+                    } else {
+                      await api(
+                        "POST",
+`/api/chats/${book.chat_id}/lorebook`,
+                        { lorebook_id: book.id }
+                      );
+                    }
+                    await refreshLoreUI(book.id);
+                    toast(
+                      book.canon
+                        ? "No book is canon for this story now."
+                        : "This book is the story's canon now.",
+                      "ok"
+                    );
+                  }
+                );
+              }
+            },
+            book.canon ? "Clear canon" : "Make canon"
+          )
     ),
     movement,
     el(
