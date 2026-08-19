@@ -265,10 +265,15 @@ actor's canonical name is not placed in the payload at all — handing it over
 with an instruction to ignore it is exactly the pattern the engine forbids.
 Same for appearance when no perceiver can see.
 
-**A unified delivery gate.** `agents/common._delivery_ok` consolidates
-containment, awareness, sight (including rear-arc), and hearing (with
-proximity). Every deterministic delivery site calls it rather than
-re-implementing scattered checks.
+**A delivery gate, on one of the two paths.** `agents/common._delivery_ok`
+consolidates containment, awareness, sight (including rear-arc), and hearing
+(with proximity) — and is called from `agents/loops.py`'s two micro-round
+deliveries and nowhere else. `agents/perception.py` and `agents/composer.py`
+answer the same four questions from the same primitives (`hear_level`,
+`_in_plain_view`, `spatial_rel_between`, `composer._sense_graded`) without
+routing through it. Two families of gate that can drift apart, which is the
+risk `docs/UNBUILT.md` §3.8 exists to hold; the word "unified" stood here for
+some time and was an intention, not a description.
 
 **Channel-by-channel barriers.** Sight, sound, scent and touch are gated
 separately. Sight is decided by `spatial_barriers._SIGHT_BARRIERS` (through
@@ -278,7 +283,14 @@ separately. Sight is decided by `spatial_barriers._SIGHT_BARRIERS` (through
 `ambient_scope`'s ambience reach, not the voice channel; scent is graded by
 `spatial_barriers._SCENT_BARRIER_LEVELS`, a TABLE rather than a set because
 scent is the one channel with degrees, and `spatial_senses.scent_level` is its
-only reader; touch is containment. A window passes sight only; bars pass sight and
+only reader; touch is containment. **Scent is a permission with nothing to
+permit**: the grader, the barrier table and card-authored scent acuity all
+work, `agents/perception.py` computes `scent_channel_to_sources` per observer —
+and no percept builder ever emits `channel="smell"`, so nothing reads that
+verdict outside tests. `agents/narration.py` says the same thing in code:
+"open air; nothing ledgered rides this channel". What is missing is CONTENT, not
+gating — no card, entity or `StateDiff` channel says what anything smells like
+(`docs/UNBUILT.md` §1.54). A window passes sight only; bars pass sight and
 sound; a membrane passes passage only. Touch-only perception is deliberately
 **cause-blind**: surface sensation crosses, the act producing it does not.
 

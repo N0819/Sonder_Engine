@@ -74,7 +74,9 @@ What any of these has **not** built is registered in
 Minds:
 
 - [`DESIGN_LONG_TERM_GOALS.md`](design/DESIGN_LONG_TERM_GOALS.md) — the project
-  tier between drive and intention. Built (v1).
+  tier between drive and intention. Built (v4); measured 2026-08-18, the review
+  occasion now reaches 6 of 100 live banks and **0 have ever adopted a
+  project** — [`UNBUILT.md`](UNBUILT.md) §1.56.
 - [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)
   — why a sheet should bias deliberation rather than serve as its premises.
   Partly built.
@@ -106,6 +108,10 @@ they answer different questions about it:
   deliberately rejected.
 - [`OFFSCREEN_WORLD_COMPLETION.md`](design/OFFSCREEN_WORLD_COMPLETION.md) —
   where that architecture actually stands, item by item, with release gates.
+  Two of its per-item tags overstate the tree and are corrected in
+  [`UNBUILT.md`](UNBUILT.md) §1.57 rather than in the note: §2's **BUILT** is
+  missing two of its five ordered steps, and §5's "exactly one reader" of
+  `offscreen_log` is three.
 - [`OFFSCREEN_LIFE_DESIGN.md`](design/OFFSCREEN_LIFE_DESIGN.md) — characters
   **not** in the room: gap generation, reactivation, villain ticks.
 - [`BACKGROUND_LIFE_DESIGN.md`](design/BACKGROUND_LIFE_DESIGN.md) — extras **in**
