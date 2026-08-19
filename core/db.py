@@ -777,8 +777,13 @@ CREATE INDEX IF NOT EXISTS idx_room_registry_book
 -- runtime pipeline reads or writes them. Their roles are absorbed by the
 -- unified model: macro geography = upper lorebook-tree books; macro
 -- transit = portal links (entity.state.link) + scheduled_events latency.
--- The tables are kept (and still tolerated by import/checkpoint plumbing)
--- so existing exports keep restoring; dropping them is Phase 3.
+-- The tables are kept so existing exports keep restoring, and only TWO of the
+-- three actually are: `fiction_worlds` and `fiction_locations` are in
+-- `chat_archive.WORLD_TABLES` and in the checkpoint blob. `transit_edges` is
+-- named in exactly one place outside this file -- the chat-deletion sweep in
+-- `web/app.py` -- so nothing snapshots, exports, imports or restores it, and
+-- an old archive carrying rows loses them on import. Dropping all three is
+-- Phase 3.
 CREATE TABLE IF NOT EXISTS fiction_worlds(
     world_id TEXT PRIMARY KEY,
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
