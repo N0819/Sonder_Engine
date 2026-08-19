@@ -123,16 +123,51 @@ def test_a_partless_cast_stays_empty_rather_than_growing_keys():
     assert conceal_disguised_parts({}, {"hinami": GLAMOUR}) == {}
 
 
-def test_the_gate_sits_where_names_are_still_true_names():
+def test_the_gate_sits_where_names_are_still_true_names(monkeypatch):
     """Filtering later -- at the percept build -- would have to match on
     observer-facing DISPLAY labels, and two bodies can both be "someone".
-    This runs on `scene_extra_parts` output, whose keys are true body names."""
-    from pathlib import Path
+    This runs on `scene_extra_parts` output, whose keys are true body names.
 
-    src = (Path(__file__).resolve().parents[1] / "agents"
-           / "perception.py").read_text(encoding="utf-8")
-    block = src[src.index("def _composer_extra_parts"):]
-    block = block[:block.index("\n\n\n")]
-    assert "conceal_disguised_parts(cached" in block
-    assert block.index("scene_extra_parts(") < block.index(
-        "conceal_disguised_parts(")
+    INSTRUMENTED, not sliced. This used to read `agents/perception.py`'s TEXT
+    from "def _composer_extra_parts" to the next blank-blank-blank line and
+    compare `str.index` results, so a blank line or an extracted helper broke
+    a test about disguises for reasons that have nothing to do with them --
+    and a reordering that kept both call sites in the same relative textual
+    positions would have passed.
+    """
+    from agents import perception
+
+    calls = []
+
+    def note(name, result):
+        calls.append(name)
+        return result
+
+    monkeypatch.setattr(perception, "scene_extra_parts",
+                        lambda *a, **kw: note("gather", {"Hinami": [TAILS]}))
+    monkeypatch.setattr(perception, "active_transformations",
+                        lambda *a, **kw: {})
+    monkeypatch.setattr(perception, "active_disguises",
+                        lambda *a, **kw: {"hinami": GLAMOUR})
+
+    def conceal(parts, disguises):
+        note("conceal", None)
+        assert parts == {"Hinami": [TAILS]}, "concealment ran on true names"
+        return {}
+
+    monkeypatch.setattr(perception, "conceal_disguised_parts", conceal)
+
+    ctx = _FakeCtx()
+    assert perception._composer_extra_parts(ctx, "Corin") == {}
+    assert calls == ["gather", "conceal"]
+    # ... and the concealed answer is what gets cached, so no later consumer
+    # can reach the unconcealed one.
+    assert ctx["_composer_extra_parts_cache"] == {}
+
+
+class _FakeCtx(dict):
+    """Just enough PipelineContext for `_composer_extra_parts`: a cache it can
+    read and write, a cast, and a chat id."""
+
+    cast = ()
+    chat = {"id": 1, "persona_id": None}
