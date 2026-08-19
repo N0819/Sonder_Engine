@@ -63,3 +63,41 @@ class TestAutoPromoteIsOneAnswer:
         assert "switched on globally in ⚙ API" in SETTINGS_JS
         assert '"PUT", "/api/auto_promote"' in SETTINGS_JS
         assert "S.boot.auto_promote" in SETTINGS_JS
+
+
+class TestTheNarratorsVoiceAnchorIsReachable:
+    """WEB-4 / FRONTEND-7. The read side and the prompt clause shipped; the
+    write side had a route and no caller, so the clause read `[]` forever."""
+
+    def test_the_editor_calls_the_route_that_writes_it(self):
+        assert '"PUT", "/api/exemplars"' in SETTINGS_JS
+        assert "S.boot.exemplars" in SETTINGS_JS
+
+    def test_the_editor_takes_its_bounds_from_the_engine(self):
+        """Every passage rides every narrator call, so the cap the host is
+        shown must be the cap the route enforces -- not a second copy."""
+        from web import app
+
+        assert "S.boot.exemplar_bounds" in SETTINGS_JS
+        assert "maxlength: String(maxChars)" in SETTINGS_JS
+        assert app.EXEMPLAR_MAX_COUNT > 0 and app.EXEMPLAR_MAX_CHARS > 0
+
+    def test_the_bounds_ride_the_bootstrap_payload(self, temp_db):
+        from web import app
+
+        bounds = app.bootstrap()["exemplar_bounds"]
+        assert bounds == {"max_count": app.EXEMPLAR_MAX_COUNT,
+                          "max_chars": app.EXEMPLAR_MAX_CHARS}
+
+    def test_what_the_editor_saves_is_what_the_narrator_reads(self, temp_db):
+        """The whole point of the row: the STYLE EXEMPLARS clause stops
+        reading an empty list."""
+        from core.db import get_setting
+        from web import app
+
+        app.put_exemplars({"exemplars": ["  A short passage.  ", "", "Another."]})
+
+        import json
+        assert json.loads(get_setting("exemplars")) == ["A short passage.",
+                                                        "Another."]
+        assert app.bootstrap()["exemplars"] == ["A short passage.", "Another."]

@@ -1172,6 +1172,12 @@ def bootstrap():
         # written -- and until now there was no way to put anything in it, so
         # every install has run with the clause referring to an empty list.
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
+        # The editor's bounds come from the engine rather than a second copy
+        # in the browser: they are a per-turn cost (every passage rides EVERY
+        # narrator call), so the number a host is shown has to be the number
+        # `put_exemplars` will actually enforce.
+        "exemplar_bounds": {"max_count": EXEMPLAR_MAX_COUNT,
+                            "max_chars": EXEMPLAR_MAX_CHARS},
         "max_output_tokens": max_output_tokens(),
         "reasoning_effort": reasoning_efforts(),
         "reasoning_effort_levels": list(REASONING_EFFORTS),
