@@ -1153,14 +1153,57 @@ RESTRAINT_LEVELS = ("held", "bound", "pinned", "encased")
 IMMOBILIZING_RESTRAINTS = frozenset(RESTRAINT_LEVELS)
 
 
+#: The words a model writes when it means one of the four rungs. No prompt
+#: publishes `RESTRAINT_LEVELS` -- the body specialist is handed a
+#: parenthetical of examples, not a `level in {...}` clause of the kind
+#: awareness gets one paragraph later -- and two of those very examples
+#: ("grappled", "held hostage") were unreadable, so both landed on the
+#: mildest rung. AGENTS.md states the rule for this shape in the weather
+#: vocabulary: extend the synonyms rather than widen the enum, because a
+#: silent fall to the default inverts the meaning of the beat.
+#:
+#: The distinction each rung names, so a new word can be placed without
+#: guessing: `held` is a body holding a body, `bound` is a binding that
+#: holds without anyone attending it, `pinned` is a body or a mass holding
+#: another against something, `encased` is being closed inside.
+_RESTRAINT_SYNONYMS = (
+    ("encased", ("encased", "encase", "entombed", "entomb", "sealed", "seal",
+                 "cocooned", "cocoon", "engulfed", "engulf", "swallowed",
+                 "swallow", "buried", "bury", "enclosed", "walled")),
+    ("pinned", ("pinned", "pin", "grappled", "grapple", "straddled",
+                "straddle", "immobilised", "immobilized", "immobile",
+                "trapped", "trap", "crushed", "crush", "wedged", "stuck",
+                "weighed down", "held down")),
+    ("bound", ("bound", "bind", "tied", "tie", "roped", "rope", "shackled",
+               "shackle", "manacled", "manacle", "handcuffed", "cuffed",
+               "cuff", "chained", "chain", "fettered", "fetter", "trussed",
+               "truss", "strapped", "restrained", "restraint", "leashed",
+               "netted")),
+    ("held", ("held", "hold", "grabbed", "grab", "grasped", "grasp",
+              "gripped", "grip", "clutched", "clutch", "clamped", "clamp",
+              "hostage", "carried")),
+)
+
+
 def _normalize_restraint_level(raw):
+    """One of `RESTRAINT_LEVELS`, from whatever the model actually wrote.
+
+    Read DEEPEST-FIRST, because these arrive as phrases as often as tokens
+    ("bound hand and foot", "held down against the flagstones") and a phrase
+    naming two rungs means the stronger one: someone held down and bound is
+    bound. Unknown wording still restrains -- the story said this body cannot
+    move itself -- and only the RUNG is guessed, at `held`, which claims
+    least.
+    """
     level = str(raw or "").strip().casefold()
     if not level:
         return "bound"
     if level in RESTRAINT_LEVELS:
         return level
-    # Unknown wording degrades to the MILDEST real restraint rather than
-    # vanishing, matching how awareness treats an unrecognized level.
+    for rung, cues in _RESTRAINT_SYNONYMS:
+        for cue in cues:
+            if _re.search(r"\b%s\b" % _re.escape(cue), level):
+                return rung
     return "held"
 
 
