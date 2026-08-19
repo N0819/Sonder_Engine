@@ -4411,7 +4411,10 @@ Still missing:
   one-owner invariant, so this is no longer blocking anything.
 - **`tools/project_check.py --extension <path>`** — the author-facing self-check
   that runs the same two lints against an unbundled extension before shipping.
-  The checks exist; the CLI entry point does not.
+  The checks exist; the CLI entry point does not. The AUDIT half now has a
+  Python entry point (`extension_runtime.audit_extension_source(path)`, which
+  runs the install's own manifest and the same ceilings and writes nothing);
+  the lints are what still have no way in from outside.
 - **Phase 2: the reviewed registry.** Every field it needs (id, version,
   `sha256`, `provenance`, and now `source_url`/`source_ref`/`commit`) is
   already written at install time, so this is an addition rather than a
@@ -4466,6 +4469,38 @@ today — nothing mines memories to affirm a `what_i_was_told` role, so
 experience-sourced facts stay absent rather than deduced — and a ledger name
 that resolves to no cast member or persona is omitted, because an unregistered
 presence has no stable id until promotion makes one.
+
+
+- **The archive does not DECLARE its extension schema.** Portable export/import
+  carries an extension's `ext:<id>`/`extf:<id>` state, its char state and its
+  documents, and round-trips them — but it carries them without a version or an
+  enumeration, so an importer cannot tell a complete carriage from a partial
+  one, and a future home added for extension data has no place to announce
+  itself. Raised by the Directive review's hardening list. Deliberately left
+  until a second home actually exists, because a version number with one member
+  is a version number nobody has to read.
+
+- **No read-snapshot token.** The same review asks for a read transaction so a
+  DTO combining several domains cannot straddle a concurrent write. Not built,
+  and deliberately not folded into the frame-coherence work, because it is a
+  different axis: `at_frame` chooses an ERA, a snapshot would fix a MOMENT.
+  `tests/test_extensions.py::test_no_capability_is_declared_for_work_that_is_not_built`
+  names it as today's example of a capability that must not be declared.
+
+- **The host's own `story_view`/`player_view` HTTP routes take no `frame`
+  parameter.** The extension API was the reviewed surface and gained the
+  selection; `web/app.py`'s two routes did not, because the host UI has no
+  consumer for it yet. Add the parameter when one appears — the underlying
+  functions already accept it.
+
+Deliberately NOT built from the Directive review's hardening list, each with
+its argument in [`design/DESIGN_FRAME_COHERENT_READS.md`](design/DESIGN_FRAME_COHERENT_READS.md)'s
+"Refused" section: frame-scoped `events` (a frame is an epistemic cursor, not a
+partition of objective truth), and ambient frame-binding of extension route
+dispatch (it would repair routes by the exact contextvar-spanning mechanism the
+facade exists to avoid). A `frame_coherent_reads` capability flag WAS refused
+while the work was in flight and is now declared, which is the discipline
+working rather than an exception to it.
 
 ### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md)
 
