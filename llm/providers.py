@@ -2088,10 +2088,20 @@ def _chat_complete_once(
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
-    sink = token_sink.get()
+    raw_sink = token_sink.get()
+    streaming = bool(raw_sink)
 
-    if sink:
-        sink = _guarded_sink(sink)
+    # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
+    # fed and judges a 4KB tail plus a 40KB loop window, so one guard shared
+    # across this function's several stream attempts -- the two json_schema
+    # rejection stages and the placeholder-skeleton re-stream -- judges the
+    # concatenation of two different responses. Two attempts at the same
+    # object look exactly like the failure it exists to catch, so the guard
+    # could abort a healthy second attempt precisely because the first one
+    # was retried; and `_checked_len` carried over, so the first stride of
+    # the second response went unexamined. A guard is about ONE response.
+    def guarded():
+        return _guarded_sink(raw_sink)
 
     if prov["kind"] == "anthropic":
         h = {
@@ -2116,12 +2126,12 @@ def _chat_complete_once(
             if key in merged:
                 body[key] = merged[key]
 
-        if sink:
+        if streaming:
             return _sse_anthropic(
                 base,
                 h,
                 dict(body),
-                sink,
+                guarded(),
                 role=role,
                 model=model,
             )
@@ -2174,13 +2184,13 @@ def _chat_complete_once(
     url = base + "/chat/completions"
     headers = _headers(prov)
 
-    if sink:
+    if streaming:
         try:
             out = _sse_openai(
                 url,
                 headers,
                 dict(body),
-                sink,
+                guarded(),
                 role=role,
                 model=model,
             )
@@ -2200,7 +2210,7 @@ def _chat_complete_once(
                         url,
                         headers,
                         stage_one,
-                        sink,
+                        guarded(),
                         role=role,
                         model=model,
                     )
@@ -2219,7 +2229,7 @@ def _chat_complete_once(
                     url,
                     headers,
                     fallback_body,
-                    sink,
+                    guarded(),
                     role=role,
                     model=model,
                 )
@@ -2236,7 +2246,7 @@ def _chat_complete_once(
                 url,
                 headers,
                 retry_body,
-                sink,
+                guarded(),
                 role=role,
                 model=model,
             )
@@ -2479,9 +2489,20 @@ async def _chat_complete_async_once(
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
-    sink = token_sink.get()
-    if sink:
-        sink = _guarded_sink(sink)
+    raw_sink = token_sink.get()
+    streaming = bool(raw_sink)
+
+    # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
+    # fed and judges a 4KB tail plus a 40KB loop window, so one guard shared
+    # across this function's several stream attempts -- the two json_schema
+    # rejection stages and the placeholder-skeleton re-stream -- judges the
+    # concatenation of two different responses. Two attempts at the same
+    # object look exactly like the failure it exists to catch, so the guard
+    # could abort a healthy second attempt precisely because the first one
+    # was retried; and `_checked_len` carried over, so the first stride of
+    # the second response went unexamined. A guard is about ONE response.
+    def guarded():
+        return _guarded_sink(raw_sink)
 
     if prov["kind"] == "anthropic":
         h = {"x-api-key": prov["api_key"] or "", "anthropic-version": "2023-06-01", "content-type": "application/json"}
@@ -2490,8 +2511,8 @@ async def _chat_complete_async_once(
             if k in merged:
                 body[k] = merged[k]
         async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
-            if sink:
-                return await _sse_anthropic_async(base, h, dict(body), sink, client, role=role, model=model)
+            if streaming:
+                return await _sse_anthropic_async(base, h, dict(body), guarded(), client, role=role, model=model)
             _t0 = time.time()
             r = await client.post(base + "/v1/messages", headers=h, json=body)
             if r.status_code >= 400:
@@ -2510,9 +2531,9 @@ async def _chat_complete_async_once(
     _apply_json_mode(body, prov, model, json_mode, json_schema)
 
     async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
-        if sink:
+        if streaming:
             try:
-                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)
+                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), guarded(), client, role=role, model=model)
             except LLMError as e:
                 if e.status_code == 400:
                     # Staged, as on the sync paths: response_format first so a
@@ -2522,7 +2543,7 @@ async def _chat_complete_async_once(
                         b1 = dict(body)
                         b1.pop("response_format", None)
                         try:
-                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b1, sink, client, role=role, model=model)
+                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b1, guarded(), client, role=role, model=model)
                             _note_json_object_rejected(prov, model)
                             recovered = True
                         except LLMError as e1:
@@ -2532,7 +2553,7 @@ async def _chat_complete_async_once(
                         b2 = dict(body)
                         b2.pop("response_format", None)
                         b2 = _strip_extended(b2)
-                        out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
+                        out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, guarded(), client, role=role, model=model)
                 else:
                     raise
             # Same placeholder-skeleton guard as the sync streaming path:
@@ -2543,7 +2564,7 @@ async def _chat_complete_async_once(
             if json_mode and _is_placeholder_json(out):
                 retry_body = dict(body)
                 retry_body.pop("response_format", None)
-                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), retry_body, sink, client, role=role, model=model)
+                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), retry_body, guarded(), client, role=role, model=model)
             return out
         _t0 = time.time()
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
