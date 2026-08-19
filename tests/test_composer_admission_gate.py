@@ -32,6 +32,8 @@ import time
 
 import pytest
 
+from tests.helpers import forbid_model_calls
+
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
@@ -132,14 +134,12 @@ def test_authored_prose_stops_narrating_the_perceiver_at_themselves():
 
 @pytest.fixture(autouse=True)
 def _no_llm(monkeypatch):
-    """See test_composer_pipeline: the guard moved down to the shared
-    helper, because perception no longer imports a model seam at all."""
-    import agents.common as common
-
-    def _boom(*args, **kwargs):  # pragma: no cover - the assertion
-        raise AssertionError("perception attempted a model call")
-
-    monkeypatch.setattr(common, "_agent_json", _boom)
+    """See test_composer_pipeline, including why patching `agents.common`
+    alone was inert: the seam is bound into every role module's own globals,
+    so the guard has to be applied wherever it is bound."""
+    patched = forbid_model_calls(
+        monkeypatch, reason="perception attempted a model call")
+    assert ("agents.common", "_agent_json") in patched
 
 
 def _make_ctx(temp_db, *, room_notes="Rope coils hang from the rafters.",

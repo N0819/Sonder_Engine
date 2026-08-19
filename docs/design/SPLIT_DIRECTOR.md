@@ -17,7 +17,7 @@ shows:
 dictionary. A function moved to `agents/director_x.py` resolves `_agent_json` in
 **its own** globals and never sees the patch.
 
-`tests/conftest.py:158`'s `fanout_resolve_agent` makes it concrete: one fake
+`tests/helpers.py`'s `fanout_resolve_agent` makes it concrete: one fake
 must be seen simultaneously by `director_resolve` (prose-author call),
 `_run_specialists` (specialist calls) and `_specialist_repairs` (repair calls).
 A naive split puts those in three modules and one patch reaches one of them.

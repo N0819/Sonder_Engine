@@ -8,8 +8,9 @@ the prompts, and the one thing no amount of hand-authoring can establish.
 
 Only the opening scene is authored, because establishing a world is what a
 user does before play starts. From the first beat onward every stage is the
-model's: interpret, resolve, perception for each perceiver, each character,
-the narrator, mapping, and every off-screen rung. Nothing is scripted, and
+model's: interpret, resolve, each character, the narrator, mapping, and every
+off-screen rung. (Perception is not on that list because it is deterministic:
+no prompt, no model call, no role.) Nothing is scripted, and
 nothing is retried by hand. `llm_quality` validates and repairs exactly as it
 would for a paying user, so a rejected op is a real rejection.
 
@@ -101,7 +102,6 @@ from llm.providers import ROLES as _PROVIDER_ROLES
 
 ROLES = tuple(_PROVIDER_ROLES)
 MAIN_MODEL = "minimax/minimax-m3"
-PERCEPTION_MODEL = "mistral-code-agent-latest"
 EMBEDDING_MODEL = "perplexity/pplx-embed-v1-4b"
 
 #: `--fast`. Free and very quick, and everything sent to it is used to TRAIN.
@@ -113,17 +113,10 @@ EMBEDDING_MODEL = "perplexity/pplx-embed-v1-4b"
 #: private chat, no credential, no personal data.
 #:
 #: Never point this preset at a real story.
-#:
-#: It takes perception too, rather than leaving that role on a code model.
-#: Measured: `mistral-code-agent-latest` was slower here than its headline
-#: throughput suggests, and since wall-clock on this pipeline is generation-
-#: bound, the fastest generator wins the role that runs once per perceiver.
 FAST_MAIN_MODEL = "meta/muse-spark-1.2-contributor"
-FAST_PERCEPTION_MODEL = "meta/muse-spark-1.2-contributor"
 
 
-def seed_providers(db, main_model=MAIN_MODEL,
-                   perception_model=PERCEPTION_MODEL):
+def seed_providers(db, main_model=MAIN_MODEL):
     """Register the two providers this run needs, from the environment.
 
     Credentials are read from `NANOGPT_API_KEY` and `OPENROUTER_API_KEY` and
@@ -147,7 +140,6 @@ def seed_providers(db, main_model=MAIN_MODEL,
         "VALUES(?,?,?,?,1)",
         ("nanogpt", "nanogpt", "https://nano-gpt.com/api/v1", nano_key))
     models = {role: {"provider": nano, "model": main_model} for role in ROLES}
-    models["perception"] = {"provider": nano, "model": perception_model}
 
     # A third provider, seeded only when its key is present, so a run can put
     # the heavy roles somewhere with different decode economics. The measured
@@ -255,7 +247,7 @@ def transcript(played, prose, rates):
         "# The Vale, played by a model",
         "",
         "Only the opening scene is authored. Every stage from the first beat",
-        "on -- interpret, resolve, perception per perceiver, each character,",
+        "on -- interpret, resolve, each character,",
         "the narrator, mapping, and the off-screen rungs -- is a real model",
         "call through `providers.chat_complete`, validated and repaired by",
         "`llm_quality` exactly as it would be for a paying user.",
@@ -325,14 +317,11 @@ def main():
 
     db_module.init()
     main_model = args.model or (FAST_MAIN_MODEL if args.fast else MAIN_MODEL)
-    perception_model = (FAST_PERCEPTION_MODEL if args.fast
-                        else PERCEPTION_MODEL)
     if args.fast:
         print("--fast: %s is free and TRAINS ON ITS INPUT. Only the engine's\n"
               "        own prompts and an invented valley are sent."
               % FAST_MAIN_MODEL, flush=True)
-    models = seed_providers(db_module, main_model=main_model,
-                            perception_model=perception_model)
+    models = seed_providers(db_module, main_model=main_model)
     # Per-role overrides, applied after the uniform seed so the baseline is
     # always "one model everywhere" and each override is a single named
     # departure from it -- which is what makes a per-role result attributable.
@@ -369,8 +358,8 @@ def main():
                                 "model": model}
                 print("  role override: %s -> %s" % (role, model), flush=True)
         db_module.set_setting("agent_models", _json.dumps(models))
-    print("models: %s | perception: %s | embeddings: %s" % (
-        main_model, perception_model,
+    print("models: %s | embeddings: %s" % (
+        main_model,
         (models.get("embeddings") or {}).get("model") or "off"), flush=True)
     if args.role_effort:
         import json as _json
@@ -422,8 +411,14 @@ def main():
         with open(os.path.join(args.out, "transcript.md"), "w") as fh:
             fh.write(transcript(played, narration_by_turn(db_module, cid),
                                 rates))
-        from persist.chat_archive import ChatArchiveService
-        export = ChatArchiveService.export_chat(None, cid)
+        # THE WIRED SERVICE, not the class. `export_chat` is an instance
+        # method: it dereferences `self._remap` inside the frames loop, so
+        # `ChatArchiveService.export_chat(None, cid)` worked only until a
+        # chat had a `frames` row -- and a frame split happens on its own,
+        # after the run is paid for. `web.app` owns the one wiring of the
+        # remappers; borrowing it cannot drift from what the route does.
+        from web.app import chat_export
+        export = chat_export(cid)
         export["checkpoints"] = []
         with open(os.path.join(args.out, "story.json"), "w") as fh:
             json.dump(export, fh, indent=1, default=str)

@@ -73,8 +73,40 @@ def canonical_language_tokens(text: str) -> set:
     return found
 
 
+#: Decorators under which a repeated name in one body is the language working
+#: as intended: a property's setter/getter/deleter, and `typing.overload`
+#: stubs. Everything else that repeats a name discards the earlier definition.
+_LEGITIMATE_REDEFINITION = frozenset(
+    {"setter", "getter", "deleter", "overload"})
+
+
+def _decorator_names(node) -> set:
+    names = set()
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if isinstance(target, ast.Attribute):
+            names.add(target.attr)
+        elif isinstance(target, ast.Name):
+            names.add(target.id)
+    return names
+
+
+def _redefinitions(body) -> dict:
+    """`{name: [line, line]}` for every name this body defines more than once."""
+    seen: dict[str, list[int]] = defaultdict(list)
+    for node in body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                 ast.ClassDef)):
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                _decorator_names(node) & _LEGITIMATE_REDEFINITION):
+            continue
+        seen[node.name].append(node.lineno)
+    return {name: lines for name, lines in seen.items() if len(lines) > 1}
+
+
 def check_duplicate_python_symbols(errors: list[str]) -> None:
-    """A redefined top-level name silently replaces the first one.
+    """A redefined name silently replaces the first one.
 
     `tests/` is included because that is where it does the most damage and
     the least noise: a duplicated test name does not error, it DELETES the
@@ -83,19 +115,29 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
     `test_empty_and_missing_inputs_are_noops` -- and one of the lost four was
     the false-positive guard on player-speech authority, whose whole job is to
     stop the check crying wolf on ordinary narration.
+
+    CLASS BODIES are walked too, and were not: this read `tree.body` only, so
+    a method defined twice -- the exact damage the paragraph above describes,
+    and the shape a test class takes -- was invisible to the check that exists
+    to catch it. A property's setter/getter/deleter and `@overload` stubs are
+    the one legitimate way to repeat a name in a body, and are exempt.
     """
     for path in sorted(engine_python_paths()
                        + list((ROOT / "tests").glob("test_*.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        symbols: dict[str, list[int]] = defaultdict(list)
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                symbols[node.name].append(node.lineno)
-        for name, lines in symbols.items():
-            if len(lines) > 1:
+        rel = path.relative_to(ROOT)
+        for name, lines in _redefinitions(tree.body).items():
+            errors.append(
+                f"{rel} defines top-level symbol {name!r} "
+                f"more than once at lines {lines}"
+            )
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            for name, lines in _redefinitions(node.body).items():
                 errors.append(
-                    f"{path.relative_to(ROOT)} defines top-level symbol {name!r} "
-                    f"more than once at lines {lines}"
+                    f"{rel} defines {node.name}.{name!r} more than once at "
+                    f"lines {lines}; the second definition replaces the first"
                 )
 
 
@@ -195,9 +237,52 @@ def check_patch_debris(errors: list[str]) -> None:
 
 
 def check_empty_tests(errors: list[str]) -> None:
+    """A `test_*.py` that contributes no test, and a test that runs nothing.
+
+    Only whitespace-only files were flagged, which is the one shape this
+    never actually takes. A file whose tests were all deleted, renamed out of
+    the `test_` prefix, or absorbed into a class that lost its `Test` prefix
+    still holds imports, helpers and docstrings -- it reads like a suite and
+    collects nothing, and the suite total moves by a number nobody watches.
+
+    The second rule is narrower on purpose. A test with no `assert` is not
+    automatically empty: "this call does not raise" is a real assertion made
+    by execution. A test whose body is nothing BUT imports asserts neither --
+    `test_the_producer_is_wired_at_the_commit_tail` was a docstring and
+    `import tests.test_commit_tail_producers`, and it passed.
+    """
     for path in sorted((ROOT / "tests").glob("test_*.py")):
-        if not path.read_text(encoding="utf-8").strip():
-            errors.append(f"{path.relative_to(ROOT)} is empty")
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(ROOT)
+        if not text.strip():
+            errors.append(f"{rel} is empty")
+            continue
+        try:
+            tree = ast.parse(text, filename=str(path))
+        except SyntaxError:
+            continue
+        collected = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                    and node.name.startswith("test"):
+                collected.append(node)
+            elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+                collected.append(node)
+        if not collected:
+            errors.append(
+                f"{rel} collects no test: nothing in it is named `test*` or "
+                f"`Test*`, so pytest runs none of it.")
+        for node in collected:
+            if isinstance(node, ast.ClassDef):
+                continue
+            body = [n for n in node.body
+                    if not (isinstance(n, ast.Expr)
+                            and isinstance(n.value, ast.Constant))]
+            if body and all(isinstance(n, (ast.Import, ast.ImportFrom))
+                            for n in body):
+                errors.append(
+                    f"{rel}:{node.lineno}: {node.name} does nothing but "
+                    f"import. It passes without exercising anything.")
 
 
 #: An `_ops` name a prompt may mention without owning it. Kept explicit and
@@ -910,11 +995,20 @@ def check_extension_manifests(errors: list[str]) -> None:
         declared = {str(stage.get("key") or "")
                     for stage in (caps.get("stages") or [])
                     if isinstance(stage, dict)}
-        if not declared:
-            continue
         # A dry-run registration: load the entry against a throwaway API and
         # see what it ACTUALLY registers. Cheaper and far more honest than
         # parsing the source for `add_stage` calls.
+        #
+        # Run for EVERY extension with a python entry, not only for one that
+        # declares stages. It was gated on `if not declared: continue`, so of
+        # three bundled extensions only `cohesion-demo` was ever load-tested:
+        # `campaign-demo` and `overlay-demo` register commit domains, routes
+        # and hooks instead of stages, and an import error or a `register()`
+        # that raised in either would have reached a host's Extensions menu
+        # with nothing between. Loading is the half that must run for
+        # everyone; comparing stage keys is the half that needs a declaration.
+        if not ext.python_entry:
+            continue
         try:
             registered = _dry_run_registrations(extension_runtime, ext)
         except Exception as exc:
@@ -1005,6 +1099,131 @@ def check_extension_imports(errors: list[str]) -> None:
                             f'"system": true to accept the coupling.')
 
 
+#: A local name is being used AS A MODULE OBJECT, not called through.
+#: `monkeypatch.setattr(mod, name, ...)` and `mod.__file__` both need the
+#: module that DEFINES the symbol; a facade re-export is a different binding.
+_MODULE_OBJECT_CALLS = frozenset({
+    "setattr", "delattr", "getattr", "hasattr", "reload",
+    "getsource", "getsourcefile", "getsourcelines", "getmembers", "signature",
+})
+_MODULE_OBJECT_ATTRS = frozenset({"__file__", "__name__", "__dict__", "__doc__"})
+
+
+def _module_object_uses(tree: ast.AST) -> set[str]:
+    """Local names this file treats as a module object rather than a namespace."""
+    used: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and node.args:
+            func = node.func
+            fname = (func.attr if isinstance(func, ast.Attribute)
+                     else func.id if isinstance(func, ast.Name) else "")
+            if fname in _MODULE_OBJECT_CALLS and isinstance(node.args[0], ast.Name):
+                used.add(node.args[0].id)
+        elif isinstance(node, ast.Attribute) and node.attr in _MODULE_OBJECT_ATTRS:
+            if isinstance(node.value, ast.Name):
+                used.add(node.value.id)
+    return used
+
+
+def facade_import_violations(source, *, pkg: str, stem: str, siblings,
+                             inside: bool = False, is_test: bool = False):
+    """Every facade-rule violation in one file: `(lineno, kind, module)`.
+
+    `kind` is `"outside-in"` (a caller reached past the facade to a sibling)
+    or `"inside-out"` (a sibling imported its own facade, which is the cycle
+    the arrangement exists to prevent).
+
+    Both spellings count, and that is the repair this function exists for.
+    The matcher this replaced `rpartition`ed the module name, so it saw
+    `from persist.commit_memory import X` and never `from persist import
+    commit_memory` -- and the second is the form the whole tree is written in.
+    Twelve sibling imports sat in `tests/` unseen; the rule held only where
+    nobody was writing.
+
+    `is_test` carries the exception the split's own correctness requires. A
+    monkeypatch must name the module that DEFINES the function it intercepts:
+    a moved function resolves names in its own globals, so a patch on the
+    facade's re-export is silently inert (`docs/experiments/AUDIT_COMMIT.md`),
+    and the same holds for a test that reads a sibling's `__file__` to parse
+    the source. The facade is a contract for CALLERS, and neither of those is
+    a call -- so a test may name a sibling it patches or introspects, and may
+    not name one it merely calls through.
+    """
+    tree = source if isinstance(source, ast.AST) else ast.parse(source)
+    siblings = set(siblings)
+    exempt = _module_object_uses(tree) if is_test else set()
+    facade_mod = "%s.%s" % (pkg, stem)
+    out = []
+
+    def record(node, module, local):
+        if module == facade_mod or module == stem:
+            if inside:
+                out.append((node.lineno, "inside-out", module))
+        elif not inside and not (local and local in exempt):
+            out.append((node.lineno, "outside-in", module))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                head, _, tail = alias.name.rpartition(".")
+                if head not in (pkg, ""):
+                    continue
+                if tail in siblings or tail == stem:
+                    local = alias.asname or (alias.name if not head else None)
+                    record(node, "%s.%s" % (pkg, tail), local)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            module = node.module or ""
+            if module == pkg:
+                for alias in node.names:
+                    if alias.name in siblings or alias.name == stem:
+                        record(node, "%s.%s" % (pkg, alias.name),
+                               alias.asname or alias.name)
+            else:
+                head, _, tail = module.rpartition(".")
+                if head in (pkg, "") and (tail in siblings or tail == stem):
+                    # Names lifted OUT of the sibling: no module object is
+                    # bound, so no patch or source read can be meant by it.
+                    record(node, "%s.%s" % (pkg, tail), None)
+    return sorted(out)
+
+
+def facade_siblings(home: Path, stem: str) -> set:
+    """The modules a facade actually re-exports, read off its own imports.
+
+    NOT `glob("<stem>_*.py")`. A filename prefix is a guess about membership,
+    and it is wrong here: `world/spatial_frames.py` matches `spatial_*` and is
+    NOT behind `world/spatial.py` — the facade contains zero references to it —
+    so a family built by prefix would have flagged six correct engine imports
+    and three correct test imports as facade violations. The facade's own
+    import block is the only statement of what it promises to re-export, and
+    it cannot drift from the promise because it IS the promise.
+
+    Relative and absolute spellings both count: `agents/director.py` imports
+    its nine siblings as `from .director_lingua import ...`, and
+    `persist/commit.py` imports its thirteen as `from persist.commit_x`.
+    """
+    facade_path = home / (stem + ".py")
+    try:
+        tree = ast.parse(facade_path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return set()
+    prefix = stem + "_"
+    found = set()
+    for node in ast.walk(tree):
+        names = []
+        if isinstance(node, ast.ImportFrom):
+            names = [node.module or ""]
+        elif isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        else:
+            continue
+        for name in names:
+            tail = name.rpartition(".")[2]
+            if tail.startswith(prefix) and (home / (tail + ".py")).is_file():
+                found.add(tail)
+    return found
+
+
 def check_facade_import_direction(errors: list[str]) -> None:
     """A split family's facade must stay the only way in, and the only way out.
 
@@ -1024,18 +1243,34 @@ def check_facade_import_direction(errors: list[str]) -> None:
     Not a style rule. Both are silent until they are not: the first fails when
     somebody later moves a symbol between siblings, the second when an
     unrelated import order changes.
+
+    The rule is about CALLERS. `facade_import_violations` carries the one
+    exception, and why a test is not always a caller.
     """
+    #: `world.spatial` is the third facade of this shape and is NOT here yet.
+    #: Adding the line is all it takes -- `facade_siblings` reads its fourteen
+    #: re-exported siblings correctly, and deliberately excludes
+    #: `world/spatial_frames.py`, which matches the prefix and is not behind
+    #: the facade. Measured, adding it reports five sites that must be
+    #: repaired first, by the owners of those files: `world/crowds.py:57`
+    #: imports `world.spatial_geometry` for `ROOM_SIZES`/`DEFAULT_ROOM_SIZE`,
+    #: both of which the facade re-exports, and four tests
+    #: (`test_barrier_vocabulary`, `test_bearing_integrity`, `test_orientation`,
+    #: `test_sound_bearing`) name `spatial_orientation`/`spatial_senses` to
+    #: CALL through rather than to patch. None is a defect this check invented;
+    #: each is one import line.
     families = {
         "agents.director": (ROOT / "agents", "director"),
         "commit": (ROOT / "persist", "commit"),
     }
+    tests_dir = ROOT / "tests"
     for facade, (home, stem) in families.items():
-        pkg = home.name if home.name != "agents" else "agents"
-        siblings = {p.stem for p in home.glob("%s_*.py" % stem)}
+        pkg = home.name
+        siblings = facade_siblings(home, stem)
         if not siblings:
             continue
         facade_mod = facade if "." in facade else "%s.%s" % (pkg, facade)
-        for path in engine_python_paths() + sorted((ROOT / "tests").glob("*.py")):
+        for path in engine_python_paths() + sorted(tests_dir.glob("*.py")):
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
             except (OSError, SyntaxError):
@@ -1043,26 +1278,179 @@ def check_facade_import_direction(errors: list[str]) -> None:
             rel = path.relative_to(ROOT).as_posix()
             inside = path.parent == home and (
                 path.stem == stem or path.stem in siblings)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.level == 0:
-                    name = node.module or ""
-                elif isinstance(node, ast.Import):
-                    name = node.names[0].name
-                else:
-                    continue
-                head, _, tail = name.rpartition(".")
-                if tail in siblings and head in (pkg, ""):
-                    if not inside:
-                        errors.append(
-                            f"{rel}:{node.lineno}: imports {name!r}, a sibling "
-                            f"behind the {facade_mod!r} facade. Import the "
-                            f"facade instead — it re-exports every name.")
-                elif name == facade_mod and path.stem in siblings and path.parent == home:
+            is_test = path.parent == tests_dir
+            for lineno, kind, module in facade_import_violations(
+                    tree, pkg=pkg, stem=stem, siblings=siblings,
+                    inside=inside, is_test=is_test):
+                if kind == "outside-in":
+                    extra = ("" if not is_test else
+                             " A test may name a sibling it PATCHES or reads"
+                             " the source of — patching the facade's re-export"
+                             " is inert — but not one it only calls through.")
                     errors.append(
-                        f"{rel}:{node.lineno}: imports its own facade "
+                        f"{rel}:{lineno}: imports {module!r}, a sibling "
+                        f"behind the {facade_mod!r} facade. Import the "
+                        f"facade instead — it re-exports every name.{extra}")
+                else:
+                    errors.append(
+                        f"{rel}:{lineno}: imports its own facade "
                         f"{facade_mod!r}. That is the import cycle the facade "
                         f"exists to prevent; import the sibling that defines "
                         f"the name, or move the name down.")
+
+
+def _engine_module_index() -> tuple[set[str], dict[str, list[str]]]:
+    """Every engine module by dotted name, and by its bare final component."""
+    names = {"agents"}
+    for path in engine_python_paths():
+        rel = path.relative_to(ROOT).with_suffix("")
+        parts = list(rel.parts)
+        if parts[-1] == "__init__":
+            parts.pop()
+        names.add(".".join(parts))
+    names.update(SUBSYSTEM_PACKAGES)
+    by_tail: dict[str, list[str]] = {}
+    for name in names:
+        by_tail.setdefault(name.rpartition(".")[2], []).append(name)
+    return names, by_tail
+
+
+def engine_import_violations(source, names: set[str], by_tail: dict) -> list:
+    """`(lineno, message)` for every import naming a module that is not there."""
+    tree = source if isinstance(source, ast.AST) else ast.parse(source)
+    engine_roots = set(SUBSYSTEM_PACKAGES) | {"agents"}
+    out = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            targets = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            targets = [node.module or ""]
+        else:
+            continue
+        for target in targets:
+            if target in names:
+                continue
+            root = target.partition(".")[0]
+            if root in engine_roots:
+                out.append((node.lineno, "imports %r, which is not a module "
+                                         "in this tree." % target))
+            elif "." not in target:
+                moved = sorted(by_tail.get(target, []))
+                if moved:
+                    out.append((node.lineno,
+                                "imports %r, a module name from before the "
+                                "package move. It is now %s."
+                                % (target, " or ".join(moved))))
+    return sorted(out)
+
+
+def check_engine_imports_resolve(errors: list[str]) -> None:
+    """An import naming an engine module that does not exist.
+
+    The class the package move created and nothing catches: `tools/` drivers
+    are imported by nothing — no test, no route, no other module — so a name
+    that stopped resolving fails only when a human runs the tool, months
+    later, and usually into a bare `except` that degrades a metric instead of
+    raising. `tools/perception_quality.py` asked for `spatial` and
+    `character_schema` for weeks; its dialogue-entitlement gate was off the
+    whole time and it exited 0.
+
+    Checked statically, by name, against the modules that actually exist: a
+    bare name matching a moved module is reported WITH where it went, so the
+    repair is in the message. Nothing is executed to run this — a driver must
+    not have to be runnable to be checked.
+    """
+    names, by_tail = _engine_module_index()
+    for path in sorted((ROOT / "tools").glob("*.py")) + engine_python_paths():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for lineno, message in engine_import_violations(tree, names, by_tail):
+            errors.append(f"{rel}:{lineno}: {message}")
+
+
+ASGI_TARGET = re.compile(r"uvicorn\s+(?:[-\w]+\s+)*([\w.]+):(\w+)")
+
+
+def check_asgi_targets(errors: list[str]) -> None:
+    """Every `uvicorn module:attr` a launcher runs must name a real module.
+
+    The launchers are shell, batch and make — nothing imports them, nothing
+    compiles them, and the suite cannot see them at all. `tools/test_server.sh`
+    still said `uvicorn app:app` nine days after the app became `web.app`, so
+    the script whose whole job is "start a server against a COPY of the
+    database, never the live one" failed at startup and sent anyone who
+    reached for it back to the launcher that uses the real database.
+    """
+    names, by_tail = _engine_module_index()
+    launchers = [ROOT / "Makefile"] + sorted((ROOT / "tools").glob("*.sh"))
+    launchers += sorted(ROOT.glob("*.bat"))
+    for path in launchers:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for match in ASGI_TARGET.finditer(line):
+                module = match.group(1)
+                if module in names:
+                    continue
+                moved = sorted(by_tail.get(module.rpartition(".")[2], []))
+                where = (" It is now %s." % " or ".join(moved)) if moved else ""
+                errors.append(
+                    f"{rel}:{lineno}: runs {match.group(0)!r}, but "
+                    f"{module!r} is not a module in this tree.{where}")
+
+
+def check_conftest_not_imported(errors: list[str]) -> None:
+    """`conftest.py` is pytest's to import, and only pytest's.
+
+    pytest loads a conftest under a name of its own choosing (`conftest` for a
+    directory with no `__init__.py`). Any other module that imports the same
+    file under a second name -- `tests.conftest`, `from conftest import X` --
+    does not reach that module object; Python builds a SECOND one. Every
+    import-time side effect then runs twice, and only one copy's fixtures are
+    registered, so whatever the second copy allocated has no owner and no
+    teardown.
+
+    Measured, 2026-08-18: five test files imported `tests.conftest` for one
+    plain helper function. `_redirect_default_database()` therefore ran twice
+    per session, `db.DB` ended the collection pointing at the unowned copy,
+    and every suite run left one more 516,096-byte scratch database in
+    /dev/shm -- 164 of them by the time anyone counted. Nothing failed.
+
+    A helper that tests share belongs in a module tests import BY NAME
+    (`tests/helpers.py`). A conftest holds fixtures and hooks, which pytest
+    delivers without an import.
+    """
+    for path in sorted((ROOT / "tests").rglob("*.py")) + engine_python_paths():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        if path.name == "conftest.py":
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 0:
+                names = [node.module or ""]
+            elif isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            else:
+                continue
+            for name in names:
+                if name.rpartition(".")[2] == "conftest":
+                    errors.append(
+                        f"{rel}:{node.lineno}: imports {name!r}. pytest already "
+                        f"imported that file under its own name, so this builds "
+                        f"a second module object and runs its import-time side "
+                        f"effects again. Move the shared helper into a plain "
+                        f"module (tests/helpers.py) and import that.")
 
 
 def main() -> int:
@@ -1071,6 +1459,9 @@ def main() -> int:
     check_extension_manifests(errors)
     check_extension_imports(errors)
     check_facade_import_direction(errors)
+    check_conftest_not_imported(errors)
+    check_engine_imports_resolve(errors)
+    check_asgi_targets(errors)
     check_duplicate_python_symbols(errors)
     check_duplicate_dict_keys(errors)
     check_install_root_derivations(errors)

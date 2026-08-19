@@ -224,6 +224,38 @@ def test_a_restore_reuses_the_stored_vector_rather_than_re_embedding(
     assert len(memory.dump_memory_summaries(bank["chat"])) == 2
 
 
+def test_a_summary_with_no_stored_vector_does_reach_the_embedder(
+        bank, monkeypatch):
+    """The positive control for the test above.
+
+    That one asserts an ABSENCE, which is also what a stub installed on a name
+    nothing reads would produce. This drives the other branch of the same
+    `if emb is None or not model` -- a legacy dump, from before the vector
+    travelled with it -- and requires the stub to fire. If it does not, the
+    guard above is green by construction rather than by behaviour.
+    """
+    _window(bank, "The bridge and the ferryman.", 0, 10)
+    legacy = [dict(item, embedding=None, embedding_model="")
+              for item in memory.dump_memory_summaries(bank["chat"])]
+
+    calls = []
+
+    class _Embedded:
+        vectors = [[0.25, 0.5, 0.75]]
+        model_key = "test-embedder"
+        dimensions = 3
+
+    def _record(texts, **kw):
+        calls.append(texts)
+        return _Embedded()
+
+    monkeypatch.setattr(memory, "embed_texts_meta", _record)
+    memory.restore_memory_summaries(bank["chat"], legacy)
+    assert calls, ("a summary with no stored vector did not reach the "
+                   "embedder: the stub cannot fire")
+    assert len(memory.dump_memory_summaries(bank["chat"])) == 1
+
+
 # ---- end to end: consolidation was already computing bounded windows ----
 
 @pytest.fixture

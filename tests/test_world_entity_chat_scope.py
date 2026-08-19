@@ -11,12 +11,12 @@ v14 repartitions both tables on the composite key (chat_id, id).
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
-import tempfile
 import time
 
 import pytest
+
+from tests.helpers import remove_scratch_db, scratch_db_path
 
 
 def _new_chat(db, name="C"):
@@ -69,12 +69,15 @@ def test_duplicate_entity_within_one_chat_still_rejected(temp_db):
                    "VALUES('rifle',?,?,?,'{}')", (a, "object", "Dup"))
 
 
+@pytest.mark.slow
 def test_v13_to_v14_migration_preserves_data_and_repartitions_pk():
     """A populated pre-v14 database (bare global PK) must upgrade in place,
-    keeping every row and switching to the composite (chat_id, id) key."""
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    os.remove(path)
+    keeping every row and switching to the composite (chat_id, id) key.
+
+    Marked by hand: it builds its own database instead of taking `temp_db`, so
+    the conftest's fixture-name rule cannot see that it is database-backed.
+    """
+    path = scratch_db_path()
 
     from core import db
 
@@ -147,6 +150,4 @@ def test_v13_to_v14_migration_preserves_data_and_repartitions_pk():
     finally:
         db.close_connection()
         db.configure(old)
-        for suffix in ("", "-wal", "-shm"):
-            if os.path.exists(path + suffix):
-                os.remove(path + suffix)
+        remove_scratch_db(path)

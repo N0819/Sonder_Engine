@@ -39,8 +39,13 @@ reported, not fatal):
                       _quote_body, _contains_quote, player_speech_lines,
                       character_scene_keys
   agents.perception:  _strip_self_narration, _dialogue_hear_level
-  spatial:            spatial_rel, room_of
-  character_schema:   character_name
+  world.spatial:      spatial_rel, room_of
+  story.character_schema: character_name
+
+The three the ENTITLEMENT GATE needs (`GATE_SYMBOLS`) are not optional: without
+them every dialogue line files as `ungated` and the harness measures nothing in
+the direction it exists for, so a run that cannot resolve them exits non-zero
+instead of printing zeroes.
 """
 
 from __future__ import annotations
@@ -80,6 +85,16 @@ SPOKEN_VOLUMES = ("normal", "loud", "shout")
 # Engine checker resolution (portable: by name, optional, reported)
 # --------------------------------------------------------------------------
 
+#: Without these three the entitlement gate cannot run: `gate_available` is
+#: False for every view, every dialogue line files `ungated`, and the leak and
+#: under-grant counts are both structurally zero. Degrading gracefully is right
+#: for a metric; it is not right for the metric the harness is FOR. Named here
+#: so a run can fail loudly rather than report an instrument that is unplugged
+#: — which is exactly what happened when `spatial` became `world.spatial` and
+#: the import landed in the tolerant `except` below.
+GATE_SYMBOLS = ("_dialogue_hear_level", "spatial_rel", "room_of")
+
+
 def resolve_engine():
     """Resolve every engine symbol this harness reuses, by name.
 
@@ -97,8 +112,8 @@ def resolve_engine():
         "agents.perception": ["_strip_self_narration",
                               "_strip_self_narration_quote_safe",
                               "_dialogue_hear_level"],
-        "spatial": ["spatial_rel", "room_of"],
-        "character_schema": ["character_name"],
+        "world.spatial": ["spatial_rel", "room_of"],
+        "story.character_schema": ["character_name"],
     }
     symbols, missing = {}, []
     for module_name, names in wanted.items():
@@ -798,6 +813,8 @@ def run_baseline(db_path, engine=None, limit=None, progress=None):
     return {
         "db": str(db_path),
         "engine_symbols_missing": missing,
+        "entitlement_gate_available": all(
+            engine_symbols.get(name) for name in GATE_SYMBOLS),
         "identity_floor_boundary_turn_id": boundary,
         "views_skipped_unresolvable_observer": skipped_views,
         "segments": {name: _finish_segment(seg)
@@ -821,6 +838,12 @@ def main(argv=None):
     print(text)
     if args.out:
         Path(args.out).write_text(text)
+    if not agg["entitlement_gate_available"]:
+        print("FAILED: the entitlement gate could not be assembled, so every "
+              "dialogue line filed as ungated and the leak counts above are "
+              "structurally zero. Missing: "
+              + ", ".join(agg["engine_symbols_missing"]), file=sys.stderr)
+        return 2
     return 0
 
 
