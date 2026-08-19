@@ -146,14 +146,31 @@ class TestSelectionStaysSeparateFromContent:
         """`full_agent_candidates` already documents this; it is asserted here
         because the producer is the step that would be tempted to pass the
         scene along for convenience."""
+        import ast
         import inspect
 
         params = inspect.signature(offscreen.full_agent_candidates).parameters
         assert "scene" not in params and "player_room" not in params
+
         # And the body reads only the character's own rows, never the turn.
-        body = inspect.getsource(offscreen.full_agent_candidates)
-        body = body[body.index('"""', body.index('"""') + 3) + 3:]
-        assert "scene" not in body and "director" not in body
+        # Asked of the parsed function rather than of its text: the previous
+        # form sliced the source past its docstring by index arithmetic and
+        # then searched for the WORDS "scene" and "director", which fires on
+        # a comment mentioning either and misses `sc = ctx["_scene"]`. Names
+        # and attributes are what a body can actually reach through.
+        tree = ast.parse(open(offscreen.__file__).read())
+        fn = next(node for node in ast.walk(tree)
+                  if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                  and node.name == "full_agent_candidates")
+        reached = set()
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Name):
+                reached.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                reached.add(node.attr)
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                reached.add(node.value)
+        assert not {"scene", "director"} & reached, sorted(reached)
 
 
 class TestItsOwnTheoryOfOtherMindsTravels:

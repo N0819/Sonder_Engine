@@ -669,13 +669,6 @@ Not defects yet. Each is a measured shape that will become one silently.
   `fading`, `project_review`. Each is something a model must notice and act on,
   and attention is finite — at some point adding the tenth marker makes the ninth
   less likely to be read.
-- **`logging_utils.TurnMetrics` and `measure_step` have no callers and now
-  never will.** Per-stage timing landed as a per-call ledger instead
-  (`_engine_notes.llm_calls`, `Design.md` § Turn shape), because what the slow-turn
-  investigations needed was WHICH CALLS a stage paid for, not stage totals the
-  `steps`/`variants` timestamps already yield. The two survivors are dead code
-  wearing a plausible name, which is how a reader spends an hour deciding
-  whether to wire them. Delete them.
 - **The place graph's distinct contribution is narrower than proposed.** With
   pruning gone, unpruned `known_exits` + `known_dead_ends` carry most of the
   routing information by themselves; the graph's remaining unique contributions
@@ -1072,10 +1065,13 @@ warrant before writing the guard; a check that silently pins NPCs in place is
 worse than the drift it replaces.
 
 Two consequences of the same investigation ARE fixed, because they hold on any
-geometry: `_strip_unreachable_bodies` (a body with no sensory channel is not
-described to a perceiver) and `_subject_opener` (a leading article belongs to
-the prose, not the name, so a body registered "A Dalek" is caught when the
-prose writes "The Dalek's"). See `Design.md`.
+geometry: a body with no sensory channel is not described to a perceiver at all
+(`visual_level_between` is consulted before any sentence exists, so the
+composer mints no presence, pose or appearance percept for it — the guard moved
+from the prose to the IR, and `_strip_unreachable_bodies` is gone with the rest
+of the repair-over-prose layer), and `_subject_opener` (a leading article
+belongs to the prose, not the name, so a body registered "A Dalek" is caught
+when the prose writes "The Dalek's"). See `Design.md`.
 
 ### 1.21 A character's origin cannot be reached by similarity, and 53 banks have none to reach
 
@@ -1201,7 +1197,12 @@ increase.** `tools/salience_replay.py` replays real recall against the real
 bank with the term live, deleted, and spread. It needs no embedding provider:
 a probe's own stored vector is the query and the turn cutoff is the beat it
 formed on, so each probe is an honest "what did this mind have to hand", and
-it copies the database first because `search_memories` bumps `access_count`.
+it copies the database first. (That copy was originally needed because
+`search_memories` bumped `access_count` for every caller. It no longer does:
+recording is opted INTO by the caller that is a mind recalling, via
+`record_access`, so the author's Memories tab and the replay tools no longer
+alter the number they are reading. The copy is now belt-and-braces rather than
+load-bearing.)
 
 270 probes, top-16 membership moved:
 
@@ -1671,18 +1672,29 @@ over identically -- the flag is written and nothing reads it. Giving it force
 is a Director rule about which of two colliding attempts survives intact, and
 it is the natural companion to `commitment: "contestable"`.
 
-### 1.30 The background-claims lane has never once fired
+### 1.30 The background-claims lane has fired seven times, all one way
 
-Measured 2026-08-08, against the live corpus: **0 claims ever recorded, across
-17 chats playing at `scene_life=full` over the corpus's 2,114 turns and 46
-tracked presences.** That is the real denominator -- an earlier 0-of-29 was
-measured against beats, which undercounts the opportunities and made the
-silence look like sparse data instead of a dead lane. The lane's entire
-downstream -- `background_claims.record_claims`, `unratified_claims` riding
-every resolve payload, `settle_claims`, `write_canon`, `canon_provenance` --
-has processed nothing, ever. It is built, tested, documented, and has never
-run on a single live datum: the exact shape the fire-rate rule in `AGENTS.md`
-exists for.
+**Updated 2026-08-18.** The entry used to read "has never once fired", and that
+was true when measured 2026-08-08: 0 claims across 17 chats playing at
+`scene_life=full` over 2,114 turns and 46 tracked presences. Re-measured
+read-only against the live database, the lane has now produced **7 claims, all
+7 ratified, 0 contradicted, 0 expired**, in one chat.
+
+Seven is not evidence the lane works. Until `5ab591e` `_verdicts` inferred
+adoption from any four-character reference appearing anywhere in the resolved
+event of the beat being settled, and `background_react` runs AFTER
+`director_resolve` — so the text was written before the presence spoke, every
+claim settled on the beat that produced it, and contradiction and expiry could
+not fire. A three-outcome design collapsed onto its one irreversible branch,
+and it is invisible because ratification is the branch that looks like success.
+Inferred adoption now requires a LATER beat. **The seven rows stay** (owner
+decision 3): canon is write-once, and repairing persisted story data is the
+owner's call. Two of the seven carry a raw engine uid as a speaker and one
+establishes a DENIAL as truth.
+
+So the fire rate still has to be measured, on a run under the repaired gate. A
+lane whose only firings happened through a defect gives no chances, not a
+rate.
 
 Why, structurally: a claim only enters the lane when `scene_life` output
 survives `_claimed_refs` -- either the model volunteers `asserts` (it never
@@ -2199,29 +2211,27 @@ going stale whenever the bar changed width after first paint. That fixes the
 staleness. It does not fix the floor, which is this entry.
 
 
-### 1.45 Seven perception helpers with passing tests and no production caller
+### 1.45 Three helpers with passing tests and no production caller
 
-`agents/common._inject_visible_actor` has **zero production call sites**. It is
-imported by `agents/perception.py` and re-exported from `agents/__init__.py`,
-and only `tests/test_perception_appearance.py` and
-`tests/test_perception_identity_gate.py` ever call it. So it has passing tests
-and no effect, which is the worst combination available: it reads as a live
-floor.
-
-**Re-verified 2026-08-18, and it is not one helper but seven.** The original
-entry said `_inject_action` had one live call site; that call site is inside
-`agents/perception._inject_onset_sequence`, which itself has no production
-caller, so the whole cluster is dead code calling dead code:
+**Reduced 2026-08-18.** The original entry named seven; the composer repair
+closed four of them (`perception._inject_onset_sequence`,
+`_inject_onset_speech`, `_strip_onset_rendering`, `_self_cannot_see_own_surface`
+are gone, and `tests/test_self_surface_when_enclosed.py`'s two
+`inspect.getsource` assertions on statement order inside the first went with
+them in `6d843e2`). Three survive, and they survive because they live in files
+the perception slice did not own:
 
 | Symbol | Where | Only caller |
 |---|---|---|
-| `common._inject_visible_actor` | `common.py:4570` | tests |
-| `common._inject_action` | `common.py:4515` | dead `_inject_onset_sequence` |
-| `perception._inject_onset_sequence` | `perception.py:1343` | nothing |
-| `perception._inject_onset_speech` | `perception.py:1134` | dead `_inject_onset_sequence` |
-| `perception._strip_onset_rendering` | `perception.py:1240` | nothing |
-| `perception._self_cannot_see_own_surface` | `perception.py:1311` | dead `_inject_onset_sequence` |
-| `perception._deliver_foreground_body_details` | `perception.py:679` | tests |
+| `common._inject_visible_actor` | `agents/common.py:4647` | tests |
+| `common._inject_action` | `agents/common.py:4592` | tests |
+| `perception._deliver_foreground_body_details` | `agents/perception.py:536` | tests |
+
+All three are re-exported from `agents/__init__.py`. So each has passing tests
+and no effect, which is the worst combination available: it reads as a live
+floor. Four test files pin them — `test_perception_appearance.py`,
+`test_perception_identity_gate.py`, `test_enclosed_act_leak.py`,
+`test_player_person_discipline.py`, `test_observable_injection.py`.
 
 `_inject_dialogue` and `_compose_residue_view` are the two siblings that ARE
 live, both through `agents/composer.py` (and `_compose_residue_view` also
@@ -2229,31 +2239,23 @@ through `language_adapters/japanese.py`).
 
 Every one of them was a repair over MODEL PROSE, and perception no longer
 produces any: chronology is `Percept.order_key`, concealment is a per-percept
-gate, and a rendered view is realised from percepts alone. So this is not seven
-oversights, it is one retirement that took its own callers with it and left the
-helpers standing.
+gate, and a rendered view is realised from percepts alone. So this is not an
+oversight per symbol, it is one retirement that took its own callers with it
+and left the helpers standing.
 
-**The one that mattered has already cost a guard.** `tests/test_self_surface_when_enclosed.py`
-carried two tests that asserted the STATEMENT ORDER inside `_inject_onset_sequence`
-via `inspect.getsource` — one of them saying in its own docstring "or it is a
-well-tested function nothing calls", which is exactly what it was. They are
-gone (`6d843e2`); the property they guarded is enforced instead by the composer,
-which never gives an actor their own act surface at all. `Design.md`'s
-conformance rows for both this and the sealed-actor case have been corrected to
-name the mechanism that actually runs.
+`_deliver_foreground_body_details`' two jobs appear to be superseded by the
+composer IR rather than missing. The appearance half is done by
+`composer.appearance_percept` → `"You see {desc}."`, which carries the same
+`_appearance_as_prose` output including the `wearing:` clause. The
+contradiction-stripping half looks for phrases ("no clear figure visible",
+"cannot see them") that do not occur: **0 of 5,499 stored views across the
+corpus contain any of them**, because the model-authored perception path that
+produced them is gone.
 
-Both of its jobs appear to be superseded by the composer IR rather than
-missing. The appearance half is done by `composer.appearance_percept` →
-`"You see {desc}."`, which carries the same `_appearance_as_prose` output
-including the `wearing:` clause. The contradiction-stripping half looks for
-phrases ("no clear figure visible", "cannot see them") that do not occur:
-**0 of 5,499 stored views across the corpus contain any of them**, because the
-model-authored perception path that produced them is gone.
-
-So the likely correct change is deletion, of the helper and of the two tests
-that keep it looking alive. It is filed rather than done because it is a
-judgement about design intent — whether this was meant to be a deterministic
-floor that was never wired — and because `agents/__init__.py` is a
+So the likely correct change is deletion, of all three and of the tests that
+keep them looking alive. It is filed rather than done because it is a
+judgement about design intent — whether these were meant to be deterministic
+floors that were never wired — and because `agents/__init__.py` is a
 compatibility facade that replay may depend on.
 
 Corrected while finding it: an earlier note in this session's handoff claimed
@@ -2332,16 +2334,21 @@ literal-coupled to a parser or persisted, so the real work is moving the
 clause construction behind the compositor card and migrating what is stored.
 Sized as its own change, not a follow-up patch.
 
-**`LanguagePack.fallback` is a dead contract.** The field is parsed
+**`LanguagePack.fallback` is a dead contract, and the choice is drop or
+keep — not "wire or drop".** The field is parsed
 (`language_runtime/__init__.py:154`), published on the pack (`:118`), and
 validated to point at an installed pack (`:272`) — and no lookup anywhere
 consults it. A pack declaring `"fallback": "en"` gets no fallback behaviour of
-any kind. Harmless today because nothing depends on it, and worth closing
-before third-party pack authors start writing manifests against it: either
-implement the resolution (a missing message or card field falls through to the
-named pack) or drop the field. Declared-and-ignored is the same
-invisible-failure shape as `capabilities.ui.css` was, and that one shipped
-unnoticed for a release.
+any kind. Corrected 2026-08-18: a fallback RESOLVER is unreachable by
+construction, so implementing one is not an option on the table.
+`installed_language_packs` refuses to load at all if a story pack is missing
+any system prompt id or any card leaf path the English pack has, and refuses a
+UI pack missing any source message — so the miss a fallback would answer
+cannot occur while the pack is installed, and if it could occur the pack is
+already rejected. What is left is a decision between deleting the field and
+keeping it as a declared lineage marker with the docstring saying so.
+Declared-and-ignored is the same invisible-failure shape as
+`capabilities.ui.css` was, and that one shipped unnoticed for a release.
 
 **A story does not record which pack version wrote it.** Chats stamp
 `story_language` and not the pack's `version`, so when a pack's wording or
@@ -2576,54 +2583,20 @@ beside the machinery it configures, `tools/project_check.py`'s deep-import head
 match, the monkeypatch repoints) which were recorded in the audit documents and
 never opened here. A number that has to be recomputed from three files to be
 checked is not a register. The ROWS are the register; count them if you need a
-count. Reconciled against source 2026-08-18: every row below was re-verified,
-and the only one that had landed was DIRECTOR D4.
-
-**Live behaviour, still open.**
-
-- **COMMIT** — `_salience_of` and `_durable_dialogue_category` are hardcoded
-  ENGLISH word lists in a language-pack engine. In a Japanese story every
-  memory scores the flat length-based salience and no quote is ever kept
-  verbatim, silently. `tools/remember_lines.py` inlines the same rule.
+count. Reconciled against source twice on 2026-08-18: once before the repair
+wave, when the only row that had landed was DIRECTOR D4, and again after it,
+when all sixteen SPATIAL and DIRECTOR rows and every COMMIT row but two had
+landed. What survives below is what survived that second reading.
 
 **Dead code, and guards that cannot fire.**
 
-- **SPATIAL F2/F3/F6** — ten symbols have no caller anywhere in the repo
-  (`comms_reach`, `owned_region`, `CONTACT_MANNERS`, `CONTAINMENT_MODES`,
-  `_reverse_dir`, `CONTAINER_ENCLOSURES`, `_SOUND_BARRIER_PHRASES`,
-  `_SECTOR_PHRASES`, `would_create_containment_cycle`, `validate_operations`).
-  **All ten are in the facade contract, so deleting one is an API change, not
-  a cleanup** — decide deliberately. F3 and F6 ride with them: a comment
-  claiming a use that does not exist, and two shadow-by-case pairs where the
-  function is live and the constant dead.
-- **SPATIAL F4** — `would_create_containment_cycle` and `validate_operations`
-  still speak the decommissioned `world_placements` record shape and an op
-  vocabulary no current schema emits.
-- **SPATIAL F8** — `contact_phrase`'s `subject_first=False` branch is dead and
-  would be wrong if resurrected: it bypasses the momentary-residue and
-  interior-topology rendering the rest of the function exists to enforce.
-- **COMMIT** — `prepare_mapping_commit`'s `proposed_specifics` is a permanently
-  empty payload field that teaches every mapping call about an input that
-  cannot occur.
-- **COMMIT** — `commit_all`'s result carries a hardcoded `"errors": []` with no
-  writer and no reader.
-- **COMMIT** — seven names in `persist/commit.py`'s facade import block are
-  dead re-export surface: used nowhere in the file and imported from it by
-  nothing.
-
-**Duplication, accepted or not.**
-
-- **SPATIAL F10** — the scale-change `changed`-set computation exists twice,
-  nearly verbatim, and the two copies now live in different modules.
-- **SPATIAL F11** — seven hand-rolled walks each rebuild their own neighbour
-  map from `scene.rooms`. A shared builder belongs in the `spatial_topology`
-  seam the split plan names.
-- **SPATIAL F16** — `normalize_scene_containment` probes holder existence three
-  ways, one of them twice, materialising a fresh dict per record.
-- **DIRECTOR D10** — `_travel_in_flight_view` and `_travel_continues` are
-  near-duplicates: both normalise the legacy approach shape, both build the
-  declared-movers exemption, both apply the long-edge rule. A change to any of
-  the three must be made twice and nothing checks the copies agree.
+- **COMMIT-10** — `prepare_mapping_commit`'s `proposed_specifics` is a
+  permanently empty payload field that teaches every mapping call about an
+  input that cannot occur (`persist/commit_mapping.py`; no pack card mentions
+  it, so this is a code-only change). **Blocked on an owner decision**:
+  removing it changes what every mapping call is taught it may be handed, and
+  a field a model is told it can fill is a different instruction from one it
+  is not.
 
 **Tests that pass for the wrong reason.**
 
@@ -2632,16 +2605,6 @@ and the only one that had landed was DIRECTOR D4.
   (`open("agents/director.py").read()`, sliced between `"def director_interpret"`
   and `"def _reconcile_interpretation"`), and the audit's warning that the suite
   would hold more of the class was right: `391bf14` fixed two others.
-- **COMMIT** — `_NAME_TITLE_PREFIXES` and `_BACKGROUND_NAME_TITLE_WORDS` carry
-  a correctness-critical comment about why they must stay separate, and no test
-  asserts they are.
-
-**Documentation describing something else.**
-
-- **COMMIT** — `update_place_graph` documents a `"told"` basis with no writer.
-  The docstring is honest about it, so this is a register entry rather than a
-  lie: a testimony-derived place-graph writer is designed, accepted by the data
-  model, and unbuilt. It belongs in §6 once someone moves it.
 
 **Landed 2026-08-18**, each in its own commit with a test:
 
@@ -2706,49 +2669,6 @@ does not split functions, and those three are most of what made the originals
 hard to audit.
 
 
-### 1.53 The ambient perception surfaces are built, and no view renders them
-
-`agents/perception.py` assembles three per-observer ambient views into every
-perceiver record, on every pass, for every observer:
-
-- `crowds_for_room` — the crowd blob in the room, its band, and (own-room only)
-  what its murmur is about;
-- `couriers_for_room` — the rider crossing the room, which door he makes for,
-  whether he is waiting, with the `courier_id` the interception ops need;
-- `artifacts_for_room` — the notice hanging on the wall, and what kind of thing
-  it looks like.
-
-**Nothing reads any of the three keys.** Grepped 2026-08-18: `crowds`,
-`couriers` and `notices` are written at `perception.py:2410-2412`, `2438-2440`,
-`2689-2691`, `3133-3135`, `3159-3161`, `3189-3191` and appear in no reader;
-`agents/composer.py` contains the strings `crowd`, `courier` and `notice`
-exactly zero times, so no percept builder admits one and `render_view` cannot
-realise one. The only consumers of the functions are `agents/director*.py`
-(which uses its own `_couriers_view`, not this one) and their unit tests.
-
-This is residue of the retired per-observer model call: the payload used to be
-handed to a model that wrote the view, and when the composer replaced it the
-three keys kept being computed and stopped being delivered. The composer is
-right to refuse them — it may not read the world, and these come from `wget`
-against world keys — so the fix is a percept builder per surface, fed the
-already-described dicts as data, exactly as `_with_comm_channel` feeds the
-comms channel.
-
-What this costs, stated plainly, because three documents were claiming
-otherwise: **a dispatched courier cannot be seen.** He can be dispatched, moved
-on the simulation clock, questioned, silenced and made to arrive — and no mind
-in any room he crosses receives a single word about him, so the design's own
-verbs (intercept, follow, question, outrun) have no perceptual event to begin
-from. Same for a posted bill, which can be read only by a mind that was never
-told it was there. `docs/design/OFFSCREEN_WORLD_COMPLETION.md` §2 tags the
-crowd item **BUILT** on the strength of step 1 being "a stationary crowd blob
-visible to ordinary perception"; that step is not built, and neither is step 2
-(persistent location fixtures — no barkeep/vendor/regular subsystem exists in
-the tree at all). Two of that item's five ordered steps are absent. Its own §2
-already contains the warning, written about the world key nothing wrote: "The
-module shipped pure and correct and could not occur … Worth remembering when
-reading any other 'built' line in this document." It applies to itself.
-
 ### 1.54 Scent is a permission system with nothing to permit
 
 Everything that decides WHETHER a smell crosses is built and good:
@@ -2772,29 +2692,6 @@ gate is finished work, and building content would mean deciding where a smell
 lives (a card field is stable body odour; an entity field is a thing that
 smells; a `StateDiff` channel is a smell a beat produced) and how it decays.
 The gate is the hard half and it is done. `Design.md` carries the matching row.
-
-### 1.55 `psychology.self_model.protected_beliefs` is authored and read by nothing
-
-Normalized by `story/character_schema.py` (`_profile_str_list`, three default
-sites), editable in `static/js/editors.js` (a "Protected beliefs" line list,
-read back on save), carried in archives with the rest of the sheet, and
-consulted by **no prompt, no runtime and no commit path** — `grep -rn -w
-protected_beliefs` finds only those two files, the demo card that has one, and
-`docs/experiments/AUDIT_MIND.md`, which found it first.
-
-Distinguish it from the thing that IS live, because `Design.md` credited them
-as one feature: the per-belief `protected` FLAG on a `self_model.beliefs` entry
-is read by `mind/psychology_runtime.py:439`, which halves the weakening step
-(0.05 against 0.15) for a belief carrying it. A flag on a belief the mind holds
-works. The parallel free-string list does not, and an author filling it in gets
-a character who behaves as though they had not — the silent-empty-field failure
-class CLAUDE.md warns about, arriving from the other direction: a field that is
-filled and inert.
-
-Either wire it (the obvious reading is that these are beliefs the mind defends
-rather than revises, which is what the flag already does — in which case the
-list should MINT flagged beliefs at sheet load) or delete it from the schema
-and the editor. Leaving it is the one option that keeps costing authors.
 
 ### 1.56 The project tier's occasion now arrives, and is declined
 
@@ -2834,16 +2731,18 @@ tags are one of the four rival status surfaces `docs/README.md` names. Checked
 against source 2026-08-18; recorded here because `UNBUILT.md` is the register
 and the note is argument.
 
-- **§2 "Build crowds and persistent fixtures — BUILT (2026-08-10)"** claims all
-  five ordered steps are in the tree. Two are not. Step 1 ("a stationary crowd
-  blob visible to ordinary perception") is not built — `crowds_for_room` is
-  computed per observer and consumed by nothing (§1.53). Step 2 ("persistent
-  location fixtures": barkeeps, vendors, guards, attendants, regulars belonging
-  to a LOCATION and re-meetable) has no implementation anywhere; background
-  presences are scene-scoped and are a different thing. Steps 3–5 (density as
-  terrain, movement/splitting, one-way emergence) are real:
-  `world/crowds.py`'s `density`/`terrain`/`drift`, `advance_crowds`/`split_band`,
-  and `emerge`.
+- **§2 "Build crowds and persistent fixtures — BUILT (2026-08-10)"** claimed
+  all five ordered steps were in the tree, and two were not. Step 1 ("a
+  stationary crowd blob visible to ordinary perception") landed 2026-08-18:
+  `composer.room_content_percepts` mints the crowd, the courier and the posted
+  notice as `ambient` percepts from the per-observer dicts perception had been
+  computing and dropping. Step 2 ("persistent location fixtures": barkeeps,
+  vendors, guards, attendants, regulars belonging to a LOCATION and
+  re-meetable) still has no implementation anywhere; background presences are
+  scene-scoped and are a different thing. Steps 3–5 (density as terrain,
+  movement/splitting, one-way emergence) are real: `world/crowds.py`'s
+  `density`/`terrain`/`drift`, `advance_crowds`/`split_band`, and `emerge`.
+  **So the item is still not BUILT, for one step instead of two.**
 - **§5's "`offscreen_log` has exactly one reader, `gaps.interim_for`"** is
   wrong: there are three read sites — `world/gaps.py:268` (the consumer),
   `world/offscreen.py:464` (`append_offscreen_log`'s own read-modify-write) and
@@ -2851,6 +2750,285 @@ and the note is argument.
   The claim it supports — that no diagnostic surface exists to spoiler-gate —
   survives, since only one of the three is a reader in the sense meant. The
   sentence is what is wrong, not the conclusion.
+
+
+### 1.58 Schema-touching work deferred by owner policy 4
+
+The 2026-08-18 repair wave authorised **exactly one** schema migration
+(`persona_carrier_state`, landed as SCHEMA_VERSION 30 — the player's carrier
+envelope was the one carrier home outside `FRAME_SCOPED_WORLD_KEYS`, so what
+the player witnessed in one era survived a rewind or a branch). Every other
+schema-touching finding was deferred here rather than half-done, on the
+principle that a migration deserves its own pass, its own testing and its own
+release. This entry is that paperwork. Each row below is CONFIRMED against
+source; none is speculative.
+
+The checklist every one of them owes is `docs/guides/DATABASE.md` §
+"Schema-change checklist" — eight steps, and the ones that actually bite here
+are 4 (export/import payloads), 5 (checkpoint snapshot AND restore) and 6
+(branch/clone id remapping in `web/app.py`). A frame-scoping change owes one
+more that the checklist does not name, because it is specific to this engine:
+**a bare `wget` redirects on the AMBIENT frame and is the caller's era only by
+accident**, so every read site has to be re-examined for whether it wants
+`wget_for_frame` with an explicit frame, not merely left alone.
+
+- **PERSISTENCE-F17 — three world keys are not frame-scoped while seventeen
+  siblings are.** `world_pressures` (`persist/commit_ledgers.py:150,227,299`),
+  `background_claims` (`world/background_claims.py`, six sites) and
+  `engine_notices` (`agents/director.py:532,2550`,
+  `persist/commit_mechanics.py:184`, `persist/commit_destruction.py:403,411`)
+  are plain `wget`/`wset`. So a pressure raised in one era, a claim ratified in
+  one era and a notice raised in one era are all visible from every other era,
+  and a rewind does not retract them. Adding a key to
+  `FRAME_SCOPED_WORLD_KEYS` is not itself a migration — the scoping is a key
+  rewrite at the storage layer — but the EXISTING rows keep the unscoped key
+  and would go silent on the next read, so the data migration (re-key each row
+  to the era that wrote it, or to the ambient frame) is the work.
+- **RUNTIME-11 — `world_conditions` has no `frame_id`.** Same shape, different
+  storage: this is a real column on a real table (`core/db.py:716`), and
+  `story/scene.awareness_conditions` queries `WHERE chat_id=? AND
+  kind='awareness' AND active=1` with no era filter at all. A character
+  knocked unconscious in one era is unconscious in every era of that chat.
+  `world_events` already carries `frame_id` as an explicit FK, so the shape to
+  copy exists; the migration is the column, the backfill, and the
+  `world_conditions` readers.
+- **PERSISTENCE-F15's gate half.** The writers half is not deferred and landed;
+  moving `_backfill_resource_uids` behind the version gate bumps
+  `SCHEMA_VERSION`, so it waits for the same pass.
+- **PERSISTENCE-F5's drop half.** The three deprecated macro-geography tables
+  (`fiction_worlds`, `fiction_locations`, `transit_edges`). The doc correction
+  landed; dropping them is a schema change. `transit_edges` is the cheap one —
+  nothing snapshots, exports or restores it, so there is nothing to migrate.
+- **LLM-6's remove path.** Dropping `idx_world_conditions_due` and the
+  `next_tick` column, IF the answer to "remove `tick_interval_seconds` or build
+  the due-tick sweep" is remove. The index shipped, so this is a schema change
+  either way round; the question itself is an owner decision.
+- **RUNTIME-6's stored-data purge.** The write-side fix landed — the
+  `candidates` payload is no longer persisted with each step. The
+  already-written payloads remain: measured read-only on the owner's install
+  2026-08-18, **590 variant rows carrying 7.16 MB of `candidates`**. A purge is
+  an UPDATE over live stories' saved steps, which is why it is here and not in
+  a tidy-up commit. That number GREW between the audit (4.9 MB) and this
+  measurement, which is the argument for doing it rather than against: the
+  write side is fixed, so the cost is now fixed too and will not grow again.
+- **The four dead settings keys** — §1.51b, kept there because the diagnosis is
+  there. Listed again here because the repair is the same kind of thing: a
+  migration that deletes rows from live stories at next launch.
+
+### 1.59 Three questions the paradox subsystem cannot answer for itself
+
+`world/paradox.py` is complete enough to run and has three decisions inside it
+that are the owner's, not an engineer's. They are grouped because one
+measurement bounds all three, and it is the reason none of them is urgent:
+**no paradox has ever opened on a live story.** Measured read-only on the
+owner's install 2026-08-18 — two `paradox*` rows in the whole `world` table,
+one an empty `{}` and one a `paradox_policy` on chat 20 (`mode: hazard`,
+`escalation_rate: 1`, `toll_in_radius: true`). So the code has never run
+against a real story, every claim about its behaviour is derived from reading
+it, and the cost of getting one of these wrong today is zero.
+
+- **WORLD-F7 — four rungs or five?** `STAGE_THRESHOLDS` has five
+  (`0.0, 0.25, 0.5, 0.75, 1.0`); `_apply_hazard_stage`'s handlers stop at
+  three; and stage 4's consequence fires on the same tick that force-restores
+  and clears the paradox, so the top rung's effect and its resolution are one
+  beat. Either the ladder is four rungs and the fifth IS the resolution, or
+  stage 4 needs a beat of its own before the restore.
+- **WORLD-F24 — should `mode == "hazard"` also apply the traveler
+  memory-confidence toll?** Chat 20 is the one live chat sitting on this
+  config, and it has never opened a paradox, so nothing is riding on the
+  answer yet.
+- **WORLD-F33 — what does "force restore" mean when the projection is
+  derived?** `_force_restore_anchor` (`world/paradox.py:474`) writes
+  `world_entities` directly, and that table is a derived projection of the
+  scene commit (`Design.md` § Physical-world authority), so a direct write is
+  authority flowing the wrong way. The `# NOTE, unrepaired:` comment at `:475`
+  is honest about it and still needs an answer: restore the SCENE and let the
+  projection follow, or accept that a paradox is the one thing allowed to write
+  the projection.
+
+### 1.60 `generalization_tags` promises a mechanism that does not exist
+
+`AssociationProfile.generalization_tags` (`story/character_schema.py:225`) is
+normalized, editable (`static/js/components.js:745`), archived with the sheet,
+and serialised to the character as prose inside `learned_associations`. What it
+is NOT is a generaliser: nothing deterministic reads it, and
+`psychology_runtime.apply_association_updates` moves `appraisal_bias`,
+`response_tendency` and `strength` and never touches this one. So a tag an
+author writes is a note to the model, and a tag the runtime could have LEARNED
+never appears.
+
+Kept rather than deleted, and the measurement is the reason: read-only on the
+live database 2026-08-18, **all 78 authored associations carry tags, and 87 of
+the 152 in the interior ledgers do**. Deleting the field discards authored work
+in three quarters of the places it exists. The choice — build the generaliser,
+or withdraw the promise the field's NAME makes — is an owner's, and either way
+`static/js/components.js` is the other half of whichever answer wins. Audit
+MIND-F16.
+
+### 1.61 Half the prompt ids are outside the prompt/schema drift check
+
+`tools/project_check.py`'s `check_prompt_schema_ops` exists because the same
+defect landed three times in two days — a prompt asking for an `_ops` field the
+stage's model does not have, so Pydantic drops every op silently (`project_ops`
+cost an entire tier of psychology: "has ever held a project: 0 of 14 banks").
+It iterates `schemas.SCHEMA_MAP` plus `PROMPT_MODEL_ALIASES`.
+
+Measured 2026-08-18: **21 of 41 prompt ids are inside the check and 20 are
+outside it**, and they are outside STRUCTURALLY rather than by oversight —
+there is no Pydantic model to check them against, because their outputs are
+consumed as raw dicts. The twenty: `ambience_prompt`, `artifact_wording`,
+`fill_appearance`, `fill_character_psychology`, `generator_character`,
+`generator_greeting`, `generator_lorebook`, `generator_lorebook_entries`,
+`generator_persona`, `import_character_reinterpret`,
+`import_persona_reinterpret`, `lore_reinterpret`, `memory_consolidate`,
+`offscreen_agent_adjudicate`, `offscreen_agent_attempt`, `offscreen_profile`,
+`patch_json_field`, `position_resolver`, `promote_character`, `repair_json`.
+
+The generator group is the sharp one: `book_ops`, `link_ops` and `entry_ops`
+are asked for by name in those prompts and opened as raw dicts on the other
+side, which is exactly the `entry_ops`/`entries` defect the check was built
+for, sitting where the check cannot see it. **Blocked on an owner decision** —
+"how should the generator prompts be typed" is an API-shape question about
+`llm/schemas.py`, not a checker change, and typing them is what makes the
+checker cover them for free. Audit TOOLS-S3.
+
+### 1.62 An extra player has no opening turn
+
+Two halves of one repair, in two files, both confirmed 2026-08-18:
+
+- `agents/runtime.establishment_plan` is a fixed five-step list
+  (`mapping_stage`, `director_establish`, `perception_establish`, `narrator`,
+  `commit`) and never appends `narrator_extra`, which `build_plan` does append
+  on every normal turn when the chat has extra players in this frame.
+- `agents/perception.perception_establish` builds perceivers for `"player"` and
+  for each cast member, and no `extra:<pid>` perceiver at all — `perception_act`
+  and `perception_outcome` both do (`agents/perception.py:2051`).
+
+So a co-player attached before the story opens receives no view of the opening
+scene and no render of it; the first thing they see is turn 1. Nothing warns —
+the plan is simply shorter. `agents/narration.py:1119` already reads
+`establish_views.get(f"extra:{pid_key}")` before falling back to the outcome
+views, so the narrator half is waiting for a key nothing writes, which is why
+this reads as built until you go looking for the producer. Audit RUNTIME-4.
+
+
+### 1.63 Six dropdowns show the reader the engine's stored enum values
+
+Not a translation gap. `Design.md` § Story and interface language packs states
+the rule and it is right: **the stored protocol stays canonical English —
+schema keys, enum values, step ids and ledger vocabulary are never translated**,
+which is what lets one deterministic engine read objects written by any
+language. `tools/project_check.py`'s `canonical_language_tokens` enforces it,
+and `extract_ui_catalog._message` implements it by refusing a bare lowercase
+token.
+
+The defect is one layer up, and it is in ENGLISH too. Six module-level tables
+in `static/js` are rendered straight into dropdowns and checkbox labels, and
+each element is both the `value` sent to the server and the text shown to the
+reader:
+
+| Table | Where | What a reader sees |
+|---|---|---|
+| `MEM_CATS_FALLBACK` | `utils.js:194` | `episode`, `semantic`, `self` |
+| `MEM_PROV_FALLBACK` | `utils.js:195` | `witnessed`, `inferred` |
+| `ATTIRE_REGIONS` | `components.js:445` | `torso`, `groin` |
+| `EXTRA_PART_ASPECTS` | `components.js:793` | `underside`, `sides` |
+| `LORE_INHERITANCE_MODES` | `lorebooks.js:3` | `reference_only` |
+| `DEFAULT_LORE_LINK_TYPES` | `lorebooks.js:15` | `alternate_version`, `currently_within`, `depends_on` |
+
+`alternate_version` is not a label in any language. The repair is the shape the
+attire coverage presets already use (`ATTIRE_COVERAGE` pairs an authored phrase
+with its region list): give each enum an authored LABEL beside its value, put
+the label in the catalog and the value on the `option`. `components.el()`
+already translates every text child and never touches a `value` attribute, so
+the mechanism is there and only the pairing is missing.
+
+Found while checking audit FRONTEND-23, which read the same symptom
+("`episode` appears zero times in `en/ui.json`") as an extractor bug. It is
+not: measured 2026-08-18, 688 distinct strings in `static/js` are rejected by
+that filter and 683 are CSS custom properties, MIME types, event names, class
+names and route fragments. Translating the other five is what the protocol rule
+forbids. **Refuted rather than repaired**, and recorded here so the next reader
+does not re-derive the same wrong fix — the entry that is actionable is this
+one.
+
+
+### 1.64 Thirty-four assertions that read Python source instead of running it
+
+**Census 2026-08-18**, by parsing the suite rather than grepping it: **34
+negative source-substring assertions against PYTHON source, across 18 test
+files**, plus 128 `inspect.getsource` calls of which 18 pass a whole MODULE.
+Separately, 19 negative assertions in 10 files read a non-Python asset — a
+`.js`, `.html`, `.css` or `.sh` file — and those are a different thing, treated
+below.
+
+Three faults, and only the first is the one usually noticed.
+
+1. **It passes for code that does the wrong thing.** "This path makes no model
+   call" written as `"chat_complete" not in source` holds for an aliased
+   import, for a call through `llm_quality.complete_validated_json`, and for a
+   provider reached through a module the file already imports. It is also
+   false-POSITIVE on the word appearing in a comment, which is how a correct
+   file gets a red test and somebody deletes the prose instead of the import.
+2. **It fails a refactor that changed nothing.** Extracting a condition into a
+   named predicate — the ordinary tidy-up — breaks an assertion on the
+   condition's literal spelling.
+3. **It is NON-DETERMINISTIC, which is the fault that makes this a defect
+   rather than a preference.** `inspect.getsource` resolves the source through
+   `linecache`, reading the file from disk AT ASSERT TIME, while the module
+   object was imported earlier. Anything editing that file concurrently — a
+   second agent, an editor writing on save, a `git checkout` in another
+   worktree — yields a mismatch: the test fails once and passes on re-run. Two
+   agents hit this independently during the 2026-08-18 repair wave, in
+   different files, and both first read it as a real failure.
+
+**Two instruments now exist, and the row is what remains after using them.**
+
+- `tests/model_seams.py` seals every provider door (`chat_complete`,
+  `embed_texts`, `embed_texts_meta`, `complete_validated_json`, `_agent_json`)
+  including the aliases callers bound at import time, and raises from inside
+  the call naming which door opened. A "makes no model call" claim is now
+  DRIVEN. `tests/test_model_seams.py` proves each door is really shut by
+  opening it, because a sealer that silently misses one turns a weak assertion
+  into a false one.
+- Where the property genuinely is about the module rather than about a run,
+  the assertion goes against the PARSED TREE — imported names including the
+  original behind an `as`, called names, string constants, attribute access —
+  which answers the question the substring was approximating and is immune to
+  comments, spelling and formatting.
+
+**Converted so far**: `test_style_guide.py` (three assertions, driven through
+the payload), `test_offscreen_reactive.py`, `test_offscreen_resolution.py`'s
+seeded draw (both sealed and driven), `test_perception_has_no_model.py`,
+`test_story_view.py`'s layering rule and
+`test_offscreen_agent_context.py`'s fail-closed allowlist (all four to AST).
+
+**Left, and left honestly.** A source assertion that is the only available
+instrument is a different thing from one that was merely easier, and both
+kinds remain:
+
+- **The only instrument.** The 19 assertions against `.js`, `.html`, `.css`
+  and `.sh` files (`test_ui_themes.py`, the three `test_frontend_*` files,
+  `test_guest_page.py`, `test_provider_fallbacks.py`,
+  `test_launcher_python_range.py`). A Python suite cannot execute a stylesheet
+  or a shell installer, so reading it IS the test; there is also no imported
+  module for the read to disagree with, so fault 3 does not apply to them at
+  all. These should be left alone.
+- **Merely easier**, and still open: the 34 Python ones, chiefly
+  `test_crowds.py` (5), `test_offscreen_resolution.py` (6),
+  `test_offscreen_life.py` (3), `test_launcher_python_range.py` (3),
+  `test_body_position.py` (2), `test_pipeline_audit_leak_gaps.py` (2),
+  `test_living_world.py` (2). Each needs its own judgement about what the
+  property IS, which is why this is a row rather than a sweep — and a sweep is
+  what would produce 34 tests that pass and mean nothing.
+
+**No new one should be written.** Both instruments are in `tests/`, and a
+third option exists that beats either: give the code the seam the test wants.
+`tests/test_carriers.py` keeps one source assertion and says so in its own
+docstring — `prepare_memory_commit` offers no way to observe which clock it
+stamped without running a commit, and inventing that seam belongs to whoever
+owns `persist/`. That is the right shape for a residual: named, reasoned, and
+pointing at the change that would remove it.
 
 
 ## 2. Roadmap
@@ -2885,7 +3063,37 @@ The heuristic path derives psychology from the card's `personality` field, so a
 v2 card that puts everything in `description` — common — yields a sparse first
 pass. The opt-in v3 gap-filler mitigates sparse old cards but does not remove the
 value of a better deterministic first pass.
-`importers.character_import_warnings` exists but fires only on the import path.
+`character_card_warnings` now fires on all nine surfaces that hand back a card
+(`8ddcc1e`), so a heuristic import that lands sparse is reported wherever it
+was made; what is still missing is the populated-field THRESHOLD that would
+make "sparse" a warning of its own.
+
+### 2.4 A `$note` key on typed pack values
+
+The language-pack extraction moved roughly forty deterministic word lists and
+regexes out of `agents/common.py` and its siblings into
+`language_packs/*/cards/linguistics.json`. The comments explaining WHY each
+list is drawn where it is could not go with them, because the pack format has
+nowhere to put prose: only `_YOU_AGREEMENT` and `_PRONOUN_GROUPS` carry any
+extra key at all. `a5c9ef4` re-sited twenty of those rationales onto the
+`_ling(...)` call that reads each value, which is the best Python allows — but
+the data a TRANSLATOR edits still has none of them, and a translator is
+precisely the reader who most needs to know that an English verb table anchors
+`^...s?$` because it is matched against a single declared token while a
+script with no spaces has no token to anchor.
+
+The structural answer is a `$note` key alongside `$type`, which the decoder
+would ignore for free: `_decode_linguistic` reads `pattern`/`flags` for a
+regex and `items` for a tuple/frozenset/set and passes over anything else, and
+`_leaf_paths` already treats a `$type` value as a leaf, so a note on one would
+not become a required path a Japanese pack has to supply. What is missing is
+the CONVENTION and the one place it is stated — `language_runtime/__init__.py`,
+`docs/guides/LANGUAGE_PACKS.md`, and a `project_check` rule that a note is
+never load-bearing. Untyped values (a plain dict of strings) would need a
+decision of their own, since there `$note` would land in the dict.
+
+Cheap, and it is what stops the next extraction stranding its rationale the
+same way.
 
 ### 2.5 Complete automatic canon lock
 
@@ -3549,14 +3757,15 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
 - **A8 residual — `_disguise_leak_check` is warn-only.** The channel itself is
   closed: `_act_payload` is gone with the model-authored views, `_composer_act`
   is never handed `p_disguise`, and `concealed_truth` is minted only in
-  `_subject_disguise_context` and now reaches no payload in either pass. What
-  survives is the builder for the retired `action_onset` dict, which sets
-  `subject_disguise` and is read by nothing — dead code that reads like a live
-  leak, which is the reason to say so here rather than leave it to a grep.
+  `_subject_disguise_context`, which now reaches no payload in either pass. The
+  dead half went with the model-authored views — the `action_onset` builder
+  that set `subject_disguise` and was read by nothing no longer exists, and
+  `_subject_disguise_context` is live at seven call sites. What remains is only
+  that the tripwire warns and does not scrub, which is deliberate: the fix
+  belongs upstream in what perception is handed, and rewriting a view on a
+  regex would be a worse authority than the model it is policing.
 - **B4 residual — `_ensure_environment` does not check darkness** on the "is here
   with you" branch. Containment is now gated; light is not. *No dedicated test.*
-- **B5 residual — the micro-view append is still post-scrub**, running after the
-  identity and invented-dialogue scrubs.
 - **C3 — stray view keys survive normalization**, and the exposure went with
   the composer rewrite rather than being fixed. `_normalise_views` still writes
   through any unmatched key, so a view keyed by a non-awake character's name is
@@ -4012,8 +4221,10 @@ Most of §3 shipped in alpha 4.0. What did not:
   style-guide-level canon licence.
 - **The separation eval (§3.3.1)** — the deterministic leak floor is built; the
   proposed measurement of real cross-presence leak rate has no artifact in-tree.
-- **Location-themed population and the chorus presence (§4).** `AggregateEntity`
-  is declared in `llm/schemas.py` and unconsumed.
+- **Location-themed population and the chorus presence (§4).** Not built and now
+  with no artifact at all: `AggregateEntity` was declared in `llm/schemas.py`
+  and consumed by nothing, and was deleted rather than wired. The design has
+  neither an implementation nor a schema to point at.
 - **The narrator dilution clause (§5)** — no tension-gated ambient suppression.
 - **The `digest`/`interim` tier typology (§3.1)** — only `blurb` was built.
 - **The prompt fix for §3.8** — a blurb tell should be available colour, not a

@@ -59,7 +59,7 @@ def test_a_missing_compositor_table_raises_rather_than_emptying(monkeypatch):
     anyway -- one statement later, with a worse message.
     """
     from language_runtime import LanguagePackError
-    import world.spatial_senses as senses
+    import world.spatial as senses
 
     def boom(name, *a, **kw):
         raise LanguagePackError(f"pack lacks compositor value {name!r}")

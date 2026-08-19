@@ -69,9 +69,22 @@ remains ignorant, rerolling replays rather than duplicates history, and the
 player learns only through aftermath, present perception, investigation, or a
 fallible speaker.
 
-### 2. Build crowds and persistent fixtures — **BUILT** (2026-08-10)
+### 2. Build crowds and persistent fixtures — **PARTIAL** (four of five steps)
 
-All five steps are in the tree; see
+Tagged **BUILT** here from 2026-08-10 until 2026-08-18, on the strength of five
+ordered steps of which two were not in the tree. Step 1 — "a stationary crowd
+blob visible to ordinary perception" — landed 2026-08-18, when
+`composer.room_content_percepts` began minting the crowd (and the courier, and
+the posted notice) as `ambient` percepts from the per-observer dicts perception
+had been computing and dropping. **Step 2 is still absent**: persistent
+location fixtures — a barkeep, a vendor, a guard, an attendant, a regular
+belonging to a LOCATION and re-meetable across visits — have no implementation
+anywhere. Background presences are scene-scoped and are a different thing.
+Steps 3–5 are real. This item's own §2 carries the warning that applies to it:
+"The module shipped pure and correct and could not occur … Worth remembering
+when reading any other 'built' line in this document."
+
+For steps 3–5, see
 [`DESIGN_CROWDS.md`](DESIGN_CROWDS.md) §7a for what the building
 corrected in the design. `world/crowds.py` is pure; `StateDiff.crowd_ops` is how a
 Director says it; `commit.commit_crowds` is the persistence boundary;
@@ -251,9 +264,15 @@ The required safeguards below, checked against source:
   so a reroll re-mints them byte-identically.
 - **Diagnostics remain spoiler-gated and outside the fiction** — nothing
   enforces this, because no diagnostic surface exists to gate. `offscreen_log`
-  has exactly one reader, `gaps.interim_for`, which delivers a subject's own
-  gap at contact under a provenance filter. The spoiler-gated causal inspector
-  is still §8's work.
+  has one CONSUMER, `gaps.interim_for` (`world/gaps.py:268`), which delivers a
+  subject's own gap at contact under a provenance filter. It has three read
+  SITES, and the difference matters to anyone grepping: the other two are
+  `offscreen.append_offscreen_log`'s own read-modify-write
+  (`world/offscreen.py:465`) and the frame fork/merge copying the key
+  (`world/spatial_frames.py:906`, `:1053`), neither of which shows anybody
+  anything. The conclusion survives the correction — one consumer, and it is
+  not a diagnostic surface — but "exactly one reader" is not what the tree
+  says. The spoiler-gated causal inspector is still §8's work.
 
 Built is not fired. Measured on this tree's `engine.db` (2026-08-10),
 `tools/fire_rates.py` still reports `no chances` for both full-agent rows —

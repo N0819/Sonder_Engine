@@ -26,7 +26,7 @@ import pytest
 
 from world.spatial import (_PASSABLE_BARRIERS, _shield_standing_passage,
                      normalize_barrier, unresolved_barrier_words)
-from world.spatial_orientation import normalize_scene_bearings
+from world.spatial import normalize_scene_bearings
 
 # (raw value, live occurrences, what it must resolve to)
 SILENTLY_WALLED = [
@@ -305,7 +305,7 @@ class TestOneNeighbourMapForFourDifferentWalks:
 
     def test_a_body_does_not_walk_through_bars_and_sound_does(self):
         from world.spatial import _PASSABLE_BARRIERS, neighbor_map
-        from world.spatial_senses import _SOUND_WALK_BARRIERS
+        from world.spatial import _SOUND_WALK_BARRIERS
         scene = self._scene()
         assert "cell" not in neighbor_map(scene, _PASSABLE_BARRIERS)["hall"]
         assert "cell" in neighbor_map(scene, _SOUND_WALK_BARRIERS)["hall"]
@@ -313,7 +313,7 @@ class TestOneNeighbourMapForFourDifferentWalks:
     def test_a_closed_door_is_crossed_by_none_of_the_three_sets(self):
         from world.spatial import (_AMBIENT_BARRIERS, _PASSABLE_BARRIERS,
                                    neighbor_map)
-        from world.spatial_senses import _SOUND_WALK_BARRIERS
+        from world.spatial import _SOUND_WALK_BARRIERS
         scene = self._scene()
         for barriers in (_PASSABLE_BARRIERS, _AMBIENT_BARRIERS,
                          _SOUND_WALK_BARRIERS):

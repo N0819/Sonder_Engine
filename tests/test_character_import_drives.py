@@ -202,10 +202,13 @@ def test_a_native_reimport_still_round_trips_its_own_uid(temp_db):
 
 def test_a_live_beat_reports_the_empty_drive_the_import_check_would_have(
         temp_db, monkeypatch):
-    """`character_import_warnings` catches this on the import path only. A
-    card built or edited any other way gets no warning at all, and
-    `character_step` is the one function that reads the sheet on every single
-    beat of every character's life -- where the cost of saying so is one line
+    """`character_card_warnings` catches this on every AUTHORING surface (nine
+    of them since `8ddcc1e`), but authoring is not the only way a sheet
+    arrives -- an archive import, a branch, a demo file and an extension all
+    install one without passing through a route that warns. So the floor is
+    here too: `character_step` is the one function that reads the sheet on
+    every single beat of every character's life -- where the cost of saying so
+    is one line
     and the cost of not saying so is a character who reacts for a hundred
     beats while `serves: "drive"` stays valid against three empty strings."""
     import time

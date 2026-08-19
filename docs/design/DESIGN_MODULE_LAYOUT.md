@@ -51,9 +51,13 @@ and worth fixing after it — not during.
 ## Job 1: split behind facades
 
 The pattern already exists in this repo and is the one to follow:
-`world/spatial_orientation.py` was carved out of `world/spatial.py` and is re-exported
-through it (`spatial.py:11`); `agents/__init__.py` is an explicit
-compatibility facade. Each monolith keeps its filename, keeps every name it
+`world/spatial_orientation.py` was carved out of `world/spatial.py` and is
+re-exported through it; `agents/__init__.py` is an explicit compatibility
+facade. Re-exported means the sibling is no longer importable in its own right
+— `tools/project_check.py` holds all three families (`world.spatial`,
+`agents.director`, `persist.commit`) to the facade spelling, which is what
+stops a facade decaying into a directory of modules that merely share a
+prefix. Each monolith keeps its filename, keeps every name it
 exports today — **including the private ones** — and becomes a module whose
 body is the orchestration plus a block of re-exports.
 
@@ -142,7 +146,7 @@ intuition:
 ```text
 core/      db  logging_utils  outofband  updates  frames  pipeline_context  jobs
 llm/       providers  prompt_cache  prompts  llm_quality  schemas
-world/     spatial(+children)  spatial_orientation  spatial_frames  weather
+world/     spatial(+14 children, orientation among them)  spatial_frames  weather
            mechanics  place_purpose  subjects  crowds  living_world  offscreen
            degradation  paradox  gaps  routines  background_claims  comfort  survival
 mind/      memory  affect  psychology_runtime  theory_of_mind  canon_provenance

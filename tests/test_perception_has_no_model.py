@@ -22,9 +22,17 @@ It is better at the thing perception exists to do, because the information
 boundary is computed instead of requested — and a boundary that is computed
 cannot be declined by a model having an off day.
 
-These tests are structural on purpose. A behavioural test can pass while a
-model call sits on a path it did not happen to take; only reading the
-module can say the call is not there.
+These tests are structural ON PURPOSE, and that is a claim worth defending
+rather than a habit. A driven test can only prove the paths it took, and the
+property here is about every path including the ones a fixture never reaches
+-- so the module itself has to be read. What has changed (2026-08-18) is HOW:
+each assertion is now against the parsed tree rather than against a substring
+of the file, because `"_agent_json" not in source` is false for a file that
+merely mentions the name in a comment, and true for one that reaches the same
+function under another name.
+
+The driven half exists too, beside it: `tests/model_seams.py` seals every
+provider door, and the stages run under it.
 """
 
 from __future__ import annotations
@@ -47,19 +55,69 @@ def _fn(name):
                 if isinstance(n, ast.FunctionDef) and n.name == name)
 
 
-def test_the_module_contains_no_model_call():
+def _imported_names():
+    """Every name this module imports, and every module it imports from.
+
+    BOTH the original name and the local binding: `from agents.common import
+    _agent_json as _ask` binds `_ask` and imports `_agent_json`, and the
+    question here is about the second. Checking only the binding is how an
+    alias walks past a guard.
+    """
+    names, modules = set(), set()
+    for node in ast.walk(_tree()):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                modules.add(alias.name)
+                names.add(alias.name.split(".")[0])
+                if alias.asname:
+                    names.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                modules.add(node.module)
+            for alias in node.names:
+                names.add(alias.name)
+                if alias.asname:
+                    names.add(alias.asname)
+    return names, modules
+
+
+def test_the_module_neither_imports_nor_calls_a_model_seam():
     """`_agent_json` is the single seam every agent role calls a model
-    through. Perception no longer imports it, let alone calls it."""
-    source = open(perception.__file__).read()
-    assert "_agent_json" not in source
+    through, and `llm.providers`/`llm.llm_quality` are the doors under it.
+
+    Asked of the parsed tree: the name is not bound by any import under any
+    alias, no call anywhere names it, and no model module is imported at all.
+    A substring check answered a weaker question in both directions -- it
+    fires on the word in a comment, and misses `from agents.common import
+    _agent_json as _ask`.
+    """
+    names, modules = _imported_names()
+    assert "_agent_json" not in names
     assert not hasattr(perception, "_agent_json")
+    assert not [m for m in modules
+                if m == "llm" or m.startswith("llm.providers")
+                or m.startswith("llm.llm_quality")], sorted(modules)
+
+    called = {
+        getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+        for node in ast.walk(_tree()) if isinstance(node, ast.Call)
+    }
+    for door in ("_agent_json", "chat_complete", "complete_validated_json"):
+        assert door not in called, door
 
 
 def test_the_flag_is_gone_rather_than_defaulted_on():
     """A flag left switched on is a flag someone can switch off. There is
-    nothing to switch: no predicate, no env var, no second path."""
+    nothing to switch: no predicate, no env var, no second path.
+
+    The env-var name is asked of the parsed tree's string constants rather
+    than of the file text, so the paragraph at the top of this file naming
+    the retired flag does not fail its own test.
+    """
     assert not hasattr(perception, "perception_llm_disabled")
-    assert "PERCEPTION_NO_LLM" not in open(perception.__file__).read()
+    constants = {node.value for node in ast.walk(_tree())
+                 if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+    assert "PERCEPTION_NO_LLM" not in constants
 
 
 def test_the_fan_out_is_gone():

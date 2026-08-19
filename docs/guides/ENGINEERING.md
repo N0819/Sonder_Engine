@@ -319,9 +319,12 @@ flowchart LR
     C -->|"membrane: muffled<br/>window: blocks"| O
     TCH -->|"surface sensation only —<br/><b>cause-blind</b>"| O
 
-    O --> D{"_delivery_ok<br/><i>unified gate</i>"}
+    O --> D{"_delivery_ok<br/><i>micro-round path</i>"}
+    O --> P{"composer percept builders<br/><i>every other path</i>"}
     D -->|"passes"| V["delivered"]
     D -->|"fails"| X["never sent"]
+    P -->|"admits"| V
+    P -->|"declines"| X
 
     style X fill:#fdecea,stroke:#c62828
     style V fill:#e6f4ea,stroke:#1e8e3e
@@ -338,9 +341,12 @@ pressure and movement, never the act producing them.
 single runtime source of truth for live rooms, positions and entity state.
 `room_registry` is the cross-frame ledger of room identity and retirement. The
 normalized `world_entities` table is a *derived projection* of the scene
-commit. `world_placements` is decommissioned; `fiction_worlds`,
-`fiction_locations` and `transit_edges` are deprecated import-compatibility
-tables.
+commit. `world_placements` is decommissioned; `fiction_worlds` and
+`fiction_locations` are deprecated import-compatibility tables. `transit_edges`
+is NOT one, though all three are usually named together: it is in neither
+`chat_archive.WORLD_TABLES` nor the checkpoint blob, and the only place outside
+`core/db.py` that names it is the chat-deletion sweep — so nothing snapshots,
+exports, imports or restores it, and an old archive carrying rows loses them.
 
 Every scene writer must keep the registry projection in sync — check both the
 commit path and the restore path before adding one.
