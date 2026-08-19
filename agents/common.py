@@ -4010,13 +4010,23 @@ def _muffle_middle(body, keep=3):
     what survives half-hearing. The loop used to slice `quote.split()`, which
     yields a single token in a language without spaces and therefore returned
     the whole utterance.
+
+    And the pack's `muffle_join` for how the survivors are SET OUT, which was
+    the other half of that same argument: a hardcoded ASCII space put 「小瓶
+    捨」 in a story whose every other muffled line reads 「……小瓶……捨……」.
+    A separator belongs to the language -- Japanese sets an ellipsis as the
+    doubled leader with no spaces, and a half-width gap between two kanji runs
+    reads as broken typesetting rather than as a gap in hearing. The template
+    around this fragment supplies the leading and trailing ellipsis, so only
+    the join is read here.
     """
     tokens, keep_min = _muffle_tokens(body)
     kept = [w for w in tokens if len(w) >= keep_min]
     if not kept:
         return _text("muffled_indistinct")
     start = max(0, len(kept) // 2)
-    return " ".join(kept[start:start + keep])
+    join = str(_compositor_value("muffle_join"))
+    return join.join(kept[start:start + keep])
 
 
 def _muffled_fragment(body):
