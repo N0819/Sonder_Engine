@@ -85,7 +85,7 @@
 | `web/app.py` | 6051 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `core`, `core.db`, `core.frames`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 176 | Typed host-authentication HTTP routes and cookie transport. | `web` |
 | `web/guest_access.py` | 355 |  | `core.db` |
-| `web/story_view.py` | 746 |  | `core.db` |
+| `web/story_view.py` | 881 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
@@ -960,14 +960,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_people()` | 585 | 77 lines |
-| `_public_facts()` | 405 | 46 lines |
-| `_player_view_in_frame()` | 701 | 46 lines |
-| `_story_view_in_frame()` | 219 | 40 lines |
-| `viewers()` | 279 | 36 lines |
-| `_person_refs()` | 502 | 36 lines |
-| `player_view()` | 664 | 35 lines |
-| `_reading_frame()` | 105 | 26 lines |
+| `_people()` | 692 | 77 lines |
+| `_player_view_in_frame()` | 822 | 60 lines |
+| `player_view()` | 771 | 49 lines |
+| `_public_facts()` | 512 | 46 lines |
+| `_story_view_in_frame()` | 315 | 40 lines |
+| `viewers()` | 375 | 36 lines |
+| `_person_refs()` | 609 | 36 lines |
+| `_viewer_memories()` | 447 | 32 lines |
 
 ### `world/background_claims.py`
 
