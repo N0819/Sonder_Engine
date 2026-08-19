@@ -416,7 +416,7 @@ class TestPresentOthersRecognitionGate:
     entry (the normal case for an unregistered one) recognizes nobody, and
     every cast member renders as an appearance label."""
 
-    def _setup_ctx(self, temp_db, names, known_map=None):
+    def _setup_ctx(self, temp_db, names, known_map=None, positions=None):
         chat_id = temp_db.qi(
             "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
             ("T", "", time.time()),
@@ -445,6 +445,14 @@ class TestPresentOthersRecognitionGate:
         )
         if known_map:
             temp_db.wset(chat_id, "known", known_map)
+        # Everybody in the taproom unless a case says otherwise: `here` is a
+        # room and a body not standing in it is not present.
+        rooms = dict(positions or {})
+        for n in list(names) + ["The Stranger", "The Barkeep", "The Fiddler"]:
+            rooms.setdefault(n, "taproom")
+        self.scene = {"rooms": {r: {} for r in set(rooms.values())},
+                      "positions": rooms}
+        temp_db.wset(chat_id, "scene", self.scene)
         ctx = PipelineContext(
             chat=ChatData(id=chat_id, name="T", persona_id=None, lorebook_id=None,
                           scenario="", created=time.time()),
@@ -459,7 +467,9 @@ class TestPresentOthersRecognitionGate:
         from agents.background import _present_others, _presence_recognizes
         ctx, ids, chat_id = self._setup_ctx(temp_db, ["Alice", "Bob"])
 
-        result = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+        result = _present_others(
+            ctx, self.scene, "taproom",
+            _presence_recognizes(ctx, "The Barkeep"))
 
         assert "Alice" not in result
         assert "Bob" not in result
@@ -478,7 +488,9 @@ class TestPresentOthersRecognitionGate:
             temp_db, ["Alice", "Bob"],
             known_map={"The Barkeep": ["Bob"]})
 
-        result = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+        result = _present_others(
+            ctx, self.scene, "taproom",
+            _presence_recognizes(ctx, "The Barkeep"))
 
         assert "Bob" in result
         assert "Alice" not in result
@@ -491,7 +503,9 @@ class TestPresentOthersRecognitionGate:
             temp_db, ["Alice", "Bob"],
             known_map={"The Stranger": ["Alice", "Bob"]})
 
-        result = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+        result = _present_others(
+            ctx, self.scene, "taproom",
+            _presence_recognizes(ctx, "The Barkeep"))
 
         assert "Alice" not in result
         assert "Bob" not in result
@@ -506,10 +520,51 @@ class TestPresentOthersRecognitionGate:
                        "The Fiddler": ["Bob"]})
 
         both = _present_others(
-            ctx, _presence_recognizes(ctx, "The Barkeep", "The Fiddler"))
+            ctx, self.scene, ["taproom", "taproom"],
+            _presence_recognizes(ctx, "The Barkeep", "The Fiddler"))
 
         assert "Bob" in both
         assert "Alice" not in both
+
+    def test_a_body_in_another_room_is_not_present(self, temp_db):
+        """The gate this field never had. A label asserts a body is HERE as
+        much as a name does, so "the wiry person in alice-grey" about someone
+        in the cellar is the same false claim about presence, made about a
+        stranger."""
+        from agents.background import _present_others, _presence_recognizes
+        ctx, ids, chat_id = self._setup_ctx(
+            temp_db, ["Alice", "Bob"], positions={"Alice": "cellar"})
+
+        result = _present_others(
+            ctx, self.scene, "taproom",
+            _presence_recognizes(ctx, "The Barkeep"))
+
+        assert not any("alice-grey" in r for r in result)
+        assert any("bob-grey" in r for r in result)
+
+    def test_a_shared_payload_names_nobody_the_voices_do_not_share(self, temp_db):
+        """One context read by every voice in it: annotation cannot stand in
+        for non-admission, so a body present to only one of them is present to
+        none of them here."""
+        from agents.background import _present_others, _presence_recognizes
+        ctx, ids, chat_id = self._setup_ctx(temp_db, ["Alice", "Bob"])
+
+        split = _present_others(
+            ctx, self.scene, ["taproom", "cellar"],
+            _presence_recognizes(ctx, "The Barkeep", "The Fiddler"))
+
+        assert split == []
+
+    def test_an_unplaced_presence_is_told_of_nobody(self, temp_db):
+        """Not knowing where a presence stands is a reason to deliver
+        nothing, exactly as it is for `_beat_for_presence` and
+        `_audience_map`."""
+        from agents.background import _present_others, _presence_recognizes
+        ctx, ids, chat_id = self._setup_ctx(temp_db, ["Alice", "Bob"])
+
+        assert _present_others(
+            ctx, self.scene, None,
+            _presence_recognizes(ctx, "The Barkeep")) == []
 
     def test_player_name_is_gated_too(self, temp_db):
         """The protagonist is not exempt: a presence that has never been
@@ -519,8 +574,10 @@ class TestPresentOthersRecognitionGate:
             temp_db, ["Alice"],
             known_map={"The Barkeep": ["The Stranger"]})
 
-        gated = _present_others(ctx, _presence_recognizes(ctx, "The Fiddler"))
-        known = _present_others(ctx, _presence_recognizes(ctx, "The Barkeep"))
+        gated = _present_others(
+            ctx, self.scene, "taproom", _presence_recognizes(ctx, "The Fiddler"))
+        known = _present_others(
+            ctx, self.scene, "taproom", _presence_recognizes(ctx, "The Barkeep"))
 
         assert "The Stranger" not in gated
         assert "The Stranger" in known
