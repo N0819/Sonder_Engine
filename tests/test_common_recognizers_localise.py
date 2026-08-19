@@ -120,3 +120,47 @@ def test_the_players_own_japanese_line_is_recognised_in_its_quotes():
     with language_scope("ja"):
         out = _strip_player_echo("あなたは「行こう」と言った。", ["行こう"])
     assert "行こう" not in out, out
+
+
+def test_pronoun_fidelity_fires_for_a_name_not_written_in_latin_letters():
+    """The `_pronoun_to_group` fix made the pronoun MAP per-story so the
+    Japanese pack's 彼/彼女/彼ら groups would be live. The name tokenizer three
+    lines into the consumer stayed `[A-Za-z']+`, so `token_owner` came back
+    empty and the guard returned [] before consulting a pronoun at all -- the
+    guard was still dead in the language it was revived for.
+
+    MEASURED BEFORE ENFORCING, because this warning's prefix is enforceable
+    and a false positive buys a full narrator rewrite: replayed over every
+    stored narrator variant in the owner's live database (2,350 with prose,
+    69,589 clauses), 0 clauses tokenise differently under `_name_tokens`.
+    English is unchanged by construction; the whole of the new exposure is in
+    scripts where the guard returns nothing at all today.
+    """
+    from agents.common import _check_pronoun_fidelity
+
+    SHE = {"subject": "she", "object": "her",
+           "possessive": "her"}
+
+    latin = _check_pronoun_fidelity(
+        "Hinami Sato lifts his hand.", {"Hinami Sato": SHE})
+    assert latin and "his" in latin[0]
+
+    with language_scope("ja"):
+        mixed = _check_pronoun_fidelity(
+            "佐藤ヒナミ lifts his hand.", {"佐藤ヒナミ": SHE})
+        native = _check_pronoun_fidelity(
+            "佐藤ヒナミは彼の手を上げた。", {"佐藤ヒナミ": SHE})
+    assert mixed, "a Japanese name in English prose"
+    assert native, "a Japanese name and a Japanese pronoun"
+
+
+def test_a_japanese_cast_name_yields_reference_patterns():
+    """`_actor_reference_patterns` returning [] makes both
+    `_check_quote_attribution` and `_check_position_fidelity` decline
+    entirely, and ヒナミ is three characters."""
+    from agents.common import _actor_reference_patterns
+
+    with language_scope("ja"):
+        patterns = _actor_reference_patterns("佐藤ヒナミ")
+    assert patterns
+    assert any(p.search("ヒナミは頷いた。") for p in patterns)
