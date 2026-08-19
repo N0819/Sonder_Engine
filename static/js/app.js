@@ -915,9 +915,18 @@ window.addEventListener("error", event => {
 // Changing the embeddings provider does not re-embed anything already stored,
 // and a memory embedded by a different model scores 0 on both vector rankings
 // for good -- so the server reconciles the bank in the background at startup
-// and whenever the `embeddings` role changes. This is the only place a host
-// ever sees that happen: a card that appears when there is work, counts it
-// down, says so when it is finished, and removes itself.
+// and whenever the `embeddings` role changes. This card is what a host sees
+// while that runs: it appears when there is work, counts it down, says so when
+// it is finished, and removes itself.
+//
+// It covers ONE of the two occasions, and the smaller one. `erWatch` is the
+// only thing that starts the poll and `erOfferRebuild` is its only caller, so
+// the card appears only for a rebuild the host has just confirmed in the offer
+// dialog. A reconcile the server begins at STARTUP is never polled for and runs
+// entirely unseen. Making the sentence above true again means calling
+// `erWatch()` once from boot -- one request, and the interval clears itself
+// when nothing is running -- which is a decision about how much a background
+// maintenance task should announce itself, not an oversight to patch quietly.
 //
 // Deliberately not a modal and not a toast. It can run for a while on a large
 // bank, nothing is blocked while it does, and interrupting the reader to say
