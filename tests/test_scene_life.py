@@ -27,8 +27,7 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 from agents.background import (
     _audience_map,
     _manager_events,
-    _name_to_entity_id,
-    _presence_room,
+    presence_room,
     _redacted_resolved_event,
     _reproduces_withheld,
     _withheld_bodies,
@@ -106,16 +105,23 @@ def _make_ctx(temp_db, presences=None, scene=None):
 
 def test_presence_room_resolves_through_entity_id(temp_db):
     sc = _scene()
-    ids = _name_to_entity_id(sc)
     # No position keyed by the display name at all -- only by entity id.
     assert "Thin Local" not in (sc.get("positions") or {})
-    assert _presence_room(sc, "Thin Local", {}, ids) == COMMON
+    assert presence_room(sc, "Thin Local", {}) == COMMON
 
 
 def test_presence_room_falls_back_to_station_room(temp_db):
     sc = _scene()
     rec = {"sketch": {"station_room": CELLAR}}
-    assert _presence_room(sc, "Unplaced Stranger", rec) == CELLAR
+    assert presence_room(sc, "Unplaced Stranger", rec) == CELLAR
+
+
+def test_a_moved_presence_is_not_still_at_the_room_it_arrived_in(temp_db):
+    """The sketch is harvested once, when the presence is introduced. Where
+    the scene places it now outranks it on every path."""
+    sc = _scene()
+    rec = {"sketch": {"station_room": CELLAR}}
+    assert presence_room(sc, "Thin Local", rec) == COMMON
 
 
 def test_managed_presences_covers_the_room_not_just_the_salient(temp_db):
