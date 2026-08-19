@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import math
 import secrets
+import threading
 import time
 
 from core.db import q, qi, get_setting, set_setting, transaction
@@ -36,7 +37,29 @@ HOST_USERNAME_SETTING = "host_username"
 HOST_PW_HASH_SETTING = "host_pw_hash"
 HOST_PW_SALT_SETTING = "host_pw_salt"
 HOST_SESSION_TTL = 60 * 60 * 24 * 30  # 30 days
-_PBKDF2_ITERS = 200_000
+
+# The work factor is DATA, not code. Storing a bare digest froze it: raising
+# the number invalidated every existing password at once, because nothing at
+# rest recorded which number had produced the stored bytes. So a stored
+# password is a self-describing record --
+# `pbkdf2_sha256$<iters>$<salt hex>$<digest hex>` -- and raising the constant
+# below is now a one-line change that costs nobody their sign-in: the next
+# successful login re-writes that host's record at the new factor.
+#
+# 600_000 is OWASP's current figure for PBKDF2-HMAC-SHA256. Measured on the
+# development machine, 2026-08-19: 0.27s per verify against 0.09s at the old
+# 200_000. That is invisible to a person signing in and it is the point of the
+# parameter; it is visible in the test suite, which signs in some sixty times.
+_PW_SCHEME = "pbkdf2_sha256"
+_PBKDF2_ITERS = 600_000
+# Bounds on what a stored record may ask for. The lower one refuses a record
+# weakened by a hand-edited settings row; the upper one refuses one that would
+# hang the process on every login attempt -- a settings file is not a trusted
+# input just because it is local.
+_PBKDF2_MIN_ITERS = 100_000
+_PBKDF2_MAX_ITERS = 5_000_000
+# What a bare-hex record (everything written before 2026-08-19) was made with.
+_LEGACY_PBKDF2_ITERS = 200_000
 GUEST_TOKEN_TTL = 60 * 60 * 24  # 24h hard backstop, independent of revoke
 JOIN_CODE_TTL = 60 * 30  # 30 minutes
 # No 0/1/O/I/L: avoids characters a guest could misread when copying a
@@ -54,10 +77,56 @@ def host_account_exists() -> bool:
     return bool(get_setting(HOST_USERNAME_SETTING))
 
 
-def _hash_password(password: str, salt: str) -> str:
+def _pbkdf2(password: str, salt: str, iters: int) -> str:
     return hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), bytes.fromhex(salt), _PBKDF2_ITERS
+        "sha256", password.encode("utf-8"), bytes.fromhex(salt), iters
     ).hex()
+
+
+def _hash_password(password: str, salt: str, iters: int | None = None) -> str:
+    """Encode a password as a self-describing verifier record.
+
+    The scheme and work factor travel WITH the digest, so a future change to
+    either is readable by the code that has to verify against what is already
+    stored. `salt` stays a separate argument (and a separate setting) because
+    it is per-account material the caller generates, not a parameter.
+    """
+    iters = _PBKDF2_ITERS if iters is None else int(iters)
+    return f"{_PW_SCHEME}${iters}${salt}${_pbkdf2(password, salt, iters)}"
+
+
+def _parse_password_record(stored: str, legacy_salt: str) -> tuple | None:
+    """`(iters, salt, digest)` for a stored verifier, or None if unusable.
+
+    A record with no `$` is a bare digest from before the format existed:
+    those were all made at 200_000 with the salt in its own setting, so they
+    verify unchanged and are upgraded on the next successful login rather than
+    being invalidated.
+    """
+    if not stored:
+        return None
+    if "$" not in stored:
+        if not legacy_salt:
+            return None
+        try:
+            bytes.fromhex(legacy_salt)
+        except ValueError:
+            return None
+        return (_LEGACY_PBKDF2_ITERS, legacy_salt, stored)
+    parts = stored.split("$")
+    if len(parts) != 4:
+        return None
+    scheme, raw_iters, salt, digest = parts
+    if scheme != _PW_SCHEME or not salt or not digest:
+        return None
+    try:
+        iters = int(raw_iters)
+        bytes.fromhex(salt)
+    except ValueError:
+        return None
+    if not _PBKDF2_MIN_ITERS <= iters <= _PBKDF2_MAX_ITERS:
+        return None
+    return (iters, salt, digest)
 
 
 def create_host_account(username: str, password: str) -> str | None:
@@ -93,8 +162,12 @@ def verify_host_login(username: str, password: str) -> bool:
     stored_username = get_setting(HOST_USERNAME_SETTING)
     stored_salt = get_setting(HOST_PW_SALT_SETTING)
     stored_hash = get_setting(HOST_PW_HASH_SETTING)
-    if not stored_username or not stored_salt or not stored_hash:
+    if not stored_username or not stored_hash:
         return False
+    record = _parse_password_record(stored_hash, stored_salt)
+    if record is None:
+        return False
+    iters, salt, digest = record
     # compare_digest raises TypeError on a str containing non-ASCII code
     # points (it is ASCII-only for the str overload). A host who chose a
     # username with any non-ASCII character (accents, non-Latin scripts,
@@ -107,10 +180,33 @@ def verify_host_login(username: str, password: str) -> bool:
         stored_username.encode("utf-8"), username.strip().encode("utf-8")
     )
     password_ok = secrets.compare_digest(
-        stored_hash.encode("utf-8"),
-        _hash_password(password, stored_salt).encode("utf-8"),
+        digest.encode("utf-8"),
+        _pbkdf2(password, salt, iters).encode("utf-8"),
     )
+    if username_ok and password_ok:
+        # Only here: re-deriving a verifier needs the plaintext, and this is
+        # the one moment the plaintext is both present and proven. A record
+        # already at the current scheme and factor rewrites nothing.
+        if iters != _PBKDF2_ITERS or "$" not in stored_hash:
+            _rewrite_password_record(password)
     return username_ok and password_ok
+
+
+def _rewrite_password_record(password: str) -> None:
+    """Re-salt and re-hash a verified password at the current work factor.
+
+    Failure here is not a failed login: the caller has already proven the
+    password, and an unwritten upgrade only means the record is upgraded on
+    the next sign-in instead. Swallowing the error keeps a locked database or
+    a read-only file from turning a correct password into a rejected one.
+    """
+    salt = secrets.token_bytes(16).hex()
+    try:
+        with transaction():
+            set_setting(HOST_PW_SALT_SETTING, salt)
+            set_setting(HOST_PW_HASH_SETTING, _hash_password(password, salt))
+    except Exception:  # pragma: no cover - defensive, see docstring
+        pass
 
 
 def create_host_session() -> str:
@@ -170,19 +266,43 @@ def create_guest_invite(chat_id: int, persona_id: int) -> dict:
 # lifecycle -- the attack is "try many codes fast," not "try one code
 # many times" (a code is already single-use). A simple in-process sliding
 # window is enough for a local single-user app; no external infra.
+#
+# Both ledgers below are plain module lists read and written from REQUEST
+# threads. `/api/join` and `/api/auth/login` are both `def`, not `async def`,
+# so FastAPI runs them in the anyio worker threadpool -- several at once, by
+# construction. Without the guard the window was not a limit at all: every
+# thread read `len(...) < MAX` before any of them appended, so the budget was
+# spent as many times over as there were threads, and the prune loop could
+# `pop(0)` an index another thread had just cleared. One global lock, held
+# only across a list prune and an append, costs nothing measurable and makes
+# check-and-consume a single decision.
+#
+# The limit stays GLOBAL rather than per-caller. This is a single-user
+# application: there is exactly one account to guess at, so per-IP buckets
+# would hand an attacker with a rotating source address an unbounded budget
+# while giving the one legitimate host nothing.
+_RATE_GUARD = threading.Lock()
+
 _join_attempts: list[float] = []
 _JOIN_WINDOW_SECONDS = 60
 _JOIN_WINDOW_MAX = 10
 
 
+def _prune(attempts: list[float], window: int, now: float) -> None:
+    """Drop timestamps older than the window. Call with _RATE_GUARD held."""
+    cutoff = now - window
+    while attempts and attempts[0] < cutoff:
+        attempts.pop(0)
+
+
 def _join_rate_limited() -> bool:
-    now = time.time()
-    while _join_attempts and _join_attempts[0] < now - _JOIN_WINDOW_SECONDS:
-        _join_attempts.pop(0)
-    if len(_join_attempts) >= _JOIN_WINDOW_MAX:
-        return True
-    _join_attempts.append(now)
-    return False
+    with _RATE_GUARD:
+        now = time.time()
+        _prune(_join_attempts, _JOIN_WINDOW_SECONDS, now)
+        if len(_join_attempts) >= _JOIN_WINDOW_MAX:
+            return True
+        _join_attempts.append(now)
+        return False
 
 
 # /api/auth/login gets a limiter for the same reason as /api/join -- the
@@ -200,16 +320,8 @@ _LOGIN_WINDOW_SECONDS = 60
 _LOGIN_WINDOW_MAX = 10
 
 
-def login_retry_after() -> int:
-    """Whole seconds until the next login attempt will be evaluated, or 0
-    when not limited. Non-consuming: checking never spends budget, only
-    record_login_failure() does. The number exists so the login page can
-    show a real countdown instead of a static "wait a minute" -- during
-    the incident there was no way to tell a stuck page from a waiting
-    one."""
-    now = time.time()
-    while _login_attempts and _login_attempts[0] < now - _LOGIN_WINDOW_SECONDS:
-        _login_attempts.pop(0)
+def _login_retry_after_locked(now: float) -> int:
+    """Seconds until the window has room again. Call with _RATE_GUARD held."""
     if len(_login_attempts) < _LOGIN_WINDOW_MAX:
         return 0
     oldest_counted = _login_attempts[-_LOGIN_WINDOW_MAX]
@@ -217,16 +329,54 @@ def login_retry_after() -> int:
     return max(1, math.ceil(remaining))
 
 
-def record_login_failure() -> None:
-    """A wrong username/password pair spends one slot of the window."""
-    _login_attempts.append(time.time())
+def login_retry_after() -> int:
+    """Whole seconds until the next login attempt will be evaluated, or 0
+    when not limited. Non-consuming: checking never spends budget, only
+    claim_login_attempt() does. The number exists so the login page can
+    show a real countdown instead of a static "wait a minute" -- during
+    the incident there was no way to tell a stuck page from a waiting
+    one.
+
+    Non-consuming also makes this UNSAFE as the only gate: two threads that
+    both read 0 both proceed. It is the cheap refusal that precedes the
+    expensive verify; `claim_login_attempt` is the decision.
+    """
+    with _RATE_GUARD:
+        now = time.time()
+        _prune(_login_attempts, _LOGIN_WINDOW_SECONDS, now)
+        return _login_retry_after_locked(now)
+
+
+def claim_login_attempt() -> int:
+    """Spend one slot of the window, or refuse. 0 means the caller may verify.
+
+    Check and consume are ONE decision here, which is the whole point: the
+    limiter used to check in one call and record in another, with a PBKDF2
+    verify in between, so every request thread that arrived during that gap
+    read a budget none of them had spent yet. Ten guesses per minute became
+    ten per minute per thread the pool would give out.
+
+    A refusal spends nothing, so a caller polling into a 429 never pushes its
+    own unlock further away. A slot spent by an attempt that turns out to be
+    CORRECT is refunded by record_login_success(), which is what keeps the
+    window counting failures rather than sign-ins -- the 2026-08 lockout.
+    """
+    with _RATE_GUARD:
+        now = time.time()
+        _prune(_login_attempts, _LOGIN_WINDOW_SECONDS, now)
+        retry_after = _login_retry_after_locked(now)
+        if retry_after:
+            return retry_after
+        _login_attempts.append(now)
+        return 0
 
 
 def record_login_success() -> None:
     """Clear the failure ledger: the host has proven presence, so stale
     failures (their own typos, or a password manager's) stop counting
-    against them."""
-    _login_attempts.clear()
+    against them -- including the slot this very attempt just claimed."""
+    with _RATE_GUARD:
+        _login_attempts.clear()
 
 
 def redeem_code(code: str) -> dict | None:
@@ -325,6 +475,55 @@ def revoke_grant(chat_id: int, grant_id: int) -> bool:
         return False
     qi("UPDATE guest_grants SET revoked=1 WHERE id=?", (grant_id,))
     return True
+
+
+# How long a dead grant stays visible in the host's invite panel before the
+# sweep takes it. Expiry is not the same question as usefulness: a code that
+# lapsed twenty minutes ago is exactly what the host is looking at when they
+# ask why their friend could not get in. A week is long enough for that
+# conversation and short enough that the table cannot grow without bound.
+GRANT_RETENTION = 60 * 60 * 24 * 7
+
+
+def sweep_expired_access() -> int:
+    """Delete access rows that can never authenticate again. Returns the count.
+
+    Neither table had a reaper. `verify_host_session` filters on `expires > ?`
+    and `verify_guest_token` on `token_expires`, so a dead row was never a
+    security hole -- it was unbounded growth in a file the host backs up,
+    checkpoints and copies, and a growing scan behind every request that
+    checks a cookie.
+
+    Called from startup, which is the right cadence for a single-worker
+    local app: no timer to leak, no second process to coordinate with, and
+    the table cannot grow faster than one host's sessions between restarts.
+    """
+    now = time.time()
+    with transaction():
+        dead_sessions = q(
+            "SELECT COUNT(*) AS n FROM host_sessions WHERE expires < ?",
+            (now,),
+            one=True,
+        )
+        qi("DELETE FROM host_sessions WHERE expires < ?", (now,))
+        # A grant dies by whichever clock it reached. An unredeemed grant has
+        # no token_expires at all, so COALESCE lets the code's own expiry
+        # stand in -- without it, `token_expires < ?` is NULL for exactly the
+        # rows that were never used, which are the ones that pile up.
+        cutoff = now - GRANT_RETENTION
+        predicate = (
+            "code_expires < ? AND COALESCE(token_expires, code_expires) < ?"
+        )
+        dead_grants = q(
+            f"SELECT COUNT(*) AS n FROM guest_grants WHERE {predicate}",
+            (cutoff, cutoff),
+            one=True,
+        )
+        qi(
+            f"DELETE FROM guest_grants WHERE {predicate}",
+            (cutoff, cutoff),
+        )
+    return int(dead_sessions["n"] or 0) + int(dead_grants["n"] or 0)
 
 
 def list_grants(chat_id: int) -> list[dict]:

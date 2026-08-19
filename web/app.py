@@ -1,4 +1,4 @@
-import contextvars, json, queue, random, re, time, threading, os, zlib
+import contextvars, ipaddress, json, queue, random, re, sys, time, threading, os, zlib
 from core import updates
 from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -7,9 +7,22 @@ from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
                                Response)
 from fastapi.staticfiles import StaticFiles
 
+from pathlib import Path
+
 from story import attire
 import extension_runtime
+from core.paths import INSTALL_ROOT
 from web import guest_access as guest
+
+# Every file this module serves lives beside the install, not beside the
+# process's working directory. The StaticFiles mount is evaluated at IMPORT,
+# so a relative directory there did not merely serve the wrong file --
+# `import web.app` from any other directory raised RuntimeError before a route
+# existed. Five other modules learned the same lesson on 2026-08-18 when the
+# tree moved into packages; `tools/project_check.py` now keeps the derivation
+# itself in `core/paths.py`, which is why this reads INSTALL_ROOT rather than
+# working one out from `__file__`.
+STATIC_ROOT = Path(INSTALL_ROOT) / "static"
 
 from core import db
 from core.db import (q, qi, qtx, transaction, wget, wset, get_setting, set_setting,
@@ -125,6 +138,7 @@ from web.auth_routes import (
     GUEST_COOKIE,
     HOST_COOKIE,
     PUBLIC_API_PATHS,
+    _set_guest_cookie as set_guest_cookie,
     router as auth_router,
 )
 
@@ -175,9 +189,51 @@ def _reconcile_embedding_bank():
                      daemon=True).start()
 
 
+def _bind_address():
+    """The address this process is (probably) listening on.
+
+    Nothing hands the application its own bind address -- uvicorn keeps it in
+    a config object the app never sees -- so read it where the launchers put
+    it: FICTION_ENGINE_HOST if the environment names one, otherwise the
+    `--host` argument both launchers and the README's own command line pass to
+    uvicorn. A guess is acceptable HERE and only here: this feeds a printed
+    warning, never an access decision. The decision is `request_is_local`,
+    which reads the peer address of the actual connection.
+    """
+    named = os.environ.get("FICTION_ENGINE_HOST")
+    if named:
+        return named.strip()
+    argv = sys.argv
+    for index, arg in enumerate(argv):
+        if arg == "--host" and index + 1 < len(argv):
+            return argv[index + 1].strip()
+        if arg.startswith("--host="):
+            return arg.split("=", 1)[1].strip()
+    return "127.0.0.1"
+
+
+def _bind_is_public(address: str) -> bool:
+    """True when `address` accepts connections from off this machine.
+
+    An unparseable address (a hostname) is treated as public: the safe
+    reading of "I do not know" on a warning path is the one that speaks up.
+    """
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return address.lower() not in ("localhost", "")
+    return not parsed.is_loopback
+
+
 def _startup_engine():
     db.init()
     _reconcile_embedding_bank()
+    swept = guest.sweep_expired_access()
+    if swept:
+        print(
+            f"Sonder Engine: swept {swept} expired access row(s).",
+            flush=True,
+        )
     port = os.environ.get("FICTION_ENGINE_PORT", "8008")
     # FICTION_ENGINE_RESET_HOST is the forgot-password escape hatch: wipe
     # the account (and every session) so /login shows first-run setup again.
@@ -208,6 +264,24 @@ def _startup_engine():
             "password (first run only).\n",
             flush=True,
         )
+        # The unclaimed window is the one moment there is no owner to check a
+        # cookie against, so say out loud when the port is open to more than
+        # this machine. Setup itself refuses a non-loopback peer; this is the
+        # part that stops the host from LEARNING about that refusal only when
+        # their own phone on the LAN cannot complete first-run setup.
+        address = _bind_address()
+        if _bind_is_public(address):
+            print(
+                "Sonder Engine: this server is bound to "
+                f"{address}, so the port is reachable from other machines "
+                "while no host account exists. First-run setup will only "
+                "accept a connection from this machine -- open the /login "
+                "page here, not on another device. If a tunnel "
+                "(cloudflared and the like) is already running, stop it "
+                "until the account exists: a tunnel connects from this "
+                "machine, so setup cannot tell its traffic from yours.\n",
+                flush=True,
+            )
     else:
         print(
             "\n"
@@ -219,10 +293,48 @@ def _startup_engine():
         )
 
 
+# What a shutdown is allowed to wait. Cancellation is cooperative in both
+# schedulers -- work already inside a provider call finishes that call -- so
+# this bounds what is USED, not what is spent, and a person pressing Ctrl-C
+# gets their prompt back either way.
+SHUTDOWN_DRAIN_SECONDS = 1.0
+
+
+def _shutdown_engine():
+    """Ask every background scheduler to stop, and wait a bounded moment.
+
+    The lifespan had no shutdown half at all, so a Ctrl-C left offscreen ticks,
+    artifact generation, memory consolidation, backdrop and ambience work
+    running against a database the process was closing. Daemon threads mean
+    nothing HANGS; what it costs is a write that was halfway done when the
+    interpreter went away.
+
+    Both drains cancel first and wait afterwards, and both REPORT what is still
+    in flight rather than joining it -- a non-empty answer is the ordinary
+    outcome of a bounded wait, not an error, so it is said at info volume and
+    the shutdown continues. `outofband` is reached through its own module-level
+    entry point rather than by importing the two modules that own the queues:
+    web/app.py must not grow an eager import edge to `dressing`.
+    """
+    from core import jobs, outofband
+
+    left = list(jobs.drain(timeout=SHUTDOWN_DRAIN_SECONDS))
+    left += list(outofband.drain_all(timeout=SHUTDOWN_DRAIN_SECONDS))
+    if left:
+        print(
+            f"Sonder Engine: {len(left)} background task(s) were still "
+            "finishing at shutdown and were left to their daemon threads.",
+            flush=True,
+        )
+
+
 @asynccontextmanager
 async def lifespan(_app):
     _startup_engine()
-    yield
+    try:
+        yield
+    finally:
+        _shutdown_engine()
 
 
 app = FastAPI(title="Sonder Engine", version="1.0", lifespan=lifespan)
@@ -340,13 +452,37 @@ class _SelectiveGZipResponder:
         `content-length` MUST go -- it describes the uncompressed body, and
         leaving it makes the client wait for bytes that will never come.
         """
+        _vary_values = [
+            value for key, value in message["headers"]
+            if key.lower() == b"vary"
+        ]
         headers = [
             (key, value) for key, value in message["headers"]
-            if key.lower() not in (b"content-length", b"content-encoding")
+            if key.lower() not in (b"content-length", b"content-encoding",
+                                   b"vary")
         ]
         headers.append((b"content-encoding", b"gzip"))
-        if not any(key.lower() == b"vary" for key, _v in headers):
-            headers.append((b"vary", b"Accept-Encoding"))
+        # MERGE, never skip. The old shape added `Vary: Accept-Encoding` only
+        # when no Vary existed at all, so any OTHER varying header -- the one
+        # a future middleware adds -- silently took Accept-Encoding's place,
+        # and a shared cache would then be free to hand a gzipped body to a
+        # client that never asked for one. Nothing in the tree emits Vary
+        # today (there is deliberately no CORS middleware), which is what
+        # makes this a trip-wire for the next change rather than a live hole.
+        existing = [
+            token.strip()
+            for value in _vary_values
+            for token in value.decode("latin-1").split(",")
+            if token.strip()
+        ]
+        if "*" in existing:
+            headers.append((b"vary", b"*"))
+        else:
+            merged = list(existing)
+            if not any(token.lower() == "accept-encoding"
+                       for token in merged):
+                merged.append("Accept-Encoding")
+            headers.append((b"vary", ", ".join(merged).encode("latin-1")))
         return {**message, "headers": headers}
 
 
@@ -360,7 +496,7 @@ EXEMPLAR_MAX_COUNT = 5
 EXEMPLAR_MAX_CHARS = 2000
 
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=STATIC_ROOT), name="static")
 
 # ---- Host/guest access control ----
 # See guest_access.py's module docstring for the full security rationale.
@@ -377,17 +513,17 @@ def guest_page():
     # shell -- reusing index.html would mean fighting the guest allowlist
     # in every one of chat.js/app.js/settings.js's calls instead of the
     # guest only ever being able to reach the two endpoints it needs.
-    return FileResponse("static/guest.html")
+    return FileResponse(STATIC_ROOT / "guest.html")
 
 @app.get("/")
 def index():
-    return FileResponse("static/index.html")
+    return FileResponse(STATIC_ROOT / "index.html")
 
 @app.get("/login")
 def login_page():
     # Standalone page like /guest: handles both first-run account setup
     # and sign-in, then redirects into the SPA once a session cookie is set.
-    return FileResponse("static/login.html")
+    return FileResponse(STATIC_ROOT / "login.html")
 
 @app.middleware("http")
 async def access_control(request: Request, call_next):
@@ -3698,11 +3834,9 @@ def join_with_code(body: dict = Body(...)):
         "chat_name": chat["name"] if chat else "",
         "persona_name": persona["name"] if persona else "Guest",
     })
-    response.set_cookie(
-        GUEST_COOKIE, result["token"], httponly=True, samesite="lax",
-        max_age=guest.GUEST_TOKEN_TTL,
-    )
-    return response
+    # Cookie transport belongs to auth_routes, host and guest alike: two
+    # writers with two literal flag lists is how the two drifted apart.
+    return set_guest_cookie(response, result["token"])
 
 @app.get("/api/guest/state")
 def guest_state(request: Request):
