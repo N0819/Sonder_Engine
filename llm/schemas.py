@@ -4511,13 +4511,35 @@ OUTPUT_EXAMPLES = {
         "notes": "",
     },
     "director_establish": {
-        "location": "",
-        "time": "now",
-        "scene_description": "",
-        "rooms": {},
+        # The one example that has to be a WORKED scene rather than a bare
+        # shape. Establishment's semantic check requires rooms and positions
+        # -- an opening in no place, with nobody anywhere, is not an opening
+        # -- so an all-empty example is an object this stage's own validator
+        # rejects, handed to the model as the thing to imitate on the repair
+        # that follows exactly that failure.
+        "location": "The Salt Quay",
+        "time": "before dawn",
+        "scene_description": (
+            "Fog off the water, one lamp still burning at the head of the "
+            "pier."),
+        "rooms": {
+            "pier_head": {
+                "name": "Pier Head",
+                "desc": "Wet boards, a bollard, the lamp on its iron post.",
+                "adjacent": [{"room": "quay_road", "barrier": "open"}],
+                "exposure": "open",
+                "anchors": {"lamp_post": {"desc": "the iron lamp post"}},
+            },
+            "quay_road": {
+                "name": "Quay Road",
+                "desc": "A cobbled run of shuttered warehouses.",
+                "adjacent": [{"room": "pier_head", "barrier": "open"}],
+                "exposure": "open",
+            },
+        },
         "entities": {},
-        "positions": {},
-        "stations": {},
+        "positions": {"{{PLAYER}}": "pier_head", "Maren": "pier_head"},
+        "stations": {"Maren": {"at": "lamp_post", "near": []}},
         "poses": {},
         "contact_ops": [],
         "substance_ops": [],
@@ -4528,10 +4550,12 @@ OUTPUT_EXAMPLES = {
         "fiction_frame": {},
         "simulation_clock": {
             "elapsed_seconds": 0.0,
-            "display": "now",
+            "display": "before dawn",
             "time_scale": "scene",
         },
-        "opening": "",
+        "opening": (
+            "The fog has not lifted. Maren waits under the lamp at the head "
+            "of the pier, watching the water rather than the road."),
     },
     "director_resolve": {
         "resolved_event": "",
@@ -4749,6 +4773,10 @@ OUTPUT_EXAMPLES = {
             {
                 "name": "Hettie Crawe",
                 "speech": {
+                    # The entry's own `name`, again. A dialogue-log line
+                    # carries its speaker, because the log is read by minds
+                    # that were never told whose entry it came from.
+                    "speaker": "Hettie Crawe",
                     "exact_quote": "Coin first. I've heard the songs.",
                     "volume": "normal",
                     "intended_target": "Bran",
