@@ -61,6 +61,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from core import jobs
 from world.spatial import apply_transit_dock_edges
 from world.spatial_frames import infer_companion_carry, infer_vehicle_zones
 
@@ -137,9 +138,7 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
         if row.get("kind") == "consequence":
             if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
                 continue
-            base_turn = payload.get("base_turn")
-            if base_turn is not None and turn_idx is not None \
-                    and int(base_turn) > int(turn_idx):
+            if jobs.story_rewound_past(payload.get("base_turn"), turn_idx):
                 # The base-revision check at fire time: a fuse minted from a
                 # turn the story no longer contains describes a future whose
                 # cause un-happened. Cancelled loudly, never fired — the

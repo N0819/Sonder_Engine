@@ -6,11 +6,14 @@ here rather than left to each caller to remember:
 
   * A job NEVER raises into the caller. `submit` returns a record; a failure
     is recorded ON it. Background work cannot fail a player's turn.
-  * A job carries the turn it was scheduled FROM (`base_turn`). A result
-    computed against turn N is not automatically valid at turn N+3, and
-    `is_stale` is how a consumer refuses it. base_turn does NOT catch the
-    player walking into the place being ticked -- a consequence arriving
-    before its cause is a separate hazard and is still open.
+  * A job carries the turn it was scheduled FROM (`base_turn`), and
+    `story_rewound_past` is how a consumer refuses a result whose era the
+    story has left. What invalidates a result is a REWIND or a branch past
+    `base_turn`, not the story taking further turns: a tick computed at turn
+    40 is still true at turn 43, and refusing it there would discard every job
+    that outlived one beat. base_turn does NOT catch the player walking into
+    the place being ticked -- a consequence arriving before its cause is a
+    separate hazard and is still open.
 
 This generalises the per-signature threading already in backdrops.py and
 ambience.py, and closes two things reading them turned up: their per-signature
@@ -189,16 +192,26 @@ def active_jobs(chat_id=None):
                 if chat_id is None or cid == chat_id]
 
 
-def is_stale(job, current_turn):
-    """True when the story has moved past the turn this job was computed from.
+def story_rewound_past(base_turn, current_turn):
+    """True when the story no longer stands at or after the turn a piece of
+    out-of-band work was computed from -- it rewound underneath the job.
 
-    A job with no base_turn is never stale by this test -- absence of a stamp
-    is not evidence of freshness, and the caller should know that, so it is
-    said here rather than guessed at.
+    This is the question every consumer of a `base_turn` asks, and it is the
+    inverse of the one this helper asked until PERSISTENCE-F11. The story
+    MOVING ON does not invalidate a result; the story going BACK does, because
+    then the turn it was computed from is a future that has not happened.
+
+    Takes turn numbers rather than a `Job`, because no consumer holds the job
+    by the time its result lands: `base_turn` travels in the event payload,
+    the artifact record or the landing call's own arguments.
+
+    A missing number is never a refusal -- absence of a stamp is not evidence
+    of anything, and the caller should know that, so it is said here rather
+    than guessed at.
     """
-    if job is None or job.base_turn is None or current_turn is None:
+    if base_turn is None or current_turn is None:
         return False
-    return int(current_turn) > int(job.base_turn)
+    return int(current_turn) < int(base_turn)
 
 
 def reset():
