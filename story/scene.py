@@ -144,20 +144,44 @@ def extant_cast(chat_id, frame_id=None):
     """Everyone this chat's world still contains, present or not.
 
     NOT the cast to animate and NOT the cast to place in a room -- that is
-    `active_cast`, which is deliberately untouched. This answers only "is this
-    a person the story knows about", which is what name resolution, the
-    recognition map and the anti-furniture guard actually need.
+    `active_cast`. This answers only "is this a person the story knows
+    about", which is what name resolution, the recognition map and the
+    anti-furniture guard actually need.
+
+    Frame-scoped for the same reason `active_cast` is, and by the same
+    means: a frame is an ERA, and existence is one of the things that
+    genuinely differs between them -- somebody written out of the era being
+    played is not someone that era knows about, however alive the base row
+    says they are. `frame_id=None` (present) reads `chat_chars` directly; a
+    real frame LEFT JOINs `chat_char_frames` and prefers its override, so an
+    era nobody has touched still starts from the character's ordinary
+    baseline. The status and the state must come from the SAME row, or a
+    caller gets one era's roster carrying another era's private state.
     """
     placeholders = ",".join("?" * len(DEPARTED_STATUSES))
+    if frame_id is None:
+        return q(
+            "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
+            "ch.source,ch.created,ch.resource_uid,"
+            "cc.state AS cstate,cc.status "
+            "FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id "
+            f"WHERE cc.chat_id=? AND cc.status NOT IN ({placeholders}) "
+            "ORDER BY ch.id",
+            (chat_id, *DEPARTED_STATUSES),
+        )
     return q(
         "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
         "ch.source,ch.created,ch.resource_uid,"
-        "cc.state AS cstate,cc.status "
+        "COALESCE(ccf.state, cc.state) AS cstate, "
+        "COALESCE(ccf.status, cc.status) AS status "
         "FROM chat_chars cc "
         "JOIN characters ch ON ch.id=cc.char_id "
-        f"WHERE cc.chat_id=? AND cc.status NOT IN ({placeholders}) "
+        "LEFT JOIN chat_char_frames ccf "
+        "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id AND ccf.frame_id=? "
+        f"WHERE cc.chat_id=? AND COALESCE(ccf.status, cc.status) NOT IN ({placeholders}) "
         "ORDER BY ch.id",
-        (chat_id, *DEPARTED_STATUSES),
+        (frame_id, chat_id, *DEPARTED_STATUSES),
     )
 
 
