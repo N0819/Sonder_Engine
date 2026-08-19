@@ -147,9 +147,11 @@ legitimately perceive, learn, remember or infer.
 - **They can say nothing** — Silence is a legitimate answer.
 - **They do not restart conversations by accident** — Recent lines catch exact
   reissues and repeated sentence shapes; a per-turn move ledger catches the
-  same offer, question or handoff hidden behind new wording. Similarity opens a
-  contextual review rather than a ban: invited continuations, deliberate
-  emphasis, lists, callbacks, and in-character riffs or rants stay available.
+  same offer, question or handoff hidden behind new wording. A finding is
+  recorded and the beat stands — it is never a ban, and it never costs a second
+  call: invited continuations, deliberate emphasis, lists, callbacks, and
+  in-character riffs or rants stay available, and a mind that has genuinely run
+  dry is offered a contrasting memory rather than another prohibition.
 - **Per-character variance** — Each has its own creativity and cognitive tier,
   so a lead behaves more consistently than a passer-by.
 - **Their own map** — Characters build a private map of ground they have walked
