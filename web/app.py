@@ -2852,6 +2852,10 @@ def chat_new(body: dict = Body(...)):
 
 @app.get("/api/language-packs")
 def language_packs_get():
+    """Out-of-process surface, deliberately: the browser gets the same list on
+    the bootstrap payload (`language_packs`) and must not re-fetch it, since a
+    pack list read separately from the UI catalog that came with it can
+    disagree with the one the page is already rendering."""
     return {"language_packs": [
         pack.public() for pack in installed_language_packs().values()
     ]}
@@ -2869,6 +2873,9 @@ def ui_catalog_get():
 
 @app.get("/api/language-packs/{language_id}/ui")
 def language_pack_ui(language_id: str):
+    """One pack's UI catalog by id. Out-of-process surface, and the answer to
+    "what would the interface look like in X" without switching to X --
+    `GET /api/ui` is the in-page read, and it serves the ACTIVE pack only."""
     try:
         pack = require_language_pack(language_id, capability="ui")
     except LanguagePackError as exc:
@@ -3495,6 +3502,16 @@ def submit_extra_player_input(cid: int, idx: int, body: dict = Body(...)):
     whichever request actually creates/runs that turn picks up everything
     already declared for it. Rejects submissions against an already-run
     turn (has active steps) since the beat has already resolved.
+
+    The HOST-authenticated twin of `POST /api/guest/input`: same
+    `_submit_player_input`, same idx contract, different proof of who you
+    are. A guest holds a grant and can only speak as their own persona; this
+    one requires a host session and names the persona explicitly, which is
+    what an out-of-process client submitting for an attached extra player
+    needs. No page in this repository calls it -- the guest page uses the
+    guest route and the host types into the composer -- and it is kept for
+    that out-of-process case rather than deleted for want of an in-tree
+    caller (WEB-9).
     """
     pid = body.get("persona_id")
     if pid is None:
@@ -4285,9 +4302,16 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
 def story_view_get(cid: int, events: int = 20):
     """Canonical story state, versioned. The read `story_view.py` documents.
 
-    Served to the host UI as well as to extensions because it is the same
-    question either asks -- and because a surface only extensions can reach is
-    one nothing in this repository exercises.
+    THE OUT-OF-PROCESS SURFACE, and nothing in this repository calls it.
+    This docstring used to say it was "served to the host UI as well as to
+    extensions"; measured, both halves are false. `static/js/` never fetches
+    it, and in-process extensions reach the same reads through the Python
+    facade (`extension_runtime/api.py`'s `story_view`), which is faster and
+    keeps the call inside the permission model. What HTTP is for here is a
+    client that is not in this process at all -- a companion app, a script, a
+    second machine -- so it is kept, and kept versioned, rather than deleted
+    for want of an in-tree caller. The same is true of `player_view` and
+    `viewers` below.
     """
     from web import story_view
 
@@ -4308,6 +4332,8 @@ def player_view_get(cid: int, viewer: str = "player", memories: int = 12):
 
 @app.get("/api/chats/{cid}/viewers")
 def viewers_get(cid: int):
+    """Who `player_view` may be asked for. Out-of-process surface; see
+    `story_view_get`."""
     from web import story_view
 
     return {"viewers": story_view.viewers(cid)}
