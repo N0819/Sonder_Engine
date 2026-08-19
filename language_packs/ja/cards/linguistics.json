@@ -2580,6 +2580,52 @@
       "$type": "regex",
       "pattern": "(?:^[\\\"'“‘(\\[]*\\s*(?:he|she|they|it|his|her|hers|their|theirs|its|him|them)\\b|^[「『\"'“‘(\\[]*\\s*(?:彼女ら|彼女|彼ら|彼|そいつ|その人|それ|そこ))",
       "flags": 34
+    },
+    "_RAPID_MOVEMENT_VERBS": {
+      "$type": "regex",
+      "pattern": "^(?:run|sprint|flee|dash|bolt|race|charge)s?$|走|駆け|逃げ|疾走|突進|突撃|飛び出",
+      "flags": 34
+    },
+    "_SIGHT_ASSERTION": {
+      "$type": "regex",
+      "pattern": "\\b(?:sees?|saw|seen|seeing|watch(?:es|ed|ing)?|look(?:s|ed|ing)?\\s+at|notic(?:e|es|ed|ing)|observ(?:e|es|ed|ing)|glimps(?:e|es|ed|ing)|spots?|spotted|makes?\\s+out|made\\s+out|catch(?:es)?\\s+sight\\s+of|caught\\s+sight\\s+of|in\\s+view|visible|in\\s+sight)\\b|見え|見る|見た|見つめ|見回|眺め|視認|視界|目にす|目撃|気づ|気付|映る|映っ",
+      "flags": 34
+    },
+    "_RAISING": {
+      "$type": "regex",
+      "pattern": "\\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|hoist(?:s|ed|ing)?)\\b|持ち上げ|持ちあげ|上げ|掲げ|挙げ|引き上げ",
+      "flags": 32
+    },
+    "_LOWERING": {
+      "$type": "regex",
+      "pattern": "\\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?)\\b|下ろ|下げ|降ろ|降り|沈め|沈み",
+      "flags": 32
+    },
+    "_LOOK_VERBS": {
+      "$type": "regex",
+      "pattern": "^(?:look|examine|inspect|survey|study|scan|observe|glance|peer|search|check)s?$|見る|見回|見つめ|眺め|観察|調べ|検分|確認|点検|探|捜",
+      "flags": 34
+    },
+    "_PAIN_CUES": {
+      "$type": "tuple",
+      "items": [
+        "injur",
+        "wound",
+        "blood",
+        "hurt",
+        "struck",
+        "broke",
+        "burn",
+        "負傷",
+        "傷",
+        "出血",
+        "痛",
+        "殴",
+        "折",
+        "火傷",
+        "やけど",
+        "打撲"
+      ]
     }
   },
   "mind.theory_of_mind": {

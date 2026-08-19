@@ -2211,6 +2211,43 @@
       "$type": "regex",
       "pattern": "^[\\\"'“‘(\\[]*\\s*(?:he|she|they|it|his|her|hers|their|theirs|its|him|them)\\b",
       "flags": 34
+    },
+    "_RAPID_MOVEMENT_VERBS": {
+      "$type": "regex",
+      "pattern": "^(?:run|sprint|flee|dash|bolt|race|charge)s?$",
+      "flags": 34
+    },
+    "_SIGHT_ASSERTION": {
+      "$type": "regex",
+      "pattern": "\\b(?:sees?|saw|seen|seeing|watch(?:es|ed|ing)?|look(?:s|ed|ing)?\\s+at|notic(?:e|es|ed|ing)|observ(?:e|es|ed|ing)|glimps(?:e|es|ed|ing)|spots?|spotted|makes?\\s+out|made\\s+out|catch(?:es)?\\s+sight\\s+of|caught\\s+sight\\s+of|in\\s+view|visible|in\\s+sight)\\b",
+      "flags": 34
+    },
+    "_RAISING": {
+      "$type": "regex",
+      "pattern": "\\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|hoist(?:s|ed|ing)?)\\b",
+      "flags": 32
+    },
+    "_LOWERING": {
+      "$type": "regex",
+      "pattern": "\\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?)\\b",
+      "flags": 32
+    },
+    "_LOOK_VERBS": {
+      "$type": "regex",
+      "pattern": "^(?:look|examine|inspect|survey|study|scan|observe|glance|peer|search|check)s?$",
+      "flags": 34
+    },
+    "_PAIN_CUES": {
+      "$type": "tuple",
+      "items": [
+        "injur",
+        "wound",
+        "blood",
+        "hurt",
+        "struck",
+        "broke",
+        "burn"
+      ]
     }
   },
   "mind.theory_of_mind": {
