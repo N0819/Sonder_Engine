@@ -46,15 +46,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _phrase_list_would_keep(text):
-    """`commit._durable_dialogue_category`, inlined rather than imported so
-    this tool never pulls the engine (and its database configuration) in behind
-    it. Kept in sync by test_remember_lines_telemetry.py, which asserts the two
-    agree on every phrase."""
+    """`persist/commit_memory.py`'s `_durable_dialogue_category` (re-exported
+    by the `commit` facade), inlined rather than imported so this tool never
+    pulls the engine -- and its database configuration -- in behind it. Kept in
+    sync by test_remember_lines_telemetry.py, which asserts the two agree on
+    every phrase."""
     lowered = (text or "").lower()
 
     def _spoken(marker):
         # Word boundary at the marker's start, inflection allowed at its end
-        # -- "I promised" matches, "compromised" does not. Mirrors commit.py.
+        # -- "I promised" matches, "compromised" does not. Mirrors
+        # commit_memory.
         return re.search(r"\b" + re.escape(marker), lowered) is not None
 
     if any(_spoken(w) for w in ("promise", "i swear", "i vow",
