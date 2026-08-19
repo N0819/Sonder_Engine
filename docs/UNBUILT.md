@@ -1197,7 +1197,12 @@ increase.** `tools/salience_replay.py` replays real recall against the real
 bank with the term live, deleted, and spread. It needs no embedding provider:
 a probe's own stored vector is the query and the turn cutoff is the beat it
 formed on, so each probe is an honest "what did this mind have to hand", and
-it copies the database first because `search_memories` bumps `access_count`.
+it copies the database first. (That copy was originally needed because
+`search_memories` bumped `access_count` for every caller. It no longer does:
+recording is opted INTO by the caller that is a mind recalling, via
+`record_access`, so the author's Memories tab and the replay tools no longer
+alter the number they are reading. The copy is now belt-and-braces rather than
+load-bearing.)
 
 270 probes, top-16 membership moved:
 
@@ -2318,16 +2323,21 @@ literal-coupled to a parser or persisted, so the real work is moving the
 clause construction behind the compositor card and migrating what is stored.
 Sized as its own change, not a follow-up patch.
 
-**`LanguagePack.fallback` is a dead contract.** The field is parsed
+**`LanguagePack.fallback` is a dead contract, and the choice is drop or
+keep — not "wire or drop".** The field is parsed
 (`language_runtime/__init__.py:154`), published on the pack (`:118`), and
 validated to point at an installed pack (`:272`) — and no lookup anywhere
 consults it. A pack declaring `"fallback": "en"` gets no fallback behaviour of
-any kind. Harmless today because nothing depends on it, and worth closing
-before third-party pack authors start writing manifests against it: either
-implement the resolution (a missing message or card field falls through to the
-named pack) or drop the field. Declared-and-ignored is the same
-invisible-failure shape as `capabilities.ui.css` was, and that one shipped
-unnoticed for a release.
+any kind. Corrected 2026-08-18: a fallback RESOLVER is unreachable by
+construction, so implementing one is not an option on the table.
+`installed_language_packs` refuses to load at all if a story pack is missing
+any system prompt id or any card leaf path the English pack has, and refuses a
+UI pack missing any source message — so the miss a fallback would answer
+cannot occur while the pack is installed, and if it could occur the pack is
+already rejected. What is left is a decision between deleting the field and
+keeping it as a declared lineage marker with the docstring saying so.
+Declared-and-ignored is the same invisible-failure shape as
+`capabilities.ui.css` was, and that one shipped unnoticed for a release.
 
 **A story does not record which pack version wrote it.** Chats stamp
 `story_language` and not the pack's `version`, so when a pack's wording or
@@ -2804,7 +2814,10 @@ The heuristic path derives psychology from the card's `personality` field, so a
 v2 card that puts everything in `description` — common — yields a sparse first
 pass. The opt-in v3 gap-filler mitigates sparse old cards but does not remove the
 value of a better deterministic first pass.
-`importers.character_import_warnings` exists but fires only on the import path.
+`character_card_warnings` now fires on all nine surfaces that hand back a card
+(`8ddcc1e`), so a heuristic import that lands sparse is reported wherever it
+was made; what is still missing is the populated-field THRESHOLD that would
+make "sparse" a warning of its own.
 
 ### 2.5 Complete automatic canon lock
 
@@ -3932,8 +3945,10 @@ Most of §3 shipped in alpha 4.0. What did not:
   style-guide-level canon licence.
 - **The separation eval (§3.3.1)** — the deterministic leak floor is built; the
   proposed measurement of real cross-presence leak rate has no artifact in-tree.
-- **Location-themed population and the chorus presence (§4).** `AggregateEntity`
-  is declared in `llm/schemas.py` and unconsumed.
+- **Location-themed population and the chorus presence (§4).** Not built and now
+  with no artifact at all: `AggregateEntity` was declared in `llm/schemas.py`
+  and consumed by nothing, and was deleted rather than wired. The design has
+  neither an implementation nor a schema to point at.
 - **The narrator dilution clause (§5)** — no tension-gated ambient suppression.
 - **The `digest`/`interim` tier typology (§3.1)** — only `blurb` was built.
 - **The prompt fix for §3.8** — a blurb tell should be available colour, not a
