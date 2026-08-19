@@ -462,7 +462,7 @@ function charEditor(c, options = {}) {
           + "goes over the shoulders. Leave the coverage on “auto” and it is "
           + "worked out from the name. Note that waist means the belt line "
           + "only — a sash does not cover the groin. List the outermost "
-          + "garment first. \"Underneath\" is what a region shows once "
+          + "garment first. “Underneath” is what a region shows once "
           + "nothing covers it, and is used only when it has been switched "
           + "on in Settings."),
         fillAppearance,
@@ -717,7 +717,7 @@ function personaEditor(p) {
           + "goes over the shoulders. Leave the coverage on “auto” and it is "
           + "worked out from the name. Note that waist means the belt line "
           + "only — a sash does not cover the groin. List the outermost "
-          + "garment first. \"Underneath\" is what a region shows once "
+          + "garment first. “Underneath” is what a region shows once "
           + "nothing covers it, and is used only when it has been switched "
           + "on in Settings."),
         fillAppearance),
