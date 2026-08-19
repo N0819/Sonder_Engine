@@ -283,14 +283,12 @@ separately. Sight is decided by `spatial_barriers._SIGHT_BARRIERS` (through
 `ambient_scope`'s ambience reach, not the voice channel; scent is graded by
 `spatial_barriers._SCENT_BARRIER_LEVELS`, a TABLE rather than a set because
 scent is the one channel with degrees, and `spatial_senses.scent_level` is its
-only reader; touch is containment. **Scent is a permission with nothing to
-permit**: the grader, the barrier table and card-authored scent acuity all
-work, `agents/perception.py` computes `scent_channel_to_sources` per observer —
-and no percept builder ever emits `channel="smell"`, so nothing reads that
-verdict outside tests. `agents/narration.py` says the same thing in code:
-"open air; nothing ledgered rides this channel". What is missing is CONTENT, not
-gating — no card, entity or `StateDiff` channel says what anything smells like
-(`docs/UNBUILT.md` §1.54). A window passes sight only; bars pass sight and
+only reader. What it grades now has something to carry: a body's
+`embodiment.scent`, an entity's `scent`, and a substance record's `scent`
+(`docs/design/DESIGN_SCENT.md`). `muffled` is spent by withholding the SOURCE
+rather than the smell — the material genuinely crosses a half-open door, and
+what does not cross is which body it belongs to. Touch is containment. A
+window passes sight only; bars pass sight and
 sound; a membrane passes passage only. Touch-only perception is deliberately
 **cause-blind**: surface sensation crosses, the act producing it does not.
 

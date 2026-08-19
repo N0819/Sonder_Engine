@@ -95,6 +95,9 @@ World and body:
   is. Floors built; the graded half designed and registered in `UNBUILT.md`
   §1.43, including why it is a deterministic ladder and not a seventh
   Director specialist.
+- [`DESIGN_SCENT.md`](design/DESIGN_SCENT.md) — what smells, where the
+  fact lives, and why a muffled smell arrives without its source. Built
+  (v1); decay, drift and trails deliberately unbuilt.
 - [`DESIGN_REGION_VISIBILITY.md`](design/DESIGN_REGION_VISIBILITY.md) —
   concealment applied to bodies, over a four-state coverage ladder. Partly built.
 - [`DESIGN_0c_subject_identity.md`](design/DESIGN_0c_subject_identity.md) —
