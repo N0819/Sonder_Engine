@@ -826,7 +826,17 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
 def narrator(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
-    est = ctx.get("director_establish") or {}
+    # THE TURN ROW SAYS WHETHER THIS IS THE OPENING, and it is the only thing
+    # entitled to. This read `ctx.get("director_establish") or {}` and branched
+    # on the truthiness of a MODEL STAGE'S OUTPUT -- gating three separate
+    # things on it: which view is read, the `scene_opening` payload flag, and
+    # the whole `_world_fields`/`_fidelity_facts` block. `_run_pipeline`
+    # decides the same question from `turn_row["idx"] == 0`, so it was one rule
+    # with two owners, and the non-authoritative one could answer "no opening"
+    # for a turn the runtime had already planned as one. Latent rather than
+    # live today only because `DirectorEstablish` default-fills, which is a
+    # property of a schema and not of this decision.
+    est = ctx.turn["idx"] == 0
     if est:
         view = (ctx.get("perception_establish", {}).get("views") or {}).get("player") \
             or compositor_text("narrator_immediate", ctx.language)
@@ -1079,7 +1089,7 @@ def narrator_extra(ctx, nonce):
         return {}
 
     chat = ctx.chat
-    est = ctx.get("director_establish") or {}
+    est = ctx.turn["idx"] == 0          # see narrator() above
     outcome_views = (ctx.get("perception_outcome", {}) or {}).get("views") or {}
     establish_views = (ctx.get("perception_establish", {}) or {}).get("views") or {}
     di = ctx.get("director_interpret") or {}
