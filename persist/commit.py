@@ -70,6 +70,16 @@ from world.spatial_frames import (infer_companion_carry, infer_vehicle_zones,
 # maybe_consolidate_character_memory, affect, ...), and callers import
 # several of those names from `commit`. Pruning "unused" imports here is a
 # forbidden cleanup -- it breaks that contract silently.
+#
+# SEVEN of them are dead in BOTH directions and were dead before the split
+# (COMMIT-2, re-verified): `dump_chat_memories`, `restore_chat_memories`,
+# `dump_lorebook`, `restore_lorebook`, `knowledge_for_character`,
+# `get_relationships` and `save_relationships` are used nowhere in this file
+# and imported from `commit` by nothing in the tree. They are named here so
+# a reader stops hunting for the use -- not so they can be quietly pruned:
+# this block is published surface while extensions port against `ext_api: 1`,
+# and removing a re-export is an API change that belongs to one deliberate
+# decision covering every facade in the tree, not to a tidy-up.
 from persist.commit_common import (_keys_str, _stable_event_key, _clamp,
     _normalize_character_output, _player_name_or_none, _monotonic_elapsed,
     _ADDRESS_ARTICLES, _form_in, _address_forms, _names_heard_in,
