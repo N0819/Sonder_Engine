@@ -341,6 +341,17 @@ class TestReleasePrecision:
             assert _release_attempts(
                 "サラはヒナミの縄をほどいた。", ["ヒナミ"]) == {"ヒナミ"}
 
+    def test_a_japanese_sentence_boundary_is_a_clause_barrier(self):
+        """`_sentence_break_positions` knew only ASCII terminators, so a
+        cue in one Japanese sentence paired with a name in the NEXT one --
+        a rope untied in sentence one released the bystander of sentence
+        two."""
+        from language_runtime import language_scope
+
+        with language_scope("ja"):
+            assert _release_attempts(
+                "サラは縄をほどいた。ヒナミは驚いた。", ["ヒナミ"]) == set()
+
 
 # --- the vocabulary the body specialist is finally handed --------------------
 
