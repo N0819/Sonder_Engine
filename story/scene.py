@@ -1131,7 +1131,14 @@ def apply_awareness_diff(amap, diff):
                 continue
             out[key] = {"subject": subj, "level": level,
                         "cause": str(state.get("cause") or "").strip(),
-                        "rousable_by": str(state.get("rousable_by") or "").strip()}
+                        "rousable_by": str(state.get("rousable_by") or "").strip(),
+                        # THE SAME SHAPE `awareness_map` PRODUCES, including
+                        # the id an ending must re-emit: commit UPDATEs on
+                        # `condition_id`, and a fresh one opens a second row
+                        # instead of closing the first. A caller cannot be
+                        # expected to know which of the two producers built
+                        # the record it is holding.
+                        "condition_id": str(cond.get("condition_id") or _cid)}
     return out
 
 

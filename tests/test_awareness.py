@@ -466,3 +466,38 @@ class TestSeveralAwarenessRowsOnOneBody:
 
         from story.scene import awareness_conditions
         assert {r["condition_id"] for r in awareness_conditions(chat_id)} == {"a", "b"}
+
+
+# --- the two producers of "the awareness map" must produce one shape --------
+#
+# `awareness_map` carries `condition_id`; `apply_awareness_diff`, which
+# overlays this beat's not-yet-committed conditions onto it, built the same
+# record minus that one key. It is the key the entire endings path is built
+# around: an ending must re-emit the SAME condition_id, because commit UPDATEs
+# on it and a fresh id INSERTs a second row instead of closing the first --
+# which is how a body ends up carrying several standing rows in the first
+# place. Latent only because today's sole consumer of the overlaid map asks
+# `awareness_of` and nothing else.
+
+def test_the_overlaid_map_has_the_same_shape_as_the_committed_one():
+    diff = {"conditions": {"c1": [{
+        "condition_id": "c1", "subject_id": "Hinami", "kind": "awareness",
+        "state": {"level": "unconscious", "cause": "crash",
+                  "rousable_by": "a shout"}}]}}
+    record = apply_awareness_diff({}, diff)["hinami"]
+    assert record["condition_id"] == "c1"
+    assert set(record) == {"subject", "level", "cause", "rousable_by",
+                           "condition_id"}
+
+
+def test_the_diffs_own_key_names_the_condition_when_the_entry_does_not():
+    diff = {"conditions": {"c_from_the_key": [{
+        "subject_id": "Hinami", "kind": "awareness",
+        "state": {"level": "asleep"}}]}}
+    assert apply_awareness_diff({}, diff)["hinami"]["condition_id"] == "c_from_the_key"
+
+
+def test_a_standing_condition_keeps_its_id_when_the_beat_does_not_touch_it():
+    standing = {"hinami": {"subject": "Hinami", "level": "asleep", "cause": "",
+                           "rousable_by": "", "condition_id": "older"}}
+    assert apply_awareness_diff(standing, {})["hinami"]["condition_id"] == "older"
