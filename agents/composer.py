@@ -95,7 +95,7 @@ from .common import (
 PERCEPT_KINDS = (
     "environment", "presence", "pose", "appearance", "act", "speech",
     "sensation", "substance", "body_part", "body_region", "body_state",
-    "crossing", "residue", "ambient",
+    "crossing", "residue", "ambient", "scent",
 )
 
 CHANNELS = ("sight", "hearing", "touch", "interoception", "smell", "mixed")
@@ -896,6 +896,59 @@ def ambient_percepts(sensory_events, observer_room):
     return out
 
 
+#: A scent that arrives without its source. `muffled` is the graded rung
+#: `scent_level` has always returned and nothing downstream could act on.
+_SCENT_FIDELITY = {"full": "full", "muffled": "degraded"}
+
+
+def scent_percepts(sources):
+    """Standing smells reaching one observer, already graded by the caller.
+
+    Input: ``[{"key", "label", "scent", "level", "attributed"}]`` -- `level`
+    is `scent_level`'s own verdict after the observer's card acuity, and
+    `attributed` says whether this observer has a SECOND channel to the
+    source (they can see the body the smell belongs to).
+
+    THE GRADE IS ACTED ON, NOT RECORDED. A muffled scent is delivered
+    unattributed, because what a half-open door withholds is not the smell --
+    the material still crosses -- it is which body the smell belongs to. That
+    is a real subtraction and a structural one: no string is mangled, a field
+    is withheld. It also settles the disguise question in the only direction
+    the firewall's own statement points. A scent percept carries a MATERIAL,
+    never a NAME: the label is whatever this observer's display map already
+    earned for that body, so a disguise that conceals identity yields the
+    stranger's descriptor here exactly as it does for presence and pose. A
+    mind may then conclude from its own memories that this is the smell of
+    someone it knows -- inference is the product, and that inference is
+    defeasible, since two bodies can wear one perfume.
+
+    `key` is folded into the dedupe key only; canonical names never ride a
+    Percept.
+    """
+    out = []
+    for source in sources or []:
+        if not isinstance(source, dict):
+            continue
+        scent = " ".join(str(source.get("scent") or "").split())[:160]
+        level = str(source.get("level") or "none")
+        fidelity = _SCENT_FIDELITY.get(level)
+        if not scent or fidelity is None:
+            continue
+        attributed = bool(source.get("attributed")) and level == "full"
+        label = str(source.get("label") or "").strip() if attributed else ""
+        out.append(Percept(
+            kind="scent", channel="smell",
+            source_label=label if attributed else "",
+            fidelity=fidelity,
+            data={"scent": scent, "level": level,
+                  "attributed": bool(label)},
+            salience=0.35,
+            dedupe_key="scent:" + _short_hash(
+                source.get("key"), scent, level, label),
+        ))
+    return out
+
+
 def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
     """A non-awake mind gets the residue and nothing else."""
     return [Percept(
@@ -1068,7 +1121,8 @@ _STANDING_ORDER = {
     # about this beat and its authored description is a fact about the body.
     "environment": 0, "presence": 1, "pose": 2, "appearance": 3,
     "body_state": 4, "sensation": 5, "body_part": 6, "body_region": 7,
-    "ambient": 8,
+    # The air of the place, after the bodies in it and after what is on them.
+    "ambient": 8, "scent": 9,
 }
 
 _TIER_PHRASES = dict(_ENGLISH_COMPOSITOR["tier_phrases"])
@@ -1332,7 +1386,25 @@ def _render_standing(p):
         if desc and desc[-1:] not in ".!?":
             desc += "."
         return desc
+    if p.kind == "scent":
+        return _render_scent(p)
     return ""
+
+
+def _render_scent(p, *, episode=False):
+    """Three shapes, chosen by what the observer actually has a channel to:
+    the smell and whose it is, the smell alone, or the smell as a faint thing
+    from somewhere beyond. The percept decides which; this only spells it."""
+    prefix = "episode_" if episode else ""
+    scent = str(p.data.get("scent") or "").strip()
+    if not scent:
+        return ""
+    if p.data.get("level") == "muffled":
+        return _en(prefix + "scent_faint", scent=scent)
+    if p.data.get("attributed") and p.source_label:
+        return _en(prefix + "scent_source",
+                   label=_cap(p.source_label), scent=scent)
+    return _en(prefix + "scent_air", scent=scent)
 
 
 def _render_event(p):
@@ -1593,6 +1665,8 @@ def _episode_sentence(p):
     if p.kind == "appearance":
         desc = _appearance_as_prose(p.data.get("description"))
         return _en("episode_appearance", description=desc) if desc else ""
+    if p.kind == "scent":
+        return _render_scent(p, episode=True)
     if p.kind == "residue":
         return _compose_residue_view(
             p.data.get("level"), targeted=p.data.get("targeted", False),
@@ -1631,11 +1705,15 @@ def _render_episode_english(percepts, *, prev_standing=frozenset(),
             if p.data.get("force") \
                     or str(p.data.get("source_key") or "") not in prev_described:
                 changed.append(p)
-        elif p.kind in ("environment", "sensation", "pose") \
+        elif p.kind in ("environment", "sensation", "pose", "scent") \
                 and p.dedupe_key not in prev_standing:
             # A pose that CHANGED is a real memory -- somebody knelt, or was
             # pinned. An unchanged one is furniture and the dedupe key keeps
             # it out, which is the same rule the room already lives under.
+            # A scent lives under it for the same reason and earns its place
+            # for a stronger one: a smell is among the most retrievable
+            # things a mind stores, and the dedupe key already moves when the
+            # grade does, so walking into range of one is the change.
             changed.append(p)
 
     if not events and not changed:
