@@ -696,9 +696,15 @@ class TestPortalStatesVisibilityGate:
         result = _visible_portal_states(scene, "r1", visible)
         assert "Magic Portal" in result
 
-    def test_backwards_compatible_no_visible_rooms(self):
-        """When visible_rooms is None (backwards-compatible), behavior is
-        unchanged — only the player's room is considered."""
+    def test_a_door_to_an_unseen_room_is_withheld(self):
+        """This test used to assert the opposite, under the name
+        `test_backwards_compatible_no_visible_rooms`: it called
+        `_visible_portal_states` without `visible_rooms` and required the door
+        to r2 to be INCLUDED. There was never a backwards-compatible caller --
+        the one production call site has always passed the set
+        (`narration.py:919`) -- so the arm it pinned could only ever be reached
+        from this test, and what it pinned was the pre-S3-A5 leak: the state of
+        a door into a room the player cannot see."""
         from agents.narration import _visible_portal_states
         scene = {
             "location": "x", "time": "day",
@@ -712,9 +718,10 @@ class TestPortalStatesVisibilityGate:
             "entities": {},
             "attire": {}, "overlays": {},
         }
-        # No visible_rooms arg -> should still include door to r2
-        result = _visible_portal_states(scene, "r1")
-        assert "door to Room 2" in result
+        assert "door to Room 2" not in _visible_portal_states(
+            scene, "r1", {"r1"})
+        assert "door to Room 2" in _visible_portal_states(
+            scene, "r1", {"r1", "r2"})
 
 
 # ---------------------------------------------------------------------------

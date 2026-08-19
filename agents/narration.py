@@ -649,7 +649,7 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
     return payload, facts, room_names
 
 
-def _visible_portal_states(scene, room_id, visible_rooms=None):
+def _visible_portal_states(scene, room_id, visible_rooms):
     """F3: committed open/shut state of every door/portal the player can
     currently see, keyed by display name -- portal-link entities touching the
     player's room, door-like entities in it, transit hatches of an enclosure
@@ -659,22 +659,19 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
     entity (the DW t12 case).
 
     S3-A5: ``visible_rooms`` (the player's room plus any visible adjacent
-    rooms) gates which portal states are included.  A portal/door in a
-    room the player cannot see is withheld -- the player has not
-    perceived it and must not be told its state.  When ``visible_rooms``
-    is None (backwards-compatible callers) the behaviour is unchanged
-    (only the player's own room is considered)."""
+    rooms) gates which portal states are included.  A portal/door in a room
+    the player cannot see is withheld -- the player has not perceived it and
+    must not be told its state.
+
+    REQUIRED, since 2026-08. It defaulted to None for "backwards-compatible
+    callers", and there were none: the one production call site has always
+    passed the set. What the default actually did was make the gate optional
+    -- three `if _filter_adjacent` branches that fell open -- so the pre-S3-A5
+    leak stayed reachable by anyone who omitted an argument, and a test pinned
+    it as correct. A guard with an off switch is not a guard."""
     if not room_id or not isinstance(scene, dict):
         return {}
-    # Build the set of rooms whose portal states the player may perceive.
-    # When visible_rooms is None (backwards-compatible callers), only the
-    # player's own room is considered and adjacency barriers are NOT
-    # filtered (preserving the original behavior).
-    _filter_adjacent = visible_rooms is not None
-    if visible_rooms is None:
-        visible_rooms = {room_id}
-    else:
-        visible_rooms = set(visible_rooms) | {room_id}
+    visible_rooms = set(visible_rooms or ()) | {room_id}
     out = {}
     entities = scene.get("entities") or {}
     positions = scene.get("positions") or {}
@@ -691,14 +688,11 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
         link = state.get("link")
         if isinstance(link, dict) and room_id in (link.get("rooms") or []):
             # S3-A5: a portal-link that also touches a room the player
-            # cannot see still leaks state through the visible end.
-            # Only include if every room the portal connects is visible.
-            # Backwards-compatible callers (visible_rooms=None) skip this
-            # check (original behavior).
-            if _filter_adjacent:
-                portal_rooms = set(link.get("rooms") or [])
-                if portal_rooms and not portal_rooms.issubset(visible_rooms):
-                    continue
+            # cannot see still leaks state through the visible end, so it is
+            # included only when every room the portal connects is visible.
+            portal_rooms = set(link.get("rooms") or [])
+            if portal_rooms and not portal_rooms.issubset(visible_rooms):
+                continue
             out[name] = ("open" if str(link.get("phase") or "").lower()
                          == "open" else "shut")
             continue
@@ -711,10 +705,7 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
             continue
         blob = (str(ent.get("kind") or "") + " " + name).lower()
         # S3-A5: only include door-like entities positioned in a visible room.
-        # Backwards-compatible callers (visible_rooms=None) use the original
-        # behavior (ent_room == room_id only).
-        ent_room_check = ent_room in visible_rooms if _filter_adjacent else ent_room == room_id
-        if ent_room_check and any(
+        if ent_room in visible_rooms and any(
                 w in blob for w in ("door", "gate", "hatch", "portal",
                                     "shutter")):
             val = state.get("open")
@@ -735,10 +726,7 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
         if barrier not in ("closed_door", "open_door"):
             continue
         to = edge.get("to")
-        # S3-A5: only filter by visible_rooms when explicitly provided.
-        # Backwards-compatible callers (visible_rooms=None) get the
-        # original behavior: all adjacency barriers in the player's room.
-        if _filter_adjacent and to and to not in visible_rooms:
+        if to and to not in visible_rooms:
             continue
         to_name = str(((rooms.get(to) or {}).get("name")) or to or "").strip()
         state = "shut" if barrier == "closed_door" else "open"
