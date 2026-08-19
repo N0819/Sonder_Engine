@@ -378,13 +378,32 @@ def test_ambience_panel_opens_beside_the_composer(
     bar = page.locator("#composer > #ambience-bar")
     expect(bar).to_be_visible()
     # It floats in the composer's right-hand margin. Inside #composer-inner it
-    # would take width from the input, which carries the same measure as the
-    # prose column -- so the story's typing area must start exactly where it
-    # started before this feature existed.
+    # would take width from the input, so the two invariants are: the typing
+    # column is the SAME column the story is read in, and the cluster does not
+    # sit on top of it.
+    #
+    # This used to assert `width == 720` outright. That was true when the
+    # column was a constant and stopped being true when `--story-width` became
+    # dynamic (`syncVitalsGutter` reserves room for whichever float is wider
+    # and lets the column take the rest, up to STORY_MAX_WIDTH). Pinning the
+    # old constant would now fail for the RIGHT behaviour, so what is pinned
+    # is the relationship the CSS comment actually states: composer and
+    # transcript must read one variable, or the input stops lining up with the
+    # story above it.
     column = page.locator("#composer-inner").bounding_box()
     controls = bar.bounding_box()
-    assert column["width"] == 720
-    assert controls["x"] >= column["x"] + column["width"]
+    story_width = page.evaluate(
+        "() => parseFloat(getComputedStyle(document.documentElement)"
+        ".getPropertyValue('--story-width')) || 720")
+    assert column["width"] == story_width, (column["width"], story_width)
+    assert column["width"] >= 720
+    # The overlap this guards is real and was live until 2026-08-19: at a
+    # 1400px window the cluster still carried its volume slider, the column
+    # was clamped back up to STORY_MIN_WIDTH, and the controls sat 27px INSIDE
+    # the input -- over the right-hand end of the box being typed into.
+    assert controls["x"] >= column["x"] + column["width"], (
+        f"the ambience cluster overlaps the typing column by "
+        f"{column['x'] + column['width'] - controls['x']:.0f}px")
 
     page.locator("#b-ambience").click()
     expect(page.locator("#modal")).to_be_visible()

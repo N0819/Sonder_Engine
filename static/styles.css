@@ -661,14 +661,26 @@ display:flex;align-items:center;gap:4px}
 #b-amb-mute.muted,#b-chime.muted{border-color:#c0392b;color:#e74c3c}
 #b-amb-reroll:disabled{opacity:.4;cursor:default}
 #amb-vol{width:64px;accent-color:var(--acc)}
-/* The room to float in is (COMPOSER - 720)/2, and the composer is the window
-   minus the sidebar and minus whatever the drawer is taking -- so this has to
-   be a container query, not a media query. Sized against the window it read
-   ~280px of margin where there were really ~140, and the cluster reached back
-   over the Send button. Shed the slider first (volume is the one control with
-   an OS-level equivalent), then give up floating and share the row. */
-@container composer (max-width:1040px){#amb-vol{display:none}}
-@container composer (max-width:900px){
+/* The room to float in is (COMPOSER - 720)/2 - 12, and the composer is the
+   window minus the sidebar and minus whatever the drawer is taking -- so this
+   has to be a container query, not a media query. Sized against the window it
+   read ~280px of margin where there were really ~140, and the cluster reached
+   back over the Send button. Shed the slider first (volume is the one control
+   with an OS-level equivalent), then give up floating and share the row.
+
+   The thresholds below are DERIVED from the cluster's measured widths rather
+   than chosen, because choosing them is what went wrong twice. Measured in
+   Chromium: 212px with the slider, 140px without. Solving
+   (C - 720)/2 - 12 >= W for C gives C >= 1168 with the slider and C >= 1024
+   without; the numbers here are those two, rounded up for headroom. The
+   previous pair (1040 and 900) was still too small in the second place: at a
+   1400px window the composer is 1114px, the slider was still showing, and the
+   cluster sat 27px INSIDE the typing column -- over the right-hand end of the
+   input, which is the exact thing the absolute positioning above exists to
+   prevent. If the cluster gains or loses a control, re-measure and re-solve;
+   do not nudge. `browser_tests/test_ui_smoke.py` holds the invariant. */
+@container composer (max-width:1180px){#amb-vol{display:none}}
+@container composer (max-width:1040px){
   #ambience-bar{position:static;flex:0 0 auto;align-self:flex-end;padding-bottom:4px}
 }
 /* An image can take half a minute; without this the button is the only place
