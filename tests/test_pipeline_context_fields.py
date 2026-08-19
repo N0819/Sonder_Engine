@@ -46,6 +46,29 @@ def test_a_step_that_returned_none_is_not_materialized():
             "declared stage does")
 
 
+def test_every_list_spelling_that_adds_a_warning_tags_it():
+    # The class docstring's whole argument is that tagging HERE, rather than at
+    # the ~40 producer call sites, catches spellings nobody has written yet.
+    # `list.__iadd__` and `list.insert` are C-level and do not route through a
+    # Python `extend`/`append` override, so `ctx.warnings += [...]` used to add
+    # an untagged entry -- present in the list, invisible to `for_step`, so the
+    # step it belonged to showed no engine note.
+    from core.pipeline_context import current_step_key
+
+    token = current_step_key.set("narrator")
+    try:
+        ctx = _ctx()
+        ctx.warnings.append("appended")
+        ctx.warnings.extend(["extended"])
+        ctx.warnings += ["in-placed"]
+        ctx.warnings.insert(0, "inserted")
+        assert sorted(ctx.warnings_for_step("narrator")) == [
+            "appended", "extended", "in-placed", "inserted"]
+        assert len(ctx.warnings) == 4
+    finally:
+        current_step_key.reset(token)
+
+
 def test_no_declared_name_can_ever_reach_the_extra_dict():
     # `__setitem__` routes any key `hasattr` answers for to `setattr`, so the
     # two stores cannot both hold a declared name -- which is what made
