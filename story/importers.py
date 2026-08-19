@@ -13,6 +13,7 @@ from llm.providers import (
 from llm.prompts import EXTRA_PARTS_NOTE, get_prompt
 from language_runtime import language_pack
 from story.character_schema import (
+    _outfit_items as character_schema_outfit_items,
     character_card_warnings,
     CHARACTER_SCHEMA,
     PERSONA_SCHEMA,
@@ -348,14 +349,10 @@ _OUTFIT_LINE_RE = re.compile(
 )
 
 
-def _outfit_items(value):
-    if isinstance(value, dict):
-        value = value.get("wearing") or value.get("items") or []
-    if isinstance(value, str):
-        value = re.split(r"[;\n]+", value)
-    if not isinstance(value, list):
-        value = [value] if value else []
-    return [str(item).strip() for item in value if str(item or "").strip()]
+#: Imported here rather than restated: the card format owns what an outfit
+#: list is, and two helpers of this name with two rules is how a duplicate
+#: garment came to survive one pass and be dropped by the next.
+_outfit_items = character_schema_outfit_items
 
 
 def _heuristic_appearance_and_outfit(card):

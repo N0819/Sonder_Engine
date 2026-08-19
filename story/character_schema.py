@@ -395,8 +395,24 @@ def _float_or(value: Any, default: float) -> float:
 
 
 def _outfit_items(value: Any) -> list[str]:
+    """Whatever a card says it is wearing, as a list of garment names, once
+    each.
+
+    THE ONE READER, and it has to accept every shape the field arrives in
+    because there were two of these. `story/importers.py` had its own copy
+    that unwrapped a wrapper dict and did not dedupe, and this one deduped
+    and did not unwrap -- and both ran on the same import
+    (`heuristic_character_sheet` builds the outfit with one,
+    `normalize_character_data` re-reads it with the other), so which rule
+    applied to a card was decided by which same-named helper ran last. Each
+    failed at exactly what the other did: an outfit written
+    `{"wearing": [...]}` -- what older cards, imports and the generators all
+    produce -- came back here as ONE garment whose name is a Python dict.
+    """
     if value is None:
         return []
+    if isinstance(value, dict):
+        value = value.get("wearing") or value.get("items") or []
     if isinstance(value, str):
         value = [part for part in re.split(r"[;\n]+", value) if part.strip()]
     elif not isinstance(value, (list, tuple, set)):
