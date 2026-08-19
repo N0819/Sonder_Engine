@@ -668,6 +668,30 @@ class TestTheRightDoorIsNotTheLightestEntry:
         assert loop["been_there"] is True
         assert loop["circling_here"] is True
 
+    def test_a_translated_label_does_not_collapse_the_ordering(self, monkeypatch):
+        """The verdict vocabulary is pack-authored, and the labels are the
+        half a translator changes. Ordering, the discouraging-marker pruning
+        and the goal clamp all keyed off the English label by exact match, so
+        a translated pack sorted every exit last and pruned nothing -- with no
+        error, because an unknown label is indistinguishable from "trails"."""
+        from agents import character
+
+        real = character._ling
+
+        def translated(name):
+            if name != "_VERDICTS":
+                return real(name)
+            return tuple((key, "verdict_%s" % key, because)
+                         for key, _label, because in real(name))
+
+        monkeypatch.setattr(character, "_ling", translated)
+        frame = character._annotate_known_exits(
+            self.DIGEST, self.SCENE, ["rHere", "rLoop"] * 8)
+
+        assert [e["room"] for e in frame["ahead"]] == ["New", "Loop"]
+        loop = {e["room"]: e for e in frame["ahead"]}["Loop"]
+        assert "times_entered" not in loop
+
     def test_proven_does_not_outrank_untried(self):
         """Choosing between a way that worked and a way not yet tried is what
         curiosity is FOR; ordering must not quietly settle it."""
