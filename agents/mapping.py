@@ -276,11 +276,12 @@ def mapping_quick(ctx, nonce):
     merged = merge_lore(hits, cache)
     return {
         "relevant_lore": merged[:12], "staged_lore": [],
-        "scene_patch": {
-            "rooms": {}, "entities": {},
-            "positions": {}, "stations": {},
-            "remove_entities": [], "remove_rooms": [],
-        },
+        # The same normalizer `mapping_stage` runs, rather than the same shape
+        # written out again: this copy was already a field behind
+        # (`remove_adjacent`), and it survived only because every consumer
+        # spells the read `diff.get("remove_adjacent") or []`. The next field
+        # the normalizer grows would be missing here too, silently.
+        "scene_patch": _normalize_scene_patch({}),
         "cached": True,
         "summary": f"{len(merged[:12])} lore entries recalled from "
                    f"{len(sel)} active book(s) (no mapping call needed).",
