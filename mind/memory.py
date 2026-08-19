@@ -1901,7 +1901,8 @@ def _rank_normalized_importance(memories):
 
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                     current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
-                    here=None, in_sight=None, aspects=None, embedded=None):
+                    here=None, in_sight=None, aspects=None, embedded=None,
+                    record_access=False):
     """Retrieve, fusing the main query with any `aspects` given alongside it.
 
     `aspects` is [(label, text), ...] -- short, separate facets of what the
@@ -2123,7 +2124,20 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         result.append(mem)
     if chronological:
         result.sort(key=lambda m: (m["turn_idx"] is None, m["turn_idx"] if m["turn_idx"] is not None else 10**12, m["id"]))
-    if result:
+    # `access_count` answers one question -- did this memory ever come BACK to
+    # the character -- and the write used to fire for anybody who called this
+    # function. The author's Memories tab runs the same search
+    # (`web/app.py`'s memory search route, which states in its own comment
+    # that the author is not a fictional mind), and every such search
+    # incremented the counter that `tools/remember_lines.py` and
+    # `tools/salience_replay.py` read as their answer. A replay tool measuring
+    # retrieval must not alter the number it is measuring, either.
+    #
+    # So recording is asserted by the caller that IS a mind recalling, rather
+    # than opted out of by everyone who is not -- the same posture
+    # `visible_memory_rows` takes with its required arguments, and for the
+    # same reason: the caller who forgets is the one who gets it wrong.
+    if result and record_access:
         now = time.time()
         ids = [m["id"] for m in result]
         ph = ",".join("?" for _ in ids)
@@ -2139,8 +2153,8 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
 # The selection is a second scoring pass over the same character-scoped,
 # turn-cutoff, frame-filtered rows ordinary recall reads; it crosses no
 # information boundary ordinary recall doesn't already cross, and it is a
-# pure read -- unlike search_memories it must never touch access_count,
-# because it runs mid-pipeline at character-stage time.
+# pure read -- it must never touch access_count even though it runs on the
+# character's behalf, because it runs mid-pipeline at character-stage time.
 
 # How hard semantic distance pushes an unbidden memory away from the beat.
 # Comparable to the token penalty (0.8) rather than larger: the structural
@@ -2973,7 +2987,8 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
                                include_archived=True, current_turn_idx=current_turn_idx,
                                chronological=True, here=here, in_sight=in_sight,
-                               aspects=aspects, embedded=embedded)
+                               aspects=aspects, embedded=embedded,
+                               record_access=True)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     if len(recalled) > recall_limit:
         recalled = sorted(
@@ -2992,7 +3007,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         pondered = search_memories(
             chat_id, char_id, ponder_query, k=4, include_archived=True,
             current_turn_idx=current_turn_idx, chronological=True,
-            here=here, in_sight=in_sight)
+            here=here, in_sight=in_sight, record_access=True)
         # Chronological-neighbour expansion may return k+2. Deliberate recall
         # is a small supplement, not a second full memory payload.
         if len(pondered) > 4:

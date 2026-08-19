@@ -316,3 +316,33 @@ def test_the_named_exemptions_still_exist():
 def test_the_listed_host_readers_still_exist():
     for name in HOST_SCOPE_READERS:
         assert callable(getattr(memory, name)), name
+
+
+# --- what "this memory came back" is allowed to mean -----------------------
+
+def _accesses(temp_db, chat_id):
+    return temp_db.q("SELECT SUM(access_count) c FROM memories WHERE chat_id=?",
+                     (chat_id,), one=True)["c"] or 0
+
+
+def test_a_search_records_no_access_unless_the_caller_is_a_mind(bank, temp_db):
+    """MIND-F14. `access_count` answers one question -- did this memory ever
+    come BACK to the character -- and `tools/remember_lines.py` and
+    `tools/salience_replay.py` read it as their answer.
+
+    The write used to fire for every caller of `search_memories`. The author's
+    Memories tab runs the same search, and its own route comment says the
+    author is not a fictional mind; a replay tool re-ranking a bank ran it too,
+    altering the number it existed to measure. Recording is now asserted by the
+    caller who is recalling, not opted out of by everyone who is not.
+    """
+    before = _accesses(temp_db, bank["chat"])
+    hits = search_memories(bank["chat"], bank["mine"], "lantern", k=20,
+                           current_turn_idx=9, viewer_frame_id=None)
+    assert hits
+    assert _accesses(temp_db, bank["chat"]) == before
+
+    search_memories(bank["chat"], bank["mine"], "lantern", k=20,
+                    current_turn_idx=9, viewer_frame_id=None,
+                    record_access=True)
+    assert _accesses(temp_db, bank["chat"]) > before
