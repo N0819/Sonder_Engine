@@ -39,6 +39,7 @@
   "<path d=\"": "path, selector, markup, or query fragment",
   "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0": "path, selector, markup, or query fragment",
   "?frame_id=${run.frameId}": "path, selector, markup, or query fragment",
+  "?frame_id=${S.currentFrameId}": "path, selector, markup, or query fragment",
   "ABCD1234": "literal example value",
   "Air": "protocol, brand, or literal control name",
   "ArrowLeft": "protocol, brand, or literal control name",
