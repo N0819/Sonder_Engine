@@ -71,7 +71,7 @@ def test_lexicon_signs_are_valid():
 def test_appraise_empty_is_zero():
     out = appraise([], _priority_of)
     assert out == {"dV": 0.0, "dA": 0.0, "emotions": [], "dominant": None,
-                   "drive_impact": None}
+                   "drive_impact": None, "impacts": []}
     assert appraise(None, _priority_of)["dV"] == 0.0
 
 def test_appraise_uncertain_threat_is_fear():
@@ -262,6 +262,37 @@ def test_relief_clears_undercurrent():
     out = resolve_affect(prev, appraisal, _ZERO_BASE, 1, None)
     assert out["undercurrent"] is None
     assert out["surface"]["valence"] > -0.4    # mood moved toward the good news
+
+def test_relief_reaches_a_win_that_was_not_the_loudest_thing_this_beat():
+    """MIND-F5. `_relief_impacts` reads `appraisal["impacts"]` and `appraise`
+    never emitted the key, so only the single highest-weight impact of a beat
+    could ever dissolve a dread. A confirmed win on the very goal the
+    undercurrent serves was invisible whenever anything else outweighed it --
+    and something usually does, because a beat that carries a dread is
+    generally carrying something loud.
+
+    This is a mind concluding from evidence it already has: the appraisal made
+    the impact, weighed it and threw it away before the reader ran.
+    """
+    prev = {"surface": {"label": "anxious", "valence": -0.4, "arousal": 0.3},
+            "undercurrent": {"label": "fear", "valence": -0.5, "arousal": 0.4,
+                             "source": "the guard suspects her",
+                             "serves": "i1"},
+            "baseline": {"valence": 0.0, "arousal": 0.0}}
+    appraisal = appraise([
+        # the loud one: a drive wound, weight 1.0 * 0.9 * 1.0
+        {"serves": "drive", "impact": -0.9, "certainty": 1.0,
+         "agency": "other", "why": "he named her in the hall"},
+        # the quiet one: the confirmed win on the goal the dread is about
+        {"serves": "i1", "impact": 0.6, "certainty": 1.0,
+         "agency": "other", "why": "the guard waved her through"},
+    ], _priority_of)
+    assert appraisal["dominant"]["serves"] == "drive"
+    assert {i["serves"] for i in appraisal["impacts"]} == {"drive", "i1"}
+
+    out = resolve_affect(prev, appraisal, _ZERO_BASE, 1, None)
+    assert out["undercurrent"] is None
+
 
 def test_unrelated_good_news_only_decays_undercurrent():
     # prior residue deliberately kept on legacy v/a keys: read tolerantly,
