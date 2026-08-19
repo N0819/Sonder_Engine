@@ -3256,9 +3256,6 @@ def _strip_subject(sentence, name):
 # Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
 # Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
 # not speech, and a character who declared silence is entitled to all of them.
-# NOTE the distinct name: `_SPEECH_VERBS` further down is a different thing
-# (a literal tuple used for dialogue-cue detection). Two symbols of that name
-# in one module is exactly the duplicate `make structure` fails on.
 def _inflect(stem):
     """A stem as a regex matching its inflections.
 
@@ -3459,6 +3456,8 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
             # Measured across the live corpus: 14 flags, 13 of them cleared by
             # this test -- a 93% false-positive rate on a guard whose every
             # firing costs a full second Director call, the most expensive
+            # correction this seam can order.
+            #
             # ONE DIRECTION ONLY: the flagged span must sit INSIDE something
             # that was declared. The reverse -- a declared line sitting inside
             # the flagged span -- is prose that EXPANDED on what somebody said,
