@@ -1521,11 +1521,19 @@ AGENT_CONTEXT_KEYS = (
     "drive",           # their own, singular
     "memories",        # their own autobiographical rows
     "beliefs",         # what they think is true, including wrongly
+                       #   (state["interior"]["beliefs"] -- the only place
+                       #   commit_memory writes one)
     "plans",           # authored plans they own
     "carried_reports", # what reached them, already degraded
     "last_known",      # where they were and when, by their own reckoning
     "elapsed_seconds", # how long they have been on their own
 )
+# NOT here, and deliberately open: `state["mind_models"]` -- this mind's own
+# theory of other minds, built entirely from what it perceived, and already
+# handed to it on the ON-SCREEN character step (agents/character.py). It would
+# arguably belong. Adding a key to the one fail-closed allowlist in the engine
+# is a widening, not a repair, so it stays an owner's decision rather than a
+# patch's.
 
 
 def agent_context(cid, entry, *, frame_id=None, clock=None):
@@ -1579,7 +1587,14 @@ def agent_context(cid, entry, *, frame_id=None, clock=None):
         "psychology": psychology.get("traits") or {},
         "drive": psychology.get("drive") or {},
         "memories": memories,
-        "beliefs": state.get("beliefs") or {},
+        # `commit_memory` writes the belief ledger to state["interior"], and
+        # only there. Reading a top-level `beliefs` handed this rung `{}` on
+        # every tick it has ever run: measured live, 0 of 100 `chat_chars`
+        # rows carry the top-level key and 31 carry the interior one. An
+        # allowlist entry that reads the wrong path is not a smaller payload,
+        # it is a field that documents a capability the mind never had.
+        "beliefs": (state.get("interior") or {}).get("beliefs")
+        or state.get("beliefs") or [],
         "plans": plans,
         # Already degraded by `degradation` at the moment each was heard, so
         # this hands over what they believe rather than what is true.

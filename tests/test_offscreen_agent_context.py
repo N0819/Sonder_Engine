@@ -88,12 +88,20 @@ class TestItReceivesWhatItLegitimatelyHas:
         assert ctx["carried_reports"] == [heard]
 
     def test_it_gets_its_own_drive_and_beliefs(self, temp_db):
+        """Beliefs live where `commit_memory` writes them --
+        `state["interior"]["beliefs"]`, a list of belief records. This test
+        used to assert a top-level `state["beliefs"]` no writer has ever
+        produced, so the allowlist field documented as "what they think is
+        true, including wrongly" was `{}` on every paid tick. Measured live:
+        0 of 100 `chat_chars` rows carry the top-level key, 31 carry the
+        interior one."""
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
                          "VALUES(?,?,?)", ("A", "", time.time()))
+        held = [{"belief": "the gate still holds", "confidence": 0.8}]
         ctx = offscreen.agent_context(cid, _subject(state={
-            "beliefs": {"the gate": "still holds"}}))
+            "interior": {"beliefs": held}}))
         assert ctx["drive"]["essence"] == "hold the gate"
-        assert ctx["beliefs"] == {"the gate": "still holds"}
+        assert ctx["beliefs"] == held
 
     def test_a_mind_with_nothing_gets_an_empty_context_not_an_error(self,
                                                                    temp_db):
