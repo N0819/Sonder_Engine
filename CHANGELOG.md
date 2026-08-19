@@ -169,6 +169,25 @@ what follows is the part you would have noticed.
   runs green on both stacks, at 8,028, and two structural guards confine
   major-specific reads to a single module so the class stays closed.
 
+- **An extension can no longer be handed a story that is in two eras at
+  once.** Reported by the Directive team, who ran our own declared CI matrix
+  against this branch and read the result more carefully than we had. Their
+  finding: a projection built from the public extension API could carry one
+  era's scene and identity beside another era's mission, clock and crew state
+  — every field plausible, the whole thing impossible, which is worse than a
+  crash. `api.at_frame(chat_id)` now picks the era once and hands back a view
+  that cannot drift, for writes as well as reads. Two more of the same class
+  fell out of building it: a view bound to the past was handing out
+  future-era memories, and a relationships read went to the present's row
+  under a held frame. Alongside it, an extension that fails to load is now
+  inert *everywhere* — it was still serving its browser half, which went on
+  calling routes that did not exist — and installing an extension from a
+  folder audits the files that will actually be installed rather than the
+  whole development checkout, which is why nobody could install their own.
+  The full answer, including the two places their recommended patches would
+  have shipped a subtler version of the same bug, is
+  `docs/design/DIRECTIVE_REVIEW_RESPONSE.md`.
+
 - **Installing now goes by version, not by luck.** Reported from a Windows
   install by MentallyQuill: the launcher asked for the NEWEST Python and got
   3.14, for which the pinned dependency set has no built wheel — so pip
@@ -210,8 +229,14 @@ files — Director, spatial, commit — are now 37 modules behind facades, the
 81 root modules live in eight subsystem packages, and 2,714 import
 statements moved while no behaviour did. Because a green suite never runs a
 model, the repaired engine was also played against the one it was repaired
-from — ten live turns each, zero rollbacks, identical plans, and a stance
-ledger that went from 0 rows to 27.
+from: ten scripted turns each, same models on both sides, run one at a time so
+the clock meant something. Both finished every turn with zero rollbacks and
+the same plan shape, and 9.6 was **19.5% faster** on byte-identical input
+(267.9s against 332.6s). The firewall held on both — a secret told to one
+character in front of another reached its addressee and nobody else — and 9.6
+was stricter where it counts: the listener's memory of it says "the lean
+courier" where 9.5's says "Wren", because nobody had introduced the player and
+9.5 wrote the name down anyway.
 
 ## alpha 9.5 — Everyone remembers what they said, and nothing speaks that is not somebody
 
