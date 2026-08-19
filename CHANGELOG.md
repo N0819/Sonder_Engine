@@ -2,15 +2,17 @@
 
 ## alpha 9.6 — Nothing works only on paper, and nothing is lost in silence
 
-A housekeeping release, and it should read like one: 467 commits across 716
+A housekeeping release, and it should read like one: 489 commits across 724
 files, and no major standout feature among them. What happened instead is
 that the engine was read end to end — every line of roughly 112,000 across
 twelve package audits, over three hundred findings triaged, and about two
 hundred of them repaired, one commit apiece, every leak fix with a test that
 failed on the unfixed tree. The regression suite grew from the 6,329 tests
-the last release claimed to a measured 8,028, green on two dependency
-stacks. Most of what changed is invisible and is meant to stay that way;
-what follows is the part you would have noticed.
+the last release claimed to a measured 8,140, green on two dependency
+resolutions rather than one — which is a change to what "green" means here,
+and the reason is a bullet below. Most of what changed
+is invisible and is meant to stay that way; what follows is the part you would
+have noticed.
 
 - **A reroll now happens in the world its beat happened in.** Rerolling the
   narration quietly restored the pre-turn world and re-rendered against it:
