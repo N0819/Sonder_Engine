@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_JS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
 LOREBOOKS_JS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
 EDITORS_JS = (ROOT / "static/js/editors.js").read_text(encoding="utf-8")
+AMBIENCE_JS = (ROOT / "static/js/ambience.js").read_text(encoding="utf-8")
 UTILS_JS = (ROOT / "static/js/utils.js").read_text(encoding="utf-8")
 
 
@@ -388,3 +389,64 @@ class TestABrokenExtensionIsNamed:
         finally:
             monkeypatch.delenv(extension_runtime.ROOT_ENV, raising=False)
             extension_runtime.reload()
+
+
+class TestTheBackdropRoutesAnswerWithOneShape:
+    """FRONTEND-28. The browser CACHES the POST's payload under the turn id,
+    so a POST that answers with less than the GET plants a short record that a
+    later read treats as complete."""
+
+    def test_both_routes_return_the_same_keys(self, temp_db, monkeypatch):
+        import time
+
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        tid = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (cid, 0, "look", time.time()))
+
+        req = {"signature": "abc123", "room": "hall_1", "room_name": "The Hall",
+               "cached": True, "weather": {"kind": "rain"}}
+        monkeypatch.setattr(app, "build_backdrop_request", lambda *a, **k: req)
+        monkeypatch.setattr(app, "image_model", lambda: {"provider": "x"})
+        monkeypatch.setattr(app, "request_backdrop", lambda *a, **k: {
+            "signature": "abc123", "status": "ready", "room": "The Hall"})
+
+        got = app.turn_backdrop(tid)
+        posted = app.turn_backdrop_generate(tid, {})
+
+        assert set(posted) == set(got)
+        for field in ("room_id", "weather"):
+            assert posted[field] == got[field], field
+
+    def test_the_no_room_answer_is_the_same_shape_too(self, temp_db, monkeypatch):
+        """An opening turn before mapping has placed anyone. Not an error --
+        and not a reason for a payload with different keys either."""
+        import time
+
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        tid = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (cid, 0, "look", time.time()))
+        monkeypatch.setattr(app, "build_backdrop_request", lambda *a, **k: None)
+
+        empty = app.turn_backdrop(tid)
+        assert empty["weather"] == {}
+        assert empty["room_id"] is None
+        assert empty["status"] == "absent"
+
+
+class TestTheAmbiencePickerCanListTheLibrary:
+    """FRONTEND-27. `GET /api/ambience/library` says in its own docstring that
+    it exists so the picker can list the library unfiltered, and the picker
+    had a search box and no listing path -- so an unhelpfully-named library
+    was unbrowsable, which is exactly the library search cannot rank."""
+
+    def test_the_picker_calls_it(self):
+        assert '"GET", "/api/ambience/library"' in AMBIENCE_JS
+        assert "Browse library" in AMBIENCE_JS
