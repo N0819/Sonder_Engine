@@ -102,3 +102,24 @@ def test_pre_move_module_names_are_reported_with_where_they_went():
 
     assert engine_import_violations(
         "from world.spatial import room_of\nimport json\n", names, by_tail) == []
+
+
+def test_facade_siblings_are_read_off_the_facade_not_the_filenames():
+    """A filename prefix is a guess about membership, and here it is wrong.
+
+    `world/spatial_frames.py` matches `spatial_*` and is not behind
+    `world/spatial.py` — the facade has zero references to it — so a family
+    built by prefix would flag correct imports of it as facade violations.
+    """
+    from project_check import ROOT, facade_siblings
+
+    spatial = facade_siblings(ROOT / "world", "spatial")
+    assert "spatial_orientation" in spatial
+    assert "spatial_frames" not in spatial
+
+    # Relative spelling: agents/director.py imports `from .director_lingua`.
+    director = facade_siblings(ROOT / "agents", "director")
+    assert "director_lingua" in director and "director_scopes" in director
+
+    commit = facade_siblings(ROOT / "persist", "commit")
+    assert "commit_memory_write" in commit
