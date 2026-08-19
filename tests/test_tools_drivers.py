@@ -59,3 +59,24 @@ def test_code_map_generator_refuses_a_stale_purpose_key(monkeypatch):
     with pytest.raises(gcm.StalePurposeKeys) as exc:
         gcm.generate()
     assert "world.spatial" in str(exc.value)
+
+
+def test_every_benchable_step_resolves_to_a_prompt():
+    """A `--step` choice that names no prompt is a KeyError after a paid call.
+
+    The engine does not key its prompts, its schemas and its provider roles the
+    same way: `director_resolve` is a real `SCHEMA_MAP` step with no prompt of
+    that name, because the monolith is gone and the prose author's prompt is
+    `director_resolve_lean`. `contract_bench` carries that mapping;
+    `creation_probe` offered the same step without it and raised.
+    """
+    import contract_bench
+    import creation_probe
+    from llm import prompts
+
+    for tool in (contract_bench, creation_probe):
+        unresolved = sorted(
+            step for step in tool.PAYLOADS
+            if contract_bench.PROMPT_KEY.get(step, step)
+            not in prompts.DEFAULT_PROMPTS)
+        assert unresolved == [], (tool.__name__, unresolved)
