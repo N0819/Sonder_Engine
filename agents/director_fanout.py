@@ -193,6 +193,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "attire": scene_compact_attire(sc),
             "overlays": sc.get("overlays") or {},
             "active_awareness": extras.get("active_awareness"),
+            "active_restraints": extras.get("active_restraints"),
             "simulation_clock": extras.get("clock"),
             "rooms": rooms_index,
         })

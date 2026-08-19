@@ -1762,6 +1762,21 @@
       "pattern": "(?:\\b(?:wakes?|waking|woke|woken|awakens?|awakened|awakening|rouses?|rousing|roused|shakes?|shaking|shook|shaken|nudges?|nudging|nudged|jostles?|jostling|jostled|prods?|prodding|prodded|pokes?|poking|poked|shoves?|shoving|shoved|slaps?|slapping|slapped|splash\\w*|douses?|dousing|doused|hauls?|hauling|hauled|drags?|dragging|dragged|lifts?|lifting|lifted|pulls?|pulling|pulled)\\b|目を覚ます|起きる|起こす|揺さぶる|呼び起こす)",
       "flags": 32
     },
+    "_RELEASE_CUE": {
+      "$type": "regex",
+      "pattern": "(?:\\b(?:unt(?:ies|ied|ie|ying)|unbind(?:s|ing)?|unbound|uncuff(?:s|ed|ing)?|unshackl(?:es|ed|e|ing)|unchain(?:s|ed|ing)?|unstrap(?:s|ped|ping)?|unbuckl(?:es|ed|e|ing)|unbolt(?:s|ed|ing)?|(?:lets?|letting)\\s+go\\s+of|releas(?:es|ed|ing)\\s+(?=(?:\\w+\\s+){0,2}?from\\b)|freed\\s+from|(?:cuts?|cutting|breaks?|broke|breaking|works?|worked|working|wriggles?|wriggled|slips?|slipped|pulls?|pulled|pries?|pried|tears?|tore)\\s+(?=(?:\\w+\\s+){0,3}?(?:free|loose)\\b)|sets?\\s+(?=(?:\\w+\\s+){0,2}?free\\b)|setting\\s+(?=(?:\\w+\\s+){0,2}?free\\b)|unlock(?:s|ed|ing)?\\s+(?:the\\s+|her\\s+|his\\s+|their\\s+)?(?:cuffs?|handcuffs?|shackles?|restraints?|manacles?|bindings?))\\b|(?:縄|ロープ|紐|拘束|戒め|枷|手錠)を(?:ほど|解|外|切)\\w*|ほどい(?:た|て)|振りほど\\w*|解き放(?:つ|っ)\\w*|解放(?:する|した|され)\\w*|自由に(?:なっ|し)\\w*)",
+      "flags": 32
+    },
+    "_RELEASE_ATTEMPT_MARKER": {
+      "$type": "regex",
+      "pattern": "(?:\\b(?:tries|tried|trying|attempts?|attempted|attempting|struggles?|struggled|struggling|strains?|strained|straining|fights?|fought|fighting|fails?|failed|failing|begins?|began|beginning|starts?|started|starting|unable)\\s+(?:\\w+\\s+){0,1}?to\\b|\\b(?:cannot|can't|couldn't|could\\s+not|won't|wouldn't|will\\s+not|would\\s+not)\\b|うと(?:す|し)|(?:でき|出来)(?:ず|な)|せず)",
+      "flags": 32
+    },
+    "_RELEASE_OBJECT_BOUNDARY": {
+      "$type": "regex",
+      "pattern": "\\b(?:free|loose)\\b",
+      "flags": 32
+    },
     "_STAY_UNDER_CUE": {
       "$type": "regex",
       "pattern": "(?:\\b(?:asleep|sleeps?|sleeping|slumber\\w*|dozes?|dozing|dozed|nods?\\s+off|nodded\\s+off|drifts?\\s+off|drifted\\s+off|drifting\\s+off|drops?\\s+off|dropped\\s+off|pass(?:es|ed)?\\s+into\\s+sleep|go(?:es)?\\s+to\\s+sleep|went\\s+to\\s+sleep|going\\s+to\\s+sleep|knocked?\\s+out|out\\s+cold|unconscious|black(?:s|ed)?\\s+out|pass(?:es|ed)?\\s+out|faint(?:s|ed|ing)|(?:will|would|might|may|can|could|should|must|to|nearly|almost|about\\s+to|going\\s+to)\\s+faint|los(?:e|es|t|ing)\\s+consciousness|sedated|drugged|put\\s+under|dream\\w*|stays?\\s+(?:under|out|asleep)|stayed\\s+(?:under|out|asleep)|keeps?\\s+sleeping|kept\\s+sleeping|remains?\\s+(?:under|asleep|unconscious)|remained\\s+(?:under|asleep|unconscious)|snor\\w+|do(?:es)?\\s+not\\s+wake|don'?t\\s+wake|doesn'?t\\s+wake|without\\s+waking)\\b|眠ったまま|眠り続ける|意識が戻らない|気絶したまま)",

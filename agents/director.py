@@ -40,14 +40,13 @@ from llm.prompts import (
     specialist_prompt,
 )
 from story.scene import (
-    IMMOBILIZING_RESTRAINTS,
     NON_AWAKE_GATED,
-    apply_restraint_diff,
+    apply_awareness_diff,
+    apply_restraint_records_diff,
     awareness_conditions,
-    restraint_map,
-    restraint_of,
+    awareness_map,
+    restraint_conditions,
     _ability_mod,
-    _normalize_awareness_level,
     appearance_of,
     cast_scene_context,
     director_context,
@@ -193,6 +192,13 @@ from .director_floors import (
     _already_ended,
     _ending_condition,
     _awareness_exits,
+    _restraint_holder_in,
+    _restraint_holder_pool,
+    _hold_is_live,
+    _restraint_blocked_moves,
+    _restraint_view,
+    _restraint_exits,
+    _release_attempts,
     _untracked_unconsciousness_subjects,
     _destruction_name_pattern,
     _narrated_destruction_subjects,
@@ -690,6 +696,10 @@ def director_interpret(ctx, nonce):
             "clock": clock,
             "active_awareness": _awareness_view(
                 chat["id"], clock, out, {}),
+            "active_restraints": _restraint_view(
+                restraint_conditions(chat["id"]), sc,
+                awareness_map(chat["id"]), clock, None,
+                _restraint_holder_pool(sc, [p_name])),
             "body_parts": ({name: extra_parts_lines(parts)
                             for name, parts in _iparts.items()}
                            if _iparts else None),
@@ -1376,32 +1386,54 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         if _exit_warnings:
             out["awareness_warnings"] = list(_exit_warnings)
 
+    # The exit side of restraint (see the RELEASE block in director_floors).
+    # Runs BEFORE the movement floor below, so a body released this beat --
+    # by its holder leaving, its holder going down, or a release the prose
+    # asserts -- is free to move the same beat. The merge respects an ending
+    # the Director wrote itself and overwrites a re-assertion, exactly as the
+    # awareness exits above do.
+    _live_restraints = restraint_conditions(ctx.chat["id"])
+    _hold_amap = apply_awareness_diff(awareness_map(ctx.chat["id"]), sd)
+    _holder_pool = _restraint_holder_pool(sc, tracked_names)
+    if _live_restraints:
+        _rexits, _rexit_warnings = _restraint_exits(
+            _live_restraints, resolved_event, sc, _hold_amap, _holder_pool)
+        if _rexits:
+            sd.setdefault("conditions", {})
+            for _cond_id, _cond in _rexits.items():
+                _existing = sd["conditions"].get(_cond_id)
+                if _existing is not None and _already_ended(_existing):
+                    continue
+                sd["conditions"][_cond_id] = _cond
+        for _w in _rexit_warnings:
+            ctx.add_warning(_w)
+        # Surfaced on the step itself for the same reason the awareness
+        # warnings are: ctx.warnings is accumulated pipeline-wide and never
+        # shown, and the step inspector is where a refused or engine-made
+        # release can be seen.
+        if _rexit_warnings:
+            out["restraint_warnings"] = list(_rexit_warnings)
+
     # Restraint, enforced rather than merely detected. The omission scan below
     # has always asked the Director to RECORD a binding; nothing ever read the
     # result, so a character bound hand and foot could still walk out. A
     # restraint that is in force -- including one applied this same beat --
-    # blocks that body from relocating itself. Everything subtler (what they
-    # can still reach, whether they can work free) stays the Director's call.
-    _rmap = apply_restraint_diff(restraint_map(ctx.chat["id"]), sd)
-    if _rmap and isinstance(sd.get("positions"), dict):
-        _prior = (sc.get("positions") or {})
-        for _who in list(sd["positions"]):
-            _record = restraint_of(_rmap, _who)
-            if not _record or _record["level"] not in IMMOBILIZING_RESTRAINTS:
-                continue
-            _was = _prior.get(_who)
-            if _was is None or sd["positions"][_who] == _was:
-                continue
-            # Being CARRIED somewhere while bound is legitimate -- that is the
-            # restrainer moving them, not them walking off.
-            if (sc.get("contained") or {}).get(_who):
-                continue
+    # blocks that body from relocating itself, judged per RECORD: a standing
+    # binding always, a live hold only while its named holder is co-present
+    # and conscious (`_restraint_blocked_moves`). Everything subtler (what
+    # they can still reach, whether they can work free) stays the Director's
+    # call.
+    _restraints = apply_restraint_records_diff(_live_restraints, sd)
+    if _restraints:
+        for _who, _record in _restraint_blocked_moves(
+                sd, sc, _restraints, _hold_amap, _holder_pool):
             sd["positions"].pop(_who, None)
             ctx.add_warning(
                 f"Blocked a move by {_who}, who is {_record['level']}"
                 + (f" by {_record['by']}" if _record["by"] else "")
-                + ": a restrained body cannot relocate itself. Release the "
-                "restraint first, or have someone carry them."
+                + ": a restrained body cannot relocate itself. End the "
+                f"restraint (condition_id {_record['condition_id']!r}, "
+                "active:0) first, or have someone carry them."
             )
 
     signals = _strip_blank_diff_placeholders(sd)
@@ -2441,6 +2473,12 @@ def director_resolve(ctx, nonce, _corrections=None):
         # never shown the id, and across 1483 live resolves it never once did.
         "active_awareness": _awareness_view(
             chat["id"], clock, interp, char_actions),
+        # Who is currently restrained, under the same contract (see the
+        # RELEASE block): the condition_id an ending must re-emit, who holds
+        # them, and whether that hold is still physically live.
+        "active_restraints": _restraint_view(
+            restraint_conditions(chat["id"]), sc, awareness_map(chat["id"]),
+            clock, None, _restraint_holder_pool(sc, [p_name])),
         "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "fiction_model": fm,
         "fiction_frame": _dict(flow.get("fiction_frame")),
@@ -2897,6 +2935,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         "nonce": nonce,
         "clock": clock,
         "active_awareness": payload.get("active_awareness"),
+        "active_restraints": payload.get("active_restraints"),
         "body_parts": (payload.get("scene") or {}).get("body_parts"),
         "contacts": resolve_sc.get("contacts") or [],
         "contact_endings": character_contact_endings,

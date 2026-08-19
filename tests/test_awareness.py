@@ -26,7 +26,7 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.scene import (
     NON_AWAKE_GATED,
     apply_awareness_diff,
-    apply_restraint_diff,
+    apply_restraint_records_diff,
     awareness_map,
     awareness_of,
     restraint_of,
@@ -76,7 +76,11 @@ def test_condition_readers_tolerate_non_mapping_state():
         "subject_id": "Y", "kind": "restraint", "state": ["held"]}]}}
 
     assert awareness_of(apply_awareness_diff({}, awareness), "X") == "awake"
-    assert restraint_of(apply_restraint_diff({}, restraint), "Y")["level"] == "bound"
+    # A restraint whose state carries no readable field claims LEAST: the
+    # live corpus holds a row whose whole state is the string "active"
+    # (chat 44), and `held` with no holder immobilises nobody.
+    assert restraint_of(apply_restraint_records_diff([], restraint),
+                        "Y")["level"] == "held"
 
 
 # --- integration harness ----------------------------------------------------
