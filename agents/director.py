@@ -47,7 +47,6 @@ from story.scene import (
     awareness_map,
     restraint_conditions,
     _ability_mod,
-    _normalize_awareness_level,
     appearance_of,
     cast_scene_context,
     director_context,

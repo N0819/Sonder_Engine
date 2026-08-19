@@ -1022,6 +1022,69 @@ def _normalize_awareness_level(raw):
     return level
 
 
+#: Kinds where the model filed the LEVEL in the kind slot -- the same
+#: spelling-drift class as `physical_restraint` vs `restraint`. Measured
+#: live: 9 active rows carry a kind of `unconscious` (6), `asleep` (1),
+#: `sleep` (1) or `consciousness` (1) with an EMPTY state, and chats 24/25
+#: hold `unconscious` rows on subjects with no canonical awareness row at
+#: all. Reading `unconscious` off the kind is not an inference -- the word
+#: names exactly one level -- but a word that merely ORBITS the topic stays
+#: unread: `consciousness` names the faculty, not a state of it (the live
+#: row records a body coming to), and `preparing_for_sleep` is a body still
+#: awake arranging a futon. Hence the matching is WHOLE-KIND (separators
+#: normalised), never word-splitting, which would read
+#: `preparing_for_sleep` as `sleep` and gate an awake mind.
+_AWARENESS_KIND_LEVELS = {
+    "awareness": "",            # canonical: the level lives in state
+    "unconscious": "unconscious",
+    "knocked out": "unconscious",
+    "passed out": "unconscious",
+    "out cold": "unconscious",
+    "asleep": "asleep",
+    "sleep": "asleep",
+    "sleeping": "asleep",
+    "sedated": "sedated",
+    "sedation": "sedated",
+    "dazed": "dazed",
+    "stunned": "dazed",
+}
+
+
+def awareness_kind_level(kind):
+    """The awareness level a condition KIND itself asserts.
+
+    None: not an awareness-family kind at all. "": the canonical
+    `awareness` kind, whose level lives in state. Otherwise the level word
+    the model filed the condition under."""
+    token = " ".join(
+        w for w in _re.split(r"[^a-z0-9]+", str(kind or "").casefold()) if w)
+    return _AWARENESS_KIND_LEVELS.get(token)
+
+
+def _awareness_level_from(kind_level, *raw_levels):
+    """One level from a family row: an explicit state/payload `level` wins
+    (it is the more deliberate assertion), and only silence falls back to
+    the level the kind word asserts."""
+    for raw in raw_levels:
+        if str(raw or "").strip():
+            return _normalize_awareness_level(raw)
+    return kind_level or "awake"
+
+
+def awareness_cond_level(cond):
+    """The level a diff conditions entry asserts, or None when the entry is
+    not awareness-family. The one reader of a not-yet-committed condition's
+    level, so the kind-word fallback cannot fork between the floors."""
+    if not isinstance(cond, dict):
+        return None
+    kind_level = awareness_kind_level(cond.get("kind"))
+    if kind_level is None:
+        return None
+    state = _condition_state(cond)
+    return _awareness_level_from(kind_level, state.get("level"),
+                                 cond.get("level"))
+
+
 def awareness_conditions(chat_id):
     """EVERY active non-awake `awareness` condition row, in id order.
 
@@ -1036,10 +1099,13 @@ def awareness_conditions(chat_id):
     row instead of closing the first)."""
     rows = []
     for row in q(
-        "SELECT condition_id, subject_id, payload, started_at FROM world_conditions "
-        f"WHERE chat_id=? AND kind='awareness' AND active=1 {_CONDITION_ORDER}",
+        "SELECT condition_id, subject_id, kind, payload, started_at "
+        f"FROM world_conditions WHERE chat_id=? AND active=1 {_CONDITION_ORDER}",
         (chat_id,),
     ):
+        kind_level = awareness_kind_level(row["kind"])
+        if kind_level is None:
+            continue
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
@@ -1050,7 +1116,8 @@ def awareness_conditions(chat_id):
         if not subject:
             continue
         state = _condition_state(payload)
-        level = _normalize_awareness_level(state.get("level") or payload.get("level"))
+        level = _awareness_level_from(kind_level, state.get("level"),
+                                      payload.get("level"))
         if level == "awake":
             continue
         try:
@@ -1130,14 +1197,14 @@ def apply_awareness_diff(amap, diff):
         if not isinstance(cond_list, list):
             cond_list = [cond_list]
         for cond in cond_list:
-            if not isinstance(cond, dict) or cond.get("kind") != "awareness":
+            level = awareness_cond_level(cond)
+            if level is None:
                 continue
             subj = str(cond.get("subject_id") or "").strip()
             if not subj:
                 continue
             key = subj.casefold()
             state = _condition_state(cond)
-            level = _normalize_awareness_level(state.get("level"))
             if not int(cond.get("active", 1)) or level == "awake":
                 out.pop(key, None)  # woke / condition ended this beat
                 continue
