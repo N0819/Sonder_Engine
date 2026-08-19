@@ -224,11 +224,11 @@ class TestTheMonitoringWalkHasAWayIn:
         import json as _json
 
         from core.db import wset
-        from persist.commit_scene_state import sync_anchored_books
+        from persist import commit
 
         chat_id, port, ferry, van, crew_log = _make_books(temp_db)
         scene = _nested_scene()
-        sync_anchored_books(chat_id, scene)
+        commit.sync_anchored_books(chat_id, scene)
         wset(chat_id, "scene", scene)
 
         assert self._tool().main([str(chat_id), "--json"]) == 0
@@ -244,10 +244,10 @@ class TestTheMonitoringWalkHasAWayIn:
         assert [n["name"] for n in ferry_node["present"]] == ["The Van"]
 
     def test_one_subtree_can_be_asked_for_by_id(self, temp_db, capsys):
-        from persist.commit_scene_state import sync_anchored_books
+        from persist import commit
 
         chat_id, port, ferry, van, crew_log = _make_books(temp_db)
-        sync_anchored_books(chat_id, _nested_scene())
+        commit.sync_anchored_books(chat_id, _nested_scene())
 
         assert self._tool().main([str(chat_id), "--book", str(ferry)]) == 0
         out = capsys.readouterr().out
