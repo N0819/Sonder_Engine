@@ -183,6 +183,9 @@ from .director_floors import (
     _sentence_break_positions,
     _awareness_support_in_beat,
     _unsupported_player_awareness,
+    _sentence_cooccurrent_names,
+    _norm_subject,
+    _unsupported_character_awareness,
     _NATURAL_SLEEP_SECONDS,
     _clause_attributed_subjects,
     _declared_act_texts,
@@ -1336,9 +1339,11 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         ctx.tell_director(notice)
 
     # ---- Tier 0: deterministic floor -------------------------------------
-    # Runs BEFORE the omission scans below so they read the corrected diff. The
-    # two cannot fight: this only drops a gated level that no cue supports, and
-    # the unconsciousness scan only fires where a cue exists.
+    # Runs BEFORE the omission scans below so they read the corrected diff.
+    # The floors cannot fight the scans: they only drop a gated level no cue
+    # supports for its subject, and the unconsciousness scan only fires where
+    # a cue is clause-attributed to the subject -- which implies sentence
+    # co-occurrence, so any subject the scan could flag is one the floors keep.
     _pers = persona_of(ctx.chat)
     player_name = _pers.get("name") or persona_name(_pers)
     for key, level in _unsupported_player_awareness(
@@ -1352,12 +1357,33 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             "move."
         )
 
-    # The exit side of the same floor (see the WAKING block above). The onset
-    # guard above only ever refused to START a gate; nothing could END one, and
-    # across the author's whole corpus the Director never once did. Runs AFTER
-    # the onset drop so a condition dropped this beat is not also "ended", and
-    # writes only where waking is not a judgement call.
+    # The same direction for the cast (see the block above
+    # `_sentence_cooccurrent_names` in director_floors). The player floor
+    # cannot see a bystander gated by a beat that genuinely contains a
+    # collapse; this one asks the question PER SUBJECT: does any sentence in
+    # the beat tie THIS mind to going under? Live conditions are fetched
+    # first so a re-assertion of an existing gate is never mistaken for an
+    # onset, and the exits below reuse the same rows.
     _live_awareness = awareness_conditions(ctx.chat["id"])
+    for key, name, level in _unsupported_character_awareness(
+            sd.get("conditions") or {}, tracked_names, player_name,
+            ctx.input, resolved_event, dialogue_log,
+            {r["condition_id"] for r in _live_awareness}):
+        (sd.get("conditions") or {}).pop(key, None)
+        ctx.add_warning(
+            f"Dropped awareness '{level}' on {name}: nothing in the beat -- "
+            "the player's input, the resolved prose, or a spoken line -- "
+            "puts them under, and a gated level on a cast mind is a switch, "
+            "not a description: they run no character step until the world "
+            "ends the condition. If they truly went under, restate it next "
+            "beat with the loss of consciousness in the prose."
+        )
+
+    # The exit side of the same floor (see the WAKING block above). The onset
+    # guards above only ever refused to START a gate; nothing could END one,
+    # and across the author's whole corpus the Director never once did. Runs
+    # AFTER the onset drops so a condition dropped this beat is not also
+    # "ended", and writes only where waking is not a judgement call.
     if _live_awareness:
         _exits, _exit_warnings = _awareness_exits(
             ctx.chat["id"], _live_awareness, player_name, ctx.input,
