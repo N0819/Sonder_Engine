@@ -15,20 +15,25 @@ import pytest
 
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from tests.helpers import forbid_model_calls
 
 
 @pytest.fixture(autouse=True)
 def _no_llm(monkeypatch):
     """Perception has no model seam of its own to stub any more — the flag
-    and the fan-out are both gone. The guard now sits one level down, on
-    the shared helper every agent role calls, so it still fires if any
-    perception code path ever reaches for a model again."""
-    import agents.common as common
+    and the fan-out are both gone — so the guard sits on the shared seams
+    every agent role calls, and must be applied WHEREVER THEY ARE BOUND.
 
-    def _boom(*args, **kwargs):  # pragma: no cover - the assertion
-        raise AssertionError("perception attempted a model call")
-
-    monkeypatch.setattr(common, "_agent_json", _boom)
+    It was `monkeypatch.setattr(agents.common, "_agent_json", boom)`, which
+    is inert: `common` never calls that function, and every role module binds
+    it into its own globals at import. The stub could not fire for any code
+    path, and the modules under test import no seam at all, so there was no
+    positive control either — an autouse fixture guarding nothing, in the
+    tests for the stages whose whole claim is that they make no model call.
+    """
+    patched = forbid_model_calls(
+        monkeypatch, reason="perception attempted a model call")
+    assert ("agents.common", "_agent_json") in patched
 
 
 def _make_ctx(temp_db, *, known=None):
@@ -363,3 +368,19 @@ def test_commit_mints_nothing_for_a_composed_non_event(temp_db):
     episodic = [m for m in prepared["memory_batch"]["prepared"]
                 if m["kind"] == "episodic"]
     assert episodic == []
+
+
+def test_the_no_model_guard_can_actually_fire(monkeypatch):
+    """The positive control the old fixture could not have.
+
+    A guard that cannot fire is worse than no guard: the suite reports that
+    perception made no model call, when what it verified is that a stub
+    nothing reads was installed. This proves the net reaches a module that
+    really does call the seam, and that calling it raises.
+    """
+    import agents.mapping as mapping
+
+    patched = forbid_model_calls(monkeypatch)
+    assert ("agents.mapping", "_agent_json") in patched
+    with pytest.raises(AssertionError):
+        mapping._agent_json("mapping", "mapping_stage", "", {})
