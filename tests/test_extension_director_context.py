@@ -298,6 +298,33 @@ class TestDirectorHooks:
         assert "hooked" not in out
 
 
+    def test_an_extension_that_failed_to_register_contributes_nothing(
+            self, temp_db, ext_root):
+        """A campaign rule from a dead extension is the worst version of this:
+        it shapes what the Director believes HAPPENED, which propagates into
+        state, perception and memory. The block is stored per story, so it
+        outlives the session in which the extension still loaded."""
+        _write_extension(ext_root, "campaign", {
+            "id": "campaign", "version": "1.0.0", "ext_api": 1,
+            "capabilities": {"python": "extension.py", "chat_state": True},
+        }, {"extension.py": "def register(api):\n    pass\n"})
+        _enable("campaign")
+        chat_id = _chat(temp_db)
+        extension_runtime._apis["campaign"].director_context(chat_id).set(
+            resolve="Standing.")
+
+        (ext_root / "campaign" / "extension.py").write_text(
+            "def register(api):\n    raise RuntimeError('boom')\n",
+            encoding="utf-8")
+        extension_runtime.reload()
+        extension_runtime.activate(refresh=True)
+        assert "boom" in extension_runtime.disabled_reasons()["campaign"]
+
+        out = _dispatch(chat_id)
+
+        assert "extension_context" not in out
+
+
 # ------------------------------------------------------------------ wiring
 
 
