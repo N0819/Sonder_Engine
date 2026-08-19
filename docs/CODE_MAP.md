@@ -95,7 +95,7 @@
 | `world/living_world.py` | 608 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 310 |  | `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2187 |  | `core.logging_utils`, `llm.prompts` |
-| `world/paradox.py` | 536 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
+| `world/paradox.py` | 562 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 208 |  | — |
 | `world/spatial.py` | 167 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
@@ -1071,14 +1071,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check_and_apply_paradox()` | 487 | 50 lines |
+| `check_and_apply_paradox()` | 498 | 65 lines |
 | `_apply_toll()` | 299 | 48 lines |
 | `_trigger_paradox()` | 407 | 33 lines |
 | `_advance_paradox()` | 442 | 30 lines |
 | `_apply_hazard_stage()` | 269 | 28 lines |
 | `_apply_warden_stage()` | 349 | 25 lines |
+| `_force_restore_anchor()` | 474 | 22 lines |
 | `add_fixed_point()` | 144 | 19 lines |
-| `get_all_paradoxes()` | 187 | 17 lines |
 
 ### `world/place_purpose.py`
 

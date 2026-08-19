@@ -472,6 +472,18 @@ def _advance_paradox(chat_id, state):
 
 
 def _force_restore_anchor(chat_id, anchor):
+    # NOTE, unrepaired: these two statements write `world_entities` directly,
+    # and `world_entities` is a DERIVED PROJECTION of the scene commit -- the
+    # INSERT mints a durable row for a body the scene blob does not hold, and
+    # the retire semantics the projection has since grown do not know about
+    # it. The right restore path writes the anchor back into `world.scene` and
+    # lets the projection follow, which needs a decision about what "force
+    # restore" means when reality wins. Recorded rather than guessed at.
+    #
+    # The `world_placements` DELETE that stood beside them is gone: that table
+    # is decommissioned, nothing on the live path has written it for
+    # releases, and a delete against a table nobody fills is a statement that
+    # a second ledger still matters.
     exists = _entity_exists(chat_id, anchor["entity_id"])
     if anchor["required_exists"] and not exists:
         qi(
@@ -481,13 +493,27 @@ def _force_restore_anchor(chat_id, anchor):
         )
     elif not anchor["required_exists"] and exists:
         qi("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?", (chat_id, anchor["entity_id"]))
-        qi("DELETE FROM world_placements WHERE chat_id=? AND subject_id=?", (chat_id, anchor["entity_id"]))
 
 
 def check_and_apply_paradox(ctx, nonce):
-    """The commit-time entry point: call once per turn, after commit_scene
-    and commit_world_entities have applied this turn's state_diff, so the
-    check runs against what actually just got committed.
+    """The commit-time entry point, called once per turn.
+
+    `nonce` is unread, like every other commit domain's (all thirteen take it
+    and none reads it): it is the REROLL SEED the orchestrator threads
+    uniformly, not an idempotency token -- a rerun of a turn gets a DIFFERENT
+    nonce, which is the whole point of it, so keying idempotency on it would
+    fail open exactly where it was needed.
+
+    Rerunning this domain is safe for a different reason, which is worth
+    stating because it is not obvious: `severity` is computed ABSOLUTELY from
+    the simulation clock against the wound's stored onset, never incremented,
+    and a stage consequence fires only when the derived stage exceeds the
+    stored one. Two runs at the same clock reach the same severity and apply
+    nothing twice.
+
+    Call after commit_scene and commit_world_entities have applied this
+    turn's state_diff, so the check runs against what actually just got
+    committed.
 
     world_entities has no per-frame partitioning (a documented Stage-3
     limitation, not attempted here -- see Design.md), so an anchor's
