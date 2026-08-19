@@ -234,3 +234,24 @@ def test_the_prose_authors_example_shows_only_channels_it_still_owns():
     # decisions -- so showing it would be its own instruction to invent one.
     assert "following_ops" not in shown
     assert {"time", "weather", "location", "consequences"} <= shown
+
+
+def test_the_character_repair_example_names_the_psychology_tier():
+    """A key absent from the object a repair is told to imitate reads as
+    "not part of the answer". The example named none of `intent_ops`,
+    `project_ops`, `follow_op`, `drive_shift` or `manifest`, all five of
+    which the character sheet asks for on every call -- `project_ops` in
+    particular has never once been emitted in the live corpus.
+
+    Legacy `speech`/`action`/`actions` stay OUT: they are the pre-`sequence`
+    spelling, and showing them would teach the shape the sheet exists to
+    replace.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES
+
+    example = OUTPUT_EXAMPLES["character"]
+    for key in ("intent_ops", "project_ops", "follow_op", "drive_shift",
+                "manifest"):
+        assert key in example, key
+    for key in ("speech", "action", "actions"):
+        assert key not in example, key
