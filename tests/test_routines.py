@@ -27,6 +27,18 @@ def _make_chat(db):
     )
 
 
+def test_the_social_affordances_stay_a_subset_of_the_vocabulary():
+    """`_SOCIAL_AFFORDANCES` is a hand-picked subset of
+    `place_purpose.AFFORDANCES` -- which purposes draw people is this
+    module's judgment, not a property of the vocabulary, so it is not
+    derived. It had no tether at all, and an affordance renamed over there
+    would silently take its rooms out of every routine here with nothing
+    anywhere noticing."""
+    from world.place_purpose import AFFORDANCES
+
+    assert routines._SOCIAL_AFFORDANCES <= set(AFFORDANCES)
+
+
 class TestARhythmNotASchedule:
     def test_the_band_is_deterministic(self):
         """Seeded, logged, replayable: the same place at the same clock

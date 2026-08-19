@@ -130,7 +130,7 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
     call, and everything asserted is read from a ledger, so the worst it can
     be is thin -- never wrong in a way prose can be."""
     notes = []
-    ledgers = ["subject_last_seen"]
+    ledgers = [LAST_SEEN_KEY]
     moves = []
     events = []
 
