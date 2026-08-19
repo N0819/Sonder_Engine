@@ -37,6 +37,14 @@ FRAME_SCOPED_WORLD_KEYS = {
     # a rewind takes the bill off the wall, and a branch that never posted
     # it has a bare post.
     "artifacts",
+    # The PLAYER's carrier envelope (`carriers.PERSONA_STATE_KEY`). Per-era
+    # for exactly the reason the three keys above it are, and it was the one
+    # carrier home that was not: a cast member's reports ride the frame-scoped
+    # `chat_chars`/`chat_char_frames` state, and a persona has no such row, so
+    # a single world row served every era at once. What the player witnessed
+    # in one era survived a rewind or a branch and could be sent onward by
+    # `couriers.run_couriers` from an era that never produced it.
+    "persona_carrier_state",
     "pending_obligations",
     "shadow_profile", "lore_cache", "active_books",
     # {subject_id: {turn, room, elapsed_seconds}} -- who was co-present with
@@ -93,7 +101,7 @@ def parse_scoped_world_key(key):
     return key, None
 
 DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -1404,6 +1412,48 @@ MIGRATIONS = [
         # picking one.
         "ALTER TABLE chat_chars ADD COLUMN "
         "dialogue_color TEXT NOT NULL DEFAULT ''",
+    ],
+    # v29 -> v30
+    [
+        # `persona_carrier_state` joined FRAME_SCOPED_WORLD_KEYS above, so its
+        # storage row is now per-era. The rows already written are not: one
+        # bare row per chat, holding whatever every era of that story put in
+        # it. Re-key each held report by the era that ACQUIRED it -- a report
+        # records `acquired_turn`, and a turn records its frame, so the era is
+        # recoverable rather than guessed.
+        #
+        # A frame_id of NULL is the present, whose storage key is the bare one
+        # (see _scoped_world_key), so the present's reports need no move: the
+        # UPDATE below just stops the bare row from also answering for the
+        # other eras. A report whose `acquired_turn` names no surviving turn
+        # (a rewind deleted it) stays with the present rather than being
+        # dropped -- the safe direction, since the present is the era the
+        # player is most likely standing in.
+        "INSERT OR REPLACE INTO world(chat_id,key,value) "
+        "SELECT w.chat_id, "
+        "       'persona_carrier_state' || char(30) || 'fr' || t.frame_id, "
+        "       json_set(w.value, '$.carried_reports', "
+        "                json_group_array(json(r.value))) "
+        "FROM world w "
+        "JOIN json_each(w.value, '$.carried_reports') r "
+        "JOIN turns t ON t.chat_id = w.chat_id "
+        "            AND t.idx = json_extract(r.value, '$.acquired_turn') "
+        "WHERE w.key = 'persona_carrier_state' "
+        "  AND json_valid(w.value) "
+        "  AND json_type(w.value, '$.carried_reports') = 'array' "
+        "  AND t.frame_id IS NOT NULL "
+        "GROUP BY w.chat_id, t.frame_id",
+        "UPDATE world "
+        "   SET value = json_set(value, '$.carried_reports', ("
+        "        SELECT json_group_array(json(r.value)) "
+        "          FROM json_each(world.value, '$.carried_reports') r "
+        "         WHERE (SELECT t.frame_id FROM turns t "
+        "                 WHERE t.chat_id = world.chat_id "
+        "                   AND t.idx = json_extract(r.value, '$.acquired_turn')"
+        "               ) IS NULL)) "
+        " WHERE key = 'persona_carrier_state' "
+        "   AND json_valid(value) "
+        "   AND json_type(value, '$.carried_reports') = 'array'",
     ],
 ]
 
