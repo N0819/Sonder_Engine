@@ -61,11 +61,10 @@ from world.spatial import (
     proximity_rel,
     relative_bearing,
     resolve_substance_ops,
-    room_layout,
     room_of,
+    scent_level,
     comms_link,
     same_subject,
-    scent_level,
     spatial_facts,
     spatial_rel_between,
     substance_event_clause,
@@ -769,6 +768,16 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
                                  senses))
             for n in rels
         },
+        # DELIVERED NOWHERE, and kept deliberately. `composer.CHANNELS`
+        # declares "smell" and `ambient_percepts` can mint one from an
+        # authored sensory event, so the channel is reachable -- but nothing
+        # gives a BODY a smell, so this per-source grade has no content to
+        # grade and reaches no percept builder. Building body-scent perception
+        # needs a scent to perceive: a card field or a `state_diff` channel
+        # that says what something smells of. That is a feature, not a repair,
+        # and until it exists this is a gate with nothing behind it.
+        # `tests/test_masked_floor_leaks.py` reads it as the visible proof
+        # that `spatial_rel_between` stamps both enclosure directions.
         "scent_channel_to_sources": {
             n: composer._sense_graded(scent_level(r), "scent", senses)
             for n, r in rels.items()},
@@ -1483,10 +1492,8 @@ def perception_establish(ctx, nonce):
                            senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
-        "room_layout": room_layout(sc, p_name),
         "behind_rooms": _behind_rooms(sc, p_name),
         "focus_target": _focus_target(sc, p_name),
-        **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
     for c in ctx.cast:
@@ -1511,7 +1518,6 @@ def perception_establish(ctx, nonce):
                                senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
             "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
-            "room_layout": room_layout(sc, character_name(sh)),
         })
 
     # Consciousness gate (rare at opening, but a scenario may start someone
@@ -1646,8 +1652,6 @@ def perception_act(ctx, nonce):
             "spatial_to_actor": rel,
             "visual_channel_to_actor": has_visual(rel) and composer._sense_graded(
                 "full", "sight", _sense_card(sh)) != "none",
-            "scent_channel_to_actor": composer._sense_graded(
-                scent_level(rel), "scent", _sense_card(sh)),
             "proximity_to_actor": proximity_rel(
                 sc, character_name(sh), p_name),
             "proximity_to_sources": prox_to_others,
@@ -2039,12 +2043,10 @@ def perception_outcome(ctx, nonce):
                            senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
-        "room_layout": room_layout(sc, p_name),
         "behind_rooms": _behind_rooms(sc, p_name),
         "focus_target": _focus_target(sc, p_name),
         "source_manifest": _delivered_manifest(
             ctx, sc, p_name, sources, known, cast_by_name, pers),
-        **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
     for extra, pid_key, e_name, e_room in extra_entries:
@@ -2065,12 +2067,10 @@ def perception_outcome(ctx, nonce):
                                senses=_sense_card(extra)),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
-            "room_layout": room_layout(sc, e_name),
             "behind_rooms": _behind_rooms(sc, e_name),
             "focus_target": _focus_target(sc, e_name),
             "source_manifest": _delivered_manifest(
                 ctx, sc, e_name, sources, known, cast_by_name, extra),
-            **_perceiver_spatial_facts(sc, e_name, sources),
         })
 
     for c in ctx.cast:
@@ -2095,7 +2095,6 @@ def perception_outcome(ctx, nonce):
                                prev_sc=prev_scene, senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
-            "room_layout": room_layout(sc, character_name(sh)),
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
             "focus_target": _focus_target(sc, character_name(sh)),
             "source_manifest": _delivered_manifest(
@@ -2677,6 +2676,14 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         effective_light(sc, room) if room else "")
     if env:
         percepts.append(env)
+    # Crowds, couriers and posted notices: three built subsystems whose whole
+    # perception seam is these three keys, and until now nothing read them.
+    # Already room-scoped and already reduced to what a bystander takes in by
+    # the builders that produced them (`common.crowds_for_room` and its two
+    # twins), so this adds no admission decision -- it adds the delivery the
+    # decisions were being made for.
+    percepts.extend(composer.room_content_percepts(
+        p.get("crowds"), p.get("couriers"), p.get("notices")))
     senses = p.get("sense_card")
     percepts.extend(composer.presence_percepts(
         sc, name, others, display_map, senses))

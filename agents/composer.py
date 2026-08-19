@@ -863,6 +863,44 @@ def ambient_percepts(sensory_events, observer_room):
     return out
 
 
+def room_content_percepts(*groups):
+    """Standing things in the observer's room that are not bodies: a crowd, a
+    courier waiting by a door, a notice nailed to a post.
+
+    Three world subsystems (`world/crowds.py`, `story/couriers.py`,
+    `story/artifacts.py`) each publish a reading seam that has ALREADY decided
+    what a bystander in that room takes in -- the figure and which door he
+    makes for, never the message; that a bill hangs there, never its wording.
+    Room scope is likewise theirs: every caller passes the observer's own
+    room, so nothing here re-decides admission. What was missing was a percept
+    to put it in, so all three delivered to nobody.
+
+    `ambient`, because that is what these are: a standing feature of the room
+    rather than an event, a body, or a sensation on this body.
+    """
+    out = []
+    for entries in groups:
+        for entry in entries or []:
+            if not isinstance(entry, dict):
+                continue
+            desc = " ".join(str(entry.get("what") or "").split())
+            if not desc:
+                continue
+            if desc[-1:] not in ".!?":
+                desc += "."
+            # Keyed on the subject's own uid where it has one, so a crowd that
+            # thins from a crush to a press is a CHANGED percept and re-renders
+            # in a delta view, while the same crowd unchanged stays furniture.
+            key = str(entry.get("uid") or entry.get("artifact_id") or "")
+            out.append(Percept(
+                kind="ambient", channel="sight",
+                data={"desc": desc},
+                salience=0.35,
+                dedupe_key="content:" + _short_hash(key, desc),
+            ))
+    return out
+
+
 def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
     """A non-awake mind gets the residue and nothing else."""
     return [Percept(
