@@ -884,7 +884,7 @@ function openAmbiencePanel() {
         }
         if (!res.files.length) {
           results.append(emptyState(`Nothing playable in ${res.library}. `
-            + "Drop .ogg/.mp3/.wav files in there and reopen this."));
+            + `Drop .ogg/.mp3/.wav files in there and reopen this.`));
           return;
         }
         results.append(el("div", { class: "small dim" },
