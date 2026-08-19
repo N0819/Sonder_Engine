@@ -426,3 +426,55 @@ def test_chat_import_keeps_every_column_the_memory_dump_carried(
     assert after["embedding_dim"] == before["embedding_dim"]
     assert after["encoding_valence"] == before["encoding_valence"]
     assert after["encoding_arousal"] == before["encoding_arousal"]
+
+
+class TestASecretDoesNotRideAnArchive:
+    """WEB-19. The presence-id namespace is a per-install secret.
+
+    Anonymous presence ids are a hash of canonical data a `story_view` caller
+    can read for itself, salted with a random namespace; the salt is the whole
+    reason a guessed identity cannot be confirmed by enumeration. An archive
+    is a file a host hands to somebody else, so a namespace inside one hands
+    over the ability to invert every anonymous body in that story.
+
+    It rode out TWICE, which is why the guard is asserted in both places: once
+    as a plain `world` row (the export is `SELECT *`), and again inside every
+    checkpoint blob, which is `snapshot_state`'s copy of the same table.
+    """
+
+    def _exported(self, db, chat_id):
+        from web.story_view import PRESENCE_NAMESPACE_KEY
+
+        db.wset(chat_id, PRESENCE_NAMESPACE_KEY, "deadbeef" * 4)
+        ensure_checkpoint(chat_id, 0)
+        return json.loads(json.dumps(app.chat_export(chat_id)))
+
+    def test_the_namespace_is_not_a_world_row_in_the_archive(self, temp_db):
+        from web.story_view import PRESENCE_NAMESPACE_KEY
+
+        chat_id = _chat(temp_db)
+        export = self._exported(temp_db, chat_id)
+        assert PRESENCE_NAMESPACE_KEY not in (export["world"] or {})
+
+    def test_the_namespace_is_not_inside_a_carried_checkpoint(self, temp_db):
+        chat_id = _chat(temp_db)
+        export = self._exported(temp_db, chat_id)
+        assert export["checkpoints"], "the checkpoint half needs a checkpoint"
+        for row in export["checkpoints"]:
+            assert "deadbeef" not in row["blob"]
+
+    def test_the_stripped_key_is_the_one_story_view_mints(self):
+        """The two modules must not drift: `persist` cannot import `web`, so
+        the name is spelled twice and this is what keeps the copies honest."""
+        from persist.chat_archive import UNEXPORTED_WORLD_KEYS
+        from web.story_view import PRESENCE_NAMESPACE_KEY
+
+        assert PRESENCE_NAMESPACE_KEY in UNEXPORTED_WORLD_KEYS
+
+    def test_the_story_itself_still_exports(self, temp_db):
+        """Stripping one key is not a licence to drop the world."""
+        chat_id = _chat(temp_db)
+        temp_db.wset(chat_id, "simulation_clock", {"elapsed_seconds": 12.0})
+        export = self._exported(temp_db, chat_id)
+        assert export["world"]["simulation_clock"] == {"elapsed_seconds": 12.0}
+        assert "simulation_clock" in export["checkpoints"][0]["blob"]
