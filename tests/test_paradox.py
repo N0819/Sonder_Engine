@@ -404,6 +404,79 @@ class TestEscalation:
         assert rows["Right here in the wound room, just now."] == 1.0
 
 
+class TestTollIsAChosenMode:
+    """Memory confidence is not cosmetic -- it changes what a mind can rely
+    on having witnessed, and the decay has no restore path. A consequence
+    that irreversible must be OPTED INTO by choosing `mode: "toll"`; it must
+    never ride along under `hazard`, the recommended default, where the
+    module docstring promises an environmental wound and says nothing about
+    a mind's records. `toll_in_radius` is toll mode's localization knob --
+    True confines the cost to the wound's rooms, False lets a traveler's
+    continuity fade wherever they stand (Marty's photograph did not need him
+    to be standing in the wound) -- not a second, unlabeled off switch."""
+
+    def _traveler_setup(self, temp_db, *, mode, toll_in_radius=None,
+                        traveler_room="road"):
+        from mind import memory
+        from story.character_schema import default_character_data
+        import json as _json
+        from core.frames import create_frame
+
+        chat_id = _make_chat(temp_db)
+        hinami = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+            ("Hinami", _json.dumps(default_character_data("Hinami")), "{}", time.time()),
+        )
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+            (chat_id, hinami, "active", "{}"),
+        )
+        past_frame = create_frame(chat_id, label="Past", ordinal=-1, kind="past",
+                                  travelers=[hinami])
+        paradox.set_policy(chat_id, mode=mode, toll_in_radius=toll_in_radius)
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=past_frame,
+                                 required_exists=False, label="x")
+        memory.add_memory(chat_id, hinami, None, "episode", "witnessed", 0.5,
+                          "A memory.", turn_idx=1)
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id, frame_id=past_frame)
+        with _in_frame(past_frame):
+            wset(chat_id, "scene", {
+                "rooms": {"road": {"name": "Road", "adjacent": []},
+                          "church": {"name": "Church", "adjacent": []}},
+                "positions": {"pete": "road", "Hinami": traveler_room},
+                "entities": {},
+            })
+            wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+            paradox.check_and_apply_paradox(ctx, 0)
+            wset(chat_id, "simulation_clock",
+                 {"elapsed_seconds": paradox.ESCALATION_SECONDS * 0.5})
+            paradox.check_and_apply_paradox(ctx, 0)
+        from mind import memory as _memory
+        return _memory.dump_character_memories(chat_id, hinami)[0]["confidence"]
+
+    def test_hazard_mode_never_touches_memory_confidence(self, temp_db):
+        """The recommended default must not silently decay a mind's records
+        under a policy the story never chose -- chat 20's stored policy is
+        the untouched default triple, which is evidence users save defaults,
+        not evidence they chose the toll."""
+        confidence = self._traveler_setup(temp_db, mode="hazard")
+        assert confidence == 1.0
+
+    def test_toll_in_radius_false_reaches_a_traveler_outside_the_wound(self, temp_db):
+        """False used to early-return -- an off switch that made toll mode a
+        dread duplicate through a knob whose name says nothing about off."""
+        confidence = self._traveler_setup(temp_db, mode="toll",
+                                          toll_in_radius=False,
+                                          traveler_room="church")
+        assert confidence < 1.0
+
+    def test_toll_in_radius_true_spares_a_traveler_outside_the_wound(self, temp_db):
+        confidence = self._traveler_setup(temp_db, mode="toll",
+                                          traveler_room="church")
+        assert confidence == 1.0
+
+
 class TestFrameScopedVisibilityAndLockouts:
     """A paradox unfolding in one frame must not leak into, or block
     jumps for, a chat currently occupied with an unrelated frame -- see

@@ -30,11 +30,16 @@ What varies per campaign is what severity DOES, chosen via
     room consumption, riding the scene's own overlay/entity machinery.
     The recommended default: it exercises this engine's actual
     strengths (scene state filtered through senses and perception)
-    without depending on a well-authored antagonist.
-  - "toll": cost localizes to travelers physically inside the wound --
-    deterministic decay of their OWN memory confidence for rows from
-    their origin frame. This engine's one genuinely native effect: other
-    media hand-wave "reality is coming apart," this can make it a real,
+    without depending on a well-authored antagonist. Environmental ONLY,
+    and reversible on resolution: it never touches memory confidence
+    (the toll below is a chosen mode, not a rider on the default --
+    an irreversible cost to a mind's records must be opted into).
+  - "toll": cost to travelers -- deterministic decay of their OWN memory
+    confidence for rows from their origin frame. `toll_in_radius`
+    localizes it: True (default) charges only travelers physically
+    inside the wound; False lets their continuity fade wherever they
+    stand. This engine's one genuinely native effect: other media
+    hand-wave "reality is coming apart," this can make it a real,
     measurable epistemic fact via the existing confidence column.
   - "warden": a hunting entity, spawned and moved as an ordinary scene
     entity (ordinary spatial/reaction/resolution machinery treats it as
@@ -310,12 +315,20 @@ def _apply_toll(chat_id, state, policy):
     Marty's fading photograph, implemented as epistemology: this engine
     already has a per-memory confidence column and weights it in
     retrieval (memory.py), so "reality is coming apart" is a measurable
-    fact here rather than a narrative assertion."""
-    if not policy.get("toll_in_radius", True):
-        return
+    fact here rather than a narrative assertion.
+
+    `toll_in_radius` is the LOCALIZATION knob, not an off switch: True
+    confines the cost to travelers standing in the wound's rooms; False
+    lets a traveler's continuity fade wherever they stand (the reference
+    beat, Marty's photograph, fades with no regard for where Marty is).
+    It used to early-return on False, which made toll mode configurable
+    into a silent dread duplicate through a knob whose name never said
+    off -- a mode whose only consequence is the toll cannot also carry a
+    hidden switch that removes it."""
     sc = wget(chat_id, "scene", None)
     if not isinstance(sc, dict):
         return
+    in_radius = bool(policy.get("toll_in_radius", DEFAULT_TOLL_IN_RADIUS))
     consumed_rooms = set((state.get("consumed") or {}).get("rooms") or [])
     if not consumed_rooms:
         consumed_rooms = {state.get("epicenter_room")}
@@ -335,7 +348,7 @@ def _apply_toll(chat_id, state, policy):
     }
     decay = 0.05 * state.get("severity", 0.0)
     for name, room in positions.items():
-        if room not in consumed_rooms:
+        if in_radius and room not in consumed_rooms:
             continue
         char_id = name_to_id.get(name)
         if char_id is None or char_id not in travelers:
@@ -389,8 +402,15 @@ def _apply_stage_consequence(chat_id, state, stage, policy):
         _apply_warden_stage(chat_id, state, stage)
         return
     if mode == "hazard":
+        # No `_apply_toll` here, deliberately. The modes are presented as
+        # exclusive dramatizations and hazard's own contract is environmental
+        # -- sensory wrongness and impassable rooms, all of it reversible on
+        # resolution. Memory-confidence decay is irreversible and invisible,
+        # and hazard is the recommended DEFAULT: a story that never opened
+        # the policy panel must not have its minds' records decayed by a
+        # rider it was never told about. A mind's witness is only spent
+        # where the story chose the mode whose entire identity is that cost.
         _apply_hazard_stage(chat_id, state, stage)
-        _apply_toll(chat_id, state, policy)
         return
     if mode == "toll":
         _apply_toll(chat_id, state, policy)
