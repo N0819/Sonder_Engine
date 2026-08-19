@@ -1,7 +1,9 @@
 """Database layer. Current schema version is SCHEMA_VERSION (see below); migrations run in order from any older version on open."""
 
-import contextvars, sqlite3, json, os, time, threading, uuid
+import contextvars, re, sqlite3, json, os, time, threading, uuid
 from contextlib import contextmanager
+
+from core.paths import INSTALL_ROOT
 
 # The diegetic frame the CURRENT pipeline run is executing in -- set once
 # per turn in agents/runtime.py._run_pipeline from the turn row's own
@@ -100,8 +102,16 @@ def parse_scoped_world_key(key):
             return key, None
     return key, None
 
-DB = os.environ.get("ENGINE_DB", "engine.db")
-SCHEMA_VERSION = 30
+#: An explicit `ENGINE_DB` is taken VERBATIM -- tests point it at relative
+#: temp paths and must keep resolving them against their own cwd. Only the
+#: DEFAULT is anchored, and it has to be: unset, `"engine.db"` is cwd-relative,
+#: so launching from anywhere but the install root silently creates a SECOND
+#: empty database beside the process and the player's stories appear to have
+#: vanished. Masked until now only because both launchers `cd` first and pytest
+#: runs from the root. `or` rather than a default argument, so an empty
+#: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
+DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
+SCHEMA_VERSION = 31
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -174,9 +184,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_lorebooks_resource_uid
 -- runs before the version-gated MIGRATIONS below, so on an existing
 -- database that predates anchor_entity_id, an index on that column here
 -- would fail immediately -- the column doesn't exist yet until the v9->
--- v10 migration's ALTER TABLE runs, which is also where this index is
--- created (in the correct order, after the column exists). Fresh
--- installs still get both: they run every migration from v0 up too.
+-- v10 migration's ALTER TABLE runs. And the fresh path skips migrations
+-- entirely, so the migration alone cannot cover it either (fresh
+-- databases went without this index from the fresh-path change until
+-- LATE_SCHEMA existed). It lives in LATE_SCHEMA below, which init()
+-- runs AFTER the migration chain on BOTH paths.
 
 CREATE TABLE IF NOT EXISTS lorebook_links(
     id INTEGER PRIMARY KEY,
@@ -238,6 +250,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_lore_entries_uid
 CREATE VIRTUAL TABLE IF NOT EXISTS lore_fts USING fts5(
     content, keys, content='lore_entries', content_rowid='id'
 );
+
+-- External-content FTS stays in sync only through these triggers. They
+-- lived ONLY in the v4->v5 migration list, which was fine while every
+-- database walked the migration chain -- and silently wrong from the
+-- moment init() started stamping fresh files straight to SCHEMA_VERSION:
+-- a database born on the fresh path had ZERO triggers, so lore_fts
+-- stayed empty and search_lore's keyword term (mind/memory.py
+-- _kw_scores("lore_fts", ...), the 0.35 weight) scored 0.0 for every
+-- entry, forever. Defined here IF NOT EXISTS so BOTH paths get them; the
+-- columns they reference (lore_entries.content/keys, memories.content)
+-- have existed since v1, so this is correct on the oldest database the
+-- chain accepts. The v30->v31 migration rebuilds the index content for
+-- databases that lived through the triggerless era.
+-- tests/test_schema_integrity_fresh_vs_migrated.py holds the fresh and
+-- migrated schemas equal so nothing else drifts into migration-only
+-- existence.
+CREATE TRIGGER IF NOT EXISTS lore_ai AFTER INSERT ON lore_entries BEGIN
+    INSERT INTO lore_fts(rowid, content, keys)
+    VALUES (new.id, new.content, new.keys);
+END;
+CREATE TRIGGER IF NOT EXISTS lore_ad AFTER DELETE ON lore_entries BEGIN
+    INSERT INTO lore_fts(lore_fts, rowid, content, keys)
+    VALUES ('delete', old.id, old.content, old.keys);
+END;
+CREATE TRIGGER IF NOT EXISTS lore_au AFTER UPDATE ON lore_entries BEGIN
+    INSERT INTO lore_fts(lore_fts, rowid, content, keys)
+    VALUES ('delete', old.id, old.content, old.keys);
+    INSERT INTO lore_fts(rowid, content, keys)
+    VALUES (new.id, new.content, new.keys);
+END;
 
 -- Resumable lorebook-tree generation. A generation run is many model calls
 -- (one structure call, then one call per batch of outlined entries), and
@@ -398,6 +440,12 @@ CREATE TABLE IF NOT EXISTS guest_grants(
 );
 CREATE INDEX IF NOT EXISTS idx_guest_grants_chat
     ON guest_grants(chat_id);
+-- Every guest-auth request looks a row up by one of these two hashes;
+-- without the indexes each lookup was a full table scan.
+CREATE INDEX IF NOT EXISTS idx_guest_grants_code_hash
+    ON guest_grants(code_hash);
+CREATE INDEX IF NOT EXISTS idx_guest_grants_token_hash
+    ON guest_grants(token_hash);
 
 -- Host login sessions for the username+password host account. Only the
 -- SHA-256 hash of each session token is stored (same rationale as
@@ -564,6 +612,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_event ON memories(chat_id, char_id, 
 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
     content, content='memories', content_rowid='id'
 );
+
+-- Sync triggers for memories_fts, here for the same reason as the
+-- lore_fts triggers above (migration-only objects never reach a fresh
+-- database). memories_fts itself has no reader (docs/UNBUILT.md 1.35);
+-- it is kept in sync rather than dropped so the eventual drop can be its
+-- own deliberate migration instead of a side effect of this repair.
+CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, content)
+    VALUES (new.id, new.content);
+END;
+CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content)
+    VALUES ('delete', old.id, old.content);
+END;
+CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content)
+    VALUES ('delete', old.id, old.content);
+    INSERT INTO memories_fts(rowid, content)
+    VALUES (new.id, new.content);
+END;
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_retrieval_fts USING fts5(
     memory_id UNINDEXED,
@@ -1474,7 +1542,37 @@ MIGRATIONS = [
         "   AND json_valid(value) "
         "   AND json_type(value, '$.carried_reports') = 'array'",
     ],
+    # v30 -> v31
+    [
+        # Databases created between the fresh-path change (init() stamping a
+        # new file straight to SCHEMA_VERSION, skipping migrations) and the
+        # FTS sync triggers joining SCHEMA were born with NO triggers at
+        # all: every lore row written in that era never reached lore_fts,
+        # so search_lore's keyword term scored 0.0 for every entry.
+        # executescript(SCHEMA) has just re-created the triggers (IF NOT
+        # EXISTS, and it always runs before this list); this rebuild
+        # backfills the index content the missing triggers never wrote.
+        # Idempotent: a long-migrated database that always had its triggers
+        # rebuilds to the same content it already held.
+        "INSERT INTO lore_fts(lore_fts) VALUES('rebuild')",
+        "INSERT INTO memories_fts(memories_fts) VALUES('rebuild')",
+    ],
 ]
+
+# DDL that must run AFTER the migration chain, on every path -- init()
+# executes it last. Two constraints force this third location into
+# existence: executescript(SCHEMA) always runs BEFORE the version-gated
+# MIGRATIONS, so an index on a column a migration adds cannot live in
+# SCHEMA (on a pre-v10 database the column does not exist yet); and the
+# fresh path skips MIGRATIONS entirely, so it cannot live only in a
+# migration either -- that is exactly how the fresh and migrated schemas
+# drifted apart (see the FTS trigger comment in SCHEMA). Everything here
+# must be idempotent, and must reference only columns that exist once the
+# chain has run.
+LATE_SCHEMA = """
+CREATE INDEX IF NOT EXISTS idx_lorebooks_anchor ON lorebooks(anchor_entity_id)
+    WHERE anchor_entity_id IS NOT NULL;
+"""
 
 _local = threading.local()
 _write_lock = threading.RLock()
@@ -1642,6 +1740,61 @@ def qtx(sql, args=()):
     cur = conn().execute(sql, args)
     return cur.lastrowid
 
+class SchemaVersionTooNew(RuntimeError):
+    """The database file was written by a NEWER engine than this one.
+
+    The migration loop is `range(current, SCHEMA_VERSION)` -- empty when
+    current is ahead -- so before this guard a too-new file opened
+    silently and stayed at its stamped version while an older binary
+    wrote under assumptions the newer schema had already repartitioned
+    (v13->v14 moved world_entities/world_conditions onto (chat_id, id):
+    an older binary writing that file uses the wrong key space). Failing
+    loudly at open is the only safe behaviour."""
+
+
+class UnstampedDatabaseError(RuntimeError):
+    """The file already contains tables but has no schema_meta at all.
+
+    Every engine-produced database has carried schema_meta since the
+    oldest supported version, so this file is a partial copy, a
+    corrupted database, or ENGINE_DB pointed at some other program's
+    file. Adopting it (the pre-guard behaviour: executescript(SCHEMA)
+    over the wreckage, then an unconditional SCHEMA_VERSION stamp) is
+    worse than refusing: the false stamp permanently destroys the one
+    fact -- "this database never migrated" -- that a later repair would
+    need."""
+
+
+#: `ALTER TABLE <t> ADD COLUMN <col> ...` -- the one migration statement
+#: shape whose idempotence used to depend on string-matching the error
+#: message ("duplicate column"). Matched here so the migration loop can
+#: ask the schema itself (PRAGMA table_xinfo) instead of the message.
+_ADD_COLUMN_RE = re.compile(
+    r'^\s*ALTER\s+TABLE\s+"?(\w+)"?\s+ADD\s+COLUMN\s+"?(\w+)"?',
+    re.IGNORECASE,
+)
+
+
+def _column_addition_already_applied(c, stmt):
+    """True when stmt is an ADD COLUMN whose column already exists.
+
+    DDL runs in autocommit, so a crash mid-migration-list leaves the
+    earlier statements applied with the version not advanced; the re-run
+    must then skip what already landed. That used to ride on catching
+    "duplicate column" in the error text; introspection answers the same
+    question deterministically, without depending on SQLite's message
+    wording."""
+    m = _ADD_COLUMN_RE.match(stmt)
+    if not m:
+        return False
+    table, column = m.group(1), m.group(2)
+    try:
+        cols = {row[1] for row in c.execute(f'PRAGMA table_xinfo("{table}")')}
+    except sqlite3.OperationalError:
+        return False
+    return column in cols
+
+
 def _get_schema_version(c):
     row = c.execute(
         "SELECT value FROM schema_meta WHERE key='version'"
@@ -1676,9 +1829,6 @@ def _backfill_resource_uids(c):
 def init():
     c = sqlite3.connect(DB, timeout=30)
     c.row_factory = sqlite3.Row
-    c.execute("PRAGMA journal_mode=WAL")
-    c.execute("PRAGMA synchronous=NORMAL")   # see conn(), same reasoning
-    c.execute("PRAGMA foreign_keys=ON")
 
     # Checked BEFORE executescript creates schema_meta (CREATE TABLE IF
     # NOT EXISTS would otherwise mask this) -- distinguishes a genuinely
@@ -1687,6 +1837,52 @@ def init():
     is_fresh_db = c.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_meta'"
     ).fetchone() is None
+
+    # Both refusals below run BEFORE executescript(SCHEMA) touches the
+    # file: a database we are about to refuse must not be altered first.
+    if is_fresh_db:
+        # "No schema_meta" only means "brand new" when the file is
+        # genuinely empty. A file that already has tables but no version
+        # stamp is a partial copy, corruption, or a foreign database --
+        # executescript(SCHEMA) would adopt whatever shape those tables
+        # have (every CREATE is IF NOT EXISTS) and the unconditional
+        # stamp below would then assert, falsely and permanently, that
+        # the file is fully migrated.
+        preexisting = [
+            row["name"]
+            for row in c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
+        if preexisting:
+            c.close()
+            raise UnstampedDatabaseError(
+                f"{DB!r} already contains tables ({', '.join(preexisting[:8])}"
+                f"{', ...' if len(preexisting) > 8 else ''}) but no "
+                "schema_meta version stamp. This is not an engine-created "
+                "database; refusing to adopt or migrate it. If ENGINE_DB "
+                "points at the wrong file, fix the path; if the database is "
+                "a damaged copy, restore from a complete one."
+            )
+    else:
+        current = _get_schema_version(c)
+        if current > SCHEMA_VERSION:
+            c.close()
+            raise SchemaVersionTooNew(
+                f"{DB!r} is at schema version {current}, but this engine "
+                f"only understands up to {SCHEMA_VERSION}. It was written "
+                "by a newer engine; opening it here could corrupt it. "
+                "Update the engine (or open a database this version "
+                "created)."
+            )
+
+    # Only past both guards may the file be touched at all -- even
+    # PRAGMA journal_mode=WAL is a persistent file-header write, and a
+    # database we refuse must come out byte-identical.
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA synchronous=NORMAL")   # see conn(), same reasoning
+    c.execute("PRAGMA foreign_keys=ON")
 
     c.executescript(SCHEMA)
     c.commit()
@@ -1707,18 +1903,30 @@ def init():
         # FIRST rather than being skipped, silently correct only by luck.
         _set_schema_version(c, SCHEMA_VERSION)
     else:
-        current = _get_schema_version(c)
+        # `current` was read (and bounds-checked) above, before SCHEMA ran.
         for i in range(current, SCHEMA_VERSION):
             if 0 <= i - 1 < len(MIGRATIONS):
                 for stmt in MIGRATIONS[i - 1]:
+                    # DDL autocommits, so a crash mid-list leaves earlier
+                    # statements applied with the version not advanced;
+                    # re-runnability is what recovers that. ADD COLUMN
+                    # idempotence is decided by introspection rather than
+                    # by string-matching "duplicate column" in the error.
+                    if _column_addition_already_applied(c, stmt):
+                        continue
                     try:
                         c.execute(stmt)
                     except sqlite3.OperationalError as e:
-                        msg = str(e).lower()
-                        harmless = "duplicate column" in msg or "already exists" in msg
-                        if not harmless:
+                        # The remaining crash-recovery swallow: a CREATE
+                        # without IF NOT EXISTS re-run over its own
+                        # earlier success (today only the v4->v5 trigger
+                        # block, whose DROP-first makes even this inert).
+                        if "already exists" not in str(e).lower():
                             raise
                 _set_schema_version(c, i + 1)
+
+    # After the chain on BOTH paths: see LATE_SCHEMA's own comment.
+    c.executescript(LATE_SCHEMA)
 
     _backfill_resource_uids(c)
     c.commit()

@@ -124,6 +124,16 @@ def _model_dump(model):
     return dump() if dump is not None else model.dict()
 
 
+#: The version the EXPORTER writes and the highest one import accepts.
+#: An archive stamped above this was produced by a newer engine and may
+#: carry tables this binary does not enumerate -- and everything not
+#: enumerated is silently dropped on import (extra="allow" keeps the keys
+#: through validation, but nothing ever writes them; that exact failure
+#: kept `stations` inert for 45 scenes, see ChatArchiveData's docstring).
+#: Refusing with both versions named is strictly kinder than truncating.
+ARCHIVE_VERSION = 4
+
+
 class ChatArchiveData(LenientModel):
     """Typed, forward-compatible validation for the archive's top level.
 
@@ -257,7 +267,7 @@ class ChatArchiveService:
             raise HTTPException(404)
 
         export = {
-            "version": 4,
+            "version": ARCHIVE_VERSION,
             "chat": dict(chat),
             "frames": [],
             "turns": [],
@@ -580,6 +590,20 @@ class ChatArchiveService:
             typed_data = _model_validate(ChatArchiveData, data)
         except ValidationError as exc:
             raise HTTPException(400, "Invalid chat archive") from exc
+        # Refuse a FUTURE archive before any write happens: import only
+        # lands the tables this binary enumerates, so a newer archive would
+        # come in 200 OK minus whatever the newer engine added -- silent
+        # truncation presented as success. Checked here, before the
+        # transaction opens, so a refusal writes nothing at all.
+        if typed_data.version > ARCHIVE_VERSION:
+            raise HTTPException(
+                400,
+                f"Chat archive is version {typed_data.version}, but this "
+                f"engine reads archives up to version {ARCHIVE_VERSION}. "
+                "Importing it would silently drop the newer data; update "
+                "the engine first.",
+            )
+
         # Pydantic retains unknown keys under extra="allow".  Using the model's
         # dictionary supplies safe defaults for fields absent in old archives.
         data = _model_dump(typed_data)
