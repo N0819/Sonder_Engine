@@ -804,7 +804,14 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
     out, warnings = validate_llm_output("narrator", out)
-    out.setdefault("prose", out.get("text", ""))
+    # `out.setdefault("prose", out.get("text", ""))` stood here and was doubly
+    # dead. `NarratorOutput.prose` is declared `str = ""` and `_dump` excludes
+    # only None, so the validated dict ALWAYS carries a `prose` key and the
+    # setdefault never assigned; and the strict path inside `_agent_json` has
+    # already rejected a `text`-only payload before this line runs, so the
+    # fallback could not have repaired one anyway. `NarratorOutput.text`, the
+    # field it reached for, has no reader either -- its deletion is Slice 8's,
+    # since `llm/schemas.py` is theirs.
     out.setdefault("new_specifics", [])
     # The player's own declared lines must NOT count toward DIALOGUE
     # FIDELITY -- PLAYER ECHO RULE requires the opposite of them (excluded,
