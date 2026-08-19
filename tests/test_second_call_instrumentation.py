@@ -199,3 +199,45 @@ def test_decision_review_retry_is_warned_even_when_it_succeeds(
     assert not [w for w in ctx.warnings if "decision review retry" in w]
     assert any("repeat_correction" in w and "the beat stands" in w
                for w in ctx.warnings)
+
+
+# --- The deterministic prune, which does not fail and does not speak --------
+#
+# Every rung above re-issues a model call, and the ladder narrates each one.
+# The prune inside `validate_llm_output_strict` costs nothing and therefore
+# runs on the SUCCESS path: a malformed `state_diff` channel (or a whole
+# specialist channel) is dropped, the report comes back `valid=True`, and the
+# beat commits without it. That is the right trade -- absent is "no change
+# asserted" and the reconcile seam catches the drift next beat -- but it is a
+# change to committed world state, and it was made silently.
+
+_DIFF_BAD = json.dumps({
+    "resolved_event": "The door swings wide.",
+    "summary": "the door opens",
+    "state_diff": {"weather": 12345},
+})
+
+_SPECIALIST_BAD = json.dumps({"attire": 12345, "poses": {}})
+
+
+def test_a_dropped_state_diff_channel_says_so(monkeypatch, sink):
+    _script(monkeypatch, [_DIFF_BAD])
+    out = llm_quality.complete_validated_json(
+        role="director", step_key="director_resolve",
+        system="s", payload={}, repair_attempts=1)
+    # The beat commits: prose, summary and every well-formed channel stand.
+    assert out["resolved_event"] == "The door swings wide."
+    assert "weather" not in (out.get("state_diff") or {})
+    assert any("state_diff.weather" in note for note in sink), (
+        "a channel was dropped from a committed beat with nothing said: "
+        f"{sink}")
+
+
+def test_a_dropped_specialist_channel_says_so(monkeypatch, sink):
+    _script(monkeypatch, [_SPECIALIST_BAD])
+    out = llm_quality.complete_validated_json(
+        role="director_body", step_key="director_body",
+        system="s", payload={}, repair_attempts=1)
+    assert not out.get("attire")
+    assert any("attire" in note for note in sink), (
+        f"a specialist channel was dropped with nothing said: {sink}")

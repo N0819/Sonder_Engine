@@ -244,6 +244,27 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
     return out if touched else None
 
 
+def _accepted(report):
+    """Return an accepted output, saying out loud what it cost to accept it.
+
+    `ValidationReport.warnings` is written on the SUCCESS path. A malformed
+    `state_diff` channel, or a whole malformed specialist channel, is DROPPED
+    by `validate_llm_output_strict` and the report comes back `valid=True`
+    with a warning naming what went -- so the beat commits, correctly, minus
+    a piece of world state the model did adjudicate. Every rung of the ladder
+    below returned `report.output` and read no further, which made that the
+    one repair in the engine that changed a committed beat and announced
+    nothing: not in `ctx.warnings`, not in `_engine_notes`, not in the
+    pipeline drawer.
+
+    A caller with no pipeline step in scope (importers, generators, jobs)
+    still gets its output; `note_step_warning` is a no-op there.
+    """
+    for warning in (report.warnings or []):
+        note_step_warning(f"llm validation: {warning}")
+    return report.output
+
+
 _SCHEMA_CACHE: dict = {}
 
 
@@ -352,7 +373,7 @@ def complete_validated_json(
         report.errors.insert(0, parse_error)
 
     if report.valid:
-        return report.output
+        return _accepted(report)
 
     previous_raw = raw
     previous_parsed = parsed
@@ -447,7 +468,7 @@ def complete_validated_json(
                     report.errors.insert(0, parse_error)
 
                 if report.valid:
-                    return report.output
+                    return _accepted(report)
 
                 ran_out_of_room = output_ran_out_of_room(raw)
                 previous_raw = raw
@@ -472,7 +493,7 @@ def complete_validated_json(
                     f"{str((report.errors or [''])[0])[:120]!r}); repaired by "
                     f"a targeted field patch on the repair model "
                     f"({time.monotonic() - _t0:.1f}s) -- no rebuild")
-                return _patched_report.output
+                return _accepted(_patched_report)
             previous_parsed = _patched
 
     # Skip same-provider repair when the primary provider itself errored --
@@ -540,7 +561,7 @@ def complete_validated_json(
             report.errors.insert(0, parse_error)
 
         if report.valid:
-            return report.output
+            return _accepted(report)
 
     candidate_count = role_candidate_count(role)
 
@@ -599,7 +620,7 @@ def complete_validated_json(
         )
 
         if fallback_report.valid:
-            return fallback_report.output
+            return _accepted(fallback_report)
 
         report = fallback_report
 
