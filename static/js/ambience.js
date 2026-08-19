@@ -865,6 +865,40 @@ function openAmbiencePanel() {
         results.append(emptyState("Search failed: " + (e?.message || "unknown error")));
       }
     };
+    // The local library, unfiltered. `GET /api/ambience/library` says in its
+    // own docstring that it exists "so the picker can list it unfiltered",
+    // and the picker had a search box, a Search button and no listing path
+    // (FRONTEND-27) -- so a host whose files are named `track_04.ogg` could
+    // never find out what they had. Search ranks by filename tokens, which is
+    // exactly the thing an unhelpfully-named library does not offer.
+    const browse = async () => {
+      results.innerHTML = "";
+      results.append(loadingBlock("Reading the library…"));
+      try {
+        const res = await api("GET", "/api/ambience/library");
+        results.innerHTML = "";
+        if (!res.exists) {
+          results.append(emptyState("No local library folder is set, or the "
+            + "path does not exist. Set it in ⚙ API → Room ambience."));
+          return;
+        }
+        if (!res.files.length) {
+          results.append(emptyState(`Nothing playable in ${res.library}. `
+            + "Drop .ogg/.mp3/.wav files in there and reopen this."));
+          return;
+        }
+        results.append(el("div", { class: "small dim" },
+          `${res.files.length} file(s) in ${res.library}`));
+        for (const path of res.files) {
+          results.append(ambienceCandidateRow({ source: "local", path }, pick));
+        }
+      } catch (e) {
+        results.innerHTML = "";
+        results.append(emptyState("Could not read the library: "
+          + (e?.message || "unknown error")));
+      }
+    };
+
     query.onkeydown = e => { if (e.key === "Enter") search(); };
 
     // Every room this story has pinned, not only the one on screen. The list
@@ -937,7 +971,11 @@ function openAmbiencePanel() {
       el("div", { class: "small dim" },
         "Describe the SOUND, not the fiction — a library has recordings of “low electrical hum”, never of a named ship. A choice made here sticks to the room and holds while the hour and the weather move; the automatic pick follows them."),
       el("div", { class: "row", style: "margin:8px 0" }, query, sourceSel,
-        el("button", { onclick: search }, "Search")),
+        el("button", { onclick: search }, "Search"),
+        el("button", {
+          title: "List every file in the local library",
+          onclick: browse,
+        }, "Browse library")),
       results,
       el("div", { style: "margin-top:14px" },
         el("button", {

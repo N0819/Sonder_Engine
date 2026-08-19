@@ -5612,6 +5612,62 @@ def _backdrop_url(chat_id, signature):
     return "/api/chats/%d/backdrop/%s.png" % (int(chat_id), signature)
 
 
+def _backdrop_payload(cid, req, status=None, ready=None):
+    """The one shape both backdrop routes answer with.
+
+    Written because they were not the same shape (FRONTEND-28). The POST
+    omitted `room_id` and `weather` -- the two fields the GET builds with
+    load-bearing comments -- and the browser CACHES the POST's payload under
+    the turn id (`generateBackdrop`, and `awaitBackdrop` returns its `first`
+    argument unpolled whenever the POST already answers `ready`). A later
+    read of that cached entry then called `weatherFxForTurn` with
+    `weather === undefined`, tearing the weather overlay down, and set
+    `BD.shownRoom = null`, defeating the same-room hold that keeps a picture
+    up across turns in one room.
+
+    The ambience twin already worked this way and says so in one line:
+    `_ambience_payload`, "the one shape both ambience routes answer with".
+    Two routes answering about the same thing should not be two answers.
+    """
+    configured = bool(image_model())
+    enabled = get_setting("backdrops_enabled") == "1"
+    if not req:
+        # No room resolved -- an opening turn before mapping has placed
+        # anyone, say. Not an error: there is simply nothing to depict.
+        return {"enabled": enabled, "configured": configured, "room": None,
+                "room_id": None, "signature": None, "ready": False,
+                "status": "absent", "error": None, "url": None, "weather": {}}
+    signature = req["signature"]
+    if ready is None:
+        ready = bool(req["cached"])
+    return {
+        "enabled": enabled,
+        "configured": configured,
+        "room": req["room_name"],
+        # The room's IDENTITY, not its display name. A turn with no picture of
+        # its own leaves whatever is on screen up rather than blanking, and that
+        # is only honest while the reader is still in the same room -- see
+        # `backdropForTurn`. Two rooms can share a name; they cannot share this.
+        "room_id": req["room"],
+        "signature": signature,
+        "ready": bool(ready),
+        # 'ready' | 'pending' | 'error' | 'absent'. Pending is why the GET is
+        # worth polling: it is how a caller waits for an image without
+        # anything holding a connection open for the length of a generation.
+        "status": status or backdrop_status(cid, signature),
+        "error": backdrop_error(signature)
+        if (status or backdrop_status(cid, signature)) == "error" else None,
+        "url": _backdrop_url(cid, signature) if ready else None,
+        # What the weather overlay should draw over this room, already scoped
+        # to what the room can see. {} for anywhere with no sky. `severity` is
+        # the host's own setting riding along on it, so the drawing can be as
+        # restrained or as violent as the story asked for.
+        "weather": dict(req.get("weather") or {},
+                        severity=weather_severity(cid))
+        if req.get("weather") else {},
+    }
+
+
 @app.get("/api/turns/{tid}/backdrop")
 def turn_backdrop(tid: int):
     """What backdrop this turn wants, and whether it is already on disk.
@@ -5624,40 +5680,7 @@ def turn_backdrop(tid: int):
     cid = turn["chat_id"]
     req = build_backdrop_request(cid, turn["idx"], _backdrop_player(cid),
                                  style_guide(cid))
-    configured = bool(image_model())
-    enabled = get_setting("backdrops_enabled") == "1"
-    if not req:
-        # No room resolved -- an opening turn before mapping has placed
-        # anyone, say. Not an error: there is simply nothing to depict.
-        return {"enabled": enabled, "configured": configured, "room": None,
-                "room_id": None,
-                "signature": None, "ready": False, "url": None}
-    status = backdrop_status(cid, req["signature"])
-    return {
-        "enabled": enabled,
-        "configured": configured,
-        "room": req["room_name"],
-        # The room's IDENTITY, not its display name. A turn with no picture of
-        # its own leaves whatever is on screen up rather than blanking, and that
-        # is only honest while the reader is still in the same room -- see
-        # `backdropForTurn`. Two rooms can share a name; they cannot share this.
-        "room_id": req["room"],
-        "signature": req["signature"],
-        "ready": bool(req["cached"]),
-        # 'ready' | 'pending' | 'error' | 'absent'. Pending is why this route
-        # is worth polling: it is how a caller waits for an image without
-        # anything holding a connection open for the length of a generation.
-        "status": status,
-        "error": backdrop_error(req["signature"]) if status == "error" else None,
-        "url": _backdrop_url(cid, req["signature"]) if req["cached"] else None,
-        # What the weather overlay should draw over this room, already scoped
-        # to what the room can see. {} for anywhere with no sky. `severity` is
-        # the host's own setting riding along on it, so the drawing can be as
-        # restrained or as violent as the story asked for.
-        "weather": dict(req.get("weather") or {},
-                        severity=weather_severity(cid))
-        if req.get("weather") else {},
-    }
+    return _backdrop_payload(cid, req)
 
 
 @app.post("/api/turns/{tid}/backdrop")
@@ -5679,12 +5702,13 @@ def turn_backdrop_generate(tid: int, body: dict = Body(default={})):
                            style_guide(cid), force=bool(body.get("force")))
     if not out:
         raise HTTPException(409, "This turn has no room to depict yet.")
-    ready = out["status"] == "ready"
-    return {"enabled": get_setting("backdrops_enabled") == "1",
-            "configured": True,
-            "room": out["room"], "signature": out["signature"],
-            "status": out["status"], "ready": ready,
-            "url": _backdrop_url(cid, out["signature"]) if ready else None}
+    # Re-resolved rather than reconstructed from `out`'s three fields: the
+    # browser caches THIS payload under the turn id, so it has to carry
+    # everything the GET's does. `build_backdrop_request` never generates.
+    req = build_backdrop_request(cid, turn["idx"], _backdrop_player(cid),
+                                 style_guide(cid))
+    return _backdrop_payload(cid, req, status=out["status"],
+                             ready=out["status"] == "ready")
 
 
 @app.get("/api/chats/{cid}/backdrop/{signature}.png")
@@ -5781,9 +5805,16 @@ def _ambience_payload(cid, req, status=None):
         # do.
         "token": "%s#%d" % (req["signature"], (manifest or {}).get("rev") or 0)
         if req and manifest else None,
-        # What is actually playing, so the reader can see (and credit) it. The
-        # Freesound licences in play require attribution, and a feature that
-        # cannot tell you what it fetched cannot honour that.
+        # What this turn RESOLVED TO -- which is not the same claim as what is
+        # audible, and the comment here used to make the second one. The
+        # browser deliberately does not read this field: it builds its credit
+        # line from `layers[0]` beside the `playAmbience` call, because
+        # crediting the incoming bed while the previous one is still playing
+        # attributes the wrong recording, and attribution is the whole point
+        # (`ambience.js`, AMB.track). Kept as the resolved answer for any
+        # client that is not the player -- it is the only place `query` is
+        # published -- and it is the first layer's fields, not a second
+        # reading of what the speakers are doing (FRONTEND-29).
         "track": {k: manifest.get(k) for k in
                   ("title", "source", "license", "username", "url", "query")}
         if manifest and not silent else None,
