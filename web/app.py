@@ -4118,40 +4118,74 @@ def dlg_get(cid: int):
 
 @app.put("/api/chats/{cid}/dialogue_config")
 def dlg_put(cid: int, body: dict = Body(...)):
+    """Save the dialogue panel.
+
+    WHAT A SAVE MAY ERASE. This writes a whole-config replacement, which is
+    the right shape for the fields the panel renders -- an unchecked checkbox
+    has to be able to turn something off, so an absent boolean cannot mean
+    "leave it alone" for those. It is the wrong shape for every knob the panel
+    does NOT render, because then the route's own defaults stand in for a
+    value a host set some other way. So each field below falls back to WHAT IS
+    ALREADY STORED rather than to the schema default, and anything the config
+    grows that this handler has never heard of is carried through untouched.
+
+    Measured (AUDIT_MINDS finding 10): `initial_parallel_reactors` is read by
+    `agents/loops.py`, defaulted by `story/scene.py` and named in `Design.md`
+    as the supported way to restore the simultaneous opening wave -- and it
+    was in neither this whitelist nor `derived`, so a hand-set value lasted
+    until the next time anyone pressed Save on a panel with no field for it.
+    Silently, because nothing on screen had ever shown the number.
+    """
+    stored = wget(cid, "dialogue_config", None) or {}
+
+    def submitted(key, default):
+        """The submitted value, else the stored one, else the default."""
+        if key in body:
+            return body[key]
+        return stored.get(key, default)
+
     try:
-        autonomy = max(0, min(100, int(body.get("autonomy", 50))))
+        autonomy = max(0, min(100, int(submitted("autonomy", 50))))
     except (TypeError, ValueError):
         raise HTTPException(400, "autonomy must be an integer")
     derived = interaction_limits(autonomy)
 
     try:
-        config = {
-            "style": body.get("style", "natural"),
-            "min_lines": max(0, int(body.get("min_lines", 0))),
-            "max_lines": max(0, int(body.get("max_lines", 4))),
-            "variance": max(0.0, min(1.0, float(body.get("variance", 0.6)))),
+        config = dict(stored)
+        config.update({
+            "style": submitted("style", "natural"),
+            "min_lines": max(0, int(submitted("min_lines", 0))),
+            "max_lines": max(0, int(submitted("max_lines", 4))),
+            "variance": max(0.0, min(1.0, float(submitted("variance", 0.6)))),
             "autonomy": autonomy,
-            "allow_npc_initiative": bool(body.get("allow_npc_initiative", True)),
-            "allow_npc_to_npc_dialogue": bool(body.get("allow_npc_to_npc_dialogue", True)),
-            "stop_on_player_address": bool(body.get("stop_on_player_address", True)),
-            "stop_on_question_to_player": bool(body.get("stop_on_question_to_player", True)),
-            "silence_ends_exchange": bool(body.get("silence_ends_exchange", True)),
+            "allow_npc_initiative": bool(submitted("allow_npc_initiative", True)),
+            "allow_npc_to_npc_dialogue": bool(submitted("allow_npc_to_npc_dialogue", True)),
+            "stop_on_player_address": bool(submitted("stop_on_player_address", True)),
+            "stop_on_question_to_player": bool(submitted("stop_on_question_to_player", True)),
+            "silence_ends_exchange": bool(submitted("silence_ends_exchange", True)),
+            # How many characters open the beat in one blind instant. Floored
+            # at 1 because a wave of nobody is not a beat, and bounded because
+            # a number above the cast simply means "everyone" twice over.
+            "initial_parallel_reactors": max(
+                1, min(12, int(submitted("initial_parallel_reactors", 1)))),
+            "parallel_isolated_reactors": bool(
+                submitted("parallel_isolated_reactors", False)),
             # 0 = never promote. Capped well below the point where a counter
             # would be theatre rather than a setting.
             "promote_after_addressed": max(
-                0, min(99, int(body.get("promote_after_addressed", 0)))),
+                0, min(99, int(submitted("promote_after_addressed", 0)))),
             # The ceiling on what the cast may do off screen. Normalized
             # rather than rejected: an unreadable value falls to the default,
             # never to the floor, so a typo cannot quietly switch a story's
             # off-screen life off (scene.normalize_offscreen_life).
             "offscreen_life": normalize_offscreen_life(
-                body.get("offscreen_life", OFFSCREEN_LIFE_DEFAULT)),
+                submitted("offscreen_life", OFFSCREEN_LIFE_DEFAULT)),
             # 0 means no ticks however high the level is set -- the bound and
             # the permission are separate answers, and a cap of zero is a
             # legitimate way to say "not right now" without losing the level.
             "max_offscreen_actors": max(
-                0, min(12, int(body.get("max_offscreen_actors", 3)))),
-        }
+                0, min(12, int(submitted("max_offscreen_actors", 3)))),
+        })
 
         for key, default in derived.items():
             config[key] = max(0, int(body.get(key, default)))
