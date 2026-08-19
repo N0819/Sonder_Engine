@@ -306,12 +306,20 @@ def span_is_a_guess(garment):
 def guessed_spans(regions):
     """Garments in this ledger whose coverage nothing actually knew.
 
-    Returns the garment names, once each. For the commit seam to hand to the
-    Director, which CAN say what a garment covers and is the only stage with
-    the fiction in front of it. Authored coverage is never re-guessed and so
-    never reported: setting it by hand is the escape hatch, and nagging about
-    a choice somebody already made is how a warning teaches people to stop
-    reading warnings.
+    Returns the garment names, once each. UNWIRED -- no production caller,
+    only tests, and `docs/UNBUILT.md` §2.14 is the register entry. The seam it
+    was written for is the commit path handing these to the Director, which
+    CAN say what a garment covers and is the only stage with the fiction in
+    front of it; that hand-off does not exist, and this docstring described it
+    in the present tense, so a reader met a closed feedback loop that is open.
+    Measured while it was open: 110 of 560 live worn garment records carry a
+    span the cue tables guessed, twenty of them a nagajuban -- a full-length
+    under-kimono -- sitting on the torso alone, so those bodies report legs
+    and groin bare while wearing one.
+
+    Authored coverage is never re-guessed and so never reported: setting it by
+    hand is the escape hatch, and nagging about a choice somebody already made
+    is how a warning teaches people to stop reading warnings.
     """
     out, seen = [], set()
     for region in REGIONS:
@@ -1475,14 +1483,23 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
 
     Scoped PER BODY, because one flag for the whole beat meant the player
     yanking their own coat off undressing everyone standing near them.
-    Attribution, in order, because the ACTOR is not the target -- "Corin tears
-    the sash from her waist" is Mira being undressed:
+    Attribution runs the ladder in `_attributed_targets`, which both readings
+    of a beat share, because the ACTOR is not the target -- "Corin tears the
+    sash from her waist" is Mira being undressed. In its real order, which
+    this docstring used to give as three tiers in a different arrangement:
 
-      1. the garment. Whoever is wearing what the sentence names, by full
-         phrase, or by its head noun when exactly one body is wearing one.
-      2. first person, but only in the player's own input, where "I" is a
+      1. the garment, by FULL PHRASE. Whoever is wearing what the sentence
+         names outright.
+      2. the genitive owner -- "<Name>'s tank top" -- which says whose even
+         where the phrase is abbreviated past recognition and a second cast
+         name shares the sentence.
+      3. the garment by HEAD NOUN, when exactly one body is wearing one.
+      4. first person, but only in the player's own input, where "I" is a
          subject the sentence never spells out.
-      3. a name, when the sentence names exactly one body and no garment.
+      5. a name, when the sentence names exactly one body. A non-reflexive
+         third-person possessive re-attributes away from that body -- it acts
+         on somebody ELSE -- to the only other dressed body, or to nobody.
+      6. the player, for their own ambiguous prose and no one else's.
 
     Sentence matching is a heuristic, deliberately. It decides how FAST an
     undressing the fiction already asked for happens, never who may know what,
