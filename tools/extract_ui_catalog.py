@@ -29,7 +29,12 @@ PY_FILES = tuple(sorted(
     for pkg in SUBSYSTEM_PACKAGES
     for path in (ROOT / pkg).glob("*.py")
     if path.name not in {"prompts.py"}
-)) + tuple(sorted((ROOT / "agents").glob("*.py")))
+)) + tuple(sorted((ROOT / "agents").rglob("*.py")))
+#: `rglob` under `agents/`, matching `generate_code_map.source_paths` and
+#: `project_check.engine_python_paths`. `agents/` has no subpackage today, so
+#: the three agreed by accident; the day one is added, a `glob` catalogue
+#: silently stops seeing the strings in it and the missing UI text looks like
+#: a translation gap rather than a harvest gap.
 ATTRS = frozenset(("title", "aria-label", "placeholder", "alt"))
 
 
