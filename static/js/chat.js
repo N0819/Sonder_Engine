@@ -2041,10 +2041,10 @@ function memModal(p) {
     });
     const categorySelect = el("select", {},
       el("option", { value: "" }, "All categories"),
-      ...MEM_CATS.map(c => el("option", { value: c }, c)));
+      ...memoryCategories().map(c => el("option", { value: c }, c)));
     const provenanceSelect = el("select", {},
       el("option", { value: "" }, "All sources"),
-      ...MEM_PROV.map(s => el("option", { value: s }, s)));
+      ...memoryProvenance().map(s => el("option", { value: s }, s)));
     const archivedToggle = el("input", { type: "checkbox" });
     const sortSelect = el("select", {},
       el("option", { value: "newest" }, "Newest first"),
@@ -2393,12 +2393,12 @@ function memoryCard(m) {
   const gist = m.gist || m.content || "(empty)";
 
   const catSel = el("select", {},
-    MEM_CATS.map(c => el("option", {
+    memoryCategories().map(c => el("option", {
       value: c,
       ...(c === cat ? { selected: "" } : {})
     }, c)));
   const provSel = el("select", {},
-    MEM_PROV.map(p => el("option", {
+    memoryProvenance().map(p => el("option", {
       value: p,
       ...(p === prov ? { selected: "" } : {})
     }, p)));
@@ -2626,12 +2626,12 @@ function showNewMemoryForm(layout) {
     placeholder: "What this character remembers…"
   });
   const cat = el("select", {},
-    MEM_CATS.map(c => el("option", {
+    memoryCategories().map(c => el("option", {
       value: c,
       ...(c === "episode" ? { selected: "" } : {})
     }, c)));
   const prov = el("select", {},
-    MEM_PROV.map(p => el("option", {
+    memoryProvenance().map(p => el("option", {
       value: p,
       ...(p === "told" ? { selected: "" } : {})
     }, p)));
