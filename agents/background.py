@@ -74,20 +74,58 @@ from world.background_claims import (
 
 from story.scene import persona_of
 
-from .common import _agent_json, _unknown_actor_label, character_room
+from .common import (_agent_json, _unknown_actor_label, character_room,
+                     observable_action_text)
 
 _log = logging.getLogger(__name__)
 
 
-def _filtered_player_declaration(ctx):
-    """The player's beat as a background BYSTANDER may legitimately receive it:
-    overt sequence elements only -- never a concealed line, never the private
-    thought. background_react used to pass ctx.input raw, leaking whispered or
+def _filtered_player_declaration(ctx, sc, name, here):
+    """The player's beat as THIS background presence may legitimately receive
+    it: overt sequence elements only -- never a concealed line, never the
+    private thought -- and only across a channel that reaches `here`.
+
+    background_react used to pass ctx.input raw, leaking whispered or
     silently-sent content (and any private thought the player typed) straight
     into an unregistered presence's payload; worse, a declaration that named
     the presence WHILE concealing made the deterministic gate more likely to
-    pick them to react to words they never heard."""
+    pick them to react to words they never heard.
+
+    That fixed the CONTENT and left the CHANNEL open. There was no hearing
+    check, no room check and no per-presence anything in here, while the two
+    fields delivered beside it exist to answer exactly that question: `events`
+    carries a per-presence `hear_level` map and is not admitted at all when no
+    managed presence can hear it, and `resolved_event` is admitted only when
+    every managed presence stands in the player's room. This third field
+    carried the same beat's content past both of them -- the player's line
+    reached a presence for whom `_audience_map` had computed "none", and, on
+    the per-presence path, a presence `_beat_for_presence` had just failed
+    closed on three separate ways.
+
+    Same ladder as `_beat_for_presence`, for the same reason: only a FULL
+    hearing delivers the words, anything audible below that is an indistinct
+    exchange, and an act is delivered only to a presence standing in the room
+    it happened in -- as its outward surface, since a bystander sees what a
+    body does and never what it meant by it. Unknown rooms deliver nothing.
+    """
     interp = ctx.get("director_interpret") or {}
+    here = str(here or "").strip()
+    p_room = str(_player_room(ctx, sc) or "").strip()
+    if not here or not p_room:
+        return ""
+    p_name = persona_name(persona_of(ctx.chat))
+
+    def _hearing(volume):
+        """This presence's hearing of the player, or "none". An unnameable
+        speaker has no body to build a relation from, so co-location is all
+        that can be established and anything else fails closed."""
+        if not p_name:
+            return "full" if here == p_room else "none"
+        return hear_level(
+            spatial_rel_between(sc, name, p_name,
+                                observer_room=here, target_room=p_room),
+            volume or "normal")
+
     seq = [e for e in (interp.get("sequence") or []) if isinstance(e, dict)]
     if seq:
         parts = []
@@ -95,15 +133,26 @@ def _filtered_player_declaration(ctx):
             if e.get("visibility") == "concealed":
                 continue
             if e.get("type") == "speech" and e.get("text"):
+                level = _hearing(e.get("volume"))
+                if level == "none":
+                    continue
+                if level != "full":
+                    parts.append("an indistinct remark")
+                    continue
                 parts.append('"%s"' % e["text"])
-            elif e.get("type") == "action" and e.get("attempt"):
-                parts.append(str(e["attempt"]))
+            elif e.get("type") == "action":
+                if here != p_room:
+                    continue
+                surface = observable_action_text(e)
+                if surface:
+                    parts.append(str(surface))
         return " ".join(parts).strip()
     # No structured sequence to filter against; the raw input may contain the
-    # concealed words verbatim. Withhold it entirely whenever a private thought
-    # exists (the one signal available here that something was withheld);
-    # otherwise the declaration is public and safe to pass.
-    if interp.get("private_thought"):
+    # concealed words verbatim, and there is no volume to grade it by. Withhold
+    # it entirely whenever a private thought exists (the one signal available
+    # here that something was withheld), and otherwise only for a presence
+    # standing where the beat happened.
+    if interp.get("private_thought") or here != p_room:
         return ""
     return ctx.input or ""
 
@@ -559,11 +608,19 @@ def scene_life(ctx, nonce, level, cfg):
     # said everything.
     _prose_shared = bool(p_room) and all(
         room == p_room for _, _n, _r, room in managed)
+    _declarations = {_filtered_player_declaration(ctx, sc, n, room)
+                     for _t, n, _r, room in managed}
     payload = {
         "place": place,
         "beat": {
             "resolved_event": _redacted_resolved_event(dr) if _prose_shared else "",
-            "player_declaration": _filtered_player_declaration(ctx),
+            # One context read by every voice in it, so the declaration is
+            # admitted only where it is uniformly perceivable -- the same rule
+            # `_prose_shared` applies to the beat prose two lines up. Any
+            # divergence between the managed presences withholds it entirely
+            # rather than annotating it.
+            "player_declaration": (
+                _declarations.pop() if len(_declarations) == 1 else ""),
             "events": events,
             "present_characters": [
                 p for p in _present_others(
@@ -996,7 +1053,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
                 dr, sc, sketch.get("station_room"), name,
                 beat_room=_player_room(ctx, sc)),
             "addressed_by": addressed_by,
-            "player_declaration": _filtered_player_declaration(ctx),
+            "player_declaration": _filtered_player_declaration(
+                ctx, sc, name, sketch.get("station_room")),
             "present_others": [p for p in present_others if p != name],
         },
         "variant_seed": nonce,
