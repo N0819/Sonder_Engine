@@ -1107,3 +1107,74 @@ def test_covered_and_its_attribution_are_one_predicate():
     assert "head" not in cover
     assert "feet" not in cover
     assert attire.exposed_regions(regions) == ["head", "feet"]
+
+
+# --- a cue table that cannot reach its own entries --------------------------
+#
+# Two cue-table rules decide which region a garment name lands in, and both
+# resolved a phrase by something other than what the phrase says.
+#
+# `region_of` prefers the cue that matches LATEST, because English puts the
+# noun at the end. On a TIE it kept the first region in table order, so a cue
+# that is a longer, more specific spelling of an earlier one could never win:
+# `girdle-cloth` is listed under groin and `girdle` under waist, they match
+# the same string at the same offset, and waist is declared first. The groin
+# entry was unreachable from the moment it was added -- the module header is
+# emphatic that waist and groin must stay separate, and this is that failure
+# from the other side, a body in nothing but a girdle-cloth reporting its
+# groin bare.
+#
+# `attaches_only` asked whether ANY ornament word appears ANYWHERE in the
+# phrase, so one describing word turned the garment into a thing that covers
+# nothing: `cord` is both a waist cue and an attach cue, and a leather cord
+# belt was worn at the waist and concealed it not at all.
+
+def test_a_longer_cue_at_the_same_place_is_the_more_specific_garment():
+    """The tie-break is specificity, not the order the table was written in.
+    Any cue that is a longer spelling of another is otherwise dead on
+    arrival, and nothing says so."""
+    assert attire.region_of("girdle-cloth") == "groin"
+    assert attire.region_of("a silk girdle-cloth") == "groin"
+    assert attire.region_of("a plain girdle") == "waist"
+
+
+def test_the_noun_at_the_end_still_beats_a_longer_cue_earlier():
+    assert attire.region_of("girdle-cloth and a pair of boots") == "feet"
+
+
+def test_an_ornament_word_describes_a_garment_it_does_not_replace_it():
+    """`attaches_only` decides whether a garment COVERS its region. The head
+    noun decides that -- a cord belt is a belt."""
+    assert attire.attaches_only("a leather cord belt") is False
+    assert attire.region_of("a leather cord belt") == "waist"
+    assert "waist" in attire.regions_covered("a leather cord belt")
+
+
+def test_a_thing_that_really_is_worn_at_a_place_still_attaches():
+    assert attire.attaches_only("a silk hair ribbon") is True
+    assert attire.attaches_only("a gold necklace") is True
+    assert attire.attaches_only("a braided cord") is True
+    assert attire.attaches_only("a signet ring") is True
+
+
+def test_a_covering_garment_named_after_an_ornament_still_covers():
+    """The general shape: an attach cue early in the phrase, a covering noun
+    after it."""
+    assert attire.attaches_only("a chain mail shirt") is False
+    assert attire.attaches_only("a ribbon-trimmed dress") is False
+
+
+def test_a_garment_that_merely_carries_an_ornament_still_covers():
+    """Live, and the only verdict this change moves across all 192 garment
+    names in the corpus: `worn flight jacket with patched insignia` read as
+    an ornament, so the jacket covered nothing."""
+    assert attire.attaches_only("worn flight jacket with patched insignia") is False
+    assert attire.region_of("worn flight jacket with patched insignia") == "torso"
+
+
+def test_where_a_thing_hangs_does_not_decide_whether_it_covers():
+    """Two questions about one phrase. `region_of` reads the placement --
+    a key ring on a belt is at the waist -- while `attaches_only` reads what
+    the thing IS, and a key ring covers nothing whatever it hangs from."""
+    assert attire.region_of("heavy key ring on belt") == "waist"
+    assert attire.attaches_only("heavy key ring on belt") is True
