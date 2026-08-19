@@ -575,13 +575,18 @@ def _commit_all_locked(ctx, nonce):
     if isinstance(_residue_report, dict):
         results["routine_residue"] = dict(_residue_report)
 
+    # No "errors" key. It was hardcoded `[]` here, written by no domain and
+    # read by nothing, and it could not have been anything else: a domain that
+    # fails RAISES, and the outer transaction rolls the whole turn back rather
+    # than returning a partial commit with a list of complaints. Publishing a
+    # channel that cannot carry anything invites a caller to check it instead
+    # of catching.
     return {
         "summary": (
             f"Committed turn {ctx.turn.idx}: "
             f"{len(results.get('memories', {}).get('committed', []))} "
             "memory writes"
         ),
-        "errors": [],
         "results": results,
     }
 
