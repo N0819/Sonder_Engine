@@ -49,7 +49,7 @@ function defaultCharacterSheet() {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     initial_outfit: { regions: {} },
     simulation: { tier: "mid", temperature: 0.8, sampler: {}, offscreen_agent: false },
-    embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
+    embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, scent: "", latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
     psychology: { drive: { essence: "", expression: "", taboo: "" }, capacity: "", traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
     social: { voice: { register: "", cadence: "", verbosity: "natural", markers: [], notes: "" }, baseline_stances: { unknown_person: { trust: 0, warmth: 0, threat_sensitivity: 0 } } },
     competence: { abilities: [] },
@@ -295,6 +295,10 @@ function charEditor(c, options = {}) {
     "Body appearance — stable visible features, excluding clothing",
     sheet.embodiment?.visible?.summary, 3
   );
+  f.scent = fText(
+    "Body scent — what this body standingly smells of, excluding clothing",
+    sheet.embodiment?.scent
+  );
   f.senses = fSenses("Senses", sheet.embodiment?.senses);
   f.build = fText("Build", sheet.embodiment?.visible?.build);
   f.face = fText("Face", sheet.embodiment?.visible?.face);
@@ -464,7 +468,8 @@ function charEditor(c, options = {}) {
           + "character-agent ceiling; off-screen decisions use only this "
           + "character's own carried knowledge.")),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
-        f.summary.node, f.senses.node, f.build.node, f.face.node, f.hair.node,
+        f.summary.node, f.scent.node, f.senses.node, f.build.node,
+        f.face.node, f.hair.node,
         f.eyes.node, f.distinctive.node, f.latent.node,
         el("div", { class: "small dim", style: "margin-top:8px" },
           "Extra body parts are structured, not prose: declare a part once, "
@@ -539,6 +544,7 @@ function charEditor(c, options = {}) {
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.summary.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
+              scent: f.scent.read(),
               latent: f.latent.read(),
               extra_parts: f.extra_parts.read(),
               interoception: {
@@ -637,6 +643,7 @@ function personaEditor(p) {
     embodiment: {
       senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }],
       visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] },
+      scent: "",
       latent: []
     },
     competence: { abilities: [] },
@@ -658,6 +665,10 @@ function personaEditor(p) {
   f.appearance = fArea(
     "Body appearance — stable visible features, excluding clothing",
     sheet.embodiment?.visible?.summary, 3
+  );
+  f.scent = fText(
+    "Body scent — what this body standingly smells of, excluding clothing",
+    sheet.embodiment?.scent
   );
   f.build = fText("Build", sheet.embodiment?.visible?.build);
   f.face = fText("Face", sheet.embodiment?.visible?.face);
@@ -703,7 +714,7 @@ function personaEditor(p) {
           + "on in Settings."),
         fillAppearance),
       el("details", { open: "" }, el("summary", {}, "Embodiment (Visible & Senses)"),
-        f.appearance.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node,
+        f.appearance.node, f.scent.node, f.senses.node, f.build.node, f.face.node, f.hair.node, f.eyes.node, f.distinctive.node, f.latent.node,
         el("div", { class: "small dim", style: "margin-top:8px" },
           "Extra body parts are structured, not prose: declare a part once, "
           + "with where it emerges, and the story can see it, cover it, and "
@@ -728,6 +739,7 @@ function personaEditor(p) {
             embodiment: {
               senses: f.senses.read(),
               visible: { summary: f.appearance.read(), build: f.build.read(), face: f.face.read(), hair: f.hair.read(), eyes: f.eyes.read(), distinctive_features: f.distinctive.read() },
+              scent: f.scent.read(),
               latent: f.latent.read(),
               extra_parts: f.extra_parts.read()
             },

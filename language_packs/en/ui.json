@@ -311,6 +311,7 @@
   "Body appearance — stable visible features, excluding clothing": "Body appearance — stable visible features, excluding clothing",
   "Body description under the clothes, region by region. Written onto the card only if you tick this, and used in play only while the matching switch in Settings is on.": "Body description under the clothes, region by region. Written onto the card only if you tick this, and used in play only while the matching switch in Settings is on.",
   "body must be {\"doc\": <value>}": "body must be {\"doc\": <value>}",
+  "Body scent — what this body standingly smells of, excluding clothing": "Body scent — what this body standingly smells of, excluding clothing",
   "Book": "Book",
   "Book ${otherId}": "Book ${otherId}",
   "Book operations": "Book operations",
