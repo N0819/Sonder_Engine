@@ -51,7 +51,10 @@ class TestTheFirewallIsAStructure:
         params = inspect.signature(offscreen.agent_context).parameters
         assert "scene" not in params
         assert "player_room" not in params
-        assert set(params) == {"cid", "entry", "frame_id", "clock"}
+        # `turn_idx` carries no world content: it is the decay clock for the
+        # mind's own hypothesis ledger, nothing more.
+        assert set(params) == {"cid", "entry", "frame_id", "clock",
+                               "turn_idx"}
 
     def test_nothing_about_the_player_reaches_it(self, temp_db):
         cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
@@ -151,3 +154,103 @@ class TestSelectionStaysSeparateFromContent:
         body = inspect.getsource(offscreen.full_agent_candidates)
         body = body[body.index('"""', body.index('"""') + 3) + 3:]
         assert "scene" not in body and "director" not in body
+
+
+class TestItsOwnTheoryOfOtherMindsTravels:
+    """`state["mind_models"]` is this mind's own model of other minds — every
+    hypothesis in it was formed on this mind's own firewalled turns
+    (`apply_mind_model_updates` is the only writer), so handing it back to the
+    same mind opens no channel between minds. Withholding it made the absent
+    mind conclude LESS than its own evidence supports, which is the one repair
+    the firewall's doctrine forbids. What travels is the DERIVED view the
+    on-screen step already hands the same mind — decay-applied, claim and
+    current confidence only — never the raw ledger with its engine
+    bookkeeping. Argument: docs/design/DESIGN_OFFSCREEN_MIND_MODELS.md."""
+
+    def _cid(self, db):
+        return db.qi("INSERT INTO chats(name,scenario,created) "
+                     "VALUES(?,?,?)", ("A", "", time.time()))
+
+    def test_the_derived_view_travels_not_the_raw_ledger(self, temp_db):
+        cid = self._cid(temp_db)
+        raw = {"Rem": {"last_updated_turn": 10, "hypotheses": [
+            {"about_entity": "Rem", "kind": "goal",
+             "claim": "Rem means to force the gate", "confidence": 0.6,
+             "last_updated_turn": 10, "first_seen_turn": 3,
+             "formed_under": {"absorption": 0.5, "turn": 3}},
+            {"about_entity": "Rem", "kind": "goal",
+             "claim": "Rem is only passing through", "confidence": 0.3,
+             "last_updated_turn": 10},
+        ]}}
+        ctx = offscreen.agent_context(
+            cid, _subject(state={"mind_models": raw}), turn_idx=10)
+        goal = ctx["mind_models"]["Rem"]["goal"]
+        assert goal["leading"]["claim"] == "Rem means to force the gate"
+        assert [c["claim"] for c in goal["competitors"]] == \
+            ["Rem is only passing through"]
+        # The ledger's bookkeeping is the ENGINE's, not theirs: a mind that
+        # could read when it formed a belief, or under what absorption, would
+        # be reading the engine rather than the world.
+        blob = json.dumps(ctx)
+        for bookkeeping in ("last_updated_turn", "first_seen_turn",
+                            "formed_under", "hypotheses"):
+            assert bookkeeping not in blob
+
+    def test_conviction_arrives_as_it_stands_now_not_at_peak(self, temp_db):
+        """An off-screen tick is exactly the moment the most time has passed,
+        so an undecayed confidence would hand the mind its conviction as it
+        stood when formed rather than as it stands now."""
+        cid = self._cid(temp_db)
+        raw = {"Rem": {"hypotheses": [
+            {"kind": "emotion", "claim": "Rem is frightened",
+             "confidence": 0.8, "last_updated_turn": 0}]}}
+        ctx = offscreen.agent_context(
+            cid, _subject(state={"mind_models": raw}), turn_idx=60)
+        leading = ctx["mind_models"]["Rem"]["emotion"]["leading"]
+        assert leading["confidence"] < 0.05
+        # Display never mutates storage.
+        assert raw["Rem"]["hypotheses"][0]["confidence"] == 0.8
+
+    def test_a_masked_native_of_the_frame_does_not_travel(self, temp_db):
+        """The nonexistent_cast recognition backstop, applied at the same
+        boundary the on-screen step applies it: in a frame where a cast
+        member does not yet exist, a native must not be handed back a model
+        keyed to that identity — while a stranger-shaped key (no cast member
+        anywhere) rides as itself."""
+        from core.frames import create_frame
+
+        cid = self._cid(temp_db)
+        hid = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created) "
+            "VALUES(?,?,?,?)",
+            ("Hinami", json.dumps({"identity": {"name": "Hinami"}}), "{}",
+             time.time()))
+        temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
+                   "VALUES(?,?,?,?)", (cid, hid, "dormant", "{}"))
+        fid = create_frame(cid, label="Before her", ordinal=-1, kind="past",
+                           nonexistent_cast=[hid])
+        hyp = [{"kind": "trait", "claim": "sharp-eyed", "confidence": 0.4,
+                "last_updated_turn": 1}]
+        raw = {"Hinami": {"hypotheses": list(hyp)},
+               "the fox woman": {"hypotheses": list(hyp)}}
+        ctx = offscreen.agent_context(
+            cid, _subject(state={"mind_models": raw}), frame_id=fid,
+            turn_idx=1)
+        assert "Hinami" not in ctx["mind_models"]
+        assert "the fox woman" in ctx["mind_models"]
+
+    def test_its_model_of_the_player_is_its_own_state(self, temp_db):
+        """test_nothing_about_the_player_reaches_it above bars the PLAYER'S
+        side — position, recent action, the turn feed — and still holds: the
+        signature cannot receive any of it. The mind's own model OF the
+        player was formed from what it perceived and is its own state; the
+        distance between the two stays real precisely because this model can
+        be wrong."""
+        cid = self._cid(temp_db)
+        raw = {"player": {"hypotheses": [
+            {"kind": "goal", "claim": "means to leave without paying",
+             "confidence": 0.5, "last_updated_turn": 2}]}}
+        ctx = offscreen.agent_context(
+            cid, _subject(state={"mind_models": raw}), turn_idx=2)
+        assert ctx["mind_models"]["player"]["goal"]["leading"]["claim"] == \
+            "means to leave without paying"
