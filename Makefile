@@ -61,9 +61,13 @@ map:
 structure:
 	$(PYTHON) tools/project_check.py
 
+# `extension_runtime` and `language_runtime` were missing until 2026-08-18.
+# The first is the public extension API -- an integrator's production code is
+# told to depend on it, and a syntax error there was caught by nothing.
 compile:
 	$(PYTHON) -m compileall -q core llm world mind story dressing persist web \
-		 agents tools tests browser_tests
+		 agents extension_runtime language_runtime language_adapters \
+		 demo tools tests browser_tests
 
 # Both tiers now run every test. The difference is `map`: `check` regenerates
 # docs/CODE_MAP.md, `check-fast` only verifies the copy on disk is current.

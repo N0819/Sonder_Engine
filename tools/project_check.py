@@ -931,13 +931,28 @@ def check_no_dead_prompts(errors: list[str]) -> None:
 #: ROOT also contains .claude/worktrees/ and .venv-browser/.
 SUBSYSTEM_PACKAGES = ("core", "llm", "world", "mind", "story", "dressing", "persist", "web")
 
+#: Engine code that is NOT a subsystem package, and must not be added to
+#: `SUBSYSTEM_PACKAGES` -- that tuple is also the deep-import BAN list, and
+#: `extension_runtime` is the one package an extension is supposed to reach.
+#: They are still the engine's own source and still owe every structural rule.
+#:
+#: They were in neither `make compile` nor any check here until 2026-08-18, so
+#: `extension_runtime/api.py` -- the entire public extension surface, the thing
+#: an integrator's production code is told to depend on -- was the least
+#: covered source in the repository. Found while closing the gap that let a
+#: 3.11-unparseable f-string ship: the checks that would have caught it did not
+#: look here.
+NON_PACKAGE_ENGINE_DIRS = ("agents", "extension_runtime", "language_runtime",
+                           "language_adapters")
+
 
 def engine_python_paths():
-    """Every .py file the engine itself owns, packages plus agents."""
+    """Every .py file the engine itself owns, packages plus the loose dirs."""
     out = []
     for pkg in SUBSYSTEM_PACKAGES:
         out.extend((ROOT / pkg).glob("*.py"))
-    out.extend((ROOT / "agents").rglob("*.py"))
+    for extra in NON_PACKAGE_ENGINE_DIRS:
+        out.extend((ROOT / extra).rglob("*.py"))
     return sorted(out)
 
 

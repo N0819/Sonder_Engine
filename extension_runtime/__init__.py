@@ -34,12 +34,15 @@ import json
 import logging
 import os
 from pathlib import Path
+
 import re
 import sys
 import tempfile
 import threading
 import time
 from typing import Any, Callable
+
+from core.paths import INSTALL_ROOT
 
 from .api import (
     CharacterAccess, CharacterHandle, CommitView, CommittedTurn,
@@ -56,7 +59,13 @@ EXT_API_VERSION = 1
 ENABLED_SETTING = "enabled_extensions"
 ROOT_ENV = "SONDER_EXTENSIONS"
 SAFE_MODE_ENV = "SONDER_EXTENSIONS_SAFE"
-DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "extensions"
+# Through `core.paths`, not from this file's own location. A module that
+# derives the install root from `__file__` carries its own wrong answer
+# with it the day it moves -- which is not hypothetical here: the layout
+# change that put 81 root modules into eight packages moved every path
+# like this one by a directory, and the ones that were missed wrote 751 MB
+# of backdrops and ambience into a directory nothing read.
+DEFAULT_ROOT = Path(INSTALL_ROOT) / "extensions"
 
 EXTENSION_ID = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
 _VERSION = re.compile(r"^\d+(\.\d+)*$")

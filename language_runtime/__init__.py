@@ -20,10 +20,13 @@ import importlib
 import json
 import os
 from pathlib import Path
+
 import re
 import threading
 from types import MappingProxyType
 from typing import Any, Mapping
+
+from core.paths import INSTALL_ROOT
 
 
 DEFAULT_LANGUAGE = "en"
@@ -31,9 +34,13 @@ STORY_LANGUAGE_KEY = "story_language"
 UI_LANGUAGE_SETTING = "ui_language"
 PACK_SCHEMA_VERSION = 1
 
+# `INSTALL_ROOT` rather than this file's own location, for the reason
+# `core/paths.py` exists: a module that answers "where am I installed" from
+# `__file__` answers it wrongly the moment it moves, and takes the wrong
+# answer with it silently.
 _PACK_ROOT = Path(os.environ.get(
     "SONDER_LANGUAGE_PACKS",
-    Path(__file__).resolve().parent.parent / "language_packs",
+    Path(INSTALL_ROOT) / "language_packs",
 ))
 _LANGUAGE_ID = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$")
 _CARD_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
