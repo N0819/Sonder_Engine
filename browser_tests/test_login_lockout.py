@@ -69,7 +69,7 @@ def auth_server(tmp_path):
     port = _free_port()
     env = {**os.environ, "ENGINE_DB": str(tmp_path / "auth.db")}
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app:app",
+        [sys.executable, "-m", "uvicorn", "web.app:app",
          "--host", "127.0.0.1", "--port", str(port)],
         cwd=ROOT,
         env=env,

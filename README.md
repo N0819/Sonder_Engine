@@ -56,12 +56,17 @@ Python 3.11 or newer.
 **Windows:** double-click `Start Sonder.bat` — it creates the environment,
 installs dependencies, and opens the app.
 
-**macOS / Linux:**
+**macOS / Linux:** run `./"Start Sonder.sh"` — it does the same: finds a
+Python 3.11+, builds the environment, installs dependencies, starts the server
+and opens the app. It never touches a database. `--port N`, `--host ADDR` and
+`--no-browser` are there when the defaults do not suit; `--help` lists them.
+
+By hand instead:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app:app --host 127.0.0.1 --port 8008 --timeout-graceful-shutdown 3
+python3 -m venv .venv && source .venv/bin/activate
+pip install -c constraints.txt -r requirements.txt
+uvicorn web.app:app --host 127.0.0.1 --port 8008 --timeout-graceful-shutdown 3
 ```
 
 That last flag is not optional in practice. Uvicorn's graceful shutdown waits
