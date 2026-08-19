@@ -406,14 +406,22 @@ files are local state or private diagnostics and are ignored deliberately.
 - `persist/chat_archive.py`: typed, atomic portable chat export/import service and routes
 - `persist/pipeline_trace.py`: privacy-conscious export, validation, and offline replay
   of persisted step/variant history
-- `world/spatial_orientation.py`: bearing math and reciprocal edge normalization,
-  re-exported through `world/spatial.py` for compatibility
-- `world/spatial.py`: a pure re-export facade over the thirteen `spatial_*` modules
+- `world/spatial.py`: a pure re-export facade over fourteen `spatial_*` modules
   (identity, barriers, transit, containment, contacts, contact_migration,
-  substance, geometry, light, routing, senses, prose, merge -- split plan in
-  `docs/design/SPLIT_SPATIAL.md`, findings in
+  substance, geometry, light, routing, senses, prose, merge, orientation --
+  split plan in `docs/design/SPLIT_SPATIAL.md`, findings in
   `docs/experiments/AUDIT_SPATIAL.md`); every name, private ones included,
-  still imports as `from spatial import X`
+  still imports as `from world.spatial import X`, **and that is the only
+  spelling a caller may use.** `tools/project_check.py` covers this family
+  alongside `agents.director` and `persist.commit`: reaching past the facade to
+  a sibling is an error, and the one exception is a test that PATCHES or
+  introspects a sibling, because a monkeypatch must name the module that
+  DEFINES the function it intercepts. `world/spatial_frames.py` matches the
+  filename prefix and is NOT behind the facade — the family is read off the
+  facade's own import block, never off a glob.
+- `world/spatial_orientation.py`: bearing math and reciprocal edge
+  normalization. One of the fourteen, named here because three documents used
+  to present it as a directly-importable seam of its own
 
 ### `mind/memory.py`
 
