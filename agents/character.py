@@ -2581,9 +2581,21 @@ def character_step(ctx, cid, nonce):
     # reactors; this guard protects rerun/resume paths that hydrate a stale plan
     # and makes the invariant hold no matter who calls character_step. No LLM
     # call, no manifest (which perception would otherwise deliver as tells).
-    if awareness_of(chat["id"], character_name(sh)) in NON_AWAKE_GATED:
+    _awareness = awareness_of(chat["id"], character_name(sh))
+    if _awareness in NON_AWAKE_GATED:
+        # SAY SO. `_awareness_gated` had exactly one reader in the tree, a
+        # test, so nothing downstream and nothing in the pipeline drawer could
+        # tell a mind that was asleep from one that declared nothing -- and a
+        # gated mind runs no step, so it generates no pressure and reads as a
+        # quiet one, which is precisely how a stuck sleeper stays unnoticed.
+        ctx.add_warning(
+            f"character {character_name(sh)}: {_awareness}, so no decision "
+            "was taken this beat")
+        # `name`/`char_id` because every other return path sets them and the
+        # readers of a stored result key on them.
         return {"sequence": [], "speech": None, "action": None, "actions": [],
                 "manifest": {}, "mind_model_updates": [],
+                "name": character_name(sh), "char_id": cid,
                 "_awareness_gated": True}
 
     interaction_views = ctx.get("interaction_views", {}) or {}
