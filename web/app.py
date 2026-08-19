@@ -5104,11 +5104,19 @@ def edit_prose(tid: int, body: dict = Body(...)):
     # those aren't idempotent, so nothing here should make them
     # reroll/rerun-eligible. A prose edit only changes how an already-true
     # beat reads to the player, same class of operation as fixing a typo.
-    qi("UPDATE variants SET active=0 WHERE step_id=?", (step["id"],))
-    qi(
-        "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
-        (step["id"], json.dumps(content, ensure_ascii=False), time.time()),
-    )
+    #
+    # Deactivate-and-insert is ONE operation. "Exactly one active variant per
+    # materialized step" is a named invariant, and a failure between the two
+    # statements leaves the narrator step with zero -- a beat that renders
+    # blank forever, with nothing anywhere recording why. Both siblings
+    # writing this same pair (`step_edit`, `turn_narration_select`) already
+    # wrap it; this one did not.
+    with transaction():
+        qi("UPDATE variants SET active=0 WHERE step_id=?", (step["id"],))
+        qi(
+            "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+            (step["id"], json.dumps(content, ensure_ascii=False), time.time()),
+        )
     return {"ok": True, "prose": content["prose"]}
 
 # ---- Narration variants: flipping between rerolls of the CURRENT beat ----
