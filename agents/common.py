@@ -1458,11 +1458,7 @@ def _requires_director_resolution(result):
             return True
         if action.get("commitment") == "contestable":
             return True
-        conflict_terms = (
-            "attack", "grab", "restrain", "steal", "break", "force",
-            "cast", "shoot", "stab", "strike", "move into", "leave", "enter",
-        )
-        if any(term in text for term in conflict_terms):
+        if any(term in text for term in _ling("_CONFLICT_VERBS")):
             return True
     return False
 
@@ -2299,6 +2295,19 @@ def _name_token_floor(token):
     """The shortest this token could be and still identify somebody."""
     return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(token[:1])
             else _NAME_TOKEN_MIN)
+
+
+def _display_floor(name, spaced=4):
+    """The shortest a DISPLAY name can be and still be worth matching in prose.
+
+    Four characters is a floor drawn for a spaced script, where a name that
+    short is usually a common word too. An unspaced script writes the same
+    amount of name in two or three characters -- 鉄の扉 is a full portal name
+    at three -- so applying the spaced floor to it skips the guard outright,
+    silently, on every portal and every room in the story.
+    """
+    return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(str(name)[:1])
+            else spaced)
 
 
 def _significant_name_tokens(name):
@@ -4514,7 +4523,8 @@ def _observable_predicate(display, surface):
     words = surface.split()
     # Peel leading actor-name tokens / a leading pronoun off the surface.
     while words and (words[0].strip(".,;:'").casefold() in disp_tokens
-                     or words[0].casefold() in ("she", "he", "they", "it")):
+                     or words[0].casefold()
+                     in _ling("_LEADING_SUBJECT_PRONOUNS")):
         words = words[1:]
     stripped = " ".join(words).strip()
     if not stripped:
@@ -4638,20 +4648,8 @@ def _inject_visible_actor(
 
     text = str(view or "").strip()
 
-    contradiction_patterns = (
-        r"\bno visual sign of the speaker is visible\b",
-        r"\bno clear figure visible\b",
-        r"\bthe speaker is not visible\b",
-        r"\bcannot see (?:them|the speaker|anyone)\b",
-    )
-
-    for pattern in contradiction_patterns:
-        text = re.sub(
-            pattern,
-            "",
-            text,
-            flags=re.I,
-        )
+    for pattern in _ling("_VISUAL_CONTRADICTION_RES"):
+        text = pattern.sub("", text)
 
     text = re.sub(r"\s{2,}", " ", text).strip()
 
@@ -5143,8 +5141,10 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
         chunks = []
         for c in re.split(r"\.{2,}|…", body):
             c = c.strip(" ,;:—–-.!?")
-            if c.startswith("something about "):
-                c = c[len("something about "):]
+            for prefix in _ling("_PARTIAL_QUOTE_PREFIXES"):
+                if c.startswith(prefix):
+                    c = c[len(prefix):]
+                    break
             if len(c) >= 3:
                 chunks.append(c)
         return bool(chunks) and all(any(c in L for L in legit) for c in chunks)
@@ -5774,13 +5774,21 @@ def _actor_reference_patterns(display):
     if not display:
         return []
     head = display.split()[0]
-    if head.lower() in ("the", "a", "an") or not display[:1].isupper():
-        phrase = re.sub(r"^(?:the|a|an)\s+", "", display, flags=re.I).strip()
-        if len(phrase) < 4:
+    # The pack's own article list -- the same one the compositor uses when it
+    # BUILDS a descriptor label. A language with no articles supplies an empty
+    # list and the leading-article branch simply never fires.
+    articles = [str(a).lower() for a in (compositor_value("articles") or [])]
+    article_re = ("^(?:%s)\\s+" % "|".join(re.escape(a) for a in articles)
+                  if articles else None)
+    if head.lower() in articles or not display[:1].isupper():
+        phrase = display
+        if article_re:
+            phrase = re.sub(article_re, "", phrase, flags=re.I)
+        phrase = phrase.strip()
+        if len(phrase) < _display_floor(phrase):
             return []
-        return [re.compile(
-            r"(?<!\w)" + r"\s+".join(re.escape(w) for w in phrase.split())
-            + r"(?!\w)", re.I)]
+        return [re.compile(cue_boundary_pattern(
+            r"\s+".join(re.escape(w) for w in phrase.split())), re.I)]
     pats = []
     for tok in re.findall(r"[A-Za-z']+", display):
         if len(tok) < 3 or not tok[:1].isupper():
@@ -5868,8 +5876,16 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         between = prefix[best[0]:]
         cand_group = _group_of(best[1])
         ambiguous = False
-        for pm in re.finditer(r"\b(he|she|they)\b", between, re.I):
-            pg = _pronoun_to_group().get(pm.group(1).lower())
+        # The groups the ACTIVE pack declares, not three English words: the
+        # Japanese pack adds 彼/彼女/彼ら groups and this scan could not see
+        # any of them, so the ambiguity brake never engaged for a Japanese
+        # story -- the same defect `_pronoun_to_group` was written to fix.
+        groups = _pronoun_to_group()
+        subjects = sorted(_ling("_PRONOUN_GROUPS"), key=len, reverse=True)
+        subject_re = re.compile(cue_boundary_pattern(
+            "|".join(re.escape(w) for w in subjects)), re.I)
+        for pm in subject_re.finditer(between):
+            pg = groups.get(pm.group(0).lower())
             if cand_group and pg and pg != cand_group:
                 ambiguous = True
                 break
@@ -5906,7 +5922,8 @@ def _check_position_fidelity(prose, position_facts, room_names):
     usable_rooms = {}
     for rid, rname in (room_names or {}).items():
         rname = str(rname or "").strip()
-        if len(rname) < 4 or rname.lower() in ("room", "area", "here"):
+        if (len(rname) < _display_floor(rname)
+                or rname.lower() in _ling("_GENERIC_ROOM_WORDS")):
             continue
         usable_rooms[rid] = rname
     warnings = []
@@ -5934,10 +5951,14 @@ def _check_position_fidelity(prose, position_facts, room_names):
                 # character's own room's name cannot be told apart reliably.
                 if own_name and (low in own_name or own_name in low):
                     continue
+                # A language marks place with an adposition, and which SIDE of
+                # the room name it sits on is the language's business, not this
+                # guard's -- Japanese postposes it. The pack holds the whole
+                # phrase with a {room} slot for that reason.
+                shape = _ling("_PLACEMENT_PHRASE")
                 place = re.compile(
-                    r"\b(?:back\s+)?(?:in|inside|within|into|at)\s+"
-                    r"(?:the\s+)?(?:\w+[ -]){0,2}?" + re.escape(rname)
-                    + r"\b", re.I)
+                    str(shape["pattern"]).replace("{room}", re.escape(rname)),
+                    int(shape.get("flags") or 0))
                 pm = place.search(scan, best)
                 if not pm:
                     continue
@@ -5957,10 +5978,6 @@ def _check_position_fidelity(prose, position_facts, room_names):
     return warnings
 
 
-_PORTAL_OPEN_RE = r"(?:open|ajar|wide[- ]open)"
-_PORTAL_SHUT_RE = r"(?:shut|closed|sealed|locked)"
-
-
 def _check_portal_fidelity(prose, portal_states):
     """F3: named portal state in prose must match the committed scene (DW t9
     shuts the double doors; t12 renders 'through the open doors' with no
@@ -5973,17 +5990,23 @@ def _check_portal_fidelity(prose, portal_states):
     for name, state in portal_states.items():
         name = str(name or "").strip()
         state = str(state or "").strip().lower()
-        if len(name) < 4 or state not in ("open", "shut"):
+        if len(name) < _display_floor(name) or state not in ("open", "shut"):
             continue
-        wrong = _PORTAL_SHUT_RE if state == "open" else _PORTAL_OPEN_RE
-        name_pat = r"\s+".join(re.escape(w) for w in name.split())
+        shape = _ling("_PORTAL_STATE")
+        wrong = shape["shut"] if state == "open" else shape["open"]
+        name_pat = str(shape["join"]).join(
+            re.escape(w) for w in name.split()) or re.escape(name)
+
+        def _asserted(form):
+            return re.search(
+                str(shape[form]).replace("{state}", wrong)
+                                .replace("{name}", name_pat), scan, re.I)
+
         asserted = (
             # "the open doors" / "still-sealed hatch"
-            re.search(r"\b" + wrong + r"(?:\s+\w+)?\s+" + name_pat + r"\b",
-                      scan, re.I)
+            _asserted("modifier")
             # "the doors ... stand open" (same clause)
-            or re.search(r"\b" + name_pat + r"\b[^.!?\n,;]{0,60}?\b" + wrong
-                         + r"\b", scan, re.I)
+            or _asserted("predicate")
         )
         if asserted:
             opposite = "shut" if state == "open" else "open"

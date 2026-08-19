@@ -312,6 +312,31 @@ regex(common, "_NEW_SUBJECT_RE", "^(?:私|僕|俺|あなた|君|彼|彼女|彼�
 regex(common, "_PROXIMITY_RE", "近づく|一歩近づく|距離を詰める|手の届く距離|一歩下がる|離れる")
 add(common, "_DEFINITE_DETS", "この", "その", "あの", "私の", "あなたの", "彼の", "彼女の")
 add(common, "_DIRECTOR_VOICEABLE_KINDS", "生物", "動物", "怪物", "ゴーレム", "自動人形", "ゾンビ", "ドローン", "群れ")
+add(common, "_CONFLICT_VERBS", "攻撃", "掴む", "拘束", "盗む", "壊す", "破る", "押し入る", "撃つ", "刺す", "殴る", "斬る", "入る", "出る", "立ち去る")
+add(common, "_LEADING_SUBJECT_PRONOUNS", "彼", "彼女", "彼ら", "それ")
+add(common, "_GENERIC_ROOM_WORDS", "部屋", "場所", "ここ", "区画")
+add(common, "_PARTIAL_QUOTE_PREFIXES", "何か", "……何か")
+ling[common]["_VISUAL_CONTRADICTION_RES"]["items"].extend([
+    {"$type": "regex", "pattern": "話し手の姿は見えない", "flags": 34},
+    {"$type": "regex", "pattern": "はっきりした人影は見えない", "flags": 34},
+    {"$type": "regex", "pattern": "(?:相手|話し手|誰)の?姿は見えない", "flags": 34},
+    {"$type": "regex", "pattern": "(?:相手|話し手|誰も)を?見ることはできない", "flags": 34},
+])
+# Japanese marks place with a POSTPOSITION, so the room name leads the phrase
+# instead of trailing it. Same question, mirrored shape -- which is why the
+# pack holds the whole phrase with a {room} slot rather than a preposition list.
+ling[common]["_PLACEMENT_PHRASE"]["pattern"] = (
+    "(?:" + ling[common]["_PLACEMENT_PHRASE"]["pattern"]
+    + "|{room}(?:の(?:中|なか|奥))?(?:に|で|へ|にて))")
+portal = ling[common]["_PORTAL_STATE"]
+# Inside the group, not beside it: appending after the closing paren would
+# make the Japanese branch escape the alternation the caller splices in.
+portal["open"] = portal["open"][:-1] + "|開いて|開いた|開け放たれ|開け放た)"
+portal["shut"] = portal["shut"][:-1] + "|閉じ|閉ま|閉ざされ|施錠され)"
+portal["modifier"] = "(?:" + portal["modifier"] + "|{state}(?:た|ている)?{name})"
+portal["predicate"] = ("(?:" + portal["predicate"]
+                       + "|{name}[^。！？\\n、；]{0,60}?{state})")
+portal["join"] = "\\s*"
 add(common, "_INTERIOR_STATES", "恐怖", "不安", "絶望", "喜び", "欲望", "怒り", "悲しみ", "動揺")
 add(common, "_INTERIOR_CERTAINTY", "本当", "明らか", "確か", "紛れもない", "はっきり")
 regex(common, "_CLAUSE_SPLIT", "、|。|；|：|そして|しかし|だが|ので|から|ながら|とき")
