@@ -266,3 +266,78 @@ class TestHolderAwareBlocking:
         chat_records = self._records({"level": "bound"})
         records = apply_restraint_records_diff(chat_records, sd)
         assert self._blocked(sd, sc, records) == []
+
+
+# --- the kinds a beat actually writes ---------------------------------------
+#
+# THE FLOOR HAD NEVER FIRED. `restraint_conditions` selected
+# `kind='restraint'`; measured over the live database, no beat has ever
+# written that word. What the Director writes is `physical_restraint` (21
+# active rows) or `restrained` (3), across fifteen chats -- so the
+# enforcement built because "a character recorded as bound hand and foot
+# could still walk across the room" had not blocked a single move since it
+# landed. The model wrote the consistent name (`physical_disguise`,
+# `physical_transformation`, `physical_restraint`); the reader asked for the
+# inconsistent one. Widened only now that the exits exist (see
+# test_restraint_exits.py and commit 30bc3d6): the entrance had to wait for
+# the way out.
+
+class TestTheKindsRestraintIsActuallyRecordedUnder:
+    def test_the_spelling_every_live_row_uses_is_read(self, temp_db):
+        chat_id = _chat(temp_db)
+        _insert(temp_db, chat_id, _cond("c1", {"restraint_type": "metal_cuffs"},
+                                        kind="physical_restraint"))
+        record = restraint_of(restraint_conditions(chat_id), SUBJECT)
+        assert record is not None
+        assert record["level"] == "bound"
+        assert record["standing"] is True
+
+    def test_the_other_live_spelling_too(self, temp_db):
+        chat_id = _chat(temp_db)
+        _insert(temp_db, chat_id, _cond(
+            "c1", {"description": "Pinned gently to her side",
+                   "restrained_by": "Dr. Moon"}, kind="restrained"))
+        record = restraint_of(restraint_conditions(chat_id), SUBJECT)
+        assert record is not None
+        assert record["by"] == "Dr. Moon"
+        # level tokens live in prose fields only, which are deliberately
+        # unread (a cue scan on prose is negation-blind: a live description
+        # saying "not a binding restraint" contains "restraint"), so the
+        # record claims least and blocks only through its holder.
+        assert record["level"] == "held"
+
+    def test_a_condition_that_is_not_restraint_is_not_read_as_one(self, temp_db):
+        """The predicate widens to a family of spellings, not to anything
+        that has a body in it. Containment and contact are their own
+        systems with their own consequences, and the live `grip` row is
+        the SUBJECT doing the gripping."""
+        chat_id = _chat(temp_db)
+        _insert(temp_db, chat_id, _cond("c1", {"level": "bound"},
+                                        kind="containment"))
+        _insert(temp_db, chat_id, _cond("c2", {}, kind="contact",
+                                        subject="Kaede"))
+        _insert(temp_db, chat_id, _cond("c3", {}, kind="wound",
+                                        subject="Moon"))
+        _insert(temp_db, chat_id, _cond("c4", {"target": "Elyndra"},
+                                        kind="grip", subject=SUBJECT))
+        assert restraint_conditions(chat_id) == []
+
+    def test_the_same_beats_own_diff_is_read_the_same_way(self, temp_db):
+        records = apply_restraint_records_diff([], {"conditions": {"c1": [{
+            "condition_id": "c1", "subject_id": SUBJECT,
+            "kind": "physical_restraint",
+            "state": {"restraint_type": "chair_restraints"}}]}})
+        assert restraint_of(records, SUBJECT) is not None
+
+    def test_an_ending_releases_a_row_whatever_its_spelling(self, temp_db):
+        """The deterministic exits re-emit the payload's OWN kind, so the
+        overlay must recognise an ending spelled `physical_restraint`
+        exactly as it recognises the canonical word."""
+        chat_id = _chat(temp_db)
+        _insert(temp_db, chat_id, _cond("c1", {"restraint_type": "metal_cuffs"},
+                                        kind="physical_restraint"))
+        records = apply_restraint_records_diff(
+            restraint_conditions(chat_id),
+            {"conditions": {"c1": [_cond("c1", {}, kind="physical_restraint",
+                                         active=0)]}})
+        assert records == []
