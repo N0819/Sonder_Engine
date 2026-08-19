@@ -192,3 +192,71 @@ def test_monitoring_walk_is_cycle_safe(temp_db):
 
     tree = monitoring_subtree(chat_id, port)
     assert tree is not None
+
+
+# ---- MIND-F9: the walk had no reader --------------------------------------
+
+
+class TestTheMonitoringWalkHasAWayIn:
+    """`monitoring_subtree` is 75 lines and was referenced by its own
+    definition, this file, and two comments in `persist/commit_scene_state.py`
+    and `persist/commit_destruction.py` that name it as the consumer of the
+    edges they maintain. Nothing read it.
+
+    Wired rather than deleted (owner decision 1): the edges are live and
+    actively rewritten every commit, and this walk is the only thing in the
+    tree that can answer "what is aboard what right now" across more than one
+    level of nesting. A `tools/` command, not a route -- presence here is
+    DERIVED from the scene, and the reason to look is to find a commit that
+    did not run.
+    """
+
+    def _tool(self):
+        import importlib
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        return importlib.import_module("containment_tree")
+
+    def test_the_nested_tree_is_reachable_from_a_command(self, temp_db,
+                                                         capsys):
+        import json as _json
+
+        from core.db import wset
+        from persist import commit
+
+        chat_id, port, ferry, van, crew_log = _make_books(temp_db)
+        scene = _nested_scene()
+        commit.sync_anchored_books(chat_id, scene)
+        wset(chat_id, "scene", scene)
+
+        assert self._tool().main([str(chat_id), "--json"]) == 0
+        trees = _json.loads(capsys.readouterr().out)
+
+        # One root: the port. The ferry is aboard it and the van aboard the
+        # ferry, so neither starts a walk of its own -- printing them twice
+        # would read as two ferries.
+        assert [t["name"] for t in trees] == ["Port Kael"]
+        ferry_node = {n["name"]: n for n in trees[0]["present"]}["The Ferry"]
+        assert ferry_node["occupants"] == ["Mara", "van"]
+        assert [c["name"] for c in ferry_node["children"]] == ["Crew Log"]
+        assert [n["name"] for n in ferry_node["present"]] == ["The Van"]
+
+    def test_one_subtree_can_be_asked_for_by_id(self, temp_db, capsys):
+        from persist import commit
+
+        chat_id, port, ferry, van, crew_log = _make_books(temp_db)
+        commit.sync_anchored_books(chat_id, _nested_scene())
+
+        assert self._tool().main([str(chat_id), "--book", str(ferry)]) == 0
+        out = capsys.readouterr().out
+        assert "The Ferry" in out and "The Van" in out
+        assert "Port Kael" not in out
+
+    def test_a_chat_with_no_location_books_says_so(self, temp_db, capsys):
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Empty", "", time.time()))
+        assert self._tool().main([str(chat_id)]) == 0
+        assert "no location or vehicle lorebooks" in capsys.readouterr().err

@@ -316,3 +316,79 @@ def test_the_named_exemptions_still_exist():
 def test_the_listed_host_readers_still_exist():
     for name in HOST_SCOPE_READERS:
         assert callable(getattr(memory, name)), name
+
+
+# --- what "this memory came back" is allowed to mean -----------------------
+
+def _accesses(temp_db, chat_id):
+    return temp_db.q("SELECT SUM(access_count) c FROM memories WHERE chat_id=?",
+                     (chat_id,), one=True)["c"] or 0
+
+
+def test_a_search_records_no_access_unless_the_caller_is_a_mind(bank, temp_db):
+    """MIND-F14. `access_count` answers one question -- did this memory ever
+    come BACK to the character -- and `tools/remember_lines.py` and
+    `tools/salience_replay.py` read it as their answer.
+
+    The write used to fire for every caller of `search_memories`. The author's
+    Memories tab runs the same search, and its own route comment says the
+    author is not a fictional mind; a replay tool re-ranking a bank ran it too,
+    altering the number it existed to measure. Recording is now asserted by the
+    caller who is recalling, not opted out of by everyone who is not.
+    """
+    before = _accesses(temp_db, bank["chat"])
+    hits = search_memories(bank["chat"], bank["mine"], "lantern", k=20,
+                           current_turn_idx=9, viewer_frame_id=None)
+    assert hits
+    assert _accesses(temp_db, bank["chat"]) == before
+
+    search_memories(bank["chat"], bank["mine"], "lantern", k=20,
+                    current_turn_idx=9, viewer_frame_id=None,
+                    record_access=True)
+    assert _accesses(temp_db, bank["chat"]) > before
+
+
+def test_a_rollback_restores_what_came_back_as_well_as_what_happened(
+        bank, temp_db):
+    """PERSISTENCE-F7. `access_count` and `last_accessed` are not written by
+    the engine and not read by it either -- `tools/remember_lines.py` and
+    `tools/salience_replay.py` read them as their entire answer to "did this
+    memory ever come back". `dump_chat_memories` carried neither, and the
+    restore path neither accepted nor wrote them, so every reroll, branch,
+    checkpoint rollback and archive import reset the denominator to zero
+    while leaving the memories themselves intact.
+
+    Both columns already exist (`core/db.py:490-491`), so this is a dump/
+    restore fix and not a migration.
+    """
+    search_memories(bank["chat"], bank["mine"], "lantern", k=20,
+                    current_turn_idx=9, viewer_frame_id=None,
+                    record_access=True)
+    before = {r["content"]: (r["access_count"], r["last_accessed"])
+              for r in temp_db.q("SELECT content, access_count, last_accessed "
+                                 "FROM memories WHERE chat_id=?",
+                                 (bank["chat"],))}
+    assert any(count for count, _last in before.values())
+
+    dump = memory.dump_chat_memories(bank["chat"])
+    memory.restore_chat_memories(bank["chat"], dump)
+
+    after = {r["content"]: (r["access_count"], r["last_accessed"])
+             for r in temp_db.q("SELECT content, access_count, last_accessed "
+                                "FROM memories WHERE chat_id=?",
+                                (bank["chat"],))}
+    assert after == before
+
+
+def test_a_dump_written_before_this_still_restores(bank, temp_db):
+    """An older checkpoint carries neither key. It must restore to zero
+    rather than raise -- the columns default to 0/NULL and that is the honest
+    reading of a bank that never recorded them."""
+    dump = [{k: v for k, v in m.items()
+             if k not in ("access_count", "last_accessed")}
+            for m in memory.dump_chat_memories(bank["chat"])]
+    memory.restore_chat_memories(bank["chat"], dump)
+    rows = temp_db.q("SELECT access_count, last_accessed FROM memories "
+                     "WHERE chat_id=?", (bank["chat"],))
+    assert rows and all(r["access_count"] == 0 and r["last_accessed"] is None
+                        for r in rows)

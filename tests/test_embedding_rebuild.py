@@ -33,6 +33,44 @@ def _seed(bank, n=5, who=0):
                           location="bridge")
 
 
+#: The columns `_memory_vector_key` joins on, which is what a checkpoint's
+#: saved memory rows have to carry for the substitution to find them.
+_SAVED_COLUMNS = ("char_id", "category", "turn_idx", "location", "entities",
+                  "key_phrases", "gist", "content", "provenance",
+                  "emotional_context")
+
+
+def _saved_rows(temp_db, chat_id, model="ancient:model", dim=99):
+    """Live memories rendered as a checkpoint would have saved them BEFORE a
+    rebuild: the same documents, carrying the retired model's vectors."""
+    out = []
+    for row in temp_db.q("SELECT * FROM memories WHERE chat_id=? ORDER BY id",
+                         (chat_id,)):
+        saved = {c: row[c] for c in _SAVED_COLUMNS}
+        for c in ("entities", "key_phrases"):
+            saved[c] = json.loads(saved[c] or "[]")
+        saved["embedding"] = "OLDVECTOR"
+        saved["cue_embedding"] = "OLDCUEVECTOR"
+        saved["embedding_model"], saved["embedding_dim"] = model, dim
+        out.append(saved)
+    return out
+
+
+def _rebuild_one_checkpoint(temp_db, chat_id, memories, extra=None):
+    """Write one checkpoint holding `memories`, rebuild, and read it back."""
+    blob = dict(extra or {})
+    blob["memories"] = memories
+    ckpt = temp_db.qi(
+        "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
+        "VALUES(?,?,?,?)",
+        (chat_id, 1, json.dumps(blob, ensure_ascii=False), time.time()))
+    report = memory.rebuild_checkpoint_embeddings(chat_id, dry_run=False)
+    stored = json.loads(temp_db.q("SELECT blob FROM checkpoints WHERE id=?",
+                                  (ckpt,), one=True)["blob"])
+    return {"report": report, "blob": stored,
+            "memories": stored.get("memories") or []}
+
+
 def _strand(model="ancient:model", dim=99):
     from core.db import qi
     qi("UPDATE memories SET embedding_model=?, embedding_dim=?", (model, dim))
@@ -296,28 +334,58 @@ class TestCarryingARebuildBackThroughSavedStates:
         r = memory.rebuild_checkpoint_embeddings(dry_run=False)
         assert r["rewritten"] == 0 and r["memories_repaired"] == 0
 
-    def test_unmatched_rows_are_reported_not_blanked(self):
+    def test_unmatched_rows_are_reported_not_blanked(self, bank, temp_db):
         """A saved memory since deleted has no live vector to inherit. It is
         left exactly as it was — the alternative is destroying rollback
-        history to tidy a number."""
-        import inspect
+        history to tidy a number.
 
-        from mind import memory
-        src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
-        # The unmatched branch increments the counter and moves on; nothing
-        # between the miss and the next row touches the saved vector.
-        i = src.index("if hit is None:")
-        branch = src[i:i + 220]
-        assert "memories_unmatched" in branch and "continue" in branch
-        assert "embedding" not in branch.split("continue")[0]
+        Written as behaviour rather than as a slice of the function's own
+        source (MIND-F19): the old form asserted `continue` appeared within
+        220 characters of `if hit is None:`, which any reordering breaks and
+        no reordering that actually blanked a row would fail.
+        """
+        _seed(bank, 2)
+        saved = _saved_rows(temp_db, bank["chat"])
+        orphan = dict(saved[0])
+        orphan["content"] = "A memory since deleted from the live bank."
+        orphan["gist"] = "since deleted"
+        orphan["embedding"] = "ORPHANVECTOR"
+        after = _rebuild_one_checkpoint(temp_db, bank["chat"],
+                                        [saved[0], orphan])
 
-    def test_a_blob_is_proven_before_it_replaces_history(self):
-        import inspect
+        assert after["report"]["memories_unmatched"] == 1
+        assert after["report"]["memories_repaired"] == 1
+        rewritten = {m["content"]: m for m in after["memories"]}
+        gone = rewritten["A memory since deleted from the live bank."]
+        assert gone["embedding"] == "ORPHANVECTOR"
+        assert gone["embedding_model"] == "ancient:model"
+        assert gone["embedding_dim"] == 99
+        kept = rewritten[saved[0]["content"]]
+        assert kept["embedding_model"] == after["report"]["model"]
+        assert kept["embedding"] != "ORPHANVECTOR"
 
-        from mind import memory
-        src = inspect.getsource(memory.rebuild_checkpoint_embeddings)
-        assert "check = json.loads(text)" in src
-        assert "!= len(blob.get(\"memories\")" in src
+    def test_a_blob_is_proven_before_it_replaces_history(self, bank, temp_db):
+        """Every checkpoint this rewrites comes back parseable, with the row
+        count and the top-level keys it went in with — and a checkpoint whose
+        blob cannot be read is left exactly as it was rather than replaced by
+        something readable."""
+        from core.db import q, qi
+
+        _seed(bank, 2)
+        saved = _saved_rows(temp_db, bank["chat"])
+        after = _rebuild_one_checkpoint(
+            temp_db, bank["chat"], saved,
+            extra={"world": {"rooms": []}, "turn_idx": 4})
+        assert after["report"]["rewritten"] == 1
+        assert sorted(after["blob"]) == ["memories", "turn_idx", "world"]
+        assert len(after["memories"]) == len(saved)
+
+        unreadable = qi(
+            "INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
+            "VALUES(?,?,?,?)", (bank["chat"], 99, "{not json", time.time()))
+        memory.rebuild_checkpoint_embeddings(bank["chat"], dry_run=False)
+        assert q("SELECT blob FROM checkpoints WHERE id=?", (unreadable,),
+                 one=True)["blob"] == "{not json"
 
 
 class TestStartupHandsTheBankBackToo:
@@ -350,3 +418,58 @@ class TestStartupHandsTheBankBackToo:
         i = src.index("start_rebuild_if_needed()")
         assert "try:" in src[max(0, i - 400):i]
         assert "except Exception" in src[i:i + 400]
+
+
+class TestTheMaintenanceRepairsHaveAWayIn:
+    """MIND-F7. `rebuild_checkpoint_embeddings` was built, documented in
+    `docs/guides/MEMORY.md`, claimed as shipped in `Design.md` and tested --
+    and had no caller anywhere in the tree. A repair nobody can run is a repair
+    that has not happened: 1,040 checkpoints on the owner's own corpus sat
+    holding a rebuild's worth of retired vectors, one restore away from putting
+    them back.
+
+    A `tools/` script rather than a route, deliberately. It rewrites rollback
+    history and should not be one click away from a story in progress.
+    """
+
+    def _tool(self):
+        import importlib
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        return importlib.import_module("embedding_maintenance")
+
+    def test_the_checkpoint_rebuild_is_reachable_from_a_command(
+            self, bank, capsys):
+        tool = self._tool()
+        _seed(bank, 2)
+        assert tool.main(["checkpoints", "--chat", str(bank["chat"])]) == 0
+        out = capsys.readouterr().out
+        assert "dry_run" in out and "True" in out
+
+    def test_a_dry_run_is_the_default_of_the_command_too(self, bank,
+                                                         monkeypatch):
+        """The function defaults to `dry_run=True`; a command line that
+        silently inverted that would be worse than no command line."""
+        tool = self._tool()
+        seen = {}
+
+        def _fake(chat_id=None, *, dry_run=True, progress=None):
+            seen.update(chat_id=chat_id, dry_run=dry_run)
+            return {"dry_run": dry_run}
+
+        monkeypatch.setattr(tool.memory, "rebuild_checkpoint_embeddings",
+                            _fake)
+        tool.main(["checkpoints"])
+        assert seen == {"chat_id": None, "dry_run": True}
+        tool.main(["checkpoints", "--chat", "7", "--apply"])
+        assert seen == {"chat_id": 7, "dry_run": False}
+
+    def test_status_answers_without_writing(self, bank, temp_db):
+        tool = self._tool()
+        _seed(bank, 2)
+        before = temp_db.q("SELECT COUNT(*) n FROM checkpoints", one=True)["n"]
+        assert tool.main(["status", "--json"]) == 0
+        assert temp_db.q(
+            "SELECT COUNT(*) n FROM checkpoints", one=True)["n"] == before

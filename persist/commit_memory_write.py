@@ -14,6 +14,7 @@ from mind.memory import (add_memories_batch, delete_turn_memories,
                     update_relationships_from_inference,
                     maybe_consolidate_character_memory,
                     reconcile_inference_confidence)
+from language_runtime import story_language
 from story.character_schema import character_name_from_text
 from story.scene import set_char_state
 from persist.commit_memory import prepare_memory_commit
@@ -86,9 +87,9 @@ def schedule_memory_consolidation(ctx):
     (27.4s of it one `utility`-role LLM call) inside the commit stage's
     wall clock.
 
-    The job snapshots the scalars it needs (ids, names, turn, frame) so it
-    never touches ctx after the turn returns. Sequential per character with
-    a cancellation check between -- abandonable at every unit boundary --
+    The job snapshots the scalars it needs (ids, names, turn, frame, and the
+    story's language) so it never touches ctx after the turn returns.
+    Sequential per character with a cancellation check between -- abandonable at every unit boundary --
     and a failure for one character is logged and skipped, never raised:
     background work cannot break a turn, and the cadence check re-offers
     the window on a later beat. Deduped on the chat by jobs.submit: a
@@ -105,6 +106,7 @@ def schedule_memory_consolidation(ctx):
     cid = ctx.chat.id
     turn_idx = ctx.turn.idx
     frame_id = ctx.turn.frame_id
+    language_id = story_language(cid)
     members = [
         {"id": row["id"],
          "name": character_name_from_text(row["sheet"])}
@@ -118,9 +120,20 @@ def schedule_memory_consolidation(ctx):
         # for every frame-scoped read/write below (the offscreen tick
         # producers set the precedent, and the reason -- a nested frame's
         # consolidation landing in the present frame -- is the same).
+        #
+        # And the LANGUAGE, the same way and for the same reason.
+        # `run_pipeline` sets `current_language_id` for the duration of a
+        # turn; this thread is not the turn's, so consolidation resolved to
+        # the English default -- an English prompt policy on a Japanese
+        # story's summary, and, now that the deterministic recognizers read
+        # the pack, English stopwords and word regexes over Japanese text.
+        # Neither raises. The summary just comes back in the wrong language
+        # with no key phrases in it.
         from core.db import active_frame_id
         from core.logging_utils import logger
+        from language_runtime import current_language_id
         token = active_frame_id.set(frame_id)
+        language_token = current_language_id.set(language_id)
         try:
             notes = []
             for member in members:
@@ -142,6 +155,7 @@ def schedule_memory_consolidation(ctx):
                         str(exc)[:300])
             return notes
         finally:
+            current_language_id.reset(language_token)
             active_frame_id.reset(token)
 
     return jobs.submit(cid, MEMORY_CONSOLIDATION_JOB_KEY, _produce,

@@ -393,3 +393,74 @@ class TestSustainedLevelHabituation:
                 junk if isinstance(junk, dict) else {"pleasure": 0.5,
                                                      "sustained_beats": junk})
             assert 0.0 <= value <= 1.0
+
+
+def test_a_protected_belief_from_the_card_is_a_belief_the_mind_holds():
+    """MIND-F2. `psychology.self_model.protected_beliefs` is normalized by the
+    schema, edited in the browser as a "Protected beliefs" line list, carried
+    in archives, and was read by nothing: `_authored_beliefs` looked only at
+    `self_model.beliefs`. Measured on the owner's corpus, 50 of 168 sheets
+    carry one -- averaging three convictions each, on characters whose
+    `beliefs` list is empty -- so an author filling the field in got a
+    character who behaved as though they had not.
+
+    This is the silent-empty-field failure CLAUDE.md warns about arriving from
+    the other side: a field that is FILLED and inert.
+    """
+    psychology = {"self_model": {"protected_beliefs": [
+        "A physician's first obligation is to the patient, even in a crisis",
+    ]}}
+
+    seeded = psych.apply_belief_updates([], psychology, [], turn_idx=1,
+                                        clock_seconds=10)
+
+    held = [i for i in seeded if i["belief"].startswith("A physician's")]
+    assert held, seeded
+    assert held[0]["protected"] is True
+    # Confidence is the schema's own default for an unelaborated belief. A bare
+    # string in `self_model.beliefs` already gets 0.5; the same authoring act
+    # in the other list must not silently mean something stronger.
+    assert held[0]["confidence"] == 0.5
+
+    # And the flag is what it was built for: half the weakening step.
+    weakened = psych.apply_belief_updates(
+        seeded, psychology,
+        [{"belief": "A physician's first obligation is to the patient, "
+                    "even in a crisis",
+          "operation": "weaken", "confidence": 1.0,
+          "evidence": [{"event_id": "current", "fact": "She walked away."}]}],
+        turn_idx=2, clock_seconds=20)
+    assert weakened[0]["confidence"] == 0.45
+
+
+def test_a_belief_named_in_both_lists_is_one_belief_and_is_protected():
+    """Naming it in `beliefs` and in `protected_beliefs` is one claim stated
+    twice, not two beliefs -- and the second list is what asserts the flag."""
+    psychology = {"self_model": {
+        "beliefs": [{"belief": "The omens are never wrong",
+                     "confidence": 0.8, "protected": False}],
+        "protected_beliefs": ["The omens are never wrong"],
+    }}
+
+    seeded = psych.apply_belief_updates([], psychology, [], turn_idx=1,
+                                        clock_seconds=10)
+
+    assert len(seeded) == 1
+    assert seeded[0]["confidence"] == 0.8      # the elaborated entry wins
+    assert seeded[0]["protected"] is True
+
+
+def test_a_protected_belief_survives_the_ledger_cap():
+    """It is re-seeded from the sheet every turn, so evicting it frees
+    nothing -- the same reason authored beliefs are kept ahead of learned ones
+    in `_within_cap`."""
+    psychology = {"self_model": {"protected_beliefs": ["I am a good dog"]}}
+    learned = [{"belief": f"fact {i}", "confidence": 0.5, "protected": False,
+                "last_updated_turn": 40 + i}
+               for i in range(psych._LEDGER_CAP)]
+
+    seeded = psych.apply_belief_updates(learned, psychology, [], turn_idx=99,
+                                        clock_seconds=10)
+
+    assert len(seeded) == psych._LEDGER_CAP
+    assert "I am a good dog" in [i["belief"] for i in seeded]

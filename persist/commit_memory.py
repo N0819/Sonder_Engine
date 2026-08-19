@@ -29,6 +29,18 @@ from persist.commit_common import (_clamp, _known_name_roster, _monotonic_elapse
 from persist.commit_place_graph import (ROUTE_CREDIT_CAP, ROUTE_CREDIT_WINDOW,
                                 record_spatial_experience)
 from persist.commit_background import _background_fired_reactions
+from language_runtime import linguistic
+
+
+def _ling(name):
+    """One deterministic recognizer, from the story's own language pack.
+
+    Same use-time read as `commit_common._form_in`'s, and for the same reason:
+    two stories in different languages commit concurrently, and each must be
+    judged in its own words. A pack that lacks the key raises rather than
+    returning empty.
+    """
+    return linguistic("persist.commit_memory", name)
 
 # ---- Memory commit ----
 
@@ -46,19 +58,18 @@ def _durable_dialogue_category(text):
     of its 5 promise-category rows, 3 were the word "compromised" (chat 6's
     "Section C and D compromised", twice, and chat 58's "TARGETING
     COMPROMISED") against 2 genuine promises. The boundary is only required
-    at the start, so inflections still match ("I promised", "she promises");
-    tools/remember_lines.py inlines this rule and
+    at the start, so inflections still match ("I promised", "she promises").
+    The boundary is now IN the pattern rather than wrapped around a phrase,
+    because `\b` is a rule about where an English word starts and there is no
+    such boundary between a Japanese verb and its object -- a pack writes the
+    anchor its own script needs. Ordered: promise before dialogue, as it was.
+
+    tools/remember_lines.py asks the same pack and
     tests/test_remember_lines_telemetry.py holds the two in sync."""
     lowered = (text or "").lower()
-    def _spoken(marker):
-        return re.search(r"\b" + re.escape(marker), lowered) is not None
-    if any(_spoken(w) for w in ("promise", "i swear", "i vow", "you have my word",
-                                "i'll return", "i will return")):
-        return "promise"
-    if any(_spoken(w) for w in ("my name is", "call me", "i confess", "the truth is",
-                                "i killed", "i betrayed", "i love you", "i hate you",
-                                "i'll kill", "i will kill")):
-        return "dialogue"
+    for category, markers in _ling("_DURABLE_QUOTE_MARKERS").items():
+        if any(re.search(pattern, lowered) for pattern in markers):
+            return category
     return None
 
 def _cited_memory_ids(own_result):
@@ -175,9 +186,11 @@ def _is_player(speaker, chat):
 
 def _salience_of(text):
     s = 0.45 + min(len(text or ""), 400) / 1600.0
-    for w in ("attack", "blood", "secret", "betray", "kiss", "dead",
-              "weapon", "threat", "love", "steal", "scream", "knife",
-              "confess", "liar", "promise"):
+    # Which words make a beat worth remembering is a question about words, so
+    # the cue list is the pack's. Against an English-only list every memory in
+    # a Japanese story scored the flat length-only floor -- not an error, just
+    # a bank with no peaks in it.
+    for w in _ling("_SALIENCE_CUES"):
         if w in (text or "").lower():
             s += 0.08
     return round(min(s, 0.95), 3)

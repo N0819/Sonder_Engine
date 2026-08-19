@@ -151,9 +151,17 @@ def may_assert_consequence(disposition: str) -> bool:
     """Whether a record at this disposition may change the world.
 
     False for the provisional tier, and that is the whole safety property.
+    Stated as `is_canon` because that IS the rule -- something adjudicated it,
+    therefore it may commit -- and the two names are kept apart because they
+    answer different questions and a later tier could make them diverge.
+
+    `validate_provisional` enforces this rather than re-deciding it: the rule
+    used to be written out twice, once here as the published predicate and
+    once inline in the validator, which is how the published surface and the
+    enforced boundary drift into disagreeing.
     """
 
-    return disposition in ADJUDICATED_DISPOSITIONS
+    return is_canon(disposition)
 
 
 def outranks(a: str, b: str) -> bool | None:
@@ -308,11 +316,12 @@ def validate_provisional(
         if not isinstance(reason, str) or not reason.strip():
             errors.append("basis 'unavailable' requires a non-empty reason")
 
-    for key in _CONSEQUENCE_KEYS:
-        if record.get(key):
-            errors.append(
-                f"{key} is a consequence; the provisional tier may describe, not commit"
-            )
+    if not may_assert_consequence(disposition):
+        for key in _CONSEQUENCE_KEYS:
+            if record.get(key):
+                errors.append(
+                    f"{key} is a consequence; the provisional tier may describe, not commit"
+                )
 
     events = record.get("events")
     if events is None:
@@ -341,20 +350,30 @@ def promote(record: Mapping[str, Any], disposition: str, *, adjudicator: str) ->
     """NOT IMPLEMENTED, and deliberately so. This is the named seam.
 
     Promotion out of the provisional tier belongs to the Director, per section 7
-    of ``docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md``. Most of the path is described
-    there as already existing: the Director names a claim in
-    ``state_diff.ratified_claims``, ``commit`` hands that list to
-    ``background_claims.settle_claims``, and ``settle_claims`` sets a status
-    flag in the world-KV blob and writes nothing into canon. That missing write
-    is 0a's successor.
+    of ``docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md``: the Director names a
+    claim in ``state_diff.ratified_claims``, ``commit`` hands that list to
+    ``background_claims.settle_claims``, and settling it is what makes the
+    outcome real.
 
-    It is left unimplemented here so this tier can land, be tested and be
-    committed without touching the Director seam -- which the proposal itself
+    THE MISSING WRITE IS NO LONGER MISSING, and this docstring said for a long
+    time that it was. ``background_claims.write_canon`` exists and
+    ``settle_claims`` calls it: a ratified claim is written into the chat's
+    canon lorebook, keyed by its own content hash so a replayed beat cannot
+    mint it twice. Flipping a status field and stopping was the defect that
+    path already repaired.
+
+    What is still unimplemented is promotion of a record in THIS module's
+    shape -- a provisional record with a subject, a base_turn and a basis --
+    which is a different object from a background claim and has no adjudicated
+    path yet. It is left unimplemented so this tier can land, be tested and be
+    committed without touching the Director seam, which the proposal itself
     warns should be approached test-first and small.
     """
 
     raise NotImplementedError(
         "promotion out of the provisional tier is the Director's; the seam is "
-        "state_diff.ratified_claims -> settle_claims, and the write into canon does not "
-        "exist yet. See docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md section 7."
+        "state_diff.ratified_claims -> settle_claims. That path writes ratified "
+        "background claims into canon (background_claims.write_canon); a "
+        "provisional record in this module's shape has no adjudicated path yet. "
+        "See docs/archive/PROPOSAL_2026-08-06_AMENDMENTS.md section 7."
     )
