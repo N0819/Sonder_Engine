@@ -583,15 +583,33 @@ class TestARepairPromptMustNameTheRealDisagreement:
     def test_it_says_the_entries_were_discarded_and_what_shape_to_use(self):
         """Sentences are now read as events (see
         `TestASequenceWrittenAsSentences`), so what still reaches this path
-        is an entry carrying neither structure nor prose."""
+        is an entry carrying neither structure nor prose -- and the message
+        has to say THAT. Counting every non-object entry as discarded blamed
+        the model for the one spelling the engine accepts, in the message
+        that exists because a false message cost a turn."""
         from llm.schemas import validate_llm_output_strict
         report = validate_llm_output_strict(
             "director_interpret",
             {"kind": "mixed", "flow": {}, "sequence": [7, 12]},
             source_payload={"player_raw_input": "pick it up and speak"})
         assert not report.valid
-        assert "were not objects and were discarded" in report.errors[0]
+        assert "all 2" in report.errors[0]
+        assert "neither an object nor a sentence" in report.errors[0]
         assert '"type": "speech"' in report.errors[0]
+        assert "a plain sentence is read as an action" in report.errors[0]
+
+    def test_a_list_of_sentences_is_read_rather_than_blamed(self):
+        """The worked case in the function's own docstring, which
+        `_sequence_event_from_prose` closed at the source: it never reaches
+        the semantic check at all now, so it must never be described."""
+        from llm.schemas import validate_llm_output_strict
+        report = validate_llm_output_strict(
+            "director_interpret",
+            {"kind": "mixed", "flow": {},
+             "sequence": ["Picks up the PADD.",
+                          '"Nobody leaves this room."']},
+            source_payload={"player_raw_input": "pick it up and speak"})
+        assert not [e for e in report.errors if "sequence is empty" in e]
 
     def test_a_genuinely_empty_sequence_is_still_reported_as_empty(self):
         from llm.schemas import validate_llm_output_strict

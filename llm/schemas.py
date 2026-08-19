@@ -5221,6 +5221,16 @@ def _name_what_was_discarded(step_key, raw, error):
     false: the model sent a sequence, and this code deleted it. Both repair
     and every fallback candidate then failed, and the turn died.
 
+    THAT WORKED CASE NO LONGER OCCURS, and this counts what survives rather
+    than what was an object. `_sequence_event_from_prose` now READS a plain
+    sentence -- as an action unless the whole string is a quotation -- so a
+    list of sentences arrives non-empty and never reaches this at all. What
+    still cannot be read is a blank string, or an entry that is neither an
+    object nor a string. Counting every non-object entry as discarded would
+    now blame the model for the one spelling the engine accepts, and the
+    remedy sentence would instruct it away from that spelling; both would be
+    false in the same message that exists because a false message cost a turn.
+
     Naming the real disagreement is not the same as guessing what the
     sentences MEANT -- a bare sentence does not say whether it is speech or
     action, and the engine must not decide that on the player's behalf. The
@@ -5230,18 +5240,23 @@ def _name_what_was_discarded(step_key, raw, error):
     if step_key != "director_interpret" or "sequence is empty" not in error:
         return error
     sent = raw.get("sequence") if isinstance(raw, dict) else None
-    if not isinstance(sent, list):
+    if not isinstance(sent, list) or not sent:
         return error
-    dropped = [item for item in sent if not isinstance(item, dict)]
-    if not dropped:
+    # Exactly what `preprocess_llm_output` keeps, asked the same way.
+    readable = [item for item in sent
+                if isinstance(item, dict)
+                or (isinstance(item, str)
+                    and _sequence_event_from_prose(item) is not None)]
+    if readable:
         return error
     return (
-        f"{error} -- because {len(dropped)} of the {len(sent)} sequence "
-        "entries you sent were not objects and were discarded. Every entry "
-        "must be an object, e.g. "
+        f"{error} -- because all {len(sent)} sequence entries you sent were "
+        "blank or were neither an object nor a sentence, so none could be "
+        "read. An entry must be an object, e.g. "
         '{"type": "action", "attempt": "..."} or '
-        '{"type": "speech", "text": "...", "volume": "normal"}. '
-        "Resend the same beat in that shape."
+        '{"type": "speech", "text": "...", "volume": "normal"}; '
+        "a plain sentence is read as an action. Resend the same beat in "
+        "one of those shapes."
     )
 
 
