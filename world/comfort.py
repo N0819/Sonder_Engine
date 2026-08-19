@@ -100,10 +100,23 @@ _SITTING_TOKENS = frozenset({
 })
 
 # Contact manners that mean the surface is SUPPORTING the body rather than
-# the body doing something to it (spatial's _CONTACT_KEY_MANNERS vocabulary).
-_SUPPORT_MANNERS = frozenset({
-    "rest", "lean", "press", "touch", "lie", "sit", "hold",
+# the body doing something to it. A SUBSET of the real contact vocabulary,
+# `spatial_contacts.CONTACT_MANNERS` -- the comment here used to cite
+# `_CONTACT_KEY_MANNERS`, which is the identity key rather than the manner
+# list, so nothing tied this to the vocabulary it grades and `support` (the
+# canonical word for exactly this relation) was never in it. A Director
+# writing the plainest available word got the same answer as one writing
+# nothing.
+_SUPPORTING_CONTACT_MANNERS = frozenset({
+    "rest", "lean", "press", "touch", "hold", "support",
 })
+# NOT contact manners, and kept anyway: a Director asked for a manner reaches
+# for the posture word about as often as the contact word, and normalization
+# stores whichever it wrote. Dropping these would silently lose every "lying
+# on the bed" already standing in a live scene.
+_POSTURE_MANNERS = frozenset({"lie", "sit"})
+
+_SUPPORT_MANNERS = _SUPPORTING_CONTACT_MANNERS | _POSTURE_MANNERS
 
 
 def _tokens(*texts):
