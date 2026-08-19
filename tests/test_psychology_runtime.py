@@ -188,6 +188,27 @@ def test_protected_belief_weakens_slowly_and_requires_evidence():
     assert weakened[0]["confidence"] == 0.85
 
 
+def test_contradicting_an_unheld_belief_does_not_assert_it():
+    """Denying something is not holding it.
+
+    The mint branch read `confidence` and never `operation`, so a contradiction
+    of a belief the character does not hold WROTE that belief into their
+    ledger, at the strength of the evidence against it. The character came out
+    of the beat believing the thing the beat disproved.
+    """
+    minted = psych.apply_belief_updates(
+        [], {},
+        [{"belief": "the north stair is safe", "operation": "contradict",
+          "confidence": 0.9,
+          "evidence": [{"event_id": "current", "fact": "It gave way."}]}],
+        turn_idx=2, clock_seconds=30,
+    )
+
+    held = [item for item in minted
+            if item["belief"] == "the north stair is safe"]
+    assert not held or held[0]["confidence"] <= 0.5, minted
+
+
 def test_association_extinction_is_bounded_and_evidence_gated():
     existing = [{
         "cue": "a slammed door",
@@ -203,6 +224,76 @@ def test_association_extinction_is_bounded_and_evidence_gated():
     )
 
     assert result[0]["strength"] == 0.55
+
+
+def test_the_belief_cap_never_evicts_what_the_sheet_re_seeds():
+    """A bound that the next turn undoes is not a bound, it is amnesia.
+
+    The cap sliced the LAST twenty, and the front of the list is where the
+    seeding pass puts the beliefs the card authored. So the entry evicted was
+    an authored one; the next turn found it missing from the ledger and
+    re-seeded it from the sheet at card confidence with last_updated_turn 0,
+    throwing away every revision the story had earned on it -- and pushed a
+    learned belief out to make room for the resurrection.
+    """
+    psychology = {"self_model": {"beliefs": [{
+        "belief": "I never abandon my post",
+        "confidence": 0.9,
+        "protected": True,
+    }]}}
+    state = psych.apply_belief_updates(
+        [], psychology,
+        [{"belief": "I never abandon my post", "operation": "weaken",
+          "confidence": 1.0,
+          "evidence": [{"event_id": "current", "fact": "I fled."}]}],
+        turn_idx=1, clock_seconds=10,
+    )
+    earned = state[0]["confidence"]
+    assert earned < 0.9
+
+    for n in range(25):
+        state = psych.apply_belief_updates(
+            state, psychology,
+            [{"belief": f"learned thing {n}", "confidence": 0.6,
+              "evidence": [{"event_id": "current", "fact": "seen"}]}],
+            turn_idx=2 + n, clock_seconds=20 + n,
+        )
+
+    held = {item["belief"]: item for item in state}
+    assert "I never abandon my post" in held
+    assert abs(held["I never abandon my post"]["confidence"] - earned) < 1e-9
+
+
+def test_the_association_cap_never_evicts_what_the_sheet_re_seeds():
+    """Same shape, same file, one line apart -- authored associations are
+    re-seeded from `learning.associations` every turn, so evicting one costs a
+    learned slot and restores the card's strength."""
+    psychology = {"learning": {"associations": [{
+        "cue": "a slammed door",
+        "appraisal_bias": "danger",
+        "response_tendency": "freeze",
+        "strength": 0.8,
+    }]}}
+    state = psych.apply_association_updates(
+        [], psychology,
+        [{"cue": "a slammed door", "operation": "extinguish", "amount": 0.25,
+          "evidence": [{"event_id": "current", "fact": "It was harmless."}]}],
+        turn_idx=1, clock_seconds=10,
+    )
+    earned = state[0]["strength"]
+    assert earned < 0.8
+
+    for n in range(25):
+        state = psych.apply_association_updates(
+            state, psychology,
+            [{"cue": f"cue {n}", "amount": 0.1,
+              "evidence": [{"event_id": "current", "fact": "seen"}]}],
+            turn_idx=2 + n, clock_seconds=20 + n,
+        )
+
+    held = {item["cue"]: item for item in state}
+    assert "a slammed door" in held
+    assert abs(held["a slammed door"]["strength"] - earned) < 1e-9
 
 
 class TestSustainedLevelHabituation:
