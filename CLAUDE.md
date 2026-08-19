@@ -43,7 +43,7 @@ Single test:
 python -m pytest tests/test_spatial.py::test_name -q
 ```
 
-Run commands from the repository root — the app uses absolute package imports (`from core.db import q`) rooted there, so it is still not an installed package. Engine modules live in eight subsystem packages (`core llm world mind story dressing persist web`) plus `agents/`; the grouping and its limits are in [`docs/design/DESIGN_MODULE_LAYOUT.md`](docs/design/DESIGN_MODULE_LAYOUT.md). Python 3.11+.
+Run commands from the repository root — the app uses absolute package imports (`from core.db import q`) rooted there, so it is still not an installed package. Engine modules live in eight subsystem packages (`core llm world mind story dressing persist web`) plus `agents/`; the grouping and its limits are in [`docs/design/DESIGN_MODULE_LAYOUT.md`](docs/design/DESIGN_MODULE_LAYOUT.md). Python 3.11-3.13 (the pinned `pydantic-core` has no wheel above 3.13; both launchers enforce the range).
 
 The default SQLite database is `engine.db`; override with `ENGINE_DB` before importing `core/db.py`. Database-backed tests request the `temp_db` fixture (`tests/conftest.py`), which calls `db.configure()` on a temp file and cleans up WAL/SHM afterward; those tests belong to the full tier. Fast-tier tests must stay database-independent and must never rely on another test initializing `engine.db`.
 
