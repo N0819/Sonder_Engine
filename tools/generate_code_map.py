@@ -57,6 +57,7 @@ MODULE_PURPOSES = {
     "mind.memory_retrieval": "Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall.",
     "mind.memory_summaries": "Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill.",
     "mind.memory_context": "The character memory payload: where retrieval, summaries and active state become one context.",
+    "mind.memory_lore_entries": "Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping.",
     "core.pipeline_context": "Typed mutable context passed through a turn pipeline.",
     "persist.pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "llm.prompt_cache": "Provider-specific prompt-cache helpers.",
