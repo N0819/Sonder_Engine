@@ -24,6 +24,7 @@ from story.character_schema import (
     persona_name,
 )
 from core.db import get_setting, q, wget
+from core.pipeline_context import note_step_warning
 from language_runtime import (
     compositor_text, compositor_value, english_linguistic, linguistic,
 )
@@ -279,14 +280,28 @@ def _conceal_from_targets_observer(conceal_from, observer_id, observer_sheet):
     numeric id, string id, display name, uid, or alias. conceal_from is an
     absolute exclusion list authored against whatever identity handle the
     speaker knew, so a reader must resolve it against ALL of the observer's
-    handles (same tolerance character_room/canonicalize_positions apply)."""
+    handles (same tolerance character_room/canonicalize_positions apply).
+
+    FAILS CLOSED. When the handles cannot be enumerated at all, every name,
+    uid and alias form is gone and only the numeric-id form is left, so a
+    name-authored exclusion matches nothing and this used to answer "not
+    excluded" -- delivering the concealed line to the one mind it named. An
+    exclusion the engine cannot resolve is not an exclusion that does not
+    apply: unresolved, this guard cannot show the observer is NOT the
+    excluded party, and withholding one line costs a delivery while
+    delivering it costs the firewall. Reported rather than swallowed,
+    because a subtraction nothing announces is the next invisible defect."""
     if not conceal_from:
         return False
     id_forms = {str(observer_id).strip()}
     try:
         keys = {k.casefold() for k in character_scene_keys(observer_sheet)}
-    except Exception:
-        keys = set()
+    except Exception as exc:
+        note_step_warning(
+            f"conceal_from could not be resolved against observer "
+            f"{observer_id!r} ({type(exc).__name__}: {exc}); treating the "
+            f"line as concealed from them.")
+        return True
     for entry in conceal_from:
         if isinstance(entry, bool):
             continue
