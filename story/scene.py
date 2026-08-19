@@ -22,6 +22,7 @@ from story.character_schema import (
     character_opening_context,
     character_private_history,
     character_public_history,
+    character_scent,
     character_senses,
     normalize_persona_data,
     persona_abilities,
@@ -30,6 +31,7 @@ from story.character_schema import (
     persona_name,
     persona_private_history,
     persona_public_history,
+    persona_scent,
     persona_senses,
     persona_voice_setting,
     senses_as_text,
@@ -1303,6 +1305,20 @@ def senses_of(sheet):
     if "narration" in sheet:
         return senses_as_text(persona_senses(sheet))
     return sheet.get("senses") or "ordinary senses"
+
+def scent_of(sheet):
+    """What this body standingly smells of, whichever kind of card it is.
+
+    The sibling of `senses_of` and `abilities_of`: a caller holding a sheet of
+    unknown kind asks here. "" means the card says nothing, which is silence
+    rather than an odourless body -- an authoring gap must never mint a
+    percept.
+    """
+    if "psychology" in sheet or "core" in sheet:
+        return character_scent(sheet)
+    if "narration" in sheet:
+        return persona_scent(sheet)
+    return str(sheet.get("scent") or "").strip()
 
 def name_of(sheet):
     if "psychology" in sheet or "core" in sheet:

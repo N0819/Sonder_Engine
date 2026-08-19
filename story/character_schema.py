@@ -587,6 +587,13 @@ def default_character_data(name: str = "Unnamed") -> dict:
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
             },
+            # What this body standingly SMELLS of, as a short noun phrase.
+            # The sibling of `visible.summary` on the channel beside sight:
+            # stable, part of what the body is, and distinct from both
+            # authored clothing (`initial_outfit`) and matter that landed on
+            # it during play (`scene.substances`). Empty means no smell worth
+            # a percept, which is every card written before the field existed.
+            "scent": "",
             "latent": [],
             # Structured extra body parts -- see _normalize_extra_parts.
             "extra_parts": [],
@@ -681,6 +688,7 @@ def default_persona_data(name: str = "Player") -> dict:
                 "build": "", "face": "", "hair": "", "eyes": "",
                 "distinctive_features": [],
             },
+            "scent": "",
             "latent": [],
             "extra_parts": [],
         },
@@ -1415,6 +1423,18 @@ def character_appearance(sheet: dict) -> str:
                .get("summary") or "A person of unremarkable appearance.")
 
 
+def character_scent(sheet: dict) -> str:
+    """What this body standingly smells of, or "" when the card says nothing.
+
+    The olfactory sibling of `character_appearance`, and empty by default on
+    purpose: an authoring gap is silence, and silence must never become a
+    smell. Every card written before the field existed reads as no smell,
+    which is byte-identical to the behaviour it already had.
+    """
+    return str(normalize_character_data(sheet).get("embodiment", {})
+               .get("scent") or "").strip()
+
+
 def character_initial_outfit(sheet: dict) -> dict:
     return copy.deepcopy(
         normalize_character_data(sheet).get(
@@ -1638,6 +1658,12 @@ def persona_name(sheet: dict) -> str:
 def persona_appearance(sheet: dict) -> str:
     return str(normalize_persona_data(sheet).get("embodiment", {}).get("visible", {})
                .get("summary") or "A person of unremarkable appearance.")
+
+
+def persona_scent(sheet: dict) -> str:
+    """The persona's standing body smell -- see character_scent."""
+    return str(normalize_persona_data(sheet).get("embodiment", {})
+               .get("scent") or "").strip()
 
 
 def persona_initial_outfit(sheet: dict) -> dict:

@@ -217,6 +217,11 @@ _ENTITY_DEFAULT_FIELDS = {
     # silence still reads as silence.
     "enclosure": None,
     "light_source": None,
+    # Listed for the same reason as the two above, and pre-emptively: a
+    # `scent` outside this map is copied verbatim by the tail loop below, so
+    # the None validation fills in for every beat that does not re-declare it
+    # would overwrite a standing smell rather than read as silence.
+    "scent": None,
 }
 
 

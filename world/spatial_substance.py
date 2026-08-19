@@ -293,6 +293,13 @@ def _resolved_substance_add(scene, raw, report=None):
         "target_part": target_part,
         "amount": _substance_text(raw.get("amount"), 80),
         "detail": _substance_text(raw.get("detail"), 240),
+        # What this matter SMELLS of, deliberately beside `amount` and
+        # `detail` rather than among the identity fields: matter deposited
+        # somewhere is the commonest smell in play, and how much of it there
+        # is and how it smells now are both facts a later release
+        # re-describes. Hashing it into `_substance_id` would file drying
+        # blood as a second puddle beside fresh.
+        "scent": _substance_text(raw.get("scent"), 160),
     }
     # Adds derive identity from physical semantics. A model-supplied id could
     # otherwise overwrite an unrelated standing record; ids are selectors for
@@ -404,15 +411,17 @@ def _record_region(record) -> str:
 def _absorb_into_pool(standing: dict, arriving: dict) -> dict:
     """Fold a later release into the pool already standing there.
 
-    The arriving row is the current account of that pool, so `amount` and
-    `detail` replace what was there -- a re-description says how much is there
-    NOW. The part slots only ever gain precision: a release that named an
+    The arriving row is the current account of that pool, so `amount`,
+    `detail` and `scent` replace what was there -- a re-description says how
+    much is there NOW, and what it smells of now. Silence is still silence:
+    an op that says nothing about the smell does not blank the standing one.
+    The part slots only ever gain precision: a release that named an
     endpoint fills a slot the earlier one left silent, and never blanks one.
     The standing record keeps its own `substance_id`, which is what makes a
     `{op:'remove', substance_id}` selector minted from an earlier payload
     still find the row.
     """
-    for field in ("amount", "detail"):
+    for field in ("amount", "detail", "scent"):
         value = _substance_text(arriving.get(field), 240)
         if value:
             standing[field] = arriving.get(field, "")

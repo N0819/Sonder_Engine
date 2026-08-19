@@ -1279,6 +1279,13 @@ class SceneEntityDef(LenientModel):
     # validation round-trip, and a lamp that comes back unlit is a character
     # standing in the dark holding it.
     light_source: Optional[str] = None
+    # What this thing SMELLS of, as a short noun phrase: bread, lamp oil, a
+    # censer, a corpse. The sibling of `light_source` -- what the thing emits
+    # on a channel other than sight -- and declared for the same reason. It is
+    # a standing property of the object, not this beat's event: matter
+    # deposited somewhere is `substance_ops`, and a body's own smell is on its
+    # card. Absent means the thing has no smell worth a percept.
+    scent: Optional[str] = None
 
 class RoomDef(LenientModel):
     name: str = ""
@@ -2057,9 +2064,11 @@ class StateDiff(LenientModel):
     # Physical matter transferred and left somewhere after the beat.
     # {op:add|release|deposit|remove|clear, source, source_part, substance,
     # target, placement:surface|interior|contained|room, target_interior,
-    # target_part, amount, detail, substance_id?}.  A release from the acting
-    # part of a unique standing interior contact derives its destination from
-    # that topology; the model names the matter, never the code.
+    # target_part, amount, detail, scent, substance_id?}.  A release from the
+    # acting part of a unique standing interior contact derives its
+    # destination from that topology; the model names the matter, never the
+    # code. `scent` is what the matter smells of and is why this ledger, not
+    # a parallel one, carries the commonest smell in play.
     substance_ops: list[dict] = Field(default_factory=list)
     # Actor-owned following changes, projected deterministically from the
     # player interpretation and character decisions. The resolve model does
