@@ -486,7 +486,7 @@ def interaction_loop(ctx, nonce):
         except Exception:
             continue
         debt = (_unanswered_question_note(
-            ctx.chat.id, name, ctx.turn.idx, ctx.turn.frame_id)
+            ctx.chat.id, name, char_id, ctx.turn.idx, ctx.turn.frame_id)
             or {}).get("awaiting_your_answer")
         if not debt:
             continue
