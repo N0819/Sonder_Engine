@@ -40,7 +40,15 @@ import statistics
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# The engine does not key its prompts, its schemas and its provider roles the
+# same way, so a probe that benches `--step X` cannot assume a prompt called X.
+# ONE copy of that mapping, in the tool that first had to work it out: a second
+# hand-kept copy is how `creation_probe --step director_resolve` came to raise
+# KeyError while `contract_bench --step director_resolve` worked.
+from contract_bench import PROMPT_KEY  # noqa: E402
 
 # One known room, one door nobody has ever been through, and a player who just
 # went through it. Everything past that door has to be invented.
@@ -208,7 +216,12 @@ def main(argv=None):
 
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
-    system = prompts.DEFAULT_PROMPTS[args.step]
+    prompt_key = PROMPT_KEY.get(args.step, args.step)
+    if prompt_key not in prompts.DEFAULT_PROMPTS:
+        ap.error("step %r resolves to prompt %r, which this engine does not "
+                 "have. Add it to contract_bench.PROMPT_KEY if the prompt is "
+                 "named differently from the step." % (args.step, prompt_key))
+    system = prompts.DEFAULT_PROMPTS[prompt_key]
     payload = PAYLOADS[args.step]
     print(f"step {args.step}   one door opened, everything past it invented\n")
 

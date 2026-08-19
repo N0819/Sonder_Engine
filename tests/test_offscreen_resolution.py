@@ -467,16 +467,6 @@ class TestTheProducer:
             turn_idx=40, previous_scene={"location": "Harbor"},
             scene={"location": "Harbor"}, previous_clock={}, clock={},
             transit_result={}) == []
-
-    def test_the_producer_is_wired_at_the_commit_tail(self):
-        """Superseded by `tests/test_commit_tail_producers.py`.
-
-        This asserted a substring of `inspect.getsource`, which cannot fail on a
-        behavioural change: `job = None if True else schedule_profile_ticks(ctx)`
-        keeps the text and never runs the call. The replacement drives a real
-        commit and asserts the producer was reached.
-        """
-        import tests.test_commit_tail_producers  # noqa: F401  (the real cover)
     def test_nothing_cancels_jobs_on_turn_start(self):
         """The user's one explicit rule for this producer. jobs.cancel
         exists for authored teardown; the pipeline must not call it."""

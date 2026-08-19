@@ -29,7 +29,7 @@ import extension_runtime
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
-from tests.conftest import fanout_resolve_agent
+from tests.helpers import fanout_resolve_agent
 from tests.test_extensions import (  # noqa: F401 - fixtures are used by name
     _enable, _write_extension, ext_root, real_ext_root,
 )

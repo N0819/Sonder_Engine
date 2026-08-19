@@ -5,22 +5,25 @@ Speed and schema-validity are both measured with one or two characters in the
 scene, and that is the easy case. The failures worth fearing appear at load and
 are SILENT:
 
-  * perception fans out per perceiver. With five people in a room, a weaker
-    model can hand A's view to B, drop a perceiver entirely, or let something
-    only C could perceive bleed into D's view. Every one of those is an
-    information-firewall breach -- the thing this engine exists to prevent --
-    and none of them raises. The turn completes and the story is quietly wrong.
   * the Director routes the beat: who reacts, who was addressed, what each act
     targets. Fumbled routing with five characters means the wrong people
     answer, and again nothing errors.
 
-So this builds a deliberately crowded scene where every perceiver has ONE
-sentinel fact that only they can perceive, sends the engine's real prompt, and
-then checks the reply for cross-contamination rather than merely for valid
-JSON. A model can pass every other test in this repo and fail here.
+So this builds a deliberately crowded scene, sends the engine's real prompt,
+and then checks the reply for misrouting rather than merely for valid JSON: the
+two people the player named must be the two the beat addresses, and nobody who
+is not in the room may appear. A model can pass every other test in this repo
+and fail here.
 
-    python3 tools/scale_probe.py --step perception --models a,b --perceivers 5
-    python3 tools/scale_probe.py --step director_interpret --models a,b
+    python3 tools/scale_probe.py --models a,b --perceivers 5
+
+There was a second arm here, and its absence is the point. Perception used to
+fan a model call out per perceiver, and this probe planted one sentinel fact in
+each private slot to catch a view leaking into another. Perception is
+deterministic now -- no `perception` prompt, no `perception` role -- so there
+is no model call left to breach the firewall at load, and a probe that sends a
+prompt the engine no longer has measures a model this engine does not use. The
+crowding risk that remains is the Director's, which is the arm below.
 
 Run it SEQUENTIALLY and on its own. The rate limit is on the account, and
 benchmarking two things at once manufactures 429s that read as model failure.
@@ -64,27 +67,6 @@ SCENE = {
 }
 
 
-def _perception_payload(n):
-    people = PEOPLE[:n]
-    return {
-        "perceivers": [
-            {"id": str(i + 2), "name": name, "room": room,
-             "awareness": "awake",
-             # The sentinel is delivered ONLY in this perceiver's own private
-             # slot. Nothing legitimate can move it into another view.
-             "private_body_state": f"You are carrying {sentinel}."}
-            for i, (name, room, sentinel) in enumerate(people)
-        ],
-        "resolved_event": (
-            "The lamps gutter. Someone on the stair says \"It is time.\" "
-            "Ada turns toward the sound; Bram does not move; Cyra steps back "
-            "from the table. In the gallery above, Dov leans on the rail and "
-            "Eirn checks the door."),
-        "scene": SCENE,
-        "variant_seed": "scale",
-    }
-
-
 def _director_payload(n):
     people = PEOPLE[:n]
     return {
@@ -121,33 +103,6 @@ def _post(prov, model, system, user, max_tokens, timeout):
     return text, dt, None
 
 
-def _check_perception(parsed, n):
-    """Every perceiver present, nobody else's sentinel in anybody's view."""
-    problems = []
-    views = parsed.get("views")
-    if not isinstance(views, dict):
-        return ["no `views` object"]
-    people = PEOPLE[:n]
-    # Views may be keyed by id or by name; accept either, reject neither.
-    keys = {str(k).strip().casefold() for k in views}
-    for i, (name, _room, _s) in enumerate(people):
-        if str(i + 2) not in keys and name.casefold() not in keys:
-            problems.append(f"missing perceiver {name}")
-    tokens = {name: sentinel.split("_")[0] + "_SENTINEL"
-              for name, _r, sentinel in people}
-    for key, view in views.items():
-        text = str(view or "")
-        owner = None
-        for i, (name, _r, _s) in enumerate(people):
-            if str(key).strip().casefold() in (str(i + 2), name.casefold()):
-                owner = name
-                break
-        for name, token in tokens.items():
-            if name != owner and token in text:
-                problems.append(f"{name}'s sentinel leaked into {owner or key}")
-    return problems
-
-
 def _check_director(parsed, n):
     """Routing: the two named people are addressed, nobody invented."""
     problems = []
@@ -172,18 +127,34 @@ def _check_director(parsed, n):
     return problems
 
 
+#: Probe step -> (payload builder, reply checker). A step named here must
+#: also be a key in `prompts.DEFAULT_PROMPTS`; both are checked before the
+#: first paid call, because `--step` defaulted to `perception` for weeks after
+#: that prompt stopped existing and the default invocation died on a KeyError.
+PROBES = {"director_interpret": (_director_payload, _check_director)}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--db", default="engine.db")
     ap.add_argument("--provider", type=int, default=1)
-    ap.add_argument("--step", default="perception",
-                    choices=("perception", "director_interpret"))
+    ap.add_argument("--step", default="director_interpret",
+                    help="which probe to run; see PROBES")
     ap.add_argument("--models", required=True)
     ap.add_argument("--perceivers", type=int, default=5)
     ap.add_argument("--trials", type=int, default=2)
     ap.add_argument("--timeout", type=int, default=180)
     ap.add_argument("--max-tokens", type=int, default=8000)
     args = ap.parse_args(argv)
+
+    # Validated before the database is touched and before the first paid call:
+    # `--step` defaulted to `perception` for weeks after that prompt stopped
+    # existing, and the default invocation died on a KeyError deep in main.
+    if args.step not in PROBES:
+        ap.error("%r is not a probe. Available: %s. (Perception was one until "
+                 "it became deterministic -- there is no `perception` prompt "
+                 "for a model to answer any more.)"
+                 % (args.step, ", ".join(sorted(PROBES))))
 
     os.environ["ENGINE_DB"] = args.db
     from core import db
@@ -195,10 +166,11 @@ def main(argv=None):
     prov = dict(db.q("SELECT * FROM providers WHERE id=?",
                      (args.provider,), one=True))
     n = max(1, min(args.perceivers, len(PEOPLE)))
-    payload = (_perception_payload(n) if args.step == "perception"
-               else _director_payload(n))
+    if args.step not in prompts.DEFAULT_PROMPTS:
+        ap.error("%r has no prompt in this engine's DEFAULT_PROMPTS" % args.step)
+    build_payload, checker = PROBES[args.step]
+    payload = build_payload(n)
     system = prompts.DEFAULT_PROMPTS[args.step]
-    checker = _check_perception if args.step == "perception" else _check_director
 
     print(f"step {args.step}  {n} bodies  system {len(system)} chars\n")
     for model in [m.strip() for m in args.models.split(",") if m.strip()]:

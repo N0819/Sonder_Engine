@@ -30,8 +30,9 @@ statement about the row.
 
 Checkpoints and chat archives carry their OWN world_entities snapshots, taken
 before this ran, so restoring an old one reintroduces the old rows. That is
-not a gap this tool can close -- it is why the fix in commit.py, which heals
-on next touch, is the load-bearing half and this is the sweep.
+not a gap this tool can close -- it is why the fix in
+`persist/commit_entities.py` (`commit_world_entities`), which heals on next
+touch, is the load-bearing half and this is the sweep.
 """
 
 from __future__ import annotations

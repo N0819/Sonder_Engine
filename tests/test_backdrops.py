@@ -972,6 +972,17 @@ def test_the_read_path_does_not_walk_the_checkpoint_history(temp_db, monkeypatch
     req = bd.build_backdrop_request(cid, 0, "Hinami", None)
     assert req is not None and req["signature"]
     assert walked == [], "the read path walked the checkpoint history again"
+
+    # POSITIVE CONTROL. The assertion above is an absence, and an absence is
+    # also what a counter installed on the wrong object produces. So: call the
+    # expensive path the read path was separated FROM, with the same wrapper
+    # in place. If this does not record a walk, the wrapper is not on the
+    # function anyone calls and the guard above proves nothing.
+    bd.arrival_flavour(cid, 0, "kitchen", "Hinami")
+    assert walked, (
+        "arrival_flavour did not reach arrival_turn_for_room: the counter is "
+        "not installed where the calls happen")
+    walked.clear()
     # And the key is GONE rather than emptied, so a caller that needs the
     # atmosphere is forced to the function that makes it instead of silently
     # composing a prompt with a blank where the arrival prose should be.

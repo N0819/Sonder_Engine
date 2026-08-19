@@ -19,21 +19,23 @@ to date.
 
 from __future__ import annotations
 
-import os
-import tempfile
-
 import pytest
+
+from tests.helpers import remove_scratch_db, scratch_db_path
+
+#: Every test here calls the real `db.init()`, which is fsync-bound. It builds
+#: its own databases rather than taking `temp_db`, so the marker the conftest
+#: applies by fixture name never reached it: these ran in the FAST tier, which
+#: is documented as database-independent, and on the platter rather than the
+#: tmpfs every other database test uses.
+pytestmark = pytest.mark.slow
 
 
 @pytest.fixture
 def fresh_db_path():
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    os.remove(path)
+    path = scratch_db_path()
     yield path
-    for p in (path, path + "-wal", path + "-shm"):
-        if os.path.exists(p):
-            os.remove(p)
+    remove_scratch_db(path)
 
 
 class TestFreshDatabaseSkipsMigrations:

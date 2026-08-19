@@ -26,11 +26,15 @@ Usage:
                                                # own canonical helpers
     python tools/scene_lint.py --heal --dry-run
 
-Healing uses `attire.release_removed_garments` (which reder1ves the entry,
-dropping stale derived notes) and `commit._fold_duplicate_shed_garments`.
-Both are the code the live path already runs; this only reaches scenes that
-stopped being written to before those existed. Checkpoints are healed
-alongside the live scene, because a reroll restores from them.
+Healing uses `commit._fold_duplicate_shed_garments` (defined in
+`persist/commit_attire.py`, re-exported by the facade), which is the code the
+live path already runs; this only reaches scenes that stopped being written to
+before it existed. It deliberately does NOT use
+`attire.release_removed_garments`, the other canonical repair, because that
+rederives the entry and would rewrite pre-region wardrobes -- the reason, and
+what it was measured to do to this corpus, are in `heal_scene`'s own docstring.
+Checkpoints are healed alongside the live scene, because a reroll restores from
+them.
 """
 from __future__ import annotations
 

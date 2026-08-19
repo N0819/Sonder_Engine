@@ -2,54 +2,42 @@
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
+import sys
 
 import pytest
+
+from tests.helpers import remove_scratch_db, scratch_db_path
+
+# pytest imports this file itself, as the top-level module `conftest`. Nothing
+# else may import it under a second name: Python would build a second module
+# object, run everything below AGAIN, and register none of the fixtures --
+# which is exactly what `from tests.conftest import ...` did in five test
+# files until 2026-08-18. The second copy's scratch database had no owner and
+# no teardown, so every suite run left one more 516KB file in /dev/shm (164 of
+# them, counted). Shared helpers live in `tests/helpers.py`; this fails loudly
+# rather than leaking quietly, and `tools/project_check.py` catches the import
+# statically before it ever runs.
+_twins = [name for name, mod in list(sys.modules.items())
+          if name != __name__ and getattr(mod, "__file__", None) == __file__]
+if _twins:
+    raise RuntimeError(
+        "tests/conftest.py was imported twice, as %s and as %r. pytest owns "
+        "this file; import shared helpers from tests/helpers.py instead."
+        % (", ".join(repr(n) for n in _twins), __name__))
 
 
 def pytest_collection_modifyitems(items):
     """Mark database-backed tests ``slow``.
 
     Kept for CI's matrix-breadth job (``make test-fast``), NOT as the tier a
-    developer should run before considering a change done -- see the fixture
-    below for why that split no longer means what it used to.
+    developer should run before considering a change done -- see
+    `tests/helpers.py`'s `fast_tmp_dir` for why that split no longer means what
+    it used to.
     """
 
     for item in items:
         if "temp_db" in item.fixturenames:
             item.add_marker(pytest.mark.slow)
-
-
-def _fast_tmp_dir():
-    """A RAM-backed directory for test databases, where the platform has one.
-
-    ``db.init()`` is fsync-bound, not compute-bound: ``executescript(SCHEMA)``
-    auto-commits ~117 DDL statements (53 tables, 64 indexes, FTS5 virtuals,
-    triggers) against a brand-new file, and pays a flush for each. That single
-    call was the dominant cost of the whole suite -- 159 of 252 test files
-    request ``temp_db``, and their test BODIES run in 0.02--0.10s against a
-    setup measured at 0.2s idle and 1.2--1.6s on a loaded checkout.
-
-    Measured here, 13 database-backed tests: 2.93s on disk, 0.61s on tmpfs.
-    Nothing about the database changes -- same schema, same WAL, same
-    isolation, same per-test file. Only the storage backing moves, so a test
-    cannot tell the difference; the suite just stops waiting on the platter.
-
-    Returns None where no tmpfs exists (macOS, Windows), which falls back to
-    tempfile's own default. Correct everywhere, fast where it can be.
-    ``ENGINE_TEST_TMPDIR`` overrides, for a host where /dev/shm is too small.
-    """
-    override = os.environ.get("ENGINE_TEST_TMPDIR")
-    if override:
-        return override
-    if os.path.isdir("/dev/shm") and os.access("/dev/shm", os.W_OK):
-        return "/dev/shm"
-    return None
-
-
-_TMP_DIR = _fast_tmp_dir()
 
 
 def _redirect_default_database():
@@ -72,9 +60,7 @@ def _redirect_default_database():
     """
     from core import db
 
-    fd, path = tempfile.mkstemp(suffix=".db", dir=_TMP_DIR)
-    os.close(fd)
-    os.remove(path)
+    path = scratch_db_path()
     db.configure(path)
     db.init()
     return path
@@ -121,19 +107,13 @@ def _never_the_real_database():
         yield path
     finally:
         db.close_connection()
-        for leftover in (path, path + "-wal", path + "-shm"):
-            if os.path.exists(leftover):
-                os.remove(leftover)
+        remove_scratch_db(path)
 
 
 @pytest.fixture
 def temp_db():
     """Create and configure a temporary test database."""
-    fd, db_path = tempfile.mkstemp(
-        suffix=".db", dir=_TMP_DIR
-    )
-    os.close(fd)
-    os.remove(db_path)
+    db_path = scratch_db_path()
 
     from core import db
 
@@ -147,54 +127,7 @@ def temp_db():
         db.close_connection()
         db.configure(old_path)
 
-        for path in (
-            db_path,
-            db_path + "-wal",
-            db_path + "-shm",
-        ):
-            if os.path.exists(path):
-                os.remove(path)
-
-def fanout_resolve_agent(output, *, per_step=None, calls=None):
-    """A fake `agents.director._agent_json` that serves a whole-beat resolve
-    output THROUGH the specialist fan-out.
-
-    The Director's delegated channels are answered by their owners: a
-    specialist's reply owns the channels it was granted, so a fixture that
-    hands the prose author a complete `state_diff` has those channels
-    replaced by whatever each specialist said -- which, for a fake that
-    returns one shape to every call, is nothing. Position diffs vanished,
-    room edits vanished, and a test about the movement backstop failed on a
-    KeyError that had nothing to do with movement.
-
-    So this slices the output the way the engine does. The prose author gets
-    it verbatim; each specialist gets its own channels lifted out of
-    `state_diff` to the TOP level, which is the shape a specialist emits.
-    That keeps a fixture free to say "the Director decided X" without also
-    having to say which hand carries it.
-
-    `per_step` overrides any step key outright; `calls` collects
-    (step_key, payload) when a test wants to count.
-    """
-    from agents.director import SPECIALISTS
-
-    diff = (output or {}).get("state_diff") or {}
-    sliced = {}
-    for spec in SPECIALISTS.values():
-        patch = {ch: diff[ch] for ch in spec["channels"] if ch in diff}
-        if patch:
-            sliced[spec["step_key"]] = patch
-    canned = {**sliced, **(per_step or {})}
-
-    def fake(role, step_key, system, payload, **kw):
-        if calls is not None:
-            calls.append((step_key, payload))
-        if step_key in canned:
-            return json.loads(json.dumps(canned[step_key]))
-        if step_key == "director_resolve":
-            return json.loads(json.dumps(output or {}))
-        return {}
-    return fake
+        remove_scratch_db(db_path)
 
 
 @pytest.fixture

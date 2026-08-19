@@ -64,4 +64,4 @@ echo "  test server   http://127.0.0.1:$PORT"
 echo "  database      $ENGINE_DB  (copy — real engine.db is NOT used)"
 echo "  stop          Ctrl-C"
 echo
-exec python3 -m uvicorn app:app --reload --port "$PORT"
+exec python3 -m uvicorn web.app:app --reload --port "$PORT"
