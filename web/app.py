@@ -40,6 +40,7 @@ from agents import (
     fanout_is_parallel as director_fanout_is_parallel,
 )
 from story.character_schema import (
+    character_card_warnings,
     character_export_document,
     character_initial_outfit,
     character_name,
@@ -66,12 +67,16 @@ from story.importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
-    recover_greetings_from_source, character_import_warnings,
+    recover_greetings_from_source,
     fill_character_psychology, fill_appearance,
 )
 from persist.commit import (promotable_background_presences,
                     promote_background_character,
-                    sync_room_registry_with_scene)
+                    sync_room_registry_with_scene,
+                    # The gate itself, not a second reading of the same
+                    # setting. `"" != "0"` is True, so an unset setting read
+                    # as ON here and OFF at the gate -- see get_auto_promote.
+                    _auto_promote_enabled)
 from llm.prompts import (
     presets, active_preset, DEFAULT_PROMPTS,
     default_prompts_for, preset_export_document, preset_import_document,
@@ -1168,6 +1173,12 @@ def bootstrap():
         # written -- and until now there was no way to put anything in it, so
         # every install has run with the clause referring to an empty list.
         "exemplars": json.loads(get_setting("exemplars") or "[]"),
+        # The editor's bounds come from the engine rather than a second copy
+        # in the browser: they are a per-turn cost (every passage rides EVERY
+        # narrator call), so the number a host is shown has to be the number
+        # `put_exemplars` will actually enforce.
+        "exemplar_bounds": {"max_count": EXEMPLAR_MAX_COUNT,
+                            "max_chars": EXEMPLAR_MAX_CHARS},
         "max_output_tokens": max_output_tokens(),
         "reasoning_effort": reasoning_efforts(),
         "reasoning_effort_levels": list(REASONING_EFFORTS),
@@ -1214,7 +1225,7 @@ def bootstrap():
         # sent back, only whether one is set.
         "ambience": {k: v for k, v in ambience_settings().items() if k != "key"},
         "ambience_licenses": list(FREESOUND_LICENCES),
-        "auto_promote": get_setting("auto_promote") != "0",
+        "auto_promote": _auto_promote_enabled(),
         "default_prompts": DEFAULT_PROMPTS,
         "prompt_presets": presets(),
         "active_preset": active_preset(),
@@ -2327,7 +2338,8 @@ def char_generate(body: dict = Body(default={})):
     except Exception as exc:
         raise HTTPException(502, f"Character generation failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
-    return {"id": cid, "sheet": sheet}
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters")
 def char_create(body: dict = Body(...)):
@@ -2348,7 +2360,11 @@ def char_create(body: dict = Body(...)):
             new_uid("char"),
         ),
     )
-    return {"id": cid, "sheet": sheet}
+    # The blank card is the sharpest case for this: `default_character_data`
+    # ships an empty drive, no goals and an unset capacity, which is by
+    # construction the exact sheet the first three warnings exist to catch.
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters/import")
 def char_import(body: dict = Body(...)):
@@ -2363,7 +2379,7 @@ def char_import(body: dict = Body(...)):
         raise HTTPException(502 if reinterpret else 400, f"Character import failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
     return {"id": cid, "sheet": sheet,
-            "warnings": character_import_warnings(sheet)}
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters/{cid}/start")
 def character_start_story(cid: int, body: dict = Body(default={})):
@@ -2382,7 +2398,14 @@ def character_start_story(cid: int, body: dict = Body(default={})):
             language=_require_story_language(body.get("language")))
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return {"chat_id": chat_id, "turn_id": turn_id}
+    # The last moment before the card starts BEHAVING. A driveless sheet reads
+    # as a dull character rather than a missing field once play begins, and
+    # this is the surface where the host is about to find that out the slow
+    # way.
+    row = q("SELECT sheet FROM characters WHERE id=?", (cid,), one=True)
+    warnings = character_card_warnings(
+        normalize_character_data(json.loads(row["sheet"] or "{}"))) if row else []
+    return {"chat_id": chat_id, "turn_id": turn_id, "warnings": warnings}
 
 @app.post("/api/characters/{cid}/recover_greetings")
 def char_recover_greetings(cid: int):
@@ -2421,7 +2444,8 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, f"Psychology fill failed: {exc}") from exc
-    return {"id": cid, "sheet": sheet}
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 def _appearance_fill(kind, entity_id, body):
     """Shared handler for the two card editors' body-and-clothing generator."""
@@ -2441,7 +2465,9 @@ def _appearance_fill(kind, entity_id, body):
 @app.post("/api/characters/{cid}/fill_appearance")
 def char_fill_appearance(cid: int, body: dict = Body(default={})):
     """Preview a generated body and outfit for editor review. Writes nothing."""
-    return {"id": cid, "sheet": _appearance_fill("character", cid, body)}
+    sheet = _appearance_fill("character", cid, body)
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/personas/{pid}/fill_appearance")
 def persona_fill_appearance(pid: int, body: dict = Body(default={})):
@@ -2463,7 +2489,8 @@ def char_edit(cid: int, body: dict = Body(...)):
         "UPDATE characters SET name=?,sheet=? WHERE id=?",
         (character_name(sheet), json.dumps(sheet, ensure_ascii=False), cid),
     )
-    return {"ok": True, "sheet": sheet}
+    return {"ok": True, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.delete("/api/characters/{cid}")
 def char_del(cid: int):
@@ -2842,6 +2869,10 @@ def chat_new(body: dict = Body(...)):
 
 @app.get("/api/language-packs")
 def language_packs_get():
+    """Out-of-process surface, deliberately: the browser gets the same list on
+    the bootstrap payload (`language_packs`) and must not re-fetch it, since a
+    pack list read separately from the UI catalog that came with it can
+    disagree with the one the page is already rendering."""
     return {"language_packs": [
         pack.public() for pack in installed_language_packs().values()
     ]}
@@ -2859,6 +2890,9 @@ def ui_catalog_get():
 
 @app.get("/api/language-packs/{language_id}/ui")
 def language_pack_ui(language_id: str):
+    """One pack's UI catalog by id. Out-of-process surface, and the answer to
+    "what would the interface look like in X" without switching to X --
+    `GET /api/ui` is the in-page read, and it serves the ACTIVE pack only."""
     try:
         pack = require_language_pack(language_id, capability="ui")
     except LanguagePackError as exc:
@@ -2968,6 +3002,42 @@ def attach_lore(cid: int, body: dict = Body(...)):
     if last:
         refresh_checkpoint(cid, last["idx"])
     return {"lorebook_id": new}
+
+@app.put("/api/chats/{cid}/lorebooks/{lid}")
+def set_book_enabled(cid: int, lid: int, body: dict = Body(...)):
+    """Silence an attached lorebook without detaching it.
+
+    `chat_lorebooks.enabled` has been in the schema, honoured by every reader
+    that matters -- retrieval (`mind.memory._chat_lorebook_root_ids`),
+    checkpoints, the portable archive, both browser payloads -- and written by
+    nothing but the `1` five INSERTs hardcode. So the column had exactly one
+    reachable value and the whole read path around it was dead weight
+    (FRONTEND-9).
+
+    It is not the same act as detaching, which is why it earns a route rather
+    than being folded into one. Detaching a story-OWNED book deletes it and
+    its entries; disabling one drops it out of retrieval and leaves every
+    entry, link and uid where it is, so the host can turn a whole body of lore
+    off for a stretch of story and back on later without losing the citations
+    that already point into it.
+    """
+    _require_chat_idle(cid)
+    if "enabled" not in body:
+        raise HTTPException(400, "enabled required")
+    row = q("SELECT 1 FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
+            (cid, lid), one=True)
+    if not row:
+        raise HTTPException(404, "That lorebook is not attached to this chat")
+    enabled = 1 if body.get("enabled") else 0
+    qi("UPDATE chat_lorebooks SET enabled=? WHERE chat_id=? AND lorebook_id=?",
+       (enabled, cid, lid))
+    # Retrieval is snapshotted with the turn, so the checkpoint has to move
+    # with the setting or a reroll would restore the old reach -- the same
+    # reason attach and detach refresh it.
+    last = _latest_turn(cid)
+    if last:
+        refresh_checkpoint(cid, last["idx"])
+    return {"lorebook_id": lid, "enabled": bool(enabled)}
 
 @app.delete("/api/chats/{cid}/lorebooks/{lid}")
 def detach_book(cid: int, lid: int):
@@ -3371,11 +3441,23 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     memory_seeds = [str(m) for m in (body.get("memory_seeds") or []) if str(m).strip()]
     char_id = promote_background_character(
         cid, name, sheet=sheet, memory_seeds=memory_seeds)
-    return {"ok": True, "char_id": char_id}
+    # The confirm route takes whatever sheet the host approved, which may not
+    # be the draft `draft_promoted_character` warned about.
+    return {"ok": True, "char_id": char_id,
+            "warnings": character_card_warnings(sheet)}
 
 @app.get("/api/auto_promote")
 def get_auto_promote():
-    return {"enabled": get_setting("auto_promote") != "0"}
+    """What the gate will actually do, not a second reading of the setting.
+
+    These two disagreed on the case that matters most -- a fresh install,
+    where the setting has never been written. `"" != "0"` is True, so the API
+    and the bootstrap payload both reported auto-promotion ON while
+    `_auto_promote_enabled` (which reads the same row as a truthy WORD, and
+    is the only thing that decides) had it OFF. A host reading a control that
+    says ON learns nothing about whether cast will be acquired.
+    """
+    return {"enabled": _auto_promote_enabled()}
 
 @app.put("/api/auto_promote")
 def set_auto_promote(body: dict = Body(...)):
@@ -3476,6 +3558,16 @@ def submit_extra_player_input(cid: int, idx: int, body: dict = Body(...)):
     whichever request actually creates/runs that turn picks up everything
     already declared for it. Rejects submissions against an already-run
     turn (has active steps) since the beat has already resolved.
+
+    The HOST-authenticated twin of `POST /api/guest/input`: same
+    `_submit_player_input`, same idx contract, different proof of who you
+    are. A guest holds a grant and can only speak as their own persona; this
+    one requires a host session and names the persona explicitly, which is
+    what an out-of-process client submitting for an attached extra player
+    needs. No page in this repository calls it -- the guest page uses the
+    guest route and the host types into the composer -- and it is kept for
+    that out-of-process case rather than deleted for want of an in-tree
+    caller (WEB-9).
     """
     pid = body.get("persona_id")
     if pid is None:
@@ -3713,7 +3805,8 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
                 cid, ch,
             ),
         )
-    return {"ok": True, "sheet": sheet, "card_source": "chat"}
+    return {"ok": True, "sheet": sheet, "card_source": "chat",
+            "warnings": character_card_warnings(sheet)}
 
 @app.get("/api/chats/{cid}/survival")
 def survival_get(cid: int):
@@ -4118,40 +4211,74 @@ def dlg_get(cid: int):
 
 @app.put("/api/chats/{cid}/dialogue_config")
 def dlg_put(cid: int, body: dict = Body(...)):
+    """Save the dialogue panel.
+
+    WHAT A SAVE MAY ERASE. This writes a whole-config replacement, which is
+    the right shape for the fields the panel renders -- an unchecked checkbox
+    has to be able to turn something off, so an absent boolean cannot mean
+    "leave it alone" for those. It is the wrong shape for every knob the panel
+    does NOT render, because then the route's own defaults stand in for a
+    value a host set some other way. So each field below falls back to WHAT IS
+    ALREADY STORED rather than to the schema default, and anything the config
+    grows that this handler has never heard of is carried through untouched.
+
+    Measured (AUDIT_MINDS finding 10): `initial_parallel_reactors` is read by
+    `agents/loops.py`, defaulted by `story/scene.py` and named in `Design.md`
+    as the supported way to restore the simultaneous opening wave -- and it
+    was in neither this whitelist nor `derived`, so a hand-set value lasted
+    until the next time anyone pressed Save on a panel with no field for it.
+    Silently, because nothing on screen had ever shown the number.
+    """
+    stored = wget(cid, "dialogue_config", None) or {}
+
+    def submitted(key, default):
+        """The submitted value, else the stored one, else the default."""
+        if key in body:
+            return body[key]
+        return stored.get(key, default)
+
     try:
-        autonomy = max(0, min(100, int(body.get("autonomy", 50))))
+        autonomy = max(0, min(100, int(submitted("autonomy", 50))))
     except (TypeError, ValueError):
         raise HTTPException(400, "autonomy must be an integer")
     derived = interaction_limits(autonomy)
 
     try:
-        config = {
-            "style": body.get("style", "natural"),
-            "min_lines": max(0, int(body.get("min_lines", 0))),
-            "max_lines": max(0, int(body.get("max_lines", 4))),
-            "variance": max(0.0, min(1.0, float(body.get("variance", 0.6)))),
+        config = dict(stored)
+        config.update({
+            "style": submitted("style", "natural"),
+            "min_lines": max(0, int(submitted("min_lines", 0))),
+            "max_lines": max(0, int(submitted("max_lines", 4))),
+            "variance": max(0.0, min(1.0, float(submitted("variance", 0.6)))),
             "autonomy": autonomy,
-            "allow_npc_initiative": bool(body.get("allow_npc_initiative", True)),
-            "allow_npc_to_npc_dialogue": bool(body.get("allow_npc_to_npc_dialogue", True)),
-            "stop_on_player_address": bool(body.get("stop_on_player_address", True)),
-            "stop_on_question_to_player": bool(body.get("stop_on_question_to_player", True)),
-            "silence_ends_exchange": bool(body.get("silence_ends_exchange", True)),
+            "allow_npc_initiative": bool(submitted("allow_npc_initiative", True)),
+            "allow_npc_to_npc_dialogue": bool(submitted("allow_npc_to_npc_dialogue", True)),
+            "stop_on_player_address": bool(submitted("stop_on_player_address", True)),
+            "stop_on_question_to_player": bool(submitted("stop_on_question_to_player", True)),
+            "silence_ends_exchange": bool(submitted("silence_ends_exchange", True)),
+            # How many characters open the beat in one blind instant. Floored
+            # at 1 because a wave of nobody is not a beat, and bounded because
+            # a number above the cast simply means "everyone" twice over.
+            "initial_parallel_reactors": max(
+                1, min(12, int(submitted("initial_parallel_reactors", 1)))),
+            "parallel_isolated_reactors": bool(
+                submitted("parallel_isolated_reactors", False)),
             # 0 = never promote. Capped well below the point where a counter
             # would be theatre rather than a setting.
             "promote_after_addressed": max(
-                0, min(99, int(body.get("promote_after_addressed", 0)))),
+                0, min(99, int(submitted("promote_after_addressed", 0)))),
             # The ceiling on what the cast may do off screen. Normalized
             # rather than rejected: an unreadable value falls to the default,
             # never to the floor, so a typo cannot quietly switch a story's
             # off-screen life off (scene.normalize_offscreen_life).
             "offscreen_life": normalize_offscreen_life(
-                body.get("offscreen_life", OFFSCREEN_LIFE_DEFAULT)),
+                submitted("offscreen_life", OFFSCREEN_LIFE_DEFAULT)),
             # 0 means no ticks however high the level is set -- the bound and
             # the permission are separate answers, and a cap of zero is a
             # legitimate way to say "not right now" without losing the level.
             "max_offscreen_actors": max(
-                0, min(12, int(body.get("max_offscreen_actors", 3)))),
-        }
+                0, min(12, int(submitted("max_offscreen_actors", 3)))),
+        })
 
         for key, default in derived.items():
             config[key] = max(0, int(body.get(key, default)))
@@ -4232,9 +4359,16 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
 def story_view_get(cid: int, events: int = 20):
     """Canonical story state, versioned. The read `story_view.py` documents.
 
-    Served to the host UI as well as to extensions because it is the same
-    question either asks -- and because a surface only extensions can reach is
-    one nothing in this repository exercises.
+    THE OUT-OF-PROCESS SURFACE, and nothing in this repository calls it.
+    This docstring used to say it was "served to the host UI as well as to
+    extensions"; measured, both halves are false. `static/js/` never fetches
+    it, and in-process extensions reach the same reads through the Python
+    facade (`extension_runtime/api.py`'s `story_view`), which is faster and
+    keeps the call inside the permission model. What HTTP is for here is a
+    client that is not in this process at all -- a companion app, a script, a
+    second machine -- so it is kept, and kept versioned, rather than deleted
+    for want of an in-tree caller. The same is true of `player_view` and
+    `viewers` below.
     """
     from web import story_view
 
@@ -4255,6 +4389,8 @@ def player_view_get(cid: int, viewer: str = "player", memories: int = 12):
 
 @app.get("/api/chats/{cid}/viewers")
 def viewers_get(cid: int):
+    """Who `player_view` may be asked for. Out-of-process surface; see
+    `story_view_get`."""
     from web import story_view
 
     return {"viewers": story_view.viewers(cid)}
@@ -5078,6 +5214,16 @@ def edit_prose(tid: int, body: dict = Body(...)):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
+    # The same reason `edit_input` above takes it, and the reason applies
+    # here more sharply rather than less: this route WRITES a variant, so a
+    # prose edit issued while a reroll of the same turn is running races the
+    # pipeline's own write to that step. Whichever `UPDATE variants SET
+    # active=0` lands second wins, and the edit either vanishes or silences
+    # the beat the pipeline just produced. Not marking anything stale
+    # (argued below) is what makes this route safe to run on an OLD turn --
+    # it was never an argument for running it against a LIVE one.
+    _require_chat_idle(turn["chat_id"])
+
     step = q(
         "SELECT * FROM steps WHERE turn_id=? AND key='narrator'",
         (tid,),
@@ -5466,6 +5612,62 @@ def _backdrop_url(chat_id, signature):
     return "/api/chats/%d/backdrop/%s.png" % (int(chat_id), signature)
 
 
+def _backdrop_payload(cid, req, status=None, ready=None):
+    """The one shape both backdrop routes answer with.
+
+    Written because they were not the same shape (FRONTEND-28). The POST
+    omitted `room_id` and `weather` -- the two fields the GET builds with
+    load-bearing comments -- and the browser CACHES the POST's payload under
+    the turn id (`generateBackdrop`, and `awaitBackdrop` returns its `first`
+    argument unpolled whenever the POST already answers `ready`). A later
+    read of that cached entry then called `weatherFxForTurn` with
+    `weather === undefined`, tearing the weather overlay down, and set
+    `BD.shownRoom = null`, defeating the same-room hold that keeps a picture
+    up across turns in one room.
+
+    The ambience twin already worked this way and says so in one line:
+    `_ambience_payload`, "the one shape both ambience routes answer with".
+    Two routes answering about the same thing should not be two answers.
+    """
+    configured = bool(image_model())
+    enabled = get_setting("backdrops_enabled") == "1"
+    if not req:
+        # No room resolved -- an opening turn before mapping has placed
+        # anyone, say. Not an error: there is simply nothing to depict.
+        return {"enabled": enabled, "configured": configured, "room": None,
+                "room_id": None, "signature": None, "ready": False,
+                "status": "absent", "error": None, "url": None, "weather": {}}
+    signature = req["signature"]
+    if ready is None:
+        ready = bool(req["cached"])
+    return {
+        "enabled": enabled,
+        "configured": configured,
+        "room": req["room_name"],
+        # The room's IDENTITY, not its display name. A turn with no picture of
+        # its own leaves whatever is on screen up rather than blanking, and that
+        # is only honest while the reader is still in the same room -- see
+        # `backdropForTurn`. Two rooms can share a name; they cannot share this.
+        "room_id": req["room"],
+        "signature": signature,
+        "ready": bool(ready),
+        # 'ready' | 'pending' | 'error' | 'absent'. Pending is why the GET is
+        # worth polling: it is how a caller waits for an image without
+        # anything holding a connection open for the length of a generation.
+        "status": status or backdrop_status(cid, signature),
+        "error": backdrop_error(signature)
+        if (status or backdrop_status(cid, signature)) == "error" else None,
+        "url": _backdrop_url(cid, signature) if ready else None,
+        # What the weather overlay should draw over this room, already scoped
+        # to what the room can see. {} for anywhere with no sky. `severity` is
+        # the host's own setting riding along on it, so the drawing can be as
+        # restrained or as violent as the story asked for.
+        "weather": dict(req.get("weather") or {},
+                        severity=weather_severity(cid))
+        if req.get("weather") else {},
+    }
+
+
 @app.get("/api/turns/{tid}/backdrop")
 def turn_backdrop(tid: int):
     """What backdrop this turn wants, and whether it is already on disk.
@@ -5478,40 +5680,7 @@ def turn_backdrop(tid: int):
     cid = turn["chat_id"]
     req = build_backdrop_request(cid, turn["idx"], _backdrop_player(cid),
                                  style_guide(cid))
-    configured = bool(image_model())
-    enabled = get_setting("backdrops_enabled") == "1"
-    if not req:
-        # No room resolved -- an opening turn before mapping has placed
-        # anyone, say. Not an error: there is simply nothing to depict.
-        return {"enabled": enabled, "configured": configured, "room": None,
-                "room_id": None,
-                "signature": None, "ready": False, "url": None}
-    status = backdrop_status(cid, req["signature"])
-    return {
-        "enabled": enabled,
-        "configured": configured,
-        "room": req["room_name"],
-        # The room's IDENTITY, not its display name. A turn with no picture of
-        # its own leaves whatever is on screen up rather than blanking, and that
-        # is only honest while the reader is still in the same room -- see
-        # `backdropForTurn`. Two rooms can share a name; they cannot share this.
-        "room_id": req["room"],
-        "signature": req["signature"],
-        "ready": bool(req["cached"]),
-        # 'ready' | 'pending' | 'error' | 'absent'. Pending is why this route
-        # is worth polling: it is how a caller waits for an image without
-        # anything holding a connection open for the length of a generation.
-        "status": status,
-        "error": backdrop_error(req["signature"]) if status == "error" else None,
-        "url": _backdrop_url(cid, req["signature"]) if req["cached"] else None,
-        # What the weather overlay should draw over this room, already scoped
-        # to what the room can see. {} for anywhere with no sky. `severity` is
-        # the host's own setting riding along on it, so the drawing can be as
-        # restrained or as violent as the story asked for.
-        "weather": dict(req.get("weather") or {},
-                        severity=weather_severity(cid))
-        if req.get("weather") else {},
-    }
+    return _backdrop_payload(cid, req)
 
 
 @app.post("/api/turns/{tid}/backdrop")
@@ -5533,12 +5702,13 @@ def turn_backdrop_generate(tid: int, body: dict = Body(default={})):
                            style_guide(cid), force=bool(body.get("force")))
     if not out:
         raise HTTPException(409, "This turn has no room to depict yet.")
-    ready = out["status"] == "ready"
-    return {"enabled": get_setting("backdrops_enabled") == "1",
-            "configured": True,
-            "room": out["room"], "signature": out["signature"],
-            "status": out["status"], "ready": ready,
-            "url": _backdrop_url(cid, out["signature"]) if ready else None}
+    # Re-resolved rather than reconstructed from `out`'s three fields: the
+    # browser caches THIS payload under the turn id, so it has to carry
+    # everything the GET's does. `build_backdrop_request` never generates.
+    req = build_backdrop_request(cid, turn["idx"], _backdrop_player(cid),
+                                 style_guide(cid))
+    return _backdrop_payload(cid, req, status=out["status"],
+                             ready=out["status"] == "ready")
 
 
 @app.get("/api/chats/{cid}/backdrop/{signature}.png")
@@ -5635,9 +5805,16 @@ def _ambience_payload(cid, req, status=None):
         # do.
         "token": "%s#%d" % (req["signature"], (manifest or {}).get("rev") or 0)
         if req and manifest else None,
-        # What is actually playing, so the reader can see (and credit) it. The
-        # Freesound licences in play require attribution, and a feature that
-        # cannot tell you what it fetched cannot honour that.
+        # What this turn RESOLVED TO -- which is not the same claim as what is
+        # audible, and the comment here used to make the second one. The
+        # browser deliberately does not read this field: it builds its credit
+        # line from `layers[0]` beside the `playAmbience` call, because
+        # crediting the incoming bed while the previous one is still playing
+        # attributes the wrong recording, and attribution is the whole point
+        # (`ambience.js`, AMB.track). Kept as the resolved answer for any
+        # client that is not the player -- it is the only place `query` is
+        # published -- and it is the first layer's fields, not a second
+        # reading of what the speakers are doing (FRONTEND-29).
         "track": {k: manifest.get(k) for k in
                   ("title", "source", "license", "username", "url", "query")}
         if manifest and not silent else None,

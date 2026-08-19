@@ -34,6 +34,7 @@ function appearanceFillButton(kind, card, readDraft, reopen) {
         await boot();
         reopen(refreshed);
         toast("Body and clothing generated. Review, then save.", "ok");
+        showCardWarnings(r);
       } catch (e) {
         toast(`Appearance fill failed: ${e.message}`, "err");
         button.textContent = label;
@@ -250,6 +251,8 @@ function quickStartModal(character, greetingIndex) {
                   closeAllModals();
                   await boot();
                   await openChat(r.chat_id);
+                  // The last moment before the card starts BEHAVING.
+                  showCardWarnings(r);
                 },
                 successMessage: "Story started.",
                 errorPrefix: "Quick start failed"
@@ -400,6 +403,7 @@ function charEditor(c, options = {}) {
         await boot();
         charEditor(refreshed);
         toast("Missing psychology fields filled. Review and save any edits.", "ok");
+        showCardWarnings(r);
       } catch (e) {
         toast(`Psychology fill failed: ${e.message}`, "err");
         fillPsychology.textContent = label;
@@ -619,7 +623,11 @@ function charEditor(c, options = {}) {
             } else if (c) {
               result = await api("PUT", "/api/characters/" + c.id, { sheet: s });
             }
-            else await api("POST", "/api/characters", { sheet: s });
+            else result = await api("POST", "/api/characters", { sheet: s });
+            // Saving a card by hand is a card-producing surface like any
+            // other, and the blank-card route is the one that produces the
+            // empty drive by construction.
+            showCardWarnings(result);
             if (result?.sheet && c) {
               c.sheet = JSON.stringify(result.sheet);
               c.name = result.sheet.identity?.name || c.name;
@@ -785,11 +793,14 @@ function promotionReviewModal(cid, name, draft) {
         catch (e) { toast(`Invalid JSON: ${e.message}`, "err"); return }
         const memory_seeds = seedsTa.value.split("\n").map(s => s.trim()).filter(Boolean);
         try {
-          await api("POST", `/api/chats/${cid}/promotions/confirm`,
+          const r = await api("POST", `/api/chats/${cid}/promotions/confirm`,
             { name, sheet, memory_seeds });
           closeModal();
           await boot();
           toast(name + " is now a full character.", "ok");
+          // The draft's warnings were about the DRAFT; this sheet is
+          // whatever the host approved after editing it.
+          showCardWarnings(r);
         } catch (e) { toast(`Could not promote: ${e.message}`, "err") }
       } }, "✨ Confirm & attach"))));
 }
@@ -868,7 +879,7 @@ function importModal(kind) {
               if (kind === "lorebook" && r?.id) await openLoreWorkspace(r.id);
               // A card with no drive imports cleanly and then reads as a dull
               // character rather than an unfilled field. Say so.
-              for (const warning of (r?.warnings || [])) toast(warning, "warn");
+              showCardWarnings(r);
             },
              successMessage: kind.charAt(0).toUpperCase() + kind.slice(1) + " imported.",
              errorPrefix: kind.charAt(0).toUpperCase() + kind.slice(1) + " import failed" });

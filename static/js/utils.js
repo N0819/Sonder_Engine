@@ -330,3 +330,17 @@ function downloadJSON(data, filename) {
   a.download = filename || "export.json";
   document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
+
+// ---- Card authoring warnings ----
+// Every route that creates or edits a character card returns `warnings`, and
+// every caller shows them the same way. One helper rather than a copy per
+// call site: the warnings used to reach exactly ONE of nine card-producing
+// surfaces (the import route), and the reason the other eight were silent is
+// that nothing made showing them the default. An unfilled psychology field
+// does not error, does not warn at runtime and shows up fifty beats later as
+// a character who behaves wrongly, so the moment the card is written is the
+// only moment the host can act on it cheaply.
+function showCardWarnings(result) {
+  for (const warning of (result?.warnings || [])) toast(warning, "warn");
+  return result;
+}

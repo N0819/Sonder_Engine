@@ -462,16 +462,23 @@ def _recognized_person(chat_id, entry):
 
 
 #: World key holding this story's presence-id namespace: random hex minted
-#: once and never serialised into any projection. It exists because every
-#: OTHER input to an anonymous id is canonical data a `story_view` caller can
-#: read for itself -- a derivative computed only from canonical values is
-#: invertible by enumeration no matter how it is hashed, and "cannot confirm
-#: a guessed identity" is the property the id is for. Deliberately NOT in
-#: `db.FRAME_SCOPED_WORLD_KEYS`: an unidentified person is the same person
-#: in every era, so their per-viewer continuity must span frames the way the
-#: person does. As a plain world row it rides checkpoints, archives and
-#: branches with no carriage code of its own -- the same argument as
-#: `api.documents`.
+#: once and kept out of the `story_view` / `player_view` projections. It
+#: exists because every OTHER input to an anonymous id is canonical data a
+#: `story_view` caller can read for itself -- a derivative computed only from
+#: canonical values is invertible by enumeration no matter how it is hashed,
+#: and "cannot confirm a guessed identity" is the property the id is for.
+#: Deliberately NOT in `db.FRAME_SCOPED_WORLD_KEYS`: an unidentified person is
+#: the same person in every era, so their per-viewer continuity must span
+#: frames the way the person does.
+#:
+#: BUT IT IS NOT A SECRET EVERYWHERE. Being a plain world row means it rides
+#: checkpoints, archives and branches with no carriage code of its own, which
+#: buys the continuity above and also EXPORTS the namespace: anyone holding a
+#: shared archive can recompute `_viewer_presence_id` for every viewer/ref
+#: pair and de-anonymise every `body:` id in any view of that story. This
+#: comment used to say "never serialised into any projection", which was the
+#: opposite of what the sentence after it described. Stripping it at the two
+#: archive boundaries is WEB-19, in `persist/chat_archive.py`.
 PRESENCE_NAMESPACE_KEY = "presence_id_namespace"
 
 
