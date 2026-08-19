@@ -1178,3 +1178,32 @@ def test_where_a_thing_hangs_does_not_decide_whether_it_covers():
     the thing IS, and a key ring covers nothing whatever it hangs from."""
     assert attire.region_of("heavy key ring on belt") == "waist"
     assert attire.attaches_only("heavy key ring on belt") is True
+
+
+def test_a_zoned_region_and_a_plain_one_render_a_garment_the_same_way():
+    """`compact_line` had TWO copies of the NAME(state;condition)=look rule:
+    `_compact_garment_piece`, serving the zoned (torso) branch, and 39 inline
+    lines serving every other region. Same `_safe`, same first-clause split,
+    same word-boundary truncation, same look dedupe, same join -- so a change
+    to what the Director is told about a torso need not have reached what it
+    is told about a skirt.
+
+    Nothing misbehaved when this was written; the copies agreed. The test is
+    the binding, and it fails the day they stop agreeing.
+    """
+    garment = {"name": "kimono", "state": "loosened", "condition": "wine-stained",
+               "description": "A heavy silk kimono, dyed indigo; a wedding gift."}
+
+    zoned = attire.compact_line({
+        "torso": {"garments": [dict(garment)],
+                  "covered_zones": {"chest": ["kimono"]}},
+    }, look=40)
+    plain = attire.compact_line({
+        "legs": {"garments": [dict(garment)]},
+    }, look=40)
+
+    zoned_piece = zoned.split("torso:", 1)[1].split("|", 1)[0]
+    zoned_piece = zoned_piece.split(">", 1)[-1]
+    plain_piece = plain.split("legs:", 1)[1].split("|", 1)[0]
+    assert zoned_piece == plain_piece
+    assert plain_piece.startswith("kimono(loosened;wine-stained)=")
