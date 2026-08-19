@@ -35,7 +35,8 @@ from .character import character_step
 from .common import _assert_plan_materialized, _dict
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
-from .mapping import mapping_quick, mapping_stage
+from .mapping import (mapping_quick, mapping_request_stages_a_room,
+                      mapping_stage)
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
 from .storage import (
@@ -755,11 +756,8 @@ def _mapping_must_precede_perception(ctx):
         scene = get_scene(ctx.chat.id, ctx.chat)
         if target not in (scene.get("rooms") or {}):
             return True
-    request = str((interp.get("flow") or {}).get("mapping_request") or "").casefold()
-    return any(
-        phrase in request
-        for phrase in ("new room", "generate room", "scene graph", "new location")
-    )
+    return mapping_request_stages_a_room(
+        (interp.get("flow") or {}).get("mapping_request"))
 
 
 def _chat_has_extra_players(chat_id, frame_id=None):
