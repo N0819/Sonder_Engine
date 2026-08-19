@@ -2986,6 +2986,42 @@ def attach_lore(cid: int, body: dict = Body(...)):
         refresh_checkpoint(cid, last["idx"])
     return {"lorebook_id": new}
 
+@app.put("/api/chats/{cid}/lorebooks/{lid}")
+def set_book_enabled(cid: int, lid: int, body: dict = Body(...)):
+    """Silence an attached lorebook without detaching it.
+
+    `chat_lorebooks.enabled` has been in the schema, honoured by every reader
+    that matters -- retrieval (`mind.memory._chat_lorebook_root_ids`),
+    checkpoints, the portable archive, both browser payloads -- and written by
+    nothing but the `1` five INSERTs hardcode. So the column had exactly one
+    reachable value and the whole read path around it was dead weight
+    (FRONTEND-9).
+
+    It is not the same act as detaching, which is why it earns a route rather
+    than being folded into one. Detaching a story-OWNED book deletes it and
+    its entries; disabling one drops it out of retrieval and leaves every
+    entry, link and uid where it is, so the host can turn a whole body of lore
+    off for a stretch of story and back on later without losing the citations
+    that already point into it.
+    """
+    _require_chat_idle(cid)
+    if "enabled" not in body:
+        raise HTTPException(400, "enabled required")
+    row = q("SELECT 1 FROM chat_lorebooks WHERE chat_id=? AND lorebook_id=?",
+            (cid, lid), one=True)
+    if not row:
+        raise HTTPException(404, "That lorebook is not attached to this chat")
+    enabled = 1 if body.get("enabled") else 0
+    qi("UPDATE chat_lorebooks SET enabled=? WHERE chat_id=? AND lorebook_id=?",
+       (enabled, cid, lid))
+    # Retrieval is snapshotted with the turn, so the checkpoint has to move
+    # with the setting or a reroll would restore the old reach -- the same
+    # reason attach and detach refresh it.
+    last = _latest_turn(cid)
+    if last:
+        refresh_checkpoint(cid, last["idx"])
+    return {"lorebook_id": lid, "enabled": bool(enabled)}
+
 @app.delete("/api/chats/{cid}/lorebooks/{lid}")
 def detach_book(cid: int, lid: int):
     _require_chat_idle(cid)

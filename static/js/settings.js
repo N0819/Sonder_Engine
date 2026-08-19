@@ -1249,6 +1249,24 @@ function renderLorebooksTab(d, b, chatId) {
               onclick: () =>
                 generateLoreModal(lb.id)
             }, "✨"),
+            // Silencing is not detaching. `chat_lorebooks.enabled` was read
+            // by retrieval, checkpoints, the archive and both browser
+            // payloads, and written by nothing -- so a host could only
+            // remove a body of lore, never set it aside. Detaching a
+            // story-owned book deletes its entries; this leaves them.
+            !isCanon
+              ? el("button", {
+                  title: lb.enabled === false
+                    ? "Let this book be retrieved again"
+                    : "Keep this book but stop retrieving from it",
+                  onclick: async () => {
+                    await api("PUT",
+                      `/api/chats/${chatId}/lorebooks/${lb.id}`,
+                      { enabled: lb.enabled === false });
+                    refreshBooks();
+                  }
+                }, lb.enabled === false ? "🔇" : "🔊")
+              : null,
             !isCanon
               ? el("button", {
                   title: "Detach from story",
