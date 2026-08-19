@@ -487,7 +487,7 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
     return {"awaiting_your_answer": asked} if asked else {}
 
 
-def _player_quiet_beats(chat_id, current_turn_idx, frame_id, chat, cap=8):
+def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
     """How many consecutive beats up to and including this one the player has
     not spoken on. 1 means only this beat.
 
@@ -812,7 +812,7 @@ _UNBIDDEN_ABSORPTION_CEILING = 0.85
 _UNBIDDEN_PLATEAU_BEATS = 3
 
 
-def _barren_intent(active_annotated, stored_state):
+def _barren_intent(stored_state):
     """Is a live intention being pressed with nothing to show for it.
 
     Reads the same `barren_attempts` the character's own payload carries and
@@ -857,7 +857,7 @@ def _unbidden_trigger(stored_state, active_annotated, refrain, turn_idx,
         reason = "refrain"
     elif ledger.get("repeat_flag"):
         reason = "verbatim_repeat"
-    elif _barren_intent(active_annotated, st):
+    elif _barren_intent(st):
         # THE SIGNAL THAT ACTUALLY CAUGHT THE LIVE CASE. A goal carrying
         # `barren_attempts` was pressed on a beat that repeated an earlier
         # move and gained nothing (`affect._advance_intent`). The three
@@ -3245,7 +3245,7 @@ def character_step(ctx, cid, nonce):
             **_player_silence_note(
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
-                    chat.id, ctx.turn.idx, ctx.turn.frame_id, chat))),
+                    chat.id, ctx.turn.idx, ctx.turn.frame_id))),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_unanswered_question_note(
