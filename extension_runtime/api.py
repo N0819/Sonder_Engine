@@ -29,6 +29,17 @@ import re
 
 _COMMIT_SCOPE = contextvars.ContextVar("sonder_ext_commit_scope", default=False)
 
+#: Frame-selection sentinels, module-private. Two of them because `None` is
+#: unavailable for either job: it is the engine's real identifier for the
+#: implicit present era, and a caller must be able to select the present
+#: explicitly. `_LATEST_FRAME` means "the latest committed turn's frame,
+#: resolved once"; `_AMBIENT_FRAME` means "whatever `db.active_frame_id`
+#: holds at call time" -- the behaviour every unbound state accessor keeps.
+#: Deliberately DIFFERENT objects from `web/story_view.py`'s own sentinel:
+#: neither module's sentinel may ever travel into the other as a value.
+_LATEST_FRAME = object()
+_AMBIENT_FRAME = object()
+
 # Every psychology-bearing key deterministic commit code writes into
 # `chat_chars.state` (verified against commit.py's `st[...]` assignments).  Read
 # only -- an extension gets to SEE a mind's settled state, never to author it.
@@ -88,7 +99,8 @@ class ExtState:
         return f"<ExtState {self.label}>"
 
 
-def _world_state(ext_id, chat_id, *, gated=True, frame_scoped=False):
+def _world_state(ext_id, chat_id, *, gated=True, frame_scoped=False,
+                 frame_id=_AMBIENT_FRAME):
     """One of an extension's two per-story homes.
 
     `ext:<id>` is chat-global and `extf:<id>` is per-era -- the second prefix
@@ -96,11 +108,29 @@ def _world_state(ext_id, chat_id, *, gated=True, frame_scoped=False):
     everything downstream (checkpoints, archives, branch and clone frame
     remapping) already handles it: those paths parse the frame off a key
     generically rather than checking it against a list.
+
+    `frame_id` (only meaningful with `frame_scoped=True`) BINDS the state to
+    one era at construction: reads and writes go through `wget_for_frame`/
+    `wset_for_frame`, which resolve the frame into each individual call --
+    set-and-reset around one query, never left ambient across extension code
+    -- so a later `.get()` still answers for the bound frame whatever
+    `active_frame_id` has become in between. `_AMBIENT_FRAME` keeps the
+    historical behaviour: whichever frame is active AT CALL TIME, which is
+    what state read inside a pipeline run wants.
     """
-    from core.db import wget, wset
+    from core.db import wget, wget_for_frame, wset, wset_for_frame
 
     key = f"{'extf' if frame_scoped else 'ext'}:{ext_id}"
     cid = int(chat_id)
+    if frame_scoped and frame_id is not _AMBIENT_FRAME:
+        fid = frame_id
+        return ExtState(
+            f"extension {ext_id!r} frame state for chat {cid} in frame "
+            f"{'present' if fid is None else fid}",
+            lambda: wget_for_frame(cid, key, fid),
+            lambda value: wset_for_frame(cid, key, value, fid),
+            gated=gated,
+        )
     return ExtState(
         f"extension {ext_id!r} {'frame ' if frame_scoped else ''}state "
         f"for chat {cid}",
@@ -777,11 +807,18 @@ def _settings_state(ext_id):
     )
 
 
-def _read_char_state(chat_id, char_id):
-    """The character's whole engine-owned state dict, frame override first."""
+def _read_char_state(chat_id, char_id, *, frame_id=_AMBIENT_FRAME):
+    """The character's whole engine-owned state dict, frame override first.
+
+    An explicit `frame_id` is resolved into the QUERY PARAMETER, never set on
+    the ambient contextvar: a bound read must not leave `active_frame_id`
+    changed across arbitrary extension code, and must keep answering for its
+    own frame after somebody else changes the ambient one.
+    """
     from core.db import active_frame_id, q
 
-    frame_id = active_frame_id.get()
+    if frame_id is _AMBIENT_FRAME:
+        frame_id = active_frame_id.get()
     row = q(
         "SELECT COALESCE(ccf.state, cc.state) AS state FROM chat_chars cc "
         "LEFT JOIN chat_char_frames ccf "
@@ -800,38 +837,157 @@ def _read_char_state(chat_id, char_id):
     return state if isinstance(state, dict) else {}
 
 
-def _write_char_state(chat_id, char_id, mutate):
+def _write_char_state(chat_id, char_id, mutate, *, frame_id=_AMBIENT_FRAME):
     """Read-modify-write through the engine's own helper.
 
     Never build a fresh dict: `chat_chars.state` carries active_state, interior,
     stance, the tell ledgers and the spatial memory, and a blind overwrite would
     delete a mind's whole history to store one extension's counter.
+
+    The frame is resolved ONCE and used for both halves: reading era A and
+    writing era B would be the mixed-frame defect on the write side, worse,
+    because it copies one era's whole state dict over another's.
     """
     from core.db import active_frame_id
     from story.scene import set_char_state
 
-    state = _read_char_state(chat_id, char_id)
+    if frame_id is _AMBIENT_FRAME:
+        frame_id = active_frame_id.get()
+    state = _read_char_state(chat_id, char_id, frame_id=frame_id)
     mutate(state)
     set_char_state(int(chat_id), int(char_id),
                    json.dumps(state, ensure_ascii=False),
-                   frame_id=active_frame_id.get())
+                   frame_id=frame_id)
 
 
-def _char_ext_state(ext_id, chat_id, char_id, *, gated=True):
+def _char_ext_state(ext_id, chat_id, char_id, *, gated=True,
+                    frame_id=_AMBIENT_FRAME):
     key = f"ext:{ext_id}"
 
     def read():
-        return _read_char_state(chat_id, char_id).get(key)
+        return _read_char_state(chat_id, char_id, frame_id=frame_id).get(key)
 
     def write(value):
         def mutate(state):
             state[key] = value
-        _write_char_state(chat_id, char_id, mutate)
+        _write_char_state(chat_id, char_id, mutate, frame_id=frame_id)
 
-    return ExtState(
-        f"extension {ext_id!r} state for character {char_id} in chat {chat_id}",
-        read, write, gated=gated,
-    )
+    label = f"extension {ext_id!r} state for character {char_id} in chat {chat_id}"
+    if frame_id is not _AMBIENT_FRAME:
+        label += f" in frame {'present' if frame_id is None else frame_id}"
+    return ExtState(label, read, write, gated=gated)
+
+
+# ---------------------------------------------------------------- frames
+
+
+def _validate_frame(chat_id, frame_id):
+    """An explicitly selected frame, validated, or an `ExtensionError`.
+
+    `None` (the implicit present era) is valid for every chat. A frame that
+    does not exist and a frame belonging to ANOTHER chat get the same refusal
+    on purpose: an extension holding chat A must not be able to use the
+    refusal text to probe which frame ids exist in chat B.
+    """
+    if frame_id is None:
+        return None
+    from core.frames import get_frame
+
+    frame = get_frame(frame_id)
+    if frame is None or int(frame["chat_id"]) != int(chat_id):
+        raise ExtensionError(
+            f"no frame {frame_id!r} in chat {int(chat_id)}")
+    return int(frame_id)
+
+
+def _latest_frame_id(chat_id):
+    """The frame the story is actually on: the latest committed turn's.
+    `None` -- the present -- for a story with no turns at all."""
+    from web.story_view import latest_turn
+
+    turn = latest_turn(int(chat_id))
+    return turn["frame_id"] if turn else None
+
+
+class ExtensionFrameView:
+    """Every frame-sensitive read and write, bound to exactly ONE era.
+
+    The mixed-frame defect this exists against: `player_view` resolves the
+    latest committed turn's frame, while an unbound `frame_state(...).get()`
+    or `char_state(...).get()` reads whatever `db.active_frame_id` holds --
+    which, on an extension HTTP route, is unset and answers for the present.
+    A projection composed from both was structurally valid and semantically
+    impossible: scene and identity from one era, mission, clock and crew
+    state from another. Worse than a hard failure, because a consumer
+    receives plausible data. The frame is therefore resolved ONCE, here, at
+    construction, and every method reads or writes that frame and no other;
+    a new read added to a growing DTO cannot drift, because there is no
+    per-call frame left to forget.
+
+    Immutable, and inspectable: `frame_id` is the resolved selection
+    (`None` = the present era), so a test or a log can prove what one
+    request was reading instead of trusting that it composed correctly.
+
+    What is deliberately NOT here: `state` and `documents` (chat-global by
+    design -- putting them on a frame-bound object would imply a scoping
+    they do not have), `viewers` (the roster is chat-global), and events
+    (`story_view`'s `events` stays story-global under any selection; see
+    `web/story_view.py`'s `_events` for the ruling).
+
+    Writes bind exactly like reads, because refusing them would manufacture
+    the same defect on the write side: read era A through the view, then
+    `api.frame_state(chat).set_now(...)` lands in era B. A bound write is
+    `db.wset_for_frame` -- the primitive the engine's own cross-frame code
+    (spatial split/merge) already uses -- confined to this extension's own
+    `extf:`/`ext:` namespace; nothing here can touch the scene, the ledgers
+    or another extension's rows. The commit gate is unchanged: the binding
+    decides WHERE a write lands, the gate still decides WHEN it may
+    (`set()` inside an `on_turn_committed` hook, `set_now()` as the named
+    escape hatch).
+    """
+
+    __slots__ = ("_api", "_chat_id", "_frame_id")
+
+    def __init__(self, api, chat_id, frame_id):
+        object.__setattr__(self, "_api", api)
+        object.__setattr__(self, "_chat_id", int(chat_id))
+        object.__setattr__(self, "_frame_id", frame_id)
+
+    def __setattr__(self, name, value):
+        raise ExtensionError(
+            "a frame view is immutable; call api.at_frame(...) again to "
+            "select a different frame")
+
+    @property
+    def chat_id(self):
+        return self._chat_id
+
+    @property
+    def frame_id(self):
+        """The resolved selection. `None` is the implicit present era."""
+        return self._frame_id
+
+    def story_view(self, *, events=None):
+        return self._api.story_view(self._chat_id, events=events,
+                                    frame_id=self._frame_id)
+
+    def player_view(self, viewer="player", *, memories=12):
+        return self._api.player_view(self._chat_id, viewer,
+                                     memories=memories,
+                                     frame_id=self._frame_id)
+
+    def frame_state(self):
+        return _world_state(self._api.id, self._chat_id, frame_scoped=True,
+                            frame_id=self._frame_id)
+
+    def char_state(self, char_id):
+        return _char_ext_state(self._api.id, self._chat_id, char_id,
+                               frame_id=self._frame_id)
+
+    def __repr__(self):  # pragma: no cover - diagnostic only
+        frame = "present" if self._frame_id is None else self._frame_id
+        return (f"<ExtensionFrameView {self._api.id} chat={self._chat_id} "
+                f"frame={frame}>")
 
 
 # ---------------------------------------------------------------- characters
@@ -1987,7 +2143,7 @@ class SonderExtensionAPI:
 
     # -- reading the story
 
-    def story_view(self, chat_id, *, events=None):
+    def story_view(self, chat_id, *, events=None, frame_id=_LATEST_FRAME):
         """Canonical story state as a versioned, read-only, plain-value dict.
 
         What is objectively true right now: ids, clock, frame, scene, rooms,
@@ -2008,14 +2164,25 @@ class SonderExtensionAPI:
         `schema` is the compatibility contract: it is bumped when a consumer
         could break, and consumers of this live outside this repository and
         cannot be migrated in the same commit.
+
+        `frame_id` selects the era the whole view is read in: omitted is the
+        latest committed turn's frame, `None` is explicitly the present, an
+        integer is a declared frame of THIS chat (anything else is refused).
+        Composing several frame-sensitive reads into one DTO should go
+        through `api.at_frame(...)` instead, which resolves the frame once
+        for all of them.
         """
         from web import story_view as facade
 
-        if events is None:
-            return facade.story_view(chat_id)
-        return facade.story_view(chat_id, events=events)
+        kwargs = {}
+        if events is not None:
+            kwargs["events"] = events
+        if frame_id is not _LATEST_FRAME:
+            kwargs["frame_id"] = _validate_frame(chat_id, frame_id)
+        return facade.story_view(chat_id, **kwargs)
 
-    def player_view(self, chat_id, viewer="player", *, memories=12):
+    def player_view(self, chat_id, viewer="player", *, memories=12,
+                    frame_id=_LATEST_FRAME):
         """What one person in the story may be shown. A security boundary.
 
         Built out of what the engine ALREADY DELIVERED to that viewer -- the
@@ -2041,10 +2208,61 @@ class SonderExtensionAPI:
         the disclosure logic this field exists so you never re-implement.
 
         `api.viewers(chat_id)` lists the ids this accepts.
+
+        `frame_id` follows `story_view`'s vocabulary exactly (omitted =
+        latest turn's frame, `None` = the present, integer = a declared
+        frame of this chat), the selection is reported back under `frame`,
+        and a selected frame never widens the viewer's budget: the view is
+        still built only from what the engine delivered to that viewer in
+        that era. For a DTO composed of several reads, use
+        `api.at_frame(...)`.
         """
         from web import story_view as facade
 
-        return facade.player_view(chat_id, viewer, memories=memories)
+        kwargs = {"memories": memories}
+        if frame_id is not _LATEST_FRAME:
+            kwargs["frame_id"] = _validate_frame(chat_id, frame_id)
+        return facade.player_view(chat_id, viewer, **kwargs)
+
+    def at_frame(self, chat_id, frame_id=_LATEST_FRAME):
+        """A read/write facade bound to exactly ONE frame of one story.
+
+        THE way to build a projection out of several public reads. Each of
+        `player_view`, `frame_state(...)` and `char_state(...)` is correct
+        alone, and composing them on an HTTP route is where they disagreed:
+        the first resolves the latest turn's frame, the others follow the
+        ambient `active_frame_id`, which a route does not have. This
+        resolves the frame ONCE and hands back an immutable
+        `ExtensionFrameView` whose every read and write is that frame's::
+
+            host = api.at_frame(chat_id)          # latest turn's frame
+            player  = host.player_view("player")
+            mission = host.frame_state().get() or {}
+            crew    = host.char_state(person_id).get() or {}
+            assert (player["frame"] or {}).get("id") == host.frame_id or (
+                player["frame"] is None and host.frame_id is None)
+
+        Omit `frame_id` for the latest committed turn's frame -- whatever
+        frame the story is actually on (the present, for a story with no
+        turns). Pass `None` explicitly for the implicit present era; pass an
+        integer for a declared frame, verified to belong to this chat. A
+        frame that exists but holds no turns yet is honoured: its views
+        report `turn: None` beside that frame's own state.
+
+        `api.state(chat_id)`, `api.documents(chat_id)` and `api.settings`
+        stay off this object because they are chat-global (or install-
+        global) by design; `api.frame_state(chat_id)` and
+        `api.char_state(...)` keep their ambient behaviour for code running
+        inside a pipeline turn, where the ambient frame IS the answer.
+        """
+        cid = int(chat_id)
+        from core.db import q
+
+        if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+            raise ExtensionError(f"no chat {cid}")
+        resolved = (_latest_frame_id(cid) if frame_id is _LATEST_FRAME
+                    else _validate_frame(cid, frame_id))
+        return ExtensionFrameView(self, cid, resolved)
 
     def viewers(self, chat_id):
         """Who this story can be projected for, as `{id, name, kind}`."""
@@ -2211,7 +2429,8 @@ __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
     "ChatAccess", "Correction", "DirectorBlock", "DirectorContext",
     "DirectorResult", "DocumentStore",
-    "ExtState", "ExtensionError", "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
+    "ExtState", "ExtensionError", "ExtensionFrameView",
+    "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
     "Request", "SonderExtensionAPI", "StepView", "document_path",
     "enter_commit_scope", "in_commit_scope", "leave_commit_scope",
 ]

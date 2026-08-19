@@ -908,3 +908,186 @@ class TestTheExtensionSurface:
             name for name in imported
             if name == "agents" or name.startswith("agents."))
         assert not offending, offending
+
+
+# ------------------------------------------------------- explicit frames
+
+
+def _second_era(temp_db, story, *, with_turn=True):
+    """A future frame with state that cannot be confused with the present's:
+    a different scene and clock, a diverged character overlay, and one
+    future-era memory. Optionally the story's LATEST turn, so the omitted-
+    frame default resolves to it."""
+    from core.db import active_frame_id, wset
+    from story.scene import set_char_state
+    from web import app
+
+    future = app.frames_create(story["chat_id"],
+                               {"label": "Future", "ordinal": 10,
+                                "kind": "future"})
+    token = active_frame_id.set(future["id"])
+    try:
+        wset(story["chat_id"], "scene", {
+            "location": "the drowned city", "time": "after",
+            "rooms": {"pier": {"name": "The Pier"}},
+            "positions": {"Sam": "pier", "Ilse": "pier"},
+            "entities": {}})
+        wset(story["chat_id"], "simulation_clock",
+             {"elapsed_seconds": 900.0, "display": "after",
+              "time_scale": "scene"})
+        wset(story["chat_id"], "known", {"Sam": ["Ilse"], "Ilse": ["Sam"]})
+    finally:
+        active_frame_id.reset(token)
+    set_char_state(
+        story["chat_id"], story["char_id"],
+        json.dumps({"relationships": {"Sam": {"trust": 0.9}}}),
+        frame_id=future["id"])
+    temp_db.qi(
+        "INSERT INTO memories(chat_id,char_id,turn_idx,content,gist,"
+        "provenance,frame_id) VALUES(?,?,?,?,?,?,?)",
+        (story["chat_id"], story["char_id"], 9, "the pier flooded",
+         "the pier flooded", "witnessed", future["id"]))
+    turn_id = None
+    if with_turn:
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+            "VALUES(?,?,?,?,?)",
+            (story["chat_id"], 9, "look", time.time(), future["id"]))
+    return future, turn_id
+
+
+class TestExplicitFrameSelection:
+    """`frame_id` on both views: omitted is the latest turn's frame, `None`
+    is explicitly the present era (the engine's own spelling for it), an
+    integer is a declared frame verified to belong to this chat."""
+
+    def test_none_selects_the_present_while_the_latest_turn_is_elsewhere(
+            self, temp_db, story):
+        _second_era(temp_db, story)
+
+        view = story_view.story_view(story["chat_id"], frame_id=None)
+
+        assert view["frame"] is None
+        assert view["scene"]["location"] == "the observatory"
+        assert view["turn"]["idx"] == 4, \
+            "the present's own latest turn, not the story-wide one"
+
+    def test_an_integer_selects_that_frame_from_anywhere(self, temp_db,
+                                                         story):
+        future, _ = _second_era(temp_db, story)
+
+        view = story_view.story_view(story["chat_id"], frame_id=future["id"])
+
+        assert view["frame"]["id"] == future["id"]
+        assert view["scene"]["location"] == "the drowned city"
+        assert view["clock"]["display"] == "after"
+
+    def test_a_foreign_or_unknown_frame_is_refused_identically(
+            self, temp_db, story):
+        """One refusal for both, on purpose: the error text must not let a
+        caller holding chat A probe which frame ids exist in chat B."""
+        from web import app
+
+        other_chat = _chat(temp_db, "Other")
+        foreign = app.frames_create(other_chat, {"label": "Elsewhere",
+                                                 "ordinal": 3})
+
+        with pytest.raises(ValueError) as foreign_refusal:
+            story_view.story_view(story["chat_id"], frame_id=foreign["id"])
+        with pytest.raises(ValueError) as unknown_refusal:
+            story_view.story_view(story["chat_id"], frame_id=987654)
+
+        assert str(foreign_refusal.value) == str(
+            unknown_refusal.value).replace("987654", str(foreign["id"]))
+
+    def test_a_frame_with_no_turns_answers_with_its_state_and_no_turn(
+            self, temp_db, story):
+        future, _ = _second_era(temp_db, story, with_turn=False)
+
+        view = story_view.story_view(story["chat_id"], frame_id=future["id"])
+
+        assert view["turn"] is None
+        assert view["frame"]["id"] == future["id"]
+        assert view["scene"]["location"] == "the drowned city", \
+            "provisioned state exists before any turn runs in the era"
+
+    def test_a_story_with_no_turns_at_all_stands_in_the_present(
+            self, temp_db):
+        chat_id = _chat(temp_db, "Unstarted")
+
+        view = story_view.story_view(chat_id)
+
+        assert view["turn"] is None
+        assert view["frame"] is None
+
+    def test_events_stay_story_global_under_any_selection(self, temp_db,
+                                                          story):
+        """`world_events` is the objective record and frames are an epistemic
+        cursor over it -- a frame-bound view must not imply frame-sliced
+        truth that nothing else in the engine has."""
+        future, _ = _second_era(temp_db, story)
+        temp_db.qi(
+            "INSERT INTO world_events(chat_id,event_id,kind,location_id,"
+            "occurred_at,payload,committed) VALUES(?,?,?,?,?,?,?)",
+            (story["chat_id"], "ev-present", "arrival", "dome", 5.0, "{}",
+             5.0))
+
+        chosen = story_view.story_view(story["chat_id"],
+                                       frame_id=future["id"])
+
+        assert [e["event_id"] for e in chosen["events"]] == ["ev-present"]
+
+
+class TestPlayerViewFrameField:
+    def test_the_selection_is_reported_and_matches_story_view(self, temp_db,
+                                                              story):
+        future, _ = _second_era(temp_db, story)
+
+        seen = player_view(story["chat_id"], "player")
+        canonical = story_view.story_view(story["chat_id"])
+
+        assert seen["frame"] == canonical["frame"]
+        assert seen["frame"]["id"] == future["id"]
+
+    def test_the_present_is_reported_as_none_not_omitted(self, temp_db,
+                                                         story):
+        seen = player_view(story["chat_id"], "player")
+
+        assert "frame" in seen and seen["frame"] is None
+
+
+class TestFrameBoundViewerBudget:
+    """A frame-bound read must not become a way to read what a viewer could
+    not otherwise reach. Both reads below go through the engine's own
+    authorities -- `frames.is_memory_visible` via `visible_memory_rows`, and
+    the `chat_char_frames` overlay -- never a second opinion about them."""
+
+    def test_a_future_memory_does_not_reach_a_present_bound_view(
+            self, temp_db, story):
+        _second_era(temp_db, story)
+        temp_db.qi(
+            "INSERT INTO memories(chat_id,char_id,turn_idx,content,gist,"
+            "provenance) VALUES(?,?,?,?,?,?)",
+            (story["chat_id"], story["char_id"], 3, "tea in the dome",
+             "tea in the dome", "witnessed"))
+
+        present = player_view(story["chat_id"], str(story["char_id"]),
+                              frame_id=None)
+        future_view = player_view(story["chat_id"], str(story["char_id"]))
+
+        assert [m["gist"] for m in present.get("memories") or []] \
+            == ["tea in the dome"]
+        assert [m["gist"] for m in future_view.get("memories") or []] \
+            == ["tea in the dome", "the pier flooded"], \
+            "the future reaches its past; the past does not reach its future"
+
+    def test_relationships_come_from_the_selected_eras_overlay(self, temp_db,
+                                                               story):
+        _second_era(temp_db, story)
+
+        present = player_view(story["chat_id"], str(story["char_id"]),
+                              frame_id=None)
+        future_view = player_view(story["chat_id"], str(story["char_id"]))
+
+        assert present["relationships"] == {"Sam": {"trust": 0.4}}
+        assert future_view["relationships"] == {"Sam": {"trust": 0.9}}
