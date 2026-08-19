@@ -1250,26 +1250,41 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
 def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
     """Resolve a subject's active physical_disguise into perception inputs.
 
-    Returns (visible_appearance, disguise_payload_or_None, known_to_or_None,
+    Returns (visible_appearance, disguise_active, known_to_or_None,
     conceals_identity):
     - visible_appearance: what EVERY observer visually perceives -- the
       disguised outward form when a disguise is active (a concealed feature is
       not seen even by someone who knows it is there), else the true
       appearance unchanged.
-    - disguise_payload: the block handed to the perception LLM so it can give
-      observers in known_to the concealed truth as KNOWLEDGE (never as vision)
-      and preserve the subject's real capabilities; None when no disguise.
-    - known_to: casefolded names that legitimately know the truth (for the
-      leak tripwire), or None.
+    - disguise_active: True when a disguise is in force, None when not. It
+      used to be a PAYLOAD -- second-person instruction to the perception model
+      ("Every observer VISUALLY perceives only outward_visible_appearance")
+      plus the `concealed_truth` itself, so an observer in known_to could be
+      given the truth as KNOWLEDGE rather than as vision. There is no
+      perception model, and the block reached no consumer: it is a flag now,
+      and the wording it carried was prompt text with nowhere to be a prompt.
+      None rather than False for the absent case, because that is the answer
+      every caller and test already reads.
+    - known_to: casefolded names that legitimately know the truth, or None.
+      LIVE, and the reason the knowledge layer is not entirely gone: it feeds
+      `scene.disguise_breaks_recognition`, so a body's acquaintances still
+      recognise them through a disguise that conceals identity.
     - conceals_identity: whether this disguise covers what a body is
       RECOGNISED by (a face, a build, a voice) as opposed to a feature it
       merely hides. False for a glamour over fox ears: the face is still
       the face, so anyone who knows her still knows her -- wearing
       unfamiliar ears. See `scene.disguise_breaks_recognition`.
 
-    Feeding the disguised appearance is the primary, fail-safe fix: the LLM is
-    never handed the concealed features, so it cannot render them. The payload
-    and tripwire are the knowledge layer and QA around that.
+    Feeding the disguised appearance is the primary, fail-safe fix: the view
+    is composed FROM the disguised form, so a concealed feature cannot be
+    rendered as seen by anybody.
+
+    RESIDUAL, and it is a SUBTRACTION rather than a leak: an observer in
+    known_to no longer receives the concealed truth anywhere. They recognise
+    the body, and they are not told what is under the disguise. Restoring it
+    means putting the truth in the CHARACTER payload -- knowledge is not
+    perception, and the percept IR is deliberately about what a channel
+    delivered -- which is a design decision beyond removing the dead block.
     """
     # A TRANSFORMATION RESOLVES FIRST, AND IS NOT A DISGUISE. It changes the
     # body's TRUE appearance -- there is no concealed truth, nobody sees
@@ -1301,21 +1316,7 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
         return true_appearance, None, None, False
     known_to = disguise_known_to(disguise, subject_name, known_map)
     visible = disguised_visible_appearance(true_appearance, disguise)
-    payload = {
-        "active": True,
-        "outward_visible_appearance": visible,
-        "concealed_truth": disguise.get("description") or "",
-        "known_to": sorted(known_to),
-        "capability_note": (
-            "The disguise conceals APPEARANCE only. The subject's real senses "
-            "and abilities are unchanged -- e.g. concealed ears still hear."),
-        "instruction": (
-            "Every observer VISUALLY perceives only outward_visible_appearance; "
-            "never describe a concealed feature as seen. An observer whose name "
-            "is in known_to additionally KNOWS (does not see) the concealed_truth "
-            "and may act on it; an observer not in known_to has no awareness of it."),
-    }
-    return visible, payload, known_to, bool(disguise.get(
+    return visible, True, known_to, bool(disguise.get(
         "conceals_identity"))
 
 
@@ -1933,9 +1934,10 @@ def perception_outcome(ctx, nonce):
     p_appearance_true = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # Conceal a disguised subject's real appearance in every observer's outcome
-    # view: p_appearance becomes the disguised (visible) form, so present_
-    # appearances and the deterministic injection below never expose concealed
-    # features. The knowledge layer (who KNOWS the truth) rides the payload.
+    # view: p_appearance becomes the disguised (visible) form, so no percept
+    # built below can carry a concealed feature. The knowledge layer is
+    # `known_to` alone -- see `_subject_disguise_context`, which also records
+    # what went missing when its prose payload did.
     (p_appearance, p_disguise, p_disguise_known,
      p_disguise_conceals) = _subject_disguise_context(
         chat["id"], p_name, p_appearance_true, known)
