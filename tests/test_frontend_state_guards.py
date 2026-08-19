@@ -317,3 +317,25 @@ def test_the_global_error_net_catches_synchronous_throws_too():
     assert "if (!message) return;" in net
     # And whatever already toasted itself must not toast twice.
     assert "__handled" in net
+
+
+def test_the_pipeline_drawer_explains_a_turn_blocked_by_another_frame():
+    """`blocked_by_other_frame` is computed separately from `editable` "so the
+    UI can explain WHY a frame-latest turn is still blocked, instead of just
+    refusing". Nothing read it: the drawer opened with Resume, reroll, use and
+    edit absent and no reason given.
+
+    The sentence is the route's own 409 detail, so the reader gets the same
+    wording whether the drawer explains it up front or the route refuses the
+    attempt. Two copies of one message drift, so they are pinned equal here.
+    """
+    assert "p.blocked_by_other_frame" in CHAT
+
+    server = (ROOT / "web/app.py").read_text(encoding="utf-8")
+    sentence = ("Another frame has advanced since this turn. Recompute here "
+                "would silently roll back that frame's progress too -- shared "
+                "state (memories, cast, world entities) isn't sliced per frame "
+                "in this version.")
+    # Present in both, modulo each language's own string-concatenation breaks.
+    assert sentence in re.sub(r'"\s*\n\s*"', "", server)
+    assert sentence in re.sub(r'"\s*\n\s*\+ "', "", CHAT)
