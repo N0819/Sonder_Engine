@@ -23,7 +23,7 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn web.app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-full  # every Python regression test (6329 tests, ~74s — run this freely)
+make test-full  # every Python regression test (7692 tests, ~2m45s — run this freely)
 make test       # alias for test-full
 make test-lf    # last-failed first, then the rest — the fix-verify loop
 make test-fast  # NOT a tier to check your own work with; deselects 119 of 391 files,
