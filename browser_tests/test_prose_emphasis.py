@@ -29,6 +29,20 @@ def _harness(page: Page) -> None:
     state at load, none of which this block needs. The slice is bounded by
     named functions so it fails loudly if the file is reorganised.
     """
+    # `t` and `S` come first, and this slice is why the file is loaded at all:
+    # `el()` grew `t(...)` calls when the UI text moved into language packs
+    # (attribute values and every text node), so a harness holding `el` without
+    # `t` throws `ReferenceError: t is not defined` on the first element it
+    # builds. In the browser they always arrive together -- `utils.js` loads
+    # before `components.js`, per `static/index.html` -- so this was never a
+    # product defect, only a harness that had fallen a feature behind. It went
+    # unseen because the browser job was being SKIPPED whenever a sibling job
+    # failed, which is fixed in the same wave as this.
+    utils = (JS / "utils.js").read_text(encoding="utf-8")
+    s_start = utils.index("const S = {")
+    t_end = utils.index("function initTheme(") if "function initTheme(" in utils \
+        else utils.index("\n\n", utils.index("function t(source"))
+
     components = (JS / "components.js").read_text(encoding="utf-8")
     el_start = components.index("function el(")
     el_end = components.index("// ---- Modal ----")
@@ -38,7 +52,8 @@ def _harness(page: Page) -> None:
     end = chat.index("function proseEl(")
 
     page.set_content("<!doctype html><body><div id='out'></div></body>")
-    page.add_script_tag(content=components[el_start:el_end] + "\n" + chat[start:end])
+    page.add_script_tag(content=utils[s_start:t_end] + "\n"
+                        + components[el_start:el_end] + "\n" + chat[start:end])
 
 
 def _paint(page: Page, prose: str, speech=None, colors=None) -> dict:

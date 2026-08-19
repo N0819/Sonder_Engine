@@ -3038,6 +3038,38 @@ Three smaller residuals from the same note, deliberately not landed with it:
   say which way the body is crossing. If a model starts writing them at
   volume the fix is the prompt, not the predicate.
 
+### 1.66 The story column's floor overrides the room it reserved
+
+`syncVitalsGutter` (`static/js/settings.js`) computes `--story-width` as
+`clamp(STORY_MIN_WIDTH, shellWidth - 2*reserve, STORY_MAX_WIDTH)`, where
+`reserve` is the widest float that has to sit beside the column — the vitals
+tracker on the left, the ambience cluster on the right. The reservation is
+correct and the clamp silently defeats it: when
+`shellWidth - 2*reserve < STORY_MIN_WIDTH`, the column is pushed back up to
+720 and the float it was making room for lands ON it.
+
+Found by the browser suite on 2026-08-19, the first run after the CI job
+stopped being skipped. At a 1400px window the composer is 1114px wide, the
+ambience cluster was 212px with its volume slider, the reservation asked for
+a 650px column, the floor forced 720, and the controls sat **27px inside the
+input box** — over the right-hand end of the field being typed into.
+
+**The instance is fixed and the class is not.** The CSS container queries that
+shed the slider and then stop floating are now derived from the cluster's
+measured widths rather than guessed (`static/styles.css`, `@container
+composer`), so the cluster gets narrow before the margin runs out. The same
+hole is still open on the LEFT: `VITALS_MIN_GUTTER + 12` is 198, so a shell
+narrower than `720 + 396 = 1116` with the tracker visible reserves room the
+clamp then refuses to give, and nothing reports it.
+
+Two shapes of real fix, neither taken here: let the column go below
+`STORY_MIN_WIDTH` when a float genuinely needs the room (readability loses to
+not-overlapping), or make the floats' own container queries the single
+mechanism and drop the JS reservation (one mechanism instead of two that can
+disagree). The second is closer to how the ambience cluster already behaves.
+Whichever wins, `browser_tests/test_ui_smoke.py` holds the invariant and
+should gain a tracker-side case.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
