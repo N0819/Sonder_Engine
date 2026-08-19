@@ -38,6 +38,7 @@ perception surface live with their own seams.
 from __future__ import annotations
 
 import hashlib
+import re
 
 #: The world-KV key crowds live under, spelled once. It is frame-scoped in
 #: `db.FRAME_SCOPED_WORLD_KEYS`: a branch that never went to the market must
@@ -65,18 +66,64 @@ PACKED = "packed"
 LOOSE = "loose"
 
 
-def normalize_band(value):
-    """The nearest known band, or the smallest when nothing matches.
+#: Words for HOW MANY that are not one of the four band phrases. `band` is a
+#: free string on the schema with its vocabulary in a comment, so exact
+#: equality against four fixed phrases made the reading a coin flip per
+#: wording -- "dozens", "a crowd" and "a throng of dockworkers" all folded to
+#: "a handful". Extend this rather than widening BANDS, which is the same rule
+#: `weather._SYNONYMS` states for the sky: a term the enum cannot read is a
+#: wording problem, not a different quantity.
+#:
+#: Count words only. Density words ("packed", "heaving", "busy") describe the
+#: fit of a crowd to its room, which is `density`'s question and is DERIVED --
+#: reading one as a count would let a small crowd in a cupboard grow.
+_BAND_SYNONYMS = {
+    "handful": "a handful", "a few": "a handful", "few": "a handful",
+    "several": "a handful", "a couple": "a handful", "couple": "a handful",
+    "scattered": "a handful", "sparse": "a handful",
 
-    Falling back to the smallest is deliberate: a crowd the engine cannot size
-    should read as fewer people rather than more, because over-claiming a
-    throng puts bodies in a room that nothing authored.
+    "dozen": "a dozen or so", "score": "a dozen or so",
+    "ten": "a dozen or so", "twelve": "a dozen or so",
+
+    "dozens": "a few dozen", "scores": "a few dozen",
+    "crowd": "a few dozen", "gathering": "a few dozen",
+    "assembly": "a few dozen", "congregation": "a few dozen",
+
+    "throng": "a throng", "mob": "a throng", "multitude": "a throng",
+    "horde": "a throng", "swarm": "a throng", "masses": "a throng",
+    "hundreds": "a throng", "thousands": "a throng", "sea": "a throng",
+}
+
+
+def normalize_band(value, base=None):
+    """The band `value` names, `base` when it names none, else the smallest.
+
+    Read in three passes, widest evidence last: the band phrase itself, then a
+    band phrase CONTAINED in a longer one ("a throng of dockworkers"), then a
+    count word from `_BAND_SYNONYMS`. The contained pass runs before the words
+    so "a few dozen fishmongers" is not read as "a few" and shrunk two rungs.
+
+    `base` is what makes the fallback honest in both directions. On a MINT
+    there is nothing to lose, and reading an unsizable crowd as fewer people
+    is right -- over-claiming a throng puts bodies in a room nothing authored.
+    On an EDIT there is a standing band, and replacing a throng with a handful
+    because the wording changed is the larger invention: a word this
+    vocabulary cannot read is not evidence that anybody left.
     """
     text = " ".join(str(value or "").split()).casefold()
+    fallback = base if base in BANDS else BANDS[0]
+    if not text:
+        return fallback
     for band in BANDS:
         if text == band:
             return band
-    return BANDS[0]
+    contained = [(len(band), band) for band in BANDS
+                 if re.search(r"\b%s\b" % re.escape(band), text)]
+    if contained:
+        return max(contained)[1]
+    hits = [(m.start(), band) for word, band in _BAND_SYNONYMS.items()
+            for m in [re.search(r"\b%s\b" % re.escape(word), text)] if m]
+    return min(hits)[1] if hits else fallback
 
 
 def band_rank(band):
@@ -382,7 +429,10 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms, roster=(), spoken=()):
                 continue
             target["room_uid"] = room
         if raw.get("band"):
-            target["band"] = normalize_band(raw.get("band"))
+            # An EDIT keeps the standing band when the new wording cannot be
+            # read: a re-description is not a report that people left.
+            target["band"] = normalize_band(raw.get("band"),
+                                            target.get("band"))
         if raw.get("composition"):
             target["composition"] = \
                 " ".join(str(raw.get("composition")).split())[:120]
