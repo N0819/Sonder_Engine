@@ -247,3 +247,17 @@ def test_a_repeat_pass_over_one_turn_does_not_restart_the_commission_clocks():
         # And a re-render, which cancels the clocks, must let the same turn arm
         # them again rather than reading as a repeat.
         assert "%s.pendingTurn = null;" % state in source
+
+
+def test_boot_reports_a_language_pack_the_server_could_not_use():
+    """`/api/bootstrap` deliberately survives a malformed pack and returns the
+    reason in `language_error` -- "the host needs to know a pack they installed
+    is not being used, and why". Nothing read it, so the host got English and
+    silence. Once per session: `boot()` reruns on every import and save.
+    """
+    block = _between(APP, "async function boot()", "$$(\"#tabs button\")")
+
+    assert "S.boot.language_error" in block
+    assert "toast(S.boot.language_error" in block
+    assert "let languagePackErrorReported = false;" in APP
+    assert "languagePackErrorReported = true;" in block
