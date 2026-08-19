@@ -266,7 +266,11 @@ def test_visible_portal_states_from_link_hatch_and_edges():
                                           "hatch": "closed"}}},
         },
     }
-    portals = _visible_portal_states(scene, "shop")
+    # The street is visible from the shop, so its edge and the portal-link
+    # touching it are both perceivable. Passing the set is not optional:
+    # `visible_rooms` is what decides whether a door into an unseen room is
+    # withheld, and it used to default to "do not filter".
+    portals = _visible_portal_states(scene, "shop", {"shop", "street"})
     assert portals["front double doors"] == "shut"
     assert portals["escape pod hatch"] == "shut"
     assert portals["door to Street"] == "shut"
@@ -274,7 +278,7 @@ def test_visible_portal_states_from_link_hatch_and_edges():
     assert portals["doors"] == "shut"
     # Mixed states -> no generic entry.
     scene["entities"]["front_doors"]["state"]["link"]["phase"] = "open"
-    portals = _visible_portal_states(scene, "shop")
+    portals = _visible_portal_states(scene, "shop", {"shop", "street"})
     assert portals["front double doors"] == "open"
     assert "doors" not in portals
 
