@@ -59,6 +59,46 @@ function defaultCharacterSheet() {
   };
 }
 
+// ---- Carrying the fields an editor has no widget for ----
+//
+// A card editor rebuilds its sheet field by field from its widgets, and the
+// PUT that saves it REPLACES the stored sheet wholesale -- there is no merge
+// on the server. Every field the editor has no widget for therefore dies the
+// first time anyone opens the card, and `_deep_defaults` backfills the hole
+// on the way back out, so the loss reads as a value somebody chose rather
+// than as a deletion. Measured on three live fields: `simulation.sampler`
+// (read by `character_sampler` and passed to the model call),
+// `simulation.curiosity` (reverted to 0.5 every save), and
+// `psychology.projects` -- a life's work a character adopted mid-play, erased
+// by looking at their card.
+//
+// The rule is structural rather than a list of those three, because the
+// fourth field would be lost the same way: what the editor PRESENTS it owns,
+// and what it does not present it carries forward unchanged. Arrays and
+// scalars the editor built always win -- clearing a list is an authored act.
+// Only a path the editor rebuilds WHOLE is exempt; see OWNED_SHEET_PATHS.
+function carryUnpresentedFields(stored, built, owned, path) {
+  const isMap = v => !!v && typeof v === "object" && !Array.isArray(v);
+  if (!isMap(stored) || !isMap(built)) return built;
+  const out = { ...built };
+  for (const key of Object.keys(stored)) {
+    const here = path ? path + "." + key : key;
+    if ((owned || []).includes(here)) continue;
+    if (!(key in out)) out[key] = stored[key];
+    else out[key] = carryUnpresentedFields(stored[key], out[key], owned, here);
+  }
+  return out;
+}
+
+// Paths whose widget rebuilds the entire subtree, so an absence underneath
+// one is an authored DELETION rather than a field the editor never knew
+// about. `initial_outfit` is the whole list: `regions` is a map the garment
+// widget rebuilds from scratch, so carrying a stored region back resurrects a
+// garment the author just removed -- and `wearing`/`state` are derived
+// mirrors `character_schema._normalize_initial_outfit` folds back INTO
+// `regions`, which would let the same garment return through the other door.
+const OWNED_SHEET_PATHS = ["initial_outfit"];
+
 // Editable, swipeable greetings for a saved character card. Greetings are
 // captured at import (first_mes + alternate_greetings, stored on
 // sheet.opening.greetings) and can be added/edited/removed here; the list is
@@ -476,7 +516,11 @@ function charEditor(c, options = {}) {
           if (f.knowledge_scholarly.checked) access_tags.push("scholarly");
           if (f.knowledge_esoteric.checked) access_tags.push("esoteric");
 
-          const s = {
+          // Everything below is what the widgets OWN. Anything else the
+          // stored sheet carries is merged back by carryUnpresentedFields --
+          // without it a full-replacement PUT behind a field-by-field editor
+          // deletes every field that has no widget.
+          const s = carryUnpresentedFields(sheet, {
             identity: {
               uid: sheet.identity?.uid,
               name: f.name.read(),
@@ -487,8 +531,10 @@ function charEditor(c, options = {}) {
             // sent from here -- two authored copies of one outfit is how the
             // ledger ends up saying different things about the same body.
             initial_outfit: { regions: f.outfit_regions.read() },
+            // No `sampler` key: there is no widget for it, so writing one
+            // here would erase whatever was authored or imported into it. It
+            // rides the carry with every other unpresented field.
             simulation: { tier: f.tier.read(), temperature: f.temperature.read(),
-              sampler: {},
               offscreen_agent: f.offscreen_agent.querySelector("input").checked },
             embodiment: {
               senses: f.senses.read(),
@@ -555,7 +601,7 @@ function charEditor(c, options = {}) {
               first_message: f.first_message.read(),
               greetings: gc ? gc.read() : (sheet.opening?.greetings || [])
             }
-          };
+          }, OWNED_SHEET_PATHS);
           try {
             let result = null;
             if (isChatCard) {
@@ -668,7 +714,7 @@ function personaEditor(p) {
       el("details", { open: "" }, el("summary", {}, "Private history"), ph.node),
       el("div", { class: "row", style: "margin-top:10px" },
         el("button", { class: "primary", onclick: async () => {
-          const s = {
+          const s = carryUnpresentedFields(sheet, {
             identity: {
               uid: sheet.identity?.uid,
               name: f.name.read(),
@@ -688,7 +734,7 @@ function personaEditor(p) {
             competence: { abilities: f.abilities.read() },
             knowledge: { public_history: f.public_history.read(), private_history: ph.read() },
             narration: { voice_setting: f.voice_setting.read() }
-          };
+          }, OWNED_SHEET_PATHS);
           try {
             if (p) await api("PUT", "/api/personas/" + p.id, { sheet: s });
             else await api("POST", "/api/personas", { sheet: s });
@@ -807,7 +853,7 @@ function importModal(kind) {
           backgroundTask(`Importing ${kind}`, () => api("POST", endpoint, payload),
             { onSuccess: async r => {
               await boot();
-              if (kind === "lorebook" && r?.id) await loreModal(r.id);
+              if (kind === "lorebook" && r?.id) await openLoreWorkspace(r.id);
               // A card with no drive imports cleanly and then reads as a dull
               // character rather than an unfilled field. Say so.
               for (const warning of (r?.warnings || [])) toast(warning, "warn");
@@ -837,7 +883,7 @@ function generateModal(kind) {
 }
 
 // ---- Lorebook generate ----
-function generateLoreModal(lid, isChat) {
+function generateLoreModal(lid) {
   const ta = el("textarea", { style: "width:100%;height:170px", placeholder: "Describe the entries to create…" });
   modal("Generate lorebook entries", b => {
     b.append(ta,
@@ -846,85 +892,11 @@ function generateLoreModal(lid, isChat) {
         el("button", { class: "primary", onclick: () => {
           backgroundTask("Generating lorebook entries",
             () => api("POST", `/api/lorebooks/${lid}/generate`, { prompt: ta.value.trim() }),
-            { onSuccess: async r => { await boot(); if (r?.added) await loreModal(lid) },
+            { onSuccess: async r => { await boot(); if (r?.added) await openLoreWorkspace(lid) },
              successMessage: r => `Generated ${r?.added || 0} entries.`,
              errorPrefix: "Lore generation failed" });
         } }, "Generate entries")));
   });
-}
-
-// ---- Lorebooks ----
-async function loreModal(lid) {
-  modal("Lorebook", b => { b.append(loadingBlock("Loading lorebook…")) }, { wide: true });
-  let d;
-  try { d = await api("GET", "/api/lorebooks/" + lid) }
-  catch (e) { $("#modalbody").innerHTML = ""; $("#modalbody").append(emptyState("Could not load lorebook: " + e.message)); return }
-  const cats = S.boot.lore_categories, types = S.boot.lorebook_types;
-  modal(`Lorebook — ${d.book.name}`, b => {
-    const typeSel = fSelect("Type", types, d.book.book_type || "general");
-    const sumIn = fArea("Summary for the mapping agent", d.book.summary || "", 2);
-    b.append(el("div", { class: "row" },
-      el("button", { onclick: async () => {
-        const n = await promptModal("Rename:", d.book.name); if (n == null) return;
-        await api("PUT", "/api/lorebooks/" + lid, { name: n });
-        closeModal(); boot();
-      } }, "Rename"),
-      el("button", { onclick: async () => { await exportLorebook(lid) } }, "⤓ Export"),
-      el("button", { onclick: () => {
-        backgroundTask(`Reinterpreting ${d.book.name}`,
-          () => api("POST", `/api/lorebooks/${lid}/reinterpret`),
-          { onSuccess: async () => { await boot(); await loreModal(lid) },
-           successMessage: r => `Reinterpreted ${r?.reinterpreted || 0} entries.`,
-           errorPrefix: "Reinterpretation failed" });
-      } }, "✨ Reinterpret / categorize"),
-      el("button", { onclick: () => generateLoreModal(lid, false) }, "✨ Generate entries"),
-      el("button", { onclick: async () => {
-        await api("POST", `/api/lorebooks/${lid}/entries`, { keys: "", content: "New entry", category: "other" });
-        closeModal(); loreModal(lid);
-      } }, "+ Entry")));
-    b.append(typeSel.node, sumIn.node,
-      el("div", { class: "row", style: "margin:6px 0" },
-        el("button", { onclick: async () => {
-          await api("PUT", "/api/lorebooks/" + lid, { book_type: typeSel.read(), summary: sumIn.read() });
-          closeModal(); boot();
-        } }, "Save book meta")));
-    let lastCat = "";
-    for (const e of d.entries) {
-      const cat = e.category || "other";
-      if (cat !== lastCat) { b.append(el("div", { style: "margin:10px 0 2px;font-weight:600;color:var(--dim);text-transform:uppercase;font-size:11px" }, cat)); lastCat = cat }
-      const k = el("input", { style: "flex:1", value: e.keys || "", placeholder: "keys (comma-separated)" });
-      const titleIn = el("input", { style: "flex:1", value: e.title || "", placeholder: "title" });
-      const catSel = el("select", {}, cats.map(c => el("option", { value: c, ...(c === cat ? { selected: "" } : {}) }, c)));
-      const c = el("textarea", { style: "width:100%", rows: "3" }, e.content || "");
-      const tagSel = el("select", {}, ["common", "scholarly", "esoteric"].map(t => el("option", { value: t, ...(t === (e.knowledge_tag || "common") ? { selected: "" } : {}) }, t)));
-      const rangeSel = el("select", {}, ["global", "local"].map(r => el("option", { value: r, ...(r === (e.knowledge_range || "global") ? { selected: "" } : {}) }, r)));
-      let locsVal = ""; try { locsVal = (JSON.parse(e.knowledge_locations || "[]") || []).join(", ") } catch (err) { }
-      const locsIn = el("input", { style: "flex:1", value: locsVal, placeholder: "room IDs (comma-separated)" });
-      const knowledgeFields = el("div", { class: "row small", style: catSel.value === "knowledge" ? "" : "display:none" }, titleIn, tagSel, rangeSel, locsIn);
-      catSel.onchange = () => { knowledgeFields.style.display = catSel.value === "knowledge" ? "" : "none" };
-      b.append(el("div", { class: "card" },
-        el("div", { class: "row" }, k, catSel,
-          e.canon_locked ? el("span", { class: "badge" }, "🔒 locked") : null,
-          el("button", { onclick: async () => {
-            let kloc = null;
-            if (catSel.value === "knowledge" && rangeSel.value === "local")
-              kloc = JSON.stringify(locsIn.value.split(",").map(s => s.trim()).filter(Boolean));
-            await api("PUT", "/api/lore_entries/" + e.id,
-              { keys: k.value, content: c.value, category: catSel.value, title: titleIn.value,
-               knowledge_tag: catSel.value === "knowledge" ? tagSel.value : null,
-               knowledge_range: catSel.value === "knowledge" ? rangeSel.value : null,
-               knowledge_locations: kloc });
-            closeModal(); loreModal(lid);
-          } }, "Save"),
-          el("button", { onclick: async () => {
-            if (!await confirmModal("Delete this entry?", { danger: true, confirmLabel: "Delete" })) return;
-            await api("DELETE", "/api/lore_entries/" + e.id);
-            closeModal(); loreModal(lid);
-          } }, "✕")),
-        knowledgeFields, c));
-    }
-    if (!d.entries.length) b.append(el("div", { class: "dim" }, "No entries yet. Click + Entry to add one."));
-  }, { wide: true });
 }
 
 // ---- Export ----

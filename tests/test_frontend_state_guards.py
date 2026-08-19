@@ -5,6 +5,7 @@ checks pin the small sequencing guards that prevent delayed fetches and mutable
 navigation state from crossing story/provider boundaries.
 """
 
+import re
 from pathlib import Path
 
 
@@ -247,3 +248,94 @@ def test_a_repeat_pass_over_one_turn_does_not_restart_the_commission_clocks():
         # And a re-render, which cancels the clocks, must let the same turn arm
         # them again rather than reading as a repeat.
         assert "%s.pendingTurn = null;" % state in source
+
+
+def test_boot_reports_a_language_pack_the_server_could_not_use():
+    """`/api/bootstrap` deliberately survives a malformed pack and returns the
+    reason in `language_error` -- "the host needs to know a pack they installed
+    is not being used, and why". Nothing read it, so the host got English and
+    silence. Once per session: `boot()` reruns on every import and save.
+    """
+    block = _between(APP, "async function boot()", "$$(\"#tabs button\")")
+
+    assert "S.boot.language_error" in block
+    assert "toast(S.boot.language_error" in block
+    assert "let languagePackErrorReported = false;" in APP
+    assert "languagePackErrorReported = true;" in block
+
+
+def test_every_chat_scoped_toolbar_button_is_disabled_without_a_chat():
+    """The membership rule is the handler's own guard, so derive the set from
+    it rather than trusting a hand-kept list. `#b-style` had the guard and was
+    missing from the list, so with no story open it stayed lit and did nothing
+    -- the silent dead click the disabling exists to eliminate."""
+    guarded = set(re.findall(
+        r'\$\("(#b-[\w-]+)"\)\.onclick = async \(\) => \{\s*\n\s*if \(!S\.chatId\) return;',
+        SETTINGS))
+    assert guarded, "no chat-scoped handlers found -- the pattern moved"
+
+    block = _between(CHAT, "function updateChatScopedButtons()", "function renderChat()")
+    listed = set(re.findall(r'"(#b-[\w-]+)"', block))
+    assert listed == guarded, f"listed {sorted(listed)} vs guarded {sorted(guarded)}"
+
+
+def test_every_engine_plan_step_has_a_friendly_progress_label():
+    """The progress line exists so "a long-running turn never looks like
+    nothing is happening, without requiring anyone to know what
+    `perception_outcome` means". A step missing from the table falls through to
+    the technical label, which is the one thing it was built to avoid --
+    `narrator_extra` did, on exactly the stage a multiplayer chat spends its
+    time in. Read from the handler registry so a fifteenth stage cannot be
+    added to the engine alone.
+    """
+    import ast
+
+    tree = ast.parse((ROOT / "agents/runtime.py").read_text(encoding="utf-8"))
+    handlers = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", "") == "STEP_HANDLERS" for t in node.targets)):
+            handlers = {k.value for k in node.value.keys}
+    assert handlers, "STEP_HANDLERS not found in agents/runtime.py"
+
+    block = _between(CHAT, "const FRIENDLY_STEP_LABELS = {", "const FRIENDLY_SUBAGENTS")
+    labelled = set(re.findall(r"^  (\w+):", block, re.MULTILINE))
+    assert not handlers - labelled, \
+        f"plan steps with no friendly label: {sorted(handlers - labelled)}"
+
+
+def test_the_global_error_net_catches_synchronous_throws_too():
+    """The rejection listener covers every handler that awaits. A handler that
+    throws before its first await produced the identical "clicking does
+    nothing" and reached nothing -- the failure mode the net was written to
+    eliminate, surviving in the half nobody installed."""
+    assert 'window.addEventListener("unhandledrejection"' in APP
+    assert 'window.addEventListener("error"' in APP
+    net = APP[APP.index('window.addEventListener("error"'):]
+    # A failed script/image load has no usable message; it must not become a
+    # toast the reader can do nothing with.
+    assert "if (!message) return;" in net
+    # And whatever already toasted itself must not toast twice.
+    assert "__handled" in net
+
+
+def test_the_pipeline_drawer_explains_a_turn_blocked_by_another_frame():
+    """`blocked_by_other_frame` is computed separately from `editable` "so the
+    UI can explain WHY a frame-latest turn is still blocked, instead of just
+    refusing". Nothing read it: the drawer opened with Resume, reroll, use and
+    edit absent and no reason given.
+
+    The sentence is the route's own 409 detail, so the reader gets the same
+    wording whether the drawer explains it up front or the route refuses the
+    attempt. Two copies of one message drift, so they are pinned equal here.
+    """
+    assert "p.blocked_by_other_frame" in CHAT
+
+    server = (ROOT / "web/app.py").read_text(encoding="utf-8")
+    sentence = ("Another frame has advanced since this turn. Recompute here "
+                "would silently roll back that frame's progress too -- shared "
+                "state (memories, cast, world entities) isn't sliced per frame "
+                "in this version.")
+    # Present in both, modulo each language's own string-concatenation breaks.
+    assert sentence in re.sub(r'"\s*\n\s*"', "", server)
+    assert sentence in re.sub(r'"\s*\n\s*\+ "', "", CHAT)

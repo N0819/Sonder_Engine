@@ -180,8 +180,29 @@ function localizeDocument(root = document.body) {
   }
 }
 
-const MEM_CATS = ["episode", "dialogue", "promise", "relationship", "person", "place", "semantic", "intention", "emotion", "self", "inference"];
-const MEM_PROV = ["witnessed", "heard", "told", "read", "inferred", "remembered"];
+// The memory vocabularies belong to `mind/memory.py` (MEMORY_CATEGORIES /
+// MEMORY_PROVENANCE) and ride every bootstrap. Read them from there rather
+// than from a second copy here. Both ends coerce silently: `memory.py` rewrites
+// an unrecognised category or provenance to a default instead of rejecting it,
+// so a term added server-side is simply missing from the dropdown, and one
+// removed server-side is offered in the dropdown and quietly changed on save.
+// A drifted copy has no symptom -- which is why there must not be one.
+//
+// The literals survive only as the fallback for a tab whose cached JavaScript
+// is running ahead of its first bootstrap response, the same reason `t()`
+// keeps one.
+const MEM_CATS_FALLBACK = ["episode", "dialogue", "promise", "relationship", "person", "place", "semantic", "intention", "emotion", "self", "inference"];
+const MEM_PROV_FALLBACK = ["witnessed", "heard", "told", "read", "inferred", "remembered"];
+
+function memoryCategories() {
+  const shipped = S.boot && S.boot.memory_categories;
+  return Array.isArray(shipped) && shipped.length ? shipped : MEM_CATS_FALLBACK;
+}
+
+function memoryProvenance() {
+  const shipped = S.boot && S.boot.memory_provenance;
+  return Array.isArray(shipped) && shipped.length ? shipped : MEM_PROV_FALLBACK;
+}
 
 // Whether a turn can actually run yet: resolve_role() in providers.py falls
 // back to agent_models.default for any role that isn't set individually, so

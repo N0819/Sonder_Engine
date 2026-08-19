@@ -1235,7 +1235,7 @@ function renderLorebooksTab(d, b, chatId) {
               title: "Open in workspace",
               onclick: () => {
                 closeModal();
-                loreModal(lb.id);
+                openLoreWorkspace(lb.id);
               }
             }, "open"),
             el("button", {
@@ -1247,7 +1247,7 @@ function renderLorebooksTab(d, b, chatId) {
             el("button", {
               title: "Generate entries",
               onclick: () =>
-                generateLoreModal(lb.id, true)
+                generateLoreModal(lb.id)
             }, "✨"),
             !isCanon
               ? el("button", {
@@ -3308,10 +3308,6 @@ function reopenPromptsIfRequested() {
 
 // ---- Extensions ----
 //
-//: Set before enabling/disabling reloads the page, so the reader lands back
-//: in this menu rather than on the story with the dialog gone.
-const REOPEN_EXTENSIONS_KEY = "sonder.reopenExtensions";
-//
 // The management surface for `extensions/`. The prototype shipped the routes
 // (list / enable / disable) and the registries an extension talks to, but
 // nothing that CALLED them -- so an installed extension sat at
@@ -3592,16 +3588,3 @@ async function openExtensionsMenu() {
 
 $("#b-extensions").onclick = openExtensionsMenu;
 
-
-// Called by app.js once boot() has repopulated S.boot. Enabling and disabling
-// no longer reload the page, so the only thing still setting the marker is a
-// language change -- which does reload, and which can land while this menu is
-// open.
-function reopenExtensionsIfRequested() {
-  let wanted = false;
-  try {
-    wanted = !!sessionStorage.getItem(REOPEN_EXTENSIONS_KEY);
-    if (wanted) sessionStorage.removeItem(REOPEN_EXTENSIONS_KEY);
-  } catch (e) { return; }
-  if (wanted) openExtensionsMenu();
-}

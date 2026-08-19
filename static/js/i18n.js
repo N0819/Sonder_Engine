@@ -78,9 +78,17 @@
         node.nodeValue = lead + translated + tail;
       }
     }
-    const hosts = [...root.querySelectorAll("[title],[aria-label],[placeholder],[alt]")];
-    if (root.nodeType === Node.ELEMENT_NODE
-        && root.matches("[title],[aria-label],[placeholder],[alt]")) {
+    // The SAME skip tree the text pass uses. utils.js learned this the hard
+    // way: applied to text nodes only, a tooltip under `translate="no"` was
+    // still translated on the very element whose text the guard was
+    // protecting. Attributes are chrome by default, which is why textarea and
+    // input are not excluded here -- but a subtree opted out is opted out for
+    // both passes, and the rules in these two files must not differ.
+    const ATTRS = "[title],[aria-label],[placeholder],[alt]";
+    const hosts = [...root.querySelectorAll(ATTRS)]
+      .filter(element => !element.closest(SKIP_TREE));
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches(ATTRS)
+        && !root.closest(SKIP_TREE)) {
       hosts.push(root);
     }
     for (const element of hosts) {

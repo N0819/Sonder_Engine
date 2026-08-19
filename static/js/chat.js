@@ -471,13 +471,15 @@ function switchFrame(frameId) {
   renderChat();
 }
 
-// #b-world/#b-cast/#b-attire/#b-dlg all no-op with no chat open (each
-// checks `if (!S.chatId) return` at the top of its own handler already) --
-// disabling them when there's nothing for them to act on turns a silent
-// dead click into an honest, visibly-inert control.
+// Every toolbar button whose handler opens with `if (!S.chatId) return` is
+// listed here. Such a button no-ops with no chat open, and disabling it turns
+// a silent dead click into an honest, visibly-inert control. The membership
+// test is that guard and nothing else -- #b-style had it and was left out of
+// the list, so it stayed lit and did nothing. A test derives the set from
+// settings.js and holds this list equal to it.
 function updateChatScopedButtons() {
   const ready = !!S.chatId;
-  for (const id of ["#b-world", "#b-cast", "#b-attire", "#b-dlg"]) {
+  for (const id of ["#b-world", "#b-cast", "#b-attire", "#b-dlg", "#b-style"]) {
     const btn = $(id);
     if (btn) btn.disabled = !ready;
   }
@@ -712,6 +714,12 @@ const FRIENDLY_STEP_LABELS = {
   director_resolve: "Deciding what happens",
   perception_outcome: "Working out what everyone just saw",
   narrator: "Writing the scene",
+  // narrator_extra is a real plan step for any chat with extra players, and
+  // fell through to the technical label on exactly the stage a multiplayer
+  // chat spends its time in. It shares the narrator's wording deliberately:
+  // it IS the same stage, run again for another player's view, and one line
+  // per view is what the reader is watching happen.
+  narrator_extra: "Writing the scene",
   commit: "Saving the story",
   // background_react was missing entirely, so it fell through to the raw
   // technical label. It covers two very different paths, named at plan time.
@@ -739,6 +747,10 @@ function friendlyPhase(key, label) {
     const name = String(label || "").replace(/^Character\s*·\s*/, "").trim();
     return (name || "A character") + " is deciding what to do";
   }
+  // An extension step keeps its own label rather than being flattened: the
+  // extension author wrote it, and no table here could name a stage this
+  // engine has never heard of. "Working…" is the last resort for a step that
+  // arrived with no label at all.
   return label || "Working…";
 }
 
@@ -1666,6 +1678,23 @@ async function openPipeline(tid) {
 
   D.append(headerRow);
 
+  // The server computes `blocked_by_other_frame` separately from `editable`
+  // for exactly this: "so the UI can explain WHY a frame-latest turn is still
+  // blocked, instead of just refusing". Nothing read it, so the drawer opened
+  // with Resume, reroll, use and edit simply absent and no reason given -- the
+  // refusal without the explanation, which is the shape the field exists to
+  // prevent. Wording is the server's own 409 detail, verbatim, so the reader
+  // sees the same sentence whether the drawer explains it up front or the
+  // route refuses the attempt (`tests/test_frontend_state_guards.py` holds the
+  // two equal).
+  if (p.blocked_by_other_frame) {
+    D.append(el("div", { class: "engine-warning" },
+      "Another frame has advanced since this turn. Recompute here would "
+      + "silently roll back that frame's progress too -- shared state "
+      + "(memories, cast, world entities) isn't sliced per frame in this "
+      + "version."));
+  }
+
   for (const s of p.steps) {
     const variants = s.variants || [];
     const activeIndex = variants.findIndex(
@@ -2041,10 +2070,10 @@ function memModal(p) {
     });
     const categorySelect = el("select", {},
       el("option", { value: "" }, "All categories"),
-      ...MEM_CATS.map(c => el("option", { value: c }, c)));
+      ...memoryCategories().map(c => el("option", { value: c }, c)));
     const provenanceSelect = el("select", {},
       el("option", { value: "" }, "All sources"),
-      ...MEM_PROV.map(s => el("option", { value: s }, s)));
+      ...memoryProvenance().map(s => el("option", { value: s }, s)));
     const archivedToggle = el("input", { type: "checkbox" });
     const sortSelect = el("select", {},
       el("option", { value: "newest" }, "Newest first"),
@@ -2393,12 +2422,12 @@ function memoryCard(m) {
   const gist = m.gist || m.content || "(empty)";
 
   const catSel = el("select", {},
-    MEM_CATS.map(c => el("option", {
+    memoryCategories().map(c => el("option", {
       value: c,
       ...(c === cat ? { selected: "" } : {})
     }, c)));
   const provSel = el("select", {},
-    MEM_PROV.map(p => el("option", {
+    memoryProvenance().map(p => el("option", {
       value: p,
       ...(p === prov ? { selected: "" } : {})
     }, p)));
@@ -2626,12 +2655,12 @@ function showNewMemoryForm(layout) {
     placeholder: "What this character remembers…"
   });
   const cat = el("select", {},
-    MEM_CATS.map(c => el("option", {
+    memoryCategories().map(c => el("option", {
       value: c,
       ...(c === "episode" ? { selected: "" } : {})
     }, c)));
   const prov = el("select", {},
-    MEM_PROV.map(p => el("option", {
+    memoryProvenance().map(p => el("option", {
       value: p,
       ...(p === "told" ? { selected: "" } : {})
     }, p)));
