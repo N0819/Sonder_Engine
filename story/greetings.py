@@ -17,14 +17,19 @@ import time
 
 from core import db
 from story.character_schema import (
-    character_name, character_appearance, character_public_history, persona_name,
+    character_name, character_appearance, character_initial_active_state,
+    character_public_history, persona_name, persona_private_history,
 )
 from language_runtime import (
     DEFAULT_LANGUAGE, language_scope, set_story_language, story_language_scope,
 )
 from llm.llm_quality import complete_validated_json
 from llm.prompts import get_prompt
-from mind.memory import add_memories_batch, duplicate_lorebook_for_chat
+from mind.memory import (
+    add_memories_batch, duplicate_lorebook_for_chat, get_relationships,
+    record_relationship_event, save_relationships,
+)
+from mind.theory_of_mind import apply_mind_model_updates
 from agents.runtime import _run_pipeline
 from agents.storage import active_content
 
@@ -34,7 +39,13 @@ from agents.storage import active_content
 #: worked example of exactly such a change, and it shipped while nothing
 #: stamped or checked this, so every stored extraction ever written is of
 #: unknown provenance and re-extracts.
-EXTRACTOR_VERSION = 1
+#:
+#: v2: the extraction became per-person (`minds`), carrying beliefs, stances
+#: and opening affect as well as knowledge -- a v1 extraction is not wrong so
+#: much as one-fortieth of the picture, and replaying it would silently
+#: launch a story whose opening seeded almost nobody. See
+#: docs/design/DESIGN_GREETING_MINDS.md.
+EXTRACTOR_VERSION = 2
 
 #: The player's slot in imported prose. ONE definition, in the module that
 #: mints it: `importers._substitute_macros` writes this token into every
@@ -126,10 +137,16 @@ def extract_greeting(sheet: dict, greeting_prose: str) -> dict:
     )
     # Deterministic information-boundary guard (never trust the model to tag it
     # right): a "secret" seed that names the player is not actually asymmetric,
-    # so it can't be routed as private-from-the-player.
+    # so it can't be routed as private-from-the-player. Applied to the legacy
+    # top-level list and to every mind's own list -- the guard is about the
+    # seed's content, not about where the extraction filed it.
     for seed in out.get("knowledge_seeds") or []:
         if PLAYER_TOKEN in str(seed.get("content", "")):
             seed["revealed_in_prose"] = True
+    for mind in out.get("minds") or []:
+        for seed in (mind or {}).get("knowledge_seeds") or []:
+            if PLAYER_TOKEN in str(seed.get("content", "")):
+                seed["revealed_in_prose"] = True
     # STAMPED WHERE IT IS MINTED, not where it is filed. The greeting record
     # has a sibling `extractor_version` field, and a writer that copies the
     # extraction without it -- an archive, an editor, a hand-written card --
@@ -207,6 +224,430 @@ def _seed_salience(value) -> float:
     except (TypeError, ValueError):
         return 0.6
     return max(0.0, min(_SEED_SALIENCE_MAX, salience))
+
+
+# ---- Mind routing (docs/design/DESIGN_GREETING_MINDS.md) ----
+#
+# Every ceiling here is enforced AT THE WRITE, not only in the schema, for
+# the same reason _SEED_SALIENCE_MAX is: `start_story` replays STORED
+# extractions that never pass through today's schema.
+
+#: A seeded belief may be held firmly, never unshakeably: it must start where
+#: lived reinforcement could have put it, and `apply_belief_updates`'s
+#: absolute weakening step keeps anything under this revisable.
+_BELIEF_CONFIDENCE_MAX = 0.85
+#: Protection halves revision; a greeting that armors a whole worldview has
+#: authored an unrevisable character, which is a card decision
+#: (`psychology.self_model.protected_beliefs`), not an opening-passage one.
+#: The overflow is demoted to ordinary belief, not dropped.
+_PROTECTED_BELIEFS_MAX = 2
+_BELIEFS_PER_MIND_MAX = 8
+_STANCES_PER_MIND_MAX = 6
+
+#: `about_entity` spellings that mean the belief is the mind's own -- routed
+#: to `interior.beliefs` rather than through theory of mind.
+_SELF_WORLD = ("", "self", "world")
+
+
+def _mind_key(who):
+    """One identity fold for greeting minds -- the presence ledger's own
+    (`commit._presence_identity`), so the mind retained for `The Porter` is
+    found when `a porter` is promoted."""
+    from persist.commit import _presence_identity
+    return _presence_identity(who)
+
+
+def _bounded(value, lo, hi, default=0.0):
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    if f != f:  # NaN
+        return default
+    return max(lo, min(hi, f))
+
+
+def _split_minds(minds, char_name):
+    """(card character's mind, player's mind, everyone else's) by `who`.
+
+    The player is recognized by the token (or the bare words `_PLAYER_SLOT`
+    exists for); the card character by name under the presence-identity fold,
+    or the literal `self`. Everything else is somebody the passage put in the
+    room whose store does not exist yet.
+    """
+    card = player = None
+    others = []
+    char_key = _mind_key(char_name)
+    for mind in minds:
+        who = str(mind.get("who") or "").strip()
+        key = _mind_key(who)
+        if player is None and (PLAYER_TOKEN in who or _PLAYER_SLOT.search(who)):
+            player = mind
+        elif card is None and key in (char_key, "self"):
+            card = mind
+        else:
+            others.append(mind)
+    return card, player, others
+
+
+def _route_mind_memories(chat_id, char_id, seeds, handle):
+    """Route one mind's knowledge seeds to that character's private memory.
+    Returns how many were written.
+
+    Memories are per-character and never enter the player's perception, so an
+    unrevealed-in-prose seed is knowledge the character has and the player
+    does not -- the whole point of the extraction.
+    """
+    seed_specs = []
+    for seed in seeds or []:
+        # NOT the persona's name unless the character legitimately knows it:
+        # `handle` is `player_handle_for`'s answer, and this is the one path
+        # that also rewrites the literal words "the player", which a plain
+        # token replace cannot see (see _PLAYER_SLOT).
+        try:
+            content = _substitute_player_slot(
+                str((seed or {}).get("content") or ""), handle).strip()
+            if not content:
+                continue
+            # Give each seed a stable identity. The batch upserts on
+            # (chat, character, event_key), so routing the same seed twice
+            # updates one row instead of writing a second -- which is what
+            # every other memory writer in the engine already gets, and what
+            # makes a retried or partially-failed launch safe to repeat.
+            #
+            # It does NOT dedupe across launches, and should not: `start_story`
+            # creates a fresh chat every time, so a second launch is a
+            # different story that has its own copy.
+            #
+            # Keyed by content, not position, so editing or reordering the
+            # greeting does not silently orphan the old row.
+            digest = hashlib.sha1(content.encode("utf-8", "ignore")).hexdigest()
+            seed_specs.append({
+                "chat_id": chat_id, "char_id": char_id, "turn_id": None,
+                "kind": "episode", "provenance": "remembered",
+                "salience": _seed_salience(seed.get("salience")),
+                "content": content, "turn_idx": 0,
+                "event_key": "greeting_seed:%s" % digest[:16],
+            })
+        except Exception:
+            continue  # a bad seed must not abort the launch
+    if seed_specs:
+        # ONE embedding call for the whole set, not one per seed. Each seed
+        # embeds two documents, so six seeds were six separate round trips to
+        # the provider on the busiest moment a story ever has -- and any one
+        # of them failing strands that memory on the crc32 fallback under its
+        # own stamp, which is what makes a brand-new story offer to rebuild
+        # memories it wrote seconds ago (reported live, 2026-08-11). Batching
+        # is not merely faster: it turns six chances to be stranded into one,
+        # and that one is retried inside `embed_texts_meta`.
+        try:
+            add_memories_batch(seed_specs)
+        except Exception:
+            return 0  # a failed seed batch must not abort the launch
+    return len(seed_specs)
+
+
+def _seed_mind_state(chat_id, char_id, sheet, mind, handle, other_keys):
+    """Route one mind's beliefs, stances, and opening affect into the stores
+    the runtime already revises. Returns ({channel: count}, [refusals]).
+
+    Everything written here is a STARTING POINT, not a rule: interior rows
+    are learned (never `authored`) entries the ledger evicts first; claims
+    about other minds go through `apply_mind_model_updates`, so the engine's
+    own per-kind ceilings bound what a greeting may assert about someone
+    else; a stance is a graph position the story is free to move; affect
+    overlays the surface only and decays back toward the card's baseline.
+    Nothing is written for a channel the greeting did not establish --
+    absence is not neutrality, and the card's authored state must stand
+    wherever the passage was silent.
+    """
+    counts = {"beliefs": 0, "impressions": 0, "stances": 0, "affect": 0}
+    refused = []
+    row = db.q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
+               (chat_id, char_id), one=True)
+    if not row:
+        return counts, ["not attached to this chat; nothing seeded"]
+    st = json.loads(row["state"] or "{}")
+    own_key = _mind_key((mind or {}).get("who"))
+
+    beliefs = [b for b in (mind.get("beliefs") or []) if isinstance(b, dict)]
+    if len(beliefs) > _BELIEFS_PER_MIND_MAX:
+        refused.append("%d belief(s) over the per-mind cap dropped"
+                       % (len(beliefs) - _BELIEFS_PER_MIND_MAX))
+    interior_rows, tom_updates = [], []
+    protected_used = 0
+    for seed in beliefs[:_BELIEFS_PER_MIND_MAX]:
+        text = _substitute_player_slot(
+            str(seed.get("belief") or ""), handle).strip()
+        if not text:
+            continue
+        about_raw = str(seed.get("about_entity") or "").strip()
+        about_key = _mind_key(about_raw)
+        # A belief about another PERSON PRESENT is a hypothesis about a mind
+        # and goes through the theory-of-mind gate; a belief about the world,
+        # the self, or any mere thing ("the east lock") stays interior. The
+        # roster is the extraction's own -- deterministic, no name guessing.
+        to_tom = (about_key not in _SELF_WORLD and about_key != own_key
+                  and (PLAYER_TOKEN in about_raw or about_key in other_keys))
+        confidence = _bounded(seed.get("confidence"),
+                              0.0, _BELIEF_CONFIDENCE_MAX, 0.5)
+        if to_tom:
+            tom_updates.append({
+                "about_entity": (_substitute_player_slot(about_raw, handle)
+                                 .strip() or handle),
+                "claim": text,
+                "kind": str(seed.get("kind") or ""),
+                "confidence": confidence,
+            })
+        else:
+            protected = (bool(seed.get("protected"))
+                         and protected_used < _PROTECTED_BELIEFS_MAX)
+            if protected:
+                protected_used += 1
+            interior_rows.append({
+                "belief": text,
+                "confidence": confidence,
+                "protected": protected,
+                "emotional_charge": _bounded(
+                    seed.get("emotional_charge"), -1.0, 1.0),
+                "source": "greeting",
+                # Turn 0, so `_within_cap` treats these as the least live
+                # entries once the ledger fills -- a seed decays and evicts
+                # like anything the character goes on to actually live.
+                "last_updated_turn": 0, "last_updated_seconds": 0.0,
+            })
+    if interior_rows:
+        interior = st.setdefault("interior", {})
+        interior["beliefs"] = list(interior.get("beliefs") or []) + interior_rows
+        counts["beliefs"] = len(interior_rows)
+    if tom_updates:
+        apply_mind_model_updates(st, tom_updates, 0)
+        counts["impressions"] = len(tom_updates)
+
+    stances = [s for s in (mind.get("stances") or []) if isinstance(s, dict)]
+    if len(stances) > _STANCES_PER_MIND_MAX:
+        refused.append("%d stance(s) over the per-mind cap dropped"
+                       % (len(stances) - _STANCES_PER_MIND_MAX))
+    graph = None
+    for stance in stances[:_STANCES_PER_MIND_MAX]:
+        target = _substitute_player_slot(
+            str(stance.get("toward") or ""), handle).strip()
+        trust = _bounded(stance.get("trust"), -1.0, 1.0)
+        warmth = _bounded(stance.get("warmth"), -1.0, 1.0)
+        fear = _bounded(stance.get("fear"), -1.0, 1.0)
+        if not target or not (trust or warmth or fear):
+            continue
+        because = _substitute_player_slot(
+            str(stance.get("because") or ""), handle).strip()[:300]
+        if graph is None:
+            graph = get_relationships(chat_id, char_id)
+        # Absolute starting points, not deltas: this is where the passage
+        # says the relationship already stands as the story opens.
+        graph.update(target, trust=trust, emotional_valence=warmth,
+                     fear=fear, salient_event=because)
+        # One ledger row per axis the greeting set, provenance `greeting`,
+        # so `relationship_history` can explain a seeded stance the same way
+        # it explains every stance the story moves later.
+        for axis, value in (("trust", trust), ("warmth", warmth),
+                            ("fear", fear)):
+            if value:
+                record_relationship_event(
+                    chat_id, char_id, target, axis, value,
+                    note=because, provenance="greeting", turn_idx=0)
+        counts["stances"] += 1
+    if graph is not None:
+        save_relationships(chat_id, char_id, graph)
+
+    affect_seed = mind.get("affect")
+    if isinstance(affect_seed, dict):
+        label = str(affect_seed.get("label") or "").strip()
+        valence = _bounded(affect_seed.get("valence"), -1.0, 1.0)
+        arousal = _bounded(affect_seed.get("arousal"), -1.0, 1.0)
+        # An all-empty dict is absence wearing braces -- seeding it would
+        # overwrite the card's authored opening mood with "calm neutral",
+        # which is this codebase's named silent failure.
+        if label or abs(valence) >= 0.05 or abs(arousal) >= 0.05:
+            from mind import affect as affect_mod
+            # The numbers win, the label yields: a lexicon-contradicted or
+            # unknown-and-empty label falls back to the quadrant, exactly the
+            # arbitration the runtime applies to its own proposals.
+            if not label or not affect_mod.label_matches(
+                    label, valence, arousal):
+                label = affect_mod.quadrant_label(valence, arousal)
+            active = character_initial_active_state(sheet)
+            active["mood"] = label
+            active["valence"] = valence
+            active["arousal"] = arousal
+            # Surface only. The baseline stays the card's: the greeting is
+            # the moment, the card is the temperament the moment decays back
+            # toward.
+            active["affect"]["surface"] = {
+                "label": label, "valence": valence, "arousal": arousal}
+            st["active_state"] = active
+            counts["affect"] = 1
+
+    if any(counts.values()):
+        from story.scene import set_char_state
+        set_char_state(chat_id, char_id,
+                       json.dumps(st, ensure_ascii=False))
+    return counts, refused
+
+
+def _seed_player_mind(chat_id, mind, player_name, persona_sheet):
+    """Route the player-slot mind. The one player-readable store admits
+    REVEALED items only: an implied player-mind item is a model's guess about
+    what the player-character knows, and a guess can embed another mind's
+    secret in its phrasing -- routing it to a surface the player can open
+    would let the extraction widen the page. The player's affect, beliefs,
+    and stances are refused outright: the player's mind is the human's, and
+    the engine seeds no feeling into the one mind the simulation must never
+    drive. Every refusal is returned for the visible record."""
+    counts = {"memories": 0}
+    refused = []
+    entries = None
+    for seed in mind.get("knowledge_seeds") or []:
+        if not isinstance(seed, dict):
+            continue
+        # The persona's own name, not a description: the player knows who
+        # they are, and this store belongs to them.
+        content = _substitute_player_slot(
+            str(seed.get("content") or ""), player_name).strip()
+        if not content:
+            continue
+        if not seed.get("revealed_in_prose"):
+            refused.append(
+                "unrevealed player-mind item withheld: the page did not "
+                "deliver it, so this store must not")
+            continue
+        if entries is None:
+            existing = db.wget(chat_id, "persona_private_history", None)
+            # Merge over the persona's AUTHORED private history: writing this
+            # key shadows the sheet's copy (`private_knowledge_for` reads the
+            # key first), so seeding without the merge would silently discard
+            # every authored entry.
+            entries = (list(existing) if existing is not None
+                       else persona_private_history(persona_sheet))
+        entries.append({"about": player_name, "content": content,
+                        "known_by": []})
+        counts["memories"] += 1
+    if counts["memories"]:
+        db.wset(chat_id, "persona_private_history", entries)
+    dropped = sum(len(mind.get(channel) or [])
+                  for channel in ("beliefs", "stances"))
+    if dropped:
+        refused.append(
+            "%d player belief/stance item(s) refused: the player's mind is "
+            "the human's" % dropped)
+    if mind.get("affect"):
+        refused.append(
+            "player affect refused: the engine seeds no feeling into the "
+            "player")
+    return counts, refused
+
+
+def _seed_minds(chat_id, char_id, sheet, extraction, char_name, seed_handle,
+                player_name, persona_sheet):
+    """Route every mind the extraction established, and write the chat's
+    `greeting_minds` record saying exactly what each one received and what
+    was refused -- because a half-filled mind that fails silently is this
+    subsystem's named failure mode, and the record is how it stays visible.
+
+    Minds that resolve to nobody (a porter, a pair of guards) are retained
+    verbatim and unclaimed: a background presence has no memory or
+    psychology until promotion, and `claim_greeting_mind` seeds them at that
+    exact moment rather than jumping the gate.
+    """
+    minds = [dict(m) for m in (extraction.get("minds") or [])
+             if isinstance(m, dict)]
+    card, player, others = _split_minds(minds, char_name)
+    # v1's top-level seeds are the card character's own, un-keyed.
+    legacy = [s for s in (extraction.get("knowledge_seeds") or [])
+              if isinstance(s, dict)]
+    if legacy:
+        if card is None:
+            card = {"who": char_name}
+        card["knowledge_seeds"] = (list(card.get("knowledge_seeds") or [])
+                                   + legacy)
+    record = {"extractor_version": EXTRACTOR_VERSION, "minds": {}}
+    all_keys = {_mind_key(m.get("who")) for m in minds} - {""}
+    if card is not None:
+        card_key = _mind_key(card.get("who") or "") or _mind_key(char_name)
+        memories = _route_mind_memories(
+            chat_id, char_id, card.get("knowledge_seeds") or [], seed_handle)
+        counts, refused = _seed_mind_state(
+            chat_id, char_id, sheet, card, seed_handle,
+            all_keys - {card_key})
+        counts["memories"] = memories
+        record["minds"][card_key] = {
+            "who": card.get("who") or char_name,
+            "resolved": "character:%d" % int(char_id),
+            "claimed": True, "seeded": counts, "refused": refused,
+        }
+    if player is not None:
+        counts, refused = _seed_player_mind(
+            chat_id, player, player_name, persona_sheet)
+        record["minds"]["player"] = {
+            "who": PLAYER_TOKEN, "resolved": "player", "claimed": True,
+            "seeded": counts, "refused": refused,
+        }
+    for mind in others:
+        key = _mind_key(mind.get("who"))
+        if not key or key in record["minds"]:
+            continue
+        record["minds"][key] = {
+            "who": mind.get("who"), "resolved": None, "claimed": False,
+            # Verbatim and persona-neutral: {{PLAYER}} stays a token so the
+            # claim can substitute whatever handle is legitimate then.
+            "mind": mind,
+        }
+    db.wset(chat_id, "greeting_minds", record)
+    return record
+
+
+def claim_greeting_mind(chat_id, char_id, name, sheet):
+    """Seed a just-promoted character from the greeting mind retained for
+    them at launch, if one was. Called by
+    `commit_background.promote_background_character` -- promotion is the one
+    sanctioned moment a background presence acquires memory and psychology,
+    so it is the moment the retained material has been waiting for. Returns
+    the updated record entry, or None when no unclaimed mind matches.
+
+    The player handle is the persona's NAME: promotion seeds mutual
+    recognition with the player ("she's been part of the scene the whole
+    time"), so by the time this runs the name is legitimate.
+    """
+    record = db.wget(chat_id, "greeting_minds", None)
+    if not isinstance(record, dict):
+        return None
+    minds = record.get("minds") or {}
+    entry = key = None
+    for candidate in (_mind_key(name), _mind_key(character_name(sheet))):
+        found = minds.get(candidate) if candidate else None
+        if (isinstance(found, dict) and not found.get("claimed")
+                and isinstance(found.get("mind"), dict)):
+            entry, key = found, candidate
+            break
+    if entry is None:
+        return None
+    from story.scene import persona_of
+    chat_row = db.q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    handle = persona_name(persona_of(dict(chat_row))) if chat_row else "Player"
+    mind = entry["mind"]
+    memories = _route_mind_memories(
+        chat_id, char_id, mind.get("knowledge_seeds") or [], handle)
+    counts, refused = _seed_mind_state(
+        chat_id, char_id, sheet, mind, handle,
+        set(minds) - {key, "player"})
+    counts["memories"] = memories
+    entry.update({"claimed": True,
+                  "resolved": "character:%d" % int(char_id),
+                  "seeded": counts, "refused": refused})
+    # Claimed material now lives in its stores; keeping a second copy here
+    # would invite drift between the record and the mind.
+    entry.pop("mind", None)
+    minds[key] = entry
+    db.wset(chat_id, "greeting_minds", record)
+    return entry
 
 
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
@@ -296,61 +737,15 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         db.qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
               "VALUES(?,?,?,1)", (cid, new_lb, origin))
 
-    # Route the character's private knowledge to character memory. Memories are
-    # per-character and never enter the player's perception, so an
-    # unrevealed-in-prose seed is knowledge the character has and the player
-    # does not -- the whole point of the extraction.
-    seed_specs = []
-    for seed in extraction.get("knowledge_seeds") or []:
-        # NOT `sub`. That resolves the player's slot to the persona's name,
-        # which is right for the prose the player reads and wrong for a
-        # character's private memory: it hands the name over on beat zero,
-        # defeating `already_known=False`. `seed_handle` is the name only when
-        # the character is meant to know it, and a description otherwise --
-        # and either way this is the one path that also rewrites the literal
-        # words "the player", which `sub` cannot see (see _PLAYER_SLOT).
-        try:
-            content = _substitute_player_slot(seed.get("content") or "",
-                                              seed_handle).strip()
-            if not content:
-                continue
-            # Give each seed a stable identity. The batch upserts on
-            # (chat, character, event_key), so routing the same seed twice
-            # updates one row instead of writing a second -- which is what
-            # every other memory writer in the engine already gets, and what
-            # makes a retried or partially-failed launch safe to repeat.
-            #
-            # It does NOT dedupe across launches, and should not: `start_story`
-            # creates a fresh chat every time, so a second launch is a
-            # different story that has its own copy. (docs/UNBUILT.md 1.16 said
-            # a re-launch duplicates them; there is no in-chat re-routing path,
-            # so that half of the entry was wrong.)
-            #
-            # Keyed by content, not position, so editing or reordering the
-            # greeting does not silently orphan the old row.
-            digest = hashlib.sha1(content.encode("utf-8", "ignore")).hexdigest()
-            seed_specs.append({
-                "chat_id": cid, "char_id": char_id, "turn_id": None,
-                "kind": "episode", "provenance": "remembered",
-                "salience": _seed_salience(seed.get("salience")),
-                "content": content, "turn_idx": 0,
-                "event_key": "greeting_seed:%s" % digest[:16],
-            })
-        except Exception:
-            continue  # a bad seed must not abort the launch
-    if seed_specs:
-        # ONE embedding call for the whole set, not one per seed. Each seed
-        # embeds two documents, so six seeds were six separate round trips to
-        # the provider on the busiest moment a story ever has -- and any one
-        # of them failing strands that memory on the crc32 fallback under its
-        # own stamp, which is what makes a brand-new story offer to rebuild
-        # memories it wrote seconds ago (reported live, 2026-08-11). Batching
-        # is not merely faster: it turns six chances to be stranded into one,
-        # and that one is retried inside `embed_texts_meta`.
-        try:
-            add_memories_batch(seed_specs)
-        except Exception:
-            pass  # a failed seed batch must not abort the launch
+    # Route every mind the extraction established -- the card character's in
+    # full (memories, beliefs, stances, opening affect), the player's within
+    # what the page delivered, and everyone else retained for promotion --
+    # and record what each received in the chat's `greeting_minds` key.
+    # BEFORE turn 0 runs, deliberately: the pipeline's checkpoint 0 then
+    # snapshots the seeded state, so a rerun of the opening keeps it.
+    with language_scope(language or DEFAULT_LANGUAGE):
+        _seed_minds(cid, char_id, sheet, extraction, c_name, seed_handle,
+                    p_name, psheet)
 
     # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
     tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",

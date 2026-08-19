@@ -1439,6 +1439,15 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
             for i, seed in enumerate(memory_seeds)
         ])
 
+    # If the chat launched from a greeting that put this presence on the
+    # page, the extraction retained her mind unclaimed -- a background
+    # presence has no memory or psychology until this exact moment. Claim it
+    # now, after recognition is seeded so the persona's name is a legitimate
+    # handle. Local import: greetings imports agents.runtime, and this module
+    # must stay importable inside the commit family.
+    from story.greetings import claim_greeting_mind
+    claim_greeting_mind(cid, char_id, name, sheet)
+
     presences = wget(cid, "background_presences", {})
     # Every spelling of them, not just the one promotion was called with: a
     # leftover `The Dalek` after `A Dalek` is promoted would go on being

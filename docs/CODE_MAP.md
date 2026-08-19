@@ -44,7 +44,7 @@
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 453 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3283 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5168 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5299 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
@@ -56,7 +56,7 @@
 | `persist/checkpoints.py` | 1300 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 592 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 927 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
-| `persist/commit_background.py` | 1576 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `persist/commit_background.py` | 1585 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 393 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 501 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -77,7 +77,7 @@
 | `story/character_schema.py` | 1840 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1090 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 263 |  | — |
-| `story/greetings.py` | 464 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.importers` |
+| `story/greetings.py` | 859 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
 | `story/importers.py` | 2570 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema` |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/scene.py` | 2356 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.character_schema`, `world.spatial` |
@@ -513,14 +513,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3929 | 344 lines |
+| `preprocess_llm_output()` | 4021 | 344 lines |
 | `_lenient_coerce()` | 690 | 159 lines |
-| `validate_llm_output_strict()` | 5039 | 130 lines |
-| `semantic_output_errors()` | 4841 | 103 lines |
-| `canonicalize_prose_markup()` | 3734 | 102 lines |
-| `_uncross_concealed_speech()` | 3858 | 69 lines |
+| `validate_llm_output_strict()` | 5170 | 130 lines |
+| `semantic_output_errors()` | 4963 | 112 lines |
+| `canonicalize_prose_markup()` | 3826 | 102 lines |
+| `_uncross_concealed_speech()` | 3950 | 69 lines |
 | `_coerce_list_valued_map()` | 128 | 57 lines |
-| `_coerce_conditions()` | 3276 | 55 lines |
+| `_coerce_conditions()` | 3368 | 55 lines |
 
 ### `mind/affect.py`
 
@@ -641,8 +641,8 @@
 |---|---:|---:|
 | `track_background_presences()` | 607 | 347 lines |
 | `pick_background_reactors()` | 1097 | 186 lines |
-| `promote_background_character()` | 1356 | 97 lines |
-| `auto_promote_background_characters()` | 1492 | 85 lines |
+| `promote_background_character()` | 1356 | 106 lines |
+| `auto_promote_background_characters()` | 1501 | 85 lines |
 | `_presence_speech_verdict()` | 213 | 67 lines |
 | `_at_post_within_earshot()` | 1033 | 52 lines |
 | `_is_inert_presence_candidate()` | 530 | 50 lines |
@@ -874,14 +874,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `start_story()` | 212 | 154 lines |
-| `generate_greeting()` | 368 | 62 lines |
-| `extract_greeting()` | 110 | 29 lines |
-| `_strip_greeting_wrapping()` | 436 | 29 lines |
-| `_substitute_player_slot()` | 67 | 22 lines |
-| `player_handle_for()` | 91 | 17 lines |
-| `_usable_stored_extraction()` | 141 | 17 lines |
-| `_override_narrator()` | 169 | 13 lines |
+| `_seed_mind_state()` | 350 | 144 lines |
+| `start_story()` | 653 | 108 lines |
+| `generate_greeting()` | 763 | 62 lines |
+| `_seed_minds()` | 548 | 57 lines |
+| `_route_mind_memories()` | 293 | 55 lines |
+| `_seed_player_mind()` | 496 | 50 lines |
+| `claim_greeting_mind()` | 607 | 44 lines |
+| `extract_greeting()` | 121 | 35 lines |
 
 ### `story/importers.py`
 
