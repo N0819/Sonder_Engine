@@ -392,18 +392,31 @@ class TestArrivalIsTheEarningEvent:
     place itself is generated."""
 
     def test_no_mind_reads_the_ledger(self):
-        """Structural, not instructed: the modules that assemble any
-        character's, director's, perceiver's, or narrator's view must not
-        name the obligation ledger. The mapping stage — where a place
-        becomes rooms — is the single legitimate reader."""
+        """Structural, not instructed: no module that assembles any
+        character's, director's, perceiver's or narrator's view may name the
+        obligation ledger. The mapping stage — where a place becomes rooms —
+        is the single legitimate reader.
+
+        Enumerated from the package rather than hand-listed. The six names
+        this replaces were the payload assemblers `agents/` had when the rule
+        was written; the package has since grown `director_views.py`,
+        `director_fanout.py`, `composer.py` and the rest, and a leak into any
+        of them was invisible to a list nobody was going to remember to
+        extend. Every file except the allowed reader is now checked, so a new
+        assembler is covered on the day it lands."""
         import pathlib
 
         agents_dir = pathlib.Path(__file__).resolve().parent.parent / "agents"
-        for module in ("character.py", "director.py", "perception.py",
-                       "narration.py", "background.py", "loops.py"):
-            src = (agents_dir / module).read_text(encoding="utf-8")
-            assert "place_obligations" not in src, module
-            assert "owed_history" not in src, module
+        allowed = {"mapping.py"}
+        checked = 0
+        for path in sorted(agents_dir.rglob("*.py")):
+            if path.name in allowed:
+                continue
+            src = path.read_text(encoding="utf-8")
+            assert "place_obligations" not in src, path
+            assert "owed_history" not in src, path
+            checked += 1
+        assert checked > 6, "the package enumeration found nothing to check"
         mapping_src = (agents_dir / "mapping.py").read_text(encoding="utf-8")
         assert "owed_history" in mapping_src
 
