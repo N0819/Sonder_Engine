@@ -479,10 +479,20 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
     jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
             for k in members]
     yield from _stream_parallel(bus, jobs, holders)
+    # Every member has ALREADY finished by the time this loop runs --
+    # `_stream_parallel` joins them all. Raising on the first failure in plan
+    # order therefore threw away the paid, completed output of any sibling
+    # that came later and succeeded: unsaved, unset on ctx, and re-run from
+    # scratch on the resume. The pairings exist to save provider latency, so
+    # discarding a finished call is the one cost they must not have. Save what
+    # succeeded, then raise the first failure in plan order exactly as before.
+    failure = None
     for k, lbl in group:
         h = holders[k]
         if "e" in h:
-            raise h["e"]
+            if failure is None:
+                failure = h["e"]
+            continue
         ctx[k] = h["v"]
         saved = _with_engine_notes(
             h["v"], ctx, k, parallel_with=[m for m in members if m != k])
@@ -490,6 +500,8 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
                                 reasoning=h.get("reasoning"))
         _extension_step_saved(ctx, k, saved)
         yield _evt(k, lbl, sid, vid, n, saved)
+    if failure is not None:
+        raise failure
 
 
 def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
