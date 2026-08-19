@@ -8,7 +8,7 @@ shared helpers directly, so a change to one is a change to both by
 construction.
 """
 
-from agents.director_movement import (
+from agents.director import (
     _declared_movers,
     _edge_to,
     _pending_legs,
