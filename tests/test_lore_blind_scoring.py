@@ -21,7 +21,23 @@ import numpy as np
 
 from mind import memory
 from tests.helpers import patch_provider_seam
+from tests.helpers import patch_seam
 
+
+
+def _no_keyword_scoring(monkeypatch):
+    """Kill the keyword half so a test can watch the semantic half alone.
+
+    Not `setattr(memory, "_kw_scores", ...)`. `search_lore` lives in
+    `memory_lore_entries` and resolves the scorer in its OWN globals, so a
+    patch on the facade rebinds a name nothing reads -- and every test in this
+    file went on passing with the real scorer running. `patch_seam` rebinds
+    each binding of the original object, and the assertion states the reader
+    was actually covered rather than trusting that it was.
+    """
+    bindings = patch_seam(monkeypatch, "mind.memory_common", "_kw_scores",
+                          lambda table, query: {})
+    assert ("mind.memory_lore_entries", "_kw_scores") in bindings, bindings
 
 def _unit_vector(dims):
     """Exactly `dims` float32s, and the assertion is the point.
@@ -77,7 +93,7 @@ def test_a_stale_vector_is_counted_rather_than_silently_scoring_zero(
     _entry(temp_db, book, "Third Floor", "Tamamo's quarters, the roost", 256)
     _entry(temp_db, book, "Main Hall", "the shrine's first floor", 2560)
     _stub_embedder(monkeypatch, 2560)
-    monkeypatch.setattr(memory, "_kw_scores", lambda table, query: {})
+    _no_keyword_scoring(monkeypatch)
 
     with caplog.at_level("WARNING"):
         memory.search_lore([book], "where is the third floor", k=8)
@@ -93,7 +109,7 @@ def test_a_corpus_that_matches_the_model_says_nothing(temp_db, monkeypatch,
     book = _book(temp_db)
     _entry(temp_db, book, "Main Hall", "the shrine's first floor", 2560)
     _stub_embedder(monkeypatch, 2560)
-    monkeypatch.setattr(memory, "_kw_scores", lambda table, query: {})
+    _no_keyword_scoring(monkeypatch)
 
     with caplog.at_level("WARNING"):
         memory.search_lore([book], "the main hall", k=8)
@@ -110,7 +126,7 @@ def test_the_stale_entry_still_comes_back_rather_than_being_dropped(
     book = _book(temp_db)
     stale = _entry(temp_db, book, "Third Floor", "the roost", 256)
     _stub_embedder(monkeypatch, 2560)
-    monkeypatch.setattr(memory, "_kw_scores", lambda table, query: {})
+    _no_keyword_scoring(monkeypatch)
 
     got = memory.search_lore([book], "roost", k=8)
     assert [row["id"] for row in got] == [stale]
