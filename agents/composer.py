@@ -1429,9 +1429,20 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:
-            return selected.render_view(
+            out = selected.render_view(
                 percepts, mode=mode, prev_standing=prev_standing,
                 prev_described=prev_described, full_render=full_render)
+            # The tolerance below covered only a RAISE. An adapter that
+            # returned successfully with a dict, a tuple or the bare text --
+            # the shapes a pack gets wrong first -- went straight through,
+            # and the caller read `.text`, `.standing_keys` and `.described`
+            # off it one stage later, outside every guard. Checked here so a
+            # malformed return costs the same as a malformed raise.
+            if not isinstance(out, RenderedView):
+                raise TypeError(
+                    f"language renderer returned {type(out).__name__}, "
+                    "not RenderedView")
+            return out
         except Exception:
             # A view is what an observer perceives at all. A malformed pack
             # must cost wording, never the whole beat, so fall through to the
