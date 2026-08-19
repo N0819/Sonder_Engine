@@ -3676,6 +3676,15 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          "encoding_arousal": r["encoding_arousal"],
          "archived": bool(r["archived"]), "event_key": r["event_key"],
          "importance": r["importance"], "disputed": r["disputed"] or "",
+         # How often this memory came back to the character, and when it last
+         # did. The engine never reads either column; `tools/remember_lines.py`
+         # and `tools/salience_replay.py` read them as their whole answer, so a
+         # bank that forgets them on every reroll, branch or import has a
+         # denominator that silently resets to zero. Neither is re-derivable
+         # from anything -- the same argument `importance` and `disputed` are
+         # carried on, one line up.
+         "access_count": r["access_count"] or 0,
+         "last_accessed": r["last_accessed"],
          # Stored vectors travel with the dump so restore can put them
          # back byte-identically instead of re-embedding the entire
          # memory bank on every checkpoint restore (expensive, and a
@@ -3740,6 +3749,10 @@ def prepare_chat_memory_restore(chat_id, mems):
             "importance": m.get("importance"),
             "disputed": m.get("disputed") or "",
         }
+        # Restored after the insert, beside `archived`: `prepare_memory`
+        # describes a memory as it was FORMED, and neither of these is part of
+        # that -- they are the record of it being read since.
+        history = (int(m.get("access_count") or 0), m.get("last_accessed"))
         full_blob = _b64_to_blob(m.get("embedding"))
         cue_blob = _b64_to_blob(m.get("cue_embedding"))
         model = m.get("embedding_model") or ""
@@ -3761,9 +3774,11 @@ def prepare_chat_memory_restore(chat_id, mems):
                 "mode": "direct", "source": m, "data": prepare_memory(**item),
                 "full_vec": full_vec, "cue_vec": cue_vec,
                 "meta": _StoredEmbeddingMeta(model, int(dim)),
+                "retrieval_history": history,
             })
         else:
-            entries.append({"mode": "legacy", "source": m})
+            entries.append({"mode": "legacy", "source": m,
+                            "retrieval_history": history})
             legacy_items.append(item)
     legacy_batch = prepare_memories_batch(legacy_items) if legacy_items else None
     return {"entries": entries, "legacy_batch": legacy_batch}
@@ -3799,6 +3814,10 @@ def apply_chat_memory_restore(chat_id, plan):
                 li += 1
             if entry["source"].get("archived"):
                 qi("UPDATE memories SET archived=1 WHERE id=?", (mid,))
+            count, last = entry.get("retrieval_history") or (0, None)
+            if count or last is not None:
+                qi("UPDATE memories SET access_count=?, last_accessed=? "
+                   "WHERE id=?", (int(count), last, mid))
 
 def restore_chat_memories(chat_id, mems):
     apply_chat_memory_restore(chat_id, prepare_chat_memory_restore(chat_id, mems))
