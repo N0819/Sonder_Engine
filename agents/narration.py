@@ -53,6 +53,7 @@ from story.character_schema import (
     persona_appearance,
 )
 
+from . import composer
 from .common import (
     _agent_json,
     extra_parts_lines,
@@ -274,10 +275,18 @@ def _standing_substance_clauses(scene, you):
     return clauses
 
 
-#: Payload order for the manifest -- the fixed vocabulary of
-#: `composer.CHANNELS` minus `mixed`, which appears only when a merged span
-#: actually crossed channels (absent-when-empty, like the key itself).
-_MANIFEST_CHANNELS = ("sight", "hearing", "touch", "smell", "interoception")
+#: Payload order for the manifest -- DERIVED from `composer.CHANNELS` minus
+#: `mixed`, which appears only when a merged span actually crossed channels
+#: (absent-when-empty, like the key itself).
+#:
+#: It was a hand-written literal under a comment that said "the fixed
+#: vocabulary of composer.CHANNELS": two lists of one thing, agreeing today.
+#: A seventh channel added to the composer would be built into percepts,
+#: survive `observations_from_render`, arrive in `by_channel` -- and be
+#: dropped from the narrator payload by the loop below, silently, because the
+#: loop iterates this tuple. Derived, the same addition surfaces as a missing
+#: `statuses` entry, which the loop states rather than swallows.
+_MANIFEST_CHANNELS = tuple(c for c in composer.CHANNELS if c != "mixed")
 
 
 def _sensory_channels_manifest(scene, player_name, view, observations,
@@ -391,7 +400,13 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     }
     manifest = {}
     for channel in _MANIFEST_CHANNELS:
-        status, why = statuses[channel]
+        # A channel the composer can mint and this function has no delivery
+        # rule for is a gap, and it says so. Dropping it -- which is what a
+        # hand-written vocabulary did by omission -- would tell the narrator
+        # the sense is absent, which is a stronger claim than "not computed".
+        status, why = statuses.get(
+            channel, ("unknown", "no delivery status is computed for this "
+                                 "channel yet"))
         entry = {"status": status}
         if why:
             entry["why"] = why
