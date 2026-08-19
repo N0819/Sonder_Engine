@@ -361,7 +361,6 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         scoped = weather_for_room(scene, p_room) or {}
     except Exception:
         scoped = {}
-    sight_standing = list(weather_words(scoped, "sight"))
     hearing_standing = list(weather_words(scoped, "sound"))
     if scoped.get("falls_on_you"):
         touch_standing.append("%s %s falling on you"
@@ -369,9 +368,22 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     if scoped.get("wind_reaches"):
         touch_standing.append("%s on your skin" % scoped["wind"])
 
+    # THE STATUS DECIDES, AND IT IS DECIDED FIRST. This was built the other way
+    # round: `sight_standing` was filled from the weather and then
+    # unconditionally appended with `light: {light}`, so the sight entry's
+    # standing list was never empty -- and `sight_status` was computed ten
+    # lines later, where it can come back "silent". `weather_words`' sight arm
+    # gates on room EXPOSURE (sky_visible / falls_on_you / wind_reaches),
+    # never on light, so an exposed room at night handed the narrator
+    # {"status": "silent", "why": "no light reaches this room",
+    #  "standing": ["storm sky", "heavy rain", "light: dark"]}.
+    #
+    # Not a firewall breach -- the weather is legitimately the player's, and
+    # they can hear it and feel it on the other two channels. But the payload
+    # contradicted itself in the one field the prompt's SENSORY CHANNELS block
+    # is told to read as authoritative, and a reader resolves that either way
+    # they like.
     light = effective_light(scene, p_room)
-    sight_standing.append(f"light: {light}")
-
     if light == "dark":
         # Content wins over aperture: a filling light source or a percept
         # that legitimately rode sight this beat means SOMETHING is seen.
@@ -382,6 +394,12 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         sight_status = ("degraded", "dim light -- shapes, not detail")
     else:
         sight_status = ("live", "")
+
+    # Silent means nothing is standing on this channel. The reason the player
+    # cannot see is already in `why`, so `light: dark` beside it would be the
+    # same fact a second time and the only copy shaped like content.
+    sight_standing = [] if sight_status[0] == "silent" else [
+        *weather_words(scoped, "sight"), f"light: {light}"]
 
     touch_live = bool(touch_standing or by_channel.get("touch"))
     statuses = {
