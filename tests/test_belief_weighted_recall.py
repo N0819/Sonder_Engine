@@ -72,6 +72,33 @@ def test_credence_is_none_for_a_claim_no_hypothesis_carries():
     assert belief_credence(state, "Nobody", "anything", turn_idx=1) is None
 
 
+def test_credence_asks_the_same_matcher_the_merge_asks():
+    """One rule decides "same belief", or the two answers drift.
+
+    The merge drops the SUBJECT's own tokens before comparing claims --
+    naming the room inside the claim is ordinary phrasing, and without the
+    drop "Chamber 0505 has a toppled bench" and "Chamber 0505 is empty and
+    swept" score 0.5 on "chamber" and "0505" alone.  belief_credence asked
+    the same question without that argument, so a claim the merge keeps as a
+    SEPARATE hypothesis could still take its credence from the one it was
+    kept separate from.
+    """
+    state = apply_mind_model_updates(
+        {}, [{"about_entity": "Chamber 0505",
+              "claim": "Chamber 0505 has a toppled bench",
+              "kind": "stated_fact", "confidence": 0.9}], turn_idx=1)
+    # The merge's verdict on this pair: two beliefs, not one.
+    merged = apply_mind_model_updates(
+        json.loads(json.dumps(state)),
+        [{"about_entity": "Chamber 0505",
+          "claim": "Chamber 0505 is empty and swept",
+          "kind": "stated_fact", "confidence": 0.5}], turn_idx=1)
+    assert len(merged["mind_models"]["Chamber 0505"]["hypotheses"]) == 2
+    # So the unheld one may not answer from the held one.
+    assert belief_credence(
+        state, "Chamber 0505", "Chamber 0505 is empty and swept", 1) is None
+
+
 def test_credence_decays_with_elapsed_turns():
     state = apply_mind_model_updates(
         {}, [{"about_entity": "Vorne", "claim": "is frightened right now",

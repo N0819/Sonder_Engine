@@ -2445,6 +2445,77 @@ hardening items are closed.
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
 
+### 1.51b A retired setting's row outlives its feature
+
+Found 2026-08-18 while checking the owner's live database for something else.
+Nothing prunes `settings` when a feature is deleted, so a retired key stays
+forever and the only symptom is that a later reader greps the tree, finds
+nothing, greps the database, and finds a row. Four of 29 keys on the live
+install have no reader anywhere in the engine:
+
+- `director_orchestration` — the flag the orchestrated Director shipped
+  behind, deleted when the monolith went (§2.18). Empty.
+- `character_reflection` — empty, and the last trace on `main` of a feature
+  that was built and then decided against. See below.
+- `host_secret`, `host_secret_hash` — the auth scheme that preceded the
+  PBKDF2 host account (`host_pw_hash`/`host_pw_salt`, both live).
+
+**Checked, because two of them are credentials: there is nothing sensitive at
+rest.** `host_secret` is empty, `host_secret_hash` is a 64-character digest
+and not a plaintext token, so `tests/test_host_secret_hashing.py`'s standing
+claim — that a readable `engine.db` never yields a working host credential —
+still holds. Inspected read-only, values never printed.
+
+**`character_reflection` deserves its own line, because the commit that
+removed it reads as more open than the decision was.** It toggled splitting
+the character step in two: CONDUCT stays pre-resolve, and a new REFLECTION
+step after `perception_outcome` lets each mind write its memory of a beat
+from what actually HAPPENED rather than from what it intended. The problem it
+addressed is real and is still here — the character loops run before
+`director_resolve`, so `remember_lines`, belief updates, mind-model updates
+and relationship updates are all authored from intent, and salience, the
+number retrieval searches on forever, tracks what a character meant to do
+rather than what landed. It also carried an engine-computed prediction-error
+gap, `choice_review`, and `held_beliefs` (a contradiction SEEN and not
+revised, recorded as an act).
+
+It landed 2026-08-12 behind a default-OFF flag and was reverted the same day
+(`415e208`), whose message says the work is intact on branch
+`character-cognition` "so nothing is lost and it can be argued again on its
+own terms later".
+
+**The owner's answer, 2026-08-18: minds already reflect — it happens on the
+next turn.** And checking that against the code turns up the stronger
+version, which is worth stating because the reflection split's premise does
+not survive it.
+
+There are TWO numbers on a memory, deliberately. `salience` is how much it
+mattered WHEN IT WAS FORMED — intent-shaped by definition, because intent is
+what the mind knew then. `importance` is the revisable one, and
+`effective_importance` falls back to salience until something revises it.
+**Retrieval ranks on `effective_importance`**, so a later correction reaches
+the ordering the split was worried about. `raise_importance` states the
+division outright: *"Never lowers, and never touches `salience` -- how much
+it mattered when it was FORMED is a different fact."* The dispute path goes
+further and moves importance UP when a memory turns out to have been wrong,
+on the grounds that "a memory whose meaning changed is more central to this
+mind, not less."
+
+So intent-shaped salience is not a defect to be fixed at write time. It is a
+true record of what a mind understood then, and the correction is a separate
+fact that arrives when the consequence does — one beat later, through a
+channel that already exists. Re-proposing the split needs an argument against
+THAT, not a rerun of the old one.
+
+So this is tidiness, not a defect, and it is registered rather than repaired
+because the repair writes to live stories: a migration deleting retired keys
+runs on the owner's database at next launch, and that is their call to make.
+What makes it worth writing down is the CLASS. A settings key is the one kind
+of configuration the engine cannot check — `tools/project_check.py` reads the
+tree and the tree is exactly where a retired key is absent. Anything that
+enforces this has to compare a list of live keys against a database, which
+means the list has to exist first.
+
 ### 1.52 The monolith-split audit: 43 findings, 20 repaired, 23 open
 
 The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and `agents/director.py`

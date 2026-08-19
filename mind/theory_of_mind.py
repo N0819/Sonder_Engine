@@ -40,9 +40,18 @@ import re
 #   (already existed as _TOM_CONFIDENCE_CAPS before this module).
 # plasticity: how much one new consistent data point moves the belief on
 #   reinforcement, and how strongly a competing claim can suppress it.
-# half_life: turns until an unreinforced belief's confidence decays by
-#   half. Deliberately not just the inverse of plasticity — "how fast a
+# half_life: how long an unreinforced belief takes to lose half its
+#   confidence. Deliberately not just the inverse of plasticity — "how fast a
 #   belief updates" and "how fast it fades from disuse" are dissociable.
+#
+#   THE UNIT IS WHATEVER THE CALLER MEASURES ELAPSED IN, and there are two.
+#   `_elapsed` returns MINUTES of simulation time when the caller supplies
+#   `elapsed_seconds` (the commit path always does, for a chat on the
+#   simulation clock) and TURNS otherwise. So `emotion: 6` is six minutes in
+#   a clocked story and six beats in an unclocked one. That is defensible and
+#   deliberate -- a belief about how someone feels should fade in lived time,
+#   not in beats, and a story with no clock has nothing else to fade in --
+#   but the numbers cannot be read without knowing which story you are in.
 
 _DEFAULT_KIND = "goal"
 
@@ -194,7 +203,12 @@ def effective_kind(declared, claim):
 
 
 def decayed_confidence(confidence, kind, turns_elapsed):
-    """Exponential (Ebbinghaus-style) decay of an unreinforced belief."""
+    """Exponential (Ebbinghaus-style) decay of an unreinforced belief.
+
+    `turns_elapsed` is named for the unit it had first, and carries MINUTES
+    whenever the caller had a simulation clock to measure with -- see the
+    half-life table's note above.
+    """
     conf = _clamp01(confidence, fallback=0.0)
     try:
         elapsed = max(0.0, float(turns_elapsed or 0))
@@ -245,6 +259,34 @@ def claim_similarity(a, b, ignore=None):
         return 1.0
     overlap = len(ta & tb)
     return overlap / min(len(ta), len(tb))
+
+def _same_belief(hyps, indices, claim, about):
+    """Which of `indices` names the hypothesis that IS `claim`, or None.
+
+    The only place that answers "are these two the same belief". It used to be
+    answered twice -- once by the merge and once by `belief_credence` -- and
+    the two copies drifted: the merge learned to drop the subject's own tokens
+    before comparing (see `claim_similarity`) and the credence read did not, so
+    a claim the merge had deliberately kept as a SEPARATE hypothesis could
+    still take its confidence from the hypothesis it had been kept apart from.
+    Two rules for one question is the defect; one function is the fix.
+
+    `indices` is the caller's scope -- the merge passes the same-kind group,
+    because a new claim only competes with (and only reinforces) its own kind;
+    a reader with no declared kind passes them all.
+    """
+    best_idx, best_sim = None, 0.0
+    for i in indices:
+        hyp = hyps[i]
+        if not isinstance(hyp, dict):
+            continue
+        sim = claim_similarity(claim, str(hyp.get("claim") or ""), ignore=about)
+        if sim > best_sim:
+            best_sim, best_idx = sim, i
+    if best_idx is None or best_sim < _SIMILARITY_THRESHOLD:
+        return None
+    return best_idx
+
 
 def _elapsed(hypothesis, turn_idx, elapsed_seconds=None):
     if elapsed_seconds is not None and hypothesis.get("last_updated_seconds") is not None:
@@ -363,14 +405,9 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
         group = [i for i, h in enumerate(hyps)
                  if isinstance(h, dict) and _kind_or_default(h.get("kind")) == kind]
 
-        best_idx, best_sim = None, 0.0
-        for i in group:
-            sim = claim_similarity(claim, str(hyps[i].get("claim") or ""),
-                                   ignore=about)
-            if sim > best_sim:
-                best_sim, best_idx = sim, i
+        best_idx = _same_belief(hyps, group, claim, about)
 
-        if best_idx is not None and best_sim >= _SIMILARITY_THRESHOLD:
+        if best_idx is not None:
             existing = hyps[best_idx]
             decayed_old = _live_confidence(existing, turn_idx, elapsed_seconds)
             # A belief reached while the body had the mind, revisited now that
@@ -525,26 +562,30 @@ def belief_credence(state, about_entity, claim, turn_idx, elapsed_seconds=None):
     believes NOW about a claim they made earlier. This is that question.
 
     Returns the decay-adjusted confidence of the best-matching hypothesis above
-    _SIMILARITY_THRESHOLD -- the same threshold and the same matcher the merge
-    itself uses, so a memory and a hypothesis are judged "the same belief" by
-    one rule rather than two that can drift apart.
+    _SIMILARITY_THRESHOLD -- literally the same matcher the merge itself calls
+    (`_same_belief`), so a memory and a hypothesis are judged "the same belief"
+    by one rule rather than by two that can drift apart. They did drift: this
+    read once compared claims without dropping the subject's own tokens, and
+    answered from hypotheses the merge had refused to fold.
     """
     models = (state or {}).get("mind_models")
     if not isinstance(models, dict):
         return None
-    model = models.get(str(about_entity or "").strip())
+    about = str(about_entity or "").strip()
+    model = models.get(about)
     if not isinstance(model, dict):
         return None
-    best, best_sim = None, 0.0
-    for hyp in model.get("hypotheses") or []:
-        if not isinstance(hyp, dict):
-            continue
-        sim = claim_similarity(claim, str(hyp.get("claim") or ""))
-        if sim > best_sim:
-            best_sim, best = sim, hyp
-    if best is None or best_sim < _SIMILARITY_THRESHOLD:
+    hyps = model.get("hypotheses") or []
+    # Every kind, deliberately: the question arrives as a bare claim -- an
+    # inference memory's gist, a mirrored affordance -- with no declared kind
+    # to scope by, and a character who credits "Vorne is frightened" as an
+    # emotion credits it however the claim was filed. Guessing a kind here to
+    # narrow the scan would make a mind credit less than its own evidence
+    # supports; the SUBJECT drop is what keeps the match honest.
+    best_idx = _same_belief(hyps, range(len(hyps)), claim, about)
+    if best_idx is None:
         return None
-    return _clamp01(_live_confidence(best, turn_idx, elapsed_seconds),
+    return _clamp01(_live_confidence(hyps[best_idx], turn_idx, elapsed_seconds),
                     fallback=0.0)
 
 
