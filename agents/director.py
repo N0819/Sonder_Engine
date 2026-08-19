@@ -40,12 +40,12 @@ from llm.prompts import (
     specialist_prompt,
 )
 from story.scene import (
-    IMMOBILIZING_RESTRAINTS,
     NON_AWAKE_GATED,
-    apply_restraint_diff,
+    apply_awareness_diff,
+    apply_restraint_records_diff,
     awareness_conditions,
-    restraint_map,
-    restraint_of,
+    awareness_map,
+    restraint_conditions,
     _ability_mod,
     _normalize_awareness_level,
     appearance_of,
@@ -193,6 +193,9 @@ from .director_floors import (
     _already_ended,
     _ending_condition,
     _awareness_exits,
+    _restraint_holder_in,
+    _hold_is_live,
+    _restraint_blocked_moves,
     _untracked_unconsciousness_subjects,
     _destruction_name_pattern,
     _narrated_destruction_subjects,
@@ -1380,28 +1383,29 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     # has always asked the Director to RECORD a binding; nothing ever read the
     # result, so a character bound hand and foot could still walk out. A
     # restraint that is in force -- including one applied this same beat --
-    # blocks that body from relocating itself. Everything subtler (what they
-    # can still reach, whether they can work free) stays the Director's call.
-    _rmap = apply_restraint_diff(restraint_map(ctx.chat["id"]), sd)
-    if _rmap and isinstance(sd.get("positions"), dict):
-        _prior = (sc.get("positions") or {})
-        for _who in list(sd["positions"]):
-            _record = restraint_of(_rmap, _who)
-            if not _record or _record["level"] not in IMMOBILIZING_RESTRAINTS:
-                continue
-            _was = _prior.get(_who)
-            if _was is None or sd["positions"][_who] == _was:
-                continue
-            # Being CARRIED somewhere while bound is legitimate -- that is the
-            # restrainer moving them, not them walking off.
-            if (sc.get("contained") or {}).get(_who):
-                continue
+    # blocks that body from relocating itself, judged per RECORD: a standing
+    # binding always, a live hold only while its named holder is co-present
+    # and conscious (`_restraint_blocked_moves`). Everything subtler (what
+    # they can still reach, whether they can work free) stays the Director's
+    # call.
+    _restraints = apply_restraint_records_diff(
+        restraint_conditions(ctx.chat["id"]), sd)
+    if _restraints:
+        _hold_amap = apply_awareness_diff(
+            awareness_map(ctx.chat["id"]), sd)
+        _holder_pool = list(tracked_names) + [
+            str(k) for k in (sc.get("positions") or {})
+        ] + [str((e or {}).get("name") or eid)
+             for eid, e in (sc.get("entities") or {}).items()]
+        for _who, _record in _restraint_blocked_moves(
+                sd, sc, _restraints, _hold_amap, _holder_pool):
             sd["positions"].pop(_who, None)
             ctx.add_warning(
                 f"Blocked a move by {_who}, who is {_record['level']}"
                 + (f" by {_record['by']}" if _record["by"] else "")
-                + ": a restrained body cannot relocate itself. Release the "
-                "restraint first, or have someone carry them."
+                + ": a restrained body cannot relocate itself. End the "
+                f"restraint (condition_id {_record['condition_id']!r}, "
+                "active:0) first, or have someone carry them."
             )
 
     signals = _strip_blank_diff_placeholders(sd)

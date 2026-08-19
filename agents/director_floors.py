@@ -18,7 +18,9 @@ from story.scene import (
     NON_AWAKE_GATED,
     _normalize_awareness_level,
     awareness_conditions,
+    awareness_of,
 )
+from world.spatial import room_of
 
 from .director_lingua import _ling
 
@@ -512,6 +514,97 @@ def _awareness_exits(chat_id, conditions, player_name, player_input,
             "engine wakes a sleeper, so an unended sleep is permanent.")
 
     return endings, warnings
+
+
+# ---------------------------------------------------------------------------
+# RESTRAINT as a relation. `story/scene.py` reads each record's rung and
+# holder; whether a record actually STOPS a body needs the scene, so it is
+# decided here. A standing record (`bound`/`encased`, or `pinned` by a mass)
+# holds with nobody attending it. A hold (`held`, or `pinned` by a body) is a
+# live relation: it is in force only while the named holder is co-present and
+# conscious, and a record that names no holder the scene can vouch for is a
+# description handed to the Director, never a floor -- measured live, the
+# holderless "held" rows are embraces whose own descriptions say "not a
+# binding restraint" (chats 50/51) and a body gripping a console lever
+# (chats 57/58), not captives.
+
+
+def _restraint_holder_in(record, candidate_names):
+    """The tracked body the record's holder field names, or None.
+
+    Live rows name the holder inside a phrase as often as bare --
+    `restrained_by: "Dr. Moon's hand"`, `enveloped_by: "Elyndra's
+    entrance"` -- so a candidate name found anywhere in the field, on its
+    own word boundaries, counts."""
+    by = str(record.get("by") or "").strip().casefold()
+    if not by:
+        return None
+    for name in candidate_names:
+        label = str(name or "").strip()
+        if not label:
+            continue
+        if label.casefold() == by or re.search(
+                name_boundary_pattern(label.casefold()), by):
+            return label
+    return None
+
+
+def _hold_is_live(record, sc, amap, candidate_names):
+    """Is a non-standing record's grip still physically in force?
+
+    True: the holder is resolvable and nothing disproves the grip.
+    False: positively broken -- the holder is in another room or below
+    waking. A grip is a live relation between two bodies; it does not
+    persist from another room or from unconsciousness.
+    None: no holder the scene can vouch for. Unknown positions keep the
+    hold (absence of data is not evidence of departure); an unresolvable
+    holder never establishes one.
+    """
+    holder = _restraint_holder_in(record, candidate_names)
+    if holder is None:
+        return None
+    if awareness_of(amap or {}, holder) in NON_AWAKE_GATED:
+        return False
+    subject_room = room_of(sc, record.get("subject"))
+    holder_room = room_of(sc, holder)
+    if subject_room and holder_room and subject_room != holder_room:
+        return False
+    return True
+
+
+def _restraint_blocked_moves(sd, sc, records, amap, candidate_names):
+    """[(who, record)] for each self-relocation this diff writes that a
+    restraint actually stops. Judged per record, because restraints are
+    additive: a body is as restrained as the strongest thing on it, and six
+    live rows on one body (chat 80) must not be masked by the vaguest.
+
+    Being CARRIED somewhere while restrained is legitimate -- that is the
+    restrainer moving them, not them walking off -- and a position write
+    that changes nothing (or first places the body) is no move at all.
+    """
+    out = []
+    positions = sd.get("positions") if isinstance(sd, dict) else None
+    if not records or not isinstance(positions, dict):
+        return out
+    prior = (sc.get("positions") or {})
+    by_subject = {}
+    for record in records:
+        by_subject.setdefault(record["subject"].casefold(), []).append(record)
+    for who in list(positions):
+        subject_records = by_subject.get(str(who).casefold())
+        if not subject_records:
+            continue
+        was = prior.get(who)
+        if was is None or positions[who] == was:
+            continue
+        if (sc.get("contained") or {}).get(who):
+            continue
+        for record in subject_records:
+            if record.get("standing") or _hold_is_live(
+                    record, sc, amap, candidate_names):
+                out.append((who, record))
+                break
+    return out
 
 
 def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,

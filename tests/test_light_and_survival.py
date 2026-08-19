@@ -222,43 +222,43 @@ class TestRestraint:
         assert restraint_of({}, "Anyone") is None
 
     def test_a_binding_this_beat_is_in_force_this_beat(self):
-        from story.scene import apply_restraint_diff, restraint_of
+        from story.scene import apply_restraint_records_diff, restraint_of
 
         diff = {"conditions": {"c1": [{
             "condition_id": "c1", "subject_id": "Hinami", "kind": "restraint",
             "state": {"level": "bound", "by": "Tamamo", "means": "rope"}}]}}
-        rmap = apply_restraint_diff({}, diff)
+        records = apply_restraint_records_diff([], diff)
 
-        assert restraint_of(rmap, "Hinami")["level"] == "bound"
-        assert restraint_of(rmap, "Hinami")["by"] == "Tamamo"
+        assert restraint_of(records, "Hinami")["level"] == "bound"
+        assert restraint_of(records, "Hinami")["by"] == "Tamamo"
 
     def test_releasing_frees_them(self):
-        from story.scene import apply_restraint_diff, restraint_of
+        from story.scene import apply_restraint_records_diff, restraint_of
 
-        held = apply_restraint_diff({}, {"conditions": {"c1": [{
+        held = apply_restraint_records_diff([], {"conditions": {"c1": [{
             "subject_id": "Hinami", "kind": "restraint",
             "state": {"level": "bound"}}]}})
-        freed = apply_restraint_diff(held, {"conditions": {"c1": [{
+        freed = apply_restraint_records_diff(held, {"conditions": {"c1": [{
             "subject_id": "Hinami", "kind": "restraint", "active": 0,
             "state": {"level": "bound"}}]}})
 
         assert restraint_of(freed, "Hinami") is None
 
     def test_an_unknown_level_degrades_to_the_mildest(self):
-        from story.scene import apply_restraint_diff, restraint_of
+        from story.scene import apply_restraint_records_diff, restraint_of
 
-        rmap = apply_restraint_diff({}, {"conditions": {"c1": [{
+        records = apply_restraint_records_diff([], {"conditions": {"c1": [{
             "subject_id": "X", "kind": "restraint",
             "state": {"level": "hogtied_with_ribbon"}}]}})
-        assert restraint_of(rmap, "X")["level"] == "held"
+        assert restraint_of(records, "X")["level"] == "held"
 
     def test_an_awareness_condition_is_not_a_restraint(self):
-        from story.scene import apply_restraint_diff
+        from story.scene import apply_restraint_records_diff
 
-        rmap = apply_restraint_diff({}, {"conditions": {"c1": [{
+        records = apply_restraint_records_diff([], {"conditions": {"c1": [{
             "subject_id": "X", "kind": "awareness",
             "state": {"level": "asleep"}}]}})
-        assert rmap == {}
+        assert records == []
 
 
 # ------------------------------------------------------------------ survival

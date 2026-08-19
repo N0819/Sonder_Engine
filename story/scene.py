@@ -1167,9 +1167,18 @@ def apply_awareness_diff(amap, diff):
 # room they are held in -- and everything subtler is handed to the Director as
 # ground truth to resolve against.
 RESTRAINT_LEVELS = ("held", "bound", "pinned", "encased")
-# Levels at which a body cannot relocate itself. All of them: "held" is the
-# mildest and still means someone else has you.
-IMMOBILIZING_RESTRAINTS = frozenset(RESTRAINT_LEVELS)
+# Rungs that hold a body with nobody attending them: a knot stays tied and a
+# casket stays shut when whoever closed it walks away. `held` is the live
+# grip of another body and cannot outlive it; `pinned` is EITHER -- a body
+# bearing down or a fallen mass -- so which it is is decided per record: a
+# `pinned` that names a holder is a live hold, one that names none is
+# standing weight. Whether a record blocks self-relocation is therefore not
+# the rung alone: standing records always do, holds only while the named
+# holder is co-present and conscious (the director floor's question, since it
+# needs the scene), and a hold that names no holder never does -- measured
+# live, the holderless "held" rows are embraces whose own descriptions say
+# "not a binding restraint" and a body gripping a lever, not captives.
+STANDING_RESTRAINTS = frozenset({"bound", "encased"})
 
 
 #: The words a model writes when it means one of the four rungs. No prompt
@@ -1210,83 +1219,183 @@ def _normalize_restraint_level(raw):
     Read DEEPEST-FIRST, because these arrive as phrases as often as tokens
     ("bound hand and foot", "held down against the flagstones") and a phrase
     naming two rungs means the stronger one: someone held down and bound is
-    bound. Unknown wording still restrains -- the story said this body cannot
-    move itself -- and only the RUNG is guessed, at `held`, which claims
-    least.
+    bound. Unknown wording is guessed at `held`, which claims least --
+    including EMPTY wording: the live corpus holds a restraint row whose
+    whole state is the string "active" (chat 44), and now that the rung
+    decides whether a body can move with nobody holding it, handing the
+    strongest reading (`bound`, immobilising forever) to the weakest
+    evidence would jail a body on a record that says nothing.
     """
     level = str(raw or "").strip().casefold()
     if not level:
-        return "bound"
+        return "held"
     if level in RESTRAINT_LEVELS:
         return level
+    # `wrist_and_ankle_restraints_on_metal_chair` is a sentence a model wrote
+    # in the only punctuation a token field invites. An underscore is a WORD
+    # character to a regex, so word-boundary cues read the whole thing as one
+    # unknown word unless the separators become separators.
+    level = _re.sub(r"[^a-z0-9]+", " ", level).strip()
     for rung, cues in _RESTRAINT_SYNONYMS:
         for cue in cues:
-            if _re.search(r"\b%s\b" % _re.escape(cue), level):
+            if _re.search(r"\b%ss?\b" % _re.escape(cue), level):
                 return rung
     return "held"
 
 
-def restraint_map(chat_id):
-    """Active `restraint` conditions, keyed casefolded subject -> record.
+#: Where the rung is written. `level` is what the schema asks for and what no
+#: live row carries; `restraint_type` ("metal_cuffs", "chair_restraints") and
+#: `type` ("grip", "held_in_embrace") are what beats actually use.
+_RESTRAINT_LEVEL_FIELDS = ("level", "restraint_type", "type")
 
-    Mirrors awareness_map. Only restrained subjects appear; everyone else is
-    free by absence, so a chat that never restrains anyone is untouched.
+#: Where the holder is written. Live rows say `restrained_by: "Dr. Moon"`,
+#: `blocked_by: "The Doctor"` and `enveloped_by: "Elyndra's entrance"` where
+#: the schema would say `by`. Only holder-shaped names: `binding_to` and
+#: `anchor` name what a binding is FASTENED to, which is standing hardware,
+#: never a grip that a departure or a knockout could break.
+_RESTRAINT_BY_FIELDS = ("by", "restrained_by", "held_by", "blocked_by",
+                        "pinned_by", "enveloped_by")
+
+
+def _restraint_field(state, payload, fields):
+    for field in fields:
+        raw = state.get(field) if isinstance(state, dict) else None
+        if raw is None and isinstance(payload, dict):
+            raw = payload.get(field)
+        if str(raw or "").strip():
+            return str(raw).strip()
+    return ""
+
+
+def _restraint_record(cond, condition_id, fallback_subject="",
+                      row_started=None):
+    """One restraint as a RELATION: who is held, at which rung, by whom,
+    under which condition_id an ending must be re-emitted. None when the
+    payload names no subject."""
+    state = _condition_state(cond)
+    subject = str((cond.get("subject_id") if isinstance(cond, dict) else "")
+                  or fallback_subject or "").strip()
+    if not subject:
+        return None
+    raw_level = _restraint_field(state, cond, _RESTRAINT_LEVEL_FIELDS)
+    level = _normalize_restraint_level(raw_level)
+    by = _restraint_field(state, cond, _RESTRAINT_BY_FIELDS)
+    try:
+        started = float(cond.get("started_at_seconds")
+                        if cond.get("started_at_seconds") is not None
+                        else row_started or 0.0)
+    except (TypeError, ValueError):
+        started = 0.0
+    return {
+        "condition_id": str(condition_id),
+        "subject": subject,
+        "level": level,
+        "by": by,
+        "means": str(state.get("means") or "").strip() or raw_level,
+        "escapable_by": str(state.get("escapable_by") or "").strip(),
+        # Does this record hold with nobody attending it? `bound`/`encased`
+        # always; `pinned` only when it names no holder (a mass, not a body).
+        "standing": (level in STANDING_RESTRAINTS
+                     or (level == "pinned" and not by)),
+        "started_at_seconds": started,
+        "payload": cond if isinstance(cond, dict) else {},
+    }
+
+
+def restraint_conditions(chat_id):
+    """EVERY active restraint condition row, uncollapsed, in the story's order.
+
+    Mirrors `awareness_conditions`, and for the same reason: one body
+    routinely carries several active rows at once (live chat 80 holds six
+    redescriptions of the same cuffs), and RELEASING them means deactivating
+    each by its own `condition_id` -- a caller holding only a collapsed map
+    cannot end anything.
     """
-    out = {}
+    rows = []
     for row in q(
-        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
-        "AND kind='restraint' AND active=1", (chat_id,),
+        "SELECT condition_id, subject_id, payload, started_at "
+        "FROM world_conditions WHERE chat_id=? AND kind='restraint' "
+        f"AND active=1 {_CONDITION_ORDER}", (chat_id,),
     ):
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
             payload = {}
-        state = _condition_state(payload)
-        subject = str(payload.get("subject_id") or row["subject_id"] or "").strip()
-        if not subject:
-            continue
-        out[subject.casefold()] = {
-            "subject": subject,
-            "level": _normalize_restraint_level(state.get("level")),
-            "by": str(state.get("by") or "").strip(),
-            "means": str(state.get("means") or "").strip(),
-            "escapable_by": str(state.get("escapable_by") or "").strip(),
-        }
-    return out
+        if not isinstance(payload, dict):
+            payload = {}
+        record = _restraint_record(payload, row["condition_id"],
+                                   fallback_subject=row["subject_id"],
+                                   row_started=row["started_at"])
+        if record:
+            rows.append(record)
+    # The clock the records themselves publish, exactly as
+    # `awareness_conditions` sorts (the SQL clause above breaks ties).
+    rows.sort(key=lambda r: r["started_at_seconds"])
+    return rows
 
 
-def apply_restraint_diff(rmap, diff):
+def apply_restraint_records_diff(records, diff):
     """Overlay a not-yet-committed diff's restraint conditions, so a binding
-    that happens THIS beat is in force for the same beat's resolution."""
-    out = dict(rmap or {})
+    applied THIS beat is in force for the same beat's resolution and a
+    release this beat frees the body the same beat. Keyed by condition_id:
+    a re-emission replaces its own record and an ending (falsy `active`)
+    removes it, leaving the subject's OTHER records standing."""
+    out = list(records or [])
     for _cid, cond_list in ((diff or {}).get("conditions") or {}).items():
         if not isinstance(cond_list, list):
             cond_list = [cond_list]
         for cond in cond_list:
             if not isinstance(cond, dict) or cond.get("kind") != "restraint":
                 continue
-            subject = str(cond.get("subject_id") or "").strip()
-            if not subject:
-                continue
-            key = subject.casefold()
-            state = _condition_state(cond)
-            if not int(cond.get("active", 1)):
-                out.pop(key, None)          # released this beat
-                continue
-            out[key] = {
-                "subject": subject,
-                "level": _normalize_restraint_level(state.get("level")),
-                "by": str(state.get("by") or "").strip(),
-                "means": str(state.get("means") or "").strip(),
-                "escapable_by": str(state.get("escapable_by") or "").strip(),
-            }
+            cond_id = str(cond.get("condition_id") or _cid)
+            out = [r for r in out if r["condition_id"] != cond_id]
+            try:
+                if not int(cond.get("active", 1)):
+                    continue                # released this beat
+            except (TypeError, ValueError):
+                pass
+            record = _restraint_record(cond, cond_id)
+            if record:
+                out.append(record)
     return out
 
 
-def restraint_of(chat_id_or_map, name):
-    """The restraint record for `name`, or None when free (fail-open)."""
-    rmap = chat_id_or_map if isinstance(chat_id_or_map, dict) \
-        else restraint_map(chat_id_or_map)
+def _restraint_depth(record):
+    """How much a record claims: standing beats live, then the ladder, then
+    recency -- so a vague late redescription cannot mask the cuffs."""
+    try:
+        rung = RESTRAINT_LEVELS.index(record["level"])
+    except ValueError:
+        rung = 0
+    return (1 if record.get("standing") else 0, rung,
+            record.get("started_at_seconds") or 0.0)
+
+
+def restraint_map(chat_id_or_records):
+    """Collapsed view: casefolded subject -> the STRONGEST active record.
+
+    Restraints are additive facts, not exclusive states like awareness
+    levels -- a body can be gripped AND cuffed, and each is separately true
+    -- so the collapse takes the record that claims most rather than the
+    newest. Only restrained subjects appear; everyone else is free by
+    absence, so a chat that never restrains anyone is untouched.
+    """
+    records = (chat_id_or_records if isinstance(chat_id_or_records, list)
+               else restraint_conditions(chat_id_or_records))
+    out = {}
+    for record in records:
+        key = record["subject"].casefold()
+        if key not in out or _restraint_depth(record) > _restraint_depth(out[key]):
+            out[key] = record
+    return out
+
+
+def restraint_of(chat_id_or_records, name):
+    """The strongest restraint record for `name`, or None when free
+    (fail-open). Accepts a chat_id (queries), a record list, or a prebuilt
+    restraint_map."""
+    source = chat_id_or_records
+    rmap = source if isinstance(source, dict) else restraint_map(source)
     return rmap.get(str(name or "").casefold())
 
 
