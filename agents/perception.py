@@ -281,19 +281,6 @@ def _previous_open_group_continuity(
     return True
 
 
-def _addresses(intended_target, observer_name):
-    """True when a dialogue line's intended_target names this observer. The
-    target may be a single name or a list; comparison is casefolded. Used to
-    route a comm-channel transmission to the party it was addressed to, across
-    a physical barrier (see the medium:'comm' handling in perception_outcome)."""
-    if not intended_target or not observer_name:
-        return False
-    targets = intended_target if isinstance(intended_target, (list, tuple)) \
-        else [intended_target]
-    on = str(observer_name).casefold()
-    return any(str(t).casefold() == on for t in targets)
-
-
 def _dialogue_hear_level(entry, rel, observer_name, proximity=None):
     """Audibility of one dialogue entry to an observer.
 
@@ -808,6 +795,7 @@ from .common import (
     _scrub_unknown_identities,
     _mask_quoted_spans,
     _unmask_quoted_spans,
+    _VIEW_MASK,
     _scrub_invented_dialogue,
     _scrub_undeclared_player_speech,
     _compose_residue_view,
@@ -3530,7 +3518,17 @@ def _composer_extra_parts(ctx, p_name):
     return cached
 
 
-_MASK_TOKEN = re.compile("\x00Q\\d+\x00")
+# DERIVED from the one definition of the wire format, never re-spelled.
+# `common._VIEW_MASK` is what `_mask_quoted_spans` actually emits; this
+# module used to carry a second spelling of the same token, so changing the
+# mask in common.py would have silently disarmed the refusal check below --
+# the check that stops a self-narration cut from taking a reader's delivered
+# line with it. It would not have raised, it would have stopped matching.
+# `.split` rather than a regex over the format string, so a format that stops
+# having exactly one `%d` fails here and loudly.
+_MASK_PREFIX, _MASK_SUFFIX = _VIEW_MASK.split("%d")
+_MASK_TOKEN = re.compile(
+    re.escape(_MASK_PREFIX) + r"\d+" + re.escape(_MASK_SUFFIX))
 
 
 def _strip_self_narration_quote_safe(view, perceiver_name, other_names=()):
