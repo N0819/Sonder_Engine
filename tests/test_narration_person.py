@@ -3,12 +3,23 @@ narrator renders the player character in (first/second/third), inferred
 from how the player phrased their own input.
 
 Covers two layers:
-  - agents.common._detect_narration_person / _narration_person_counts:
-    the per-turn evidence count, hardened against name/verb collisions and
-    ambiguous object/possessive pronouns.
+  - agents.common._narration_person_counts: the per-turn evidence count,
+    hardened against name/verb collisions and ambiguous object/possessive
+    pronouns.
   - agents.narration._resolve_narration_person: the campaign-level resolver,
     whose hysteresis stops a single stray token from flipping an already
-    established narration person.
+    established narration person. It is also where a per-turn verdict is
+    REACHED -- the counts are turned into a person here and nowhere else.
+
+The per-turn cases below used to run against `agents.common
+._detect_narration_person`, a second verdict function with no production
+caller: the resolver reaches its own verdict inline from the same counts, so
+the two could have disagreed and only one of them was ever consulted. They now
+drive the resolver on a fresh story, where nothing is established and the
+verdict is this turn's alone. One difference of shape, and it is the truth
+rather than a loosening: a turn with no signal at all returns the default
+"second" instead of None, because a narrator has to render the beat in
+something.
 """
 
 from __future__ import annotations
@@ -17,7 +28,7 @@ import time
 
 import pytest
 
-from agents.common import _detect_narration_person, _narration_person_counts
+from agents.common import _narration_person_counts
 from agents.narration import _resolve_narration_person
 from core.db import wget, wset
 
@@ -30,28 +41,41 @@ from core.db import wget, wset
     ("I push through the door.", "Alex", {"subj": "he"}, "first"),
     ("Alex opens the door. He steps inside.", "Alex", {"subj": "he"}, "third"),
     ("Grace steps into the light.", "Grace", {"subj": "she"}, "third"),
-    # Pure imperative (the IF default): no person signal at all.
-    ("Open the door and look under the bed.", "Alex", {"subj": "he"}, None),
+    # Pure imperative (the IF default): no person signal at all, so the
+    # fallback answers and nothing is established.
+    ("Open the door and look under the bed.", "Alex", {"subj": "he"}, "second"),
     # First-person plural is recognised.
     ("We move north together.", "Alex", {"subj": "he"}, "first"),
 ])
-def test_detect_clean_cases(raw, name, pronouns, expected):
-    assert _detect_narration_person(raw, name, pronouns) == expected
+def test_detect_clean_cases(temp_db, raw, name, pronouns, expected):
+    cid = _new_chat(temp_db)
+    assert _resolve_narration_person(cid, raw, name, pronouns) == expected
 
 
-def test_name_that_is_also_a_common_word_does_not_force_third():
+def test_a_turn_with_no_person_signal_establishes_nothing(temp_db):
+    """The distinction the old None carried: answering "second" for this beat
+    is not the same as deciding the story is written in second person."""
+    cid = _new_chat(temp_db)
+    assert _resolve_narration_person(
+        cid, "Open the door and look under the bed.", "Alex",
+        {"subj": "he"}) == "second"
+    assert wget(cid, "narration_person", None) is None
+
+
+def test_name_that_is_also_a_common_word_does_not_force_third(temp_db):
     # "will" the auxiliary verb must not be read as the character named
     # "Will" -- otherwise ordinary first-person input scores a spurious
     # third-person hit and the true 'first' signal gets tied out to None.
-    assert _detect_narration_person("I will open the door.", "Will",
-                                    {"subj": "he"}) == "first"
+    cid = _new_chat(temp_db)
+    assert _resolve_narration_person(cid, "I will open the door.", "Will",
+                                     {"subj": "he"}) == "first"
     counts = _narration_person_counts("I will open the door.", "Will",
                                       {"subj": "he"})
     assert counts["third"] == 0
     assert counts["first"] == 1
 
 
-def test_object_pronoun_for_someone_else_is_not_player_third_person():
+def test_object_pronoun_for_someone_else_is_not_player_third_person(temp_db):
     # The player narrates in first person and mentions another character as
     # "her"; that object pronoun must not be counted as the PLAYER being
     # narrated in third person -- even when the player's own pronoun set
@@ -60,8 +84,9 @@ def test_object_pronoun_for_someone_else_is_not_player_third_person():
         "I gave her the key and left.", "Alex",
         {"subj": "she", "obj": "her", "poss": "her"})
     assert counts["third"] == 0
-    assert _detect_narration_person(
-        "I gave her the key and left.", "Alex",
+    cid = _new_chat(temp_db)
+    assert _resolve_narration_person(
+        cid, "I gave her the key and left.", "Alex",
         {"subj": "she", "obj": "her", "poss": "her"}) == "first"
 
 
@@ -75,11 +100,12 @@ def test_duplicate_pronoun_values_are_not_double_counted():
     assert counts["third"] == 1
 
 
-def test_quoted_you_addressed_to_npc_is_ignored():
+def test_quoted_you_addressed_to_npc_is_ignored(temp_db):
     # A "you" inside spoken dialogue addresses another character; only the
     # narrating frame ("I say") should count.
-    assert _detect_narration_person('"You should go," I say to Rose.',
-                                    "Alex", {"subj": "he"}) == "first"
+    cid = _new_chat(temp_db)
+    assert _resolve_narration_person(cid, '"You should go," I say to Rose.',
+                                     "Alex", {"subj": "he"}) == "first"
 
 
 # ---- campaign-level resolution + hysteresis ----------------------------
