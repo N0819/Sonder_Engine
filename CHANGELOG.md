@@ -166,8 +166,12 @@ what follows is the part you would have noticed.
   every dimension check in one file measured the fixture rather than the
   engine.
   Both were caught between tags and reached no release. The whole suite now
-  runs green on both stacks, at 8,028, and two structural guards confine
-  major-specific reads to a single module so the class stays closed.
+  runs green on both stacks, and two structural guards confine major-specific
+  reads to a single module so the class stays closed. The same widening found
+  that `extension_runtime/api.py` — the public extension API, the module an
+  integrator's code is told to depend on instead of our internals — was in
+  neither `make compile` nor any structural check, and so was the least
+  covered source in the repository.
 
 - **An extension can no longer be handed a story that is in two eras at
   once.** Reported by the Directive team, who ran our own declared CI matrix
