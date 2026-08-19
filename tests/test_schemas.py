@@ -272,3 +272,89 @@ def test_every_specialist_example_shows_exactly_the_channels_it_owns():
         shown = set(example) - {"notes"}
         assert shown == set(channels), (
             f"{step_key}: shows {sorted(shown)}, owns {sorted(channels)}")
+
+
+def test_no_schema_model_is_declared_without_anything_reaching_it():
+    """A Pydantic model nothing references is worse than no model at all.
+
+    Nothing validates against it, so it states a shape the engine does not
+    enforce while reading, to anyone opening this file, as the contract. That
+    is not hypothetical: the body specialist's sheet asks the Director for
+    `tick_interval_seconds`, and the only place that field exists in code is
+    `PersistentCondition` -- a model no call has ever validated -- while the
+    commit path reads a different field name entirely.
+
+    Twenty-nine such models were deleted: the fiction/time/authority models,
+    the early entity ontology, and the shapes naming the
+    fiction_worlds/fiction_locations/transit_edges/world_placements tables
+    the movement/space phases decommissioned. Reachability is computed the
+    way it has to be for this file -- a model is live if any `.py` outside it
+    names it, or if anything at module level here does (SCHEMA_MAP, the
+    helpers, the aliases), or if a live model's own body annotates a field
+    with it.
+    """
+    import ast
+    import collections
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    source = (root / "llm/schemas.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    pattern = re.compile(
+        r"\b(" + "|".join(sorted(classes, key=len, reverse=True)) + r")\b")
+
+    seed = set()
+    for path in root.rglob("*.py"):
+        rel = path.relative_to(root)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if rel.as_posix() == "llm/schemas.py":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:                       # pragma: no cover - unreadable
+            continue
+        seed.update(m.group(1) for m in pattern.finditer(text))
+
+    lines = source.splitlines()
+
+    def _names_in(node):
+        body = "\n".join(
+            lines[node.lineno - 1:(node.end_lineno or node.lineno)])
+        return {m.group(1) for m in pattern.finditer(body)}
+
+    edges = collections.defaultdict(set)
+    for name, node in classes.items():
+        edges[name] = _names_in(node) - {name}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            seed.update(_names_in(node))
+
+    reached, stack = set(), list(seed)
+    while stack:
+        name = stack.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        stack.extend(edges.get(name, ()))
+
+    # Kept deliberately, each for a stated reason. Removing a name from this
+    # allowlist means deleting the model, not silencing the test.
+    allowed = {
+        # Held until the open question about condition ticking is answered:
+        # build the due-tick sweep, or drop the prompt field, the NULL
+        # `next_tick` column and the index that serves no query.
+        "PersistentCondition",
+        # Fixtures: tests/test_schema_leniency.py exercises the shared
+        # coercion through these two, and tests/test_speech_concealment.py
+        # through SpeechElement.
+        "CausalRegime", "FictionFrame", "SpeechElement",
+    }
+    unreached = sorted(set(classes) - reached - allowed)
+    assert not unreached, (
+        f"{unreached} are declared in llm/schemas.py and reachable from "
+        "nothing -- no SCHEMA_MAP entry, no other model's field, no module "
+        "outside the file. Wire it up or delete it; a shape nothing "
+        "validates is not a contract.")
