@@ -1692,6 +1692,7 @@
   "natural": "自然",
   "next: ${p.resume_key}": "次：${p.resume_key}",
   "no chat ${chat_id}": "チャット ${chat_id} は存在しません",
+  "no frame ${frame_id} in chat ${int(chat_id)}": "チャット ${int(chat_id)} にフレーム ${frame_id} はありません",
   "no matching sound for ${state.room || \"this room\"} — 🎲 reroll tries different search terms": "一致するサウンドがありません：${state.room || \"this room\"} — 🎲 リロールで別の検索語を試します",
   "no memories array found": "メモリー配列が見つかりません",
   "no retention": "保持なし",
