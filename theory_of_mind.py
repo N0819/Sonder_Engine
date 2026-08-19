@@ -40,9 +40,18 @@ import re
 #   (already existed as _TOM_CONFIDENCE_CAPS before this module).
 # plasticity: how much one new consistent data point moves the belief on
 #   reinforcement, and how strongly a competing claim can suppress it.
-# half_life: turns until an unreinforced belief's confidence decays by
-#   half. Deliberately not just the inverse of plasticity — "how fast a
+# half_life: how long an unreinforced belief takes to lose half its
+#   confidence. Deliberately not just the inverse of plasticity — "how fast a
 #   belief updates" and "how fast it fades from disuse" are dissociable.
+#
+#   THE UNIT IS WHATEVER THE CALLER MEASURES ELAPSED IN, and there are two.
+#   `_elapsed` returns MINUTES of simulation time when the caller supplies
+#   `elapsed_seconds` (the commit path always does, for a chat on the
+#   simulation clock) and TURNS otherwise. So `emotion: 6` is six minutes in
+#   a clocked story and six beats in an unclocked one. That is defensible and
+#   deliberate -- a belief about how someone feels should fade in lived time,
+#   not in beats, and a story with no clock has nothing else to fade in --
+#   but the numbers cannot be read without knowing which story you are in.
 
 _DEFAULT_KIND = "goal"
 
@@ -194,7 +203,12 @@ def effective_kind(declared, claim):
 
 
 def decayed_confidence(confidence, kind, turns_elapsed):
-    """Exponential (Ebbinghaus-style) decay of an unreinforced belief."""
+    """Exponential (Ebbinghaus-style) decay of an unreinforced belief.
+
+    `turns_elapsed` is named for the unit it had first, and carries MINUTES
+    whenever the caller had a simulation clock to measure with -- see the
+    half-life table's note above.
+    """
     conf = _clamp01(confidence, fallback=0.0)
     try:
         elapsed = max(0.0, float(turns_elapsed or 0))

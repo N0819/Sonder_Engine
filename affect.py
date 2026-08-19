@@ -670,9 +670,12 @@ def blend_affect(old_va, target_va, arousal, shock=False):
 def decay_affect(va, baseline_va, turns, half_life=_SURFACE_HALF_LIFE):
     """Exponential decay of (va - baseline) back toward baseline.
 
-    Same 2**(-turns/half_life) form as theory_of_mind.decayed_confidence:
-    unreinforced mood halves its distance from the character's baseline
-    every `half_life` turns instead of persisting at peak forever.
+    Same 0.5**(t/half_life) form as theory_of_mind.decayed_confidence, but
+    NOT the same t: unreinforced mood halves its distance from the
+    character's baseline every `half_life` TURNS -- the caller counts beats
+    -- while a belief's half-life is measured in minutes of simulation time
+    whenever the story has a clock. The shared shape is the arithmetic, not
+    the unit.
     """
     v, a = _va_pair(va)
     base_v, base_a = _va_pair(baseline_va)
