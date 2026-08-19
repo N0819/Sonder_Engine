@@ -341,6 +341,54 @@ def _fold_duplicate_presences(presences, scene=None):
     return presences
 
 
+def overt_declaration(ctx):
+    """The player's declared beat with concealed content removed, as
+    ``(elements, raw_text)``.
+
+    ONE answer to "what of this declaration may a bystander be told about, or
+    be judged against", read by both halves of the background stage: the
+    payload builder in `agents/background.py`, which gates these elements
+    further by the channel that reaches each presence, and
+    `pick_background_reactors` below, which decides who gets a beat at all.
+
+    The two halves used to disagree. The payload was fixed to strip concealed
+    elements and the private thought; the gate went on reading `ctx.input`
+    whole, which is the raw text the player typed, whispers included. A
+    declaration that named a presence WHILE concealing therefore still made
+    that presence qualify as addressed, get picked, and react to words nobody
+    delivered -- the exact failure `_filtered_player_declaration`'s own
+    docstring records as fixed, still live one module over because the gate is
+    a different function in a different package. Having one function say what
+    is overt is the only arrangement in which they cannot drift apart again.
+
+    An unstructured declaration cannot be filtered element by element, so a
+    private thought (the one signal available that something was withheld)
+    withholds the whole of it.
+    """
+    interp = ctx.get("director_interpret") or {}
+    seq = [e for e in (interp.get("sequence") or []) if isinstance(e, dict)]
+    if seq:
+        return [e for e in seq if e.get("visibility") != "concealed"], ""
+    if interp.get("private_thought"):
+        return [], ""
+    return [], str(ctx.get("input") or "")
+
+
+def overt_declaration_text(ctx):
+    """`overt_declaration` flattened for deterministic name matching. Engine
+    side only -- it carries an act's raw `attempt`, which is the actor's
+    purpose and is never delivered to anyone."""
+    elements, raw = overt_declaration(ctx)
+    parts = [raw]
+    for element in elements:
+        if element.get("type") == "speech":
+            parts.append(str(element.get("text") or ""))
+        else:
+            parts.append(str(element.get("observable")
+                             or element.get("attempt") or ""))
+    return " ".join(p for p in parts if p).strip()
+
+
 def _background_name_mentioned(name, text):
     """resolved_event prose almost never repeats someone's full tracked
     name after their first introduction -- "Crusher" carries a scene once
@@ -1077,7 +1125,9 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     voiced_this_beat -= {n.casefold() for n in forced_routed}
 
     resolved_event = str(dr_output.get("resolved_event") or "")
-    player_input = str(ctx.get("input") or "")
+    # NOT `ctx.input`, which is the raw text the player typed. See
+    # `overt_declaration`: a whispered name used to qualify its own presence.
+    player_input = overt_declaration_text(ctx)
     turn_idx = ctx.turn.idx
     sc = wget(cid, "scene", {}) or {}
     # Read through the duplicate fold: the ledger is healed at commit, but
