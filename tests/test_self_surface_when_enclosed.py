@@ -32,8 +32,6 @@ and that is what it is for.
 
 from __future__ import annotations
 
-import pytest
-
 from agents.perception import _self_cannot_see_own_surface
 
 ACTOR = "Wren"
@@ -103,25 +101,135 @@ class TestItNeverRaises:
         assert _self_cannot_see_own_surface(_scene(), {"id": "1"}, ACTOR) is False
 
 
-def test_the_gate_runs_before_the_surface_is_injected():
-    """A wiring guard rather than a behaviour one: the check has to sit in
-    `_inject_onset_sequence` ahead of `_inject_action`, or it is a
-    well-tested function nothing calls."""
-    import inspect
+# --- what actually enforces the property now --------------------------------
+#
+# The two tests that used to stand here read `inspect.getsource` and asserted
+# statement ORDER inside `_inject_onset_sequence` -- one of them saying so in
+# its own docstring: "or it is a well-tested function nothing calls". That is
+# exactly what happened. `_inject_onset_sequence` has no production caller,
+# and neither does `_self_cannot_see_own_surface` outside it, so the wiring
+# guard was asserting the internal layout of dead code, and passing.
+#
+# The property is not lost. The composer path enforces it by a stronger and
+# blunter mechanism: an actor never receives their OWN act surface in their
+# own view at all, enclosed or not, because `_composer_act` builds no
+# perceiver for the acting player and `_composer_outcome`'s act loop skips
+# the observer's own act. Nothing said so anywhere, which is how a guard came
+# to be left pointing at the mechanism that was retired.
 
-    from agents import perception
-    src = inspect.getsource(perception._inject_onset_sequence)
-    assert "_self_cannot_see_own_surface(" in src
-    assert src.index("_self_cannot_see_own_surface(") < src.index("_inject_action(")
+import json
+import time
+
+from story.character_schema import default_character_data, default_persona_data
+from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
-def test_proprioception_is_not_sight():
-    """The rule is keyed on enclosure, never on light. A dark room must not
-    stop a character knowing what their own body is doing."""
-    import inspect
+PLAYER = "Hinami"
+SURFACE = "lifts the lantern high"
+LANTERN = "a brass lantern"
 
-    from agents import perception
-    src = inspect.getsource(perception._self_cannot_see_own_surface)
-    assert "hiding_holders_of(" in src
-    for lighting in ("light_at", "effective_light", "visual_level_between"):
-        assert lighting not in src, lighting
+
+def _outcome_ctx(temp_db, *, light=None, entity_state=None):
+    """One cast actor who acts, one player watching."""
+    persona = default_persona_data(PLAYER)
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        (PLAYER, json.dumps(persona), "{}"))
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created,persona_id) VALUES(?,?,?,?)",
+        ("Own surface", "", time.time(), persona_id))
+    sheet = default_character_data(ACTOR)
+    sheet.setdefault("embodiment", {}).setdefault("visible", {})["summary"] = (
+        "A small woman in a grey coat.")
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        (ACTOR, json.dumps(sheet), "{}", time.time(), "wren_card"))
+    temp_db.qi(
+        "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+        (chat_id, char_id, "active", "{}"))
+
+    room = {"name": "Hall", "desc": "A hall.", "adjacent": []}
+    if light:
+        room["light"] = light
+    entities = {}
+    if entity_state is not None:
+        entities["wren_1"] = {"name": ACTOR, "kind": "person",
+                              "state": dict(entity_state)}
+    temp_db.wset(chat_id, "scene", {
+        "location": "the hall", "time": "night",
+        "rooms": {"hall": room},
+        "positions": {PLAYER: "hall", ACTOR: "hall"},
+        "entities": entities, "attire": {}, "overlays": {}})
+    temp_db.wset(chat_id, "known", {ACTOR: [PLAYER]})
+
+    cast = temp_db.q(
+        "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+        "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+        (chat_id,))
+    turn_id = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, 1, "", time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Own surface", persona_id=persona_id,
+                      lorebook_id=None, scenario="", created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=1, player_input="",
+                      created=time.time()),
+        cast=cast, input="")
+    ctx["_player_room"] = "hall"
+    ctx.director_interpret = {
+        "action": {"attempt": "waits", "visibility": "overt",
+                   "conceal_from": [], "targets": [],
+                   "commitment": "asserted"},
+        "sequence": [], "speech": None, "speech_volume": "normal",
+        "flow": {"reactors": [char_id]},
+    }
+    ctx.character_results[char_id] = {
+        "speech": "", "action": "lifts the lantern",
+        "sequence": [{"type": "action", "attempt": "lifts the lantern",
+                      "observable": SURFACE, "visibility": "overt",
+                      "conceal_from": [], "targets": [],
+                      "commitment": "asserted"}]}
+    ctx.director_resolve = {
+        "resolved_event": "The hall stands quiet.", "state_diff": {},
+        "dialogue_log": [], "dialogue_order": []}
+    return ctx, char_id
+
+
+def _views(ctx):
+    import agents.perception as perception
+    return perception.perception_outcome(ctx, nonce="n")["views"]
+
+
+def test_an_actor_never_receives_their_own_act_surface(temp_db):
+    """The live floor under this file's whole premise.
+
+    `observable` is the act as seen FROM OUTSIDE. On the composer path the
+    actor is not among the observers of their own act, so the outside shot of
+    themselves cannot be delivered whatever they are sealed inside."""
+    ctx, char_id = _outcome_ctx(temp_db)
+    views = _views(ctx)
+
+    assert SURFACE not in (views[str(char_id)] or ""), (
+        "an actor was handed the outside view of their own act: "
+        f"{views[str(char_id)]!r}")
+    assert SURFACE in (views.get("player") or ""), (
+        "the subtraction reached past the actor and cost a watching mind an "
+        f"act it plainly saw: {views.get('player')!r}")
+
+
+def test_proprioception_is_not_sight(temp_db):
+    """The rule this file names, on the path that now carries it.
+
+    Being unable to see does not stop a body knowing what it is doing.
+    `body_state_percept` rides the interoception channel, so a pitch-dark
+    room takes the actor's sight of everyone else and leaves their own held
+    items exactly where they are."""
+    ctx, char_id = _outcome_ctx(
+        temp_db, light="dark", entity_state={"held_items": [LANTERN]})
+    view = _views(ctx)[str(char_id)] or ""
+
+    assert LANTERN in view, (
+        f"darkness took a character's knowledge of their own hands: {view!r}")
+    assert PLAYER not in view, (
+        f"a pitch-dark room did not take sight of another body: {view!r}")

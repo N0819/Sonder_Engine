@@ -51,6 +51,7 @@ from world.spatial import (
     containment_conceals,
     crossing_visible_from,
     egocentric_frame,
+    _entity_named,
     entity_arc,
     entity_side,
     has_visual,
@@ -69,6 +70,7 @@ from world.spatial import (
     comms_link,
     same_subject,
     scent_level,
+    sense_adjusted,
     spatial_facts,
     spatial_rel,
     spatial_rel_between,
@@ -279,19 +281,6 @@ def _previous_open_group_continuity(
     return True
 
 
-def _addresses(intended_target, observer_name):
-    """True when a dialogue line's intended_target names this observer. The
-    target may be a single name or a list; comparison is casefolded. Used to
-    route a comm-channel transmission to the party it was addressed to, across
-    a physical barrier (see the medium:'comm' handling in perception_outcome)."""
-    if not intended_target or not observer_name:
-        return False
-    targets = intended_target if isinstance(intended_target, (list, tuple)) \
-        else [intended_target]
-    on = str(observer_name).casefold()
-    return any(str(t).casefold() == on for t in targets)
-
-
 def _dialogue_hear_level(entry, rel, observer_name, proximity=None):
     """Audibility of one dialogue entry to an observer.
 
@@ -367,14 +356,32 @@ def _ling(name):
     return linguistic("agents.perception", name)
 
 
-# Closing quotes and brackets ride with the sentence they end.
-# Sentence end, script-aware. The ASCII branch needs trailing whitespace;
-# the CJK branch must not, because Japanese writes no space after 。 -- so
-# an English-only splitter returned the WHOLE Japanese event as one
-# "sentence", and every guard that keeps a safe subset of sentences (the
-# concealment redactor above all) had no subset to keep and failed open.
+# Sentence end, script-aware, and the module's ONLY definition -- a second,
+# weaker binding of this name lived 1,250 lines below and silently won, so
+# every reader got a splitter that treated neither `...` nor a trailing
+# bracket as an ending while this comment described one that did.
+#
+# The ASCII branch needs trailing whitespace; the CJK branch must not,
+# because Japanese writes no space after 。 -- so an English-only splitter
+# returned the WHOLE Japanese event as one "sentence", and every guard that
+# keeps a safe subset of sentences (the concealment redactor above all) had
+# no subset to keep.
+#
+# The terminator class carries `…`, because an ellipsis is how prose ends a
+# sentence and a beat written with one reached the redactor as a single
+# unsplittable block that had to be thrown away whole to protect one clause.
+#
+# Closing quotes and brackets ride WITH the sentence they end -- '…to me!?"
+# The voice is…' must keep its quote -- so they sit inside the LOOKBEHIND
+# rather than inside the match, where the split would eat them. That was the
+# deleted twin's one genuine advantage over this one, and the reason the
+# repair is a union rather than a deletion. Python requires a lookbehind to
+# be fixed-width, hence one alternative per closer count rather than a `*`.
 _SENTENCE_SPLIT = re.compile(
-    r"(?<=[.!?…])[\"'”’)\]]*\s+|(?<=[。！？])[」』\"'”’)\]]*\s*")
+    r"(?<=[.!?…])\s+"
+    r"|(?<=[.!?…][\"'”’)\]])\s+"
+    r"|(?<=[.!?…][\"'”’)\]][\"'”’)\]])\s+"
+    r"|(?<=[。！？])[」』\"'”’)\]]*\s*")
 
 # Does this sentence ASSERT SIGHT -- somebody looking at something, in the
 # verbs a view actually uses for it. Read by `_strip_self_narration`'s floor,
@@ -788,6 +795,7 @@ from .common import (
     _scrub_unknown_identities,
     _mask_quoted_spans,
     _unmask_quoted_spans,
+    _VIEW_MASK,
     _scrub_invented_dialogue,
     _scrub_undeclared_player_speech,
     _compose_residue_view,
@@ -1387,24 +1395,54 @@ def _ubiquitous_names(sc):
         return frozenset()
 
 
-def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel):
+def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel,
+                     senses=None):
     """Visual channel to one source, over the whole beat (see _source_channels).
 
     Per-body and light-aware via `visual_level_between` when the perceiver has
     a position, room-level otherwise. Answered against the outcome scene first;
     only if that says no does the pre-diff scene get asked, so this can add a
     channel the beat closed and can never remove one it opened.
+
+    `senses` is the observer's card, run through the same gate every other
+    admission now uses (`composer._sense_graded`): an authored-blind body has
+    no visual channel to anything, however the world is lit.
     """
     def _at(scene):
         if not scene:
             return False
         if room_of(scene, perceiver_name) is not None:
-            return visual_level_between(scene, perceiver_name, source_name) != "none"
-        return has_visual(rel)
+            return composer._sense_graded(
+                visual_level_between(scene, perceiver_name, source_name),
+                "sight", senses) != "none"
+        if not has_visual(rel):
+            return False
+        return composer._sense_graded("full", "sight", senses) != "none"
     return _at(sc) or _at(prev_sc)
 
 
-def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
+def _sense_card(sheet):
+    """The STRUCTURED card senses, which are what the G4 gate takes.
+
+    `scene.senses_of` returns senses_as_text -- a prose sentence, built for a
+    model prompt. `spatial.sense_adjusted` wants the list of
+    `{channel, acuity, range}` records, and the perceiver dicts carried only
+    the prose, which is half of why the gate reached no composed view: even a
+    reader of the `senses` key would have handed the gate a string and got the
+    level back unchanged. Same dispatch as `senses_of`, so a persona and a
+    character card resolve the same way they do everywhere else.
+    """
+    if not isinstance(sheet, dict):
+        return []
+    if "psychology" in sheet or "core" in sheet:
+        return character_senses(sheet)
+    if "narration" in sheet:
+        return persona_senses(sheet)
+    return []
+
+
+def _source_channels(sc, perceiver_name, perceiver_room, sources,
+                     prev_sc=None, senses=None):
     """spatial_to_sources / visual_channel_to_sources for ONE perceiver.
 
     Concealment by containment belongs here rather than at the call sites. A
@@ -1489,10 +1527,13 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources, prev_sc=None):
     return {
         "spatial_to_sources": rels,
         "visual_channel_to_sources": {
-            n: (_saw_across_beat(sc, prev_sc, perceiver_name, n, rels[n]))
+            n: (_saw_across_beat(sc, prev_sc, perceiver_name, n, rels[n],
+                                 senses))
             for n in rels
         },
-        "scent_channel_to_sources": {n: scent_level(r) for n, r in rels.items()},
+        "scent_channel_to_sources": {
+            n: composer._sense_graded(scent_level(r), "scent", senses)
+            for n, r in rels.items()},
     }
 
 
@@ -1617,23 +1658,6 @@ def _pronouns_for_perceiver(all_pronouns, perceiver, known):
         who: pronouns for who, pronouns in (all_pronouns or {}).items()
         if _recognizes(who, recognized)
     }
-
-
-# Sentence boundaries, tolerating a closing quote between the terminal
-# punctuation and the space ('...to me!?" The voice is...'). A lone
-# `(?<=[.!?])\s+` cannot split there, which silently made a whole passage one
-# "sentence" and let the self-narration guard pass everything. Two alternated
-# lookbehinds rather than an optional group, because Python requires them
-# fixed-width -- and this way the quote stays attached to the sentence it
-# closes instead of being eaten by the split.
-# Sentence end, script-aware. The ASCII branch needs trailing whitespace;
-# the CJK branch must not, because Japanese writes no space after 。 -- so
-# an English-only splitter returned the WHOLE Japanese event as one
-# "sentence", and every guard that keeps a safe subset of sentences (the
-# concealment redactor above all) had no subset to keep and failed open.
-_SENTENCE_SPLIT = re.compile(
-    r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+'
-    r'|(?<=[\u3002\uff01\uff1f])[\u300d\u300f"\u201d\u2019\')\]]*\s*')
 
 
 def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
@@ -2387,10 +2411,12 @@ def perception_establish(ctx, nonce):
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
-        "senses": senses_of(pers), "attention": "engaged",
+        "senses": senses_of(pers), "sense_card": _sense_card(pers),
+        "attention": "engaged",
         "knows_identity": True,
         "entity_state": p_state,
-        **_source_channels(sc, p_name, p_room, sources),
+        **_source_channels(sc, p_name, p_room, sources,
+                           senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -2413,10 +2439,12 @@ def perception_establish(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "senses": senses_of(sh), "attention": act.get("goal") or "ambient",
+            "senses": senses_of(sh), "sense_card": _sense_card(sh),
+            "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
             "entity_state": entity_states.get(character_name(sh)) or {},
-            **_source_channels(sc, character_name(sh), r, c_sources),
+            **_source_channels(sc, character_name(sh), r, c_sources,
+                               senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
             "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -2662,11 +2690,13 @@ def perception_act(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "senses": senses_of(sh),
+            "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "spatial_to_actor": rel,
-            "visual_channel_to_actor": has_visual(rel),
-            "scent_channel_to_actor": scent_level(rel),
+            "visual_channel_to_actor": has_visual(rel) and composer._sense_graded(
+                "full", "sight", _sense_card(sh)) != "none",
+            "scent_channel_to_actor": composer._sense_graded(
+                scent_level(rel), "scent", _sense_card(sh)),
             "proximity_to_actor": proximity_rel(
                 sc, character_name(sh), p_name),
             "proximity_to_sources": prox_to_others,
@@ -3104,9 +3134,11 @@ def perception_outcome(ctx, nonce):
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
-        "senses": senses_of(pers), "attention": "engaged",
+        "senses": senses_of(pers), "sense_card": _sense_card(pers),
+        "attention": "engaged",
         "knows_identity": True,
-        **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene),
+        **_source_channels(sc, p_name, p_room, sources, prev_sc=prev_scene,
+                           senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
         "room_layout": room_layout(sc, p_name),
@@ -3128,9 +3160,11 @@ def perception_outcome(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, e_room),
             "notices": artifacts_for_room(ctx.chat.id, sc, e_room),
             "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
-            "senses": senses_of(extra), "attention": "engaged",
+            "senses": senses_of(extra), "sense_card": _sense_card(extra),
+            "attention": "engaged",
             "knows_identity": True,
-            **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene),
+            **_source_channels(sc, e_name, e_room, sources, prev_sc=prev_scene,
+                               senses=_sense_card(extra)),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
             "room_layout": room_layout(sc, e_name),
@@ -3156,10 +3190,11 @@ def perception_outcome(ctx, nonce):
             "couriers": couriers_for_room(ctx.chat.id, sc, r),
             "notices": artifacts_for_room(ctx.chat.id, sc, r),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
-            "senses": senses_of(sh),
+            "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "knows_identity": p_name in (known.get(character_name(sh)) or []),
-            **_source_channels(sc, character_name(sh), r, sources, prev_sc=prev_scene),
+            **_source_channels(sc, character_name(sh), r, sources,
+                               prev_sc=prev_scene, senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
             "room_layout": room_layout(sc, character_name(sh)),
@@ -3483,7 +3518,17 @@ def _composer_extra_parts(ctx, p_name):
     return cached
 
 
-_MASK_TOKEN = re.compile("\x00Q\\d+\x00")
+# DERIVED from the one definition of the wire format, never re-spelled.
+# `common._VIEW_MASK` is what `_mask_quoted_spans` actually emits; this
+# module used to carry a second spelling of the same token, so changing the
+# mask in common.py would have silently disarmed the refusal check below --
+# the check that stops a self-narration cut from taking a reader's delivered
+# line with it. It would not have raised, it would have stopped matching.
+# `.split` rather than a regex over the format string, so a format that stops
+# having exactly one `%d` fails here and loudly.
+_MASK_PREFIX, _MASK_SUFFIX = _VIEW_MASK.split("%d")
+_MASK_TOKEN = re.compile(
+    re.escape(_MASK_PREFIX) + r"\d+" + re.escape(_MASK_SUFFIX))
 
 
 def _strip_self_narration_quote_safe(view, perceiver_name, other_names=()):
@@ -3736,14 +3781,19 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         effective_light(sc, room) if room else "")
     if env:
         percepts.append(env)
-    percepts.extend(composer.presence_percepts(sc, name, others, display_map))
-    percepts.extend(composer.pose_percepts(sc, name, others, display_map))
+    senses = p.get("sense_card")
+    percepts.extend(composer.presence_percepts(
+        sc, name, others, display_map, senses))
+    percepts.extend(composer.pose_percepts(
+        sc, name, others, display_map, senses))
     recognized = set(known.get(name) or [])
     for body in others:
         b_name = body.get("name")
         if not b_name:
             continue
-        if visual_level_between(sc, name, b_name) != "full":
+        if composer._sense_graded(
+                visual_level_between(sc, name, b_name),
+                "sight", senses) != "full":
             continue
         if entity_arc(sc, name, b_name) == "rear":
             continue
@@ -3900,7 +3950,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
             percepts = composer.residue_percepts(p["awareness"])
             company[pid] = []       # an unconscious observer sees nobody
         else:
-            others = [b for b in bodies if b["name"] != name]
+            others = [b for b in bodies
+                      if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
                 sc, name, others, known)
             gate = _authored_prose_gate(
@@ -3980,12 +4031,15 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 loud_event=onset_loud, pain=pain)
             company[pid] = []       # an unconscious observer sees nobody
         else:
-            others = [b for b in co_present if b["name"] != name]
+            others = [b for b in co_present
+                      if not _is_the_observer(sc, b["name"], name)]
             others.append(actor_body)
             display_map = composer.observer_display_map(
                 sc, name, others, known)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
+                entity_state=p.get("entity_state")
+                or _own_body_state(sc, name),
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
                 extra_parts=cast_parts)
@@ -4020,7 +4074,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         entry, speech_rel, name, display=display,
                         can_see=can_see,
                         proximity=p.get("proximity_to_actor"),
-                        order_key=idx, observer_id=pid)
+                        order_key=idx, observer_id=pid,
+                        senses=p.get("sense_card"))
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "action":
@@ -4056,6 +4111,94 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "composer_ledger": merged,
         "company": company,
     }
+
+
+def _own_body_state(sc, name):
+    """This observer's own posture, activity and held items, from the scene.
+
+    `body_state_percept` is interoception -- channel "interoception", source
+    label "you" -- and it could only ever fire from
+    `director_establish.entity_states`, which exists on the opening turn and
+    nowhere else. So a mind knew what was in its own hands on turn 0 and
+    never again, in an engine whose composer header says exactly why that
+    costs something: "a character agent is a stateless LLM call; if it is not
+    in context, the mind does not have it".
+
+    The durable home for the same three facts is the scene entity's `state`,
+    which `_PROTECTED_STATE_KEYS` already reserves as structural for
+    "perception's own deterministic backstop". Posture is the one of the
+    three with a second and better home -- `scene.poses`, which
+    `pose_percepts` renders with the sight grade and always delivers for the
+    observer themselves -- so it is read from here only when the pose ledger
+    is silent, rather than said twice.
+    """
+    state = (_entity_named(sc, name) or {}).get("state")
+    if not isinstance(state, dict):
+        return {}
+    out = {}
+    activity = str(state.get("activity") or "").strip()
+    if activity:
+        out["activity"] = activity
+    held = [str(item).strip() for item in (state.get("held_items") or [])
+            if str(item or "").strip()]
+    if held:
+        out["held_items"] = held
+    posture = str(state.get("posture") or "").strip()
+    if posture and not any(
+            same_subject(sc, key, name)
+            and str((value or {}).get("posture") or "").strip()
+            for key, value in ((sc.get("poses") or {}).items()
+                               if isinstance(sc.get("poses"), dict) else ())):
+        out["posture"] = posture
+    return out
+
+
+def _is_the_observer(sc, candidate, observer, observer_aliases=()):
+    """Is `candidate` another spelling of the observer's own name.
+
+    AGENTS.md: one being, one name -- and a being routinely carries several
+    at once. `character_scene_keys` names the cast half and says why readers
+    must try all of them: "the director sometimes keys by identity.uid (or an
+    alias)". `same_subject` covers the scene half, an entity id and its
+    aliases. A bare `==` between two of those spellings is False, and this
+    module already learned that lesson five times.
+
+    Asked in the direction that matters: everything in a view is suppressed
+    for the one person it is about, so a miss here does not leak -- it hands
+    an observer their own line and their own act as somebody else's.
+    """
+    if same_subject(sc, candidate, observer):
+        return True
+    cand = str(candidate or "").strip().casefold()
+    if not cand:
+        return False
+    return any(str(alias or "").strip().casefold() == cand
+               for alias in observer_aliases or ())
+
+
+def _mover_is_a_body(sc, mover):
+    """Does this `positions` key name somebody, or something.
+
+    A crossing percept says "a figure" about whatever it is handed, and
+    `state_diff.positions` is not a roster of people -- AGENTS.md's
+    body-enclosure row: it "legitimately keys objects and unregistered
+    presences by entity id" beside cast bodies keyed by display name. So a
+    crate carried from one room to the next arrived in every view at either
+    end as a person walking in.
+
+    The engine already answers this question once, in
+    `commit_background._is_inert_presence_candidate` -- an inert `kind`, or
+    portable and neither animate-kinded nor wearing anything -- and it is
+    conservative in the direction this needs. It calls something a thing
+    only when that is demonstrable, so an undressed unregistered presence
+    stays a body, and a mover with no entity record at all (every cast
+    member) is a body without being asked.
+    """
+    from persist.commit import _is_inert_presence_candidate
+    entity = _entity_named(sc, mover)
+    if not entity:
+        return True
+    return not _is_inert_presence_candidate(sc, mover, entity)
 
 
 def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
@@ -4179,6 +4322,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         prev_room = room_of(prev_scene, str(mover))
         if not new_room or prev_room == str(new_room):
             continue
+        if not _mover_is_a_body(sc, str(mover)):
+            continue
         moves.append((str(mover), prev_room, str(new_room)))
 
     # Micro-round deliveries were gated by `_delivery_ok` when the loop ran;
@@ -4223,11 +4368,14 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 pain=pain)
             company[pid] = []       # an unconscious observer sees nobody
         else:
-            others = [b for b in bodies if b["name"] != name]
+            others = [b for b in bodies
+                      if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
                 sc, name, others, known)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
+                entity_state=p.get("entity_state")
+                or _own_body_state(sc, name),
                 appearance_changed=appearance_changed,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
@@ -4243,7 +4391,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             order = 0
             for d in enriched_dlog:
                 speaker = d.get("speaker", "?")
-                if speaker == name or (
+                if _is_the_observer(
+                        sc, speaker, name, cast_aliases.get(name)) or (
                         pid == "player"
                         and is_player_speaker(speaker, chat)):
                     order += 1
@@ -4278,13 +4427,16 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         speaker_room=d.get("speaker_room")),
                     name, display=display, can_see=can_see,
                     proximity=measured_proximity_rel(sc, name, speaker),
-                    order_key=order, observer_id=pid)
+                    order_key=order, observer_id=pid,
+                    senses=p.get("sense_card"))
                 if percept:
                     percepts.append(percept)
                 order += 1
             for act in last_overt_by_actor.values():
                 actor = act["actor"]
-                if actor == name or actor in behind:
+                if _is_the_observer(
+                        sc, actor, name, cast_aliases.get(name)) \
+                        or actor in behind:
                     continue
                 rel = spatial.get(actor)
                 if rel is None:
@@ -4315,10 +4467,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     continue
                 if p.get("room") not in (from_room, to_room):
                     continue
-                seen = visual_level_between(sc, name, mover) != "none" or (
-                    prev_scene
-                    and visual_level_between(prev_scene, name, mover)
-                    != "none")
+                _graded = (lambda scene: composer._sense_graded(
+                    visual_level_between(scene, name, mover),
+                    "sight", p.get("sense_card")))
+                seen = _graded(sc) != "none" or (
+                    prev_scene and _graded(prev_scene) != "none")
                 if not seen:
                     continue
                 label = display_map.get(mover)
