@@ -989,6 +989,94 @@ def check_extension_imports(errors: list[str]) -> None:
                             f'"system": true to accept the coupling.')
 
 
+#: A local name is being used AS A MODULE OBJECT, not called through.
+#: `monkeypatch.setattr(mod, name, ...)` and `mod.__file__` both need the
+#: module that DEFINES the symbol; a facade re-export is a different binding.
+_MODULE_OBJECT_CALLS = frozenset({
+    "setattr", "delattr", "getattr", "hasattr", "reload",
+    "getsource", "getsourcefile", "getsourcelines", "getmembers", "signature",
+})
+_MODULE_OBJECT_ATTRS = frozenset({"__file__", "__name__", "__dict__", "__doc__"})
+
+
+def _module_object_uses(tree: ast.AST) -> set[str]:
+    """Local names this file treats as a module object rather than a namespace."""
+    used: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and node.args:
+            func = node.func
+            fname = (func.attr if isinstance(func, ast.Attribute)
+                     else func.id if isinstance(func, ast.Name) else "")
+            if fname in _MODULE_OBJECT_CALLS and isinstance(node.args[0], ast.Name):
+                used.add(node.args[0].id)
+        elif isinstance(node, ast.Attribute) and node.attr in _MODULE_OBJECT_ATTRS:
+            if isinstance(node.value, ast.Name):
+                used.add(node.value.id)
+    return used
+
+
+def facade_import_violations(source, *, pkg: str, stem: str, siblings,
+                             inside: bool = False, is_test: bool = False):
+    """Every facade-rule violation in one file: `(lineno, kind, module)`.
+
+    `kind` is `"outside-in"` (a caller reached past the facade to a sibling)
+    or `"inside-out"` (a sibling imported its own facade, which is the cycle
+    the arrangement exists to prevent).
+
+    Both spellings count, and that is the repair this function exists for.
+    The matcher this replaced `rpartition`ed the module name, so it saw
+    `from persist.commit_memory import X` and never `from persist import
+    commit_memory` -- and the second is the form the whole tree is written in.
+    Twelve sibling imports sat in `tests/` unseen; the rule held only where
+    nobody was writing.
+
+    `is_test` carries the exception the split's own correctness requires. A
+    monkeypatch must name the module that DEFINES the function it intercepts:
+    a moved function resolves names in its own globals, so a patch on the
+    facade's re-export is silently inert (`docs/experiments/AUDIT_COMMIT.md`),
+    and the same holds for a test that reads a sibling's `__file__` to parse
+    the source. The facade is a contract for CALLERS, and neither of those is
+    a call -- so a test may name a sibling it patches or introspects, and may
+    not name one it merely calls through.
+    """
+    tree = source if isinstance(source, ast.AST) else ast.parse(source)
+    siblings = set(siblings)
+    exempt = _module_object_uses(tree) if is_test else set()
+    facade_mod = "%s.%s" % (pkg, stem)
+    out = []
+
+    def record(node, module, local):
+        if module == facade_mod or module == stem:
+            if inside:
+                out.append((node.lineno, "inside-out", module))
+        elif not inside and not (local and local in exempt):
+            out.append((node.lineno, "outside-in", module))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                head, _, tail = alias.name.rpartition(".")
+                if head not in (pkg, ""):
+                    continue
+                if tail in siblings or tail == stem:
+                    local = alias.asname or (alias.name if not head else None)
+                    record(node, "%s.%s" % (pkg, tail), local)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            module = node.module or ""
+            if module == pkg:
+                for alias in node.names:
+                    if alias.name in siblings or alias.name == stem:
+                        record(node, "%s.%s" % (pkg, alias.name),
+                               alias.asname or alias.name)
+            else:
+                head, _, tail = module.rpartition(".")
+                if head in (pkg, "") and (tail in siblings or tail == stem):
+                    # Names lifted OUT of the sibling: no module object is
+                    # bound, so no patch or source read can be meant by it.
+                    record(node, "%s.%s" % (pkg, tail), None)
+    return sorted(out)
+
+
 def check_facade_import_direction(errors: list[str]) -> None:
     """A split family's facade must stay the only way in, and the only way out.
 
@@ -1008,18 +1096,22 @@ def check_facade_import_direction(errors: list[str]) -> None:
     Not a style rule. Both are silent until they are not: the first fails when
     somebody later moves a symbol between siblings, the second when an
     unrelated import order changes.
+
+    The rule is about CALLERS. `facade_import_violations` carries the one
+    exception, and why a test is not always a caller.
     """
     families = {
         "agents.director": (ROOT / "agents", "director"),
         "commit": (ROOT / "persist", "commit"),
     }
+    tests_dir = ROOT / "tests"
     for facade, (home, stem) in families.items():
-        pkg = home.name if home.name != "agents" else "agents"
+        pkg = home.name
         siblings = {p.stem for p in home.glob("%s_*.py" % stem)}
         if not siblings:
             continue
         facade_mod = facade if "." in facade else "%s.%s" % (pkg, facade)
-        for path in engine_python_paths() + sorted((ROOT / "tests").glob("*.py")):
+        for path in engine_python_paths() + sorted(tests_dir.glob("*.py")):
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
             except (OSError, SyntaxError):
@@ -1027,23 +1119,22 @@ def check_facade_import_direction(errors: list[str]) -> None:
             rel = path.relative_to(ROOT).as_posix()
             inside = path.parent == home and (
                 path.stem == stem or path.stem in siblings)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.level == 0:
-                    name = node.module or ""
-                elif isinstance(node, ast.Import):
-                    name = node.names[0].name
-                else:
-                    continue
-                head, _, tail = name.rpartition(".")
-                if tail in siblings and head in (pkg, ""):
-                    if not inside:
-                        errors.append(
-                            f"{rel}:{node.lineno}: imports {name!r}, a sibling "
-                            f"behind the {facade_mod!r} facade. Import the "
-                            f"facade instead — it re-exports every name.")
-                elif name == facade_mod and path.stem in siblings and path.parent == home:
+            is_test = path.parent == tests_dir
+            for lineno, kind, module in facade_import_violations(
+                    tree, pkg=pkg, stem=stem, siblings=siblings,
+                    inside=inside, is_test=is_test):
+                if kind == "outside-in":
+                    extra = ("" if not is_test else
+                             " A test may name a sibling it PATCHES or reads"
+                             " the source of — patching the facade's re-export"
+                             " is inert — but not one it only calls through.")
                     errors.append(
-                        f"{rel}:{node.lineno}: imports its own facade "
+                        f"{rel}:{lineno}: imports {module!r}, a sibling "
+                        f"behind the {facade_mod!r} facade. Import the "
+                        f"facade instead — it re-exports every name.{extra}")
+                else:
+                    errors.append(
+                        f"{rel}:{lineno}: imports its own facade "
                         f"{facade_mod!r}. That is the import cycle the facade "
                         f"exists to prevent; import the sibling that defines "
                         f"the name, or move the name down.")
