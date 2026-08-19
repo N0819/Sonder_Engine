@@ -539,18 +539,40 @@ def _restraint_holder_in(record, candidate_names):
 
     Live rows name the holder inside a phrase as often as bare --
     `restrained_by: "Dr. Moon's hand"`, `enveloped_by: "Elyndra's
-    entrance"` -- so a candidate name found anywhere in the field, on its
-    own word boundaries, counts."""
+    entrance"` -- so a candidate name found inside the field, on its own
+    word boundaries, counts. But resolution has TEETH: the floor auto-ends
+    a hold the moment its resolved holder leaves or goes under, so a wrong
+    answer releases a body somebody is still holding. Three rules keep the
+    answer honest:
+
+    - A candidate matching the WHOLE phrase is that candidate, always.
+    - A match whose span sits inside a longer candidate's match is the
+      shorter spelling of the longer name ("Moon" inside "Dr. Moon's
+      hand") and is dropped, whatever order the pool offered them in.
+    - A phrase still naming MORE THAN ONE body ("the harness Sarah
+      buckled while Marcos held it") vouches for nobody: picking either
+      is a guess wearing a match, and ambiguity is the Director's to
+      settle -- the view already says the record vouches for nobody, and
+      a vouched-for-nobody hold blocks nobody and never auto-ends."""
     by = str(record.get("by") or "").strip().casefold()
     if not by:
         return None
+    matches = []
     for name in candidate_names:
         label = str(name or "").strip()
         if not label:
             continue
-        if label.casefold() == by or re.search(
-                name_boundary_pattern(label.casefold()), by):
+        if label.casefold() == by:
             return label
+        for m in re.finditer(name_boundary_pattern(label.casefold()), by):
+            matches.append((m.start(), m.end(), label))
+    kept = {
+        label for s, e, label in matches
+        if not any(s2 <= s and e <= e2 and (e - s) < (e2 - s2)
+                   for s2, e2, _l in matches)
+    }
+    if len(kept) == 1:
+        return next(iter(kept))
     return None
 
 

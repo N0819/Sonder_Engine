@@ -28,8 +28,10 @@ end on a clock -- a rope stays tied all night:
 from __future__ import annotations
 
 from agents.director import (
+    _hold_is_live,
     _release_attempts,
     _restraint_exits,
+    _restraint_holder_in,
     _restraint_holder_pool,
     _restraint_view,
 )
@@ -215,6 +217,43 @@ class TestRestraintView:
         pool = _restraint_holder_pool(sc, ["Hinami"])
         assert "the strangler vine" in pool
         assert "vine_mass" in pool
+
+
+# --- resolving the holder out of a phrase ------------------------------------
+
+class TestHolderResolution:
+    def test_a_phrase_naming_two_bodies_vouches_for_neither(self):
+        """`by: "the harness Sarah buckled while Marcos held it"` names the
+        binder and a bystander; picking either is a guess wearing a match,
+        and the guess has teeth -- the floor auto-ends a hold the moment its
+        resolved holder walks out, so mis-resolving to Sarah releases a body
+        Marcos is still holding when SARAH leaves the room. Ambiguity is the
+        Director's to settle: the record must vouch for nobody, block
+        nobody, and never auto-end."""
+        record = _record(
+            {"level": "held", "by": "the harness Sarah buckled while Marcos "
+             "held it steady"})
+        names = [SUBJECT, "Sarah", "Marcos"]
+        assert _restraint_holder_in(record, names) is None
+        sc = _scene(Hinami="cell", Marcos="cell", Sarah="hall")
+        assert _hold_is_live(record, sc, {}, names) is None
+        endings, _ = _restraint_exits([record], "", sc, {}, names)
+        assert endings == {}
+
+    def test_a_name_inside_a_longer_name_is_that_name(self):
+        """"Moon" matching inside "Dr. Moon's hand" is the shorter spelling
+        of the same holder, not a second body -- the containing span wins,
+        whichever order the candidate pool offers them in."""
+        record = _record({"level": "held", "by": "Dr. Moon's hand"})
+        assert _restraint_holder_in(
+            record, ["Moon", "Dr. Moon"]) == "Dr. Moon"
+        assert _restraint_holder_in(
+            record, ["Dr. Moon", "Moon"]) == "Dr. Moon"
+
+    def test_a_whole_phrase_match_is_never_ambiguous(self):
+        record = _record({"level": "held", "by": "Dr. Moon"})
+        assert _restraint_holder_in(
+            record, ["Moon", "Dr. Moon"]) == "Dr. Moon"
 
 
 # --- the cue's precision, measured rather than designed ----------------------
