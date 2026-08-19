@@ -182,13 +182,44 @@ def snapshot_state(chat_id):
         "fiction_locations": fiction_locations,
     }
 
+def _recreate_snapshot_book(chat_id, snapshot):
+    """Re-create a snapshot book this chat no longer has, or decline.
+
+    A restore already DELETES the chat-owned books no snapshot book maps
+    onto -- a book minted by a since-discarded timeline must not survive
+    into canon. Without the inverse the pair is one-way: rolling back past
+    the turn that minted a book and then forward again found nothing to
+    match, and the book, its entries, the canon binding and every link
+    between those books were gone for good. Rolling all of a chat's books
+    away is only the extreme of that, not a separate case.
+
+    Declines when the snapshot's id still names a live row: this chat does
+    not own that book (the id-, origin- and name-matching above would have
+    claimed it if it did), so it is a library book other chats read, and
+    rewriting a shared resource from one chat's checkpoint is not this
+    function's business. The re-created book is chat-owned and attached at
+    the snapshot's `enabled`, which is also what makes the next restore
+    match it by id instead of minting a second copy."""
+    old_id = snapshot.get("lorebook_id")
+    if old_id is not None and q(
+            "SELECT id FROM lorebooks WHERE id=?", (old_id,), one=True):
+        return None
+    new_id = qi(
+        "INSERT INTO lorebooks(chat_id,name,book_type,origin_id) "
+        "VALUES(?,?,?,?)",
+        (chat_id, snapshot.get("name") or "Lorebook",
+         snapshot.get("book_type") or "general", snapshot.get("origin_id")),
+    )
+    qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,enabled) "
+       "VALUES(?,?,?)",
+       (chat_id, new_id, 1 if snapshot.get("enabled", 1) else 0))
+    return new_id
+
 def _restore_books(chat_id, books, links=None):
     """Restore lorebook rows/entries from a snapshot. Returns the
     {snapshot book id: current book id} map so the caller can remap other
     snapshot data that embeds book ids (room_registry.owning_book_id)."""
     current_ids = set(chat_lorebook_ids(chat_id, enabled_only=False))
-    if not current_ids:
-        return {}
     current = {
         row["id"]: row
         for row in q("SELECT * FROM lorebooks WHERE chat_id=?", (chat_id,))
@@ -210,7 +241,11 @@ def _restore_books(chat_id, books, links=None):
         if target not in current:
             target = by_name.get(snapshot.get("name"))
         if target not in current:
-            continue
+            target = _recreate_snapshot_book(chat_id, snapshot)
+            if target is None:
+                continue
+            current[target] = q(
+                "SELECT * FROM lorebooks WHERE id=?", (target,), one=True)
         old_id = snapshot.get("lorebook_id")
         if old_id:
             old_to_new[old_id] = target
