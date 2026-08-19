@@ -582,6 +582,38 @@ def derive_contained_positions(scene: dict) -> dict:
     return scene
 
 
+def scale_changed_names(previous_scales, current_scales) -> set:
+    """Whose size changed enough to break what was true at the old geometry.
+
+    Returns folded names, so a caller compares against
+    `str(x).strip().casefold()`.
+
+    ONE implementation, because this is one rule with two consequences: a
+    contact is released (`contacts_broken_by_scale_change`) and a containment
+    is released (`containment_broken_by_scale_change`), and both must agree on
+    what counts as a change. They were separate near-verbatim loops with
+    cosmetically different zero-guards -- `min(was, current) <= 0` against
+    `was <= 0 or current <= 0` -- which is exactly the arrangement where a
+    later threshold change lands in one of them.
+
+    Lives here rather than in a shared geometry module because
+    `_SCALE_CONTACT_BREAK` and `clamp_scale` do, and `spatial_geometry`
+    imports this module: the dependency only runs one way.
+    """
+    before = previous_scales if isinstance(previous_scales, dict) else {}
+    now = current_scales if isinstance(current_scales, dict) else {}
+
+    changed = set()
+    for name in set(before) | set(now):
+        was = clamp_scale(_ci_get(before, name)) or 1.0
+        current = clamp_scale(_ci_get(now, name)) or 1.0
+        if min(was, current) <= 0:
+            continue
+        if max(was, current) / min(was, current) >= _SCALE_CONTACT_BREAK:
+            changed.add(str(name).strip().casefold())
+    return changed
+
+
 def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
     """Release anyone whose size change makes their container absurd.
 
@@ -594,18 +626,7 @@ def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
     if not isinstance(contained, dict) or not contained:
         return []
 
-    before = previous_scales if isinstance(previous_scales, dict) else {}
-    now = scene.get("scales") or {}
-
-    changed = set()
-    for name in set(before) | set(now):
-        was = clamp_scale(_ci_get(before, name)) or 1.0
-        current = clamp_scale(_ci_get(now, name)) or 1.0
-        if min(was, current) <= 0:
-            continue
-        if max(was, current) / min(was, current) >= _SCALE_CONTACT_BREAK:
-            changed.add(str(name).strip().casefold())
-
+    changed = scale_changed_names(previous_scales, scene.get("scales") or {})
     if not changed:
         return []
 
