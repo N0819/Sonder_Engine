@@ -728,9 +728,15 @@ def scene_after_turn(chat_id, turn_idx):
 def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
     """Everything needed to generate (or serve from cache) one backdrop.
 
-    Returns {room, signature, cached, source} -- `source` being the
-    perception-derived, people-stripped setting text an image prompt is written
-    from. Returns None when there is no room to depict.
+    Returns `{room, room_name, signature, cached, place, time, location,
+    weather}`, or None when there is no room to depict. `place` is the
+    structured, occupant-free room projection an image prompt is written from.
+
+    There is NO `flavour` key and no cheaper name for one: the
+    perception-derived setting text used to be computed here and was moved out
+    for the reason spelled out in `arrival_flavour`, so the one caller that
+    needs it builds it for itself, past every cache check. This dict is the
+    READ path, which serves cache hits and never writes a prompt.
     """
     scene = scene_after_turn(chat_id, turn_idx)
     room_id = _room_of_player(scene, player_name)
