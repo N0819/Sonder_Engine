@@ -340,6 +340,47 @@ class TestPlanSplice:
         keys = [key for key, _ in build_plan({}, [], chat_id=_chat(temp_db))]
         assert not any(key.startswith("ext:") for key in keys)
 
+    def test_an_anchor_the_planner_cannot_splice_is_refused_at_registration(
+            self, temp_db, ext_root):
+        """Ordering two of your own stages -- `anchor="after:ext:<id>:<key>"`
+        -- is the obvious thing to reach for and the planner cannot do it.
+        It was ACCEPTED: the stage registered, appeared in
+        `registered_stages()`, and was never planned on any turn, with no
+        warning and no load error anywhere. Silence is the defect; the
+        refusal has to happen where the extension can read it."""
+        from agents.runtime import build_plan
+
+        _write_extension(ext_root, "chained", {
+            "id": "chained", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py"}},
+            files={"extension.py":
+                   "def register(api):\n"
+                   "    api.add_stage('first', anchor='after:narrator',\n"
+                   "                  handler=lambda v, x, n: {})\n"
+                   "    api.add_stage('second',\n"
+                   "                  anchor='after:ext:chained:first',\n"
+                   "                  handler=lambda v, x, n: {})\n"})
+        _enable("chained")
+
+        assert "anchor" in extension_runtime.disabled_reasons()["chained"]
+        keys = [key for key, _ in build_plan({}, [], chat_id=_chat(temp_db))]
+        assert not any(key.startswith("ext:") for key in keys)
+
+    def test_an_anchor_on_the_dynamic_character_group_is_refused_too(
+            self, ext_root):
+        """Same rule, same reason: `character:<id>` is planned as a parallel
+        group, so there is no single position to splice beside."""
+        _write_extension(ext_root, "chatty", {
+            "id": "chatty", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py"}},
+            files={"extension.py":
+                   "def register(api):\n"
+                   "    api.add_stage('note', anchor='after:character:5',\n"
+                   "                  handler=lambda v, x, n: {})\n"})
+        _enable("chatty")
+
+        assert "anchor" in extension_runtime.disabled_reasons()["chatty"]
+
     def test_two_extensions_at_one_anchor_order_by_id(self, temp_db, ext_root):
         from agents.runtime import build_plan
 
