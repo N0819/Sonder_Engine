@@ -386,8 +386,9 @@ copy blindly:
 runtime authority for live rooms, positions and entity state. `room_registry` is
 the sole cross-frame ledger of room identity and retirement. `world_entities` is
 a derived projection of the scene commit. `world_placements` is decommissioned;
-`fiction_worlds`, `fiction_locations`, and `transit_edges` are deprecated
-import-compatibility tables.
+`fiction_worlds` and `fiction_locations` are deprecated import-compatibility
+tables. `transit_edges` is only ever deleted: it is in no archive, no
+checkpoint and no restore path, so it compatibly imports nothing.
 
 **Commit is atomic.** Slow provider work (lore and memory embeddings) happens
 *before* the write lock; then all primary turn mutations commit inside one outer
