@@ -274,10 +274,17 @@ def _scan() -> tuple[dict[str, Extension], list[dict]]:
     except OSError:
         return found, errors
     for directory in children:
-        # `.staging-*` and friends: a half-written download in flight is not an
-        # installed extension, and reporting it as a broken one is noise.
+        # A dotted directory is not an extension: hidden entries under this
+        # root belong to the host or the filesystem, never to the scan.
         if directory.name.startswith("."):
             continue
+        # THIS is what keeps an install in flight out of the scan, and it is
+        # the reason a half-written download is never reported as a broken
+        # extension. Staging happens in a `tempfile.TemporaryDirectory` under
+        # this same root, which is named `tmpXXXXXXXX` and holds the bundle
+        # one level DEEPER -- so it has no manifest of its own here. Nothing
+        # in this tree has ever created a dot-prefixed staging directory; the
+        # guard above has never fired for that reason.
         if not (directory / "manifest.json").is_file():
             continue
         try:
