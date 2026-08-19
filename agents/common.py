@@ -1494,6 +1494,51 @@ def _named_cast_subject(text, target_forms):
     return hits[0] if len(hits) == 1 else None
 
 
+def _effect_subject(event, eff, actor_name, target_forms, actor_forms):
+    """Who ONE effect is about, and whether that answer is a guess.
+
+    `targets` is a property of the ELEMENT; the effects hanging off it are
+    separate claims, and the question "who is this about" is asked once per
+    claim. Scoping the self-fallback to the element meant an element that acts
+    on somebody AND asserts something about the actor's own body lost the
+    subject on the body claim -- and `_named_cast_subject`, the guard added to
+    catch a claim plainly about someone else, was nested INSIDE the same
+    condition and so could not run there either.
+
+    Measured over every stored `director_interpret` active variant in the live
+    database, read-only: 1,673 effect claims, 856 (51.2%) with no subject, and
+    703 of those 856 hang off an element that DID name targets -- which is
+    exactly this scope error. Every one of them lands in
+    `director_reconcile._player_claim_findings`' "no resolvable subject;
+    coverage not checkable" note, so the player's asserted effect is never held
+    against the diff at all.
+    """
+    if eff.get("target_id"):
+        return eff["target_id"], False
+    own_text = " ".join(str(part) for part in
+                        (eff.get("kind"), eff.get("details")) if part)
+    named = _named_cast_subject(own_text, target_forms)
+    if named:
+        return named, True
+    # The effect's own text naming the ACTOR is the case the element scope hid:
+    # "Hinami is seated on the bed" on an element whose targets name someone
+    # else. It is the player's own body, and it is checkable.
+    if actor_name and any(
+            re.search(cue_boundary_pattern(re.escape(form)), own_text, re.I)
+            for form in (actor_forms or ()) if form):
+        return actor_name, True
+    if event.get("targets"):
+        # The element named somebody and this effect named nobody: a dropped
+        # reference, not the self. Left for the Director to adjudicate, as
+        # before -- resolving it to the player would hand them authorship of
+        # another character's body.
+        return None, False
+    named = _named_cast_subject(
+        f"{event.get('attempt') or ''} {_element_effect_text(event)}",
+        target_forms)
+    return (named or actor_name), bool(named or actor_name)
+
+
 def _extract_authority_claims(sequence, raw_input, actor_name=None,
                               target_forms=None):
     """Extract authority claims from the interpreted sequence.
@@ -1525,6 +1570,7 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
     cast member the text does is strictly better than either wrong answer --
     the resolve seam can then actually check the claim's coverage."""
     fallback_text = str(raw_input or "")
+    actor_forms = _player_name_forms(actor_name) if actor_name else ()
     claims = []
     for i, event in enumerate(sequence or []):
         if event.get("type") == "event":
@@ -1555,16 +1601,6 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                 event.get("raw_text") or event.get("attempt")
                 or fallback_text)
         event["commitment"] = commitment
-        # A null effect target is the actor's own body only when the action
-        # named no targets at all; if it did, the null is a dropped reference.
-        self_subject = actor_name if not (event.get("targets") or []) else None
-        if self_subject and target_forms:
-            # ...and only when the act is not plainly about someone else.
-            named = _named_cast_subject(
-                f"{event.get('attempt') or ''} {_element_effect_text(event)}",
-                target_forms)
-            if named:
-                self_subject = named
         if commitment == "asserted":
             for effect_index, effect in enumerate(
                 event.get("asserted_effects") or []
@@ -1572,19 +1608,28 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                 eff = _normalize_effect(effect)
                 if eff is None:
                     continue
+                predicate = str(eff.get("kind") or "").strip()
+                if not predicate and not eff.get("details"):
+                    # Nothing was claimed. An empty predicate with a resolvable
+                    # subject becomes an omission reading "player-asserted
+                    # completed effect '' on <subject>", which buys a full
+                    # resolve_repair Director call for a claim with no content.
+                    # Measured live: 48 of 1,673 effect claims (2.9%), and all
+                    # 48 carry an empty `value` too, so nothing is lost.
+                    continue
+                subject_id, inferred = _effect_subject(
+                    event, eff, actor_name, target_forms, actor_forms)
                 claims.append({
                     "claim_id": f"claim:{i}:effect:{effect_index}",
                     "scope": "effect",
-                    "subject_id": eff.get("target_id") or self_subject,
+                    "subject_id": subject_id,
                     # Whether that subject is the model's answer or this
-                    # function's GUESS. `self_subject` is a fallback for an
-                    # act that named no target, and "named no target" is not
-                    # the same fact as "was about my own body" -- see
+                    # function's GUESS -- "named no target" is not the same
+                    # fact as "was about my own body". See
                     # `_claim_authority_kind`, which may not read a guess as a
                     # grant.
-                    "subject_inferred": not eff.get("target_id")
-                    and bool(self_subject),
-                    "predicate": eff.get("kind", ""),
+                    "subject_inferred": inferred,
+                    "predicate": predicate,
                     "value": eff.get("details"),
                     "commitment": "asserted",
                     "source_text": event.get("raw_text")
@@ -1597,19 +1642,17 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                 eff = _normalize_effect(effect)
                 if eff is None:
                     continue
+                predicate = str(eff.get("kind") or "").strip()
+                if not predicate and not eff.get("details"):
+                    continue
+                subject_id, inferred = _effect_subject(
+                    event, eff, actor_name, target_forms, actor_forms)
                 claims.append({
                     "claim_id": f"claim:{i}:intent:{effect_index}",
                     "scope": "intent",
-                    "subject_id": eff.get("target_id") or self_subject,
-                    # Whether that subject is the model's answer or this
-                    # function's GUESS. `self_subject` is a fallback for an
-                    # act that named no target, and "named no target" is not
-                    # the same fact as "was about my own body" -- see
-                    # `_claim_authority_kind`, which may not read a guess as a
-                    # grant.
-                    "subject_inferred": not eff.get("target_id")
-                    and bool(self_subject),
-                    "predicate": eff.get("kind", ""),
+                    "subject_id": subject_id,
+                    "subject_inferred": inferred,
+                    "predicate": predicate,
                     "value": eff.get("details"),
                     "commitment": "contestable",
                     "source_text": event.get("raw_text")
