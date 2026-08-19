@@ -171,6 +171,18 @@ def _javascript_strings(source: str):
         i += 1
 
 
+#: Past this, a candidate is far more likely to be a runaway regex capture
+#: than authored copy, and is refused outright.
+_CAPTURE_CEILING = 2000
+
+#: Past this, a candidate is unusual enough to name in the run's output so a
+#: maintainer can look at it -- but it is still published, because long help
+#: text is copy a reader needs translated most.
+_LONG_MESSAGE = 500
+
+_LONG_MESSAGES: set[str] = set()
+
+
 def _message(value: str, label_position: bool = False) -> str | None:
     value = " ".join(str(value or "").split())
     if len(value) < 2 or not any(ch.isalpha() for ch in value):
@@ -184,10 +196,27 @@ def _message(value: str, label_position: bool = False) -> str | None:
     # inside legitimate template literals like
     # `Could not load the app: ${e?.message || e}`. Both are re-scoped to the
     # shapes that only occur in code.
-    if len(value) > 500 or any(marker in value for marker in (
+    if any(marker in value for marker in (
             " function ", " const ", " => ",
             "document.", "querySelector", "addEventListener", "return ",
             "/api/", "await ", " // ", "$(\"")):
+        return None
+    # A LENGTH ceiling used to stand here, at 500 characters, on the reasoning
+    # that "real interface messages are deliberately concise". Measured
+    # 2026-08-18 it rejected five strings and every one of them was interface
+    # copy: the attire picker's explanation of why a garment covers regions,
+    # the player-authority setting's account of what full authorship means, the
+    # backdrop-continuity setting's account of what editing the first image
+    # buys, and the repair model's account of shape-versus-content. Long help
+    # text is the copy a reader most needs in their own language, and it was
+    # the only copy structurally excluded from every pack.
+    #
+    # The ceiling was never the real guard anyway -- the markers above are.
+    # It survives only as a WARNING, because a runaway regex capture is a real
+    # failure mode and a silent 4KB blob in the catalog is worse than a noisy
+    # one. Anything past 2,000 characters is far outside authored copy and is
+    # still refused.
+    if len(value) > _CAPTURE_CEILING:
         return None
     # `let x =` is code; "to let OpenRouter choose" is not.
     if re.search(r"\blet\s+[A-Za-z_$][\w$]*\s*=", value):
@@ -219,6 +248,11 @@ def _message(value: str, label_position: bool = False) -> str | None:
     # the string sits, not how it looks.
     if not label_position and re.fullmatch(r"[a-z0-9_.:/-]+", value):
         return None
+    # Recorded LAST, so the report names only what is actually published. The
+    # code guards above (the `;` count, `var(--`, the code markers) are what
+    # rejects a runaway capture; length is not a guard here, it is a flag.
+    if len(value) > _LONG_MESSAGE:
+        _LONG_MESSAGES.add(value)
     return value
 
 
@@ -263,7 +297,11 @@ def _python_text(node) -> str | None:
 #: repo are prompts, log lines or protocol and must never enter the catalog.
 #: Each entry here is a promise that the table's values are interface copy.
 READER_FACING_TABLES = {
-    "agents/runtime.py": {"FRIENDLY_STEP_LABELS", "STEP_LABELS"},
+    # `FRIENDLY_STEP_LABELS` was named here too and has never been in this
+    # file -- it is a table in `static/js/chat.js`, harvested by the ordinary
+    # JS string sweep. A promise about a table that is not there is the same
+    # shape as the one this comment block exists to prevent.
+    "agents/runtime.py": {"STEP_LABELS"},
     "world/living_world.py": {"LIVING_WORLD_DESCRIPTIONS"},
     "story/scene.py": {"OFFSCREEN_LIFE_DESCRIPTIONS"},
     "mind/affect.py": {"CAPACITY_DESCRIPTIONS"},
@@ -338,6 +376,59 @@ OPTION_LABEL = (
     re.compile(r'el\(\s*"option"[^)]*?\}\s*,\s*"([^"]+)"\s*\)'),
 )
 
+#: THE BROWSER HAS NO ANALOGUE OF `READER_FACING_TABLES`, DELIBERATELY.
+#:
+#: The rule above rejects a bare lowercase token with no space or punctuation.
+#: Audit FRONTEND-23 read that as the bug -- "`episode` appears zero times in
+#: `en/ui.json`" -- and it is not. Measured 2026-08-18, 688 distinct strings in
+#: `static/js` are rejected by it, and 683 are CSS custom properties, MIME
+#: types, event names, class names and route fragments. The other five are
+#: members of six module-level tables (`MEM_CATS_FALLBACK`, `MEM_PROV_FALLBACK`,
+#: `ATTIRE_REGIONS`, `EXTRA_PART_ASPECTS`, `LORE_INHERITANCE_MODES`,
+#: `DEFAULT_LORE_LINK_TYPES`) whose elements ARE rendered as dropdown labels --
+#: and every one of them is a stored enum value: `memories.category`,
+#: `memories.provenance`, an attire region key, a lorebook `relation_type`.
+#:
+#: `Design.md` § Story and interface language packs states the rule those fall
+#: under: "the stored protocol stays canonical English -- schema keys, enum
+#: values, step ids and ledger vocabulary are never translated, which is what
+#: lets one deterministic engine read objects written by any language."
+#: `tools/project_check.py`'s `canonical_language_tokens` enforces it, and
+#: translating these five is exactly what it refuses.
+#:
+#: So the filter is the rule, implemented. What IS wrong is one layer up and
+#: not this tool's to fix: the interface shows a reader `alternate_version` and
+#: `reference_only` in ENGLISH TOO. That is a missing label, not a missing
+#: translation, and giving each enum an authored label with the enum as its
+#: `value` is a browser change. Recorded in `docs/UNBUILT.md`.
+
+
+#: `\uXXXX` and `\xXX` were NOT unescaped here, and the catalog key is what
+#: `t()` looks up at runtime. So a source string written `"\u201cthe door
+#: gives way\u201d"` was harvested with the six literal characters `\u201c` in
+#: it, while the browser called `t()` with the real curly quote -- the key
+#: could never match, and three of this catalog's longest help texts were
+#: untranslatable in every pack while looking translated in the JSON. Found
+#: 2026-08-18. Template placeholders stay verbatim so an explicit ``t(`...`)``
+#: call can use them; a backslash escape does not, because the string the
+#: browser passes to `t()` is the EVALUATED one and the key has to be it.
+_JS_ESCAPES = (
+    (r"\n", "\n"), (r"\t", "\t"), (r"\r", "\r"), (r"\/", "/"),
+    (r'\"', '"'), (r"\'", "'"),
+)
+_JS_CODEPOINT = re.compile(
+    r"\\u\{([0-9a-fA-F]+)\}|\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})")
+
+
+def _unescape_js(raw: str) -> str:
+    """Enough JS unescaping for authored UI strings."""
+    value = _JS_CODEPOINT.sub(
+        lambda m: chr(int(next(g for g in m.groups() if g is not None), 16)),
+        raw)
+    for escape, literal in _JS_ESCAPES:
+        value = value.replace(escape, literal)
+    return value.replace("\\\\", "\\")
+
 
 def _option_labels(source: str) -> set[str]:
     found = set()
@@ -359,16 +450,7 @@ def source_messages() -> list[str]:
         source = path.read_text(encoding="utf-8")
         found.update(_option_labels(source))
         for raw in _javascript_strings(source):
-            # Enough JS unescaping for authored UI strings. Keep template
-            # placeholders verbatim so explicit t(`...`) calls can use them.
-            value = (raw.replace(r"\n", "\n")
-                     .replace(r"\t", "\t")
-                     .replace(r"\r", "\r")
-                     .replace(r"\/", "/")
-                     .replace(r'\"', '"')
-                     .replace(r"\'", "'")
-                     .replace(r"\\", "\\"))
-            message = _message(value)
+            message = _message(_unescape_js(raw))
             if message:
                 found.add(message)
     return sorted(found, key=lambda item: (item.casefold(), item))
@@ -397,6 +479,8 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"Wrote {len(expected) - 1} source messages to {UI_PATH}")
+    for message in sorted(_LONG_MESSAGES):
+        print(f"  long ({len(message)} chars): {message[:80]}...")
     return 0
 
 

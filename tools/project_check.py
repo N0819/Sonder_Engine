@@ -141,6 +141,101 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
                 )
 
 
+def _module_level_bodies(tree: ast.AST, source: str) -> dict:
+    """Module-level `def`s and simple assignments, keyed by name.
+
+    The value is the definition's own source with its leading indentation and
+    trailing blank lines stripped, so two files can be compared on what the
+    definition SAYS rather than on where it sits. A docstring is included: two
+    copies with different docstrings are still two copies, and the difference
+    is usually one of them explaining why it exists.
+    """
+    lines = source.splitlines()
+    found = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names = [node.name]
+        elif isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names = [node.target.id]
+        else:
+            continue
+        end = getattr(node, "end_lineno", None)
+        if end is None:
+            continue
+        body = "\n".join(lines[node.lineno - 1:end]).strip()
+        for name in names:
+            found[name] = body
+    return found
+
+
+def check_cross_file_duplicate_definitions(errors: list[str]) -> None:
+    """One definition written out twice, in two modules, with separate callers.
+
+    `check_duplicate_python_symbols` is PER FILE -- it catches a name bound
+    twice in one module, which Python resolves by discarding the first. This
+    catches the other shape, which Python resolves by keeping both: the same
+    function or constant copied into a second module, where nothing ever
+    reports the two drifting apart because neither file is wrong on its own.
+
+    Measured on the shape that prompted it (audit STORY-F11):
+    `sanitize_attire_items` and its `_NON_ATTIRE_TERMS` set existed in
+    `story/attire.py`, `persist/commit_attire.py` and `story/scene.py`, each
+    with its own consumers -- the Director sanitising what a specialist
+    proposed, commit sanitising what is about to be written, and scene
+    sanitising an authored outfit at seed time. Three chances for one rule
+    about what counts as clothing to become three different rules.
+
+    NAME PLUS BODY, never name alone. A repo has many honest same-name
+    definitions in different modules (`_key`, `_normalize`, `main`), and
+    reporting those would make this noise rather than a check. Two definitions
+    that are BYTE-IDENTICAL after stripping indentation are a copy, and the
+    false-positive rate for that is the rate at which two people independently
+    write the same lines -- which for anything longer than a line is nil.
+
+    ENGINE FILES ONLY. A test fixture repeated across test files is ordinary
+    and deliberate, and this rule is about one authority for one rule.
+    """
+    seen = {}
+    for path in sorted(engine_python_paths()):
+        rel = path.relative_to(ROOT).as_posix()
+        source = path.read_text(encoding="utf-8")
+        try:
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError:
+            continue
+        for name, body in _module_level_bodies(tree, source).items():
+            if name in _PER_MODULE_HOOKS:
+                continue
+            if len(body.splitlines()) < _DUPLICATE_MIN_LINES:
+                continue
+            seen.setdefault((name, body), []).append(rel)
+    for (name, _body), files in sorted(seen.items()):
+        if len(files) > 1:
+            errors.append(
+                f"{name!r} is defined identically in {len(files)} modules "
+                f"({', '.join(files)}); one of them owns it and the rest "
+                "should import it, or they will drift apart with nothing "
+                "reporting it"
+            )
+
+
+#: Module hooks the language resolves PER MODULE. A module-level `__getattr__`
+#: cannot be imported and shared -- defining one in each module that needs it
+#: is the only way to have one at all -- so "one of them owns it and the rest
+#: should import it" is advice that cannot be followed. `story/importers.py`
+#: and `world/offscreen.py` both carry the same four-line compat shim for
+#: `_COMPAT_PROMPT_IDS`, correctly.
+_PER_MODULE_HOOKS = frozenset({"__getattr__", "__dir__"})
+
+#: Below this many lines a same-name, same-body definition is as likely to be
+#: a coincidence as a copy -- `_key = lambda x: x` and a two-line `__init__`
+#: are written the same way by everybody. The pair this check was built for is
+#: an eight-element set and a twelve-line loop.
+_DUPLICATE_MIN_LINES = 3
+
+
 def check_duplicate_dict_keys(errors: list[str]) -> None:
     """A dict literal binding the same key twice keeps only the LAST one.
 
@@ -1224,6 +1319,29 @@ def facade_siblings(home: Path, stem: str) -> set:
     return found
 
 
+#: Every facade family this rule covers, as `name -> (package dir, stem)`.
+#:
+#: A MODULE-LEVEL map rather than a local, so a test can ask which facades are
+#: covered without re-parsing the tree or reading this function's source.
+#: `world.spatial` was the third of the three and sat outside the check for as
+#: long as the check existed, behind a comment saying adding the line was all
+#: it took. It took the line plus eight import sites -- `world/crowds.py`
+#: reaching for `world.spatial_geometry`'s `ROOM_SIZES`, and seven test sites
+#: naming `spatial_orientation`/`spatial_senses`/`spatial_contacts` to CALL
+#: through rather than to patch -- each of which is the drift a facade rule
+#: exists to stop: a caller that knows which sibling defines a name, and
+#: therefore pins where the name lives.
+#:
+#: `facade_siblings` reads each family's members off the facade's own import
+#: block, never off a filename glob, which is why `world/spatial_frames.py`
+#: (prefix match, not behind the facade) is correctly outside `world.spatial`.
+FACADE_FAMILIES = {
+    "agents.director": (ROOT / "agents", "director"),
+    "commit": (ROOT / "persist", "commit"),
+    "world.spatial": (ROOT / "world", "spatial"),
+}
+
+
 def check_facade_import_direction(errors: list[str]) -> None:
     """A split family's facade must stay the only way in, and the only way out.
 
@@ -1247,24 +1365,8 @@ def check_facade_import_direction(errors: list[str]) -> None:
     The rule is about CALLERS. `facade_import_violations` carries the one
     exception, and why a test is not always a caller.
     """
-    #: `world.spatial` is the third facade of this shape and is NOT here yet.
-    #: Adding the line is all it takes -- `facade_siblings` reads its fourteen
-    #: re-exported siblings correctly, and deliberately excludes
-    #: `world/spatial_frames.py`, which matches the prefix and is not behind
-    #: the facade. Measured, adding it reports five sites that must be
-    #: repaired first, by the owners of those files: `world/crowds.py:57`
-    #: imports `world.spatial_geometry` for `ROOM_SIZES`/`DEFAULT_ROOM_SIZE`,
-    #: both of which the facade re-exports, and four tests
-    #: (`test_barrier_vocabulary`, `test_bearing_integrity`, `test_orientation`,
-    #: `test_sound_bearing`) name `spatial_orientation`/`spatial_senses` to
-    #: CALL through rather than to patch. None is a defect this check invented;
-    #: each is one import line.
-    families = {
-        "agents.director": (ROOT / "agents", "director"),
-        "commit": (ROOT / "persist", "commit"),
-    }
     tests_dir = ROOT / "tests"
-    for facade, (home, stem) in families.items():
+    for facade, (home, stem) in FACADE_FAMILIES.items():
         pkg = home.name
         siblings = facade_siblings(home, stem)
         if not siblings:
@@ -1468,6 +1570,7 @@ def main() -> int:
     check_no_dead_prompts(errors)
     check_patch_debris(errors)
     check_empty_tests(errors)
+    check_cross_file_duplicate_definitions(errors)
     check_prompt_schema_ops(errors)
     check_specialist_prompt_chunks(errors)
     check_prose_author_chunks(errors)

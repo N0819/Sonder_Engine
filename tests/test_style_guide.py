@@ -136,23 +136,110 @@ def test_endpoints_round_trip(temp_db):
         chat_id, {"style_guide": {"genre": "auto"}})["style_guide"] == {}
 
 
-def test_only_generative_stages_carry_the_guide():
-    """director_interpret reads the player's declaration; a house style there
-    would colour how their own words are read. Character agents keep their own
-    authored voices."""
-    director = open("agents/director.py").read()
-    interpret = director[director.index("def director_interpret"):
-                         director.index("def _reconcile_interpretation")]
-    assert "style_guide" not in interpret
-
-    for path in ("agents/character.py", "agents/perception.py",
-                 "agents/narration.py"):
-        assert "style_guide" not in open(path).read(), path
+GUIDE = {"genre": "weird western", "director_notes": "Dust, and long odds."}
 
 
-def test_generative_stages_do_carry_it():
-    director = open("agents/director.py").read()
-    establish = director[director.index("def director_establish"):
-                         director.index("def director_interpret")]
-    assert "style_guide" in establish
-    assert "style_guide" in open("agents/mapping.py").read()
+def _chat_with_guide(guide, *, idx=1, player_input="I look around."):
+    """A minimal chat carrying `guide`, plus the context one stage needs."""
+    import time
+
+    from core import db
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
+
+    persona_id = db.qi(
+        "INSERT INTO personas(name,sheet) VALUES(?,?)",
+        ("Nia", json.dumps({"identity": {"name": "Nia"}})))
+    chat_id = db.qi(
+        "INSERT INTO chats(name,persona_id,scenario,created) VALUES(?,?,?,?)",
+        ("Rain", persona_id, "A quiet street.", time.time()))
+    if guide:
+        db.wset(chat_id, "style_guide", guide)
+    turn_id = db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (chat_id, idx, player_input, time.time()))
+    ctx = PipelineContext(
+        chat=ChatData(id=chat_id, name="Rain", persona_id=persona_id,
+                      lorebook_id=None, scenario="A quiet street.",
+                      created=time.time()),
+        turn=TurnData(id=turn_id, chat_id=chat_id, idx=idx,
+                      player_input=player_input, created=time.time()),
+        cast=[],
+        input=player_input,
+    )
+    return ctx
+
+
+def _payloads_sent(monkeypatch, module, run):
+    """Every payload `run()` hands the model, through `module._agent_json`.
+
+    This is the instrument the source assertions here used to stand in for.
+    They sliced `agents/director.py` between two `def` markers and asked
+    whether the substring "style_guide" appeared in the slice, which is wrong
+    in both directions: a function added between the markers silently widens
+    the slice, and a key reached through a helper or a spread vanishes from it
+    while still reaching the model. Reading the payload asks the question the
+    design cares about -- what did this stage SEND.
+    """
+    sent = []
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        sent.append(payload)
+        return {}
+
+    monkeypatch.setattr(module, "_agent_json", fake_agent_json)
+    if hasattr(module, "validate_llm_output"):
+        monkeypatch.setattr(module, "validate_llm_output",
+                            lambda step, value: (value, []))
+    try:
+        run()
+    except Exception:
+        # A stage may fail downstream of its model call on a skeletal fixture.
+        # What it already sent is the whole question, and an empty list fails
+        # the assertion below rather than passing vacuously.
+        pass
+    return sent
+
+
+def test_the_interpret_stage_sends_no_house_style(monkeypatch, temp_db):
+    """`director_interpret` reads the player's own declaration. A house style
+    there would colour how their words are read, which is the one place in
+    this engine where the player's own meaning is decided."""
+    from agents import director
+
+    ctx = _chat_with_guide(GUIDE)
+    sent = _payloads_sent(monkeypatch, director,
+                          lambda: director.director_interpret(ctx, nonce=0))
+
+    assert sent, "the stage made no model call, so this proves nothing"
+    for payload in sent:
+        assert "style_guide" not in json.dumps(payload)
+
+
+def test_the_generative_stages_do_send_it(monkeypatch, temp_db):
+    """The other half, in the same instrument: an assertion that a key is
+    absent is only worth having beside one that it can be present."""
+    from agents import director
+
+    ctx = _chat_with_guide(GUIDE, idx=0, player_input="")
+    sent = _payloads_sent(monkeypatch, director,
+                          lambda: director.director_establish(ctx, nonce=0))
+
+    assert sent, "director_establish made no model call"
+    assert any(payload.get("style_guide") == GUIDE for payload in sent)
+
+
+def test_the_mapping_agent_is_told_about_it_and_the_minds_are_not():
+    """Asserted on the PROMPT CARDS, which are data rather than source layout.
+
+    A stage whose instructions never mention the key cannot be asked to honour
+    one, and the card is the durable statement of what a stage is told --
+    it survives a refactor that moves where the payload is assembled, which
+    is precisely what the source slice did not.
+    """
+    from llm.prompts import DEFAULT_PROMPTS
+
+    assert "style_guide" in DEFAULT_PROMPTS["mapping_stage"]
+    for pid in ("character", "narrator", "director_interpret",
+                "perception_act" if "perception_act" in DEFAULT_PROMPTS
+                else "narrator"):
+        assert "style_guide" not in DEFAULT_PROMPTS[pid], pid

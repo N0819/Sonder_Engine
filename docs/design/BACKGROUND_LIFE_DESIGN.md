@@ -1066,11 +1066,19 @@ about a person, who moves. Neither is implemented, on three grounds:
    same string-guessing this design already refuses for contradiction, and a
    misclassification would silently change a claim's lifetime.
 
-And the measurement is missing. Against the production corpus this lane has
-produced **0 claims** (2,411 `background_react` variants, 39 through the
-manager path, 29 that called the detector), so there is no ratification or
-expiry rate to tune against. Get the rate first — the `source_notes` stamp
-above is what makes it countable — then decide.
+And the measurement is still missing, though the lane has now fired. It
+produced 0 claims for a long time (2,411 `background_react` variants, 39
+through the manager path, 29 that called the detector); measured again
+2026-08-18 it has produced **7, all 7 ratified, 0 contradicted, 0 expired**,
+all in one chat. Those seven are not a ratification rate: until `5ab591e`
+`_verdicts` adopted a claim whenever any reference of four characters or more
+appeared anywhere in the resolved event of the beat being SETTLED, and
+`background_react` runs after `director_resolve` — so the text was written
+before the presence spoke, every claim was settled on its own beat, and
+contradiction and expiry could not fire at all. A three-outcome design
+collapsed onto its one irreversible branch. Get the rate again under the
+repaired gate — the `source_notes` stamp above is what makes it countable —
+then decide.
 
 #### Credence comes from the frozen blurb
 

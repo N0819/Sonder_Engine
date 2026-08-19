@@ -885,10 +885,26 @@ class TestTheExtensionSurface:
     def test_the_facade_needs_no_agent_import_to_answer(self, temp_db, story):
         """A panel refresh must not drag the pipeline in. `story_view.py` is
         reached from HTTP routes, and an import of `agents.*` there would pull
-        the whole runtime into a read that wants four tables."""
-        import inspect
+        the whole runtime into a read that wants four tables.
 
-        source = inspect.getsource(story_view)
+        AST, not substring. `"import agents" not in source` was false-negative
+        on `import agents.perception as p` only by luck of spelling, and
+        false-POSITIVE on the words appearing in a comment or a docstring --
+        which is how a correct file gets a red test and someone deletes the
+        prose instead of the import. It also missed a deferred import inside a
+        function body, which is the form this module would actually acquire.
+        """
+        import ast
 
-        assert "import agents" not in source
-        assert "from agents" not in source
+        tree = ast.parse(open(story_view.__file__).read())
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(a.name for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module)
+
+        offending = sorted(
+            name for name in imported
+            if name == "agents" or name.startswith("agents."))
+        assert not offending, offending

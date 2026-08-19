@@ -275,13 +275,31 @@ class TestPlanFiring:
         assert hit["reactive_fired"] == 1
         assert wget(cid, "offscreen_plans", [])[0]["status"] == "completed"
 
-    def test_the_reactive_path_has_no_provider_call(self):
-        import inspect
-        from world import offscreen
+    def test_the_reactive_path_has_no_provider_call(self, temp_db, monkeypatch):
+        """DRIVEN, not read. The substring form this replaces --
+        `"providers" not in source` and `"chat_complete" not in source` --
+        holds for any spelling that avoids those two words: an aliased import,
+        a call through `llm_quality.complete_validated_json`, or a provider
+        reached through one of the modules `offscreen.py` already imports.
+        Sealing the doors and running the path asks the real question."""
+        from core.db import transaction
+        from model_seams import seal_model_seams
+        from world.offscreen import advance_reactive_plans, apply_plan_ops
 
-        source = inspect.getsource(offscreen.advance_reactive_plans)
-        assert "providers" not in source
-        assert "chat_complete" not in source
+        cid, _, scene, ctx, op = _world(temp_db)
+        op["stages"][0]["trigger"] = {"after_seconds": 30}
+        apply_plan_ops(ctx, scene, {"elapsed_seconds": 0})
+        ctx.turn = types.SimpleNamespace(
+            id=temp_db.qi(
+                "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+                (cid, 2, "", time.time())), idx=2, frame_id=None)
+
+        seal_model_seams(monkeypatch)
+        with transaction():
+            result = advance_reactive_plans(
+                ctx, scene, {"elapsed_seconds": 60}, {}, "epoch_sealed")
+        assert result["reactive_fired"] == 1, (
+            "the path did not fire, so nothing was proved about it")
 
 
 def test_schema_keeps_plan_ops():

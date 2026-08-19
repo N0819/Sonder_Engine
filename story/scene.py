@@ -40,24 +40,12 @@ from story.character_schema import (
 import re as _re
 
 from story import attire as attire_model
-
-_NON_ATTIRE_TERMS = {
-    "chair", "cushion", "seat", "table", "cup", "mug", "glass",
-    "bottle", "book", "weapon", "tool",
-}
-
-def sanitize_attire_items(items):
-    result = []
-    for item in items or []:
-        text = str(item).strip()
-        lowered = text.casefold()
-        if not text:
-            continue
-        if any(_re.search(rf"\b{_re.escape(term)}\b", lowered) for term in _NON_ATTIRE_TERMS):
-            continue
-        if text not in result:
-            result.append(text)
-    return result
+# The third copy of this pair lived here until 2026-08-18, and it had already
+# drifted in spelling if not in behaviour: the same eight-word set and the same
+# loop, written out again. `story/attire.py` owns both (audit STORY-F11), and
+# re-exporting from here keeps `scene.sanitize_attire_items` importable for the
+# callers that know it by that name.
+from story.attire import _NON_ATTIRE_TERMS, sanitize_attire_items  # noqa: F401
 
 
 def seed_initial_attire(scene, name, outfit):

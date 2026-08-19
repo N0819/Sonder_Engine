@@ -116,7 +116,7 @@ def test_the_support_manners_come_from_the_contact_vocabulary():
     rather than the manner list, so nothing tied the two together and the
     real vocabulary grew a word this never saw."""
     from world.comfort import _SUPPORTING_CONTACT_MANNERS
-    from world.spatial_contacts import CONTACT_MANNERS
+    from world.spatial import CONTACT_MANNERS
 
     assert _SUPPORTING_CONTACT_MANNERS <= set(CONTACT_MANNERS)
 

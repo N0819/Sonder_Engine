@@ -55,7 +55,7 @@ BANDS = ("a handful", "a dozen or so", "a few dozen", "a throng")
 #: in one would be a worse answer than a crowd of ordinary density. That rule
 #: is `effective_room_size`'s to state, and this module had a second copy of
 #: the vocabulary it graded against.
-from world.spatial_geometry import DEFAULT_ROOM_SIZE, ROOM_SIZES  # noqa: E402
+from world.spatial import DEFAULT_ROOM_SIZE, ROOM_SIZES  # noqa: E402
 
 #: `spatial._ROOM_COST` looks like this rank and is NOT: it collapses tiny,
 #: small, "" and medium all to 1, because it prices WALKING rather than
