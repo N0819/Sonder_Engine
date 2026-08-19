@@ -151,14 +151,35 @@ class TestResidueIsContactOnly:
         assert out["facts"][0] == "consequence 0 stands"
         assert out["facts"][1] == "consequence 1 stands"
 
-    def test_this_module_writes_nothing(self):
+    def test_this_module_writes_nothing(self, temp_db, monkeypatch):
         """A residue that is never stored cannot be delivered to the wrong
         mind later, and a hundred quiet turns cost nothing. The one-door
-        rule, held by there being no door: no world-KV write, no INSERT,
-        no model call anywhere in this module."""
-        import inspect
+        rule, held by there being no door: no world-KV write, no INSERT, no
+        model call.
 
-        src = inspect.getsource(routines)
-        assert "wset(" not in src
-        assert "INSERT INTO" not in src
-        assert "chat_complete" not in src
+        Held by DRIVING the module with every mutating seam booby-trapped,
+        rather than by grepping its source for `wset(`, `INSERT INTO` and
+        `chat_complete`. Those three spellings are three of many: `qi`,
+        `qtx`, `transaction`, an import alias or any helper that wraps one
+        satisfies the grep and writes anyway."""
+        import core.db as db
+        import llm.providers as providers
+
+        cid = _make_chat(temp_db)
+
+        def _refuse(name):
+            def _fail(*a, **k):
+                raise AssertionError("routines reached %s" % name)
+            return _fail
+
+        for seam in ("wset", "qi", "qtx", "transaction", "wset_for_frame"):
+            if hasattr(db, seam):
+                monkeypatch.setattr(db, seam, _refuse("db.%s" % seam))
+        monkeypatch.setattr(providers, "chat_complete",
+                            _refuse("providers.chat_complete"))
+
+        routine_band("room:%s:tavern" % cid, 5000.0)
+        occupancy_fact("room:%s:tavern" % cid, "The Boar Tavern", 0.0, 90000.0)
+        entropy_facts("The Boar Tavern", 9 * DAY_SECONDS)
+        residue_for(cid, {"rooms": {"tavern_main": {"name": "Tavern"}}},
+                    "tavern_main", now_seconds=90000.0)
