@@ -272,3 +272,147 @@ def test_every_specialist_example_shows_exactly_the_channels_it_owns():
         shown = set(example) - {"notes"}
         assert shown == set(channels), (
             f"{step_key}: shows {sorted(shown)}, owns {sorted(channels)}")
+
+
+def test_no_schema_model_is_declared_without_anything_reaching_it():
+    """A Pydantic model nothing references is worse than no model at all.
+
+    Nothing validates against it, so it states a shape the engine does not
+    enforce while reading, to anyone opening this file, as the contract. That
+    is not hypothetical: the body specialist's sheet asks the Director for
+    `tick_interval_seconds`, and the only place that field exists in code is
+    `PersistentCondition` -- a model no call has ever validated -- while the
+    commit path reads a different field name entirely.
+
+    Twenty-nine such models were deleted: the fiction/time/authority models,
+    the early entity ontology, and the shapes naming the
+    fiction_worlds/fiction_locations/transit_edges/world_placements tables
+    the movement/space phases decommissioned. Reachability is computed the
+    way it has to be for this file -- a model is live if any `.py` outside it
+    names it, or if anything at module level here does (SCHEMA_MAP, the
+    helpers, the aliases), or if a live model's own body annotates a field
+    with it.
+    """
+    import ast
+    import collections
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    source = (root / "llm/schemas.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    pattern = re.compile(
+        r"\b(" + "|".join(sorted(classes, key=len, reverse=True)) + r")\b")
+
+    seed = set()
+    for path in root.rglob("*.py"):
+        rel = path.relative_to(root)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if rel.as_posix() == "llm/schemas.py":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:                       # pragma: no cover - unreadable
+            continue
+        seed.update(m.group(1) for m in pattern.finditer(text))
+
+    lines = source.splitlines()
+
+    def _names_in(node):
+        body = "\n".join(
+            lines[node.lineno - 1:(node.end_lineno or node.lineno)])
+        return {m.group(1) for m in pattern.finditer(body)}
+
+    edges = collections.defaultdict(set)
+    for name, node in classes.items():
+        edges[name] = _names_in(node) - {name}
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef):
+            seed.update(_names_in(node))
+
+    reached, stack = set(), list(seed)
+    while stack:
+        name = stack.pop()
+        if name in reached:
+            continue
+        reached.add(name)
+        stack.extend(edges.get(name, ()))
+
+    # Kept deliberately, each for a stated reason. Removing a name from this
+    # allowlist means deleting the model, not silencing the test.
+    allowed = {
+        # Held until the open question about condition ticking is answered:
+        # build the due-tick sweep, or drop the prompt field, the NULL
+        # `next_tick` column and the index that serves no query.
+        "PersistentCondition",
+        # Fixtures: tests/test_schema_leniency.py exercises the shared
+        # coercion through these two, and tests/test_speech_concealment.py
+        # through SpeechElement.
+        "CausalRegime", "FictionFrame", "SpeechElement",
+    }
+    unreached = sorted(set(classes) - reached - allowed)
+    assert not unreached, (
+        f"{unreached} are declared in llm/schemas.py and reachable from "
+        "nothing -- no SCHEMA_MAP entry, no other model's field, no module "
+        "outside the file. Wire it up or delete it; a shape nothing "
+        "validates is not a contract.")
+
+
+def test_greeting_interpret_asks_only_for_what_the_launch_reads():
+    """The greeting extraction declared eleven fields and `story.greetings`
+    read two.
+
+    The other nine were a whole scene graph -- rooms, positions, entities,
+    attire, player_room -- plus location, scene_description, character_state
+    and notes. None was a gap waiting to be wired: `start_story` stores the
+    greeting prose as the chat's scenario, so `director_establish` builds the
+    scene from the SAME passage one turn later with the engine's full payload
+    behind it. Every card ingest paid for a second, weaker pass at that job
+    and threw the answer away.
+
+    Two assertions, because the defect can come back from either side: a
+    field re-added to the schema that nothing reads, or a prompt that goes on
+    asking for one the schema dropped.
+    """
+    import re
+
+    from llm.schemas import GreetingInterpret
+    from language_runtime import installed_language_packs
+
+    declared = set(GreetingInterpret.__fields__)
+    assert declared == {"time", "knowledge_seeds"}, (
+        "GreetingInterpret declares a field story/greetings.py does not read; "
+        "wire the reader or drop the field")
+
+    # A stored extraction written by the older extractor still reads: extra
+    # keys are ignored here as everywhere else in this module.
+    legacy = {
+        "location": "a dim tavern", "time": "night",
+        "scene_description": "Rain against the shutters.",
+        "rooms": {"tavern": {"name": "The Tavern"}},
+        "positions": {"Kara": "tavern"}, "entities": {},
+        "attire": {"Kara": {"summary": "a travel-worn cloak"}},
+        "character_state": {"mood": "wary"}, "player_room": "tavern",
+        "notes": "", "knowledge_seeds": [],
+    }
+    report = validate_llm_output_strict("greeting_interpret", legacy)
+    assert report.valid, report.errors
+    assert set(report.output) == declared
+    assert report.output["time"] == "night"
+
+    # And every pack's output line names those fields and no others.
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        prompt = pack.card("system_prompts")["prompts"]["greeting_interpret"]
+        for field in declared:
+            assert field in prompt, (
+                f"{pack.id} never names {field!r}, which the schema requires")
+        for dropped in ("rooms", "positions", "player_room",
+                        "scene_description", "character_state"):
+            # Word-bounded: "Dispositions" in the psychology clause is not a
+            # request for `positions`.
+            assert not re.search(r"\b%s\b" % dropped, prompt), (
+                f"{pack.id} still asks for {dropped!r}, which nothing reads")

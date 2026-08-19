@@ -1616,10 +1616,27 @@ def _warn_unsent_on_anthropic(prov, role, json_schema):
     they change nothing, and nothing said so -- the host reads the panel,
     sees the value they set, and attributes the difference to the model.
 
-    Sending them is a request-shape decision (Anthropic spells reasoning as
-    `thinking: {type, budget_tokens}` and constrains output through tools,
-    neither of which this module emits) and is the owner's to make. Saying
-    that a set dial is inert is not.
+    Sending them is a request-shape decision and is the owner's to make.
+    Saying that a set dial is inert is not.
+
+    What that shape IS, though, is not a matter of taste, and the answer this
+    docstring gave was out of date: Anthropic no longer spells reasoning as a
+    token budget. `thinking: {type: "enabled", budget_tokens: N}` is
+    deprecated on the 4.6 generation and rejected outright, with a 400, on the
+    models after it. The live pair is `thinking: {type: "adaptive"}` alongside
+    `output_config: {effort: low|medium|high|xhigh|max}` -- which is this
+    module's own per-role dial under another name, so the mapping is nearly
+    the identity rather than a budget anyone has to invent. "off" maps to
+    `thinking: {type: "disabled"}`, which is itself refused above the middle
+    effort levels on some models and refused entirely on others. Output is
+    likewise no longer constrained only through a tool: `output_config:
+    {format: ...}` is the native structured-output field, so the JSON grammar
+    has a direct spelling here too.
+
+    Both are versioned request shapes that have to be checked against the
+    model actually configured before anything is sent, which is why this
+    remains a decision rather than a repair -- but it should be decided
+    against the current API, not the one this comment described.
     """
     name = _prov_field(prov, "name") or "provider"
     unsent = []
