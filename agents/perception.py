@@ -6,7 +6,7 @@ import copy
 import json
 import re
 
-from language_runtime import linguistic
+from language_runtime import english_linguistic, linguistic
 from story.character_schema import (
     character_appearance,
     character_name,
@@ -72,13 +72,18 @@ from world.spatial import (
 )
 
 
-_RAPID_MOVEMENT_VERBS = frozenset({
-    "run", "sprint", "flee", "dash", "bolt", "race", "charge",
-})
-
-
 def _declares_rapid_movement(value):
-    """Whether one structured declaration says the actor moves rapidly."""
+    """Whether one structured declaration says the actor moves rapidly.
+
+    The verb table is the ACTIVE PACK's (`agents.perception._RAPID_MOVEMENT_VERBS`),
+    not seven English words: a Japanese story declaring 走る got no match, so
+    the continuity rescue this gates stayed open on exactly the beats it exists
+    to close. Matched against the declared verb and the leading word of the
+    observable only -- never against free prose -- which is why each pack can
+    anchor its own pattern (English `^...s?$`, Japanese unanchored stems)
+    without widening what is tested.
+    """
+    pattern = _ling("_RAPID_MOVEMENT_VERBS")
     sequence = value if isinstance(value, list) else (value or {}).get("sequence")
     for event in sequence or []:
         if not isinstance(event, dict) or event.get("type") != "action":
@@ -87,8 +92,8 @@ def _declares_rapid_movement(value):
         words = str(
             event.get("attempt") or event.get("observable") or ""
         ).strip().casefold().split()
-        if verb in _RAPID_MOVEMENT_VERBS or (
-            words and words[0].rstrip("s") in _RAPID_MOVEMENT_VERBS
+        if (verb and pattern.search(verb)) or (
+            words and pattern.search(words[0])
         ):
             return True
     return False
@@ -378,20 +383,24 @@ _SENTENCE_SPLIT = re.compile(
 
 # Does this sentence ASSERT SIGHT -- somebody looking at something, in the
 # verbs a view actually uses for it. Read by `_strip_self_narration`'s floor,
-# which refuses to leave a perceiver with no sight at all.
+# which refuses to leave a perceiver with no sight at all. In the ACTIVE PACK
+# (`agents.perception._SIGHT_ASSERTION`), because the floor is worth exactly
+# what the pattern recognises: written in English literals, a Japanese view
+# asserting 見える scored as containing no sight at all, so the refusal could
+# never fire and the whole third-person cut went through.
 #
 # Deliberately its own pattern rather than `_atom_channel`'s "sight" cues:
 # those classify a whole ATOM for the observation projection, they lean on
 # second-person phrasing ("you see") that is by definition absent from the
 # third-person views this floor exists for, and widening them would move
 # every consumer of that classification.
-_SIGHT_ASSERTION = re.compile(
-    r"\b(?:sees?|saw|seen|seeing|watch(?:es|ed|ing)?|look(?:s|ed|ing)?\s+at"
-    r"|notic(?:e|es|ed|ing)|observ(?:e|es|ed|ing)|glimps(?:e|es|ed|ing)"
-    r"|spots?|spotted|makes?\s+out|made\s+out|catch(?:es)?\s+sight\s+of"
-    r"|caught\s+sight\s+of|in\s+view|visible|in\s+sight)\b",
-    re.I,
-)
+#
+# The name survives as the ENGLISH COMPAT EXPORT, the same convention
+# `composer.DIM_FIGURE` keeps: bound once at import from the English pack, read
+# by tests and audits, and NEVER by the floor itself -- which reads the active
+# pack at use time, because two languages can be running in one process.
+_SIGHT_ASSERTION = english_linguistic(
+    "agents.perception", "_SIGHT_ASSERTION")
 
 
 def _cue_hits(cues, folded):
@@ -956,8 +965,9 @@ def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
     # promise that nothing informative is ever dropped (a view phrasing sight
     # as "visual sensors pick up" is still dropped whole -- see
     # test_a_body_named_with_an_article_is_caught_under_another_article).
-    if (any(_SIGHT_ASSERTION.search(s) for s in dropped)
-            and not any(_SIGHT_ASSERTION.search(s) for s in kept)):
+    _sight = _ling("_SIGHT_ASSERTION")
+    if (any(_sight.search(s) for s in dropped)
+            and not any(_sight.search(s) for s in kept)):
         if refusals is not None:
             refusals.append(
                 "dropping self-narration would have left this view with no "
@@ -1360,9 +1370,9 @@ def _subject_concealed_terms(chat_id, subject_name):
 # generate false positives -- but a hand cannot rise and descend in the same
 # instant, and that is the one that bit. Deliberately narrow: this is a
 # tripwire, and a tripwire nobody trusts gets ignored.
-_RAISING = re.compile(r"\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|"
-                      r"hoist(?:s|ed|ing)?)\b")
-_LOWERING = re.compile(r"\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?)\b")
+# In the ACTIVE PACK (`agents.perception._RAISING` / `._LOWERING`): a tripwire
+# written in one language is a tripwire that fires in one language, and the
+# story it was measured on is not the only story.
 
 
 def _inverted_motion_check(ctx, stage, views, resolved_event):
@@ -1388,17 +1398,18 @@ def _inverted_motion_check(ctx, stage, views, resolved_event):
     event = str(resolved_event or "").casefold()
     if not event:
         return
-    event_lowers = bool(_LOWERING.search(event))
-    event_raises = bool(_RAISING.search(event))
+    raising, lowering = _ling("_RAISING"), _ling("_LOWERING")
+    event_lowers = bool(lowering.search(event))
+    event_raises = bool(raising.search(event))
     if event_lowers == event_raises:
         return                      # says both, or says neither
     for pid, view in (views or {}).items():
         text = str(view or "").casefold()
         if not text:
             continue
-        if event_lowers and _RAISING.search(text) and not _LOWERING.search(text):
+        if event_lowers and raising.search(text) and not lowering.search(text):
             said, saw = "lowering", "raising"
-        elif event_raises and _LOWERING.search(text) and not _RAISING.search(text):
+        elif event_raises and lowering.search(text) and not raising.search(text):
             said, saw = "raising", "lowering"
         else:
             continue
@@ -2142,18 +2153,16 @@ def perception_outcome(ctx, nonce):
 # regression, and that was measured rather than supposed.
 # ---------------------------------------------------------------------------
 
-_LOOK_VERBS = frozenset({
-    "look", "examine", "inspect", "survey", "study", "scan", "observe",
-    "glance", "peer", "search", "check",
-})
-
-
 def _explicit_look_intent(interp):
     """Did the player explicitly look/examine this beat? Read from the
     Director's structured interpretation (location_query, or a declared
     action whose leading verb is a look verb), never from raw input. An
     explicit look re-renders the player's full standing state instead of the
-    delta."""
+    delta.
+
+    The verb table is the ACTIVE PACK's (`agents.perception._LOOK_VERBS`). A
+    Japanese story never re-earned a full render on an explicit look, because
+    the eleven English words could not match 見回す."""
     if not isinstance(interp, dict):
         return False
     if str(interp.get("location_query") or "").strip():
@@ -2165,7 +2174,7 @@ def _explicit_look_intent(interp):
         words = text.strip().split()
         verb = str(event.get("verb") or (words[0] if words else ""))
         verb = re.sub(r"[^\w]", "", verb).strip().casefold()
-        if verb in _LOOK_VERBS or verb.rstrip("s") in _LOOK_VERBS:
+        if verb and _ling("_LOOK_VERBS").search(verb):
             return True
     return False
 
@@ -2924,9 +2933,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
             cause = (amap.get(name_cf) or {}).get("cause", "").lower()
-            pain = any(w in cause for w in
-                       ("injur", "wound", "blood", "hurt", "struck",
-                        "broke", "burn"))
+            pain = any(w in cause for w in _ling("_PAIN_CUES"))
             percepts = composer.residue_percepts(
                 p["awareness"], targeted=(name_cf in onset_targets),
                 loud_event=onset_loud, pain=pain)
@@ -3263,9 +3270,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 str(d.get("intended_target") or "").casefold() == name_cf
                 for d in enriched_dlog)
             cause = (amap.get(name_cf) or {}).get("cause", "").lower()
-            pain = any(w in cause for w in
-                       ("injur", "wound", "blood", "hurt", "struck",
-                        "broke", "burn"))
+            pain = any(w in cause for w in _ling("_PAIN_CUES"))
             percepts = composer.residue_percepts(
                 p["awareness"], targeted=targeted, loud_event=loud_event,
                 pain=pain)
