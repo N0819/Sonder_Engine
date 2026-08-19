@@ -595,6 +595,43 @@ PRESERVED_SETTING_KEYS = (
     # roll back with everything else: rewind to before you were starving and
     # you are not starving.
     "survival_enabled",
+    # Display sibling of the toggle above -- whether the margin tracker shows
+    # anyone but the player (world/survival.py). The pair was split when
+    # `survival_enabled` joined this list; the same argument covers both.
+    "survival_track_npcs",
+    # What the world does on its own -- routine residue, scheduled
+    # consequences, place obligations, the antagonist ladder
+    # (world/living_world.py). Same family as `background_config` one entry
+    # up: the dial is the host's, while everything it CAUSES (a fired fuse, a
+    # minted consequence, an owed-history row) is diegetic and rolls back,
+    # exactly as vitals roll back while `survival_enabled` stands. This dial
+    # changes what the fiction does, which makes it look ambiguous -- but so
+    # does every ceiling here, and the precedent is settled: the position of
+    # the dial is authoring, its effects are the story's.
+    "living_world",
+    # The dial a story's whole premise can rest on (`Design.md` hard mode):
+    # how much of the world the player may author. Its route refuses rather
+    # than normalizes an unreadable value because "the player silently
+    # keeping or losing authorship of the world" is the failure mode -- and a
+    # reroll reverting `actor_only` to `world_author` is that exact failure.
+    # The blob carries the mode AND the record of it changing
+    # (scene.set_player_authority); the record is wall-clock history of the
+    # dial, kept for the same reason `fixed_points` outlives a rewind past
+    # its declaration: rolling it back would erase the only thing that can
+    # explain why an earlier beat granted what the current mode refuses.
+    "player_authority",
+    # NOT a preference -- the one entry here preserved on a correctness
+    # argument instead. The secret nonce that keys every viewer-scoped
+    # anonymous `body:` id (web/story_view.py), minted lazily on first
+    # projection. A checkpoint taken before that mint does not carry it, so a
+    # restore that let it roll back would force a re-mint and re-key every
+    # anonymous id a viewer has ever seen, mid-story -- the continuity the
+    # projection schema exists to keep. It is bookkeeping for the projection,
+    # like a session id: not story state, so it must not roll back with the
+    # story. (An archive import minting a fresh one is the OTHER case and
+    # stays: a different chat is a different projection -- see
+    # chat_archive.UNEXPORTED_WORLD_KEYS.)
+    "presence_id_namespace",
 )
 
 
