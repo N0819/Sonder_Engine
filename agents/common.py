@@ -2478,7 +2478,14 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     """
     if awareness is not None and awareness in NON_AWAKE_GATED:
         return False
-    if observer_name == source_name:
+    # `same_subject`, not `==`, for `region_visibility`'s reason 1,800 lines
+    # above: a being routinely carries a display name and an entity id at
+    # once, and a bare comparison between the two answers "these are two
+    # people". Here that denies a mind its OWN percept rather than handing it
+    # somebody else's -- and the case where it matters most is a body sealed
+    # inside something, which is concealed from every subject in the scene,
+    # itself included, once the self-exemption has failed to recognise it.
+    if same_subject(scene, observer_name, source_name):
         return True
     if containment_conceals(scene, observer_name, source_name):
         return False
