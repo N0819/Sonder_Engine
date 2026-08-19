@@ -44,7 +44,7 @@
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 429 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3266 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5444 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5460 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2207 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 360 |  | — |
@@ -515,8 +515,8 @@
 |---|---:|---:|
 | `preprocess_llm_output()` | 4211 | 344 lines |
 | `_lenient_coerce()` | 695 | 159 lines |
-| `validate_llm_output_strict()` | 5315 | 130 lines |
-| `semantic_output_errors()` | 5117 | 103 lines |
+| `validate_llm_output_strict()` | 5331 | 130 lines |
+| `semantic_output_errors()` | 5133 | 103 lines |
 | `canonicalize_prose_markup()` | 4016 | 102 lines |
 | `_uncross_concealed_speech()` | 4140 | 69 lines |
 | `_coerce_list_valued_map()` | 128 | 57 lines |
