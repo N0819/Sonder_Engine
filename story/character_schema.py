@@ -689,6 +689,44 @@ def default_persona_data(name: str = "Player") -> dict:
         "narration": {"voice_setting": ""},
     }
 
+#: The pronoun paradigm every reader assumes. `_narration_person_counts`
+#: iterates `.values()`, the fidelity checks index by role -- so a non-mapping
+#: here is not a degraded card, it is an AttributeError on the narrator step
+#: of every turn in that story.
+_DEFAULT_PRONOUNS = {"subject": "they", "object": "them", "possessive": "their"}
+
+
+def _pronouns(value: Any) -> dict:
+    """A pronoun paradigm, whatever shape the card offered.
+
+    Normalization used to be `value.get("pronouns") or {default}`, which
+    checks PRESENCE and not TYPE. A string is truthy, so the most natural
+    thing an author or an importing model writes -- `"pronouns": "they/them"`
+    -- passed straight through and every turn of that story died at the
+    narrator.
+
+    A slash- or comma-separated string is READ rather than discarded: it is
+    what people write, and throwing it away to hand back a default would lose
+    an authored fact to a formatting choice. Anything else falls back. Fewer
+    than three parts repeat the last one, so "she/her" gives a possessive
+    rather than a silent gap.
+    """
+    if isinstance(value, dict):
+        out = dict(_DEFAULT_PRONOUNS)
+        for role in ("subject", "object", "possessive"):
+            word = str(value.get(role) or "").strip()
+            if word:
+                out[role] = word
+        return out
+    if isinstance(value, str):
+        parts = [w.strip() for w in re.split(r"[/,]", value) if w.strip()]
+        if parts:
+            while len(parts) < 3:
+                parts.append(parts[-1])
+            return dict(zip(("subject", "object", "possessive"), parts[:3]))
+    return dict(_DEFAULT_PRONOUNS)
+
+
 def _list(value: Any) -> list:
     if isinstance(value, list):
         return value
@@ -784,6 +822,25 @@ def _legacy_private_history(value: Any) -> list[dict]:
             result.append({"content": text, "about": "", "known_by": []})
     return result
 
+def _with_normalized_pronouns(value: Any) -> Any:
+    """Read `identity.pronouns` into a paradigm before the defaults merge.
+
+    Runs first because `_deep_defaults` now DECLINES a scalar written where a
+    mapping belongs -- correct, and on its own it would silently drop
+    "they/them" rather than honour it. Parsing here means the merge sees a
+    mapping and the authored fact survives.
+    """
+    if not isinstance(value, dict):
+        return value
+    identity = value.get("identity")
+    if not isinstance(identity, dict) or "pronouns" not in identity:
+        return value
+    out = dict(value)
+    out["identity"] = dict(identity)
+    out["identity"]["pronouns"] = _pronouns(identity.get("pronouns"))
+    return out
+
+
 def _deep_defaults(defaults: Any, value: Any) -> Any:
     if not isinstance(defaults, dict):
         return copy.deepcopy(value)
@@ -791,8 +848,22 @@ def _deep_defaults(defaults: Any, value: Any) -> Any:
     if not isinstance(value, dict):
         return result
     for key, item in value.items():
-        if key in result and isinstance(result[key], dict) and isinstance(item, dict):
-            result[key] = _deep_defaults(result[key], item)
+        if key in result and isinstance(result[key], dict):
+            if isinstance(item, dict):
+                result[key] = _deep_defaults(result[key], item)
+            # A DEFAULT IS A SHAPE, NOT JUST A VALUE. A scalar written where
+            # the default is a mapping used to replace it outright, so the
+            # sheet left this function structurally wrong and every reader
+            # downstream had to survive a type it was never written for.
+            # Measured: a persona authored `"pronouns": "they/them"` -- the
+            # most natural thing anyone writes -- passed normalization and
+            # raised `'str' object has no attribute 'values'` on the NARRATOR
+            # step of the first turn, and of every turn after it.
+            #
+            # The default is kept instead. A field that can meaningfully READ
+            # the scalar normalizes it before the merge (see `_pronouns`);
+            # everything else is better off shaped right than authored wrong.
+            continue
         else:
             result[key] = copy.deepcopy(item)
     return result
@@ -987,6 +1058,7 @@ def normalize_character_data(value: dict) -> dict:
         # would make it look native to the branch test above and route it
         # away from the legacy conversion below.
         value = repair_character_shape(value)
+        value = _with_normalized_pronouns(value)
         name = (value.get("identity") or {}).get("name") or value.get("name") or "Unnamed"
         result = _deep_defaults(default_character_data(name), value)
         _coerce_latent(result)
@@ -1045,8 +1117,7 @@ def normalize_character_data(value: dict) -> dict:
             "uid": str(value.get("uid") or new_uid("char")),
             "name": name,
             "aliases": _list(value.get("aliases")),
-            "pronouns": copy.deepcopy(value.get("pronouns") or {
-                "subject": "they", "object": "them", "possessive": "their"}),
+            "pronouns": _pronouns(value.get("pronouns")),
         },
         "initial_outfit": _normalize_initial_outfit(
             value.get("initial_outfit")
@@ -1139,6 +1210,7 @@ def normalize_persona_data(value: dict) -> dict:
     elif isinstance(value.get("sheet"), dict):
         value = value["sheet"]
     if "identity" in value or "narration" in value:
+        value = _with_normalized_pronouns(value)
         name = (value.get("identity") or {}).get("name") or value.get("name") or "Player"
         result = _deep_defaults(default_persona_data(name), value)
         _coerce_latent(result)
@@ -1155,8 +1227,7 @@ def normalize_persona_data(value: dict) -> dict:
             "uid": str(value.get("uid") or new_uid("persona")),
             "name": str(value.get("name") or "Player"),
             "aliases": _list(value.get("aliases")),
-            "pronouns": copy.deepcopy(value.get("pronouns") or {
-                "subject": "they", "object": "them", "possessive": "their"}),
+            "pronouns": _pronouns(value.get("pronouns")),
         },
         "initial_outfit": _normalize_initial_outfit(
             value.get("initial_outfit")

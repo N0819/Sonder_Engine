@@ -74,7 +74,7 @@
 | `story/attire.py` | 2690 |  | — |
 | `story/authored_events.py` | 124 |  | `core.db` |
 | `story/carriers.py` | 707 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.living_world`, `world.spatial` |
-| `story/character_schema.py` | 1722 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/character_schema.py` | 1793 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1090 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 263 |  | — |
 | `story/greetings.py` | 464 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.importers` |
@@ -833,14 +833,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 974 | 159 lines |
+| `normalize_character_data()` | 1045 | 159 lines |
 | `default_character_data()` | 569 | 95 lines |
 | `_normalize_psychology()` | 293 | 83 lines |
-| `repair_character_shape()` | 915 | 57 lines |
-| `character_card_warnings()` | 1638 | 54 lines |
+| `repair_character_shape()` | 986 | 57 lines |
+| `character_card_warnings()` | 1709 | 54 lines |
 | `_normalize_extra_parts()` | 515 | 52 lines |
 | `_as_profile_list()` | 38 | 50 lines |
-| `normalize_persona_data()` | 1134 | 50 lines |
+| `normalize_persona_data()` | 1205 | 50 lines |
 
 ### `story/couriers.py`
 
