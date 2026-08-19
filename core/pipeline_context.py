@@ -150,10 +150,21 @@ class PipelineContext:
     perception_establish: Optional[dict] = None
     perception_act: Optional[dict] = None
     director_resolve: Optional[dict] = None
+    # Declared, not left to `_extra`, for the reason agents/README.md step 5
+    # gives: five modules read this stage's output (narration, perception and
+    # three commit domains). The storage choice is not cosmetic -- `__contains__`
+    # answers `getattr(...) is not None` for a declared field but `key in
+    # _extra` for anything else, so an undeclared stage whose handler returned
+    # None passed `_assert_plan_materialized` and a declared one does not.
+    background_react: Optional[dict] = None
     perception_outcome: Optional[dict] = None
     narrator: Optional[dict] = None
     interaction_loop: Optional[dict] = None
     reaction_loop: Optional[dict] = None
+    # Nothing downstream reads it -- commit is the last stage -- but it is a
+    # planned step, and the materialization check must be able to tell a
+    # commit that returned nothing from one that never ran.
+    commit: Optional[dict] = None
 
     character_results: dict[int, dict] = field(default_factory=dict)
     reaction_results: dict[int, dict] = field(default_factory=dict)
