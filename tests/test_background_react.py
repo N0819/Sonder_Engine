@@ -510,3 +510,49 @@ def test_a_manager_that_did_speak_for_them_is_not_second_guessed(temp_db,
 
     assert out is voiced
     assert calls == [], "the manager spoke for them and was asked again anyway"
+
+
+def test_the_managers_work_survives_somebody_elses_unpaid_debt(temp_db,
+                                                               monkeypatch):
+    """The case neither test above covers, and the one that loses work: the
+    manager voiced A while C carries an unpaid routed debt. Control falls past
+    both returns to the per-presence path, and `out` was never referenced
+    again -- A's line, the minted blurbs and the recorded claims all dropped,
+    after the `blurb_mint` call had been paid for."""
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "night clerk": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                        "mention_turns": []},
+        "porter": {"first_turn": 1, "last_turn": 1, "dialogue_turns": [],
+                   "mention_turns": []},
+    }, player_input="Hello?")
+    temp_db.wset(ctx.chat.id, "background_config",
+                 {"scene_life": "full", "max_reactors": 1})
+    ctx.director_resolve = {
+        "resolved_event": "Hinami calls out.", "dialogue_log": [],
+        "routed_to_background": ["night clerk"],
+    }
+    voiced = background._result(
+        ["porter"],
+        [{"name": "porter", "action": "",
+          "dialogue_log_entry": {"speaker": "porter",
+                                 "exact_quote": '"Mind the step."'}}],
+        mode="scene_life:full", agent_calls=["blurb_mint", "scene_life"])
+    voiced["blurbs"] = {"porter": {"manner": "brisk"}}
+    voiced["claims"] = [{"by": "porter", "refs": ["the east stair"]}]
+    monkeypatch.setattr(background, "scene_life", lambda *a, **k: voiced)
+    monkeypatch.setattr(background, "_agent_json", lambda *a, **k: {
+        "reacts": True, "action": "straightens from the cot",
+        "dialogue_log_entry": {"speaker": "night clerk",
+                               "exact_quote": '"All right, all right..."',
+                               "volume": "normal"}})
+
+    out = background.background_react(ctx, nonce=0)
+
+    spoke = {r["name"] for r in out["reactions"]}
+    assert spoke == {"porter", "night clerk"}
+    assert set(out["selected"]) == {"porter", "night clerk"}
+    assert out["blurbs"] == {"porter": {"manner": "brisk"}}
+    assert out["claims"] == [{"by": "porter", "refs": ["the east stair"]}]
+    assert "blurb_mint" in out["agent_calls"]
