@@ -726,6 +726,69 @@ Provenance uses the vocabulary the engine already speaks —
 `what_i_experienced` / `what_i_was_told` / `what_i_concluded` — rather than a
 second one invented for the facade.
 
+### One frame at a time
+
+A Sonder story can hold more than one era (`core/frames.py`), and the two
+reads above plus your two state homes are all frame-sensitive. Each is
+correct alone; **composing them is where they can disagree**: `player_view`
+resolves the latest committed turn's frame, while `frame_state(...)` and
+`char_state(...)` follow the ambient frame — which an HTTP route does not
+have, so they answer for the present. A projection built from both can carry
+the future's scene beside the present's mission state, and every field looks
+plausible.
+
+When one DTO combines several reads, bind them:
+
+```python
+host    = api.at_frame(chat_id)            # the latest committed turn's frame
+player  = host.player_view("player")
+mission = host.frame_state().get() or {}
+crew    = host.char_state(person_id).get() or {}
+assert (player["frame"] or {}).get("id") == host.frame_id \
+    or (player["frame"] is None and host.frame_id is None)
+```
+
+`at_frame` resolves the frame **once** and returns an immutable view bound
+to it — `host.frame_id` is inspectable, so a test can prove what a request
+read. The selection vocabulary, everywhere it appears (`at_frame`, and the
+optional `frame_id` keyword on `story_view`/`player_view`):
+
+- **omitted** — the latest committed turn's frame, whatever frame the story
+  is actually on. A story with no turns at all is standing in the present.
+- **`None`** — explicitly the implicit present era. `None` is the engine's
+  own identifier for the present (`turns.frame_id IS NULL`), not a default.
+- **an integer** — that declared frame, verified to belong to this chat.
+  A frame of another chat and a frame that does not exist get the same
+  refusal, deliberately. A frame with no turns yet is honoured: its views
+  report `turn: None` beside the frame's own state, which provisioning can
+  legitimately have seeded.
+
+`player_view` reports the selection under `frame`, matching `story_view`, so
+coherence is observable rather than trusted.
+
+Three edges worth knowing:
+
+- **Writes bind too.** `host.frame_state().set_now(...)` lands in the bound
+  frame and no other — a read-modify-write must land where it read, or the
+  mixed-frame defect returns on the write side. The commit gate is
+  unchanged: the binding decides *where*, the gate still decides *when*
+  (`set()` in an `on_turn_committed` hook, `set_now()` as the escape hatch).
+- **A bound read stays bound.** `.get()` answers for the captured frame even
+  if the ambient frame changes in between, and never leaves the ambient
+  frame altered — the frame is resolved into each query, not parked in a
+  contextvar across your code.
+- **`api.state`, `api.documents` and `api.viewers` are not on the view**,
+  because they are chat-global by design; and `story_view.events` stays
+  story-global under any selection — `world_events` is the objective record,
+  and frames are an epistemic cursor over it, not a partition of the truth.
+  Filter on `turn_id` yourself if you want one era's events, knowingly.
+
+The unbound `api.frame_state(chat_id)` and `api.char_state(...)` keep their
+ambient behaviour, which is what code running *inside* a pipeline turn
+wants: there the engine has set the frame, and it is the answer. The
+argument for all of this is
+[`docs/design/DESIGN_FRAME_COHERENT_READS.md`](../design/DESIGN_FRAME_COHERENT_READS.md).
+
 ### Refusing a Director result
 
 `director_context` is model input: it guides a decision and cannot guarantee
@@ -992,6 +1055,11 @@ remap is generic, so `extf:` needed no code of its own to be carried correctly.
 
 A commit domain receives both (`view.state`, `view.frame_state`), and a
 mission-advancing domain almost always wants the second.
+
+Outside a pipeline turn — on a route, in a panel handler — the ambient frame
+is unset and `frame_state` answers for the present, which disagrees with
+`player_view`'s latest-turn frame the moment the story has a second era.
+Compose through `api.at_frame(chat_id)` there (§4, "One frame at a time").
 
 ## 6. Targeting characters
 
