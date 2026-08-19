@@ -67,6 +67,33 @@ class TestTheRamp:
         assert out[0]["last_progress_turn"] == 3
         assert out[0].get("barren_attempts") is None
 
+    def test_restating_a_goal_on_a_barren_beat_does_not_advance_it_either(self):
+        """The same beat, and the answer depended on which op the model chose.
+
+        `apply_intent_ops` folds an `add` that restates an existing goal into
+        progress on it -- which is exactly what a character repeating itself
+        emits, since a repeated move usually arrives with the goal restated
+        rather than with a `progress` op. That fold called `_advance_intent`
+        without `barren_beat`, so the rung the flag exists to close was open
+        the whole time to anyone who rephrased instead of reporting.
+        """
+        restate = [{"op": "add", "intent": "Complete the intake interview",
+                    "why": "still trying"}]
+        out, _ = _apply(_intent(), barren=True, ops=restate)
+
+        assert len(out) == 1, "a restatement is not a second goal"
+        assert out[0]["progress"] == 0.2
+        assert out[0]["barren_attempts"] == 1
+        assert out[0]["last_progress_turn"] == 1
+
+    def test_restating_a_goal_on_an_ordinary_beat_still_advances_it(self):
+        restate = [{"op": "add", "intent": "Complete the intake interview",
+                    "why": "still trying"}]
+        out, _ = _apply(_intent(), ops=restate)
+
+        assert out[0]["progress"] == 0.4
+        assert out[0]["last_progress_turn"] == 3
+
     def test_the_live_three_beat_grind_now_stops_at_the_first_repeat(self):
         """Chat 80 turns 1-3, replayed. Turn 1 advances; turns 2 and 3 repeated
         an earlier move and are refused."""
