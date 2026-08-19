@@ -437,3 +437,40 @@ def test_room_content_admits_nothing_it_was_not_handed():
 
     assert composer.room_content_percepts(None, [], [{}]) == []
     assert composer.room_content_percepts([{"what": "   "}]) == []
+
+
+def test_a_micro_round_delivery_is_a_percept_like_everything_else():
+    """It used to be concatenated onto the finished view AFTER the tripwires
+    and after `observations_from_render`, and given a hand-written observation
+    atom -- the one atom in the payload whose channel, intensity, suddenness
+    and self-direction were asserted rather than derived. That is the exact
+    property the projection's safety rests on, so the fix is to put the
+    delivery in the same percept list as everything else rather than to
+    hand-stamp it more carefully."""
+    from agents import composer
+
+    room = composer.environment_percept("hall", "Hall", "", "lit")
+    micro = composer.micro_round_percept(
+        "  She sets the cup down   without a word.  ")
+    rendered = composer.render_view([room, micro], mode="character")
+    atoms = composer.observations_from_render("7", rendered)
+
+    assert micro.data["desc"] == "She sets the cup down without a word."
+    assert micro.data["desc"] in rendered.text
+    carried = [a for a in atoms if "sets the cup down" in a["observed"]["text"]]
+    assert carried and carried[0]["channel"] == "mixed"
+    for atom in atoms:
+        assert atom["observed"]["text"] in rendered.text
+
+
+def test_two_identical_micro_deliveries_are_one_percept():
+    from agents import composer
+
+    first = composer.micro_round_percept("He nods once.")
+    again = composer.micro_round_percept("He nods once.")
+    text = composer.render_view([first, again], mode="character").text
+
+    assert first.dedupe_key == again.dedupe_key
+    assert text.count("He nods once.") == 1
+    assert composer.micro_round_percept("   ") is None
+    assert composer.micro_round_percept(None) is None
