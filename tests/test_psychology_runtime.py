@@ -226,6 +226,76 @@ def test_association_extinction_is_bounded_and_evidence_gated():
     assert result[0]["strength"] == 0.55
 
 
+def test_the_belief_cap_never_evicts_what_the_sheet_re_seeds():
+    """A bound that the next turn undoes is not a bound, it is amnesia.
+
+    The cap sliced the LAST twenty, and the front of the list is where the
+    seeding pass puts the beliefs the card authored. So the entry evicted was
+    an authored one; the next turn found it missing from the ledger and
+    re-seeded it from the sheet at card confidence with last_updated_turn 0,
+    throwing away every revision the story had earned on it -- and pushed a
+    learned belief out to make room for the resurrection.
+    """
+    psychology = {"self_model": {"beliefs": [{
+        "belief": "I never abandon my post",
+        "confidence": 0.9,
+        "protected": True,
+    }]}}
+    state = psych.apply_belief_updates(
+        [], psychology,
+        [{"belief": "I never abandon my post", "operation": "weaken",
+          "confidence": 1.0,
+          "evidence": [{"event_id": "current", "fact": "I fled."}]}],
+        turn_idx=1, clock_seconds=10,
+    )
+    earned = state[0]["confidence"]
+    assert earned < 0.9
+
+    for n in range(25):
+        state = psych.apply_belief_updates(
+            state, psychology,
+            [{"belief": f"learned thing {n}", "confidence": 0.6,
+              "evidence": [{"event_id": "current", "fact": "seen"}]}],
+            turn_idx=2 + n, clock_seconds=20 + n,
+        )
+
+    held = {item["belief"]: item for item in state}
+    assert "I never abandon my post" in held
+    assert abs(held["I never abandon my post"]["confidence"] - earned) < 1e-9
+
+
+def test_the_association_cap_never_evicts_what_the_sheet_re_seeds():
+    """Same shape, same file, one line apart -- authored associations are
+    re-seeded from `learning.associations` every turn, so evicting one costs a
+    learned slot and restores the card's strength."""
+    psychology = {"learning": {"associations": [{
+        "cue": "a slammed door",
+        "appraisal_bias": "danger",
+        "response_tendency": "freeze",
+        "strength": 0.8,
+    }]}}
+    state = psych.apply_association_updates(
+        [], psychology,
+        [{"cue": "a slammed door", "operation": "extinguish", "amount": 0.25,
+          "evidence": [{"event_id": "current", "fact": "It was harmless."}]}],
+        turn_idx=1, clock_seconds=10,
+    )
+    earned = state[0]["strength"]
+    assert earned < 0.8
+
+    for n in range(25):
+        state = psych.apply_association_updates(
+            state, psychology,
+            [{"cue": f"cue {n}", "amount": 0.1,
+              "evidence": [{"event_id": "current", "fact": "seen"}]}],
+            turn_idx=2 + n, clock_seconds=20 + n,
+        )
+
+    held = {item["cue"]: item for item in state}
+    assert "a slammed door" in held
+    assert abs(held["a slammed door"]["strength"] - earned) < 1e-9
+
+
 class TestSustainedLevelHabituation:
     """The pain/pleasure LEVEL is peak-held, so a body under continuous strong
     stimulus reads at the ceiling indefinitely -- and cognitive_absorption read
