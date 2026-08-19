@@ -401,6 +401,37 @@ class TestTheReader:
         assert "interim_for(" in src
         assert "while_you_were_offscreen" in src
         assert 'cast_entity_id(sh, row["id"])' in src
+        # WORLD-F27: the OTHER floor. `observer_name_scrub` gates other
+        # people's names and says nothing about the mind's own.
+        assert "self_name_forms(" in src
+        assert "_self_second_person(" in src
+
+    def test_a_mind_is_not_told_about_itself_in_the_third_person(self):
+        """Every tick composer in `world/offscreen.py` leads with the
+        subject's display name -- `_IDLE_TICKS` is "{who} goes about their own
+        business...", the intention branch is "{who} keeps quietly at it: ..."
+        -- `gaps._skeleton` copies that into `events[].summary`, and the one
+        reader hands the whole record to THAT SUBJECT.
+
+        `Design.md`: "A mind is never told about itself in the third person,
+        by name OR by the label strangers use for it -- Built". This payload
+        was the exception, and it is latent only because no seeded rung has
+        written a batch yet.
+        """
+        from agents.common import (_self_second_person, scrub_names_deep,
+                                   self_name_forms)
+
+        forms = self_name_forms("Elyndra", ["Elyndra", SID])
+        record = {"events": [
+            {"summary": "Elyndra goes about her own business in the garden."},
+            {"summary": "Elyndra keeps quietly at it: tending the beds."},
+        ]}
+        owned = scrub_names_deep(
+            record, lambda text: _self_second_person(text, forms))
+        rendered = json.dumps(owned, ensure_ascii=False)
+        assert "Elyndra" not in rendered, rendered
+        assert "You go" in rendered or "You keep" in rendered or \
+            "you" in rendered.lower()
 
 
 class TestTheCommitRecorder:

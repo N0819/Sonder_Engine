@@ -790,3 +790,48 @@ class TestTheMurmurIsAboutSomething:
         temp_db.wset(cid, "crowds", [crowd])
         view = _crowds_view(cid, scene)
         assert view[0]["talk"][0]["world_event_id"] == "world_bell"
+
+
+class TestOneAnswerToHowBigTheRoomIs:
+    """`crowds.room_size_rank` reads the authored `size` string and falls to
+    `medium` for anything else; `spatial_geometry.effective_room_size` answers
+    the same question with a name/desc keyword hint that promotes hall,
+    warehouse, plaza, courtyard, atrium, cathedral, hangar and ten more to
+    `large`. `crowds_for_room` was handing it the raw string.
+
+    So an unsized "Great Hall" was `large` for proximity grading and `medium`
+    for crowd density -- and `density("a throng", ...)` returns PACKED under
+    one and CRUSH under the other. CRUSH is what `terrain` turns into a
+    `membrane` you cannot see across, and what `drift` turns into CARRY.
+    """
+
+    def test_an_unsized_hall_is_the_same_size_to_both_layers(self, temp_db):
+        import time
+
+        from agents.common import crowds_for_room
+        from world.spatial import effective_room_size
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
+                         "VALUES(?,?,?)", ("Hall", "", time.time()))
+        scene = {"rooms": {"hall": {"name": "The Great Hall"}}}
+        assert effective_room_size(scene, "hall") == "large"
+
+        crowd = crowds.new_crowd(cid, "hall", band="a throng",
+                                 composition="petitioners", since_turn=1)
+        temp_db.wset(cid, "crowds", [crowd])
+        seen = crowds_for_room(cid, scene, "hall")
+        assert seen[0]["density"] == crowds.density("a throng", "large")
+
+    def test_an_authored_size_still_wins(self, temp_db):
+        import time
+
+        from agents.common import crowds_for_room
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) "
+                         "VALUES(?,?,?)", ("Hall", "", time.time()))
+        scene = {"rooms": {"hall": {"name": "The Great Hall", "size": "small"}}}
+        crowd = crowds.new_crowd(cid, "hall", band="a throng",
+                                 composition="petitioners", since_turn=1)
+        temp_db.wset(cid, "crowds", [crowd])
+        seen = crowds_for_room(cid, scene, "hall")
+        assert seen[0]["density"] == crowds.density("a throng", "small")

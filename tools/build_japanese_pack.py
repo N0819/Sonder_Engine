@@ -246,10 +246,8 @@ regex(common, "_SPEECH_NARRATION_RE", "言(?:う|った|って)|話す|答える
 ling[common]["_PLAYER_ACT_VERBS"] += "|取る|掴む|持つ|上げる|下げる|飲む|食べる|歩く|走る|開ける|閉める|見る"
 regex(common, "_SUBJECT_PRONOUN_RE", "^(?:彼|彼女|あの人|その人|彼ら)")
 ling[common]["_ATTRIBUTION_VERBS"] += "|言う|話す|答える|尋ねる|囁く|つぶやく|叫ぶ"
-add(common, "_LOCOMOTION_STEMS", "歩く", "進む", "近づく", "下がる", "走る", "渡る", "移動する")
 ling[common]["_LOCOMOTION_VERBS"] += "|歩く|進む|近づく|下がる|走る|渡る|移動する"
 add(common, "_INTERIOR_VERBS", "思う", "考える", "知る", "信じる", "疑う", "望む", "恐れる", "決める", "気づく")
-add(common, "_MANIPULATION_STEMS", "掴む", "取る", "持つ", "引く", "押す", "上げる", "開ける", "閉める")
 ling[common]["_MANIPULATION_VERBS"] += "|掴む|取る|持つ|引く|押す|上げる|開ける|閉める"
 add(common, "_OWN_BODY_NOUNS", "身体", "手", "腕", "足", "脚", "顔", "目", "口", "胸", "背中", "腰", "息", "心臓", "肌")
 regex(common, "_QUOTE_SPAN_RE", "(「)([^」]{2,})(」)|(『)([^』]{2,})(』)")
@@ -263,11 +261,43 @@ ling[common]["_APPEARANCE_LABELS"]["items"].extend([
     {"$type": "tuple", "items": ["; clothing state:", "、衣服の状態は"]},
     {"$type": "tuple", "items": ["; currently:", "、現在は"]},
 ])
-ling[common]["_SPEECH_CUE"] += "|言う|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ"
-regex(common, "_SPEECH_VERB_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
+# The ONE speech vocabulary: both dangling-speech healers are built from this
+# key, so the inflected forms narration actually uses have to be here and not
+# only the dictionary form. `_DANGLING_SPEECH.verb`/`.colon` carry the SHAPE of
+# each wound and are seeded whole below, because the Japanese wound is a
+# different shape -- the quotative particle stranded before a clause-final verb.
+ling[common]["_SPEECH_CUE"] += (
+    "|言う|言った|言って|話す|話した|答える|答えた|尋ねる|尋ねた|囁く|囁いた"
+    "|ささやく|ささやいた|つぶやく|つぶやいた|叫ぶ|叫んだ"
+    "|続ける|続けた|付け加える|付け加えた|返す|返した")
+ling[common]["_DANGLING_SPEECH"] = {
+    "verb": {
+        "pattern": ("(?:と|って)?(?<!そう)({cue})[^\\S\\n]*"
+                    "(?:(?P<end>[。！？.!?])|(?P<cont>、)|(?P<eol>$))"),
+        "flags": 42,
+    },
+    "colon": {
+        "pattern": ("([^。！？：:\\n]*(?:{cue})[^\\S\\n]*)[：:]"
+                    "\\s*[。.]?\\s*(?=\\S|$)"),
+        "flags": 34,
+    },
+    "heal_end": "そう{verb}{end}",
+    "heal_cont": "そう{verb}、",
+    "heal_stop": "そう{verb}。",
+    "heal_colon": "{lead}。",
+}
 regex(common, "_DIALOGUE_CUE_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
 regex(common, "_NPC_PRONOUN_RE", "彼女|彼|彼ら|あの人|その人")
 regex(common, "_VIEW_QUOTED_SPAN_RE", "「[^」]*」|『[^』]*』")
+# ONE capture group across every pair, so a caller reading group(1) by position
+# is right whichever pair matched. Character classes, not alternation, for that
+# reason -- `project_check` holds a pack to English's group count.
+ling[common]["_VIEW_QUOTE_BODY_RE"]["pattern"] = "[\"“「『]([^\"“”」』]{1,})[\"”」』]"
+ling[common]["_QUOTE_PAIRS"]["items"].extend([
+    {"$type": "tuple", "items": ["「", "」"]},
+    {"$type": "tuple", "items": ["『", "』"]},
+])
+add(common, "_QUOTE_CHARS", "「", "」", "『", "』")
 regex(common, "_NARRATION_QUOTE_RE", "「[^」]*」|『[^』]*』")
 regex(common, "_NARRATION_DOUBLED_QUOTE_RE", "「{2,}|『{2,}")
 regex(common, "_NARRATION_DANGLING_QUOTE_RE", "「[^」]*$|『[^』]*$")
@@ -284,16 +314,38 @@ regex(common, "_YOU_INTERIOR", "(?:あなた|君|お前)(?:自身)?(?:の)?(?:�
 add(common, "_SUBJECT_LEADS", "私", "僕", "俺", "あなた", "君", "彼", "彼女", "彼ら", "その", "この", "あの")
 regex(common, "_CLAUSE_BREAKS", "そして|しかし|だが|ので|から|ながら|とき|前に|後で|まで|、|；|：")
 add(common, "ATTEMPT_CUES", "しようとする", "試みる", "狙う", "手を伸ばす", "近づこうとする")
-add(common, "ASSERTION_SKIP_CUES", "しようとする", "試みる", "狙う")
 add(common, "_BREATH_CONJUNCTIONS", "そして", "しかし", "または", "ので", "から", "ながら", "とき", "まで")
 add(common, "_NAME_TITLE_TOKENS", "博士", "先生", "隊長", "司令官", "大尉", "中尉", "軍曹", "殿", "様", "さん")
-add(common, "_PLAYER_ACT_STEMS", "取る", "掴む", "持つ", "飲む", "食べる", "歩く", "走る", "見る")
 add(common, "_NAME_LEADERS", "博士", "先生", "隊長", "司令官", "大尉", "中尉", "軍曹")
 regex(common, "_NEW_SUBJECT_RE", "^(?:私|僕|俺|あなた|君|彼|彼女|彼ら|それ|これ|あれ)")
-add(common, "_ATTRIBUTION_STEMS", "言う", "話す", "答える", "尋ねる", "囁く", "つぶやく", "叫ぶ")
 regex(common, "_PROXIMITY_RE", "近づく|一歩近づく|距離を詰める|手の届く距離|一歩下がる|離れる")
 add(common, "_DEFINITE_DETS", "この", "その", "あの", "私の", "あなたの", "彼の", "彼女の")
 add(common, "_DIRECTOR_VOICEABLE_KINDS", "生物", "動物", "怪物", "ゴーレム", "自動人形", "ゾンビ", "ドローン", "群れ")
+add(common, "_CONFLICT_VERBS", "攻撃", "掴む", "拘束", "盗む", "壊す", "破る", "押し入る", "撃つ", "刺す", "殴る", "斬る", "入る", "出る", "立ち去る")
+add(common, "_LEADING_SUBJECT_PRONOUNS", "彼", "彼女", "彼ら", "それ")
+add(common, "_GENERIC_ROOM_WORDS", "部屋", "場所", "ここ", "区画")
+add(common, "_PARTIAL_QUOTE_PREFIXES", "何か", "……何か")
+ling[common]["_VISUAL_CONTRADICTION_RES"]["items"].extend([
+    {"$type": "regex", "pattern": "話し手の姿は見えない", "flags": 34},
+    {"$type": "regex", "pattern": "はっきりした人影は見えない", "flags": 34},
+    {"$type": "regex", "pattern": "(?:相手|話し手|誰)の?姿は見えない", "flags": 34},
+    {"$type": "regex", "pattern": "(?:相手|話し手|誰も)を?見ることはできない", "flags": 34},
+])
+# Japanese marks place with a POSTPOSITION, so the room name leads the phrase
+# instead of trailing it. Same question, mirrored shape -- which is why the
+# pack holds the whole phrase with a {room} slot rather than a preposition list.
+ling[common]["_PLACEMENT_PHRASE"]["pattern"] = (
+    "(?:" + ling[common]["_PLACEMENT_PHRASE"]["pattern"]
+    + "|{room}(?:の(?:中|なか|奥))?(?:に|で|へ|にて))")
+portal = ling[common]["_PORTAL_STATE"]
+# Inside the group, not beside it: appending after the closing paren would
+# make the Japanese branch escape the alternation the caller splices in.
+portal["open"] = portal["open"][:-1] + "|開いて|開いた|開け放たれ|開け放た)"
+portal["shut"] = portal["shut"][:-1] + "|閉じ|閉ま|閉ざされ|施錠され)"
+portal["modifier"] = "(?:" + portal["modifier"] + "|{state}(?:た|ている)?{name})"
+portal["predicate"] = ("(?:" + portal["predicate"]
+                       + "|{name}[^。！？\\n、；]{0,60}?{state})")
+portal["join"] = "\\s*"
 add(common, "_INTERIOR_STATES", "恐怖", "不安", "絶望", "喜び", "欲望", "怒り", "悲しみ", "動揺")
 add(common, "_INTERIOR_CERTAINTY", "本当", "明らか", "確か", "紛れもない", "はっきり")
 regex(common, "_CLAUSE_SPLIT", "、|。|；|：|そして|しかし|だが|ので|から|ながら|とき")
@@ -330,6 +382,23 @@ translations = [
 ]
 for row, text in zip(verdicts, translations):
     row["items"][2] = text
+# `unentered` is the one verdict the code mints rather than reading from the
+# table, so it needs its own row here or a Japanese story receives a Japanese
+# verdict with an English sentence welded on. Same for the clauses that ride on
+# top of any verdict.
+ling["agents.character"]["_VERDICT_TEMPLATE"] = "{label}——{detail}"
+ling["agents.character"]["_VERDICT_UNENTERED"]["items"] = [
+    "未踏",
+    ("他に出口はないが、まだ中に入ったことがない。部屋の中に何があるかは、"
+     "その先に何があるかとは別の問題であり、たどり着く価値のあるものは"
+     "たいてい通り道ではない"),
+]
+ling["agents.character"]["_VERDICT_DETAILS"].update({
+    "entered_recently": "直近の十数歩でそこに{count}回入っている",
+    "frontier_adjacent": "。その先の部屋には、まだ通ったことのない扉がある",
+    "frontier_distant":
+        "。まだ通ったことのない最も近い扉は、その方向におよそ{hops}部屋先にある",
+})
 
 ling["agents.narration"]["_CRAFT_TELLS"].extend([
     {"$type": "tuple", "items": ["小さく息を吐(?:く|いた)", "小さく息を吐く"]},
