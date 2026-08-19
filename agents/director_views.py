@@ -414,40 +414,21 @@ def _carried_reports_view(ctx):
     the Director already owns objective causality and this adds nothing it did
     not have -- while a character reading it would be reading other minds.
 
-    Read through `active_cast` and `cstate`, which is how `carriers` itself
-    reads them. The first version walked `ctx.cast` asking for `state`; that
-    key does not hold the carrier ledger, so the view came back empty while
-    two reports sat in the database -- and the Director, told to name a
-    `world_event_id`, again had nothing to name. Two spellings of one thing,
-    which is the defect this repo's rules single out by name.
+    Routed through `carriers.carried_reports_view` -- the SAME enumeration
+    acquisition and telling run on -- rather than any walk of this module's
+    own. The first version walked `ctx.cast` asking for `state`, a key that
+    does not hold the carrier ledger, and the view came back empty while two
+    reports sat in the database. The second walked `active_cast`/`cstate`,
+    which holds the ledger for exactly the carriers `_carriers` does NOT
+    stop at: the player (whose reports live in a world key, no cast row)
+    and dormant cast were both invisible, so the one participant likeliest
+    to send news could acquire a surface and never have it named in a
+    `telling_ops`/`courier_ops` (docs/UNBUILT.md 1.31). Three spellings of
+    one walk; this is the last, because it is not a spelling.
     """
-    import json
+    from story.carriers import carried_reports_view
+    from story.scene import get_scene
 
-    from story.carriers import STATE_KEY
-    from story.character_schema import normalize_character_data
-    from story.scene import active_cast
-
-    out = []
-    for row in active_cast(ctx.chat.id, ctx.turn.frame_id) or []:
-        try:
-            sheet = json.loads(row["sheet"] or "{}")
-        except (TypeError, ValueError):
-            sheet = {}
-        name = ((normalize_character_data(sheet or {}).get("identity") or {})
-                .get("name") or "")
-        try:
-            state = json.loads(row["cstate"] or "{}")
-        except (TypeError, ValueError):
-            state = {}
-        if not isinstance(state, dict):
-            continue
-        for report in (state.get(STATE_KEY) or [])[-4:]:
-            if not isinstance(report, dict) or not report.get("world_event_id"):
-                continue
-            out.append({
-                "who": name,
-                "world_event_id": report.get("world_event_id"),
-                "gist": report.get("claim"),
-                "retellings": report.get("retellings", 0),
-            })
-    return out
+    return carried_reports_view(
+        ctx.chat.id, ctx.turn.frame_id,
+        get_scene(ctx.chat.id, ctx.chat), chat=ctx.chat)

@@ -443,6 +443,44 @@ def _carriers(cid, frame_id, scene, chat=None):
     return entries
 
 
+def carried_reports_view(cid, frame_id, scene, chat=None, cap=PAYLOAD_CAP):
+    """Who is carrying what, as [{who, world_event_id, gist, retellings}].
+
+    THE one enumeration of held reports for anything that has to name a
+    `world_event_id` in an op -- built on `_carriers`, so it answers for
+    every body that can hold a report: extant cast (dormant included) and
+    the player. The Director's carried-report view used to rebuild this
+    walk over `active_cast`/`cstate` alone, which silently omitted the two
+    carriers `_carriers`' own docstring argues for -- so a player who
+    legitimately acquired a surface could never spread it: the one stage
+    that writes `telling_ops`/`courier_ops` held an empty list and had
+    nothing to name (docs/UNBUILT.md 1.31). Public so no caller ever has a
+    reason to re-enumerate carriers itself; two spellings of one walk is
+    exactly how that defect was minted.
+
+    The gist is the holder's OWN degraded wording, not the objective event:
+    handing this to the Director tells it what a carrier could say rather
+    than what is true. Fine for the Director, which already owns objective
+    causality -- never hand this to a character, who would be reading other
+    minds.
+    """
+    out = []
+    for entry in _carriers(cid, frame_id, scene, chat=chat):
+        state = entry.get("state")
+        if not isinstance(state, dict):
+            continue
+        for report in (state.get(STATE_KEY) or [])[-cap:]:
+            if not isinstance(report, dict) or not report.get("world_event_id"):
+                continue
+            out.append({
+                "who": entry.get("name"),
+                "world_event_id": report.get("world_event_id"),
+                "gist": report.get("claim"),
+                "retellings": report.get("retellings", 0),
+            })
+    return out
+
+
 def _cast_index(cid, frame_id, scene, chat=None):
     """Carriers this beat, by every name each answers to.
 

@@ -71,6 +71,7 @@ from world.spatial import (
     contact_relation,
     _merge_entity,
     _merge_room,
+    _NEVER_STATIONED_KINDS,
     egocentric_frame,
     merge_scene_with_diff,
     normalize_bearing,
@@ -3271,16 +3272,55 @@ def director_resolve(ctx, nonce, _corrections=None):
             _bodies.append(character_name_from_text(_row["sheet"]))
         except Exception:
             continue
-    # The declared mover, and anyone the same beat sent where they were going:
-    # both belong to the movement backstop above, which has already ruled on
-    # them and may legitimately have honoured a contested crossing.
+    # Unregistered presences too. The floor skips any name it does not know
+    # to be a body, so a background presence -- real enough to be written
+    # into `positions`, not real enough for a cast row -- was never
+    # route-checked at all. The reading is the containment module's own:
+    # every entity kind outside `_NEVER_STATIONED_KINDS` reads as a body,
+    # free-text species names included. Things that carry an interior or
+    # travel on `state.transit`/`state.link` are excluded even under a
+    # free-text kind, because they move by transit and their arrival is what
+    # CREATES the dock edge -- route-checking one strips the very move that
+    # opens the door.
+    for _eid, _ent in ((sc.get("entities") or {}).items()):
+        if not isinstance(_ent, dict):
+            continue
+        if str(_ent.get("kind") or "").strip().casefold() \
+                in _NEVER_STATIONED_KINDS:
+            continue
+        _estate = _ent.get("state") if isinstance(_ent.get("state"), dict) \
+            else {}
+        if _ent.get("interior_rooms") or _estate.get("transit") \
+                or _estate.get("link"):
+            continue
+        for _alias in (_eid, _ent.get("name"), *(_ent.get("aliases") or [])):
+            if _alias:
+                _bodies.append(str(_alias))
+    # The declared mover, whose crossing the movement backstop above has
+    # already ruled on -- and may legitimately have honoured as a contested
+    # crossing this floor's route test would re-refuse. That ruling extends
+    # to the bodies standing at the same doorway: anyone the same beat sent
+    # to the declared destination FROM THE MOVER'S OWN ROOM crossed the edge
+    # the backstop judged, as one movement.
+    #
+    # It extends no further. This set once exempted EVERY body the diff sent
+    # to the declared destination, whatever room it started in -- so on any
+    # beat with a legal declared move, a co-destined write from an unrelated
+    # room was checked by nothing, and a companion could be walked through a
+    # wall the moment the player legally went where she was sent (the exact
+    # chat-74 failure the backstop's stranded rule was built from, reopened
+    # from the other side). A co-destined body from another room is doing its
+    # own travelling: the floor judges it by its own route, and a passable
+    # route passes.
     _spared = set()
     if isinstance(mv, dict) and mv.get("to_room"):
         if move_subject:
             _spared.add(move_subject)
-        _spared.update(
-            subject for subject, room in (sd["positions"] or {}).items()
-            if room == mv.get("to_room"))
+        if subject_prev_room:
+            _spared.update(
+                subject for subject, room in (sd["positions"] or {}).items()
+                if room == mv.get("to_room")
+                and room_of(sc, subject) == subject_prev_room)
     for _body, _from, _to in _unreachable_position_writes(
             sc, merge_scene_with_diff(sc, sd), sd["positions"],
             _bodies, exempt=_spared):

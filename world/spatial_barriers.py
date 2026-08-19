@@ -430,6 +430,39 @@ def _barrier_against_its_own_name(barrier, name):
 _PASSABLE_BARRIERS = {"open", "open_door", "membrane"}
 
 
+#: The edges a REMEMBERING MIND records as routes: a way I could go through,
+#: now or by opening it (docs/UNBUILT.md 1.6).
+#:
+#: Neither existing set answers that question. `_SIGHT_BARRIERS` means "can
+#: be seen through" and includes glass and bars -- you can see through a
+#: barred window and cannot walk through one, and a durable map that records
+#: one as a doorway sends its owner marching at a pane of glass with a
+#: SPECIFIC remembered distance (`_frontier_hops` renders "about 3 rooms down
+#: that way") and no retraction path. `_PASSABLE_BARRIERS` means "passable
+#: THIS BEAT" and excludes `closed_door`, which a body simply opens -- a map
+#: that forgot every closed door would forget most of a house.
+#:
+#: So: the passable set plus `closed_door`. Two judgements folded in, on the
+#: record:
+#:
+#: * A LOCKED door is remembered as a route. `normalize_barrier` already
+#:   folds `locked_door`/`padlocked`/... to `closed_door`, so the vocabulary
+#:   itself has ruled: locked is a state of a door, not a kind of wall, and a
+#:   remembered route past a locked door is still a route if you expect to
+#:   get the key. Movement stays governed by `_PASSABLE_BARRIERS`; this set
+#:   only decides what a mind writes down.
+#: * `unknown` is NOT a route. The movement backstop refuses to walk it
+#:   (`barrier in ("wall", "unknown")` blocks), and a mind should not record
+#:   as a way through what its body would not be allowed to cross; the next
+#:   beat that resolves the barrier re-confirms or disproves it.
+_ROUTE_MEMORY_BARRIERS = frozenset(_PASSABLE_BARRIERS) | {"closed_door"}
+
+
+def route_memory_barrier(value) -> bool:
+    """Is this edge a route a remembering mind should record?"""
+    return normalize_barrier(value) in _ROUTE_MEMORY_BARRIERS
+
+
 _AMBIENT_BARRIERS = {"open", "open_door", "bars"}
 
 
