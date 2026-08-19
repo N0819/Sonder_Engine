@@ -28,6 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_JS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
+LOREBOOKS_JS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
 
 
 class TestAutoPromoteIsOneAnswer:
@@ -149,3 +150,35 @@ class TestBothHalvesOfALifecycleHaveAControl:
         `POST /api/auth/logout` destroys the session row and clears the
         cookie, and no page in the app offered it."""
         assert '"POST", "/api/auth/logout"' in SETTINGS_JS
+
+
+class TestCanonCanBeChangedAfterTheStoryStarts:
+    """WEB-9. `chats.lorebook_id` is what `agents/mapping.py` reads as this
+    story's settled truth. The lorebook tree has always BADGED it and never
+    offered a way to change it: canon was chosen once, on the greeting
+    screen, and after that only a database edit could move it."""
+
+    def test_the_tree_calls_both_halves_of_the_route(self):
+        assert "canon" in LOREBOOKS_JS
+        assert '"POST",\n`/api/chats/${book.chat_id}/lorebook`' in LOREBOOKS_JS
+        assert '"DELETE",\n`/api/chats/${book.chat_id}/lorebook`' in LOREBOOKS_JS
+
+    def test_binding_and_detaching_move_the_canon_the_tree_reports(self, temp_db):
+        import time
+
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        lid = temp_db.qi(
+            "INSERT INTO lorebooks(name,chat_id) VALUES(?,?)", ("Book", cid))
+
+        def canon_ids():
+            return [b["id"] for b in app.chat_lorebooks_owned(cid)["lorebooks"]
+                    if b["canon"]]
+
+        assert canon_ids() == []
+        app.bind_lore(cid, {"lorebook_id": lid})
+        assert canon_ids() == [lid]
+        app.detach_lore(cid)
+        assert canon_ids() == []
