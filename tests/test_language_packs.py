@@ -567,3 +567,27 @@ def test_every_nsfw_prompt_id_names_a_prompt_that_exists():
         assert not unmatched, (
             f"language pack {pack.id!r} marks {unmatched} NSFW-overlaid, and "
             "no such prompt exists")
+
+
+def test_the_conditions_shape_a_prompt_shows_is_the_shape_declared():
+    """`StateDiff.conditions` is `dict[str, list[dict]]`, and the worked
+    example writes a list of one -- while `resolve_repair` and the body
+    specialist's own chunk both printed `conditions:{condition_id:{...}}`, a
+    bare object under each id. `_coerce_conditions` accepts the singular form
+    and wraps it, so nothing ever failed and nothing said the sheet was
+    wrong; a model taught the singular simply cannot express the second
+    reading of a condition it is otherwise being asked for.
+    """
+    import re
+
+    singular = re.compile(r"conditions:\\?\{condition_id:\\?\{")
+    plural = re.compile(r"conditions:\\?\{condition_id:\\?\[")
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        blob = (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json"
+                ).read_text(encoding="utf-8")
+        assert not singular.search(blob), (
+            f"{pack.id} shows conditions keyed to a bare object; the field "
+            "is dict[str, list[dict]]")
+        assert plural.search(blob), f"{pack.id} shows no conditions shape"
