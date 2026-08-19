@@ -79,3 +79,103 @@ def test_the_module_binds_the_splitter_once():
     assert src.count("\n_SENTENCE_SPLIT = ") == 1, (
         "_SENTENCE_SPLIT is bound more than once; the later binding wins "
         "silently and the earlier comment block describes nothing")
+
+
+# ---------------------------------------------------------------------------
+# The recognizer tables the same class of defect one layer over: the guard is
+# fine, the language it is written in is not the language the story is in.
+# Five tables that decide a full render, a continuity rescue, a refusal floor,
+# a motion tripwire and whether a knocked-out mind feels pain were English
+# literals on the live path, while the tables that HAD been routed through the
+# pack sat on the dead one. Read at use time, never at import: the story
+# language is a contextvar and two languages can run in one process.
+# ---------------------------------------------------------------------------
+
+import pytest
+
+from language_runtime import current_language_id
+
+
+@pytest.fixture
+def japanese():
+    token = current_language_id.set("ja")
+    try:
+        yield
+    finally:
+        current_language_id.reset(token)
+
+
+def _look(verb):
+    return perception._explicit_look_intent(
+        {"sequence": [{"type": "action", "verb": verb, "attempt": verb}]})
+
+
+def _rapid(verb):
+    return perception._declares_rapid_movement(
+        {"sequence": [{"type": "action", "verb": verb, "attempt": verb}]})
+
+
+def test_an_explicit_look_re_earns_a_full_render_in_english():
+    assert _look("examine") and _look("looks")
+    assert not _look("shout")
+
+
+def test_an_explicit_look_re_earns_a_full_render_in_japanese(japanese):
+    """The player's outcome view re-renders their whole standing state on an
+    explicit look. Against eleven English words a Japanese story could never
+    earn it."""
+    assert _look("見回す")
+    assert _look("調べる")
+    assert not _look("叫ぶ")
+
+
+def test_declared_rapid_movement_is_recognised_in_both(japanese):
+    assert _rapid("走る")
+    assert _rapid("run")
+    assert not _rapid("座る")
+
+
+def test_the_sight_floor_recognises_a_japanese_assertion(japanese):
+    """`_strip_self_narration` refuses to leave a view with no sight in it at
+    all. In English literals a view asserting 見える scored as sightless, so
+    the refusal could not fire and the whole cut went through -- over-denial,
+    which is the failure this floor exists to prevent."""
+    from language_runtime import linguistic
+
+    sight = linguistic("agents.perception", "_SIGHT_ASSERTION")
+    assert sight.search("彼女には鳥居の人影が見える。")
+    assert sight.search("He catches sight of a figure at the torii.")
+    assert not sight.search("雨が砂利を叩く音がする。")
+
+
+def test_the_vertical_motion_tripwire_reads_both(japanese):
+    from language_runtime import linguistic
+
+    raising = linguistic("agents.perception", "_RAISING")
+    lowering = linguistic("agents.perception", "_LOWERING")
+    assert raising.search("手を持ち上げる") and raising.search("lifts a hand")
+    assert lowering.search("手を下ろす") and lowering.search("lowers a hand")
+    assert not raising.search("手を下ろす")
+
+
+def test_pain_cues_are_one_table_read_from_the_pack(japanese):
+    """Hand-copied twice, ten lines apart, in the two residue paths. A
+    non-awake Japanese mind whose cause read 負傷 felt nothing."""
+    from language_runtime import linguistic
+
+    cues = linguistic("agents.perception", "_PAIN_CUES")
+    assert any(w in "負傷により意識を失った" for w in cues)
+    assert any(w in "struck from behind" for w in cues)
+    assert not any(w in "眠っている" for w in cues)
+
+
+def test_the_english_compat_export_is_not_what_the_floor_reads():
+    """`_SIGHT_ASSERTION` survives as a module constant for tests and audits,
+    bound once from the English pack -- the same convention
+    `composer.DIM_FIGURE` keeps. The floor itself reads the ACTIVE pack, which
+    is why the constant may be English while a Japanese turn still works."""
+    from language_runtime import english_linguistic
+
+    assert perception._SIGHT_ASSERTION.pattern == english_linguistic(
+        "agents.perception", "_SIGHT_ASSERTION").pattern
+    assert not perception._SIGHT_ASSERTION.search("彼女には人影が見える。")

@@ -6,7 +6,7 @@ import copy
 import json
 import re
 
-from language_runtime import linguistic
+from language_runtime import english_linguistic, linguistic
 from story.character_schema import (
     character_appearance,
     character_name,
@@ -39,18 +39,13 @@ from story.scene import (
     scent_of,
     sheet_state,
 )
-import os
 
 from mind import affect
 from world.spatial import (
     apply_contact_ops,
-    corridor_sightlines,
     hiding_holders_of,
     ambient_scope,
-    contact_phrase,
     contact_sensation,
-    containment_conceals,
-    crossing_visible_from,
     egocentric_frame,
     _entity_named,
     entity_arc,
@@ -66,27 +61,28 @@ from world.spatial import (
     proximity_rel,
     relative_bearing,
     resolve_substance_ops,
-    room_layout,
     room_of,
+    scent_level,
     comms_link,
     same_subject,
-    scent_level,
-    sense_adjusted,
-    spatial_facts,
-    spatial_rel,
     spatial_rel_between,
     substance_event_clause,
     visible_adjacent_rooms,
 )
 
 
-_RAPID_MOVEMENT_VERBS = frozenset({
-    "run", "sprint", "flee", "dash", "bolt", "race", "charge",
-})
-
-
 def _declares_rapid_movement(value):
-    """Whether one structured declaration says the actor moves rapidly."""
+    """Whether one structured declaration says the actor moves rapidly.
+
+    The verb table is the ACTIVE PACK's (`agents.perception._RAPID_MOVEMENT_VERBS`),
+    not seven English words: a Japanese story declaring 走る got no match, so
+    the continuity rescue this gates stayed open on exactly the beats it exists
+    to close. Matched against the declared verb and the leading word of the
+    observable only -- never against free prose -- which is why each pack can
+    anchor its own pattern (English `^...s?$`, Japanese unanchored stems)
+    without widening what is tested.
+    """
+    pattern = _ling("_RAPID_MOVEMENT_VERBS")
     sequence = value if isinstance(value, list) else (value or {}).get("sequence")
     for event in sequence or []:
         if not isinstance(event, dict) or event.get("type") != "action":
@@ -95,8 +91,8 @@ def _declares_rapid_movement(value):
         words = str(
             event.get("attempt") or event.get("observable") or ""
         ).strip().casefold().split()
-        if verb in _RAPID_MOVEMENT_VERBS or (
-            words and words[0].rstrip("s") in _RAPID_MOVEMENT_VERBS
+        if (verb and pattern.search(verb)) or (
+            words and pattern.search(words[0])
         ):
             return True
     return False
@@ -325,18 +321,6 @@ def _dialogue_hear_level(entry, rel, observer_name, proximity=None):
         entry, rel, observer_name, proximity=proximity)
 
 
-def _perceiver_spatial_facts(scene, observer, sources):
-    """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
-    for a perceiver -- the same scaffold given to the narrator, applied at the
-    perception stage so the VIEW itself is FOV-clean (a rear source rendered as
-    sound, not sight). Off by default -> {} (baseline behavior)."""
-    if not os.environ.get("SPATIAL_SCAFFOLD"):
-        return {}
-    names = [s.get("name") for s in sources if s.get("name")]
-    facts = spatial_facts(scene, observer, names)
-    return {"spatial_facts": facts} if facts else {}
-
-
 # Sensory-channel cues in priority order, matched as whole words against ONE
 # atom rather than a whole view -- an unanchored substring scan over a page of
 # prose relabels everything ("paint" matched "pain", one quoted line made a
@@ -386,28 +370,24 @@ _SENTENCE_SPLIT = re.compile(
 
 # Does this sentence ASSERT SIGHT -- somebody looking at something, in the
 # verbs a view actually uses for it. Read by `_strip_self_narration`'s floor,
-# which refuses to leave a perceiver with no sight at all.
+# which refuses to leave a perceiver with no sight at all. In the ACTIVE PACK
+# (`agents.perception._SIGHT_ASSERTION`), because the floor is worth exactly
+# what the pattern recognises: written in English literals, a Japanese view
+# asserting 見える scored as containing no sight at all, so the refusal could
+# never fire and the whole third-person cut went through.
 #
 # Deliberately its own pattern rather than `_atom_channel`'s "sight" cues:
 # those classify a whole ATOM for the observation projection, they lean on
 # second-person phrasing ("you see") that is by definition absent from the
 # third-person views this floor exists for, and widening them would move
 # every consumer of that classification.
-_SIGHT_ASSERTION = re.compile(
-    r"\b(?:sees?|saw|seen|seeing|watch(?:es|ed|ing)?|look(?:s|ed|ing)?\s+at"
-    r"|notic(?:e|es|ed|ing)|observ(?:e|es|ed|ing)|glimps(?:e|es|ed|ing)"
-    r"|spots?|spotted|makes?\s+out|made\s+out|catch(?:es)?\s+sight\s+of"
-    r"|caught\s+sight\s+of|in\s+view|visible|in\s+sight)\b",
-    re.I,
-)
-
-# Atoms per view. High enough that a busy beat still decomposes, low enough
-# that a character payload stays readable.
-_MAX_OBSERVATION_ATOMS = 8
-
-# Sentences per atom, so a long stretch of one-channel prose still arrives as
-# several observations rather than one undifferentiated block.
-_MAX_SPAN_SENTENCES = 3
+#
+# The name survives as the ENGLISH COMPAT EXPORT, the same convention
+# `composer.DIM_FIGURE` keeps: bound once at import from the English pack, read
+# by tests and audits, and NEVER by the floor itself -- which reads the active
+# pack at use time, because two languages can be running in one process.
+_SIGHT_ASSERTION = english_linguistic(
+    "agents.perception", "_SIGHT_ASSERTION")
 
 
 def _cue_hits(cues, folded):
@@ -421,107 +401,6 @@ def _atom_channel(folded):
     return "mixed"
 
 
-def _observation_spans(text):
-    """Split one view into (channel, text) spans: consecutive sentences sharing
-    a channel are one atom, and spans are merged smallest-first until the view
-    fits the atom budget."""
-    sentences = [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
-    if not sentences:
-        return []
-    spans = []
-    for sentence in sentences:
-        channel = _atom_channel(sentence.casefold())
-        if (spans and spans[-1][0] == channel
-                and len(spans[-1][1]) < _MAX_SPAN_SENTENCES):
-            spans[-1][1].append(sentence)
-        else:
-            spans.append([channel, [sentence]])
-    while len(spans) > _MAX_OBSERVATION_ATOMS:
-        idx = min(range(len(spans)),
-                  key=lambda i: len(" ".join(spans[i][1])))
-        into = idx - 1 if idx else 1
-        if spans[into][0] != spans[idx][0]:
-            spans[into][0] = "mixed"
-        target, source = sorted((into, idx))
-        spans[target][1].extend(spans[source][1])
-        spans.pop(source)
-    return [(channel, " ".join(parts)) for channel, parts in spans]
-
-
-def _contact_already_felt(view, contact, observer_name, scene):
-    """Does this view already deliver the sensation of this standing contact?
-
-    Matched on the two BODY PARTS the contact names, because that is the part
-    of the record a paraphrase preserves -- a model rendering a tail against a
-    thigh will say tail and thigh whatever else it changes -- while the manner
-    is exactly what it rewrites.
-
-    Both parts must appear IN ONE SENTENCE, on word boundaries. Scanning the
-    whole view for each part separately matched a hip in one clause against a
-    hand in another and called a contact between them delivered; unanchored
-    substrings matched `hip` inside `ship`. A contact is rendered where both
-    of its ends are named together, or it is not rendered.
-
-    Biased toward silence in one direction only: a contact naming no parts at
-    all cannot be matched, and is treated as already delivered rather than
-    appending a clause about `your body` on every beat of an ordinary embrace.
-    """
-    if not isinstance(contact, dict):
-        return True
-    observer = str(observer_name or "").strip()
-    if same_subject(scene, str(contact.get("actor") or ""), observer):
-        mine = str(contact.get("actor_part") or "")
-        theirs = str(contact.get("target_part") or "")
-    else:
-        mine = str(contact.get("target_part") or "")
-        theirs = str(contact.get("actor_part") or "")
-    parts = [p.replace("_", " ").strip().casefold()
-             for p in (mine, theirs) if str(p or "").strip()]
-    if not parts:
-        return True
-    patterns = [re.compile(r"\b%s\b" % re.escape(part)) for part in parts]
-    for sentence in re.split(r"(?<=[.!?])\s+", str(view or "")):
-        folded = sentence.casefold()
-        if all(pattern.search(folded) for pattern in patterns):
-            return True
-    return False
-
-
-def _deliver_standing_sensations(view, observer_name, scene, contacts):
-    """Append the sensation of any standing contact the view left unfelt.
-
-    THE DEFECT THIS IS THE FLOOR FOR. The perception contract specifies the
-    tactile channel only as a substitute for sight: every mandatory clause is
-    conditioned on sight being absent -- in the dark, behind a wall, sealed
-    inside something. Two bodies in continuous contact in a lit room have a
-    wide-open tactile channel and no clause requiring a word of it, so a view
-    written under a token budget renders what is seen and drops what is felt.
-    Measured over 7,508 corpus observations before this: 46.8% classified as
-    `mixed` because no sensory cue matched them at all, and `interoception`
-    accounted for 2.4%.
-
-    A standing contact is neither an event nor inert state. It is a CONTINUOUS
-    PERCEPT -- true every beat and felt every beat, until it ends -- and the
-    engine had no representation for that, only `event` (rendered once) and
-    `state` (mentioned, then inert). This is the third category, delivered
-    deterministically so it does not depend on a model cooperating.
-
-    It subtracts nothing and adds only to a party to the contact: a bystander
-    watching two other people touch gets no clause, because `contact_sensation`
-    returns "" for anyone who is not a party.
-    """
-    additions = []
-    for contact in contacts or []:
-        if _contact_already_felt(view, contact, observer_name, scene):
-            continue
-        clause = contact_sensation(contact, you=observer_name, scene=scene)
-        if clause:
-            additions.append(clause[0].upper() + clause[1:] + ".")
-    if not additions:
-        return view
-    return _append_once(str(view or ""), " ".join(additions))
-
-
 def _standing_contacts_for(scene, observer_name):
     """The contacts this perceiver is a party to, first-hand by definition."""
     out = []
@@ -533,30 +412,6 @@ def _standing_contacts_for(scene, observer_name):
                                 observer_name)):
             out.append(contact)
     return out
-
-
-def _deliver_substance_events(view, observer_name, scene, events):
-    """Append newly transferred matter to the source/recipient's own view.
-
-    Persistent substances are scene state; only this beat's ADD delta is an
-    event.  This prevents a deposit replaying every turn while ensuring the
-    physical consequence cannot disappear merely because free perception
-    prose chose a euphemism or omitted it under token pressure.
-    """
-    additions = []
-    folded = str(view or "").casefold()
-    for event in events or []:
-        if not isinstance(event, dict) or event.get("op") != "add":
-            continue
-        substance = " ".join(str(event.get("substance") or "").split())
-        if substance and substance.casefold() in folded:
-            continue
-        clause = substance_event_clause(
-            event, you=observer_name, scene=scene)
-        if clause:
-            additions.append(clause[0].upper() + clause[1:] + ".")
-    return (_append_once(str(view or ""), " ".join(additions))
-            if additions else view)
 
 
 _BODY_DETAIL_GENERIC = frozenset({
@@ -722,72 +577,16 @@ def _deliver_foreground_body_details(view, body_regions):
     return _append_once(original, " ".join(additions)), additions
 
 
-def _observations_from_clean_views(clean_views):
-    """Project final, scrubbed prose views into structured observations.
-
-    This deliberately accepts *only* the post-gate view map. It never reads the
-    Director event, raw perception-model observations, manifests, private tell
-    grounds, canonical identity roster, or another body's vitals. Structured
-    perception therefore cannot become a side channel: its text is byte-for-
-    byte a view the perceiver was already allowed to receive, and its metadata
-    is derived from that text alone.
-
-    The axes are GRADED by cue density rather than tripped by a single hit.
-    One hedging word in a long view is not an ambiguous perception, and the
-    all-or-nothing form pinned every real view to the ambiguous end -- which
-    the character agent then reads as reason to doubt what it plainly
-    perceived.
-    """
-    out = {}
-    for raw_pid, raw_view in (clean_views or {}).items():
-        pid = str(raw_pid)
-        text = str(raw_view or "").strip()
-        atoms = []
-        for index, (channel, span) in enumerate(_observation_spans(text)):
-            folded = span.casefold()
-            ambiguity = min(1.0, 0.15 + 0.2 * _cue_hits(_ling("_AMBIGUITY_CUES"), folded))
-            atoms.append({
-                "observation_id": f"current:{pid}:{index}",
-                "perceiver_id": pid,
-                "source_atom_id": "current",
-                "channel": channel,
-                "fidelity": "ambiguous" if ambiguity >= 0.5 else "rendered",
-                "observed": {"text": span},
-                "intensity": min(
-                    1.0, 0.35 + 0.2 * _cue_hits(_ling("_INTENSITY_CUES"), folded)),
-                "suddenness": min(
-                    1.0, 0.1 + 0.25 * _cue_hits(_ling("_SUDDENNESS_CUES"), folded)),
-                "ambiguity": ambiguity,
-                # Own-body state is about the perceiver by definition; nothing
-                # else in a second-person view needs a cue to say so.
-                "directed_at_self": channel == "interoception" or bool(
-                    _ling("_SELF_DIRECTED").search(span)),
-            })
-        out[pid] = atoms
-    return out
-
 from . import composer
 
 from .common import (
     preview_player_state_assertions,
-    _action_already_rendered,
-    _append_micro_view,
     _append_once,
-    _contains_quote,
-    _contextual_rooms,
-    _perceptible_entities,
-    _dedupe_view_sentences,
     _player_name_forms,
     self_name_forms,
     self_reference_forms,
-    _quote_body,
     _sentence_subjects,
-    _ensure_environment,
-    _fallback_perception_views,
-    _inject_action,
-    _inject_dialogue,
     _appearance_as_prose,
-    _inject_visible_actor,
     _resolve_player_room,
     _room_notes_from_lore,
     crowds_for_room,
@@ -798,9 +597,10 @@ from .common import (
     _unmask_quoted_spans,
     _VIEW_MASK,
     _scrub_invented_dialogue,
-    _scrub_undeclared_player_speech,
-    _compose_residue_view,
     _recognizes,
+    # Re-export only: tests/test_name_variant_recognition.py:18 imports it
+    # through this module. It belongs to common.py and should be imported
+    # from there; the test file is outside this slice's ownership.
     _significant_name_tokens,
     observable_action_text,
     player_speech_lines,
@@ -812,576 +612,6 @@ from .common import (
     character_room,
     character_scene_keys,
 )
-
-
-def _observer_scene_payload(scene, perceiver, body_labels=None,
-                            extra_parts=None):
-    """Project objective scene state to one observer before any model call.
-
-    NO PRODUCTION CALLER REMAINS. This built the per-observer payload for
-    the perception model, and perception has no model; the composer reads
-    the same underlying projections directly. It is kept because it is a
-    correct, pure, observer-safe projection that several test files use as
-    exactly that, and because deleting it would delete their subject rather
-    than their scaffolding. Do not read its existence as a live path.
-
-    This is intentionally stricter than an output scrub: relations that name a
-    hidden body never enter another observer's context in the first place.
-    """
-    name = str(perceiver.get("name") or "")
-    room_id = perceiver.get("room")
-    visible_rooms = {
-        str(item.get("room_id"))
-        for item in (perceiver.get("visible_rooms") or [])
-        if isinstance(item, dict) and item.get("room_id")
-    }
-    allowed_rooms = ({str(room_id)} if room_id else set()) | visible_rooms
-    rooms = {}
-    for rid in allowed_rooms:
-        raw = (scene.get("rooms") or {}).get(rid)
-        if not isinstance(raw, dict):
-            continue
-        projected = copy.deepcopy(raw)
-        # F6: an adjacency to a room this observer cannot see keeps its
-        # BARRIER and loses its destination. Dropping the edge outright was
-        # over-correction in the other direction: a closed door is a thing in
-        # the room, plainly there to anyone standing in it, and a payload that
-        # omits it tells the observer the room has no way out. What they have
-        # not earned is the name of what is behind it.
-        adjacent = []
-        for edge in (projected.get("adjacent") or []):
-            if not isinstance(edge, dict):
-                continue
-            if str(edge.get("to")) in allowed_rooms:
-                adjacent.append(edge)
-                continue
-            blind = {k: v for k, v in edge.items()
-                     if k not in ("to", "to_name", "name", "notes", "desc")}
-            blind["to"] = None
-            adjacent.append(blind)
-        projected["adjacent"] = adjacent
-        rooms[rid] = projected
-
-    visible_names = {
-        str(other) for other in (scene.get("positions") or {})
-        if str(other) != name
-        and visual_level_between(scene, name, str(other)) != "none"
-    }
-    # Every contact here is STANDING state -- what is true at the top of this
-    # beat, not what just happened. The beat's own acts arrive separately, in
-    # `declared_act.sequence`. Each carries `standing`, a stative clause the
-    # model can lift directly, because the bare {manner: "kiss"} record read as
-    # an event and was narrated as one: a kiss recorded several beats earlier
-    # kept being delivered as a live advance, and the character answered it.
-    contacts = []
-    for contact in (scene.get("contacts") or []):
-        if not isinstance(contact, dict):
-            continue
-        if not (
-            name in (str(contact.get("actor") or ""),
-                     str(contact.get("target") or ""))
-            or (
-                str(contact.get("actor") or "") in visible_names
-                and str(contact.get("target") or "") in visible_names
-            )
-        ):
-            continue
-        entry = copy.deepcopy(contact)
-        entry["standing"] = contact_phrase(contact, you=name)
-        # `standing` is the contact as a third party would state it. `sensation`
-        # is what it delivers to THIS perceiver's body, which is a different
-        # thing and was previously nowhere in the payload -- so a mind in
-        # sustained contact received a diagram of the contact and nothing it
-        # felt. Empty for a contact this perceiver is only watching.
-        entry["sensation"] = contact_sensation(contact, you=name, scene=scene)
-        contacts.append(entry)
-    poses = {}
-    posed_subjects = []
-    for subject, raw_pose in (scene.get("poses") or {}).items():
-        if not isinstance(raw_pose, dict):
-            continue
-        subject_is_self = same_subject(scene, subject, name)
-        subject_is_visible = str(subject) in visible_names
-        if not subject_is_self and not subject_is_visible:
-            continue
-        entry = copy.deepcopy(raw_pose)
-        key = "you" if subject_is_self else (
-            (body_labels or {}).get(str(subject), str(subject)))
-        relative = str(entry.get("relative_to") or "")
-        if relative:
-            if same_subject(scene, relative, name):
-                entry["relative_to"] = "you"
-            elif relative in visible_names:
-                entry["relative_to"] = (
-                    (body_labels or {}).get(relative, relative))
-            else:
-                # Keep the directly felt constraint but not an unseen body's
-                # identity or a visual above/below relation the observer has
-                # no channel to establish.
-                entry.pop("relative_to", None)
-                entry.pop("relation", None)
-        poses[key] = entry
-        posed_subjects.append(str(subject))
-    # Legacy scenes can predate the pose ledger. Absence used to be left as
-    # an implicit blank, which models routinely completed as a generic
-    # standing/in-front arrangement. Make the uncertainty explicit in the
-    # observer payload without fabricating a world-state pose. Restrict the
-    # roster to known body labels so room objects are not called unposed.
-    pose_unknown = []
-    body_subjects = [name] + [
-        str(subject) for subject in (body_labels or {})
-        if str(subject) in visible_names
-    ]
-    for subject in body_subjects:
-        if any(same_subject(scene, subject, posed)
-               for posed in posed_subjects):
-            continue
-        label = ("you" if same_subject(scene, subject, name) else
-                 (body_labels or {}).get(subject, subject))
-        if label not in pose_unknown:
-            pose_unknown.append(label)
-    substances = []
-    for record in (scene.get("substances") or []):
-        if not isinstance(record, dict):
-            continue
-        source = str(record.get("source") or "")
-        target = str(record.get("target") or "")
-        source_is_self = same_subject(scene, source, name)
-        target_is_self = same_subject(scene, target, name)
-        placement = str(record.get("placement") or "").casefold()
-        # Persistent hidden matter belongs to the recipient's present bodily
-        # state.  The source receives the ADD event this beat, but does not get
-        # a remote state feed on every later beat merely because it caused it.
-        if placement in ("interior", "contained") and not target_is_self:
-            continue
-        target_is_visible = target_is_self or target in visible_names \
-            or (placement == "room" and target in allowed_rooms)
-        if not target_is_visible:
-            continue
-        entry = copy.deepcopy(record)
-        # A recipient has direct access to the material and its location, not
-        # automatically to its cause.  The ordinary scene/action channels may
-        # independently identify the source; this ledger never grants it.
-        if target_is_self and not source_is_self:
-            entry.pop("source", None)
-            entry.pop("source_part", None)
-            entry.pop("detail", None)
-        elif not source_is_self and source not in visible_names:
-            entry.pop("source", None)
-            entry.pop("source_part", None)
-        for field, is_self in (("source", source_is_self),
-                               ("target", target_is_self)):
-            value = str(entry.get(field) or "")
-            if not value:
-                continue
-            if is_self:
-                entry[field] = "you"
-            elif body_labels and value in body_labels:
-                entry[field] = body_labels[value]
-        substances.append(entry)
-    scales = {
-        key: value for key, value in (scene.get("scales") or {}).items()
-        if str(key) == name or str(key) in visible_names
-    }
-    # A6: `contained` is the concealment ledger itself -- a body hidden in a bag
-    # is named as hidden in that bag. An observer gets their own record (they
-    # know what they are inside, and what they are carrying) plus any carrying
-    # that is happening in plain sight between two bodies they can both see.
-    # The holder is nested under an "in" key, so reading the VALUE as a name is
-    # what the first version did and it silently matched nothing -- the filter
-    # fell closed by accident, which is the right outcome reached the wrong way
-    # and would have re-opened the moment the shape changed.
-    contained = {}
-    for key, value in (scene.get("contained") or {}).items():
-        holder = str(
-            (value or {}).get("in") if isinstance(value, dict) else value or ""
-        ).strip()
-        subject = str(key)
-        if subject == name or holder == name:
-            contained[key] = value
-        elif subject in visible_names and holder in visible_names:
-            contained[key] = value
-    payload = {
-        "location": scene.get("location"),
-        "time": scene.get("time"),
-        "rooms": rooms,
-        "entities": _perceptible_entities(scene, [name]),
-        "contacts": contacts,
-        "poses": poses,
-        "pose_unknown": pose_unknown,
-        "substances": substances,
-        "scales": scales,
-        "contained": contained,
-        "light": {
-            rid: effective_light(scene, rid) for rid in allowed_rooms
-        },
-        # What can be read looking STRAIGHT down each passage: that it ends,
-        # opens out, or bends. Sight follows the line until the passage turns,
-        # a door blocks it, or the dark takes it -- so it grants no knowledge
-        # of anything round a corner.
-        "sightlines": corridor_sightlines(scene, room_id) if room_id else [],
-    }
-    body_regions = observer_body_regions(
-        scene, name, body_labels or {name: "you"})
-    if body_regions:
-        payload["body_regions"] = body_regions
-    return payload
-
-
-def _observer_body_labels(perceiver, known, appearances, *, include=()):
-    """Canonical body -> observer-safe label for the body-region payload."""
-    observer = str(perceiver.get("name") or "")
-    recognized = set((known or {}).get(observer) or []) | {observer}
-    candidates = dict(appearances or {})
-    for name in include or ():
-        candidates.setdefault(str(name), "")
-    labels = {}
-    for body, appearance in candidates.items():
-        body = str(body or "").strip()
-        if not body:
-            continue
-        if observer.strip().casefold() == body.casefold():
-            labels[body] = "you"
-        elif _recognizes(body, recognized):
-            labels[body] = body
-        else:
-            labels[body] = _unknown_actor_label(body, appearance)
-    return labels
-
-
-def _novel_visible_appearances(scene, appearances, visual_channels, *,
-                               observer_name, recognized, changed=()):
-    """Full appearance text only for discovery or a structural change.
-
-    A familiar stable body's authored card is not a new percept every beat.
-    Dynamic region/clothing projection travels separately in scene.body_regions.
-    """
-    changed = [str(name) for name in (changed or []) if str(name or "").strip()]
-    return {
-        name: appearance
-        for name, appearance in (appearances or {}).items()
-        if name != observer_name
-        and (visual_channels or {}).get(name)
-        and (not _recognizes(name, set(recognized or []))
-             or any(same_subject(scene, name, item) for item in changed))
-    }
-
-
-_UNKNOWN_POSE_PREDICATE = re.compile(
-    r"^(?:is|are)\s+(?:(?:currently|directly)\s+)?(?:standing|sitting|seated|"
-    r"lying|reclining|kneeling|crouching|hovering|floating|hanging|perched|"
-    r"leaning|above|below|beneath|under|over|before|behind|beside|astride|"
-    r"against|in\s+front\s+of)\b|^(?:stands?|sits?|lies?|reclines?|kneels?|"
-    r"crouches?|hovers?|floats?|hangs?|perches?|straddles?|leans?)\b",
-    re.I,
-)
-
-
-def _strip_unknown_pose_claims(view, pose_unknown):
-    """Remove static pose assertions for bodies with no pose authority.
-
-    Action-onset subsequently re-injects every declared action from structured
-    sequence data, so a genuine stand/sit/lie action survives. What is removed
-    here is only the model-authored ambient default that preceded it. The
-    syntax is deliberately subject-led: "Mara's voice stands out" is not a
-    claim about Mara's body and must remain.
-    """
-    text = str(view or "")
-    if not text.strip() or not pose_unknown:
-        return view, []
-    parts = re.split(r"(?<=[.!?])\s+|\n+", text)
-    kept, dropped = [], []
-    for sentence in parts:
-        raw = sentence.strip()
-        remove = False
-        for label in pose_unknown:
-            subject = str(label or "").strip()
-            if not subject:
-                continue
-            match = re.match(
-                rf"^{re.escape(subject)}(?:['’]s body)?"
-                rf"(?:\s*,[^.!?]{{0,220}},)?\s+(.+)$",
-                raw, re.I)
-            if match and _UNKNOWN_POSE_PREDICATE.search(match.group(1)):
-                remove = True
-                break
-        if remove:
-            dropped.append(raw)
-        elif raw:
-            kept.append(raw)
-    return " ".join(kept).strip(), dropped
-
-
-# Concurrency for the per-observer perception fan-out. Capped rather than
-# one-thread-per-perceiver: a crowded room would otherwise open a dozen
-# simultaneous completions against the provider on every one of the three
-# passes.
-
-
-def _concealed_from_perceiver(entry, perceiver):
-    refs = {
-        str(value).strip().casefold()
-        for value in (entry.get("conceal_from") or [])
-        if str(value or "").strip()
-    }
-    return bool(
-        "*" in refs
-        or str(perceiver.get("name") or "").casefold() in refs
-        or str(perceiver.get("id") or "").casefold() in refs
-        or f"character:{perceiver.get('id')}".casefold() in refs
-    )
-
-
-def _inject_onset_speech(view, speech_elems, perceiver, rel, display, can_see):
-    """Deliver every player line this observer is allowed to hear.
-
-    This is deliberately safe to call twice. The first pass lets ordinary
-    model prose keep its natural ordering; `_inject_dialogue` adds only a line
-    that is not already present. The second pass runs after every destructive
-    view scrub and is the actual fidelity floor: a scrub must not erase a line
-    merely because the model first placed it inside prose the scrub rejected.
-
-    Live (chat 38, turn 125): the Doctor's raw view evidently contained
-    ``It's really beautiful...`` inside a sentence narrated from outside the
-    Doctor. `_inject_dialogue` saw the quote and avoided a duplicate, then
-    `_strip_self_narration` removed that whole sentence. With no final delivery
-    check, the Doctor decided the beat having heard only the player's second
-    line. A restored earlier line is anchored before the next surviving line,
-    with its declared tone, rather than appended after it. Keeping the
-    audibility/concealment calculation in one helper prevents the two passes
-    from drifting apart.
-    """
-    events = list(speech_elems or [])
-
-    def _body_match(text, body):
-        words = re.split(r"(\s+)", str(body or ""))
-        pattern = "".join(r"\s+" if part.isspace() else re.escape(part)
-                          for part in words if part)
-        return re.search(pattern, str(text or ""), re.I) if pattern else None
-
-    def _clause_start(text, pos):
-        """Start of the prose clause containing a later spoken line."""
-        inside_quote = False
-        start = 0
-        for index, char in enumerate(str(text or "")[:pos]):
-            if char in '"“”':
-                inside_quote = not inside_quote
-            elif char in ".!?…" and not inside_quote:
-                start = index + 1
-        while start < len(text) and text[start].isspace():
-            start += 1
-        return start
-
-    for index, event in enumerate(events):
-        if event.get("visibility") == "concealed" and (
-            not event.get("conceal_from")
-            or _concealed_from_perceiver(event, perceiver)
-        ):
-            continue
-        level = hear_level(
-            rel, event.get("volume", "normal"),
-            proximity=perceiver.get("proximity_to_actor"),
-        )
-        # Compatibility floor for a rerolled checkpoint that predates the
-        # near-group position repair.  It grants hearing only; the relation's
-        # real spatial fields still govern sight and every other channel.
-        if (
-            level == "none"
-            and rel.get("open_group_continuity")
-            and str(event.get("volume") or "normal").casefold()
-            in {"normal", "loud", "shout"}
-        ):
-            level = "full"
-        body = _quote_body(event.get("text"))
-        if level == "none" or not body or _contains_quote(view, body):
-            continue
-
-        # Append is normally sufficient, but if a later declared line already
-        # survived the model/scrub path it would put this restored EARLIER line
-        # after it. Anchor the missing line immediately before the next
-        # surviving line's clause, preserving the player's speech order and
-        # therefore its emotional progression.
-        next_match = None
-        for later in events[index + 1:]:
-            next_body = _quote_body(later.get("text"))
-            match = _body_match(view, next_body)
-            if match:
-                next_match = match
-                break
-        if next_match and level != "fragment":
-            delivered = _inject_dialogue(
-                "", display, event.get("text"), level,
-                event.get("volume", "normal"), can_see,
-                conducted=bool(rel.get("inside_source")),
-                tone=event.get("tone", ""),
-            )
-            insert_at = _clause_start(view, next_match.start())
-            view = (
-                view[:insert_at].rstrip() + " " + delivered + " "
-                + view[insert_at:].lstrip()
-            ).strip()
-        else:
-            view = _inject_dialogue(
-                view, display, event.get("text"), level,
-                event.get("volume", "normal"), can_see,
-                conducted=bool(rel.get("inside_source")),
-                tone=event.get("tone", ""),
-            )
-    return view
-
-
-_DELIVERY_META_RE = re.compile(
-    r"^(?:the words? (?:reach|reaches) you(?: clearly)?|"
-    r"you hear (?:both|all|the) (?:lines?|words?) (?:in full|clearly))"
-    r"[.!?]*$",
-    re.I,
-)
-
-
-def _strip_onset_rendering(view, sequence, display):
-    """Remove the model's paraphrase of declared onset events.
-
-    The perception model remains useful for selecting ambient sensory detail,
-    but it cannot be the authority on the ORDER of an already structured
-    player sequence.  A live two-line beat was returned as turn -> first line
-    -> second line, even though interpret correctly held first line -> turn ->
-    second line.  It also added delivery metacommentary ("The words reach you
-    clearly", "You hear both lines in full") that describes the filter rather
-    than the fiction.
-
-    Strip only material that can be tied back to a declared speech/action:
-    exact quote bodies, the two high-precision delivery-meta shapes above, and
-    clauses with the same conservative content overlap `_inject_action` uses
-    for duplicate detection.  Mixed environment/action sentences are handled
-    clause-by-clause so a trailing turn does not erase the room description.
-    The caller then projects the authorized sequence deterministically.
-    """
-    text = str(view or "").strip()
-    if not text:
-        return text
-    speech_bodies = [
-        _quote_body(event.get("text"))
-        for event in (sequence or [])
-        if isinstance(event, dict) and event.get("type") == "speech"
-        and event.get("text")
-    ]
-    action_surfaces = [
-        observable_action_text(event)
-        for event in (sequence or [])
-        if isinstance(event, dict) and event.get("type") == "action"
-        and observable_action_text(event)
-    ]
-
-    kept = []
-    for sentence in _SENTENCE_SPLIT.split(text):
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-        if any(body and _contains_quote(sentence, body)
-               for body in speech_bodies):
-            continue
-        if _DELIVERY_META_RE.fullmatch(sentence.strip()):
-            continue
-
-        if any(_action_already_rendered(sentence, display, surface)
-               for surface in action_surfaces):
-            # A model often tacks the visible act onto a useful environment
-            # sentence after a comma: "The console glows..., her ears perk as
-            # she turns." Remove just that clause when possible.
-            pieces = re.split(r"([,;\u2014\u2013]\s+)", sentence)
-            clauses = pieces[::2]
-            retained = []
-            for index, clause in enumerate(clauses):
-                if any(_action_already_rendered(
-                        clause, display, surface)
-                       for surface in action_surfaces):
-                    continue
-                if clause.strip():
-                    retained.append(clause.strip())
-            if retained and len(retained) < len(clauses):
-                sentence = ", ".join(retained).strip(" ,;\u2014\u2013")
-                if sentence and sentence[-1] not in ".!?\u2026":
-                    sentence += "."
-            else:
-                continue
-        if sentence:
-            kept.append(sentence)
-    return " ".join(kept).strip()
-
-
-def _self_cannot_see_own_surface(scene, perceiver, actor_name) -> bool:
-    """Is this perceiver the actor, AND sealed inside something?
-
-    `observable` is the intent-free surface of an act as seen FROM OUTSIDE,
-    and the actor normally receives it in their own view (rewritten to second
-    person by `_self_second_person`) because people can see themselves doing
-    things. Sealed inside another body that stops being true: the surface then
-    describes the OUTSIDE of the enclosure -- how the wall of it moves with
-    them -- and there is no channel from inside to that.
-
-    Live, chat 60 t18. The declared observable was "A tiny lump writhes and
-    squirms beneath the fabric ... the shirt shifting and bulging", and the
-    actor's own view came back "The lump you make writhes and bulges under the
-    fabric" -- in darkness, under cloth, with the narrator's own prose two
-    clauses earlier saying she could see nothing. The engine handed her an
-    outside observer's shot of herself.
-
-    Deliberately keyed on being ENCLOSED rather than on darkness or a failed
-    sight check. Being unable to see in the dark does not stop you knowing what
-    your own body is doing -- proprioception is not sight, and suppressing an
-    actor's own conduct every time the lights went out would be a worse error
-    than the one this fixes. What an enclosure removes is specifically the
-    outside view of yourself.
-    """
-    if not scene or not perceiver:
-        return False
-    name = str(perceiver.get("name") or "").strip()
-    if not name or not same_subject(scene, name, actor_name):
-        return False
-    return bool(hiding_holders_of(scene, name))
-
-
-def _inject_onset_sequence(view, sequence, perceiver, rel, display, can_see,
-                           scene, actor_name, self_forms):
-    """Project authorized speech/actions in their declared order."""
-    delivered = set()
-    continuity_available = bool(rel.get("open_group_continuity"))
-    sentence_display = str(display or "")
-    if sentence_display:
-        sentence_display = sentence_display[:1].upper() + sentence_display[1:]
-    for event in sequence or []:
-        if not isinstance(event, dict):
-            continue
-        if event.get("visibility") == "concealed" and (
-            not event.get("conceal_from")
-            or _concealed_from_perceiver(event, perceiver)
-        ):
-            continue
-        if event.get("type") == "speech":
-            speech_rel = rel if continuity_available else {
-                **rel, "open_group_continuity": False,
-            }
-            view = _inject_onset_speech(
-                view, [event], perceiver, speech_rel, sentence_display, can_see)
-            continue
-        if event.get("type") != "action":
-            continue
-        if _declares_rapid_movement([event]):
-            # Speech before the run remains audible; speech after the run gets
-            # no continuity floor.  Following is not all-powerful pursuit.
-            continuity_available = False
-        surface = observable_action_text(event)
-        if not surface or entity_arc(
-                scene, perceiver.get("name"), actor_name) == "rear":
-            continue
-        if _self_cannot_see_own_surface(scene, perceiver, actor_name):
-            continue
-        view = _inject_action(
-            view, sentence_display, surface, can_see,
-            event_id=event.get("event_id"), delivered=delivered,
-            self_forms=self_forms,
-        )
-    return view
 
 
 def _ubiquitous_names(sc):
@@ -1532,6 +762,16 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
                                  senses))
             for n in rels
         },
+        # DELIVERED NOWHERE, and kept deliberately. `composer.CHANNELS`
+        # declares "smell" and `ambient_percepts` can mint one from an
+        # authored sensory event, so the channel is reachable -- but nothing
+        # gives a BODY a smell, so this per-source grade has no content to
+        # grade and reaches no percept builder. Building body-scent perception
+        # needs a scent to perceive: a card field or a `state_diff` channel
+        # that says what something smells of. That is a feature, not a repair,
+        # and until it exists this is a gate with nothing behind it.
+        # `tests/test_masked_floor_leaks.py` reads it as the visible proof
+        # that `spatial_rel_between` stamps both enclosure directions.
         "scent_channel_to_sources": {
             n: composer._sense_graded(scent_level(r), "scent", senses)
             for n, r in rels.items()},
@@ -1614,52 +854,6 @@ def _identity_roster(p_name, p_appearance, cast):
             "aliases": keys[1:],
         })
     return roster
-
-def _observed_pronouns(chat_id, cast):
-    """Canonical pronouns for each cast member a view may refer to in the third
-    person, so a view doesn't guess a character's gender from their name and
-    flip it between beats (W6).
-
-    A character under an ACTIVE DISGUISE is excluded: their canonical pronouns
-    are part of the identity the disguise conceals, and stating them in a view
-    an unaware observer receives would out them -- the exact leak the disguise
-    machinery above exists to prevent. Their pronouns come from the disguised
-    appearance instead, like every other visible feature.
-    """
-    disguised = active_disguises(chat_id) or {}
-    out = {}
-    for c in (cast or []):
-        sh, _, _ = sheet_state(c)
-        name = character_name(sh)
-        if not name or str(name).casefold() in disguised:
-            continue
-        pronouns = ((sh.get("identity") or {}).get("pronouns") or {}
-                    if isinstance(sh, dict) else {})
-        clean = {k: pronouns[k] for k in ("subject", "object", "possessive")
-                 if isinstance(pronouns, dict) and pronouns.get(k)}
-        if clean:
-            out[name] = clean
-    return out
-
-def _pronouns_for_perceiver(all_pronouns, perceiver, known):
-    """The slice of `_observed_pronouns` one observer has earned.
-
-    The per-observer split replaced the shared cast_pronouns map with an empty
-    dict, which closed the leak (a stranger's canonical pronouns are part of
-    the identity they have not been given) by deleting the field -- so the
-    perception prompt's PRONOUNS rule could never fire for anyone, and every
-    view was back to guessing a character's gender from their name and flipping
-    it between beats, which is the bug _observed_pronouns exists to fix.
-    Scoping to what this observer recognizes keeps both properties: a
-    recognized character keeps stable pronouns, an unrecognized one is
-    described by what is visibly there."""
-    name = str(perceiver.get("name") or "")
-    recognized = set(known.get(name) or []) | {name}
-    return {
-        who: pronouns for who, pronouns in (all_pronouns or {}).items()
-        if _recognizes(who, recognized)
-    }
-
 
 def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
     """Drop sentences that narrate the PERCEIVER from outside their own view.
@@ -1746,21 +940,21 @@ def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
     # that beat all came out sound-only -- a permanent hole in what that mind
     # knows, from a framing slip.
     #
-    # The two failures are not equal and the module already says so:
-    # `_strip_unreachable_bodies` refuses over-denial on the ground that
-    # "silence about someone audibly present is its own lie". Being told about
-    # yourself in the third person for one beat is bounded and visible; losing
-    # what you saw is neither. So when the drop would leave a view with no
-    # assertion of sight in it at all, the view stands and the warning carries
-    # it.
+    # The two failures are not equal. Over-denial is the worse one: silence
+    # about something a mind plainly perceived is its own lie, and it is
+    # invisible afterwards. Being told about yourself in the third person for
+    # one beat is bounded and visible; losing what you saw is neither. So when
+    # the drop would leave a view with no assertion of sight in it at all, the
+    # view stands and the warning carries it.
     #
     # Narrow on purpose: it keys on the verbs a view actually uses to assert
     # sight, so it is a floor under this specific loss and NOT a general
     # promise that nothing informative is ever dropped (a view phrasing sight
     # as "visual sensors pick up" is still dropped whole -- see
     # test_a_body_named_with_an_article_is_caught_under_another_article).
-    if (any(_SIGHT_ASSERTION.search(s) for s in dropped)
-            and not any(_SIGHT_ASSERTION.search(s) for s in kept)):
+    _sight = _ling("_SIGHT_ASSERTION")
+    if (any(_sight.search(s) for s in dropped)
+            and not any(_sight.search(s) for s in kept)):
         if refusals is not None:
             refusals.append(
                 "dropping self-narration would have left this view with no "
@@ -1769,100 +963,6 @@ def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
         return view, []
     return " ".join(kept), dropped
 
-
-def _strip_unreachable_bodies(view, perceiver_name, scene, roster):
-    """Drop sentences about a body the perceiver has NO sensory channel to.
-
-    A view is the whole information budget one mind receives, and the engine
-    already knows who is reachable -- `spatial_rel` answers it for every pair
-    on the scene. Nothing consumed that answer when the view was prose, so a
-    body could be described in full to an observer with no way to perceive it.
-
-    Live (chat 58, t28): Hinami slammed the TARDIS doors and stood in the
-    console room; the Dalek stood outside. `visual_level_between` returns
-    'none' for that pair and `spatial_rel` calls it `separated`/`far` -- no
-    connecting geometry at all -- and her actions were still narrated into the
-    Dalek's view, which then fed the Dalek's own next-turn context.
-
-    Deliberately the HARD case only: no channel whatsoever. A body the
-    perceiver cannot SEE but can still hear through a shut door is left alone,
-    because dropping it would deny a legitimate perception -- that narrower
-    case (sight asserted where only hearing exists) needs sense-cue analysis
-    and is not this guard's job. Over-denial here would be the worse failure:
-    a view is what a mind gets, and silence about someone audibly present is
-    its own lie.
-
-    Same shape as `_strip_self_narration`: whole sentences, subject only,
-    nothing invented to replace what goes, and never empties a view.
-    """
-    if not view or not perceiver_name or not scene:
-        return view, []
-    names = [r["name"] for r in (roster or []) if r.get("name")]
-    unreachable = set()
-    for name in names:
-        if name == perceiver_name:
-            continue
-        rel = spatial_rel(scene, cast_room(scene, perceiver_name, []),
-                          cast_room(scene, name, []))
-        # `separated` means no edge was found between the two rooms; `unknown`
-        # means one of them has no room at all. Every other barrier is a real
-        # relationship the perceiver may sense across at SOME volume.
-        if str(rel.get("barrier") or "").lower() in ("separated", "unknown") \
-                and not rel.get("same_room"):
-            unreachable.add(name)
-    if not unreachable:
-        return view, []
-    kept, dropped = [], []
-    for stripped, subject in _sentence_subjects(
-            str(view), names, split=_SENTENCE_SPLIT):
-        if not stripped:
-            continue
-        if subject in unreachable:
-            dropped.append(stripped)
-        else:
-            kept.append(stripped)
-    if not dropped or not kept:
-        return view, []
-    return " ".join(kept), dropped
-
-
-def _scrub_view_for(ctx, stage, view, perceiver_name, known, roster,
-                    scene=None):
-    """Apply the deterministic identity floor to one perceiver's view:
-    every roster identity the perceiver does not recognize (and is not) is
-    scrubbed outside quoted spans. Surfaces a pipeline warning per leak --
-    the original bug was quiet, which is how it went unnoticed."""
-    recognized = set(known.get(perceiver_name) or [])
-    unknown = [s for s in roster
-               if s["name"] != perceiver_name
-               and not _recognizes(s["name"], recognized)]
-    view, leaked = _scrub_unknown_identities(
-        view,
-        allowed_forms=[perceiver_name, *recognized],
-        unknown_sources=unknown,
-    )
-    if leaked:
-        ctx.warnings.append(
-            f"{stage}: scrubbed unearned identity {leaked} "
-            f"from the view of {perceiver_name}")
-    refused = []
-    view, self_narrated = _strip_self_narration(
-        view, perceiver_name, [s["name"] for s in roster], refusals=refused)
-    for reason in refused:
-        ctx.warnings.append(
-            f"{stage}: kept self-narration in the view of "
-            f"{perceiver_name} — {reason}")
-    for sentence in self_narrated:
-        ctx.warnings.append(
-            f"{stage}: dropped self-narration from the view of "
-            f"{perceiver_name}: {sentence[:120]!r}")
-    view, unreachable = _strip_unreachable_bodies(
-        view, perceiver_name, scene, roster)
-    for sentence in unreachable:
-        ctx.warnings.append(
-            f"{stage}: dropped a body with no sensory channel from the view "
-            f"of {perceiver_name}: {sentence[:120]!r}")
-    return view
 
 def _behind_rooms(scene, observer):
     """Room ids at the observer's back (the way they came), from their
@@ -2154,26 +1254,41 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
 def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
     """Resolve a subject's active physical_disguise into perception inputs.
 
-    Returns (visible_appearance, disguise_payload_or_None, known_to_or_None,
+    Returns (visible_appearance, disguise_active, known_to_or_None,
     conceals_identity):
     - visible_appearance: what EVERY observer visually perceives -- the
       disguised outward form when a disguise is active (a concealed feature is
       not seen even by someone who knows it is there), else the true
       appearance unchanged.
-    - disguise_payload: the block handed to the perception LLM so it can give
-      observers in known_to the concealed truth as KNOWLEDGE (never as vision)
-      and preserve the subject's real capabilities; None when no disguise.
-    - known_to: casefolded names that legitimately know the truth (for the
-      leak tripwire), or None.
+    - disguise_active: True when a disguise is in force, None when not. It
+      used to be a PAYLOAD -- second-person instruction to the perception model
+      ("Every observer VISUALLY perceives only outward_visible_appearance")
+      plus the `concealed_truth` itself, so an observer in known_to could be
+      given the truth as KNOWLEDGE rather than as vision. There is no
+      perception model, and the block reached no consumer: it is a flag now,
+      and the wording it carried was prompt text with nowhere to be a prompt.
+      None rather than False for the absent case, because that is the answer
+      every caller and test already reads.
+    - known_to: casefolded names that legitimately know the truth, or None.
+      LIVE, and the reason the knowledge layer is not entirely gone: it feeds
+      `scene.disguise_breaks_recognition`, so a body's acquaintances still
+      recognise them through a disguise that conceals identity.
     - conceals_identity: whether this disguise covers what a body is
       RECOGNISED by (a face, a build, a voice) as opposed to a feature it
       merely hides. False for a glamour over fox ears: the face is still
       the face, so anyone who knows her still knows her -- wearing
       unfamiliar ears. See `scene.disguise_breaks_recognition`.
 
-    Feeding the disguised appearance is the primary, fail-safe fix: the LLM is
-    never handed the concealed features, so it cannot render them. The payload
-    and tripwire are the knowledge layer and QA around that.
+    Feeding the disguised appearance is the primary, fail-safe fix: the view
+    is composed FROM the disguised form, so a concealed feature cannot be
+    rendered as seen by anybody.
+
+    RESIDUAL, and it is a SUBTRACTION rather than a leak: an observer in
+    known_to no longer receives the concealed truth anywhere. They recognise
+    the body, and they are not told what is under the disguise. Restoring it
+    means putting the truth in the CHARACTER payload -- knowledge is not
+    perception, and the percept IR is deliberately about what a channel
+    delivered -- which is a design decision beyond removing the dead block.
     """
     # A TRANSFORMATION RESOLVES FIRST, AND IS NOT A DISGUISE. It changes the
     # body's TRUE appearance -- there is no concealed truth, nobody sees
@@ -2205,21 +1320,7 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
         return true_appearance, None, None, False
     known_to = disguise_known_to(disguise, subject_name, known_map)
     visible = disguised_visible_appearance(true_appearance, disguise)
-    payload = {
-        "active": True,
-        "outward_visible_appearance": visible,
-        "concealed_truth": disguise.get("description") or "",
-        "known_to": sorted(known_to),
-        "capability_note": (
-            "The disguise conceals APPEARANCE only. The subject's real senses "
-            "and abilities are unchanged -- e.g. concealed ears still hear."),
-        "instruction": (
-            "Every observer VISUALLY perceives only outward_visible_appearance; "
-            "never describe a concealed feature as seen. An observer whose name "
-            "is in known_to additionally KNOWS (does not see) the concealed_truth "
-            "and may act on it; an observer not in known_to has no awareness of it."),
-    }
-    return visible, payload, known_to, bool(disguise.get(
+    return visible, True, known_to, bool(disguise.get(
         "conceals_identity"))
 
 
@@ -2256,9 +1357,9 @@ def _subject_concealed_terms(chat_id, subject_name):
 # generate false positives -- but a hand cannot rise and descend in the same
 # instant, and that is the one that bit. Deliberately narrow: this is a
 # tripwire, and a tripwire nobody trusts gets ignored.
-_RAISING = re.compile(r"\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|"
-                      r"hoist(?:s|ed|ing)?)\b")
-_LOWERING = re.compile(r"\b(?:lower(?:s|ed|ing)?|descend(?:s|ed|ing)?)\b")
+# In the ACTIVE PACK (`agents.perception._RAISING` / `._LOWERING`): a tripwire
+# written in one language is a tripwire that fires in one language, and the
+# story it was measured on is not the only story.
 
 
 def _inverted_motion_check(ctx, stage, views, resolved_event):
@@ -2284,17 +1385,18 @@ def _inverted_motion_check(ctx, stage, views, resolved_event):
     event = str(resolved_event or "").casefold()
     if not event:
         return
-    event_lowers = bool(_LOWERING.search(event))
-    event_raises = bool(_RAISING.search(event))
+    raising, lowering = _ling("_RAISING"), _ling("_LOWERING")
+    event_lowers = bool(lowering.search(event))
+    event_raises = bool(raising.search(event))
     if event_lowers == event_raises:
         return                      # says both, or says neither
     for pid, view in (views or {}).items():
         text = str(view or "").casefold()
         if not text:
             continue
-        if event_lowers and _RAISING.search(text) and not _LOWERING.search(text):
+        if event_lowers and raising.search(text) and not lowering.search(text):
             said, saw = "lowering", "raising"
-        elif event_raises and _LOWERING.search(text) and not _RAISING.search(text):
+        elif event_raises and lowering.search(text) and not raising.search(text):
             said, saw = "raising", "lowering"
         else:
             continue
@@ -2329,40 +1431,6 @@ def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
                     f"{stage}: disguise leak -- '{t}' (a concealed feature of "
                     f"{subject_name}) surfaced in the view of {p.get('name')}")
                 break
-
-
-def _observer_facing_sequence(sequence):
-    """Project a declared action sequence into what OTHER perceivers may be
-    handed. Each action element carries only its intent-free `observable`
-    surface (via observable_action_text) as `attempt`, with the causal-intent
-    ledger (intended_effects/asserted_effects) and the actor's own framing
-    (verb, raw attempt) removed; a mental element (observable "") is dropped
-    entirely, being imperceptible. Speech/event elements pass through unchanged
-    (their concealment is handled separately). This keeps the perception filter
-    from ever RECEIVING the actor's purpose ('runes of slow and soften',
-    'channel divine heritage') -- honoring the barrier rather than handing over
-    hidden intent with an instruction to ignore it (the very pattern the engine
-    forbids for character agents)."""
-    out = []
-    for e in sequence or []:
-        if not isinstance(e, dict):
-            continue
-        if e.get("type") != "action":
-            out.append(e)
-            continue
-        surface = observable_action_text(e)
-        if not surface:
-            continue
-        out.append({
-            "type": "action",
-            "event_id": e.get("event_id", ""),
-            "attempt": surface,
-            "visibility": e.get("visibility", "overt"),
-            "conceal_from": e.get("conceal_from") or [],
-            "targets": e.get("targets") or [],
-            "stage": e.get("stage", "immediate"),
-        })
-    return out
 
 
 def perception_establish(ctx, nonce):
@@ -2420,10 +1488,8 @@ def perception_establish(ctx, nonce):
                            senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
-        "room_layout": room_layout(sc, p_name),
         "behind_rooms": _behind_rooms(sc, p_name),
         "focus_target": _focus_target(sc, p_name),
-        **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
     for c in ctx.cast:
@@ -2448,30 +1514,16 @@ def perception_establish(ctx, nonce):
                                senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), c_sources),
             "behind_sources": _behind_sources(sc, character_name(sh), c_sources),
-            "room_layout": room_layout(sc, character_name(sh)),
         })
-
-    declared = {
-        "actor_id": "OPENING", "actor_name": p_name,
-        "actor_room": p_room,
-        "actor_room_name": (p_rdata or {}).get("name") or p_room,
-        "actor_present_appearance": p_appearance,
-        "entity_state": p_state,
-        "sensory_events": sensory_events,
-        "player_seed": ctx.get("input") or "",
-        "sequence": [], "player_speech": [],
-        "speech": None, "speech_volume": "normal",
-        "action_attempt": None, "visibility": "overt",
-        "conceal_from": [], "targets": [],
-    }
 
     # Consciousness gate (rare at opening, but a scenario may start someone
     # unconscious/asleep): overlay the establish diff onto committed conditions.
     amap = apply_awareness_diff(awareness_map(chat["id"]), diff)
+    # The gate itself is INSIDE the composer orchestrators, per perceiver
+    # (`if p.get("awareness") in NON_AWAKE_GATED`), so this loop stamps the
+    # verdict and nothing here needs to partition on it.
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
-    awake_perceivers = [p for p in perceivers
-                        if p.get("awareness") not in NON_AWAKE_GATED]
 
     return _composer_establish(
         ctx, sc, perceivers, known, p_name, p_appearance,
@@ -2499,7 +1551,6 @@ def perception_act(ctx, nonce):
         p_room = _resolve_player_room(sc, pers, interp, ctx.cast, ctx.input)
         ctx["_player_room"] = p_room
 
-    p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
     p_name = pers.get("name") or persona_name(pers)
     # WHAT THE PLAYER SAID HAPPENED, HAS HAPPENED -- here, before a single
     # observer's view is built. Everything the player asserted about their own
@@ -2520,7 +1571,7 @@ def perception_act(ctx, nonce):
     # p_visible is what is actually SEEN (disguised form when active), fed to
     # both the LLM and the deterministic injection below so a concealed feature
     # is never rendered as perceived.
-    (p_visible, p_disguise, p_disguise_known,
+    (p_visible, _p_disguise, p_disguise_known,
      p_disguise_conceals) = _subject_disguise_context(
         chat["id"], p_name, p_appearance, known)
     p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
@@ -2532,105 +1583,6 @@ def perception_act(ctx, nonce):
     if not speech_elems and interp.get("speech"):
         speech_elems = [{"type": "speech", "text": interp["speech"],
                          "volume": interp.get("speech_volume", "normal"), "tone": ""}]
-
-    # Observer-facing action text is the intent-free `observable` surface, never
-    # the actor's intent-laden `attempt` -- a mental beat (observable "") is
-    # skipped so it never reaches the empty-view fallback below.  Concealed
-    # actions are also skipped: action_desc feeds the deterministic
-    # _ensure_environment fallback that runs for EVERY perceiver, and a
-    # concealed action's observable surface must not reach perceivers it is
-    # hidden from (mirroring the action_elems filter below).
-    action_desc = ""
-    for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("visibility") != "concealed":
-            surface = observable_action_text(e)
-            if surface:
-                action_desc = surface
-                break
-
-    # Concealed speech elements are withheld from the perceiver payload for
-    # the same reason as concealed actions: player_speech is embedded in
-    # action_onset (declared_act) which goes to the perception LLM, and a
-    # concealed line's text must not reach perceivers it is hidden from.
-    # The conceal_from list is preserved in the concealed_actions metadata
-    # below so the LLM still knows a concealed line existed.
-    overt_player_speech = [
-        {"text": e.get("text"), "volume": e.get("volume", "normal"),
-         "tone": e.get("tone", ""),
-         "visibility": e.get("visibility", "overt"),
-         "conceal_from": e.get("conceal_from") or []}
-        for e in speech_elems
-        if e.get("visibility") != "concealed"
-    ]
-
-    # The sequence handed to the perception LLM is the observer-facing
-    # projection: intent-free surfaces only, intent ledger stripped, mental
-    # beats dropped. action_attempt (the scalar mirror) follows the same
-    # surface -- action.get("attempt") is the actor's raw framing and, being
-    # the FIRST element, is frequently the mental beat ("remember the runes").
-    # Concealed actions are filtered OUT of the sequence entirely: every
-    # perceiver in this call is a non-actor (the actor is the player), so a
-    # concealed action's observable surface has no legitimate audience here.
-    # The concealed action metadata is preserved in the concealed_actions
-    # list on the payload (see perception_outcome's equivalent).
-    observer_sequence = [
-        e for e in _observer_facing_sequence(interp.get("sequence"))
-        if e.get("visibility") != "concealed"
-    ]
-    observer_action_attempt = next(
-        (e["attempt"] for e in observer_sequence
-         if e.get("type") == "action" and e.get("attempt")), None)
-
-    # Build the concealed_actions metadata list (mirrors perception_outcome):
-    # the LLM is told a concealed action existed and who it is hidden from,
-    # without receiving the observable surface in the main sequence.
-    concealed_actions = []
-    for e in (interp.get("sequence") or []):
-        if e.get("type") == "action" and e.get("visibility") == "concealed":
-            concealed_actions.append({
-                "actor": p_name,
-                "attempt": observable_action_text(e),
-                "conceal_from": e.get("conceal_from") or [],
-            })
-    for e in speech_elems:
-        if e.get("visibility") == "concealed":
-            concealed_actions.append({
-                "actor": p_name,
-                "attempt": e.get("text"),
-                "conceal_from": e.get("conceal_from") or [],
-            })
-
-    # Determine whether the scalar speech fields are concealed.  When the
-    # primary speech is concealed, passing the raw text as an unmarked scalar
-    # would leak it to every perceiver; withhold the text and mark it.
-    raw_speech = interp.get("speech")
-    raw_speech_volume = interp.get("speech_volume") or "normal"
-    primary_speech_concealed = any(
-        e.get("visibility") == "concealed" and e.get("text") == raw_speech
-        for e in speech_elems
-    )
-
-    # Build action onset for reaction eligibility
-    action_onset = {
-        "actor_id": "PLAYER",
-        "actor": p_name,
-        "actor_name": p_name,
-        "actor_room": p_room,
-        "actor_room_name": (p_rdata or {}).get("name") or p_room,
-        "actor_present_appearance": p_visible,
-        "sequence": observer_sequence,
-        "player_speech": overt_player_speech,
-        "speech": "" if primary_speech_concealed else raw_speech,
-        "speech_volume": raw_speech_volume,
-        "speech_concealed": primary_speech_concealed,
-        "action_attempt": observer_action_attempt,
-        "visibility": action.get("visibility", "overt"),
-        "conceal_from": action.get("conceal_from") or [],
-        "targets": action.get("targets") or [],
-        "commitment": action.get("commitment", "contestable"),
-    }
-    if p_disguise:
-        action_onset["subject_disguise"] = p_disguise
 
     # Every cast body with a position, whether or not it acts this beat --
     # the raw material for `_co_present_company` (which see): pass 1 has no
@@ -2696,8 +1648,6 @@ def perception_act(ctx, nonce):
             "spatial_to_actor": rel,
             "visual_channel_to_actor": has_visual(rel) and composer._sense_graded(
                 "full", "sight", _sense_card(sh)) != "none",
-            "scent_channel_to_actor": composer._sense_graded(
-                scent_level(rel), "scent", _sense_card(sh)),
             "proximity_to_actor": proximity_rel(
                 sc, character_name(sh), p_name),
             "proximity_to_sources": prox_to_others,
@@ -2724,8 +1674,6 @@ def perception_act(ctx, nonce):
     amap = awareness_map(chat["id"])
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
-    awake_perceivers = [p for p in perceivers
-                        if p.get("awareness") not in NON_AWAKE_GATED]
 
     return _composer_act(
         ctx, sc, interp, perceivers, known, p_name, p_visible,
@@ -2926,7 +1874,6 @@ def perception_outcome(ctx, nonce):
     known = wget(chat["id"], "known", {})
     res = ctx.get("director_resolve", {})
     interp = ctx.get("director_interpret", {})
-    reactors = set((interp.get("flow") or {}).get("reactors") or [])
 
     # Room dedup runs BEFORE this stage's merge (Phase-2 re-scope of the
     # Phase-1 one-beat skew): commit will deterministically rekey/redirect
@@ -2955,11 +1902,10 @@ def perception_outcome(ctx, nonce):
     # scene. infer_* run at COMMIT, which is AFTER the narrator -- so without
     # this, the FOV/egocentric derivations below AND the narrator's spatial
     # frame would use LAST beat's facing/came_from on exactly the movement beats
-    # they exist for (a room just entered, rendered with the prior heading; the
-    # deterministic spatial_facts contradicting the correct view). Pure and
-    # deterministic given (prev_scene, sc) -- commit re-runs them to the same
-    # result. Stashed on ctx so the narrator derives its spatial_frame/
-    # spatial_facts from this same oriented scene, not the stale committed KV.
+    # they exist for (a room just entered, rendered with the prior heading).
+    # Pure and deterministic given (prev_scene, sc) -- commit re-runs them to
+    # the same result. Stashed on ctx so the narrator derives its
+    # spatial_frame from this same oriented scene, not the stale committed KV.
     try:
         from world.spatial_frames import infer_came_from, infer_focus, infer_facing
         _o_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
@@ -2987,9 +1933,10 @@ def perception_outcome(ctx, nonce):
     p_appearance_true = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # Conceal a disguised subject's real appearance in every observer's outcome
-    # view: p_appearance becomes the disguised (visible) form, so present_
-    # appearances and the deterministic injection below never expose concealed
-    # features. The knowledge layer (who KNOWS the truth) rides the payload.
+    # view: p_appearance becomes the disguised (visible) form, so no percept
+    # built below can carry a concealed feature. The knowledge layer is
+    # `known_to` alone -- see `_subject_disguise_context`, which also records
+    # what went missing when its prose payload did.
     (p_appearance, p_disguise, p_disguise_known,
      p_disguise_conceals) = _subject_disguise_context(
         chat["id"], p_name, p_appearance_true, known)
@@ -3033,60 +1980,15 @@ def perception_outcome(ctx, nonce):
             "medium": d.get("medium"),
         })
 
-    # The model receives no raw dialogue transcript. Every spoken line,
-    # including player and concealed speech, is delivered below through the
-    # deterministic per-observer hearing/concealment gate.
-    npc_dlog = list(enriched_dlog)
-
-    # ...but the no-LLM fallback is NOT that gate. _fallback_perception_views
-    # admits a line on same-room alone -- no concealment check, no hear_level --
-    # so handing it the full log would render every concealed line verbatim to
-    # every co-located perceiver on exactly the turns where the model failed.
-    # It also has no per-observer vantage to decide a partial conceal_from, so
-    # it fails closed on the whole class, and drops the player's own lines the
-    # way it always did.
-    fallback_dlog = [
-        d for d in enriched_dlog
-        if d.get("visibility") != "concealed"
-        and not is_player_speaker(d.get("speaker", ""), chat)
-    ]
-
     sources = [{"name": p_name, "room": p_room}]
     for _e in br_entries:
         sources.append({"name": _e.get("speaker"), "room": cast_room(sc, _e.get("speaker"), ctx.cast)})
-    concealed = []
-    for a in (interp.get("actions") or
-              ([interp["action"]] if interp.get("action") else [])):
-        if isinstance(a, dict) and a.get("visibility") == "concealed":
-            concealed.append({"actor": p_name,
-                              "attempt": observable_action_text(a),
-                              "conceal_from": a.get("conceal_from") or []})
-    for d in enriched_dlog:
-        if d.get("visibility") == "concealed":
-            concealed.append({"actor": d.get("speaker"), "attempt": d.get("exact_quote"),
-                              "conceal_from": d.get("conceal_from") or []})
-
     for c in ctx.cast:
         d = ctx.character_results.get(c["id"])
         sh = json.loads(c["sheet"])
         if d and (d.get("sequence") or d.get("speech") or d.get("action")):
             sources.append({"name": character_name(sh),
                             "room": character_room(sc, sh)})
-        for a in ((d or {}).get("actions") or []):
-            if a.get("visibility") == "concealed":
-                concealed.append({"actor": character_name(sh),
-                                  "attempt": observable_action_text(a),
-                                  "conceal_from": a.get("conceal_from") or []})
-        reaction = ctx.reaction_results.get(c["id"])
-        for a in ((reaction or {}).get("actions") or
-                  [e for e in ((reaction or {}).get("sequence") or [])
-                   if isinstance(e, dict) and e.get("type") == "action"]):
-            if isinstance(a, dict) and a.get("visibility") == "concealed":
-                concealed.append({
-                    "actor": character_name(sh),
-                    "attempt": observable_action_text(a),
-                    "conceal_from": a.get("conceal_from") or [],
-                })
 
     appearances = {p_name: p_appearance}
 
@@ -3105,7 +2007,6 @@ def perception_outcome(ctx, nonce):
     # first (so it had no channel to any co-player at all), and each extra
     # player's perceiver was built as its own source-append happened (so
     # extra A had no channel to extra B, only vice versa).
-    other_players = interp.get("other_players") or {}
     extra_entries = []
     for extra in ctx.extra_players:
         pid_key = str(extra["persona_id"])
@@ -3114,11 +2015,6 @@ def perception_outcome(ctx, nonce):
         sources.append({"name": e_name, "room": e_room})
         appearances[e_name] = _appearance_as_prose(appearance_of(
             e_name, extra.get("appearance") or f"{e_name}, a person of unremarkable appearance.", sc))
-        entry = other_players.get(pid_key) or {}
-        for e in (entry.get("sequence") or []):
-            if e.get("type") == "action" and e.get("attempt") and e.get("visibility") == "concealed":
-                concealed.append({"actor": e_name, "attempt": e.get("attempt"),
-                                  "conceal_from": e.get("conceal_from") or []})
         extra_entries.append((extra, pid_key, e_name, e_room))
 
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
@@ -3142,12 +2038,10 @@ def perception_outcome(ctx, nonce):
                            senses=_sense_card(pers)),
         "proximity_to_sources": _proximity_to_sources(sc, p_name, sources),
         "behind_sources": _behind_sources(sc, p_name, sources),
-        "room_layout": room_layout(sc, p_name),
         "behind_rooms": _behind_rooms(sc, p_name),
         "focus_target": _focus_target(sc, p_name),
         "source_manifest": _delivered_manifest(
             ctx, sc, p_name, sources, known, cast_by_name, pers),
-        **_perceiver_spatial_facts(sc, p_name, sources),
     }]
 
     for extra, pid_key, e_name, e_room in extra_entries:
@@ -3168,12 +2062,10 @@ def perception_outcome(ctx, nonce):
                                senses=_sense_card(extra)),
             "proximity_to_sources": _proximity_to_sources(sc, e_name, sources),
             "behind_sources": _behind_sources(sc, e_name, sources),
-            "room_layout": room_layout(sc, e_name),
             "behind_rooms": _behind_rooms(sc, e_name),
             "focus_target": _focus_target(sc, e_name),
             "source_manifest": _delivered_manifest(
                 ctx, sc, e_name, sources, known, cast_by_name, extra),
-            **_perceiver_spatial_facts(sc, e_name, sources),
         })
 
     for c in ctx.cast:
@@ -3198,7 +2090,6 @@ def perception_outcome(ctx, nonce):
                                prev_sc=prev_scene, senses=_sense_card(sh)),
             "proximity_to_sources": _proximity_to_sources(sc, character_name(sh), sources),
             "behind_sources": _behind_sources(sc, character_name(sh), sources),
-            "room_layout": room_layout(sc, character_name(sh)),
             "behind_rooms": _behind_rooms(sc, character_name(sh)),
             "focus_target": _focus_target(sc, character_name(sh)),
             "source_manifest": _delivered_manifest(
@@ -3214,8 +2105,6 @@ def perception_outcome(ctx, nonce):
     amap = apply_awareness_diff(awareness_map(chat["id"]), diff)
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
-    awake_perceivers = [p for p in perceivers
-                        if p.get("awareness") not in NON_AWAKE_GATED]
 
     return _composer_outcome(
         ctx, sc, prev_scene, diff, interp, res, known, p_name,
@@ -3250,18 +2139,16 @@ def perception_outcome(ctx, nonce):
 # regression, and that was measured rather than supposed.
 # ---------------------------------------------------------------------------
 
-_LOOK_VERBS = frozenset({
-    "look", "examine", "inspect", "survey", "study", "scan", "observe",
-    "glance", "peer", "search", "check",
-})
-
-
 def _explicit_look_intent(interp):
     """Did the player explicitly look/examine this beat? Read from the
     Director's structured interpretation (location_query, or a declared
     action whose leading verb is a look verb), never from raw input. An
     explicit look re-renders the player's full standing state instead of the
-    delta."""
+    delta.
+
+    The verb table is the ACTIVE PACK's (`agents.perception._LOOK_VERBS`). A
+    Japanese story never re-earned a full render on an explicit look, because
+    the eleven English words could not match 見回す."""
     if not isinstance(interp, dict):
         return False
     if str(interp.get("location_query") or "").strip():
@@ -3273,7 +2160,7 @@ def _explicit_look_intent(interp):
         words = text.strip().split()
         verb = str(event.get("verb") or (words[0] if words else ""))
         verb = re.sub(r"[^\w]", "", verb).strip().casefold()
-        if verb in _LOOK_VERBS or verb.rstrip("s") in _LOOK_VERBS:
+        if verb and _ling("_LOOK_VERBS").search(verb):
             return True
     return False
 
@@ -3923,6 +2810,14 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         effective_light(sc, room) if room else "")
     if env:
         percepts.append(env)
+    # Crowds, couriers and posted notices: three built subsystems whose whole
+    # perception seam is these three keys, and until now nothing read them.
+    # Already room-scoped and already reduced to what a bystander takes in by
+    # the builders that produced them (`common.crowds_for_room` and its two
+    # twins), so this adds no admission decision -- it adds the delivery the
+    # decisions were being made for.
+    percepts.extend(composer.room_content_percepts(
+        p.get("crowds"), p.get("couriers"), p.get("notices")))
     senses = p.get("sense_card")
     percepts.extend(composer.presence_percepts(
         sc, name, others, display_map, senses))
@@ -4171,9 +3066,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
             cause = (amap.get(name_cf) or {}).get("cause", "").lower()
-            pain = any(w in cause for w in
-                       ("injur", "wound", "blood", "hurt", "struck",
-                        "broke", "burn"))
+            pain = any(w in cause for w in _ling("_PAIN_CUES"))
             percepts = composer.residue_percepts(
                 p["awareness"], targeted=(name_cf in onset_targets),
                 loud_event=onset_loud, pain=pain)
@@ -4476,9 +3369,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         moves.append((str(mover), prev_room, str(new_room)))
 
     # Micro-round deliveries were gated by `_delivery_ok` when the loop ran;
-    # they arrive pre-rendered and are appended after the composed view.
-    # (Residual: the micro loop should emit percepts -- noted in
-    # design_notes/13-composer-build.md.)
+    # they arrive pre-rendered. They are minted as percepts and go into the
+    # SAME list as everything else, so the tripwires see them and their
+    # observations are derived rather than asserted. (Residual: the micro loop
+    # should emit percepts of its own rather than prose -- noted in
+    # design_notes/13-composer-build.md, and it lives in agents/loops.py.)
     micro_by_pid = {}
     for round_data in (ctx.interaction_loop or {}).get("rounds") or []:
         for perceiver_id, additions in (
@@ -4509,9 +3404,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 str(d.get("intended_target") or "").casefold() == name_cf
                 for d in enriched_dlog)
             cause = (amap.get(name_cf) or {}).get("cause", "").lower()
-            pain = any(w in cause for w in
-                       ("injur", "wound", "blood", "hurt", "struck",
-                        "broke", "burn"))
+            pain = any(w in cause for w in _ling("_PAIN_CUES"))
             percepts = composer.residue_percepts(
                 p["awareness"], targeted=targeted, loud_event=loud_event,
                 pain=pain)
@@ -4642,6 +3535,10 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     percepts.append(percept)
                     order += 1
             company[pid] = _composer_company(others, display_map, percepts)
+        for additions in micro_by_pid.get(pid) or []:
+            micro = composer.micro_round_percept(additions)
+            if micro is not None:
+                percepts.append(micro)
         rendered = composer.render_view(
             percepts,
             mode="player" if is_player_view else "character",
@@ -4652,26 +3549,6 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
             spoken_lines=spoken_lines)
-        for additions in micro_by_pid.get(pid) or []:
-            current = clean_views.get(pid) or ""
-            appended = _dedupe_view_sentences(
-                _append_micro_view(current, additions))
-            if appended != current:
-                clean_views[pid] = appended
-                observations[pid] = list(observations.get(pid) or []) + [
-                    composer.compact_observation({
-                        "observation_id":
-                            f"current:{pid}:{len(observations.get(pid) or [])}",
-                        "perceiver_id": pid,
-                        "source_atom_id": "current",
-                        "channel": "mixed",
-                        "fidelity": "rendered",
-                        "observed": {"text": str(additions)},
-                        "intensity": 0.5,
-                        "suddenness": 0.2,
-                        "ambiguity": 0.3,
-                        "directed_at_self": False,
-                    })]
         if not is_player_view:
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,
