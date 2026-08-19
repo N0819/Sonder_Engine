@@ -933,10 +933,15 @@ def compact_checkpoints(chat_id=None, *, dry_run=True, progress=None):
     chats = q("SELECT DISTINCT chat_id FROM checkpoints WHERE " + clause, tuple(args))
     total = q("SELECT COUNT(*) n FROM checkpoints WHERE " + clause, tuple(args),
               one=True)["n"]
+    # No `error` key. A per-story failure is `skipped` -- named, with its
+    # reason, which is the only failure this function has -- and a failure of
+    # the RUN raises out of here into `_run_compaction`, which is where
+    # `_COMPACT_STATE["error"]` is filled. The key used to sit here
+    # initialized to "" and assigned by nothing, so a caller reading it was
+    # told "no failure" by a run that had one.
     report = {"checkpoints": total, "rewritten": 0, "vectors_stored": 0,
               "bytes_before": 0, "bytes_after": 0, "stories": len(chats),
-              "stories_done": 0, "skipped": [], "dry_run": bool(dry_run),
-              "error": ""}
+              "stories_done": 0, "skipped": [], "dry_run": bool(dry_run)}
     seen = 0
     for row in chats:
         cid = row["chat_id"]
