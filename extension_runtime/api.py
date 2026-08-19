@@ -2308,7 +2308,10 @@ class SonderExtensionAPI:
 
         Reads and writes go to whichever frame the turn is running in. Outside
         a pipeline run there is no active frame and this reads the present, the
-        same rule every other frame-scoped key follows.
+        same rule every other frame-scoped key follows -- which is exactly
+        wrong for a route composing this beside `player_view`, whose frame is
+        the latest turn's. There, bind the reads: `api.at_frame(chat_id)
+        .frame_state()`.
         """
         return _world_state(self.id, chat_id, frame_scoped=True)
 
