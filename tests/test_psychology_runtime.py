@@ -188,6 +188,27 @@ def test_protected_belief_weakens_slowly_and_requires_evidence():
     assert weakened[0]["confidence"] == 0.85
 
 
+def test_contradicting_an_unheld_belief_does_not_assert_it():
+    """Denying something is not holding it.
+
+    The mint branch read `confidence` and never `operation`, so a contradiction
+    of a belief the character does not hold WROTE that belief into their
+    ledger, at the strength of the evidence against it. The character came out
+    of the beat believing the thing the beat disproved.
+    """
+    minted = psych.apply_belief_updates(
+        [], {},
+        [{"belief": "the north stair is safe", "operation": "contradict",
+          "confidence": 0.9,
+          "evidence": [{"event_id": "current", "fact": "It gave way."}]}],
+        turn_idx=2, clock_seconds=30,
+    )
+
+    held = [item for item in minted
+            if item["belief"] == "the north stair is safe"]
+    assert not held or held[0]["confidence"] <= 0.5, minted
+
+
 def test_association_extinction_is_bounded_and_evidence_gated():
     existing = [{
         "cue": "a slammed door",
