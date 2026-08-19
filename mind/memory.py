@@ -3624,15 +3624,52 @@ def restore_memory_vectors(entries):
     Additive and idempotent -- the address is the content, so an entry that is
     already here is the same vector. Never deletes: another chat's checkpoints
     may reference the same address.
+
+    VERIFIED, not trusted: this used to file the archive's `vkey` straight
+    through with no recomputation and no length check, while
+    `persist/checkpoints.py`'s restore recomputed. That broke the store's
+    premise -- `put_memory_vector` is INSERT OR IGNORE with first-writer-wins
+    because the address IS the content, so one mislabeled archive entry could
+    park wrong bytes under a true address and shadow the real vector for
+    every checkpoint that later referenced it. A violation RAISES rather than
+    skipping, so the enclosing import transaction rolls the whole restore
+    back: a partially-restored vector bank is a silent retrieval downgrade,
+    which is the failure mode the model stamps were added to end. Pre-`v1:`
+    keys were addressed on the memory document, not the bytes, so they cannot
+    be recomputed here and restore on the well-formedness checks alone.
     """
     n = 0
     with transaction():
         for e in entries or []:
             if not isinstance(e, dict):
                 continue
-            if put_memory_vector(e.get("vkey"), _b64_to_blob(e.get("embedding")),
-                                 _b64_to_blob(e.get("cue_embedding")),
-                                 e.get("embedding_model"), e.get("embedding_dim")):
+            vkey = str(e.get("vkey") or "").strip()
+            if not vkey:
+                continue
+            full = _b64_to_blob(e.get("embedding"))
+            cue = _b64_to_blob(e.get("cue_embedding"))
+            if full is None or cue is None:
+                raise ValueError(
+                    f"memory vector {vkey!r}: payload is not a well-formed "
+                    "float32 blob"
+                )
+            try:
+                dim = int(e.get("embedding_dim"))
+            except (TypeError, ValueError):
+                dim = None
+            if dim and len(full) != dim * 4:
+                raise ValueError(
+                    f"memory vector {vkey!r}: blob holds {len(full) // 4} "
+                    f"floats but claims dimension {dim}"
+                )
+            if vkey.startswith("v1:") and vector_address(full, cue) != vkey:
+                raise ValueError(
+                    f"memory vector {vkey!r}: bytes do not hash to their own "
+                    "address"
+                )
+            if put_memory_vector(vkey, full, cue,
+                                 e.get("embedding_model"),
+                                 dim if dim else e.get("embedding_dim")):
                 n += 1
     return n
 

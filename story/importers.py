@@ -7,8 +7,8 @@ from mind.memory import (
     KNOWLEDGE_TAGS, KNOWLEDGE_RANGES, add_lorebook_link,
 )
 from llm.providers import (
-    chat_complete, token_sink, embed_texts, request_timeout,
-    clamp_read_timeout,
+    chat_complete, token_sink, embed_texts, embed_texts_meta,
+    request_timeout, clamp_read_timeout,
 )
 from llm.prompts import get_prompt
 from language_runtime import language_pack
@@ -76,7 +76,18 @@ def _prepared_lore_embeddings(entries):
 def _repair_json(text):
     return re.sub(r',\s*([}\]])', r'\1', text or "")
 
-def _jparse(text):
+def _jparse_salvage(text):
+    """Parse a model response, SALVAGING a truncated one by closing braces.
+
+    The salvage is a policy, and the name carries it: a cut-off response comes
+    back as a parseable object with its tail missing, indistinguishable from a
+    finished one. That is right for a recovery ladder that ends in keeping the
+    source (`_reinterpret_entries`) and wrong for a whole-document authoring
+    call, where every caller must pair this with `_json_arrived_whole` and
+    refuse the salvage -- a half-written sheet is the card-authoring failure
+    CLAUDE.md calls the worst of them (empty `psychology.drive`, invisible for
+    fifty beats).
+    """
     t = re.sub(
         r"^```[a-zA-Z]*\n?|```$",
         "",
@@ -136,7 +147,15 @@ def _jparse(text):
 
     return {}
 
+#: Old name, kept for readers outside this module (tests introspect it).
+_jparse = _jparse_salvage
+
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+#: Ceiling on an imported card PNG, enforced on the base64 text before any
+#: byte is decoded. Real community cards run a few MB; 25 keeps generous
+#: headroom while bounding what one request body can make this process hold.
+MAX_CARD_PNG_BYTES = 25 * 1024 * 1024
 
 def _png_text_chunks(png_bytes):
     if not png_bytes.startswith(_PNG_SIGNATURE):
@@ -175,10 +194,28 @@ def extract_png_card(png_base64):
     # "chara" chunk too, for readers that don't know about v3 -- so v3
     # is preferred when both are present).
     raw = png_base64.split(",", 1)[-1]
+    # Bound BEFORE decoding, on the length of the base64 text itself: the
+    # zTXt inflate below is already capped at 10MB because card imports are
+    # untrusted community files, but the b64decode ran unbounded on whatever
+    # the request body carried. Checked before the whitespace strip too, so
+    # an oversized payload never even gets copied.
+    if len(raw) > (MAX_CARD_PNG_BYTES * 4) // 3 + 4:
+        raise ValueError(
+            "PNG card is too large "
+            f"(limit {MAX_CARD_PNG_BYTES // (1024 * 1024)} MB)"
+        )
     try:
-        png_bytes = base64.b64decode(raw)
+        # validate=True, same as the lore-vector decode: reject junk instead
+        # of silently skipping it. MIME-style line wrapping from sloppy
+        # exporters is not junk, so whitespace is stripped first.
+        png_bytes = base64.b64decode("".join(raw.split()), validate=True)
     except Exception as exc:
         raise ValueError(f"Invalid PNG data: {exc}") from exc
+    if len(png_bytes) > MAX_CARD_PNG_BYTES:
+        raise ValueError(
+            "PNG card is too large "
+            f"(limit {MAX_CARD_PNG_BYTES // (1024 * 1024)} MB)"
+        )
 
     chunks = _png_text_chunks(png_bytes)
     for key in ("ccv3", "chara"):
@@ -470,11 +507,12 @@ def import_character(payload, reinterpret=False):
                     payload_json,
                     max_tokens=max_tokens,
                 )
-                parsed = _jparse(raw)
+                parsed = _jparse_salvage(raw)
                 if not parsed:
                     raise RuntimeError(
                         "Character reinterpretation returned no object"
                     )
+                _require_whole_json(raw)
                 sheet = normalize_character_data(parsed)
                 # The model does not get to name the engine's key for this
                 # character. identity.uid IS the scene entity id (scene.py's
@@ -584,11 +622,12 @@ def import_persona(payload, reinterpret=False):
                     json.dumps(source_payload, ensure_ascii=False),
                     max_tokens=AUTHORING_MAX_TOKENS,
                 )
-                parsed = _jparse(raw)
+                parsed = _jparse_salvage(raw)
                 if not parsed:
                     raise RuntimeError(
                         "Persona reinterpretation returned no object"
                     )
+                _require_whole_json(raw)
                 sheet = normalize_persona_data(parsed)
                 # Same as the character path above: a reconstructed sheet does
                 # not carry a model-chosen identity key.
@@ -660,6 +699,36 @@ def _promotion_evidence(chat_id, name):
         })
     return evidence
 
+
+def _presence_conduct_tail(chat_id, name):
+    """The presence's OWN recorded speech and acts, and nothing else.
+
+    `commit_background._append_manager_conduct` routes each attributed entry
+    to its own presence's `recent` tail precisely so that no shared-context
+    prose is ever written to a presence's record. That makes this tail -- like
+    the presence's own quoted lines -- legitimate raw material for their
+    first-person memory, where `resolved_event` is not (see
+    draft_promoted_character).
+    """
+    from core.db import wget
+
+    presences = wget(chat_id, "background_presences", {}) or {}
+    record = presences.get(name)
+    if record is None:
+        wanted = name.casefold()
+        record = next(
+            (rec for key, rec in presences.items()
+             if str(key).casefold() == wanted),
+            None,
+        )
+    if not isinstance(record, dict):
+        return []
+    return [
+        {"turn": item.get("turn"), "text": str(item.get("text") or "")}
+        for item in (record.get("recent") or [])
+        if isinstance(item, dict) and str(item.get("text") or "").strip()
+    ]
+
 def draft_promoted_character(chat_id, name):
     """Generate a character sheet + starter memories for a recurring
     background presence (see commit.py's track_background_presences),
@@ -670,6 +739,12 @@ def draft_promoted_character(chat_id, name):
     draft carries `character_card_warnings` for the same reason the import
     response does: review is the only point at which an empty drive is still
     cheap to fix.
+
+    Two model calls, not one, and the split is the information firewall: the
+    SHEET is authored from the full evidence pack (resolved_event included --
+    authoring is tooling, not a mind), while `memory_seeds` come from a
+    second call whose payload holds only what this presence itself said and
+    did. See the comment at the seed call.
     """
     evidence = _promotion_evidence(chat_id, name)
     if not evidence:
@@ -686,12 +761,13 @@ def draft_promoted_character(chat_id, name):
             max_tokens=AUTHORING_MAX_TOKENS,
         )
 
-    parsed = _jparse(raw)
+    parsed = _jparse_salvage(raw)
     if not parsed or not isinstance(parsed.get("sheet"), dict):
         raise RuntimeError(
             "Promotion generator returned no usable character sheet.\n"
             f"Raw output:\n{raw[:800]}"
         )
+    _require_whole_json(raw)
 
     sheet = normalize_character_data(parsed["sheet"])
     # opening.first_message is meaningless for someone already mid-scene
@@ -707,9 +783,51 @@ def draft_promoted_character(chat_id, name):
     # a spice seller and a young shopper in one market were BOTH minted
     # carrying the player persona's name.
     sheet.setdefault("identity", {})["name"] = name
-    memory_seeds = [
-        str(m) for m in (parsed.get("memory_seeds") or []) if str(m).strip()
+
+    # MEMORY SEEDS ARE NOT AUTHORING. The sheet above may be written against
+    # the full evidence pack -- reading a record puts nothing in anyone's
+    # head -- but the seeds become first-person `provenance: "witnessed"`
+    # memories (persist/commit_background.py's promotion write), and
+    # `resolved_event` is the Director's omniscient record of each whole
+    # beat: content a bystander in one room never sensed, as
+    # `agents/background.py`'s `_beat_for_presence` already says in as many
+    # words. The name-mention floor above proves the person was NAMED in a
+    # beat, never that they perceived any of it. So the seed-producing call
+    # gets a second, SUBTRACTED evidence pack: their own quoted lines plus
+    # their own recorded conduct tail, and nothing else. Fail closed by
+    # construction -- an omniscient fact cannot reach a seed because it never
+    # reaches the call, and the full-record call's own memory_seeds are
+    # discarded no matter how good they look. A presence with no speech and
+    # no conduct on record gets no seed call at all: there is nothing a
+    # witnessed memory could legitimately be made from.
+    seed_evidence = [
+        {"turn": e["turn"], "quoted_lines": e["quoted_lines"]}
+        for e in evidence if e["quoted_lines"]
     ]
+    own_conduct = _presence_conduct_tail(chat_id, name)
+    memory_seeds = []
+    if seed_evidence or own_conduct:
+        with _silent_provider_stream():
+            seed_raw = chat_complete(
+                "utility",
+                get_prompt("promote_character"),
+                json.dumps({
+                    "name": name,
+                    "evidence": seed_evidence,
+                    "own_recent_conduct": own_conduct,
+                }, ensure_ascii=False),
+                temperature=0.4,
+                max_tokens=AUTHORING_MAX_TOKENS,
+            )
+        seed_parsed = _jparse_salvage(seed_raw)
+        # Seeds are individually whole strings, so a salvaged (truncated)
+        # list is usable where a salvaged sheet is not; and a failed seed
+        # call degrades to an empty list the review screen can refill --
+        # never to the full-record call's seeds.
+        memory_seeds = [
+            str(m) for m in ((seed_parsed or {}).get("memory_seeds") or [])
+            if str(m).strip()
+        ]
     return {
         "sheet": sheet,
         "memory_seeds": memory_seeds,
@@ -732,12 +850,13 @@ def generate_character(brief, language="en"):
             max_tokens=AUTHORING_MAX_TOKENS,
         )
     
-    parsed = _jparse(raw)
+    parsed = _jparse_salvage(raw)
     if not parsed:
         raise RuntimeError(
             "Generator returned no usable character data.\n"
             f"Raw output:\n{raw[:800]}"
         )
+    _require_whole_json(raw)
 
     sheet = normalize_character_data(parsed)
     name = character_name(sheet)
@@ -825,12 +944,13 @@ def fill_character_psychology(char_id, brief):
             temperature=0.65,
             max_tokens=AUTHORING_MAX_TOKENS,
         )
-    proposed = _jparse(raw)
+    proposed = _jparse_salvage(raw)
     if not proposed:
         raise RuntimeError(
             "Psychology fill returned no usable data.\n"
             f"Raw output:\n{raw[:800]}"
         )
+    _require_whole_json(raw)
     restricted = {}
     if isinstance(proposed.get("psychology"), dict):
         restricted["psychology"] = proposed["psychology"]
@@ -878,6 +998,26 @@ def _json_arrived_whole(text):
     except Exception:
         return False
     return True
+
+
+def _require_whole_json(raw):
+    """Refuse a salvaged parse at a whole-document authoring site.
+
+    Every generator here emits ONE structured document a person is about to
+    trust; a truncated one that `_jparse_salvage` closed up is worse than a
+    failure, because it looks finished. `fill_appearance` adopted this check
+    first; the check belongs at every sibling site because nothing about the
+    answer depends on which document was being written. `_reinterpret_entries`
+    is the deliberate exception -- its recovery ladder ends in keeping the
+    author's source text, so dying there would lose a book to save it.
+    """
+    if not _json_arrived_whole(raw):
+        raise RuntimeError(
+            "The model ran out of output budget partway through and the "
+            "result was cut off. Raise 'Max output tokens' in Settings, or "
+            "point the `utility` role at a non-reasoning model — a reasoning "
+            "model spends that same budget on its thinking."
+        )
 
 
 def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
@@ -931,7 +1071,7 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
             # llm_quality.complete_validated_json (maze arm A11).
             max_tokens=None,
         )
-    proposed = _jparse(raw)
+    proposed = _jparse_salvage(raw)
     if not proposed:
         # Distinguish the two failures: nothing came back at all, versus
         # something came back that was not JSON. They have different causes and
@@ -948,13 +1088,7 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
             "Appearance fill returned no usable data.\n"
             f"Raw output:\n{raw[:800]}"
         )
-    if not _json_arrived_whole(raw):
-        raise RuntimeError(
-            "The model ran out of output budget partway through and the "
-            "result was cut off. Raise 'Max output tokens' in Settings, or "
-            "point the `utility` role at a non-reasoning model — a reasoning "
-            "model spends that same budget on its thinking."
-        )
+    _require_whole_json(raw)
     merged = copy.deepcopy(stored)
     visible = ((proposed.get("embodiment") or {}).get("visible")
                if isinstance(proposed.get("embodiment"), dict) else None)
@@ -1002,12 +1136,13 @@ def generate_persona(brief, language="en"):
             max_tokens=AUTHORING_MAX_TOKENS,
         )
     
-    parsed = _jparse(raw)
+    parsed = _jparse_salvage(raw)
     if not parsed:
         raise RuntimeError(
             "Generator returned no usable persona data.\n"
             f"Raw output:\n{raw[:800]}"
         )
+    _require_whole_json(raw)
 
     sheet = normalize_persona_data(parsed)
     name = persona_name(sheet)
@@ -1151,7 +1286,7 @@ def _reinterpret_entries(entries):
                     temperature=0.2,
                     max_tokens=max_tokens,
                 )
-                res = _jparse(raw)
+                res = _jparse_salvage(raw)
                 es = res.get("entries") or []
                 if not es:
                     raise RuntimeError(
@@ -1209,7 +1344,7 @@ def _reinterpret_entries(entries):
                             temperature=0.1,
                             max_tokens=max_tokens,
                         )
-                        recovered = (_jparse(fixed) or {}).get("entries") or []
+                        recovered = (_jparse_salvage(fixed) or {}).get("entries") or []
                     except Exception:
                         recovered = None
                 if recovered:
@@ -1459,6 +1594,22 @@ def import_lorebook(payload, name=None, reinterpret=False,
     return lb, len(prepared_entries)
 
 def reinterpret_lorebook(lid):
+    """Rewrite a book's unlocked entries in place, losing nothing on the way.
+
+    Two ways the old shape lost data, both measured. It deleted every
+    unlocked row and re-inserted one at a time with an embedding round-trip
+    inside the loop and NO transaction, so a failure on insert 3 of 3 left
+    two rows behind and the third gone permanently while the route returned
+    502. And even on full success it read each source row as a bare
+    `(keys, content)` pair, so `title`, `importance`, `aliases` and every
+    knowledge field were reset on every run (title 'T0' -> None, importance
+    0.9 -> 0.5, aliases ['a0'] -> []) -- and the knowledge fields decide who
+    can retrieve the entry, not how it looks.
+
+    Now: model calls and embeddings happen BEFORE the write transaction, the
+    delete+insert commits atomically, and each rewritten entry carries its
+    source row's metadata forward.
+    """
     from core.db import q
     from mind.memory import delete_lore
 
@@ -1466,30 +1617,75 @@ def reinterpret_lorebook(lid):
         "SELECT * FROM lore_entries WHERE lorebook_id=?",
         (lid,),
     )
-    unlocked = [
-        (r["keys"], r["content"], 0)
-        for r in rows
-        if not r["canon_locked"]
-    ]
+    unlocked = [dict(r) for r in rows if not r["canon_locked"]]
 
     if not unlocked:
         return 0
 
-    redone = _reinterpret_entries(unlocked)
+    redone = _reinterpret_entries(
+        [(r["keys"], r["content"], 0) for r in unlocked]
+    )
 
-    for r in rows:
-        if not r["canon_locked"]:
+    # Match each rewritten entry back to its source row, the same way
+    # import_lorebook matches its structure map: the rewrite can SPLIT
+    # entries (310 rows from 300 sources on the live Re:Zero import), so
+    # index alignment drifts, and the opening of the text survives a rewrite
+    # far better than its keys do. Prefix-tolerant because _structure_key
+    # truncates at 120 characters: a short source whose rewrite grew past it
+    # still has one key as a prefix of the other. Keys are the fallback; an
+    # entry that matches nothing keeps engine defaults, which is exactly what
+    # every entry got before.
+    def _source_for(entry):
+        new_key = _structure_key(entry.get("content"))
+        if new_key:
+            for r, src_key in keyed:
+                if src_key and (src_key.startswith(new_key)
+                                or new_key.startswith(src_key)):
+                    return r
+        return by_keys.get(
+            " ".join(str(entry.get("keys") or "").split()).casefold())
+
+    keyed = [(r, _structure_key(r["content"])) for r in unlocked]
+    by_keys = {}
+    for r in unlocked:
+        kk = " ".join(str(r["keys"] or "").split()).casefold()
+        if kk and kk not in by_keys:
+            by_keys[kk] = r
+
+    # Vectors resolved before the write lock, like every other lore import
+    # path: an embedding provider failure now aborts before anything is
+    # deleted instead of after some of it is.
+    got = embed_texts_meta([
+        (e.get("keys") or "") + " " + (e.get("content") or "")
+        for e in redone
+    ])
+
+    with transaction():
+        for r in unlocked:
             delete_lore(r["id"])
-
-    for e in redone:
-        add_lore(
-            lid,
-            e["keys"],
-            e["content"],
-            turn_added=None,
-            locked=0,
-            category=e["category"],
-        )
+        for e, vec in zip(redone, got.vectors):
+            src = _source_for(e) or {}
+            add_lore(
+                lid,
+                e["keys"],
+                e["content"],
+                turn_added=src.get("turn_added"),
+                locked=0,
+                category=e["category"],
+                title=src.get("title"),
+                knowledge_tag=src.get("knowledge_tag"),
+                knowledge_range=src.get("knowledge_range"),
+                knowledge_locations=src.get("knowledge_locations"),
+                importance=(src.get("importance")
+                            if src.get("importance") is not None else 0.5),
+                aliases=src.get("aliases"),
+                scope=src.get("scope"),
+                relations=src.get("relations"),
+                source_notes=src.get("source_notes") or "",
+                embedding=vec,
+                embedding_model=got.model_key,
+                embedding_dim=got.dimensions,
+            )
 
     return len(redone)
 
@@ -1775,7 +1971,7 @@ def _lore_gen_context(lorebook_id):
         if not lb:
             continue
         entries = q(
-            "SELECT keys, content, category, title, canon_locked "
+            "SELECT id, keys, content, category, title, canon_locked "
             "FROM lore_entries WHERE lorebook_id=?",
             (bid,),
         )
@@ -1792,7 +1988,13 @@ def _lore_gen_context(lorebook_id):
             category_counts[cat] = category_counts.get(cat, 0) + 1
             if e["title"]:
                 existing_titles.append(e["title"])
+            # `id` is what makes an `{"op":"update","id":N}` response mean
+            # anything: without it every update op the prompt's own rules
+            # invite (allow_updates defaults true) carried an invented
+            # integer, and apply_lorebook_plan now refuses those. An id the
+            # model was actually shown is the only kind that can pass.
             existing_entries.append({
+                "id": e["id"],
                 "book_id": bid,
                 "keys": e["keys"],
                 "title": e["title"],
@@ -1805,8 +2007,9 @@ def _lore_gen_context(lorebook_id):
     # as titles/keys so the prompt stays a sane size.
     if len(existing_entries) > 50:
         digest = existing_entries[:20] + [
-            {"book_id": e["book_id"], "keys": e["keys"], "title": e["title"],
-             "category": e["category"], "locked": e["locked"]}
+            {"id": e["id"], "book_id": e["book_id"], "keys": e["keys"],
+             "title": e["title"], "category": e["category"],
+             "locked": e["locked"]}
             for e in existing_entries[20:]
         ]
     else:
@@ -1979,12 +2182,13 @@ def _lore_gen_structure(params, ctx):
             max_tokens=AUTHORING_MAX_TOKENS,
         )
 
-    parsed = _jparse(raw)
+    parsed = _jparse_salvage(raw)
     if not parsed:
         raise RuntimeError(
             "Lore generator returned no usable plan.\n"
             f"Raw output:\n{(raw or '')[:800]}"
         )
+    _require_whole_json(raw)
 
     plan = {
         "analysis": parsed.get("analysis") if isinstance(parsed.get("analysis"), dict) else {},
@@ -2073,12 +2277,13 @@ def _lore_gen_entry_batch(params, ctx, plan, batch):
             max_tokens=max(3000, 1200 * len(batch)),
         )
 
-    parsed = _jparse(raw)
+    parsed = _jparse_salvage(raw)
     if not parsed:
         raise RuntimeError(
             "model returned unparseable JSON (first 300 chars: "
             f"{(raw or '')[:300]!r})"
         )
+    _require_whole_json(raw)
 
     ops = _normalize_entry_ops(parsed, ctx["selected_book_id"])
     if not ops:
@@ -2328,7 +2533,8 @@ def resume_lorebook_plan(job_id, timeout=None):
     _gen_save(job_id, **fields)
     return _run_lore_gen_job(job_id)
 
-def _plan_parent_id(raw_parent, created_books, root_id, chat_id):
+def _plan_parent_id(raw_parent, created_books, root_id, chat_id,
+                    allowed_books=frozenset()):
     """Where a planned book actually hangs.
 
     `commit.py`'s `_apply_mapping_book_ops` already refuses to leave a new book
@@ -2339,15 +2545,23 @@ def _plan_parent_id(raw_parent, created_books, root_id, chat_id):
     attachments, so the book's entries can never reach play, and an
     ownership-blind browser could not even show it.
 
-    Resolution order: a temp_id created by this same plan, then a real existing
-    book, then the book the plan was generated for, then the chat's canon.
+    An integer parent must be in `allowed_books` -- the subtree the plan was
+    generated for, plus this plan's own creations -- not merely EXIST. Mere
+    existence let a hallucinated id parent a chat-A book under chat B's tree
+    (reproduced against a plan for one chat aimed at another's book id), and
+    the generator context sends the model only subtree books, so an id from
+    outside it cannot be anything but invented.
+
+    Resolution order: a temp_id created by this same plan, then a real book
+    inside the plan's scope, then the book the plan was generated for, then
+    the chat's canon.
     """
     if isinstance(raw_parent, str):
         resolved = created_books.get(raw_parent)
         if resolved:
             return resolved
     elif isinstance(raw_parent, int) and not isinstance(raw_parent, bool):
-        if q("SELECT id FROM lorebooks WHERE id=?", (raw_parent,), one=True):
+        if raw_parent in allowed_books:
             return raw_parent
 
     if root_id:
@@ -2371,13 +2585,32 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
     `root_id` is the lorebook the plan was generated for: it is where books and
     entries land when their own reference cannot be resolved, so nothing is
     created unreachable and no entry is silently dropped.
+
+    Every INTEGER id the plan names is scoped to `root_id`'s subtree (plus
+    this plan's own creations) before it is believed. The model is instructed
+    to emit `{"op":"update","id":N}` ops whenever `allow_updates` is true --
+    the default -- while `_lore_gen_context` sends it no entry ids at all, so
+    an update op's id is always invented; unchecked, one reached
+    `update_lore`'s bare `WHERE id=?` and overwrote a canon_locked entry in a
+    different chat while this function reported success. Refused ops land in
+    the result's `skipped` list rather than vanishing: the UI can then say
+    what was not done, which a silent `continue` never could.
     """
-    from mind.memory import add_lore, update_lore, add_lorebook_link
+    from mind.memory import (
+        add_lore, update_lore, add_lorebook_link, lorebook_descendants,
+    )
     from core.db import q, qi, transaction
 
     created_books = {}
     created_entries = []
     created_links = []
+    skipped = []
+
+    # The plan's writable scope, resolved ONCE before any write: the subtree
+    # of the book the plan was generated for. Books minted by this plan join
+    # it as they are created. No root means no pre-existing book is in scope
+    # -- fail closed rather than open.
+    allowed_books = set(lorebook_descendants(root_id)) if root_id else set()
 
     # Wrap all write operations in a single transaction so the plan is
     # applied atomically — a crash mid-plan rolls back everything.
@@ -2385,9 +2618,15 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
         # Process book ops
         for book_op in plan.get("book_ops", []):
             if book_op.get("op") != "create":
+                skipped.append({
+                    "op": str(book_op.get("op") or ""),
+                    "name": book_op.get("name"),
+                    "reason": "book ops other than create are not applied",
+                })
                 continue
             parent_id = _plan_parent_id(
-                book_op.get("parent_id"), created_books, root_id, chat_id
+                book_op.get("parent_id"), created_books, root_id, chat_id,
+                allowed_books=allowed_books,
             )
 
             bid = qi(
@@ -2403,6 +2642,7 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
                 ),
             )
             created_books[book_op.get("temp_id", f"book_{bid}")] = bid
+            allowed_books.add(bid)
 
         # Process entry ops
         for entry_op in plan.get("entry_ops", []):
@@ -2410,6 +2650,12 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
             if isinstance(book_id, str) and book_id in created_books:
                 book_id = created_books[book_id]
             elif isinstance(book_id, str):
+                book_id = None
+            elif isinstance(book_id, int) and book_id not in allowed_books:
+                # An integer aimed outside the plan's subtree is as invented
+                # as an unknown temp_id -- the generator context never showed
+                # the model a book beyond the subtree -- and following it
+                # would write this plan's entry into some other tree.
                 book_id = None
 
             # An unresolvable book reference used to drop the entry on the floor.
@@ -2419,10 +2665,40 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
                 book_id = root_id
 
             if not book_id:
+                skipped.append({
+                    "op": str(entry_op.get("op") or "create"),
+                    "title": entry_op.get("title"),
+                    "reason": "no resolvable book and no plan root to file "
+                              "the entry into",
+                })
                 continue
 
             if entry_op.get("op") == "update" and entry_op.get("id"):
-                entry_id = entry_op["id"]
+                try:
+                    entry_id = int(entry_op["id"])
+                except (TypeError, ValueError):
+                    entry_id = None
+                target = q(
+                    "SELECT lorebook_id, canon_locked FROM lore_entries "
+                    "WHERE id=?",
+                    (entry_id,), one=True,
+                ) if entry_id is not None else None
+                if not target or target["lorebook_id"] not in allowed_books:
+                    # The model was shown no entry ids, so an update op's id
+                    # is invented every time; honouring one outside the
+                    # plan's subtree overwrote another chat's entry.
+                    skipped.append({
+                        "op": "update", "id": entry_op["id"],
+                        "reason": "no such entry in the tree this plan was "
+                                  "generated for",
+                    })
+                    continue
+                if target["canon_locked"]:
+                    skipped.append({
+                        "op": "update", "id": entry_op["id"],
+                        "reason": "entry is canon-locked",
+                    })
+                    continue
                 update_lore(
                     entry_id,
                     entry_op.get("keys", ""),
@@ -2468,8 +2744,32 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
                 target_id = created_books[target_id]
 
             if not isinstance(source_id, int) or not isinstance(target_id, int):
+                skipped.append({
+                    "op": "link", "source_id": source_id,
+                    "target_id": target_id,
+                    "reason": "unresolvable book reference",
+                })
                 continue
 
+            if source_id not in allowed_books or target_id not in allowed_books:
+                # Same rule as entry updates: an integer the generator
+                # context never showed the model is invented, and a link is a
+                # retrieval edge -- following one out of the subtree splices
+                # a foreign tree into this chat's lore walk.
+                skipped.append({
+                    "op": "link", "source_id": source_id,
+                    "target_id": target_id,
+                    "reason": "book is not in the tree this plan was "
+                              "generated for",
+                })
+                continue
+
+            # No bare swallow: `add_lorebook_link` already returns the
+            # existing link's id for a duplicate, so the only ValueErrors
+            # left are real refusals (self-link, cross-scope ownership) --
+            # and a refusal the result never mentions reads as success
+            # (reproduced: a refused cross-chat link reported ok with
+            # links_created: 0 and no explanation).
             try:
                 lid = add_lorebook_link(
                     source_id, target_id,
@@ -2481,13 +2781,17 @@ def apply_lorebook_plan(plan, chat_id=None, root_id=None):
                     weight=link_op.get("weight", 0.75),
                 )
                 created_links.append(lid)
-            except Exception:
-                pass
+            except ValueError as exc:
+                skipped.append({
+                    "op": "link", "source_id": source_id,
+                    "target_id": target_id, "reason": str(exc),
+                })
 
     return {
         "books_created": len(created_books),
         "entries_created": len(created_entries),
         "links_created": len(created_links),
+        "skipped": skipped,
     }
 def generate_lore_entries(lorebook_id, brief):
     from core.db import q
@@ -2526,7 +2830,8 @@ def generate_lore_entries(lorebook_id, brief):
             max_tokens=AUTHORING_MAX_TOKENS,
         )
 
-    parsed = _jparse(raw)
+    parsed = _jparse_salvage(raw)
+    _require_whole_json(raw)
     # `generator_lorebook` documents entry_ops and nothing else, and instructs
     # a model given no "stage" key -- which is every call made from here -- to
     # return complete entry_ops in one response. Reading only the legacy
@@ -2541,30 +2846,47 @@ def generate_lore_entries(lorebook_id, brief):
             f"Raw output:\n{(raw or '')[:800]}"
         )
 
-    entry_ids = []
+    # Every op reaching here belongs to this book: the payload shows the
+    # model no entry ids and no second book, so an "update" op cannot be
+    # addressing anything real. Write it as a new entry -- misfiling one
+    # entry is fixable by hand, silently discarding a generated one is not.
+    prepared = []
     for e in entries:
-        # Every op reaching here belongs to this book: the payload shows the
-        # model no entry ids and no second book, so an "update" op cannot be
-        # addressing anything real. Write it as a new entry -- misfiling one
-        # entry is fixable by hand, silently discarding a generated one is not.
         cat = e.get("category")
         if cat not in LORE_CATEGORIES:
             cat = guess_category(e.get("keys", ""), e.get("content", ""))
-        eid = add_lore(
-            lorebook_id,
-            e.get("keys", ""),
-            e.get("content", ""),
-            category=cat,
-            title=e.get("title"),
-            knowledge_tag=e.get("knowledge_tag"),
-            knowledge_range=e.get("knowledge_range"),
-            knowledge_locations=e.get("knowledge_locations"),
-            importance=e.get("importance", 0.5),
-            aliases=e.get("aliases", []),
-            scope=e.get("scope", {}),
-            relations=e.get("relations", {}),
-            source_notes=e.get("source_notes", ""),
-        )
-        entry_ids.append(eid)
+        prepared.append((e, cat))
+
+    # Vectors BEFORE the write transaction, writes atomically inside one.
+    # This was a bare insert loop with an embedding round-trip per entry: a
+    # failure on entry 3 of 4 left two committed while the route returned
+    # 502, and nothing said which two.
+    got = embed_texts_meta([
+        (e.get("keys") or "") + " " + (e.get("content") or "")
+        for e, _ in prepared
+    ])
+
+    entry_ids = []
+    with transaction():
+        for (e, cat), vec in zip(prepared, got.vectors):
+            eid = add_lore(
+                lorebook_id,
+                e.get("keys", ""),
+                e.get("content", ""),
+                category=cat,
+                title=e.get("title"),
+                knowledge_tag=e.get("knowledge_tag"),
+                knowledge_range=e.get("knowledge_range"),
+                knowledge_locations=e.get("knowledge_locations"),
+                importance=e.get("importance", 0.5),
+                aliases=e.get("aliases", []),
+                scope=e.get("scope", {}),
+                relations=e.get("relations", {}),
+                source_notes=e.get("source_notes", ""),
+                embedding=vec,
+                embedding_model=got.model_key,
+                embedding_dim=got.dimensions,
+            )
+            entry_ids.append(eid)
 
     return entry_ids
