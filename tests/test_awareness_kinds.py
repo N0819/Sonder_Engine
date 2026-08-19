@@ -45,7 +45,7 @@ from agents.director import (
     _unsupported_player_awareness,
     _untracked_unconsciousness_subjects,
 )
-from persist.commit_entities import _is_gated_awareness
+from persist.commit import _is_gated_awareness
 from story.scene import (
     apply_awareness_diff,
     awareness_conditions,
