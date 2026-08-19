@@ -403,14 +403,17 @@ def _already_ended(cond_value):
     return False
 
 
-def _ending_condition(record, reason):
+def _ending_condition(record, reason, kind="awareness"):
     """The same condition, closed. Built from the stored payload so nothing
     authored on it is lost, and keyed by the SAME condition_id -- commit
     UPDATEs on that id, and a fresh one would open a second row."""
     ended = dict(record.get("payload") or {})
     ended["condition_id"] = record["condition_id"]
     ended["subject_id"] = record["subject"]
-    ended["kind"] = "awareness"
+    # The payload's own kind survives (post-vocabulary, a live row may spell
+    # its family member differently); the fallback names the canonical kind
+    # of the floor that ends it.
+    ended["kind"] = str(ended.get("kind") or "").strip() or kind
     ended["active"] = 0
     ended["ended_reason"] = reason
     return ended
@@ -549,6 +552,21 @@ def _restraint_holder_in(record, candidate_names):
     return None
 
 
+def _restraint_holder_pool(sc, extra_names=()):
+    """Everything a holder field could legitimately name: tracked minds,
+    every body with a position, and every scene entity by name or id --
+    because a vine, a mechanism or a crowd-mass can hold a body exactly as a
+    person can."""
+    pool = [str(n) for n in (extra_names or ()) if n]
+    pool += [str(k) for k in ((sc or {}).get("positions") or {})]
+    for eid, ent in ((sc or {}).get("entities") or {}).items():
+        name = str((ent or {}).get("name") or "").strip()
+        if name:
+            pool.append(name)
+        pool.append(str(eid))
+    return pool
+
+
 def _hold_is_live(record, sc, amap, candidate_names):
     """Is a non-standing record's grip still physically in force?
 
@@ -605,6 +623,140 @@ def _restraint_blocked_moves(sd, sc, records, amap, candidate_names):
                 out.append((who, record))
                 break
     return out
+
+
+# ---------------------------------------------------------------------------
+# RELEASE (the exit side of restraint).
+#
+# The same trap the WAKING block above records for awareness, one section up:
+# a gate that can be entered and not left is worse than no gate. Measured
+# against the author's live corpus before this landed, the Director had never
+# once ended ANY condition by re-emitting it with active:0 (0 of 1483
+# resolves), and the restraint rows bear it out: 24 active, zero ever ended,
+# the oldest standing for a whole story. The same two causes, the same two
+# repairs: the resolve payload never showed the Director a restraint or its
+# condition_id (`_restraint_view` now does), and nothing deterministic
+# enforced the exits that are not judgement calls (`_restraint_exits`).
+#
+# What is deterministic here is narrower than waking, because restraints do
+# not end by themselves on a clock: a rope stays tied all night. The floor
+# ends only (1) a hold whose holder is POSITIVELY gone -- physics, not
+# adjudication -- and (2) a release the Director's own resolved prose already
+# asserts. Escape ATTEMPTS -- struggling, working at the knots -- are
+# contests, and contests are the Director's.
+
+
+def _release_attempts(resolved_event, restrained_names):
+    """Restrained subjects whose release the resolved prose asserts.
+
+    Reads ONLY resolved_event -- the Director's own adjudicated account --
+    never declared acts (an attempt is not a completion) and never dialogue
+    quotes ("I'll untie you" is a plan spoken by someone still holding the
+    rope). Cues are completed-release verbs; attribution is the same
+    clause-pinned idiom as the rouse scan, object-side first, because a
+    release is transitive ("Sarah uncuffs Hinami")."""
+    if not restrained_names:
+        return set()
+    return _clause_attributed_subjects(
+        [str(resolved_event or "")], _ling("_RELEASE_CUE"), restrained_names,
+        prefer_object=True)
+
+
+def _restraint_view(records, sc, amap, clock, sd_time, candidate_names):
+    """The `active_restraints` block the resolve payload carries.
+
+    The Director has never once ended a restraint condition, and the first
+    reason is that it was never shown one. Each entry names the condition_id
+    it must re-emit with active:0, who or what holds the subject, whether
+    that hold is still physically live, and how long the body has been
+    restrained on the simulation clock."""
+    view = []
+    for record in records or []:
+        elapsed = _sleep_elapsed(record, clock, sd_time)
+        hold = (None if record.get("standing")
+                else _hold_is_live(record, sc, amap, candidate_names))
+        view.append({
+            "condition_id": record["condition_id"],
+            "subject": record["subject"],
+            "level": record["level"],
+            "by": record["by"],
+            "means": record["means"],
+            "escapable_by": record["escapable_by"],
+            "holds_unattended": bool(record.get("standing")),
+            # None: this hold names no holder the scene can vouch for, so
+            # it blocks nothing and only the Director can settle it.
+            "holder_still_holding": hold,
+            "restrained_for_seconds": (None if elapsed is None
+                                       else round(elapsed)),
+            "blocks_self_relocation": bool(record.get("standing") or hold),
+        })
+    return view
+
+
+def _restraint_exits(records, resolved_event, sc, amap, candidate_names):
+    """Restraint conditions the world has ENDED this beat, whatever the diff says.
+
+    Returns (endings, warnings) exactly as `_awareness_exits` does: endings
+    is {condition_id: [ending_condition]} to merge into
+    state_diff.conditions, warnings is prose for ctx.
+
+    Two rules, each covering only the part of release that is not a
+    judgement call:
+
+    1. A HOLD NEEDS A HOLDER. A hold (`held`, or `pinned` by a body) whose
+       named holder is positively elsewhere or below waking has physically
+       ended -- a grip is a live relation, and nobody goes on gripping from
+       another room or from unconsciousness. Standing restraints are
+       untouched: a knot stays tied when the tier walks away. So is a hold
+       whose holder the scene cannot vouch for -- ending what cannot be
+       verified is adjudication, and the view already tells the Director the
+       record vouches for nobody.
+
+    2. A RELEASE THE PROSE ASSERTS. A completed-release cue pinned to a
+       restrained subject in resolved_event ends every record on them: the
+       Director adjudicated the release when it wrote the sentence, and the
+       floor only encodes what the prose already asserts. A partial release
+       (one cuff of two) is the Director's to re-impose, which the warning
+       says.
+    """
+    endings, warnings = {}, []
+    if not records:
+        return endings, warnings
+
+    # 1. holds whose holder is positively gone
+    for record in records:
+        if record.get("standing"):
+            continue
+        if _hold_is_live(record, sc, amap, candidate_names) is False:
+            endings[record["condition_id"]] = [
+                _ending_condition(record, "the holder is no longer holding "
+                                  "them", kind="restraint")]
+            warnings.append(
+                f"Ended restraint '{record['level']}' on {record['subject']}"
+                + (f" (by {record['by']})" if record["by"] else "")
+                + ": the holder is in another room or below waking, and a "
+                "grip cannot outlive its holder's presence. Narrate the "
+                "release if it has not been, or re-impose the hold with the "
+                "holder actually there.")
+
+    # 2. releases the resolved prose asserts
+    released = _release_attempts(
+        resolved_event, [r["subject"] for r in records])
+    for record in records:
+        if record["subject"] not in released:
+            continue
+        if record["condition_id"] in endings:
+            continue
+        endings[record["condition_id"]] = [
+            _ending_condition(record, "a release narrated this beat",
+                              kind="restraint")]
+        warnings.append(
+            f"Ended restraint '{record['level']}' on {record['subject']}: "
+            "the resolved prose asserts their release and the diff did not "
+            "record it. If anything still holds them -- a second binding, "
+            "one cuff of two -- re-impose it as its own condition.")
+
+    return endings, warnings
 
 
 def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,
