@@ -43,6 +43,16 @@ def _prepared(_ctx):
             "memories": {}, "claims": {}}
 
 
+def _empty_memory_prepared():
+    """The memory domain's prepared shape with nothing in it: every list the
+    write path iterates, present and empty, so it commits a turn that
+    remembered nothing."""
+    return {"memory_batch": {"prepared": []}, "relationship_ops": [],
+            "state_updates": [],
+            "names_learned": {}, "memory_disputes": [], "importance_bumps": [],
+            "event_content": ""}
+
+
 def _context(temp_db):
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
@@ -128,6 +138,36 @@ def test_the_blocking_twin_is_not_used_by_the_tail(temp_db, monkeypatch):
     monkeypatch.setattr(commit_memory_write,
                         "_consolidate_committed_memories", blocking)
     commit_module.commit_all(_context(temp_db), nonce=0)
+
+
+def test_the_blocking_twin_fires_when_a_direct_caller_asks_for_it(
+        temp_db, monkeypatch):
+    """The positive control for the guard above, and the reason it is here.
+
+    That test asserts an ABSENCE -- the tail did not reach the blocking
+    consolidation -- and an absence is exactly what a stub installed on the
+    wrong module also produces. Nothing else in the suite demonstrated that
+    this particular stub, on this particular module, can fire at all. So:
+    same patch, same object, `consolidate=True`, which is what a direct
+    caller passes. If the stub is inert, this fails, and the guard above is
+    revealed as green-by-construction.
+    """
+    from persist import commit_memory_write
+
+    fired = []
+
+    def consolidating(ctx):
+        fired.append(ctx)
+        return []
+
+    monkeypatch.setattr(commit_memory_write, "_consolidate_committed_memories",
+                        consolidating)
+    ctx = _context(temp_db)
+    commit_memory_write.commit_memories(
+        ctx, nonce=0, prepared=_empty_memory_prepared(), consolidate=True)
+    assert fired, (
+        "the in-band twin was not reached even with consolidate=True: the "
+        "stub above cannot fire, so the absence it asserts proves nothing")
 
 
 def test_a_failing_producer_warns_and_does_not_roll_the_turn_back(
