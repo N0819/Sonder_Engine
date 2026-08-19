@@ -1249,14 +1249,44 @@ LOOP_DENSITY = 0.5
 # `unentered` sits just behind `known`: a cul-de-sac you have never looked
 # inside is worse than a route (it goes nowhere) and better than ground you
 # have already covered (it might hold what you are looking for).
-_APPEAL_ORDER = ("UNTRIED", "proven", "unentered", "known", "circling",
-                 "spent", "no way through", "closed")
+#
+# KEYED ON THE EVIDENCE, NOT THE READING. `_VERDICTS` is a pack table of
+# (marker key, label, because), and the label is the half a translator
+# changes -- so ordering on labels meant a translated pack sorted every exit
+# last (`_appeal` returns `len(_APPEAL_ORDER)` on ValueError), pruned no
+# redundant counters and never clamped a goal route, all silently, because an
+# unrecognised label is indistinguishable here from "trails everything". The
+# marker keys are protocol: they are what the engine writes onto an exit.
+_APPEAL_ORDER = ("untried", "worked_before", "unentered", "been_there",
+                 "circling_here", "no_new_ground_that_way", "no_route_onward",
+                 "visibly_no_way_through")
 # The verdicts that argue AGAINST taking an exit. For these the supporting
 # counters are redundant with the verdict itself and are dropped, so that a
 # discouraged door never outweighs the encouraged one beside it.
 # `unentered` is deliberately absent: its supporting markers are the only
 # evidence the character has about a room they have never been in.
-_DISCOURAGING = frozenset({"circling", "spent", "no way through", "closed"})
+_DISCOURAGING = frozenset({"circling_here", "no_new_ground_that_way",
+                           "no_route_onward", "visibly_no_way_through"})
+
+
+def _verdict_key(entry):
+    """Which reading this exit's own markers earn, or None.
+
+    The precedence is the pack table's order, and this is the ONE place it is
+    walked -- `_verdict` renders the reading and `_appeal` ranks it, and both
+    ask here rather than parsing the rendered string back apart.
+    """
+    if not isinstance(entry, dict):
+        return None
+    for key, _label, _because in _ling("_VERDICTS"):
+        if not entry.get(key):
+            continue
+        # A cul-de-sac you have NEVER been inside is not a spent one; see
+        # `_verdict` for the measurement.
+        if key == "visibly_no_way_through" and entry.get("untried"):
+            return "unentered"
+        return key
+    return None
 
 
 def _verdict(entry, frontier_hops=None):
@@ -1274,8 +1304,10 @@ def _verdict(entry, frontier_hops=None):
     salience inversion (the right door as the lightest entry) was fixed once
     and must not be re-created by decoration.
     """
+    verdict_key = _verdict_key(entry)
     for key, label, because in _ling("_VERDICTS"):
-        if not entry.get(key):
+        if key != verdict_key and not (
+                verdict_key == "unentered" and key == "visibly_no_way_through"):
             continue
         # A cul-de-sac you have NEVER been inside is not a spent one. `closed`
         # is a fact about where a room LEADS; it says nothing about what is
@@ -1298,7 +1330,7 @@ def _verdict(entry, frontier_hops=None):
                        "question from what it leads to, and things worth "
                        "reaching are usually not thoroughfares")
         detail = because
-        if label == "circling" and entry.get("entered_recently"):
+        if verdict_key == "circling_here" and entry.get("entered_recently"):
             detail = (f"you have been in there {entry['entered_recently']} "
                       "times in your last dozen paces")
         # The distance rides ANY verdict that has one, not only `known`.
@@ -1318,7 +1350,7 @@ def _verdict(entry, frontier_hops=None):
                 detail += ("; the nearest door you have never taken lies "
                            f"about {frontier_hops} rooms down that way")
         entry["verdict"] = f"{label} — {detail}"
-        if label in _DISCOURAGING:
+        if verdict_key in _DISCOURAGING:
             # These numbers all say the same thing as the verdict, and
             # together they were three times the text of the untried door
             # beside them. The verdict carries the reading; the rest were
@@ -1339,9 +1371,8 @@ def _appeal(entry):
     # arrived in.
     if not isinstance(entry, dict):
         return len(_APPEAL_ORDER)
-    label = str(entry.get("verdict") or "").split(" — ")[0]
     try:
-        return _APPEAL_ORDER.index(label)
+        return _APPEAL_ORDER.index(_verdict_key(entry))
     except ValueError:
         return len(_APPEAL_ORDER)
 
@@ -2232,12 +2263,12 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                 # exactly why it was the route. Clamped to `known`, never
                 # lifted above untried/proven -- goal against curiosity
                 # stays the character's call, as the appeal order promises.
-                appeal = min(appeal, _APPEAL_ORDER.index("known"))
+                appeal = min(appeal, _APPEAL_ORDER.index("been_there"))
                 near_dest = toward
             near = 10 ** 6
             if isinstance(entry, dict) and isinstance(hops, int) \
                     and hops >= 1 \
-                    and str(entry.get("verdict") or "").startswith("known"):
+                    and _verdict_key(entry) == "been_there":
                 near = hops
             return (appeal, near_dest, near)
         out[bucket] = sorted(marked, key=_rank)
@@ -2260,7 +2291,7 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     live = [trio for trio in all_marked
             if isinstance(trio[1], int) and trio[1] >= 0]
     if live and len(live) == 1 and all(
-            _appeal(e) >= _APPEAL_ORDER.index("circling")
+            _appeal(e) >= _APPEAL_ORDER.index("circling_here")
             for e, _, _ in all_marked if isinstance(e, dict)):
         entry, hops, _toward = live[0]
         entry["only_way_onward"] = True
