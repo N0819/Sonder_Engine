@@ -38,7 +38,6 @@
         "plan",
         "believe",
         "doubt",
-        "focus",
         "assume",
         "recollect",
         "realize",
@@ -46,12 +45,10 @@
         "hope",
         "decide",
         "wonder",
-        "resolve",
         "recall",
         "visualize",
         "consider",
         "visualise",
-        "feel",
         "ponder",
         "imagine",
         "deliberate",
@@ -62,8 +59,6 @@
         "think",
         "realise",
         "understand",
-        "reflect",
-        "sense",
         "recognize",
         "fear",
         "思う",
@@ -77,6 +72,19 @@
         "疑う",
         "望む",
         "恐れる"
+      ]
+    },
+    "_AMBIGUOUS_MENTAL_VERBS": {
+      "$type": "set",
+      "items": [
+        "feel",
+        "focus",
+        "reflect",
+        "resolve",
+        "sense",
+        "感じる",
+        "感じ取る",
+        "集中する"
       ]
     },
     "_AUTONOMY_VERBS": {

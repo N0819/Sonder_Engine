@@ -167,19 +167,65 @@ def _is_autonomous_response(verb, text):
     )
 
 
+def _in_mental_vocabulary(token, key):
+    token = str(token or "").strip().lower()
+    words = _ling(key)
+    return bool(token) and (token in words or _stem_token(token) in words)
+
+
 def _is_mental_action(verb, attempt):
-    """True when an action element is purely interior (no outward surface):
-    its declared verb is a mental verb, or -- for a weak model that left verb
-    unset -- its attempt LEADS with a mental verb ('remember the runes her
-    mother taught her'). Conservative: only the leading token is checked, so a
+    """True when an action element is purely interior (no outward surface).
+
+    Answering wrongly here is not recoverable: a blanked `observable` is
+    skipped by every deterministic delivery site, so the act reaches no view,
+    no percept and no memory, and the only trace is an empty string in a
+    stored variant. Two rules keep the guess from overruling an answer.
+
+    A DECLARED VERB DECIDES. The leading-token scan below exists, in this
+    docstring's own words, "for a weak model that left verb unset" -- so it
+    only runs when the verb is unset. It used to run regardless, and blanked
+    `verb: "search"` / `attempt: "feel along the desk surface in total
+    darkness, searching by touch for anything resembling a radio unit"`
+    because the attempt happened to open with `feel` (live corpus, measured).
+
+    A VERB THAT NAMES BOTH NEEDS AN INWARD OBJECT. `feel`, `focus`, `reflect`,
+    `resolve` and `sense` lead ordinary conduct as readily as they lead a
+    thought, and the leading token alone cannot tell which. What the act
+    REACHES FOR can: turned on the actor's own body or on a state they are in,
+    it is interior; directed at anything else, it is not. Held in the pack as
+    `_AMBIGUOUS_MENTAL_VERBS` so a language can name its own such verbs.
+
+    Conservative in the other direction too: only the LEAD is classified, so a
     physical act that merely mentions thought later ('carve while recalling
-    the shape') is NOT suppressed."""
-    v = str(verb or "").strip().lower()
-    if v in _ling("_MENTAL_VERBS") or _stem_token(v) in _ling("_MENTAL_VERBS"):
-        return True
+    the shape') is NOT suppressed.
+    """
+    verb = str(verb or "").strip().lower()
+    if verb:
+        if _in_mental_vocabulary(verb, "_MENTAL_VERBS"):
+            return True
+        if not _in_mental_vocabulary(verb, "_AMBIGUOUS_MENTAL_VERBS"):
+            return False
+        return _reaches_inward(attempt)
     head = re.split(r"[^\w]+", str(attempt or "").strip().lower(), maxsplit=1)
     lead = head[0] if head else ""
-    return bool(lead) and (lead in _ling("_MENTAL_VERBS") or _stem_token(lead) in _ling("_MENTAL_VERBS"))
+    if _in_mental_vocabulary(lead, "_MENTAL_VERBS"):
+        return True
+    if _in_mental_vocabulary(lead, "_AMBIGUOUS_MENTAL_VERBS"):
+        return _reaches_inward(attempt)
+    return False
+
+
+def _reaches_inward(attempt):
+    """Whether an act is turned on the actor rather than on the world.
+
+    The markers are the two the pack already keeps for exactly this
+    distinction: the actor's own body, and a state a person is in.
+    """
+    low = str(attempt or "").lower()
+    tokens = set(re.findall(r"[\w']+", low))
+    if tokens.intersection(_ling("_OWN_BODY_NOUNS")):
+        return True
+    return any(state in low for state in _ling("_INTERIOR_STATES"))
 
 
 def observable_action_text(elem):
@@ -1982,6 +2028,9 @@ def norm_sequence(out, warn=None):
                     if warn:
                         warn("moved a stage direction out of spoken text into "
                              "its own action: '%s'" % _span[:80])
+                        if not clean[-1]["observable"]:
+                            warn("classified as interior, so no perceiver "
+                                 "receives it: %r" % _span[:120])
             if txt:
                 # Carry the speech element's OWN concealment through
                 # normalization. Dropping it here (as we used to) meant a
@@ -2078,8 +2127,18 @@ def norm_sequence(out, warn=None):
                 # delivery regression for un-migrated / plain physical acts).
                 observable = e.get("observable")
                 if observable is None:
-                    observable = "" if _is_mental_action(
-                        e.get("verb"), att) else att
+                    if _is_mental_action(e.get("verb"), att):
+                        observable = ""
+                        # SAY SO. Blanking is a decision that nobody will ever
+                        # perceive this act -- it is skipped by every delivery
+                        # site, so there is no view, no percept and no memory
+                        # to notice it by, and the only trace left behind is an
+                        # empty string in a stored variant.
+                        if warn:
+                            warn("classified as interior, so no perceiver "
+                                 "receives it: %r" % att[:120])
+                    else:
+                        observable = att
                 clean.append({
                     "type": "action",
                     "attempt": att,
