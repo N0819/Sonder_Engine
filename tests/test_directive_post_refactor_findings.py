@@ -6,6 +6,7 @@ source before being acted on; none needed refuting this time.
 
 from __future__ import annotations
 
+import inspect
 import sys
 from pathlib import Path, PureWindowsPath
 
@@ -132,3 +133,32 @@ def test_browser_provisioning_does_not_shell_out_to_apt():
     assert not [c for c in commands if "--with-deps" in c], (
         "apt is back in browser provisioning")
     assert "~/.cache/ms-playwright" in workflow, "browser payload is not cached"
+
+
+# ------------------------------------ the host's own view routes select a frame
+
+def test_the_http_view_routes_take_a_frame_parameter():
+    """The extension API gained frame selection in 9.6 and these two routes did
+    not, because the host UI had no consumer. That left one surface able to
+    compose a frame-coherent read and its HTTP twin unable to -- an asymmetry
+    between two doors onto one room, which is how an out-of-process caller
+    straddles eras without being able to say so. The underlying functions
+    already accepted `frame_id`; only the routes did not pass it.
+    """
+    from web import app as web_app
+
+    for route in (web_app.story_view_get, web_app.player_view_get):
+        assert "frame" in inspect.signature(route).parameters, route.__name__
+
+
+def test_an_unasked_frame_is_omitted_rather_than_passed_as_none():
+    """`story_view`'s default is a SENTINEL meaning "the latest committed turn
+    across every frame". `None` is a different question -- it would be
+    validated as a frame id -- so a route that always passed the parameter
+    would turn "I did not ask" into "frame None"."""
+    from web import story_view
+
+    for fn in (story_view.story_view, story_view.player_view):
+        default = inspect.signature(fn).parameters["frame_id"].default
+        assert default is story_view._LATEST_FRAME
+        assert default is not None
