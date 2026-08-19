@@ -503,7 +503,7 @@ def resume_key_for_turn(turn_id, chat_id):
         return "director_interpret"
 
     if turn["idx"] == 0:
-        plan = establishment_plan()
+        plan = establishment_plan(chat_id)
     else:
         interpretation = active_content(turn_id, "director_interpret")
         if not isinstance(interpretation, dict):
@@ -695,14 +695,23 @@ def _chat_has_extra_players(chat_id, frame_id=None):
         (chat_id, frame_id, chat_id), one=True,
     ))
 
-def establishment_plan():
-    return [
+def establishment_plan(chat_id=None):
+    plan = [
         ("mapping_stage", "Mapping · route books & lore"),
         ("director_establish", "Director · establish scene"),
         ("perception_establish", "Perception · opening player view"),
         ("narrator", "Narrator · opening"),
         ("commit", "Mapping & memory · commit-up"),
     ]
+    # Spliced for the same reason build_plan's return is, and it was not:
+    # `mapping_stage`, `narrator` and `commit` all RUN on turn 0, so an
+    # extension anchored `after:mapping_stage` or `before:narrator` was
+    # silently unplanned there. EXTENSIONS.md's contract says an anchor is
+    # skipped when the turn does not run that step; here the step ran and the
+    # splice still did not happen, which is the opposite of what the document
+    # predicts. `api.provision_story` exists to make turn zero arrive whole,
+    # and the plan half of that was missing.
+    return _extension_splices(plan, chat_id)
 
 def _rehydrate_loop_results(ctx, key, content):
     """Rebuild the per-character result maps a loop step populated in the
@@ -930,7 +939,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         _restore_and_refresh()
 
     if establishment:
-        plan = establishment_plan()
+        plan = establishment_plan(chat_id)
         keys = [key for key, _ in plan]
 
         if from_key is None:
