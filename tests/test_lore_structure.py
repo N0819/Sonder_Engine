@@ -190,3 +190,21 @@ def test_world_mechanics_do_not_become_local_knowledge(temp_db):
     recs = {r["title"]: r for r in parse_structure(_book())}
     assert derive_knowledge(recs["Authority of Sloth"])[1] == "global"
     assert derive_knowledge(recs["Lugunica Currency"])[1] == "local"
+
+
+def test_a_category_cannot_be_handed_to_derive_knowledge(sample_records=None):
+    """`derive_knowledge(record, category=None)` accepted a category and never
+    mentioned it again -- while the twenty-line comment directly above it
+    argues at length that using the entry's category as a second signal was
+    tried and MEASURED WORSE (`guess_category` calls four real places
+    `mechanic`/`myth`, and calls `Lugunica Currency` a `mechanic`, which is
+    the one case the whole feature exists to serve).
+
+    So a reader who supplied one got the behaviour the comment says was
+    rejected -- which is to say, no behaviour at all, silently. The parameter
+    is gone; supplying one is now an error rather than a quiet no-op.
+    """
+    import pytest
+
+    with pytest.raises(TypeError):
+        derive_knowledge({"title": "Lugunica Currency"}, "mechanic")
