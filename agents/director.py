@@ -10,6 +10,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from story import attire as attire_model
+from story.attire import sanitize_attire_items
 from story.character_schema import (
     character_abilities,
     character_appearance,
@@ -55,7 +56,6 @@ from story.scene import (
     is_player_speaker,
     persona_of,
     player_authority,
-    sanitize_attire_items,
     senses_of,
     sheet_state,
     simulation_clock,
@@ -170,6 +170,10 @@ from .director_movement import (
     _resolve_movement_mover,
     _LONG_EDGE_DISTANCES,
     _LONG_EDGE_BEATS,
+    _pending_legs,
+    _declared_movers,
+    _edge_to,
+    _still_crossing,
     _travel_in_flight_view,
     _travel_continues,
     _guard_approach_is_not_arrival,

@@ -9,25 +9,12 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 
 import json, re
 from story import attire as attire_model
+# Canonical in `story.attire`, which is a leaf module three separate callers
+# can reach. Re-exported here under both names because `persist/commit.py`'s
+# facade imports them from this module and every `from commit import X` in the
+# tree resolves through it.
+from story.attire import _NON_ATTIRE_TERMS, sanitize_attire_items
 from persist.commit_common import _player_name_or_none
-
-_NON_ATTIRE_TERMS = {
-    "chair", "cushion", "seat", "table", "cup", "mug", "glass",
-    "bottle", "book", "weapon", "tool",
-}
-
-def sanitize_attire_items(items):
-    result = []
-    for item in items or []:
-        text = str(item).strip()
-        lowered = text.casefold()
-        if not text:
-            continue
-        if any(re.search(rf"\b{re.escape(term)}\b", lowered) for term in _NON_ATTIRE_TERMS):
-            continue
-        if text not in result:
-            result.append(text)
-    return result
 
 def _unstated(value):
     """Nothing said, as opposed to something said that is falsey.

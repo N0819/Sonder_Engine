@@ -844,35 +844,6 @@ def refine_layers(layers, place):
         return layers, {}
 
 
-def refine_query(draft, place):
-    """Optionally rewrite the deterministic draft with the `ambience_prompt`
-    model. Returns the draft unchanged if no model is configured or the call
-    fails -- a nicety, never a dependency.
-
-    This is where a fictional referent becomes an acoustic description: a model
-    asked for "the bridge of a starship" returns hum, air handling and sparse
-    console tones, which a sound library can actually match. Searching the
-    proper noun matches nothing.
-    """
-    try:
-        from llm.providers import resolve_role_candidates
-        resolve_role_candidates("ambience_prompt")
-    except Exception:
-        return {"query": draft, "avoid": ""}
-    try:
-        from agents.common import _agent_json
-        from language_runtime import DEFAULT_LANGUAGE
-        from llm.prompts import get_prompt
-        out = _agent_json("ambience_prompt", "ambience_prompt",
-                          get_prompt("ambience_prompt", DEFAULT_LANGUAGE),
-                          {"place": place, "draft": draft}, temperature=0.4)
-        query = str((out or {}).get("query") or "").strip()
-        return {"query": query or draft,
-                "avoid": str((out or {}).get("avoid") or "").strip()}
-    except Exception:
-        return {"query": draft, "avoid": ""}
-
-
 # --- sources ---------------------------------------------------------------
 
 def library_files(library=None, limit=2000):
@@ -992,8 +963,11 @@ _MUSIC_WORDS = ("music musical song songs melody melodic tune tunes "
 _MUSIC_TERMS = frozenset(_MUSIC_WORDS.split())
 
 # Freesound's own taxonomy, which is far better evidence than a tag: those
-# tracks are all `category: "Music"`. Requested as a field and, where a layer
-# may not have music at all, excluded server-side so they are never fetched.
+# tracks are all `category: "Music"`. Requested as a field (`_FREESOUND_FIELDS`)
+# and weighed in `_rank_candidates`, NOT excluded at the server -- `category` is
+# a field Freesound returns and will not filter on, so a music track is fetched
+# like any other and loses on the ranking. The whole account is at
+# `_freesound_page`, beside the filter string that has no category term in it.
 _MUSIC_CATEGORY = "Music"
 
 # Thunder is not the weather layer's to play. The engine draws the flash and
