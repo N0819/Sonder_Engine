@@ -89,6 +89,74 @@ def _freeze(value):
     return value
 
 
+#: The reference grammar: `{{fragment:<name>}}`, where <name> is a top-level
+#: string key of the same system-prompt card.
+_FRAGMENT_REF = re.compile(r"\{\{fragment:([a-z][a-z0-9_]*)\}\}")
+#: Any spelling that merely OPENS a reference. The strict pattern above is
+#: what resolves; this looser mark is what fails the load afterwards, so a
+#: typo -- wrong case, missing colon -- cannot ship as literal prompt text.
+_FRAGMENT_MARK = "{{fragment"
+
+
+def _resolve_prompt_fragments(card: dict, language_id: str) -> dict:
+    """Substitute every `{{fragment:<name>}}` reference in a prompt card.
+
+    Four authored fragments are embedded in seventeen prompt bodies. As
+    hand-maintained pastes they were free to drift, and in the Japanese pack
+    all seventeen had: each copy was translated independently of its own
+    fragment. A reference resolved here -- at card load, before anything
+    downstream can read the card -- makes the copies the same bytes as the
+    fragment by construction, and turns a fragment edit into one edit.
+
+    Fails the pack load on an unknown name, a cycle, or a reference that
+    does not parse, because a prompt shipped with `{{fragment:foo}}` in it
+    is read by every story.
+    """
+    sources = {name: value for name, value in card.items()
+               if isinstance(value, str)}
+    resolved: dict[str, str] = {}
+    resolving: list[str] = []
+
+    def fragment(name: str, at: str) -> str:
+        if name not in sources:
+            raise LanguagePackError(
+                f"language pack {language_id!r} references unknown prompt "
+                f"fragment {name!r} at system_prompts.{at}")
+        if name in resolving:
+            raise LanguagePackError(
+                f"language pack {language_id!r} has a fragment reference "
+                f"cycle: {' -> '.join(resolving + [name])}")
+        if name not in resolved:
+            resolving.append(name)
+            try:
+                resolved[name] = substitute(sources[name], name)
+            finally:
+                resolving.pop()
+        return resolved[name]
+
+    def substitute(text: str, at: str) -> str:
+        out = _FRAGMENT_REF.sub(lambda match: fragment(match.group(1), at),
+                                text)
+        if _FRAGMENT_MARK in out:
+            raise LanguagePackError(
+                f"language pack {language_id!r} has a malformed fragment "
+                f"reference at system_prompts.{at}")
+        return out
+
+    def walk(value, path):
+        if isinstance(value, dict):
+            return {key: walk(child, f"{path}.{key}")
+                    for key, child in value.items()}
+        if isinstance(value, list):
+            return [walk(child, f"{path}.{index}")
+                    for index, child in enumerate(value)]
+        if isinstance(value, str):
+            return substitute(value, path)
+        return value
+
+    return {key: walk(child, key) for key, child in card.items()}
+
+
 @dataclass(frozen=True)
 class LanguagePack:
     id: str
@@ -203,6 +271,9 @@ def _load_pack(directory: Path) -> LanguagePack:
             f"{', '.join(sorted(missing_story_cards))}")
     cards = {name: _read_json(directory / "cards" / f"{name}.json")
              for name in card_names}
+    if "system_prompts" in cards:
+        cards["system_prompts"] = _resolve_prompt_fragments(
+            cards["system_prompts"], language_id)
     prompt_policy = _read_json(directory / "prompt_policy.json")
     if not isinstance(prompt_policy.get("roles", {}), dict):
         raise LanguagePackError(

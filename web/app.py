@@ -80,7 +80,7 @@ from persist.commit import (promotable_background_presences,
 from llm.prompts import (
     presets, active_preset, DEFAULT_PROMPTS,
     default_prompts_for, preset_export_document, preset_import_document,
-    unique_preset_name,
+    unique_preset_name, unresolvable_fragment_references,
 )
 from language_runtime import (
     DEFAULT_LANGUAGE, STORY_LANGUAGE_KEY, LanguagePackError,
@@ -1511,6 +1511,14 @@ def save_preset(body: dict = Body(...)):
     supplied = body.get("prompts") or {}
     if not isinstance(supplied, dict):
         raise HTTPException(400, "prompts must be an object")
+    # `{{fragment:...}}` references resolve once, at pack load; a preset body
+    # is applied after that, so one saved here would reach the model as
+    # literal text in every beat. Refuse it while the host is still looking.
+    unresolvable = unresolvable_fragment_references(supplied)
+    if unresolvable:
+        raise HTTPException(
+            400, "{{fragment:...}} references cannot be used in a preset; "
+            "write the text itself in: " + ", ".join(unresolvable[:8]))
     ps = presets()
     ps[name] = {
         "language": language,
