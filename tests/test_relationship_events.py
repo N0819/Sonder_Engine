@@ -82,7 +82,7 @@ class TestEveryPathThatMovesAStanceLeavesAReason:
     """
 
     def test_an_inferred_trust_move_is_recorded(self):
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
 
         update_relationships_from_inference(cid, 7, 12, [{
@@ -98,7 +98,7 @@ class TestEveryPathThatMovesAStanceLeavesAReason:
         """Concluding someone is dangerous and being TOLD you distrust them are
         different provenances, and the ledger already distinguishes evidenced
         from unevidenced for exactly this reason."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
 
         update_relationships_from_inference(cid, 7, 12, [{
@@ -112,7 +112,7 @@ class TestEveryPathThatMovesAStanceLeavesAReason:
     def test_a_conclusion_that_moves_nothing_writes_nothing(self):
         """Familiarity creeps up on every mention; that is not a reason for
         anything and must not fill the ledger with rows carrying no delta."""
-        import db as db_module
+        from core import db as db_module
         cid = _chat(db_module)
 
         update_relationships_from_inference(cid, 7, 12, [{
