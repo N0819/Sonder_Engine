@@ -197,6 +197,27 @@ class CopingStrategyProfile(_PsychologyModel):
 
 
 class AssociationProfile(_PsychologyModel):
+    """A cue, what it biases, and how strongly -- reinforced or extinguished
+    in play by `psychology_runtime.apply_association_updates`.
+
+    `generalization_tags` IS NOT THAT. The name promises the mechanism by
+    which a cue learned in one situation transfers to a similar one, and
+    there is no engine behind it: nothing deterministic reads the field.
+    Authored tags do reach the character as prose, because the whole
+    association dict is serialised into `learned_associations`
+    (`agents/character.py`) -- so a tag an author writes is a note to the
+    model and nothing more, and a tag the runtime could have LEARNED never
+    appears, because the update path moves `appraisal_bias`,
+    `response_tendency` and `strength` and never touches this one.
+
+    Kept, not deleted, because authors USE it: measured 2026-08-18 on the
+    live database, all 78 authored associations carry tags and 87 of the 152
+    in the interior ledgers do. Deleting the field discards them. Audit
+    MIND-F16; the choice between building the generaliser and withdrawing the
+    promise is an owner's, and either way the browser editor
+    (`static/js/components.js`) is the other half.
+    """
+
     cue: str = ""
     appraisal_bias: str = ""
     response_tendency: str = ""
