@@ -72,7 +72,15 @@ DEFAULT_TOLL_IN_RADIUS = True
 # out over real in-fiction minutes-to-hours produces a few stage jumps
 # rather than an instant maximum or an imperceptible crawl.
 ESCALATION_SECONDS = 900.0
-STAGE_THRESHOLDS = (0.0, 0.25, 0.5, 0.75, 1.0)
+# FOUR rungs (stages 0-3), matching the consequence appliers exactly:
+# `_apply_warden_stage` distinguishes >=1, `_apply_hazard_stage` >=2 and >=3,
+# and nothing anywhere had a distinct FIFTH behaviour. Severity 1.0 is the
+# CEILING, a terminal event handled in `_advance_paradox` before any rung is
+# applied -- the old fifth threshold made the top rung fire in the same call
+# that force-restored the anchor and reverted the wound, which was a no-op
+# for everything except `_apply_toll`'s irreversible memory UPDATE and the
+# warden spawn, neither of which the restore undoes.
+STAGE_THRESHOLDS = (0.0, 0.25, 0.5, 0.75)
 
 # "hazard" mode's own docstring promises "sensory wrongness escalating to
 # room consumption" -- the room-consumption half was implemented
@@ -450,22 +458,28 @@ def _advance_paradox(chat_id, state):
 
     elapsed = max(0.0, _clock_elapsed(chat_id) - state["started_clock_seconds"])
     severity = min(1.0, (elapsed / ESCALATION_SECONDS) * policy["escalation_rate"])
-    new_stage = _stage_for(severity)
     state["severity"] = severity
-    if new_stage > state["stage"]:
-        state["stage"] = new_stage
-        _apply_stage_consequence(chat_id, state, new_stage, policy)
 
     if severity >= 1.0:
         # Ceiling, minimal-slice version: reality wins. The anchor is
         # forcibly restored rather than orphaning the frame (that
         # requires visibility-rule changes to the memory ledger this
         # slice doesn't attempt -- see Design.md's paradox section).
+        # The ceiling is TERMINAL, not a rung: checked BEFORE any stage
+        # consequence, because applying one here fired it in the same
+        # call that reverted the wound -- invisible for rooms, which the
+        # restore un-consumes, but a toll decay is irreversible and a
+        # spawned warden outlives its own resolved wound.
         if anchor:
             _force_restore_anchor(chat_id, anchor)
         _restore_consumed(chat_id, state)
         _clear_paradox(chat_id, state.get("frame_id"))
         return {**state, "resolved": True, "forced": True}
+
+    new_stage = _stage_for(severity)
+    if new_stage > state["stage"]:
+        state["stage"] = new_stage
+        _apply_stage_consequence(chat_id, state, new_stage, policy)
 
     _save_paradox(chat_id, state)
     return state

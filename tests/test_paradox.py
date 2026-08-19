@@ -762,3 +762,89 @@ class TestResolution:
         # Reality won: Pete no longer exists, satisfying the anchor.
         assert not q("SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
                      (chat_id, "pete"), one=True)
+
+
+class TestCeilingIsTerminalNotARung:
+    """The ladder has four rungs (stages 0-3); severity 1.0 is the CEILING,
+    a terminal event, not a fifth rung. The old shape applied a stage-4
+    consequence at the ceiling and then force-restored the anchor and
+    un-consumed the rooms four lines later in the SAME call -- coherent only
+    for consequences the restore undoes, and `_apply_toll`'s memory-
+    confidence UPDATE and `_apply_warden_stage`'s spawned hunter are not."""
+
+    def test_stage_never_exceeds_the_appliers_top_rung(self):
+        # `_apply_hazard_stage` distinguishes >=2 and >=3, `_apply_warden_stage`
+        # >=1; no applier has a fourth distinct rung, so neither may the map.
+        assert len(paradox.STAGE_THRESHOLDS) == 4
+        assert paradox._stage_for(1.0) == paradox._stage_for(0.75) == 3
+
+    def test_the_ceiling_spawns_no_warden_in_the_beat_that_resolves_it(self, temp_db):
+        """Warden mode, straight from onset to the ceiling: the old code set
+        stage 4, placed a hunter at the epicenter, and declared the paradox
+        resolved in the same call -- leaving a hostile body in the ledger for
+        a wound that no longer exists."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "scene", {"rooms": {"road": {"name": "Road", "adjacent": []}},
+                                  "positions": {"pete": "road"}, "entities": {}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        paradox.set_policy(chat_id, mode="warden")
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                 required_exists=False, label="x")
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": paradox.ESCALATION_SECONDS * 10})
+        result = paradox.check_and_apply_paradox(ctx, 0)
+
+        assert result["resolved"] is True and result["forced"] is True
+        sc = wget(chat_id, "scene")
+        assert not [
+            eid for eid, e in (sc.get("entities") or {}).items()
+            if isinstance(e, dict) and e.get("subtype") == "paradox_warden"
+        ]
+
+    def test_the_ceiling_takes_no_toll_in_the_beat_that_resolves_it(self, temp_db):
+        """`_apply_toll` is an irreversible UPDATE on memories; every other
+        stage-4 consequence was reverted four lines later, this one was the
+        exception. A traveler's witness must not decay in the very call that
+        declares reality restored."""
+        from mind import memory
+        from story.character_schema import default_character_data
+        import json as _json
+
+        chat_id = _make_chat(temp_db)
+        hinami = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+            ("Hinami", _json.dumps(default_character_data("Hinami")), "{}", time.time()),
+        )
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+            (chat_id, hinami, "active", "{}"),
+        )
+        from core.frames import create_frame
+        past_frame = create_frame(chat_id, label="Past", ordinal=-1, kind="past",
+                                  travelers=[hinami])
+        paradox.set_policy(chat_id, mode="toll")
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=past_frame,
+                                 required_exists=False, label="x")
+        memory.add_memory(chat_id, hinami, None, "episode", "witnessed", 0.5,
+                          "A memory.", turn_idx=1)
+        before = memory.dump_character_memories(chat_id, hinami)[0]["confidence"]
+
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id, frame_id=past_frame)
+        with _in_frame(past_frame):
+            wset(chat_id, "scene", {
+                "rooms": {"road": {"name": "Road", "adjacent": []}},
+                "positions": {"pete": "road", "Hinami": "road"}, "entities": {},
+            })
+            wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+            paradox.check_and_apply_paradox(ctx, 0)
+            wset(chat_id, "simulation_clock",
+                 {"elapsed_seconds": paradox.ESCALATION_SECONDS * 10})
+            result = paradox.check_and_apply_paradox(ctx, 0)
+
+        assert result["resolved"] is True and result["forced"] is True
+        after = memory.dump_character_memories(chat_id, hinami)[0]["confidence"]
+        assert after == before
