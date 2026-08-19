@@ -452,6 +452,20 @@ def _condition_state(condition):
     state = condition.get("state") if isinstance(condition, dict) else None
     return state if isinstance(state, dict) else {}
 
+
+#: HOW A BODY'S STANDING CONDITION ROWS ARE WALKED, for every reader that
+#: collapses `world_conditions` to one answer per subject. Rows accumulate --
+#: the Director mints a fresh condition_id per reroll, a branch copies rows
+#: wholesale, a restore rewrites them -- so several are routinely active on
+#: one body, and whichever the scan reaches last decides what everyone sees.
+#: The order must therefore be the STORY's, not the table's: `rowid` is
+#: insertion order, which a branch copy and a re-emission both scramble.
+#: Stated once because two readers of one table with two tie-breaks is a
+#: guarantee they will one day disagree about the same person -- which they
+#: did: `active_disguises` ordered by the clock and `awareness_conditions` by
+#: rowid.
+_CONDITION_ORDER = "ORDER BY started_at ASC, rowid ASC"
+
 def active_disguises(chat_id):
     """Active physical_disguise conditions for `chat_id`, keyed by casefolded
     subject name. Each value: {subject, description, presented_appearance,
@@ -474,7 +488,7 @@ def active_disguises(chat_id):
     for row in q(
         "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
         "AND kind='physical_disguise' AND active=1 "
-        "ORDER BY started_at ASC, rowid ASC", (chat_id,),
+        f"{_CONDITION_ORDER}", (chat_id,),
     ):
         try:
             payload = json.loads(row["payload"])
@@ -1011,7 +1025,7 @@ def awareness_conditions(chat_id):
     rows = []
     for row in q(
         "SELECT condition_id, subject_id, payload, started_at FROM world_conditions "
-        "WHERE chat_id=? AND kind='awareness' AND active=1 ORDER BY rowid",
+        f"WHERE chat_id=? AND kind='awareness' AND active=1 {_CONDITION_ORDER}",
         (chat_id,),
     ):
         try:
@@ -1042,18 +1056,49 @@ def awareness_conditions(chat_id):
             "started_at_seconds": started,
             "payload": payload,
         })
+    # ORDERED BY THE CLOCK THE RECORDS THEMSELVES PUBLISH. A payload's
+    # `started_at_seconds` is the simulation clock and the column is the wall
+    # clock they were written at; they disagree in live data (chat 23 holds
+    # 180 against 130 on one row), so sorting on one while reporting the other
+    # is two answers to when this started. Stable, so the SQL clause above
+    # still breaks a tie.
+    rows.sort(key=lambda r: r["started_at_seconds"])
     return rows
+
+
+def _awareness_depth(level):
+    """How far under a level is, on `AWARENESS_LEVELS`' own ordering."""
+    try:
+        return AWARENESS_LEVELS.index(level)
+    except ValueError:
+        return AWARENESS_LEVELS.index("dazed")
 
 
 def awareness_map(chat_id):
     """Active `awareness` conditions for chat_id, keyed by casefolded subject
     name -> {subject, level, cause, rousable_by, condition_id}. Mirrors
     active_disguises. Only non-awake subjects appear; everyone else is awake by
-    absence. Several rows may name one subject; the last wins, unchanged --
-    `awareness_conditions` is the un-collapsed view."""
+    absence. `awareness_conditions` is the un-collapsed view, and the ending
+    floor needs it: waking somebody deactivates every row, not this one.
+
+    SEVERAL ROWS, ONE BODY, AND THE STORY'S ORDER DECIDES. The newest wins,
+    because coming round is a real transition and the row that records it is
+    the later one. Where two rows share a clock reading -- which is how a
+    branch copy delivers them, the same shape `active_disguises` documents --
+    nothing in the data says which came after, and the two answers are not
+    equivalent: the deeper level gates the mind and the milder one hands it
+    full perception, since `dazed` is not in `NON_AWAKE_GATED`. So a tie falls
+    to the deeper level rather than to a rowid, and a body the story put under
+    is never read as present by an accident of insertion order."""
     out = {}
+    rank = {}
     for record in awareness_conditions(chat_id):
-        out[record["subject"].casefold()] = {
+        key = record["subject"].casefold()
+        order = (record["started_at_seconds"], _awareness_depth(record["level"]))
+        if key in out and order <= rank[key]:
+            continue
+        rank[key] = order
+        out[key] = {
             "subject": record["subject"],
             "level": record["level"],
             "cause": record["cause"],

@@ -366,3 +366,103 @@ class TestFaintIsUsuallyAnAdjective:
         for text in ("he was knocked out", "she blacks out", "the blow makes "
                      "you pass out", "she is out cold", "losing consciousness"):
             assert cue.search(text.lower()), text
+
+
+# --- how several standing rows on one body collapse to one answer ----------
+#
+# `awareness_map` keys by subject and lets the last row scanned win, exactly
+# as `active_disguises` does -- but the two read `world_conditions` with
+# DIFFERENT tie-breaks (`ORDER BY rowid` against `ORDER BY started_at ASC,
+# rowid ASC`), so one body's condition rows collapsed one way for a disguise
+# and another way for consciousness. Rows genuinely accumulate: awareness is
+# deliberately not in `SINGULAR_BODY_CONDITIONS` (a waking must deactivate
+# every row, so several may stand), and live chats 23 and 27 each carry three
+# and four active rows on one person -- 27's are 23's, inherited by a branch
+# copy, which is also how two rows arrive sharing one clock reading.
+#
+# The direction of the failure is the reason this matters: the row that wins
+# by insertion order can be the mildest one, and `dazed` is not in
+# `NON_AWAKE_GATED` -- so a body the story put under reads as present,
+# receives full perception, and is planned as a reactor.
+
+class TestSeveralAwarenessRowsOnOneBody:
+    def _chat(self, db):
+        return db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Awareness", "", time.time()))
+
+    def _condition(self, db, chat_id, cond_id, level, started_at,
+                   subject="Hinami"):
+        db.qi(
+            "INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,"
+            "started_at,expires_at,next_tick,payload,active) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (cond_id, chat_id, subject, "awareness", started_at, None, None,
+             json.dumps({"subject_id": subject, "kind": "awareness",
+                         "state": {"level": level}}), 1))
+
+    def test_the_clock_decides_which_row_wins_not_insertion_order(self, temp_db):
+        """THE DEFECT. The row written last is not the state entered last --
+        a branch copy, a restore and a re-emitted condition all write in an
+        order the story did not live in."""
+        chat_id = self._chat(temp_db)
+        self._condition(temp_db, chat_id, "later_state", "unconscious", 500.0)
+        self._condition(temp_db, chat_id, "earlier_state", "dazed", 100.0)
+
+        assert awareness_map(chat_id)["hinami"]["level"] == "unconscious"
+
+    def test_a_tie_on_the_clock_does_not_ungate_a_body(self, temp_db):
+        """Two rows sharing a clock reading is the branch-copy shape the
+        disguise reader documents. Nothing in the data says which came
+        after, so the answer may not be a rowid coin flip -- and the two
+        outcomes are not equivalent: one gates a mind, the other hands it
+        full perception."""
+        chat_id = self._chat(temp_db)
+        self._condition(temp_db, chat_id, "a", "unconscious", 400.0)
+        self._condition(temp_db, chat_id, "b", "dazed", 400.0)
+
+        assert awareness_map(chat_id)["hinami"]["level"] == "unconscious"
+
+    def test_a_tie_answers_the_same_whichever_row_was_written_first(self, temp_db):
+        chat_id = self._chat(temp_db)
+        self._condition(temp_db, chat_id, "b", "dazed", 400.0)
+        self._condition(temp_db, chat_id, "a", "unconscious", 400.0)
+
+        assert awareness_map(chat_id)["hinami"]["level"] == "unconscious"
+
+    def test_a_later_row_still_wins_when_it_is_the_milder_one(self, temp_db):
+        """Coming round is a real transition and must survive the tie-break:
+        newest wins, and only an actual tie falls through to depth."""
+        chat_id = self._chat(temp_db)
+        self._condition(temp_db, chat_id, "under", "unconscious", 100.0)
+        self._condition(temp_db, chat_id, "coming_round", "dazed", 500.0)
+
+        assert awareness_map(chat_id)["hinami"]["level"] == "dazed"
+
+    def test_the_clock_the_record_publishes_is_the_clock_it_is_ordered_by(
+            self, temp_db):
+        """`awareness_conditions` reports `started_at_seconds` from the
+        payload where there is one, and the column otherwise. Live chat 23
+        holds a row whose two figures disagree (column 130, payload 180);
+        ordering on one while publishing the other is two answers to when."""
+        chat_id = self._chat(temp_db)
+        temp_db.qi(
+            "INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,"
+            "started_at,expires_at,next_tick,payload,active) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            ("simclock", chat_id, "Hinami", "awareness", 10.0, None, None,
+             json.dumps({"subject_id": "Hinami", "kind": "awareness",
+                         "started_at_seconds": 900.0,
+                         "state": {"level": "unconscious"}}), 1))
+        self._condition(temp_db, chat_id, "wallclock", "dazed", 500.0)
+
+        assert awareness_map(chat_id)["hinami"]["level"] == "unconscious"
+
+    def test_every_row_is_still_returned_uncollapsed(self, temp_db):
+        """The ending floor deactivates every row, so the un-collapsed view
+        must keep them all however the map collapses them."""
+        chat_id = self._chat(temp_db)
+        self._condition(temp_db, chat_id, "a", "unconscious", 400.0)
+        self._condition(temp_db, chat_id, "b", "dazed", 500.0)
+
+        from story.scene import awareness_conditions
+        assert {r["condition_id"] for r in awareness_conditions(chat_id)} == {"a", "b"}
