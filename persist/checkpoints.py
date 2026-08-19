@@ -582,6 +582,13 @@ def _preserved_settings(chat_id):
     Only keys that currently EXIST are preserved. A fresh chat (branch,
     import) has none, so it still inherits the source's settings from the
     snapshot -- which is the behavior branching wants.
+
+    A key that exists and will not parse is a different case, and it is the
+    one this list was built to prevent: the restore falls through to the
+    checkpoint's older dial and the reader's own value is gone. Left silent,
+    that is indistinguishable from never having turned the dial, so it is
+    logged. The restore still proceeds -- an unreadable preference is not a
+    reason to refuse a rollback of the story.
     """
     preserved = {}
     for key in PRESERVED_SETTING_KEYS:
@@ -590,8 +597,11 @@ def _preserved_settings(chat_id):
         if row is not None:
             try:
                 preserved[key] = json.loads(row["value"])
-            except (TypeError, ValueError):
-                continue
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    "checkpoints: chat %s setting %r is unreadable (%s); the "
+                    "restore will roll it back to the checkpoint's value",
+                    chat_id, key, exc)
     return preserved
 
 

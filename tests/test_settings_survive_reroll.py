@@ -66,6 +66,34 @@ def test_settings_absent_now_still_come_from_the_snapshot(temp_db):
     assert temp_db.wget(cid, "dialogue_config", {})["autonomy"] == 70
 
 
+def test_an_unreadable_setting_says_so_before_the_rollback_takes_it(
+    temp_db, caplog,
+):
+    """A setting that cannot be read is not a setting that is absent.
+
+    An absent key is the branch/import case and correctly falls through to
+    the snapshot. A key that EXISTS and will not parse is the one case where
+    the restore does the exact thing this list was built to prevent: the
+    checkpoint's older dial wins and the reader's own value is gone. Doing it
+    quietly makes it indistinguishable from the dial never having been
+    changed.
+    """
+    import logging
+
+    cid = _chat(temp_db)
+    temp_db.wset(cid, "scene", {"rooms": {}})
+    temp_db.wset(cid, "style_guide", {"genre": "noir"})
+    ensure_checkpoint(cid, 1)
+
+    temp_db.qi("UPDATE world SET value=? WHERE chat_id=? AND key='style_guide'",
+               ("{not json", cid))
+
+    with caplog.at_level(logging.WARNING):
+        assert _preserved_settings(cid) == {}
+    assert any("style_guide" in record.getMessage()
+               for record in caplog.records), caplog.text
+
+
 def test_ordinary_world_state_is_still_rolled_back(temp_db):
     """The preserve list is deliberately narrow -- it must not turn into a
     general escape hatch that leaks turn state past a rollback."""
