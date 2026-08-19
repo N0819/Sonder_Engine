@@ -98,7 +98,17 @@ def test_warning_detected_from_dialogue_log_quote_not_just_resolved_event():
 # the synonyms rather than widening the enum, because a silent fall to the
 # default inverts the meaning of the beat.
 
-from story.scene import RESTRAINT_LEVELS, _normalize_restraint_level
+import json
+import time
+
+from story.scene import (
+    IMMOBILIZING_RESTRAINTS,
+    RESTRAINT_LEVELS,
+    _normalize_restraint_level,
+    apply_restraint_diff,
+    restraint_map,
+    restraint_of,
+)
 
 
 class TestRestraintWordsTheEnumCannotRead:
@@ -142,3 +152,106 @@ class TestRestraintWordsTheEnumCannotRead:
         one that claims least."""
         assert _normalize_restraint_level("flabbergasted") == "held"
         assert _normalize_restraint_level("") == "bound"
+
+
+# --- the kind a beat actually writes ---------------------------------------
+#
+# THE FLOOR HAS NEVER FIRED. `restraint_map` selects
+# `kind='restraint'`; measured over the live database, no beat has ever
+# written that word. What the Director writes is `physical_restraint` (21
+# active rows) or `restrained` (3), across fifteen chats -- so the
+# enforcement built because "a character recorded as bound hand and foot
+# could still walk across the room" has not blocked a single move since it
+# landed.
+#
+# `world_conditions.kind` is free model text: no prompt publishes a
+# vocabulary for it, and what the body specialist is told is "physical
+# restraint (bound, held hostage, grappled, pinned)" -- prose, from which
+# `physical_restraint` is the obvious token, and which matches the engine's
+# own `physical_disguise` / `physical_transformation` besides. The model
+# wrote the consistent name; the reader asked for the inconsistent one.
+#
+# Nor do those rows carry `state.level`. They carry `restraint_type`
+# ("metal_cuffs", "chair_restraints") or `type` ("grip", "held_in_embrace"),
+# which is where the rung has to be read from.
+
+class TestTheKindsRestraintIsActuallyRecordedUnder:
+    def _chat(self, db):
+        return db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Restraint", "", time.time()))
+
+    def _row(self, db, chat_id, cond_id, kind, state, started_at=100.0,
+             subject="Hinami"):
+        db.qi(
+            "INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,"
+            "started_at,expires_at,next_tick,payload,active) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (cond_id, chat_id, subject, kind, started_at, None, None,
+             json.dumps({"subject_id": subject, "kind": kind, "state": state}), 1))
+
+    def test_the_spelling_every_live_row_uses_is_read(self, temp_db):
+        chat_id = self._chat(temp_db)
+        self._row(temp_db, chat_id, "c1", "physical_restraint",
+                  {"restraint_type": "metal_cuffs"})
+
+        record = restraint_of(restraint_map(chat_id), "Hinami")
+        assert record is not None
+        assert record["level"] in IMMOBILIZING_RESTRAINTS
+
+    def test_the_other_live_spelling_too(self, temp_db):
+        chat_id = self._chat(temp_db)
+        self._row(temp_db, chat_id, "c1", "restrained",
+                  {"description": "Pinned to her side by a hand on her arm"})
+
+        assert restraint_of(restraint_map(chat_id), "Hinami") is not None
+
+    def test_a_condition_that_is_not_restraint_is_not_read_as_one(self, temp_db):
+        """The predicate widens to a family of spellings, not to anything
+        that has a body in it. Containment and contact are their own
+        systems with their own consequences."""
+        chat_id = self._chat(temp_db)
+        self._row(temp_db, chat_id, "c1", "containment", {"level": "bound"})
+        self._row(temp_db, chat_id, "c2", "contact", {}, subject="Kaede")
+        self._row(temp_db, chat_id, "c3", "wound", {}, subject="Moon")
+
+        assert restraint_map(chat_id) == {}
+
+    def test_the_rung_is_read_from_the_field_the_beat_used(self, temp_db):
+        chat_id = self._chat(temp_db)
+        self._row(temp_db, chat_id, "c1", "physical_restraint",
+                  {"restraint_type": "metal_cuffs"})
+        assert restraint_map(chat_id)["hinami"]["level"] == "bound"
+
+        chat_two = self._chat(temp_db)
+        self._row(temp_db, chat_two, "c2", "physical_restraint",
+                  {"type": "grip"})
+        assert restraint_map(chat_two)["hinami"]["level"] == "held"
+
+    def test_an_underscored_token_is_still_words(self, temp_db):
+        """Models write `wrist_and_ankle_restraints_on_metal_chair`. An
+        underscore is a word character to a regex, so a cue table matching
+        on word boundaries reads that as one unknown word."""
+        assert _normalize_restraint_level(
+            "wrist_and_ankle_restraints_on_metal_chair") == "bound"
+        assert _normalize_restraint_level("held_in_embrace") == "held"
+
+    def test_several_rows_collapse_in_the_story_order(self, temp_db):
+        """Live chat 80 carries six active restraint rows on one body. With
+        no ORDER BY at all, which one described the subject was the scan's
+        choice."""
+        chat_id = self._chat(temp_db)
+        self._row(temp_db, chat_id, "late", "physical_restraint",
+                  {"restraint_type": "metal_cuffs"}, started_at=500.0)
+        self._row(temp_db, chat_id, "early", "physical_restraint",
+                  {"type": "grip"}, started_at=100.0)
+
+        assert restraint_map(chat_id)["hinami"]["level"] == "bound"
+
+    def test_the_same_beats_own_diff_is_read_the_same_way(self, temp_db):
+        """`apply_restraint_diff` overlays this beat's not-yet-committed
+        conditions, and asked for the same one token the query did."""
+        diff = {"conditions": {"c1": [{
+            "condition_id": "c1", "subject_id": "Hinami",
+            "kind": "physical_restraint",
+            "state": {"restraint_type": "chair_restraints"}}]}}
+        assert restraint_of(apply_restraint_diff({}, diff), "Hinami") is not None

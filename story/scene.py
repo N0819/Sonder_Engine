@@ -1192,6 +1192,47 @@ _RESTRAINT_SYNONYMS = (
 )
 
 
+#: The kinds a beat actually files a restraint under. `world_conditions.kind`
+#: is free model text -- no prompt publishes a vocabulary for it, and what the
+#: body specialist is told is the phrase "physical restraint (bound, held
+#: hostage, grappled, pinned)", from which `physical_restraint` is the obvious
+#: token and the one that matches the engine's own `physical_disguise` /
+#: `physical_transformation` besides. This reader asked for `restraint`, which
+#: across the whole live corpus no beat has ever written: 21 active rows say
+#: `physical_restraint` and 3 say `restrained`, over fifteen chats, and the
+#: floor that stops a bound body walking out has therefore never once fired.
+#:
+#: A FAMILY OF SPELLINGS, NOT ANYTHING WITH A BODY IN IT: containment and
+#: contact are their own systems with their own consequences, and reading one
+#: as a restraint would immobilise a body nothing is holding.
+_RESTRAINT_KIND_WORDS = frozenset({
+    "restraint", "restraints", "restrained", "restraining", "bound",
+    "binding", "bindings",
+})
+
+
+def _is_restraint_kind(kind):
+    """Is this condition kind one of the ways a restraint gets recorded?"""
+    words = _re.split(r"[^a-z0-9]+", str(kind or "").casefold())
+    return any(word in _RESTRAINT_KIND_WORDS for word in words)
+
+
+#: Where the rung is written. `level` is what the schema asks for and what no
+#: live row carries; `restraint_type` ("metal_cuffs", "chair_restraints") and
+#: `type` ("grip", "held_in_embrace") are what beats actually use.
+_RESTRAINT_LEVEL_FIELDS = ("level", "restraint_type", "type")
+
+
+def _restraint_level_of(state, payload=None):
+    for field in _RESTRAINT_LEVEL_FIELDS:
+        raw = state.get(field) if isinstance(state, dict) else None
+        if raw is None and isinstance(payload, dict):
+            raw = payload.get(field)
+        if str(raw or "").strip():
+            return _normalize_restraint_level(raw)
+    return _normalize_restraint_level("")
+
+
 def _normalize_restraint_level(raw):
     """One of `RESTRAINT_LEVELS`, from whatever the model actually wrote.
 
@@ -1207,9 +1248,14 @@ def _normalize_restraint_level(raw):
         return "bound"
     if level in RESTRAINT_LEVELS:
         return level
+    # `wrist_and_ankle_restraints_on_metal_chair` is a sentence a model wrote
+    # in the only punctuation a token field invites. An underscore is a WORD
+    # character to a regex, so word-boundary cues read the whole thing as one
+    # unknown word unless the separators become separators.
+    level = _re.sub(r"[^a-z0-9]+", " ", level).strip()
     for rung, cues in _RESTRAINT_SYNONYMS:
         for cue in cues:
-            if _re.search(r"\b%s\b" % _re.escape(cue), level):
+            if _re.search(r"\b%ss?\b" % _re.escape(cue), level):
                 return rung
     return "held"
 
@@ -1222,9 +1268,11 @@ def restraint_map(chat_id):
     """
     out = {}
     for row in q(
-        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
-        "AND kind='restraint' AND active=1", (chat_id,),
+        "SELECT subject_id, kind, payload FROM world_conditions WHERE chat_id=? "
+        f"AND active=1 {_CONDITION_ORDER}", (chat_id,),
     ):
+        if not _is_restraint_kind(row["kind"]):
+            continue
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
@@ -1235,7 +1283,7 @@ def restraint_map(chat_id):
             continue
         out[subject.casefold()] = {
             "subject": subject,
-            "level": _normalize_restraint_level(state.get("level")),
+            "level": _restraint_level_of(state, payload),
             "by": str(state.get("by") or "").strip(),
             "means": str(state.get("means") or "").strip(),
             "escapable_by": str(state.get("escapable_by") or "").strip(),
@@ -1251,7 +1299,7 @@ def apply_restraint_diff(rmap, diff):
         if not isinstance(cond_list, list):
             cond_list = [cond_list]
         for cond in cond_list:
-            if not isinstance(cond, dict) or cond.get("kind") != "restraint":
+            if not isinstance(cond, dict) or not _is_restraint_kind(cond.get("kind")):
                 continue
             subject = str(cond.get("subject_id") or "").strip()
             if not subject:
@@ -1263,7 +1311,7 @@ def apply_restraint_diff(rmap, diff):
                 continue
             out[key] = {
                 "subject": subject,
-                "level": _normalize_restraint_level(state.get("level")),
+                "level": _restraint_level_of(state, cond),
                 "by": str(state.get("by") or "").strip(),
                 "means": str(state.get("means") or "").strip(),
                 "escapable_by": str(state.get("escapable_by") or "").strip(),
