@@ -1032,8 +1032,5 @@ boot()
     if (typeof reopenPromptsIfRequested === "function") {
       reopenPromptsIfRequested();
     }
-    if (typeof reopenExtensionsIfRequested === "function") {
-      reopenExtensionsIfRequested();
-    }
   })
   .catch(e => toast(`Could not load the app: ${(e?.message || e)}`, "err", 0));
