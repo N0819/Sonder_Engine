@@ -1667,9 +1667,27 @@ def extension_disable(eid: str):
 
 @app.get("/api/extensions/{eid}/state")
 def extension_state(eid: str, chat_id: int):
-    return {"id": _extension_id(eid),
+    """BOTH of an extension's per-story homes, and 404 for a story that is not
+    there.
+
+    An extension has two: `ext:<id>` spans the story's eras and `extf:<id>` is
+    scoped to one, which is what `api.frame_state` recommends for exactly the
+    state a campaign keeps -- "a mission advanced in one era was advanced in
+    every era" is the defect it exists to prevent. This route knew about the
+    first only, so an extension that took that advice read `null` about its
+    own mission from its own panel.
+
+    The chat check is the other half of the same problem: `{"state": null}`
+    for a story that does not exist is indistinguishable from a story that has
+    stored nothing.
+    """
+    ext_id = _extension_id(eid)
+    if not q("SELECT 1 FROM chats WHERE id=?", (chat_id,), one=True):
+        raise HTTPException(404, "Chat not found")
+    return {"id": ext_id,
             "chat_id": chat_id,
-            "state": wget(chat_id, f"ext:{_extension_id(eid)}")}
+            "state": wget(chat_id, f"ext:{ext_id}"),
+            "frame_state": wget(chat_id, f"extf:{ext_id}")}
 
 
 def _extension_documents(eid: str, chat_id):
