@@ -324,6 +324,16 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     }
 
 
+# Which way an update's evidence points. `weaken` and `contradict` are
+# unambiguous: the beat argued AGAINST the belief text as written. `revise`
+# is not -- a revision may arrive spelling the OLD belief (then it is a
+# weakening) or the NEW one (then it is an assertion) -- so it moves a HELD
+# belief down, where there is an old confidence to move, and mints as an
+# ordinary assertion where there is nothing to revise.
+_WEAKENING_OPS = ("weaken", "contradict", "revise")
+_DENYING_OPS = ("weaken", "contradict")
+
+
 def _authored_beliefs(psychology):
     self_model = (psychology or {}).get("self_model") or {}
     return [
@@ -363,9 +373,22 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
         operation = str(update.get("operation") or "reinforce").casefold()
         confidence = _clamp(update.get("confidence"), default=0.5)
         if item is None:
+            # A belief nobody holds has no old confidence to move, so the mint
+            # branch read the update's number and nothing else -- including
+            # not reading `operation`. "contradict: the north stair is safe,
+            # 0.9" therefore WROTE that belief at 0.9, and the character
+            # finished the beat believing exactly what the beat disproved.
+            #
+            # Skipping would be the cautious repair and the wrong one: the
+            # character did just acquire something -- they have now considered
+            # this and do not credit it -- and a ledger that stores only what
+            # a mind affirms cannot represent a settled disbelief at all. The
+            # complement keeps the evidence and points it the right way.
+            minted = (_clamp(1.0 - confidence)
+                      if operation in _DENYING_OPS else confidence)
             item = {
                 "belief": text,
-                "confidence": confidence,
+                "confidence": minted,
                 "protected": False,
                 "emotional_charge": _clamp(
                     update.get("emotional_charge"), -1.0, 1.0),
@@ -374,7 +397,7 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
             by_text[key] = item
         else:
             old = _clamp(item.get("confidence"), default=0.5)
-            if operation in ("weaken", "contradict", "revise"):
+            if operation in _WEAKENING_OPS:
                 step = 0.05 if item.get("protected") else 0.15
                 item["confidence"] = max(0.0, old - step * confidence)
             else:
