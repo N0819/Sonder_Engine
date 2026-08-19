@@ -963,8 +963,11 @@ _MUSIC_WORDS = ("music musical song songs melody melodic tune tunes "
 _MUSIC_TERMS = frozenset(_MUSIC_WORDS.split())
 
 # Freesound's own taxonomy, which is far better evidence than a tag: those
-# tracks are all `category: "Music"`. Requested as a field and, where a layer
-# may not have music at all, excluded server-side so they are never fetched.
+# tracks are all `category: "Music"`. Requested as a field (`_FREESOUND_FIELDS`)
+# and weighed in `_rank_candidates`, NOT excluded at the server -- `category` is
+# a field Freesound returns and will not filter on, so a music track is fetched
+# like any other and loses on the ranking. The whole account is at
+# `_freesound_page`, beside the filter string that has no category term in it.
 _MUSIC_CATEGORY = "Music"
 
 # Thunder is not the weather layer's to play. The engine draws the flash and
