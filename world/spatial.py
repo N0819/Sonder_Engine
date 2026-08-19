@@ -1,5 +1,31 @@
 # spatial.py
-"""Spatial reasoning with entity-aware scene merging and containment validation."""
+"""Spatial reasoning with entity-aware scene merging and containment validation.
+
+A FACADE. Every name below is defined in one of the `world/spatial_*` modules
+and re-exported here so that `from world.spatial import X` keeps meaning what
+it meant before the split -- an internal import contract for the engine, not
+the extension surface (that is `extension_runtime/api.py`, closed and versioned
+against deep-importable internals by design).
+
+Four public names here have no caller anywhere in the repository and are
+RETAINED deliberately rather than left to be re-found and deleted:
+
+  `comms_reach`          -- "every room a voice reaches", the whole-scene form
+                            of the live `comms_link`/`comms_between` pair.
+  `owned_region`         -- the `(who, where)` region token from a measured
+                            live confusion (chat 69 turns 78-80); its
+                            qualified-comparison sibling `same_owned_region`
+                            is live in `spatial_substance`.
+  `CONTAINMENT_MODES`    -- the vocabulary `scene.contained[*].mode` may hold.
+  `CONTAINER_ENCLOSURES` -- the vocabulary `entity.enclosure` may hold.
+
+The two constants are declared vocabularies their own normalisers do not
+enforce (SPATIAL-F1's shape, recorded in `docs/UNBUILT.md`); they document
+what the scene field means, which is a use, and validating against them is a
+behaviour change and not a cleanup. Six other uncalled names WERE removed --
+see `a17f383` and `ab25b24` for the standard: a name goes only when something
+else is its wired successor, or when the shape it speaks no longer exists.
+"""
 
 import copy
 import hashlib
@@ -124,8 +150,7 @@ from world.spatial_light import (
 
 from world.spatial_routing import (
     _CORRIDOR_NAMED, _CORRIDOR_VAGUENESS, _DISTANCE_ALIASES,
-    _DISTANCE_UNIT_METERS, _is_carried_interior, _onward_exits, _reverse_dir,
-    _ROOM_COST, CORRIDOR_SIGHT_LIMIT, corridor_sightlines, DISTANCE_TIERS,
+    _DISTANCE_UNIT_METERS, _is_carried_interior, _onward_exits, _ROOM_COST, CORRIDOR_SIGHT_LIMIT, corridor_sightlines, DISTANCE_TIERS,
     nearby_rooms, normalize_edge_distance, passable_neighbors, passable_path,
     passable_route_exists, passable_route_next_step, rooms_adjacent,
     spatial_rel, SPRINT_BUDGET, sprint_reach, visible_adjacent_rooms,

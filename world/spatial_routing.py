@@ -381,10 +381,6 @@ _CORRIDOR_VAGUENESS = ((1, "just ahead"), (2, "a short way"),
 _CORRIDOR_NAMED = 2
 
 
-def _reverse_dir(d):
-    return {"n": "s", "s": "n", "e": "w", "w": "e"}.get(str(d or "").lower())
-
-
 def corridor_sightlines(scene, room_id):
     """What can be seen looking STRAIGHT along each passage out of a room.
 
