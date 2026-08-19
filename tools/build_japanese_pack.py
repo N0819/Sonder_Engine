@@ -263,7 +263,31 @@ ling[common]["_APPEARANCE_LABELS"]["items"].extend([
     {"$type": "tuple", "items": ["; clothing state:", "、衣服の状態は"]},
     {"$type": "tuple", "items": ["; currently:", "、現在は"]},
 ])
-ling[common]["_SPEECH_CUE"] += "|言う|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ"
+# The ONE speech vocabulary: both dangling-speech healers are built from this
+# key, so the inflected forms narration actually uses have to be here and not
+# only the dictionary form. `_DANGLING_SPEECH.verb`/`.colon` carry the SHAPE of
+# each wound and are seeded whole below, because the Japanese wound is a
+# different shape -- the quotative particle stranded before a clause-final verb.
+ling[common]["_SPEECH_CUE"] += (
+    "|言う|言った|言って|話す|話した|答える|答えた|尋ねる|尋ねた|囁く|囁いた"
+    "|ささやく|ささやいた|つぶやく|つぶやいた|叫ぶ|叫んだ"
+    "|続ける|続けた|付け加える|付け加えた|返す|返した")
+ling[common]["_DANGLING_SPEECH"] = {
+    "verb": {
+        "pattern": ("(?:と|って)?(?<!そう)({cue})[^\\S\\n]*"
+                    "(?:(?P<end>[。！？.!?])|(?P<cont>、)|(?P<eol>$))"),
+        "flags": 42,
+    },
+    "colon": {
+        "pattern": ("([^。！？：:\\n]*(?:{cue})[^\\S\\n]*)[：:]"
+                    "\\s*[。.]?\\s*(?=\\S|$)"),
+        "flags": 34,
+    },
+    "heal_end": "そう{verb}{end}",
+    "heal_cont": "そう{verb}、",
+    "heal_stop": "そう{verb}。",
+    "heal_colon": "{lead}。",
+}
 regex(common, "_SPEECH_VERB_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
 regex(common, "_DIALOGUE_CUE_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
 regex(common, "_NPC_PRONOUN_RE", "彼女|彼|彼ら|あの人|その人")

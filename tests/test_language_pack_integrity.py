@@ -193,6 +193,22 @@ def test_a_pack_may_add_alternatives_but_not_drop_canonical_ones(
         f"({reason}): {sorted(missing)[:6]}")
 
 
+@pytest.mark.parametrize("language_id", sorted(PACKS))
+def test_composed_regexes_compile_and_keep_their_group_shape(language_id):
+    """`_DANGLING_SPEECH` holds a SHAPE with a `{cue}` slot rather than a
+    finished pattern, so `project_check`'s `$type: regex` sweep cannot see it.
+    The two things that sweep guarantees -- it compiles, and its capture groups
+    are the ones callers read by position -- still have to hold, because
+    `_heal_dangling_verb` reads `group(1)` and three named groups.
+    """
+    from agents.common import _dangling_speech
+
+    verb = _dangling_speech("verb", language_id)
+    assert verb.groups == 4, language_id
+    assert set(verb.groupindex) == {"end", "cont", "eol"}, language_id
+    assert _dangling_speech("colon", language_id).groups == 1, language_id
+
+
 @pytest.mark.parametrize("language_id", NON_ENGLISH)
 def test_localized_regexes_keep_the_anchors_english_defines(language_id):
     """A pack widens a pattern by alternation, and an alternation does not

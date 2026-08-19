@@ -94,11 +94,28 @@ def _ling(name):
 def _text(key, **values):
     return compositor_text(key, **values)
 
+
+def _dangling_speech(part, language_id=None):
+    """The healer pattern for one wound, built from the ONE speech vocabulary.
+
+    A dangling verb and a dangling colon are the same wound from the same cut,
+    so what counts as speech is a single pack value (`_SPEECH_CUE`) and the two
+    patterns are shapes around it. They were two independent literals before,
+    and they drifted: `en`'s verb healer knew `call` and `shout` and its colon
+    healer did not, and neither of `ja`'s carried a single Japanese verb while
+    its `_SPEECH_CUE` carried eight. The SHAPE stays per-language because the
+    wound is: English strands a verb before a comma, Japanese strands the
+    quotative particle before a clause-final verb.
+    """
+    shape = linguistic("agents.common", "_DANGLING_SPEECH", language_id)[part]
+    cue = str(linguistic("agents.common", "_SPEECH_CUE", language_id))
+    return re.compile(str(shape["pattern"]).replace("{cue}", cue),
+                      int(shape.get("flags") or 0))
+
 # Read-only English compatibility views for diagnostics/tests that import the
-# historical constants. Runtime guards use `_ling(...)` and remain context
-# local; these names are not consulted by a story pipeline.
-_DANGLING_SPEECH_VERB_RE = english_linguistic(
-    "agents.common", "_DANGLING_SPEECH_VERB_RE")
+# historical constants. Runtime guards resolve through the active pack and
+# remain context local; these names are not consulted by a story pipeline.
+_DANGLING_SPEECH_VERB_RE = _dangling_speech("verb", "en")
 _SPEECH_CUE = english_linguistic("agents.common", "_SPEECH_CUE")
 
 def _stem_token(tok):
@@ -3999,8 +4016,8 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
         return prose
     out_parts.append(prose[last:])
     result = "".join(out_parts)
-    result = _ling("_DANGLING_SPEECH_VERB_RE").sub(_heal_dangling_verb, result)
-    result = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, result)
+    result = _dangling_speech("verb").sub(_heal_dangling_verb, result)
+    result = _dangling_speech("colon").sub(_heal_dangling_colon, result)
     result = _collapse_empty_quote_debris(result)
     return re.sub(r"\s{2,}", " ", result).strip()
 
@@ -4738,13 +4755,15 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
 # NPC dialogue whenever the same beat also stripped a player echo (v4).
 
 
-# ONE vocabulary, shared with the colon healer below. These two lists drifted:
-# the colon healer knew `add`, `speak`, `voice`, `continue` and `offer` and this
-# one did not, so a quote stripped after "as you add," left the fragment
-# "You let the wry amusement show as you add," standing on the page with
-# nothing after it (live, chat 72). A dangling verb and a dangling colon are
-# the same wound from the same cut, and there is no reason for them to disagree
-# about what counts as speech. `_SPEECH_CUE` is defined below and reused here.
+# ONE vocabulary, shared with the colon healer below -- by construction, not by
+# discipline. Two independent literals drifted twice: the colon healer knew
+# `add`, `speak`, `voice`, `continue` and `offer` and the verb healer did not,
+# so a quote stripped after "as you add," left the fragment "You let the wry
+# amusement show as you add," standing on the page with nothing after it (live,
+# chat 72); and later the verb healer alone gained `call` and `shout`. Both now
+# read `_SPEECH_CUE` through `_dangling_speech` (defined at the top of this
+# file), so a pack states what counts as speech ONCE and neither healer can
+# hold a vocabulary the other does not.
 
 
 def _heal_dangling_verb(match):
@@ -4754,6 +4773,7 @@ def _heal_dangling_verb(match):
     knows and what this function exists to keep off the page, so the
     replacement must refer to the utterance without reproducing it.
     """
+    heal = _ling("_DANGLING_SPEECH")
     verb = match.group(1)
     if match.group("cont"):
         # A capital straight after the comma means the cut left two sentences
@@ -4761,11 +4781,13 @@ def _heal_dangling_verb(match):
         # first rather than running them together with an object between.
         rest = match.string[match.end():].lstrip()
         if rest[:1].isupper():
-            return f"{verb} it."
-        return f"{verb} it,"          # attribution mid-sentence: keep going
+            return heal["heal_stop"].format(verb=verb)
+        # attribution mid-sentence: keep going
+        return heal["heal_cont"].format(verb=verb)
     if match.group("end"):
-        return f"{verb} it{match.group('end')}"   # consume it; never double
-    return f"{verb} it."              # end of paragraph or of the prose
+        # consume the punctuation the wound left; never double it
+        return heal["heal_end"].format(verb=verb, end=match.group("end"))
+    return heal["heal_stop"].format(verb=verb)   # end of paragraph or prose
 
 
 # `, ,` and `,,` left where a quote sat between an attribution and its
@@ -4789,7 +4811,7 @@ _DOUBLED_COMMA_RE = re.compile(r",(?:[^\S\n]*,)+")
 
 
 def _heal_dangling_colon(m):
-    return m.group(1) + ". "
+    return _ling("_DANGLING_SPEECH")["heal_colon"].format(lead=m.group(1))
 
 def _protected_view_quotes(view, player_lines=None):
     """Quoted spans in a perceiver's view that belong to a NON-player speaker
@@ -4890,9 +4912,9 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
             if hit is None:
                 continue
             prose = prose[:hit.start()] + prose[hit.end():]
-            prose = _ling("_DANGLING_SPEECH_VERB_RE").sub(
+            prose = _dangling_speech("verb").sub(
                 _heal_dangling_verb, prose)
-            prose = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, prose)
+            prose = _dangling_speech("colon").sub(_heal_dangling_colon, prose)
             continue
         for quoted in quoted_forms:
             prose = prose.replace(quoted, "")
@@ -4902,8 +4924,8 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # "I ask,", "Alex says.") with nothing after it -- the subject varies
         # with narration_person (first/second/third), so match on the verb
         # rather than assuming "you".
-        prose = _ling("_DANGLING_SPEECH_VERB_RE").sub(_heal_dangling_verb, prose)
-        prose = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, prose)
+        prose = _dangling_speech("verb").sub(_heal_dangling_verb, prose)
+        prose = _dangling_speech("colon").sub(_heal_dangling_colon, prose)
     for token, form in masks:
         prose = prose.replace(token, form)
     prose = _collapse_empty_quote_debris(prose)

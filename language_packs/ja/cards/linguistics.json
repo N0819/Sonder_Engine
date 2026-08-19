@@ -851,16 +851,20 @@
         }
       ]
     },
-    "_SPEECH_CUE": "say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered|言う|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ",
-    "_DANGLING_SPEECH_VERB_RE": {
-      "$type": "regex",
-      "pattern": "\\b(say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered|call|calls|called|shout|shouts|shouted)\\b,?[^\\S\\n]*(?:(?P<end>[.!?])|(?P<cont>,(?![^.!?\\n]*[\\\"“]))|(?P<eol>$))",
-      "flags": 42
-    },
-    "_DANGLING_SPEECH_COLON_RE": {
-      "$type": "regex",
-      "pattern": "(\\b(?:say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered)\\b[^.!?:]*):\\s*\\.?\\s*(?=[A-Z]|$)",
-      "flags": 34
+    "_SPEECH_CUE": "say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered|言う|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ|言った|言って|話した|答えた|尋ねた|囁いた|ささやいた|つぶやいた|叫んだ|続ける|続けた|付け加える|付け加えた|返す|返した",
+    "_DANGLING_SPEECH": {
+      "verb": {
+        "pattern": "(?:と|って)?(?<!そう)({cue})[^\\S\\n]*(?:(?P<end>[。！？.!?])|(?P<cont>、)|(?P<eol>$))",
+        "flags": 42
+      },
+      "colon": {
+        "pattern": "([^。！？：:\\n]*(?:{cue})[^\\S\\n]*)[：:]\\s*[。.]?\\s*(?=\\S|$)",
+        "flags": 34
+      },
+      "heal_end": "そう{verb}{end}",
+      "heal_cont": "そう{verb}、",
+      "heal_stop": "そう{verb}。",
+      "heal_colon": "{lead}。"
     },
     "_EMPTY_QUOTE_RE": {
       "$type": "regex",
