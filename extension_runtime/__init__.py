@@ -986,9 +986,25 @@ def run_commit_domains(ctx, results) -> None:
             log.exception("extension commit domain %s failed", name)
             _observer_failures[domain["ext_id"]] = _observer_failures.get(
                 domain["ext_id"], 0) + 1
-            if domain["on_error"] == "fail":
-                raise
             note = getattr(ctx, "add_warning", None)
+            if domain["on_error"] == "fail":
+                # Named, for the same reason `commit._commit_domain` names
+                # every ENGINE domain it rolls a turn back for: this is the
+                # one rollback a third party can cause, so it is the one a
+                # host most needs attributed. Bare, it reached the host as
+                # `Commit failed and was rolled back: <the extension's own
+                # message>` -- indistinguishable from an engine defect, and
+                # silent in the turn's warning trail while the warn branch
+                # right below wrote to it.
+                if callable(note):
+                    try:
+                        note(f"commit domain {name} failed; turn rolled "
+                             f"back: {exc}")
+                    except Exception:
+                        pass
+                raise ExtensionError(
+                    f"commit domain {name} failed; turn rolled back: {exc}"
+                ) from exc
             if callable(note):
                 try:
                     note(f"commit domain {name} failed (turn kept): {exc}")
