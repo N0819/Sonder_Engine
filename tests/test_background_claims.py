@@ -348,3 +348,58 @@ def test_surname_matches_an_established_titled_name():
 def test_titled_form_matches_a_bare_established_name():
     known = KNOWN | {"Jean-Luc Picard"}
     assert novel_proper_nouns("Captain Jean-Luc Picard said so.", known) == []
+
+
+# --- ratification is a deliberate act, not a brush-past --------------------
+
+def test_a_claim_is_not_ratified_by_its_own_beat(temp_db):
+    """`background_react` runs AFTER `director_resolve` (agents/runtime.py's
+    plan), so the resolved event of the beat a claim was made in was written
+    BEFORE the presence spoke. A reference appearing there is the presence
+    echoing the Director's prose, not the Director adopting the presence's
+    invention. Measured, chat 67: 7 claims, 7 ratified, 0 contradicted, 0
+    expired -- the three-outcome design collapsed onto its one irreversible
+    branch, and this is the beat that collapsed it."""
+    cid = _chat(temp_db)
+    record_claims(cid, 4, [{"claimant": "innkeeper",
+                            "text": "The Dragon Kingdom, dear.",
+                            "refs": ["The Dragon Kingdom"]}])
+    out = settle_claims(cid, 4, "The innkeeper looks up from the ledger. "
+                                "The Dragon Kingdom's roads are bad this year.")
+    assert out["ratified"] == 0
+    rec = list(wget(cid, "background_claims", {}).values())[0]
+    assert rec["status"] == "unratified"
+
+
+def test_an_explicit_verdict_still_lands_on_the_claims_own_beat(temp_db):
+    """Only the INFERRED half needs a later beat. Naming the claim in
+    `state_diff.ratified_claims` is the Director's deliberate act whenever it
+    arrives."""
+    cid = _chat(temp_db)
+    record_claims(cid, 4, [{"claimant": "innkeeper", "text": "...",
+                            "refs": ["The Dragon Kingdom"]}])
+    out = settle_claims(cid, 4, "", ratified_refs=["The Dragon Kingdom"])
+    assert out["ratified"] == 1
+
+
+def test_a_reference_inside_a_longer_word_is_not_adoption(temp_db):
+    """A substring is not a reference. Ratification writes canon, and canon is
+    a one-way door, so the match that opens it must be to the name rather than
+    to a run of letters that happens to contain it."""
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [{"claimant": "patron", "text": "...",
+                            "refs": ["Rose"]}])
+    settle_claims(cid, 2, "She sets it down in prose nobody will read.")
+    rec = list(wget(cid, "background_claims", {}).values())[0]
+    assert rec["status"] == "unratified"
+
+
+def test_a_name_may_still_inflect_where_it_is_taken_up(temp_db):
+    """The boundary is required at the name's leading edge only: a plural or a
+    possessive is the fiction using the name, not a different word."""
+    cid = _chat(temp_db)
+    record_claims(cid, 1, [{"claimant": "patron", "text": "...",
+                            "refs": ["Briddock"]}])
+    settle_claims(cid, 2, "The Briddocks have not been seen since.")
+    rec = list(wget(cid, "background_claims", {}).values())[0]
+    assert rec["status"] == "ratified"
