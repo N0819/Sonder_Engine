@@ -479,17 +479,28 @@ def _invented_claim(claim, ctx, speaker):
     }
 
 
-def _crowd_index(cid, scene, frame_id):
+def _crowd_index(cid, frame_id=None):
     """Crowds standing in rooms, by uid -- the anonymous carriers.
 
     A crowd is exactly the carrier approach C asks for and needs no new travel
     machinery at all: `crowds.advance_crowds` already walks it along the same
     spatial graph everyone else uses, so talk moves because the market moves.
-    """
-    from core.db import wget
 
+    THE FRAME IS READ, not merely accepted. `crowds` is in
+    `db.FRAME_SCOPED_WORLD_KEYS`, so a plain `wget` is era-correct only by
+    accident -- it redirects on the ambient `active_frame_id` a pipeline run
+    happens to have set, and any caller outside one, or one whose turn belongs
+    to a different frame than the ambient, got another era's throng while
+    passing the right frame in. The `scene` parameter is gone: a crowd's
+    roster is world state, and nothing here ever read it.
+    """
+    from core.db import wget, wget_for_frame
+
+    stored = (wget_for_frame(cid, crowds_model.CROWDS_WORLD_KEY, frame_id, [])
+              if frame_id is not None
+              else wget(cid, crowds_model.CROWDS_WORLD_KEY, []))
     index = {}
-    for crowd in wget(cid, crowds_model.CROWDS_WORLD_KEY, []) or []:
+    for crowd in stored or []:
         if isinstance(crowd, dict) and crowd.get("uid"):
             index[str(crowd["uid"]).casefold()] = dict(crowd)
     return index
@@ -530,7 +541,7 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
     index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
-    crowd_index = _crowd_index(cid, scene, frame_id)
+    crowd_index = _crowd_index(cid, frame_id)
     crowds_dirty = {}
 
     def party(key):

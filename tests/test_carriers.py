@@ -717,3 +717,43 @@ class TestThePlayerStandsWhereItLands:
         # mouth; the eyewitness row stays verbatim in the player's own hands.
         assert rider["report"]["provenance"] == "told"
         assert self._held(temp_db, cid)[0]["provenance"] == "witnessed_surface"
+
+
+# --- the crowd roster belongs to an era too ---------------------------------
+#
+# `_crowd_index(cid, scene, frame_id)` read neither `scene` nor `frame_id`.
+# Its body was one `wget`, which is frame-scoped only INCIDENTALLY -- `crowds`
+# is in `db.FRAME_SCOPED_WORLD_KEYS`, so the read redirects on the ambient
+# `active_frame_id` contextvar that a pipeline run happens to have set. Any
+# caller outside a pipeline run, or one whose turn belongs to a different
+# frame than the ambient one, got the wrong era's crowds while passing the
+# right frame in.
+
+class TestCrowdIndexIsFrameScoped:
+    def test_the_frame_passed_in_is_the_frame_read(self, temp_db):
+        from core.db import wset_for_frame
+        from story import carriers
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Crowds", "", time.time()))
+        past = app.frames_create(cid, {"label": "Past", "ordinal": -10, "kind": "past"})
+        future = app.frames_create(cid, {"label": "Future", "ordinal": 10, "kind": "future"})
+        wset_for_frame(cid, crowds.CROWDS_WORLD_KEY,
+                       [{"uid": "market_throng", "room_uid": "square"}], past["id"])
+        wset_for_frame(cid, crowds.CROWDS_WORLD_KEY,
+                       [{"uid": "funeral_crowd", "room_uid": "square"}], future["id"])
+
+        assert set(carriers._crowd_index(cid, past["id"])) == {"market_throng"}
+        assert set(carriers._crowd_index(cid, future["id"])) == {"funeral_crowd"}
+
+    def test_no_frame_still_reads_the_present(self, temp_db):
+        from core.db import wset
+        from story import carriers
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Crowds", "", time.time()))
+        wset(cid, crowds.CROWDS_WORLD_KEY,
+             [{"uid": "market_throng", "room_uid": "square"}])
+
+        assert set(carriers._crowd_index(cid, None)) == {"market_throng"}
