@@ -29,7 +29,12 @@ from agents.runtime import _run_pipeline
 from agents.storage import active_content
 
 EXTRACTOR_VERSION = 1
-PLAYER_TOKEN = "{{PLAYER}}"
+
+#: The player's slot in imported prose. ONE definition, in the module that
+#: mints it: `importers._substitute_macros` writes this token into every
+#: imported card, and a second literal here could drift from the one actually
+#: written without a single test noticing.
+from story.importers import PLAYER_TOKEN
 
 # Every way the player's slot arrives in seed prose. The token is what the
 # prompt asks for; the bare words are what models write instead, and they are
