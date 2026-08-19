@@ -369,12 +369,60 @@ def _within_cap(items, re_seeded):
     return [items[i] for i in sorted(ranked[:_LEDGER_CAP])]
 
 
+#: The confidence a belief authored as a bare string starts at. Not a number
+#: chosen here: `BeliefProfile.confidence` defaults to 0.5, and a bare string
+#: in `self_model.beliefs` is already normalized to exactly that. Naming a
+#: conviction in `protected_beliefs` is the same authoring act, so it must not
+#: silently mean something stronger -- what that list adds is the FLAG.
+_BARE_BELIEF_CONFIDENCE = 0.5
+
+
 def _authored_beliefs(psychology):
+    """Every belief the sheet asserts this mind holds, from both lists.
+
+    A card can state a belief in two places and they are not alternatives:
+    `self_model.beliefs` carries elaborated entries (confidence, charge,
+    source), and `self_model.protected_beliefs` carries bare convictions the
+    mind DEFENDS rather than revises. Only the first was ever read, so the
+    second was authored, normalized by the schema, edited in the browser and
+    carried through every archive without reaching a single runtime decision.
+
+    `protected` is what the second list means, and the flag already works:
+    `apply_belief_updates` halves the weakening step for an entry carrying it.
+    So a name in `protected_beliefs` sets the flag -- on the elaborated entry
+    where the card states the belief in both lists, since that is one claim
+    made twice, and on a minted entry where it does not.
+    """
     self_model = (psychology or {}).get("self_model") or {}
-    return [
-        dict(item) for item in (self_model.get("beliefs") or [])
-        if isinstance(item, dict) and str(item.get("belief") or "").strip()
-    ]
+    out = []
+    by_text = {}
+    for item in (self_model.get("beliefs") or []):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("belief") or "").strip()
+        if not text:
+            continue
+        entry = dict(item)
+        out.append(entry)
+        by_text.setdefault(text.casefold(), entry)
+    for raw in (self_model.get("protected_beliefs") or []):
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        held = by_text.get(text.casefold())
+        if held is not None:
+            held["protected"] = True
+            continue
+        entry = {
+            "belief": text,
+            "confidence": _BARE_BELIEF_CONFIDENCE,
+            "protected": True,
+            "emotional_charge": 0.0,
+            "source": "protected_beliefs",
+        }
+        out.append(entry)
+        by_text[text.casefold()] = entry
+    return out
 
 
 def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds):
