@@ -1257,6 +1257,35 @@ _RESTRAINT_BY_FIELDS = ("by", "restrained_by", "held_by", "blocked_by",
                         "pinned_by", "enveloped_by")
 
 
+#: The kinds a beat actually files a restraint under. `world_conditions.kind`
+#: is free model text -- until the RESTRAINT block landed in the body
+#: specialist's sheet, no prompt published a vocabulary for it, and what the
+#: specialist was told was the phrase "physical restraint (bound, held
+#: hostage, grappled, pinned)", from which `physical_restraint` is the
+#: obvious token and the one that matches the engine's own
+#: `physical_disguise` / `physical_transformation` besides. This reader asked
+#: for `restraint`, which across the whole live corpus no beat has ever
+#: written: 21 active rows say `physical_restraint` and 3 say `restrained`,
+#: over fifteen chats, and the floor that stops a bound body walking out had
+#: therefore never once fired.
+#:
+#: A FAMILY OF SPELLINGS, NOT ANYTHING WITH A BODY IN IT: containment and
+#: contact are their own systems with their own consequences, and reading one
+#: as a restraint would immobilise a body nothing is holding. `grip` stays
+#: out for the measured reason that the live `grip` row is the subject doing
+#: the gripping.
+_RESTRAINT_KIND_WORDS = frozenset({
+    "restraint", "restraints", "restrained", "restraining", "bound",
+    "binding", "bindings",
+})
+
+
+def _is_restraint_kind(kind):
+    """Is this condition kind one of the ways a restraint gets recorded?"""
+    words = _re.split(r"[^a-z0-9]+", str(kind or "").casefold())
+    return any(word in _RESTRAINT_KIND_WORDS for word in words)
+
+
 def _restraint_field(state, payload, fields):
     for field in fields:
         raw = state.get(field) if isinstance(state, dict) else None
@@ -1313,10 +1342,12 @@ def restraint_conditions(chat_id):
     """
     rows = []
     for row in q(
-        "SELECT condition_id, subject_id, payload, started_at "
-        "FROM world_conditions WHERE chat_id=? AND kind='restraint' "
+        "SELECT condition_id, subject_id, kind, payload, started_at "
+        "FROM world_conditions WHERE chat_id=? "
         f"AND active=1 {_CONDITION_ORDER}", (chat_id,),
     ):
+        if not _is_restraint_kind(row["kind"]):
+            continue
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
@@ -1345,7 +1376,8 @@ def apply_restraint_records_diff(records, diff):
         if not isinstance(cond_list, list):
             cond_list = [cond_list]
         for cond in cond_list:
-            if not isinstance(cond, dict) or cond.get("kind") != "restraint":
+            if not isinstance(cond, dict) or not _is_restraint_kind(
+                    cond.get("kind")):
                 continue
             cond_id = str(cond.get("condition_id") or _cid)
             out = [r for r in out if r["condition_id"] != cond_id]
