@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 from pathlib import Path
 import re
@@ -632,3 +633,62 @@ def test_no_english_compat_export_survives_without_a_reader():
                           for body in bodies.values())]
     assert not orphans, (
         "English compat exports nothing reads: " + ", ".join(orphans))
+
+
+#: Authored fragments the prompt card also embeds verbatim inside prompt
+#: bodies, with the number of copies English currently carries. Four
+#: fragments, seventeen copies, each maintained by hand.
+_EMBEDDED_FRAGMENTS = {
+    "category_note": 5,
+    "book_type_note": 3,
+    "transit_note": 3,
+    "extra_parts_note": 6,
+}
+
+
+def _authored_leaves(value, path=()):
+    # Mapping, not dict: `LanguagePack.card()` hands back the frozen
+    # mappingproxy `language_runtime._freeze` builds, which is not a dict
+    # subclass -- type-testing for dict walks zero leaves and silently
+    # disarms the check, exactly as it once did in tools/project_check.py.
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            yield from _authored_leaves(child, path + (str(key),))
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            yield from _authored_leaves(child, path + (str(index),))
+    elif isinstance(value, str):
+        yield ".".join(path), value
+
+
+def test_every_embedded_copy_of_a_fragment_still_equals_the_fragment():
+    """Four fragments are ALSO pasted verbatim into seventeen prompt bodies.
+
+    `category_note` into five, `book_type_note` into three, `transit_note`
+    into three, `extra_parts_note` into six -- each a hand-maintained copy of
+    a value the card already holds once. Editing the fragment and not its
+    copies leaves two prompts teaching different rules for the same field,
+    and nothing anywhere compares them.
+
+    English is the reference pack and this holds it exact. The Japanese pack
+    is a known and separate gap: ZERO of its seventeen copies equal their own
+    Japanese fragment, because the translation pass rendered the fragment and
+    each embedded copy independently. Closing that needs either seventeen
+    re-translations or a fragment-substitution mechanism in the card format,
+    which is a bigger decision than this guard.
+    """
+    english = installed_language_packs(refresh=True)["en"]
+    card = english.card("system_prompts")
+    leaves = dict(_authored_leaves(card))
+    for name, expected in _EMBEDDED_FRAGMENTS.items():
+        fragment = str(card[name])
+        copies = [path for path, body in leaves.items()
+                  if path != name and fragment in body]
+        head = fragment[:60]
+        drifted = [path for path, body in leaves.items()
+                   if path != name and head in body and fragment not in body]
+        assert not drifted, (
+            f"{name} has drifted from its copies at: {drifted}")
+        assert len(copies) == expected, (
+            f"{name} is embedded {len(copies)} times, not {expected} -- "
+            "update the count deliberately, or a copy went missing")
