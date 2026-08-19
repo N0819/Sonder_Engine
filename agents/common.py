@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import hashlib
 import json
 import re
@@ -876,8 +877,6 @@ def crowds_for_room(cid, sc, room_id):
     band and the ROOM and the crowd may have walked into a different one since
     it was minted.
     """
-    from core.db import wget
-
     if not room_id:
         return []
     room = ((sc or {}).get("rooms") or {}).get(room_id) or {}
@@ -932,7 +931,6 @@ def couriers_for_room(cid, sc, room_id):
     questioning, or seizure, all of which are commit-validated ops.
     """
     from story import couriers as couriers_model
-    from core.db import wget
 
     if not room_id:
         return []
@@ -2105,6 +2103,13 @@ def norm_sequence(out, warn=None):
             if query and why:
                 out["ponder"] = {
                     "type": "ponder", "query": query, "why": why}
+            elif (query or why) and warn:
+                # A ponder is by design not in the public sequence, so nothing
+                # downstream can notice it went missing -- there is no view, no
+                # percept and no prose it would have shown up in. Dropping half
+                # of one silently is the same failure shape as blanking an act.
+                warn("dropped a ponder missing its %s: %r"
+                     % ("why" if query else "query", (query or why)[:80]))
         elif t in ("event", "environment", "environmental", "world"):
             # Actor-less environmental event ("the lights go out", "a
             # monster enters") declared by the player. These used to be
@@ -3242,13 +3247,15 @@ def _player_name_forms(player_name):
     return sorted(set(forms), key=len, reverse=True)
 
 
-# A sentence whose subject is a bare pronoun, optionally after a short leading
-# adverbial ("After a moment, he lowers the device"). Bounded so it cannot
-# reach past a genuine subject into a subordinate clause.
+#: Bounded, because this is the file's one piece of mutable module state and it
+#: is keyed by NAME FORM -- so it grows with every cast of every chat the
+#: process has served, and nothing ever cleared it. An LRU is the right shape:
+#: the working set is one scene's cast, and a form that falls out is recompiled
+#: in microseconds.
+_SUBJECT_OPENER_CACHE = 512
 
-_SUBJECT_OPENERS = {}
 
-
+@lru_cache(maxsize=_SUBJECT_OPENER_CACHE)
 def _subject_opener(form):
     """Does a sentence OPEN with this name, as subject or possessive?
 
@@ -3271,24 +3278,20 @@ def _subject_opener(form):
     case-sensitively as before, so an ordinary noun that happens to spell a
     name does not bind.
     """
-    pat = _SUBJECT_OPENERS.get(form)
-    if pat is None:
-        # `name_boundary_pattern`, not a trailing `\b`: `\b` asserts a
-        # transition between word and non-word characters, which describes
-        # scripts that space their words and nothing else. A Japanese particle
-        # is a word character, so 「ヒナミは」 never matched `ヒナミ\b` -- and
-        # this is the primitive every subject-anchored guard in the file is
-        # built on, so all of them, player-act authority included, resolved
-        # NOBODY as the subject of any sentence in such a story. The boundary
-        # the pattern does apply still refuses a Latin name inside a longer
-        # word ("Hinamis"), and the leading article stays this function's own
-        # rule.
-        pat = re.compile(
-            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
-            rf"(?:['’]s)?",
-            re.I if form[:1].islower() else 0)
-        _SUBJECT_OPENERS[form] = pat
-    return pat
+    # `name_boundary_pattern`, not a trailing `\b`: `\b` asserts a
+    # transition between word and non-word characters, which describes
+    # scripts that space their words and nothing else. A Japanese particle
+    # is a word character, so 「ヒナミは」 never matched `ヒナミ\b` -- and
+    # this is the primitive every subject-anchored guard in the file is
+    # built on, so all of them, player-act authority included, resolved
+    # NOBODY as the subject of any sentence in such a story. The boundary
+    # the pattern does apply still refuses a Latin name inside a longer
+    # word ("Hinamis"), and the leading article stays this function's own
+    # rule.
+    return re.compile(
+        rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
+        rf"(?:['’]s)?",
+        re.I if form[:1].islower() else 0)
 
 
 def _sentence_subjects(prose, names, split=None):
@@ -4155,11 +4158,6 @@ def _muffle_tokens(body):
             _MUFFLE_KEEP_MIN)
 
 
-def _compositor_value(name):
-    from language_runtime import compositor_value
-    return compositor_value(name)
-
-
 def _muffle_middle(body, keep=3):
     """The middle few content chunks of a line, for the interaction loop.
 
@@ -4182,7 +4180,7 @@ def _muffle_middle(body, keep=3):
     if not kept:
         return _text("muffled_indistinct")
     start = max(0, len(kept) // 2)
-    join = str(_compositor_value("muffle_join"))
+    join = str(compositor_value("muffle_join"))
     return join.join(kept[start:start + keep])
 
 
@@ -4220,8 +4218,8 @@ def _muffled_fragment(body):
     # with half-width gaps read as broken typography inside Japanese prose.
     # The pack's own `muffled_indistinct` already used the right form, so the
     # same feature was being typeset two different ways.
-    lead = str(_compositor_value("muffle_ellipsis"))
-    join = str(_compositor_value("muffle_join"))
+    lead = str(compositor_value("muffle_ellipsis"))
+    join = str(compositor_value("muffle_join"))
     return lead + join.join(kept) + lead
 
 
@@ -6300,11 +6298,21 @@ def _llm_resolve_player_room(sc, pers, cast, interp, player_input):
         out = jparse(chat_complete("utility", get_prompt("position_resolver"),
                                    json.dumps(payload, ensure_ascii=False),
                                    temperature=0.0, max_tokens=1000))
-        key = out.get("key") if isinstance(out, dict) else None
-        if key and key in positions:
-            return positions[key]
-    except Exception:
-        pass
+    except Exception as exc:
+        # A provider failure and "the model found no match" used to be the
+        # same answer here: both returned None, and the caller reported the
+        # player's room as unresolved. They are different facts, and only one
+        # of them is a system fault -- so the fault says so. The value is
+        # still checked against `positions` before use, so this stays a
+        # warning rather than a raise.
+        note_step_warning(
+            "position_resolver call failed (%s: %s); the player's room falls "
+            "back to the committed position"
+            % (type(exc).__name__, str(exc)[:120]))
+        return None
+    key = out.get("key") if isinstance(out, dict) else None
+    if key and key in positions:
+        return positions[key]
     return None
 
 def _resolve_player_room(sc, pers, interp, cast, player_input=None):
