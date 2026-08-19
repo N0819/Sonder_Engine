@@ -2473,23 +2473,50 @@ def _safe(text):
 
 
 def _compact_garment_piece(garment, look, look_said):
-    """One compact-line garment value, including its first unsaid look."""
+    """One compact-line garment value, including its first unsaid look.
+
+    EVERY REGION COMES THROUGH HERE. The zoned branch called this helper and
+    every other region ran a byte-equivalent copy inline -- same `_safe`, same
+    first-clause split, same word-boundary truncation, same `look_said`
+    dedupe, same final join -- so a change to the look rule could land on what
+    the Director is told about a torso and not about a skirt.
+    """
     name = _safe(garment.get("name")) or "?"
     state = garment.get("state") or "worn"
     condition = garment.get("condition") or ""
     notes = [_safe(n) for n in
              (state if state != "worn" else "", condition) if n]
+    # A GARMENT'S LOOK REACHES PROSE ONLY THROUGH THIS PAYLOAD. The Director
+    # is the sole path by which what a thing looks like gets into the
+    # narration, so stripping descriptions outright would quietly cost the
+    # story its clothing detail -- a change nothing errors on and nobody
+    # notices for fifty beats. `look` keeps the FIRST CLAUSE, which is where a
+    # garment's appearance lives, and drops the provenance after it: "a small
+    # spring-clip holding a single feather" survives, "souvenir from some
+    # distant region, pinned into her copper-gold hair near the left fox ear"
+    # does not.
     described = ""
     key = name.casefold()
     if look and key not in look_said:
+        # Sentence boundaries only. Splitting on the COMMA as well turned
+        # "A snug, ribbed tank top in charcoal" into "A snug" -- a bare
+        # adjective, which is worse than no description at all. A comma
+        # separates adjectives here far more often than clauses.
         clause = re.split(r"[;—.]", str(garment.get("description") or ""), 1)[0]
         clause = " ".join(clause.split())
         if len(clause) > int(look):
+            # On a word boundary. A look cut mid-word ("A snug") reads as a
+            # corrupted field rather than a short description.
             clause = clause[:int(look)].rsplit(" ", 1)[0]
         clause = clause.strip(" ,;-")
         if clause and clause.casefold() != key:
             described = _safe(clause)
             look_said.add(key)
+    # NAME(state;condition)=look, in that order. The look goes LAST because it
+    # is the only free-text field: it runs to the next `+` or `|`, neither of
+    # which it can contain, so a reader always knows where it ends. With the
+    # look in the middle, "...in charcoal(open)" read as though the
+    # parenthesis belonged to the description.
     piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
     return "%s=%s" % (piece, described) if described else piece
 
@@ -2611,46 +2638,8 @@ def compact_line(regions, beneath_visible=False, look=0):
             parts.append("%s:%s%s" % (region, _safe(beneath) or BARE,
                                        _attached_text(attached)))
             continue
-        pieces = []
-        for garment in worn:
-            name = _safe(garment.get("name")) or "?"
-            state = garment.get("state") or "worn"
-            condition = garment.get("condition") or ""
-            notes = [_safe(n) for n in
-                     (state if state != "worn" else "", condition) if n]
-            # A GARMENT'S LOOK REACHES PROSE ONLY THROUGH THIS PAYLOAD. The
-            # Director is the sole path by which what a thing looks like gets
-            # into the narration, so stripping descriptions outright would
-            # quietly cost the story its clothing detail -- a change nothing
-            # errors on and nobody notices for fifty beats. `look` keeps the
-            # FIRST CLAUSE, which is where a garment's appearance lives, and
-            # drops the provenance after it: "a small spring-clip holding a
-            # single feather" survives, "souvenir from some distant region,
-            # pinned into her copper-gold hair near the left fox ear" does not.
-            described = ""
-            key = name.casefold()
-            if look and key not in look_said:
-                # Sentence boundaries only. Splitting on the COMMA as well
-                # turned "A snug, ribbed tank top in charcoal" into "A snug" --
-                # a bare adjective, which is worse than no description at all.
-                # A comma separates adjectives here far more often than clauses.
-                clause = re.split(r"[;\u2014.]", str(garment.get("description") or ""), 1)[0]
-                clause = " ".join(clause.split())
-                if len(clause) > int(look):
-                    # On a word boundary. A look cut mid-word ("A snug") reads
-                    # as a corrupted field rather than a short description.
-                    clause = clause[:int(look)].rsplit(" ", 1)[0]
-                clause = clause.strip(" ,;-")
-                if clause and clause.casefold() != key:
-                    described = _safe(clause)
-                    look_said.add(key)
-            # NAME(state;condition)=look, in that order. The look goes LAST
-            # because it is the only free-text field: it runs to the next `+`
-            # or `|`, neither of which it can contain, so a reader always knows
-            # where it ends. With the look in the middle, "…in charcoal(open)"
-            # read as though the parenthesis belonged to the description.
-            piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
-            pieces.append("%s=%s" % (piece, described) if described else piece)
+        pieces = [_compact_garment_piece(garment, look, look_said)
+                  for garment in worn]
         parts.append("%s:%s%s%s" % (region, "+".join(pieces),
                                     _displaced_text(displaced_here),
                                     _attached_text(attached)))
