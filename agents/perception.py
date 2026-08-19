@@ -38,7 +38,6 @@ from story.scene import (
     senses_of,
     sheet_state,
 )
-import os
 
 from mind import affect
 from world.spatial import (
@@ -65,7 +64,6 @@ from world.spatial import (
     scent_level,
     comms_link,
     same_subject,
-    spatial_facts,
     spatial_rel_between,
     substance_event_clause,
     visible_adjacent_rooms,
@@ -320,18 +318,6 @@ def _dialogue_hear_level(entry, rel, observer_name, proximity=None):
     so the two paths cannot drift apart."""
     return composer.line_hear_level(
         entry, rel, observer_name, proximity=proximity)
-
-
-def _perceiver_spatial_facts(scene, observer, sources):
-    """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
-    for a perceiver -- the same scaffold given to the narrator, applied at the
-    perception stage so the VIEW itself is FOV-clean (a rear source rendered as
-    sound, not sight). Off by default -> {} (baseline behavior)."""
-    if not os.environ.get("SPATIAL_SCAFFOLD"):
-        return {}
-    names = [s.get("name") for s in sources if s.get("name")]
-    facts = spatial_facts(scene, observer, names)
-    return {"spatial_facts": facts} if facts else {}
 
 
 # Sensory-channel cues in priority order, matched as whole words against ONE
@@ -1915,11 +1901,10 @@ def perception_outcome(ctx, nonce):
     # scene. infer_* run at COMMIT, which is AFTER the narrator -- so without
     # this, the FOV/egocentric derivations below AND the narrator's spatial
     # frame would use LAST beat's facing/came_from on exactly the movement beats
-    # they exist for (a room just entered, rendered with the prior heading; the
-    # deterministic spatial_facts contradicting the correct view). Pure and
-    # deterministic given (prev_scene, sc) -- commit re-runs them to the same
-    # result. Stashed on ctx so the narrator derives its spatial_frame/
-    # spatial_facts from this same oriented scene, not the stale committed KV.
+    # they exist for (a room just entered, rendered with the prior heading).
+    # Pure and deterministic given (prev_scene, sc) -- commit re-runs them to
+    # the same result. Stashed on ctx so the narrator derives its
+    # spatial_frame from this same oriented scene, not the stale committed KV.
     try:
         from world.spatial_frames import infer_came_from, infer_focus, infer_facing
         _o_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]

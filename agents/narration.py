@@ -30,7 +30,6 @@ from world.spatial import (
     room_of,
     same_subject,
     spatial_digest,
-    spatial_facts,
     spatial_rel,
     substances_for,
     visible_adjacent_rooms,
@@ -46,18 +45,6 @@ def _ling(name):
 _ENFORCEABLE_PREFIXES = english_linguistic(
     "agents.narration", "_ENFORCEABLE_PREFIXES")
 
-def _spatial_facts_field(scene, observer):
-    """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
-    for the narrator. Off by default -> {} (no payload change, baseline
-    behavior). On -> {'spatial_facts': [...]} the narrator is told not to
-    contradict. Sources are everyone co-located with the observer."""
-    if not os.environ.get("SPATIAL_SCAFFOLD"):
-        return {}
-    o_room = room_of(scene, observer)
-    positions = scene.get("positions") or {}
-    names = [n for n, r in positions.items() if r == o_room and n != observer]
-    facts = spatial_facts(scene, observer, names)
-    return {"spatial_facts": facts} if facts else {}
 from llm.schemas import validate_llm_output
 
 from story.character_schema import (
@@ -873,7 +860,6 @@ def narrator(ctx, nonce):
     _scene_for_frame = ctx.get("outcome_scene") or get_scene(chat["id"], chat)
     _spatial_fields = ({} if player_awareness in NON_AWAKE_GATED else {
         "spatial_frame": spatial_digest(_scene_for_frame, player_name),
-        **_spatial_facts_field(_scene_for_frame, player_name),
     })
 
     # F1-F4 world-fidelity payload: the pipeline's own ordered event record,
