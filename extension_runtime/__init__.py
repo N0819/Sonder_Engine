@@ -1989,6 +1989,12 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
             origin = Path(source).expanduser()
             if not origin.is_dir():
                 raise ExtensionError(f"not a directory: {source}")
+            # Audited BEFORE the copy, and for the same reason the git branch
+            # audits the checkout: `copytree(symlinks=False)` DEREFERENCES a
+            # link rather than refusing it, so a link audited afterwards is
+            # already a copy of whatever it pointed at. A folder is a source
+            # like any other -- the rules must not depend on how it travelled.
+            _audit_tree(origin)
             shutil.copytree(origin, staged, dirs_exist_ok=True,
                             symlinks=False, ignore=shutil.ignore_patterns(
                                 "__pycache__", "*.pyc", ".git"))
