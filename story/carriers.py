@@ -63,6 +63,15 @@ PAYLOAD_CAP = 4
 #: A world key rather than a table, because there is exactly one persona per
 #: chat. It holds the same shape a cast row's state does, so every reader
 #: below is indifferent to which of the two it was handed.
+#:
+#: FRAME-SCOPED, and read/written through an EXPLICIT frame (see
+#: `persona_entry` and `save_state`). The cast half is per-era because
+#: `chat_chars`/`chat_char_frames` state is; this half was not, so one row
+#: answered for every era of a story at once and what the player witnessed in
+#: one survived a rewind or a branch into another. Frame scoping alone is not
+#: the whole repair: a bare `wget` redirects on the AMBIENT `active_frame_id`,
+#: which is the right era only by accident outside a pipeline run -- the same
+#: distinction `_crowd_index` records below.
 PERSONA_STATE_KEY = "persona_carrier_state"
 
 #: How many public surfaces still standing in a room a newcomer may take in on
@@ -304,14 +313,19 @@ def _crowds_acquire(ctx, event_rows, standing_rows):
     return opportunities, acquired
 
 
-def persona_entry(cid, chat, scene):
+def persona_entry(cid, chat, scene, *, frame_id=None):
     """The player, shaped like any other carrier — or None if unresolvable.
 
     Failing toward None rather than a placeholder keeps the old behaviour for
     a chat with no resolvable persona: only registered characters carry, which
     is the safe direction (`couriers._player_name` fails the same way).
+
+    THE FRAME IS READ, exactly as `_crowd_index` reads it: `PERSONA_STATE_KEY`
+    is frame-scoped, so a bare `wget` answers with whichever era the ambient
+    `active_frame_id` happens to name -- the caller's own era only by
+    accident.
     """
-    from core.db import wget
+    from core.db import wget, wget_for_frame
     from story.scene import persona_of
 
     from story.character_schema import persona_name
@@ -331,7 +345,9 @@ def persona_entry(cid, chat, scene):
     name = str(persona_name(persona) or identity.get("name") or "").strip()
     if not name:
         return None
-    state = wget(cid, PERSONA_STATE_KEY, {}) or {}
+    state = (wget_for_frame(cid, PERSONA_STATE_KEY, frame_id, {})
+             if frame_id is not None
+             else wget(cid, PERSONA_STATE_KEY, {})) or {}
     return {"row": None, "persona": True, "name": name,
             "aliases": [str(a) for a in (identity.get("aliases") or []) if a],
             "uid": str(identity.get("uid") or ""),
@@ -348,9 +364,12 @@ def save_state(cid, entry, state, *, frame_id=None):
     about what happens to those.
     """
     if entry.get("persona"):
-        from core.db import wset
+        from core.db import wset, wset_for_frame
 
-        wset(cid, PERSONA_STATE_KEY, state)
+        if frame_id is not None:
+            wset_for_frame(cid, PERSONA_STATE_KEY, state, frame_id)
+        else:
+            wset(cid, PERSONA_STATE_KEY, state)
         return
     set_char_state(cid, entry["row"]["id"],
                    json.dumps(state, ensure_ascii=False), frame_id=frame_id)
@@ -418,7 +437,7 @@ def _carriers(cid, frame_id, scene, chat=None):
         entries.append(entry)
         taken.update(_keys_of(entry))
 
-    player = persona_entry(cid, chat, scene)
+    player = persona_entry(cid, chat, scene, frame_id=frame_id)
     if player and not (set(_keys_of(player)) & taken):
         entries.append(player)
     return entries
