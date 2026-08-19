@@ -1120,6 +1120,13 @@ MIGRATIONS = [
         "DROP TABLE world_entities",
         "ALTER TABLE world_entities_new RENAME TO world_entities",
         "CREATE INDEX IF NOT EXISTS idx_world_entities_chat_kind ON world_entities(chat_id, kind)",
+        # The same scratch-table clearance the entity rebuild above got, and
+        # for the same reason -- omitted here, one rebuild later in the same
+        # list. Worse than the entity case would have been: this CREATE has no
+        # IF NOT EXISTS, so against leftover wreckage it fails with "already
+        # exists", which `init()` swallows as harmless. The copy then lands on
+        # the half-populated table and the RENAME installs it.
+        "DROP TABLE IF EXISTS world_conditions_new",
         "CREATE TABLE world_conditions_new("
         "condition_id TEXT NOT NULL,"
         "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"
@@ -1277,6 +1284,13 @@ MIGRATIONS = [
         # A rebuild rather than an ALTER: SQLite cannot drop a UNIQUE declared
         # inline on CREATE TABLE (it owns an implicit auto-index). Existing
         # rows copy across unchanged and become each character's first window.
+        # Drop any leftover scratch table first, exactly as the three other
+        # recreate-copy-swap migrations do: a crash between the CREATE and the
+        # RENAME leaves a half-populated table, and IF NOT EXISTS adopts it
+        # instead of building a fresh one -- so the copy below re-inserts an id
+        # it has already written, the migration dies on the UNIQUE, and the
+        # database stays at the old version with no way forward.
+        "DROP TABLE IF EXISTS memory_summaries_v23",
         "CREATE TABLE IF NOT EXISTS memory_summaries_v23("
         "id INTEGER PRIMARY KEY,"
         "chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,"
