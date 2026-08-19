@@ -24,6 +24,7 @@ from story.character_schema import (
     persona_name,
 )
 from core.db import get_setting, q, wget
+from core.pipeline_context import note_step_warning
 from language_runtime import (
     compositor_text, compositor_value, english_linguistic, linguistic,
 )
@@ -32,7 +33,7 @@ from mind.memory import chat_lorebook_ids, chat_lorebook_weights
 from llm.providers import chat_complete
 from llm.prompts import get_prompt
 from story.scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
-                   PLAYER_AUTHORITY_GRANTS)
+                   normalize_player_authority, PLAYER_AUTHORITY_GRANTS)
 from llm.schemas import normalize_speech_volume
 from world.spatial import (
     _body_interior_holder,
@@ -279,14 +280,28 @@ def _conceal_from_targets_observer(conceal_from, observer_id, observer_sheet):
     numeric id, string id, display name, uid, or alias. conceal_from is an
     absolute exclusion list authored against whatever identity handle the
     speaker knew, so a reader must resolve it against ALL of the observer's
-    handles (same tolerance character_room/canonicalize_positions apply)."""
+    handles (same tolerance character_room/canonicalize_positions apply).
+
+    FAILS CLOSED. When the handles cannot be enumerated at all, every name,
+    uid and alias form is gone and only the numeric-id form is left, so a
+    name-authored exclusion matches nothing and this used to answer "not
+    excluded" -- delivering the concealed line to the one mind it named. An
+    exclusion the engine cannot resolve is not an exclusion that does not
+    apply: unresolved, this guard cannot show the observer is NOT the
+    excluded party, and withholding one line costs a delivery while
+    delivering it costs the firewall. Reported rather than swallowed,
+    because a subtraction nothing announces is the next invisible defect."""
     if not conceal_from:
         return False
     id_forms = {str(observer_id).strip()}
     try:
         keys = {k.casefold() for k in character_scene_keys(observer_sheet)}
-    except Exception:
-        keys = set()
+    except Exception as exc:
+        note_step_warning(
+            f"conceal_from could not be resolved against observer "
+            f"{observer_id!r} ({type(exc).__name__}: {exc}); treating the "
+            f"line as concealed from them.")
+        return True
     for entry in conceal_from:
         if isinstance(entry, bool):
             continue
@@ -915,6 +930,78 @@ def artifacts_for_room(cid, sc, room_id):
         artifacts_model.standing_artifacts(cid), room_id)]
 
 
+def _subject_spellings(sc, subject):
+    """Every handle this scene keys one being by: the string as given, plus
+    the entity id and the display name of the record it names.
+
+    A being routinely carries the pair at once -- entity `tardis_001`, display
+    name "Blue Police Box" -- and each of its ledgers is keyed by whichever
+    handle its writer had. Aliases are deliberately NOT spellings here: they
+    are lookup vocabulary, several beings may claim one, and this list decides
+    a firewall answer.
+    """
+    text = str(subject or "").strip()
+    if not text:
+        return []
+    forms = [text]
+    seen = {text.casefold()}
+    for eid, ent in ((sc or {}).get("entities") or {}).items():
+        if not isinstance(ent, dict):
+            continue
+        labels = (eid, ent.get("name"), *(ent.get("aliases") or []))
+        if not any(str(label or "").strip().casefold() == text.casefold()
+                   for label in labels):
+            continue
+        for handle in (eid, ent.get("name")):
+            form = str(handle or "").strip()
+            if form and form.casefold() not in seen:
+                seen.add(form.casefold())
+                forms.append(form)
+        break
+    return forms
+
+
+def _enclosure_of(sc, subject):
+    """The nearest enclosure around this being, under any name it is keyed by.
+
+    The first spelling the scene knows an enclosure for wins. A spelling the
+    scene does not key answers "nothing around it" -- which is the ignorant
+    answer, indistinguishable from a body standing in the open -- and the
+    informed answer must outrank it.
+    """
+    for form in _subject_spellings(sc, subject):
+        holders = hiding_holders_of(sc, form)
+        if holders:
+            return str(holders[0]).strip()
+    return ""
+
+
+def _enclosure_conceals(sc, observer, target):
+    """`spatial.containment_conceals`, asked under every live spelling.
+
+    Sight and sound need both parties on the same side of every closed thing,
+    which `containment_conceals` decides by comparing their nearest
+    enclosures -- resolving each from the ONE string it was handed. One being
+    routinely answers to two (a cast display name and a scene entity id), each
+    ledger is keyed by whichever its writer had, and
+    `spatial_identity.canonical_subject_map` deliberately declines to fold a
+    lone entity-id key, so the pair stays live on purpose. Handed the spelling
+    a scene does not key, the primitive reports a being with nothing shut
+    around it, and every caller reads that as "in the open".
+
+    So both parties are resolved across their spellings first, and the two
+    enclosures are compared through `same_subject`, because the holder carries
+    the pair too. Nothing is concealed from itself under either of its names.
+    """
+    if same_subject(sc, observer, target):
+        return False
+    around_observer = _enclosure_of(sc, observer)
+    around_target = _enclosure_of(sc, target)
+    if around_observer == around_target:
+        return False
+    return not same_subject(sc, around_observer, around_target)
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 
@@ -951,13 +1038,19 @@ def _perceptible_entities(sc, perceiver_names=None):
     doing, so it does not go in.
 
     `perceiver_names` is who the payload is being built for. Concealment is
-    decided by containment only (spatial.containment_conceals): an entity in
-    the open is unaffected, so this is inert for the ordinary scene and bites
-    exactly on the enclosed case that motivated it. The entity still appears
-    -- only `state` is withheld -- because presence may reach the perceiver
-    through contact or sound even when nothing else does. Omitted (the
-    default) keeps the whole table, which is right for callers that have no
-    perceiver set to gate against.
+    decided by containment only: an entity in the open is unaffected, so this
+    is inert for the ordinary scene and bites exactly on the enclosed case
+    that motivated it. The entity still appears -- only `state` is withheld --
+    because presence may reach the perceiver through contact or sound even
+    when nothing else does. Omitted (the default) keeps the whole table, which
+    is right for callers that have no perceiver set to gate against.
+
+    Concealment goes through `_enclosure_conceals`, which asks both parties
+    under every spelling they are keyed by: the record's `name` and its dict
+    key are routinely two live handles for one being, and a gate that resolves
+    only one of them failed OPEN here for an id-keyed enclosed entity (its
+    act-naming `state` shipped to every perceiver) and CLOSED for an id-keyed
+    co-occupant (denied what the body beside it was doing).
     """
     entities = (sc or {}).get("entities") or {}
     if not isinstance(entities, dict):
@@ -969,11 +1062,16 @@ def _perceptible_entities(sc, perceiver_names=None):
         if holder
     }
 
-    def _state_reaches_anyone(ent_name):
-        if not names or not ent_name:
+    def _state_reaches_anyone(*ent_spellings):
+        spellings = [s for s in (str(f or "").strip() for f in ent_spellings)
+                     if s]
+        if not names or not spellings:
             return True
-        return any(not containment_conceals(sc, observer, ent_name)
-                   for observer in names)
+        return any(
+            all(not _enclosure_conceals(sc, observer, form)
+                for form in spellings)
+            for observer in names
+        )
 
     by_name = {}
     for eid, ent in entities.items():
@@ -993,7 +1091,7 @@ def _perceptible_entities(sc, perceiver_names=None):
         key = name if name and len(by_name.get(name.casefold(), ())) == 1 \
             else eid
         drop = set(_ENTITY_LOOKUP_ONLY_FIELDS)
-        if not _state_reaches_anyone(name or eid):
+        if not _state_reaches_anyone(name, eid):
             drop.add("state")
         if eid in _inhabited_by_a_perceiver:
             # YOU CANNOT SEE THE OUTSIDE OF WHAT YOU ARE STANDING INSIDE.
@@ -2094,13 +2192,48 @@ def _append_once(view, text, marker=None):
 # middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
 
 
+#: The word-runs of a NAME, in whatever script it is written. `[A-Za-z']+`
+#: describes the Latin script rather than a name, and returns nothing at all
+#: for the rest -- so every rule built on tokens (recognition variants,
+#: standalone forms) simply stopped having anything to work with.
+#:
+#: A run in a script that does not space its words is one token; the joiners
+#: those scripts put BETWEEN the parts of a name -- the katakana middle dot
+#: and double hyphen -- are deliberately outside the classes, so 佐藤・ヒナミ
+#: splits where a reader would split it. Latin runs are matched exactly as
+#: before, hyphen and all, so no existing name tokenises differently.
+_NAME_TOKEN_RE = re.compile(
+    r"[A-Za-z']+"
+    r"|[ぁ-ゖ]+|[ァ-ヺ]+|[㐀-䶿一-鿿豈-﫿]+|[가-힯]+|[฀-๿]+")
+
+#: A short Latin token cannot be told from an ordinary word; a short token in
+#: a script that does not space its words is a perfectly ordinary name --
+#: 佐藤 is two characters and is a family name. The same distinction
+#: `_scrub_unknown_identities` draws, for the same reason.
+_NAME_TOKEN_MIN = 3
+_UNSPACED_NAME_TOKEN_MIN = 2
+
+
+def _name_tokens(text):
+    """The word-runs of a name, in whatever script it is written."""
+    return _NAME_TOKEN_RE.findall(str(text or ""))
+
+
+def _name_token_floor(token):
+    """The shortest this token could be and still identify somebody."""
+    return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(token[:1])
+            else _NAME_TOKEN_MIN)
+
+
 def _significant_name_tokens(name):
     """Lower-cased identifying tokens of a name -- titles, ranks and single
     initials removed. 'Commander Riker' -> {'riker'}."""
     out = set()
-    for tok in re.findall(r"[A-Za-z']+", str(name or "")):
+    for tok in _name_tokens(name):
         low = tok.strip(".'").casefold()
-        if len(low) < 3 or low in _ling("_NAME_TITLE_TOKENS"):
+        if not low or len(low) < _name_token_floor(low):
+            continue
+        if low in _ling("_NAME_TITLE_TOKENS"):
             continue
         out.add(low)
     return out
@@ -2158,9 +2291,14 @@ def observer_label_fn(chat, observer_name, cast):
     at. She had asked twice, in dialogue, and been refused both times; six
     beats later she used the surname aloud.
 
-    Same rule as `agents/perception.py`'s own gate, from the same `known` map
-    and through the same `_unknown_actor_label`, so this is one identity floor
-    rather than a second one that can drift from it.
+    Same rule as `agents/perception.py`'s own gate, from the same `known` map,
+    through the same `_recognizes` predicate and the same
+    `_unknown_actor_label`, so this is one identity floor rather than a second
+    one that can drift from it. The predicate is the half that HAD drifted:
+    membership in `known` is string equality, and perception asks `_recognizes`
+    at nine sites, so a rank or title variant of somebody the observer knows
+    ("Commander Riker" to a mind introduced to "William T. Riker") was a
+    person in the view and a stranger in every payload beside it.
     """
     known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
     sheets = {}
@@ -2179,7 +2317,7 @@ def observer_label_fn(chat, observer_name, cast):
 
     def label(name):
         text = str(name or "").strip()
-        if not text or text == observer_name or text in known:
+        if not text or text == observer_name or _recognizes(text, known):
             return text
         sheet = sheets.get(text)
         if sheet is None:
@@ -2237,7 +2375,10 @@ def observer_name_scrub(chat, observer_name, cast):
     subjects = []
     for sheet in sheets:
         name = character_name(sheet)
-        if not name or name == observer_name or name in known:
+        # `_recognizes`, not membership: the same predicate `observer_label_fn`
+        # above resolves a label with, so a mind's structured payload and its
+        # prose cannot disagree about who it has met.
+        if not name or name == observer_name or _recognizes(name, known):
             continue
         forms = {name} | {
             str(alias) for alias in (character_scene_keys(sheet)[1:] or [])
@@ -2389,9 +2530,21 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     """
     if awareness is not None and awareness in NON_AWAKE_GATED:
         return False
-    if observer_name == source_name:
+    # `same_subject`, not `==`, for `region_visibility`'s reason 1,800 lines
+    # above: a being routinely carries a display name and an entity id at
+    # once, and a bare comparison between the two answers "these are two
+    # people". Here that denies a mind its OWN percept rather than handing it
+    # somebody else's -- and the case where it matters most is a body sealed
+    # inside something, which is concealed from every subject in the scene,
+    # itself included, once the self-exemption has failed to recognise it.
+    if same_subject(scene, observer_name, source_name):
         return True
-    if containment_conceals(scene, observer_name, source_name):
+    # `_enclosure_conceals`, not the bare primitive, for the same reason the
+    # line above is not `==`: containment is resolved from the strings this
+    # caller happened to use, and a body keyed by entity id read as a body
+    # standing in the open -- so a sealed body was delivered, on every
+    # channel, to everyone around whatever held it.
+    if _enclosure_conceals(scene, observer_name, source_name):
         return False
 
     if channel == "hearing":
@@ -2946,31 +3099,19 @@ def _player_name_forms(player_name):
     if not name:
         return []
     forms = [name]
-    for word in re.split(r"[\s,]+", name):
-        clean = word.strip()
-        if (len(clean) >= 3 and clean[:1].isupper()
-                and clean.casefold() not in _ling("_NAME_LEADERS")):
+    for clean in _name_tokens(name):
+        # The capital is what separates a name part from an ordinary word it
+        # sits beside -- in a script that HAS capitals. A caseless script
+        # offers no such signal, and demanding one there is how a Japanese
+        # player name contributed no standalone form at all; the leader list
+        # and the length floor carry it instead.
+        if len(clean) < _name_token_floor(clean):
+            continue
+        if not clean[:1].islower() \
+                and clean.casefold() not in _ling("_NAME_LEADERS"):
             forms.append(clean)
     # Longest first so "The Stranger" is preferred over "Stranger".
     return sorted(set(forms), key=len, reverse=True)
-
-
-def _player_subject_sentences(prose, player_name):
-    """Sentences of `prose` whose grammatical subject is plainly the player --
-    the sentence OPENS with their name (optionally possessive). Deliberately
-    narrow: a pronoun subject ("She lifts it") could refer to any character in
-    the beat, and guessing would make this cry wolf on ordinary narration."""
-    forms = _player_name_forms(player_name)
-    if not prose or not forms:
-        return []
-    out = []
-    for sentence in re.split(r"(?<=[.!?])\s+", prose):
-        stripped = sentence.strip()
-        for form in forms:
-            if re.match(rf"^{re.escape(form)}(?:'s)?\b", stripped):
-                out.append(stripped)
-                break
-    return out
 
 
 # A sentence whose subject is a bare pronoun, optionally after a short leading
@@ -3004,8 +3145,19 @@ def _subject_opener(form):
     """
     pat = _SUBJECT_OPENERS.get(form)
     if pat is None:
+        # `name_boundary_pattern`, not a trailing `\b`: `\b` asserts a
+        # transition between word and non-word characters, which describes
+        # scripts that space their words and nothing else. A Japanese particle
+        # is a word character, so 「ヒナミは」 never matched `ヒナミ\b` -- and
+        # this is the primitive every subject-anchored guard in the file is
+        # built on, so all of them, player-act authority included, resolved
+        # NOBODY as the subject of any sentence in such a story. The boundary
+        # the pattern does apply still refuses a Latin name inside a longer
+        # word ("Hinamis"), and the leading article stays this function's own
+        # rule.
         pat = re.compile(
-            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{re.escape(form)}(?:'s|’s)?\b",
+            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
+            rf"(?:['’]s)?",
             re.I if form[:1].islower() else 0)
         _SUBJECT_OPENERS[form] = pat
     return pat
@@ -3014,8 +3166,8 @@ def _subject_opener(form):
 def _sentence_subjects(prose, names, split=None):
     """Each sentence of `prose` paired with the name that is plainly its subject.
 
-    `_player_subject_sentences` deliberately refuses to resolve pronouns, on
-    the ground that "She lifts it" could be anyone in the beat. That is true of
+    The version this replaced refused to resolve pronouns at all, on the
+    ground that "She lifts it" could be anyone in the beat. That is true of
     a pronoun read in ISOLATION and false of one read in sequence: prose
     establishes a subject by name and then continues it, which is why the
     live miss (chat 56 t1391) slipped through -- the Director named the Doctor
@@ -3104,9 +3256,6 @@ def _strip_subject(sentence, name):
 # Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
 # Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
 # not speech, and a character who declared silence is entitled to all of them.
-# NOTE the distinct name: `_SPEECH_VERBS` further down is a different thing
-# (a literal tuple used for dialogue-cue detection). Two symbols of that name
-# in one module is exactly the duplicate `make structure` fails on.
 def _inflect(stem):
     """A stem as a regex matching its inflections.
 
@@ -3307,6 +3456,8 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
             # Measured across the live corpus: 14 flags, 13 of them cleared by
             # this test -- a 93% false-positive rate on a guard whose every
             # firing costs a full second Director call, the most expensive
+            # correction this seam can order.
+            #
             # ONE DIRECTION ONLY: the flagged span must sit INSIDE something
             # that was declared. The reverse -- a declared line sitting inside
             # the flagged span -- is prose that EXPANDED on what somebody said,
@@ -3679,9 +3830,14 @@ def apply_player_authority(out, mode, player_name=None):
     puts in front of the Director and on the step, so a refusal is answerable
     rather than silent.
     """
-    mode = str(mode or "world_author")
-    granted = PLAYER_AUTHORITY_GRANTS.get(
-        mode, PLAYER_AUTHORITY_GRANTS["world_author"])
+    # `normalize_player_authority` owns this vocabulary (story/scene.py): it is
+    # what `player_authority` runs on the stored mode and on every history
+    # entry, and it folds an unreadable value to the DEFAULT. A second copy
+    # here -- a bare `str()` and a dict `.get` with the top rung as fallback --
+    # answered `world_author` for any spelling the table did not hold
+    # literally, so a story tightened to `actor_only` was handed the whole
+    # ladder back by a capital letter.
+    granted = PLAYER_AUTHORITY_GRANTS[normalize_player_authority(mode)]
     if not isinstance(out, dict):
         return []
     flow = out.get("flow")
@@ -3900,13 +4056,23 @@ def _muffle_middle(body, keep=3):
     what survives half-hearing. The loop used to slice `quote.split()`, which
     yields a single token in a language without spaces and therefore returned
     the whole utterance.
+
+    And the pack's `muffle_join` for how the survivors are SET OUT, which was
+    the other half of that same argument: a hardcoded ASCII space put 「小瓶
+    捨」 in a story whose every other muffled line reads 「……小瓶……捨……」.
+    A separator belongs to the language -- Japanese sets an ellipsis as the
+    doubled leader with no spaces, and a half-width gap between two kanji runs
+    reads as broken typesetting rather than as a gap in hearing. The template
+    around this fragment supplies the leading and trailing ellipsis, so only
+    the join is read here.
     """
     tokens, keep_min = _muffle_tokens(body)
     kept = [w for w in tokens if len(w) >= keep_min]
     if not kept:
         return _text("muffled_indistinct")
     start = max(0, len(kept) // 2)
-    return " ".join(kept[start:start + keep])
+    join = str(_compositor_value("muffle_join"))
+    return join.join(kept[start:start + keep])
 
 
 def _muffled_fragment(body):
@@ -5185,25 +5351,6 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
             counts["third"] += len(re.findall(rf"\b{re.escape(pron)}\b", narrative, re.IGNORECASE))
     return counts
 
-def _detect_narration_person(raw_input, player_name=None, player_pronouns=None):
-    """Guess which grammatical person the PLAYER used to phrase their own
-    input this turn -- 'first' ("I open the door"), 'second' ("You open the
-    door"), 'third' ("Alex opens the door") -- so the narrator can match it
-    instead of always defaulting to 'you'. Whichever person has strictly more
-    evidence (see _narration_person_counts) than every other wins. Ties or
-    zero matches (e.g. a turn that's pure dialogue with no narrative frame)
-    return None -- ambiguous, caller should fall back to whatever was already
-    established.
-    """
-    counts = _narration_person_counts(raw_input, player_name, player_pronouns)
-    best = max(counts, key=counts.get)
-    if counts[best] == 0:
-        return None
-    others = [v for k, v in counts.items() if k != best]
-    if others and counts[best] <= max(others):
-        return None
-    return best
-
 # Third-person paradigms screened by _check_pronoun_fidelity. Only these three
 # closed sets are checked: a character whose declared pronouns fall outside the
 # table (neopronouns, mixed sets like she/them) is skipped entirely rather than
@@ -5843,6 +5990,38 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         name_words = [w for w in name.split() if len(w) >= 3]
         if name_words and not any(w.lower() in prose.lower() for w in name_words):
             warnings.append(f"Proper noun from view missing in narrator prose: '{name}'")
+
+    # A ONE-WORD NAME IS A NAME. The pattern above is `(?:...)+`, so it can
+    # only ever see a proper noun of two or more capitalised words -- and a
+    # single-token name is the commonest cast shape in this engine's own
+    # stories, which made the check structurally unavailable for most of the
+    # cast rather than merely quiet about them.
+    #
+    # Two questions, both of which the regex was guessing at. WHAT IS A NAME:
+    # the roster is already in this payload, so the answer comes from the cast
+    # rather than from capitalisation. WHAT COUNTS AS PRESENT: prose refers to
+    # a person by pronoun after the first mention, which is ordinary English
+    # and not a dropped body -- the multi-word arm gets that tolerance free
+    # from its surname rule and a one-word name has no shorter form to fall
+    # back on. Measured over 2,277 stored beats carrying both a view and
+    # prose: without the pronoun tolerance this fires on 29 of 217 view-named
+    # single-token cast members and 26 of those are pronoun prose; with it, 3.
+    for name, pronouns in (cast_pronouns or {}).items():
+        text = str(name or "").strip()
+        if not text or len(text.split()) != 1 or text == player_name:
+            continue
+        if not re.search(rf"(?<!\w){re.escape(text)}(?!\w)", view_text):
+            continue
+        if text.lower() in prose.lower():
+            continue
+        forms = [str(pronouns.get(k) or "").strip().lower()
+                 for k in ("subject", "object", "possessive")
+                 ] if isinstance(pronouns, dict) else []
+        if any(form and re.search(rf"(?<!\w){re.escape(form)}(?!\w)",
+                                  prose.lower()) for form in forms):
+            continue
+        warnings.append(
+            f"Proper noun from view missing in narrator prose: '{text}'")
 
     # recent_prose_for_rhythm is supplied to the narrator as a STYLE
     # reference, but nothing stops the model from reusing its content
