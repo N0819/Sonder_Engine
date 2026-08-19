@@ -1000,7 +1000,9 @@ def normalize_wants(wants, valid_intention_ids, *, want_cap=None):
     omitted it is the `ordinary` rung, which is the constant this has always
     used, so every existing caller and story is unchanged.
 
-    Caps to 3, merges near-duplicates (claim_similarity >= 0.4, higher
+    Caps to `want_cap` -- 1 at the `narrow` rung through 5 at `wide`, and 3
+    at `ordinary`, which is the default and the number this used to hardcode
+    -- merges near-duplicates (claim_similarity >= 0.4, higher
     urgency wins), rewrites unknown `serves` (neither "drive" nor a known
     intention/project id -- the caller passes the union) to "situational",
     and lets at most one situational want
@@ -1225,7 +1227,9 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
     `capacity_caps`); omitted it is the `ordinary` rung, which is the constant
     this has always used, so every existing caller and story is unchanged.
 
-    Enforced floors: at most 4 active intentions; an `add` that is
+    Enforced floors: at most `intent_cap` active intentions -- 2 at the
+    `narrow` rung through 6 at `wide`, and 4 at `ordinary`, which is the
+    default and the number this used to hardcode; an `add` that is
     near-duplicate (claim_similarity >= 0.4) of an existing intent becomes
     a `progress` on it; `satisfy`/`abandon` within 3 turns of formation
     require `evidence_ok(op)` (goals should not evaporate the beat after
