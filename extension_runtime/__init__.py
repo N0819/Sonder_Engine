@@ -60,12 +60,34 @@ DEFAULT_ROOT = Path(__file__).resolve().parent.parent / "extensions"
 
 EXTENSION_ID = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
 _VERSION = re.compile(r"^\d+(\.\d+)*$")
-# Manifest keys the engine understands. Unknown ones are tolerated on purpose --
-# a manifest written for a later ext_api must stay loadable, not become an error.
-KNOWN_CAPABILITIES = (
-    "stages", "chat_state", "char_state", "characters", "routing", "python",
-    "ui", "system", "routes", "commit_domains",
-)
+# Manifest keys the engine understands, each with the sentence a host is shown
+# before they consent to it. Unknown keys are tolerated on purpose -- a
+# manifest written for a later ext_api must stay loadable, not become an error
+# -- so a key absent from this table is DISCLOSED BY NAME rather than dropped:
+# the one thing the consent dialog must never do is stay silent about
+# something the manifest asked for.
+#
+# One table, read by `Extension.disclosures`, because the browser used to keep
+# its own hand-written summary and it had drifted: it named six of these ten,
+# and the four it left out were `python` (runs code in this process),
+# `commit_domains` (runs inside the turn's transaction and can roll it back),
+# `routes` (serves HTTP under the host session) and `char_state` (writes into
+# a mind's own state) -- precisely the four a host would most want named.
+CAPABILITY_DISCLOSURES = {
+    "stages": "Adds steps to the turn pipeline.",
+    "chat_state": "Stores and reads its own state in your stories.",
+    "char_state": "Writes into a character's own per-story state.",
+    "characters": "Supplies or alters characters.",
+    "routing": "Alters how information is routed between the engine's stages.",
+    "python": "Runs Python code inside the engine's process.",
+    "ui": "Adds to this interface.",
+    "system": "Full pipeline access.",
+    "routes": "Serves its own HTTP endpoints under your host session.",
+    "commit_domains": (
+        "Runs inside the turn's commit transaction, and can roll a turn back."
+    ),
+}
+KNOWN_CAPABILITIES = tuple(CAPABILITY_DISCLOSURES)
 
 _lock = threading.RLock()
 _extensions: dict[str, "Extension"] | None = None
@@ -130,6 +152,40 @@ class Extension:
             return ""
         return str(ui.get("css") or "").strip()
 
+    def disclosures(self) -> list[str]:
+        """What this extension's manifest asks for, in a host's words.
+
+        Computed HERE rather than in the browser. `capabilities` is disclosure
+        -- never enforcement -- so the only thing it has to do is arrive
+        complete at the consent dialog, and a second hand-written list in
+        `settings.js` was silently naming six of ten (WEB-2). A key this
+        engine has never heard of is still disclosed, by its own name: a
+        manifest from a later `ext_api` must load, and must not thereby become
+        able to ask for something quietly.
+        """
+        said = []
+        for key, value in (self.capabilities or {}).items():
+            if not value:
+                continue
+            note = CAPABILITY_DISCLOSURES.get(key)
+            if key == "stages" and isinstance(value, list):
+                for stage in value:
+                    if not isinstance(stage, dict):
+                        continue
+                    said.append(
+                        "Adds the pipeline step "
+                        f"“{stage.get('label') or stage.get('key')}” "
+                        f"at {stage.get('anchor')}.")
+                continue
+            if key == "characters" and isinstance(value, list):
+                said.append("Supplies characters: " + ", ".join(
+                    str(name) for name in value) + ".")
+                continue
+            said.append(note or f"Declares “{key}”, "
+                                "which this version of the engine does not "
+                                "recognise.")
+        return said
+
     def public(self) -> dict:
         return {
             "id": self.id,
@@ -139,6 +195,7 @@ class Extension:
             "ext_api": self.ext_api,
             "trust": self.trust,
             "capabilities": dict(self.capabilities),
+            "disclosures": self.disclosures(),
             "provenance": self.provenance,
             "source_url": self.source_url,
             "source_ref": self.source_ref,
