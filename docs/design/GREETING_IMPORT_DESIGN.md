@@ -1,5 +1,12 @@
 # Greeting-seeded openings — implementation design
 
+> **The extraction's scope has since grown past this document:** what a
+> greeting may establish about a MIND — beliefs, stances, opening affect, and
+> every person present rather than the card's owner alone — is argued and
+> specified in [`DESIGN_GREETING_MINDS.md`](DESIGN_GREETING_MINDS.md)
+> (extractor v2). This note remains the record of the launch/verbatim/swipe
+> architecture.
+>
 > Status: **shipped in alpha 1.4, under a materially different architecture than
 > this document proposes.** Import SillyTavern greetings + alt-greetings,
 > preserve the prose verbatim, extract the simulation scaffolding underneath, and

@@ -382,7 +382,11 @@ def test_greeting_interpret_asks_only_for_what_the_launch_reads():
     from language_runtime import installed_language_packs
 
     declared = set(GreetingInterpret.__fields__)
-    assert declared == {"time", "knowledge_seeds"}, (
+    # `minds` joined when the extraction became per-person (every entry is
+    # routed by `start_story._seed_minds`); `knowledge_seeds` stays as v1's
+    # shape, folded into the card character's mind at launch. Anything beyond
+    # these three is a field nothing reads -- the defect coming back.
+    assert declared == {"time", "minds", "knowledge_seeds"}, (
         "GreetingInterpret declares a field story/greetings.py does not read; "
         "wire the reader or drop the field")
 
@@ -398,9 +402,14 @@ def test_greeting_interpret_asks_only_for_what_the_launch_reads():
         "notes": "", "knowledge_seeds": [],
     }
     report = validate_llm_output_strict("greeting_interpret", legacy)
-    assert report.valid, report.errors
+    # The v1 shape still READS -- extra keys dropped, known ones kept -- so a
+    # hand-stamped stored extraction routes at launch. It is no longer
+    # semantically VALID as fresh model output: a greeting always contains at
+    # least its own character's mind, and an extraction that seeded nobody is
+    # the silent-empty failure the semantic gate exists to retry.
     assert set(report.output) == declared
     assert report.output["time"] == "night"
+    assert not report.valid and any("minds" in e for e in report.errors)
 
     # And every pack's output line names those fields and no others.
     for pack in installed_language_packs(refresh=True).values():
