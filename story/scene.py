@@ -1357,11 +1357,6 @@ def name_of(sheet):
         return character_name(sheet)
     return persona_name(sheet)
 
-def base_appearance_of(sheet):
-    if "psychology" in sheet or "core" in sheet:
-        return character_appearance(sheet)
-    return persona_appearance(sheet)
-
 def abilities_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return character_abilities(sheet)
@@ -1541,15 +1536,6 @@ def director_context(chat_id, n=5, frame_id=_UNSET, *, entitled=True):
             "resolved": resolved,
         })
     return out
-
-def salience_of(text):
-    s = 0.45 + min(len(text or ""), 400) / 1600.0
-    for w in ("attack", "blood", "secret", "betray", "kiss", "dead",
-              "weapon", "threat", "love", "steal", "scream", "knife",
-              "confess", "liar", "promise"):
-        if w in (text or "").lower():
-            s += 0.08
-    return round(min(s, 0.95), 3)
 
 def _ability_mod(actor, ability, ctx):
     levels = {"novice": 0, "competent": 2, "expert": 4, "master": 6}

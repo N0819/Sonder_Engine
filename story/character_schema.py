@@ -662,14 +662,6 @@ def default_character_data(name: str = "Unnamed") -> dict:
     }
     return result
 
-def default_character_document(name: str = "Unnamed") -> dict:
-    return {
-        "schema": CHARACTER_SCHEMA,
-        "version": CHARACTER_VERSION,
-        "data": default_character_data(name),
-        "source": {"format": "native", "original": None},
-    }
-
 def default_persona_data(name: str = "Player") -> dict:
     return {
         "identity": {
@@ -695,14 +687,6 @@ def default_persona_data(name: str = "Player") -> dict:
         "competence": {"abilities": []},
         "knowledge": {"public_history": "", "private_history": []},
         "narration": {"voice_setting": ""},
-    }
-
-def default_persona_document(name: str = "Player") -> dict:
-    return {
-        "schema": PERSONA_SCHEMA,
-        "version": PERSONA_VERSION,
-        "data": default_persona_data(name),
-        "source": {"format": "native", "original": None},
     }
 
 def _list(value: Any) -> list:
@@ -1633,9 +1617,6 @@ def senses_as_text(senses: Any) -> str:
             part += f" ({notes})"
         parts.append(part)
     return "; ".join(parts) if parts else "ordinary senses"
-
-def visible_appearance_payload(sheet: dict) -> dict:
-    return copy.deepcopy(normalize_character_data(sheet).get("embodiment", {}).get("visible", {}))
 
 def character_export_document(sheet: dict, source: dict | None = None) -> dict:
     return {
