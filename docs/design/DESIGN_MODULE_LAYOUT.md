@@ -136,7 +136,7 @@ pass over every symbol:
 
 ## Job 2: the tree
 
-The root should hold what you run and what you read — `Start Sonder.bat`,
+The root should hold what you run and what you read — `Start_Sonder.bat`,
 `Makefile`, `pyproject.toml`, the requirements files, `README.md`,
 `CHANGELOG.md`, `CLAUDE.md`, `AGENTS.md`, `Design.md` — and not 55 modules.
 
@@ -181,8 +181,27 @@ something a directory scheme would finally make visible.
 So the grouping is proposed **for navigability, and explicitly not as an
 enforced layering**. Do not add an import linter on top of it until those edges
 are broken, and do not break them as part of the move — that is logic work, and
-this is not a logic change. The table above is the baseline a future cleanup
-should measure itself against.
+this is not a logic change.
+
+**The table above is NO LONGER the baseline, and that sentence is why it had
+to stop being one.** It was written as "the baseline a future cleanup should
+measure itself against" in the same paragraph that declined to build anything
+that could read it, so it drifted immediately and silently: re-measured
+2026-08-19, `persist → story` carries 19 eager and 29 deferred sites against
+the 33/29 recorded here, and a census across one day of green gates
+(`a6d823f` → `73a380a`) found three edges gaining EAGER module-level imports
+inside existing cycles. A baseline nothing regenerates records what someone
+believed on one afternoon.
+
+The baseline is now `tools/package_edges.json`, which is generated
+(`python tools/project_check.py --write-package-edges`) and checked by
+`check_package_edge_budget`. It enforces the one thing this section actually
+argues for: **no NEW cycle**, measured as a strongly connected component of the
+EAGER import graph. It does not budget edges — `web → *` and `agents → *` are
+supposed to grow, and a gate that fought a legitimate dependency would be
+waived within the week. The eager graph currently has one SCC,
+`{agents, persist, story, world}`, which is this section's six two-cycles seen
+whole.
 
 ### How the move is executed
 

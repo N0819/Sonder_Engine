@@ -14,7 +14,7 @@ shows:
 **106 sites across 17 test files do `monkeypatch.setattr(director,
 "_agent_json", fake)`**, plus 2× `validate_llm_output`, 2× `_ability_mod`, 1×
 `_prose_gate_facts`. A monkeypatch writes into `agents/director.py`'s module
-dictionary. A function moved to `agents/director_x.py` resolves `_agent_json` in
+dictionary. A function moved to any `agents/director_<sibling>.py` resolves `_agent_json` in
 **its own** globals and never sees the patch.
 
 `tests/helpers.py`'s `fanout_resolve_agent` makes it concrete: one fake

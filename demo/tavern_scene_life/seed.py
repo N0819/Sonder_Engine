@@ -12,14 +12,16 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = "/home/nathan/Documents/Fiction-improved/Fiction"  # engine.db lives here
-WORKTREE = "/home/nathan/Documents/Fiction-improved/Fiction/.claude/worktrees/background-life-design"
+# The repository root, derived from this file's own location. It was an
+# absolute path naming a project that has since been renamed and a git
+# worktree that no longer exists, so this script could not run anywhere.
+ROOT = os.path.dirname(os.path.dirname(HERE))
 RUN_DB = os.path.join(HERE, "run.db")
 for suffix in ("", "-wal", "-shm"):
     if os.path.exists(RUN_DB + suffix):
         os.remove(RUN_DB + suffix)
 os.environ["ENGINE_DB"] = RUN_DB
-sys.path.insert(0, WORKTREE)
+sys.path.insert(0, ROOT)
 
 from core import db
 from core.db import q, qi, set_setting, wset
@@ -29,7 +31,9 @@ db.configure(RUN_DB)
 db.init()
 
 # ---- provider, copied from the real engine.db (never written back) ----
-src = sqlite3.connect(os.path.join(ROOT, "engine.db"))
+# Read-only: this is the owner's live database and nothing here writes back.
+src = sqlite3.connect("file:%s?mode=ro" % os.path.join(ROOT, "engine.db"),
+                      uri=True)
 src.row_factory = sqlite3.Row
 prov = src.execute("SELECT * FROM providers WHERE name='nanogpt'").fetchone()
 assert prov, "nanogpt provider not found in engine.db"

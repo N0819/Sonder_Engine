@@ -6,7 +6,7 @@ deliberately different verification levels.
 ## Test commands
 
 ```bash
-make test-full     # every Python regression test (8217 tests, ~3m40s)
+make test-full     # every Python regression test
 make test-lf       # last-failed first, then the rest -- the fix-verify loop
 make test-browser  # optional Chromium behavior tests
 make check-fast    # compile, structure/map freshness, then the full suite
@@ -23,9 +23,13 @@ current.
 
 Tests requesting the shared `temp_db` fixture are still marked `slow` during
 collection, and `make test-fast` still deselects them. Do not reach for it to
-check your own work: it deselects **2657 of 8217 tests, emptying 138 of 505
-test files**, including the persistence and information-firewall suites — the
-invariants this repo exists to keep honest. **Nothing runs it any more.** It
+check your own work: it deselects **every database-backed test file** —
+roughly a quarter of the suite — including the persistence and
+information-firewall suites, the invariants this repo exists to keep honest.
+No count is written down here on purpose: the numbers in this document were
+re-synced twice and had drifted again within a day both times. `pytest -q`
+reports the total, and `pytest -q -m "not slow" --collect-only` reports what
+this tier skips; a literal in prose can only be wrong. **Nothing runs it any more.** It
 was kept for the CI matrix-breadth run, but that job now runs `make check-fast`
 — the whole suite — on both interpreters, so `test-fast` has no consumer left
 in `.github/workflows/ci.yml`. It survives only as a manual escape hatch for a
@@ -39,7 +43,7 @@ test bodies of 0.02–0.10s. That one call was ~90% of the suite's wall clock.
 Moving the fixture's temp directory to tmpfs (`tests/helpers.py`,
 `fast_tmp_dir`; a test that builds its own database calls `scratch_db_path`)
 removed it: **15m35s → 36s for all 3799 tests**, measured at
-the time. The suite has since grown to 8217 tests and ~3m40s, which is the same
+the time. The suite has since grown by roughly a factor of two at the same
 per-test cost.
 Nothing about the database changed — same schema, same WAL, same isolation,
 same per-test file; only the storage backing moved, so no test can tell the
@@ -111,6 +115,23 @@ This separates two useful promises:
 - installing without a constraints file receives compatible maintenance
   updates within the declared major-version bounds;
 - installing with `-c constraints.txt` reproduces the CI baseline.
+
+**A declared FLOOR is a promise the version works, and until 2026-08-19 five of
+the six were promises nobody had tested.** Every install path in the project —
+both launchers, the README's by-hand recipe, and all three CI jobs — passes
+`-c constraints.txt`, so the pin is what gets installed and the minimum is
+reachable only in a pre-existing environment. `fastapi>=0.101`, `httpx>=0.24`,
+`numpy>=1.26`, `requests>=2.31` and `uvicorn>=0.27` had therefore never been
+run against this code by anything, and `numpy>=1.26` could not even install on
+3.13. The floors now name the version CI actually installs. `pydantic` is the
+deliberate exception and stays wide, because both majors genuinely run.
+
+A minimum-resolution CI lane (`pip install --resolution=lowest`) was considered
+and **not** built: it would add a fourth job and a second dependency
+resolution to maintain in order to test a configuration nothing here produces.
+Raising the floors to what is measured costs nothing and makes the declaration
+true, which is the honest half of the same fix. If a floor is ever lowered
+again, that is a claim, and it wants evidence.
 
 When updating dependencies, change the range only if support policy changes,
 refresh the corresponding direct pin in `constraints.txt`, run
@@ -261,12 +282,22 @@ do not exist on 1.x; those are what to migrate first if the ceiling moves.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs three jobs:
 
-1. `fast` — `make check-fast` on Python 3.11 and 3.12. Named `fast` for
-   history, because it is a required check elsewhere; it has not been the
+1. `fast` — `make check-fast` on Python 3.11, 3.12 **and 3.13**. Named `fast`
+   for history, because it is a required check elsewhere; it has not been the
    reduced tier since the databases moved to tmpfs, and compiles, runs the
-   structure/map checks, and runs **every** test on both interpreters. The
+   structure/map checks, and runs **every** test on every interpreter. The
    separate `full` job that used to follow it was a strict subset and was
    deleted.
+
+   3.13 was added 2026-08-19 and had never been run by any gate. It was inside
+   `requires-python` (`>=3.11,<3.14`), inside both launchers' candidate lists,
+   and inside `tests/test_launcher_python_range.py`'s `SUPPORTED` — and outside
+   this matrix. Both launchers are ordered NEWEST-FIRST, so 3.13 is the
+   interpreter a fresh player is most likely to land on, which made it the
+   worst possible one to leave untested. The matrix, `requires-python` and the
+   two launcher lists are now held equal by
+   `tools/project_check.py::check_python_version_agreement`; a version that
+   drifts out of any of the four fails `make structure`.
 2. `pydantic1` — `make test-full` on Python 3.12 with Pydantic downgraded past
    the constraint, covering the half of the declared range the pin does not.
    It asserts the major it is actually running before testing.

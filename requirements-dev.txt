@@ -1,2 +1,4 @@
 -r requirements.txt
-pytest>=8,<10
+# The floor is the version CI installs, for the reason in requirements.txt:
+# a minimum nothing has run is not a supported minimum.
+pytest>=8.4.1,<10

@@ -2,13 +2,13 @@
 # ---------------------------------------------------------------
 #  Sonder Engine launcher for Linux and macOS.
 #
-#  The counterpart of "Start Sonder.bat", and the same promise: a clean
+#  The counterpart of Start_Sonder.bat, and the same promise: a clean
 #  box, a clone, one command. On first run it finds a Python, builds a
 #  virtual environment and installs dependencies; on later runs it just
 #  starts the server and opens your browser.
 #
-#      ./"Start Sonder.sh"
-#      ./"Start Sonder.sh" --port 8009 --no-browser
+#      ./Start_Sonder.sh
+#      ./Start_Sonder.sh --port 8009 --no-browser
 #
 #  What it deliberately does NOT do:
 #
@@ -146,7 +146,7 @@ if [ ! -f "requirements.txt" ] || [ ! -d "web" ]; then
     fail "This does not look like the Sonder Engine folder:
     ${ROOT}
 
-    Keep \"Start Sonder.sh\" in the folder it came in, beside README.md."
+    Keep Start_Sonder.sh in the folder it came in, beside README.md."
 fi
 
 # --- How this host installs a Python ---------------------------
@@ -292,14 +292,23 @@ if [ -x "$VENV_PY" ] && ! "$VENV_PY" -c 'import sys; sys.exit(0 if (3, 11) <= sy
 fi
 
 # --- Install / update dependencies -----------------------------
-# Reinstall when the stamp is missing, when requirements.txt or
-# constraints.txt is NEWER than the stamp -- so pulling an upgrade does
-# not need a manual reinstall -- or when the packages are simply not
+# Reinstall when the stamp is missing, when the dependency files have
+# CHANGED since the stamp was written -- so pulling an upgrade does not
+# need a manual reinstall -- or when the packages are simply not
 # importable, since a stamp can outlive the environment it describes.
+#
+# The stamp holds a DIGEST of requirements.txt + constraints.txt, and the
+# .bat writes the same thing, so the two launchers agree about an
+# environment either of them built. It used to be a date compared with
+# `-nt`, which is wrong in a way that shows up exactly where it hurts: a
+# fresh `git clone` or a checkout stamps every file with the same recent
+# mtime, so "requirements is newer than the stamp" answers a question
+# about the filesystem rather than about the dependencies.
+DEPS_DIGEST="$("$VENV_PY" -c 'import hashlib; h = hashlib.sha256(); [h.update(open(f, "rb").read()) for f in ("requirements.txt", "constraints.txt")]; print(h.hexdigest())' 2>/dev/null || echo "")"
 NEED_DEPS=0
-if [ ! -f "$STAMP" ]; then
+if [ ! -f "$STAMP" ] || [ -z "$DEPS_DIGEST" ]; then
     NEED_DEPS=1
-elif [ "requirements.txt" -nt "$STAMP" ] || [ "constraints.txt" -nt "$STAMP" ]; then
+elif [ "$(cat "$STAMP" 2>/dev/null)" != "$DEPS_DIGEST" ]; then
     NEED_DEPS=1
     printf '\nDependencies have changed since the last run; updating them.\n'
 elif ! "$VENV_PY" -c 'import importlib.util as u, sys; sys.exit(0 if all(u.find_spec(m) for m in ("fastapi", "uvicorn")) else 1)' >/dev/null 2>&1; then
@@ -324,7 +333,10 @@ if [ "$NEED_DEPS" = "1" ]; then
     # by that being exactly the ones running this launcher. Install what
     # was actually tested.
     "$VENV_PY" -m pip install -c constraints.txt -r requirements.txt
-    date > "$STAMP"
+    # Re-read after the install: a `pip install` cannot change these files,
+    # but computing it here means the stamp always describes what was
+    # actually installed rather than what was intended.
+    "$VENV_PY" -c 'import hashlib; h = hashlib.sha256(); [h.update(open(f, "rb").read()) for f in ("requirements.txt", "constraints.txt")]; print(h.hexdigest())' > "$STAMP"
     printf '\nSetup complete.\n'
 fi
 

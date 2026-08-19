@@ -25,7 +25,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # The full declared range, not a sample of it. Both launchers try
+        # 3.13 FIRST (`Start_Sonder.bat`'s `for %%V in (3.13 3.12 3.11)`,
+        # `Start_Sonder.sh`'s `python3.13 python3.12 python3.11`), so the
+        # interpreter a fresh player is MOST likely to get was the one no gate
+        # had ever run. Keep this list equal to `requires-python` in
+        # `pyproject.toml` and to the launcher candidate lists;
+        # `tools/project_check.py::check_python_version_agreement` fails if
+        # they drift apart.
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5

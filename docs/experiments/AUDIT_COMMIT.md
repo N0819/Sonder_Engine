@@ -428,4 +428,4 @@ Final line counts: `commit.py` 575 (from 8,197); `commit_common` 384,
 `commit_mechanics` 348, `commit_memory` 1,486, `commit_memory_write` 230 —
 each within a few header lines of the plan's estimate. Every name
 `commit.py` exported before the split, all 22 private crossers included,
-remains importable as `from commit import X`.
+remains importable as `from persist.commit import X`.

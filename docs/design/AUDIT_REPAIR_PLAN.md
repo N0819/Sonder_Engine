@@ -1,17 +1,29 @@
 # Repair-and-re-audit plan
 
-Status: NOT STARTED. Written 2026-08-18 as a handoff, so the work survives a
-context compaction. Three phases, in order. Do not merge them.
+Status: PHASE 1 ESSENTIALLY LANDED — one row open. Written 2026-08-18 as a
+handoff, so the work survives a context compaction. Three phases, in order. Do
+not merge them.
+
+**This document is the ARGUMENT, not the status.** The single register is
+[`../UNBUILT.md`](../UNBUILT.md) §1.52, which as of 2026-08-19 records **one**
+of the 43 findings still open (COMMIT-10, blocked on an owner decision). Read
+the register for what remains; read the phases below for how the work was meant
+to be sequenced. The snapshot this section used to open with — a commit count,
+a test count and a working-tree state, all from the day it was written — has
+been deleted rather than re-synced: a status line in an argument document is a
+second register, and the one thing this repository has repeatedly proved is
+that a second register drifts.
 
 ## Where things stand
 
-`main` is at the tree move, `make check` green (7,274 tests), **47 commits
-unpushed**, working tree clean. Today landed, in order: alpha 9.5; the split of
-`spatial.py` → 13 modules, `commit.py` → 14, `agents/director.py` → 9 (Phase 1
-only); then 81 modules out of the repository root into eight subsystem packages
-(`core llm world mind story dressing persist web`) beside `agents/`.
+`main` is at the tree move. The day this was written landed, in order: alpha
+9.5; the split of `spatial.py` → 13 modules, `commit.py` → 14,
+`agents/director.py` → 9 (Phase 1 only); then 81 modules out of the repository
+root into eight subsystem packages (`core llm world mind story dressing persist
+web`) beside `agents/`.
 
-Reference documents, all current:
+Reference documents (each checked against source when this header was last
+revised — verify before acting, per `AGENTS.md` on `docs/design/`):
 
 - [`DESIGN_MODULE_LAYOUT.md`](DESIGN_MODULE_LAYOUT.md) — the layout, its limits,
   and what the move actually cost. **Marked LANDED.**
@@ -19,7 +31,9 @@ Reference documents, all current:
   / [`SPLIT_DIRECTOR.md`](SPLIT_DIRECTOR.md) — the executed plans. `SPLIT_DIRECTOR`
   still carries an unstarted **Phase 2**, which is a separate decision.
 - [`../UNBUILT.md`](../UNBUILT.md) §1.52 — the register entry indexing all 43
-  findings.
+  findings, and the **authority** on which of them are still open. A landed row
+  is deleted there in the commit that lands it, so the shipped list lives in
+  `CHANGELOG.md`.
 - `docs/experiments/AUDIT_{SPATIAL,COMMIT,DIRECTOR}.md` — full detail, each
   finding carrying `file:line` **as of `418ab5b`** plus the commit that moved
   the code. Line numbers have all changed since; resolve by symbol name.
