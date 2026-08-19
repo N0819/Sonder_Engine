@@ -34,11 +34,46 @@ def _prompt_card(language=None):
 
 _ENGLISH = _prompt_card("en")
 
+
+def _assembled_sheets(card):
+    """The Director sheets that are BUILT, never stored.
+
+    A specialist sheet is its core plus one chunk per channel scoping grants,
+    and the prose author's is its own segment list. Storing a finished body
+    for those ids alongside the parts is one sheet with two spellings, free
+    to drift -- and it had: English `director_spatial` was 1,518 characters
+    short of its own assembly (the entire `comms_ops` chunk) while the prompt
+    editor showed it as the sheet, and a preset saved from that view replaces
+    the assembled sheet for every beat afterwards. The parts are the source;
+    this is the only place the whole is made.
+    """
+    sheets = {
+        f"director_{name}": (
+            str(spec["core"]) + "".join(
+                str(spec["chunks"][channel]) for channel in spec["order"]))
+        for name, spec in card["specialists"].items()
+    }
+    sheets["director_resolve_lean"] = "".join(
+        str(text) for _name, text in card["prose_author_sheet"])
+    return sheets
+
+
+def _prompt_bodies(card):
+    """Every prompt body one pack publishes: stored ones plus assembled ones."""
+    bodies = {pid: str(text) for pid, text in card["prompts"].items()}
+    bodies.update(_assembled_sheets(card))
+    return bodies
+
+
+#: Prompt ids whose body is assembled rather than authored as one block. A
+#: pack that stores a body under one of these has re-created the duplication.
+ASSEMBLED_SHEET_IDS = frozenset(_assembled_sheets(_ENGLISH))
+
 # Compatibility exports used by the prompt editor, project checks, benches,
 # and tests. They are views of the English pack, not a second authored source.
 DEFAULT_PROMPTS = {
-    pid: apply_prompt_policy(str(text), "en", pid)
-    for pid, text in _ENGLISH["prompts"].items()
+    pid: apply_prompt_policy(text, "en", pid)
+    for pid, text in _prompt_bodies(_ENGLISH).items()
 }
 CATEGORY_NOTE = str(_ENGLISH["category_note"])
 BOOK_TYPE_NOTE = str(_ENGLISH["book_type_note"])
@@ -184,8 +219,8 @@ def default_prompts_for(language=None):
     preset at all.
     """
     selected = _language(language)
-    return {pid: apply_prompt_policy(str(text), selected, pid)
-            for pid, text in _prompt_card(selected)["prompts"].items()}
+    return {pid: apply_prompt_policy(text, selected, pid)
+            for pid, text in _prompt_bodies(_prompt_card(selected)).items()}
 
 
 def preset_export_document(name):
@@ -379,8 +414,8 @@ DIRECTOR_RESOLVE_SHEET_IDS = (
 
 
 def director_resolve_sheets(language=None):
-    card_prompts = _prompt_card(language)["prompts"]
-    return {pid: str(card_prompts[pid]) for pid in DIRECTOR_RESOLVE_SHEET_IDS}
+    bodies = _prompt_bodies(_prompt_card(language))
+    return {pid: bodies[pid] for pid in DIRECTOR_RESOLVE_SHEET_IDS}
 
 
 def get_prompt_body(pid, language=None):
@@ -389,9 +424,9 @@ def get_prompt_body(pid, language=None):
     if override is not None:
         base = override
     else:
-        prompts = _prompt_card(language)["prompts"]
+        prompts = _prompt_bodies(_prompt_card(language))
         try:
-            base = str(prompts[pid])
+            base = prompts[pid]
         except KeyError as exc:
             raise KeyError(
                 f"language pack {language!r} has no system prompt {pid!r}"
