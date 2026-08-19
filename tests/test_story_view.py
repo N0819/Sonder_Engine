@@ -309,6 +309,55 @@ class TestPlayerView:
             assert player_view(story["chat_id"], entry["id"])["viewer"] == entry
 
 
+class TestTheViewerIsNamedTheWayTheStoryIsKeyed:
+    """A viewer's `name` is a join key, not a label. `known` and the scene's
+    `positions` are keyed by the SHEET's identity name, so a viewer named from
+    anywhere else silently misses every lookup instead of failing."""
+
+    def test_the_player_is_named_from_the_sheet_not_the_denormalised_column(
+            self, temp_db, story):
+        """`personas.name` is a copy of the sheet made at insert time, free to
+        diverge from it forever after. `_backdrop_player` says so in as many
+        words and uses `persona_of`/`persona_name` instead."""
+        from core.db import wset
+
+        temp_db.qi("UPDATE personas SET sheet=? WHERE id=?",
+                   (json.dumps({"name": "Samantha"}), story["persona_id"]))
+        wset(story["chat_id"], "known", {"Samantha": ["Ilse"]})
+
+        listed = {entry["id"]: entry["name"] for entry in viewers(story["chat_id"])}
+        assert listed["player"] == "Samantha"
+        assert player_view(story["chat_id"], "player")["knows"] == ["Ilse"]
+
+    def test_an_extra_player_is_named_from_their_sheet_too(self, temp_db,
+                                                           story):
+        """The same column, the same divergence, one row further out. The
+        scene seeds an extra persona under `persona_name(sheet)`."""
+        pid = temp_db.qi("INSERT INTO personas(name,sheet) VALUES(?,?)",
+                         ("Old", json.dumps({"name": "Bex"})))
+        temp_db.qi(
+            "INSERT INTO chat_personas(chat_id,persona_id,status) "
+            "VALUES(?,?,'active')", (story["chat_id"], pid))
+
+        listed = {entry["id"]: entry["name"]
+                  for entry in viewers(story["chat_id"])}
+        assert listed[f"extra:{pid}"] == "Bex"
+
+    def test_a_story_with_no_persona_still_has_a_player_to_project(
+            self, temp_db, story):
+        """Every other reader in the engine falls back to `persona_of`'s
+        "The Stranger", which is the name the scene is keyed by. Emitting no
+        `player` entry made the one read sold as "what one person may be
+        shown" the only one that cannot see the default player -- a 404."""
+        temp_db.qi("UPDATE chats SET persona_id=NULL WHERE id=?",
+                   (story["chat_id"],))
+
+        listed = {entry["id"]: entry["name"]
+                  for entry in viewers(story["chat_id"])}
+        assert listed["player"] == "The Stranger"
+        assert player_view(story["chat_id"], "player")["viewer"]["id"] == "player"
+
+
 class TestPeople:
     """`player_view["people"]` -- the structured roster, still deciding
     nothing. Its two admissions are the identity ledger and the perception
