@@ -193,7 +193,6 @@ function _confirmOverlay(buildBody, onKeydown) {
   backdrop.append(box);
   document.body.append(backdrop);
 
-  let resolved = false;
   const cleanup = () => { backdrop.remove(); document.removeEventListener("keydown", keyHandler) };
   const keyHandler = e => {
     if (e.key === "Escape") onKeydown?.dismiss();
@@ -208,7 +207,7 @@ function _confirmOverlay(buildBody, onKeydown) {
     f?.focus();
   });
 
-  return { cleanup, isResolved: () => resolved, markResolved: () => { resolved = true } };
+  return { cleanup };
 }
 
 function confirmModal(message, opts = {}) {
@@ -660,7 +659,7 @@ function fAttireGarments(label, regions) {
 function fList(label, items, addLabel, buildRow, newItem) {
   const wrap = el("div"), rows = [];
   const addRow = item => {
-    const { node, read, remove } = buildRow(item);
+    const { node, read } = buildRow(item);
     const card = el("div", { class: "card row" }, node, el("button", { onclick: () => { card.remove(); rows.splice(rows.indexOf(card), 1) } }, "✕"));
     card._read = read;
     rows.push(card); wrap.append(card);
