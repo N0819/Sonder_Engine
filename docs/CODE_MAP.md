@@ -94,7 +94,7 @@
 | `world/gaps.py` | 454 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 608 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 319 |  | `core`, `world.spatial`, `world.spatial_frames` |
-| `world/offscreen.py` | 2186 |  | `core`, `core.logging_utils`, `llm.prompts` |
+| `world/offscreen.py` | 2223 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 562 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 208 |  | — |
@@ -1060,14 +1060,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `land_agent_tick()` | 1881 | 187 lines |
-| `schedule_agent_ticks()` | 2070 | 117 lines |
+| `land_agent_tick()` | 1917 | 187 lines |
+| `schedule_agent_ticks()` | 2106 | 118 lines |
 | `schedule_profile_ticks()` | 1406 | 112 lines |
 | `apply_plan_ops()` | 731 | 110 lines |
+| `agent_context()` | 1584 | 109 lines |
 | `advance_epoch()` | 976 | 98 lines |
 | `advance_reactive_plans()` | 889 | 85 lines |
 | `profile_summary_record()` | 1157 | 85 lines |
-| `agent_context()` | 1586 | 71 lines |
 
 ### `world/paradox.py`
 

@@ -1571,19 +1571,17 @@ AGENT_CONTEXT_KEYS = (
                        #   (state["interior"]["beliefs"] -- the only place
                        #   commit_memory writes one)
     "plans",           # authored plans they own
+    "mind_models",     # their own theory of other minds -- the DERIVED view
+                       #   only (decay-applied leading + competitors, claim and
+                       #   current confidence), never the raw ledger. Argument:
+                       #   docs/design/DESIGN_OFFSCREEN_MIND_MODELS.md
     "carried_reports", # what reached them, already degraded
     "last_known",      # where they were and when, by their own reckoning
     "elapsed_seconds", # how long they have been on their own
 )
-# NOT here, and deliberately open: `state["mind_models"]` -- this mind's own
-# theory of other minds, built entirely from what it perceived, and already
-# handed to it on the ON-SCREEN character step (agents/character.py). It would
-# arguably belong. Adding a key to the one fail-closed allowlist in the engine
-# is a widening, not a repair, so it stays an owner's decision rather than a
-# patch's.
 
 
-def agent_context(cid, entry, *, frame_id=None, clock=None):
+def agent_context(cid, entry, *, frame_id=None, clock=None, turn_idx=None):
     """The private context for one paid off-screen tick. Fail-closed.
 
     This is the firewall the whole `character_agent` rung rests on, and the
@@ -1628,6 +1626,43 @@ def agent_context(cid, entry, *, frame_id=None, clock=None):
              and str(p.get("actor_id")) == str(entry.get("id"))
              and p.get("status") == "active"]
 
+    # Their own theory of other minds. Every hypothesis in the ledger was
+    # formed on this mind's own firewalled turns (`apply_mind_model_updates`
+    # is its only writer), so handing it back opens no channel between minds
+    # -- and withholding it made the absent mind conclude LESS than its own
+    # evidence supports, the one repair the firewall's doctrine forbids. What
+    # travels is the DERIVED view, built by the SAME function the on-screen
+    # step uses (the `beliefs` entry above is what happens when one field
+    # grows two shapes): decay-applied, because an off-screen tick is exactly
+    # the moment the most time has passed and conviction must arrive as it
+    # stands NOW, and claim+confidence only, because the raw ledger's
+    # bookkeeping (first_seen_turn, formed_under) is the engine's, not theirs.
+    from mind.theory_of_mind import mind_models_for_payload
+
+    _elapsed_s = (clock or {}).get("elapsed_seconds")
+    try:
+        _elapsed_s = float(_elapsed_s) if _elapsed_s is not None else None
+    except (TypeError, ValueError):
+        _elapsed_s = None
+    mind_models = mind_models_for_payload(
+        state.get("mind_models") or {}, int(turn_idx or 0),
+        elapsed_seconds=_elapsed_s)
+    if frame_id is not None and mind_models:
+        # The nonexistent_cast recognition backstop, exactly as the on-screen
+        # step applies it (agents/character.py): in a frame where a cast
+        # member does not yet exist, no native may be handed back a model
+        # keyed to that identity. A key that is no cast member anywhere -- a
+        # stranger's description, a place, the player -- keeps the
+        # -1/"recognized" fallback, as on-screen.
+        from core.frames import is_recognized_in_frame
+        from story.scene import all_cast_name_to_id
+
+        name_to_id = all_cast_name_to_id(cid)
+        mind_models = {
+            name: mm for name, mm in mind_models.items()
+            if is_recognized_in_frame(name_to_id.get(name, -1), frame_id)
+        }
+
     context = {
         "identity": {"name": identity.get("name") or "",
                      "uid": identity.get("uid") or ""},
@@ -1643,6 +1678,7 @@ def agent_context(cid, entry, *, frame_id=None, clock=None):
         "beliefs": (state.get("interior") or {}).get("beliefs")
         or state.get("beliefs") or [],
         "plans": plans,
+        "mind_models": mind_models,
         # Already degraded by `degradation` at the moment each was heard, so
         # this hands over what they believe rather than what is true.
         "carried_reports": [r for r in state.get("carried_reports") or []
@@ -2134,7 +2170,8 @@ def schedule_agent_ticks(ctx, epoch=None):
                 if job.cancelled.is_set():
                     break
                 context = agent_context(
-                    cid, cand, frame_id=frame_id, clock=clock)
+                    cid, cand, frame_id=frame_id, clock=clock,
+                    turn_idx=turn_idx)
                 proposal = agent_proposal(cid, cand, context)
                 if not proposal:
                     skipped += 1
