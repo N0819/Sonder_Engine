@@ -30,11 +30,16 @@ What varies per campaign is what severity DOES, chosen via
     room consumption, riding the scene's own overlay/entity machinery.
     The recommended default: it exercises this engine's actual
     strengths (scene state filtered through senses and perception)
-    without depending on a well-authored antagonist.
-  - "toll": cost localizes to travelers physically inside the wound --
-    deterministic decay of their OWN memory confidence for rows from
-    their origin frame. This engine's one genuinely native effect: other
-    media hand-wave "reality is coming apart," this can make it a real,
+    without depending on a well-authored antagonist. Environmental ONLY,
+    and reversible on resolution: it never touches memory confidence
+    (the toll below is a chosen mode, not a rider on the default --
+    an irreversible cost to a mind's records must be opted into).
+  - "toll": cost to travelers -- deterministic decay of their OWN memory
+    confidence for rows from their origin frame. `toll_in_radius`
+    localizes it: True (default) charges only travelers physically
+    inside the wound; False lets their continuity fade wherever they
+    stand. This engine's one genuinely native effect: other media
+    hand-wave "reality is coming apart," this can make it a real,
     measurable epistemic fact via the existing confidence column.
   - "warden": a hunting entity, spawned and moved as an ordinary scene
     entity (ordinary spatial/reaction/resolution machinery treats it as
@@ -61,7 +66,7 @@ import time as _time
 from story.character_schema import character_name
 from core.db import active_frame_id, q, qi, transaction, wget, wset
 from core.frames import get_frame
-from world.spatial import room_of
+from world.spatial import merge_scene_with_diff, room_of
 
 MODES = ("dread", "hazard", "toll", "warden", "bureau")
 DEFAULT_MODE = "hazard"
@@ -72,7 +77,15 @@ DEFAULT_TOLL_IN_RADIUS = True
 # out over real in-fiction minutes-to-hours produces a few stage jumps
 # rather than an instant maximum or an imperceptible crawl.
 ESCALATION_SECONDS = 900.0
-STAGE_THRESHOLDS = (0.0, 0.25, 0.5, 0.75, 1.0)
+# FOUR rungs (stages 0-3), matching the consequence appliers exactly:
+# `_apply_warden_stage` distinguishes >=1, `_apply_hazard_stage` >=2 and >=3,
+# and nothing anywhere had a distinct FIFTH behaviour. Severity 1.0 is the
+# CEILING, a terminal event handled in `_advance_paradox` before any rung is
+# applied -- the old fifth threshold made the top rung fire in the same call
+# that force-restored the anchor and reverted the wound, which was a no-op
+# for everything except `_apply_toll`'s irreversible memory UPDATE and the
+# warden spawn, neither of which the restore undoes.
+STAGE_THRESHOLDS = (0.0, 0.25, 0.5, 0.75)
 
 # "hazard" mode's own docstring promises "sensory wrongness escalating to
 # room consumption" -- the room-consumption half was implemented
@@ -302,12 +315,20 @@ def _apply_toll(chat_id, state, policy):
     Marty's fading photograph, implemented as epistemology: this engine
     already has a per-memory confidence column and weights it in
     retrieval (memory.py), so "reality is coming apart" is a measurable
-    fact here rather than a narrative assertion."""
-    if not policy.get("toll_in_radius", True):
-        return
+    fact here rather than a narrative assertion.
+
+    `toll_in_radius` is the LOCALIZATION knob, not an off switch: True
+    confines the cost to travelers standing in the wound's rooms; False
+    lets a traveler's continuity fade wherever they stand (the reference
+    beat, Marty's photograph, fades with no regard for where Marty is).
+    It used to early-return on False, which made toll mode configurable
+    into a silent dread duplicate through a knob whose name never said
+    off -- a mode whose only consequence is the toll cannot also carry a
+    hidden switch that removes it."""
     sc = wget(chat_id, "scene", None)
     if not isinstance(sc, dict):
         return
+    in_radius = bool(policy.get("toll_in_radius", DEFAULT_TOLL_IN_RADIUS))
     consumed_rooms = set((state.get("consumed") or {}).get("rooms") or [])
     if not consumed_rooms:
         consumed_rooms = {state.get("epicenter_room")}
@@ -327,7 +348,7 @@ def _apply_toll(chat_id, state, policy):
     }
     decay = 0.05 * state.get("severity", 0.0)
     for name, room in positions.items():
-        if room not in consumed_rooms:
+        if in_radius and room not in consumed_rooms:
             continue
         char_id = name_to_id.get(name)
         if char_id is None or char_id not in travelers:
@@ -343,6 +364,30 @@ def _apply_toll(chat_id, state, policy):
             "UPDATE memories SET confidence=MAX(0.05, confidence-?) "
             "WHERE chat_id=? AND char_id=? AND frame_id IS NOT ?",
             (decay, chat_id, char_id, state.get("frame_id")),
+        )
+
+
+def _project_entity_row(chat_id, entity_id, entity_def):
+    """Keeps the `world_entities` projection in step with a scene write made
+    outside the commit's own scene->projection pass (AGENTS.md Phase 3a:
+    every scene writer owes the pair). The row is written FROM the blob's
+    merged entity, the same direction `commit_world_entities` projects --
+    never the other way around."""
+    payload = json.dumps(entity_def, ensure_ascii=False)
+    kind = str(entity_def.get("kind") or "object")
+    subtype = str(entity_def.get("subtype") or "")
+    name = str(entity_def.get("name") or entity_id)
+    if _entity_exists(chat_id, entity_id):
+        qi(
+            "UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
+            "WHERE entity_id=? AND chat_id=?",
+            (kind, subtype, name, payload, entity_id, chat_id),
+        )
+    else:
+        qi(
+            "INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload) "
+            "VALUES(?,?,?,?,?,?)",
+            (entity_id, chat_id, kind, subtype, name, payload),
         )
 
 
@@ -371,6 +416,10 @@ def _apply_warden_stage(chat_id, state, stage):
     entities.setdefault(warden_id, {"kind": "creature", "subtype": "paradox_warden", "hostile": True})
     positions[warden_id] = epicenter
     wset(chat_id, "scene", sc)
+    # A scene entity with no world_entities row is the exact divergence
+    # tools/scene_lint.py reports ("scene entity missing from
+    # world_entities") -- the warden previously lived in the blob alone.
+    _project_entity_row(chat_id, warden_id, entities[warden_id])
 
 
 def _apply_stage_consequence(chat_id, state, stage, policy):
@@ -381,8 +430,15 @@ def _apply_stage_consequence(chat_id, state, stage, policy):
         _apply_warden_stage(chat_id, state, stage)
         return
     if mode == "hazard":
+        # No `_apply_toll` here, deliberately. The modes are presented as
+        # exclusive dramatizations and hazard's own contract is environmental
+        # -- sensory wrongness and impassable rooms, all of it reversible on
+        # resolution. Memory-confidence decay is irreversible and invisible,
+        # and hazard is the recommended DEFAULT: a story that never opened
+        # the policy panel must not have its minds' records decayed by a
+        # rider it was never told about. A mind's witness is only spent
+        # where the story chose the mode whose entire identity is that cost.
         _apply_hazard_stage(chat_id, state, stage)
-        _apply_toll(chat_id, state, policy)
         return
     if mode == "toll":
         _apply_toll(chat_id, state, policy)
@@ -450,49 +506,79 @@ def _advance_paradox(chat_id, state):
 
     elapsed = max(0.0, _clock_elapsed(chat_id) - state["started_clock_seconds"])
     severity = min(1.0, (elapsed / ESCALATION_SECONDS) * policy["escalation_rate"])
-    new_stage = _stage_for(severity)
     state["severity"] = severity
-    if new_stage > state["stage"]:
-        state["stage"] = new_stage
-        _apply_stage_consequence(chat_id, state, new_stage, policy)
 
     if severity >= 1.0:
         # Ceiling, minimal-slice version: reality wins. The anchor is
         # forcibly restored rather than orphaning the frame (that
         # requires visibility-rule changes to the memory ledger this
         # slice doesn't attempt -- see Design.md's paradox section).
+        # The ceiling is TERMINAL, not a rung: checked BEFORE any stage
+        # consequence, because applying one here fired it in the same
+        # call that reverted the wound -- invisible for rooms, which the
+        # restore un-consumes, but a toll decay is irreversible and a
+        # spawned warden outlives its own resolved wound.
         if anchor:
-            _force_restore_anchor(chat_id, anchor)
+            _force_restore_anchor(chat_id, anchor, state)
         _restore_consumed(chat_id, state)
         _clear_paradox(chat_id, state.get("frame_id"))
         return {**state, "resolved": True, "forced": True}
+
+    new_stage = _stage_for(severity)
+    if new_stage > state["stage"]:
+        state["stage"] = new_stage
+        _apply_stage_consequence(chat_id, state, new_stage, policy)
 
     _save_paradox(chat_id, state)
     return state
 
 
-def _force_restore_anchor(chat_id, anchor):
-    # NOTE, unrepaired: these two statements write `world_entities` directly,
-    # and `world_entities` is a DERIVED PROJECTION of the scene commit -- the
-    # INSERT mints a durable row for a body the scene blob does not hold, and
-    # the retire semantics the projection has since grown do not know about
-    # it. The right restore path writes the anchor back into `world.scene` and
-    # lets the projection follow, which needs a decision about what "force
-    # restore" means when reality wins. Recorded rather than guessed at.
-    #
-    # The `world_placements` DELETE that stood beside them is gone: that table
-    # is decommissioned, nothing on the live path has written it for
-    # releases, and a delete against a table nobody fills is a statement that
-    # a second ledger still matters.
-    exists = _entity_exists(chat_id, anchor["entity_id"])
+def _force_restore_anchor(chat_id, anchor, state=None):
+    """Reality wins by rewriting REALITY'S ledger: the frame-scoped scene
+    blob is the single runtime source of truth, so "force restore" means
+    editing the operative frame's scene through the engine's own merge --
+    `merge_scene_with_diff`, so removal cleans positions/poses/substances by
+    the entity record's names exactly as a committed `remove_entities` would
+    -- and keeping the `world_entities` projection in step in the same call
+    (the pair every scene writer owes; AGENTS.md Phase 3a). The old shape
+    wrote the projection ALONE: its DELETE left the erased body standing in
+    the blob for every perceiver and for the next commit to re-mint the row
+    from (re-tripping the anchor), and its INSERT minted a durable row for a
+    body the scene never held. This resolves the deferral that stood here.
+
+    A restored body reappears at the wound's epicenter when this scene still
+    has that room -- the tear is where reality knits itself back together,
+    and it is the only place the wound knows. Without a scene or a standing
+    epicenter, existence is restored without a place (the projection row
+    plus, where a scene exists, an unplaced entity record) and the Director
+    brings the body onstage; inventing a room here is how a body appears
+    somewhere nobody was standing.
+    """
+    eid = anchor["entity_id"]
+    exists = _entity_exists(chat_id, eid)
+    sc = wget(chat_id, "scene", None)
     if anchor["required_exists"] and not exists:
-        qi(
-            "INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload) "
-            "VALUES(?,?,?,?,?,?)",
-            (anchor["entity_id"], chat_id, "person", "", anchor["entity_id"], "{}"),
-        )
+        entity_def = {"kind": "person", "name": eid}
+        if isinstance(sc, dict):
+            diff = {"entities": {eid: dict(entity_def)}}
+            epicenter = (state or {}).get("epicenter_room")
+            if epicenter and epicenter in (sc.get("rooms") or {}):
+                diff["positions"] = {eid: epicenter}
+            sc = merge_scene_with_diff(sc, diff)
+            wset(chat_id, "scene", sc)
+            merged = (sc.get("entities") or {}).get(eid)
+            if isinstance(merged, dict):
+                entity_def = merged
+        _project_entity_row(chat_id, eid, entity_def)
     elif not anchor["required_exists"] and exists:
-        qi("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?", (chat_id, anchor["entity_id"]))
+        if isinstance(sc, dict):
+            sc = merge_scene_with_diff(sc, {"remove_entities": [eid]})
+            # The merge's removal cleans by the entity RECORD's names and
+            # skips a body that has no record; an anchor subject standing in
+            # `positions` without one (a cast member's shape) still leaves.
+            (sc.get("positions") or {}).pop(eid, None)
+            wset(chat_id, "scene", sc)
+        qi("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?", (chat_id, eid))
 
 
 def check_and_apply_paradox(ctx, nonce):
