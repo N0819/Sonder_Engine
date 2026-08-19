@@ -263,11 +263,6 @@ class ActionStage(str, Enum):
     contact = "contact"
     sustained = "sustained"
 
-class TemporalMode(str, Enum):
-    immediate = "immediate"
-    extended = "extended"
-    time_skip = "time_skip"
-
 class PlayerAuthorityMode(str, Enum):
     actor_only = "actor_only"
     explicit_outcomes = "explicit_outcomes"
@@ -933,34 +928,11 @@ class LenientModel(BaseModel):
                 value, _declared(field), f"{cls.__name__}.{field.name}")
 
 
-class GenreProfile(LenientModel):
-    primary: str = "unspecified"
-    secondary: list[str] = Field(default_factory=list)
-    tone: list[str] = Field(default_factory=list)
-    motifs: list[str] = Field(default_factory=list)
-    threat_density: float = 0.3
-    mystery_density: float = 0.3
-    humor_density: float = 0.2
-    lethality: float = 0.3
-    supernatural_prevalence: float = 0.0
-    technology_level: str = "unspecified"
-    content_boundaries: list[str] = Field(default_factory=list)
-
 class CausalRegime(LenientModel):
     regime_id: str
     scope: str = "default"
     priority: int = 0
     rules: dict[str, Any] = Field(default_factory=dict)
-
-class FictionModel(LenientModel):
-    genre: dict[str, Any] = Field(default_factory=dict)
-    ontology: dict[str, Any] = Field(default_factory=dict)
-    causal_regimes: list[dict] = Field(default_factory=list)
-    scale_rules: dict[str, Any] = Field(default_factory=dict)
-    abstraction_rules: dict[str, Any] = Field(default_factory=dict)
-    narrative_conventions: list[dict] = Field(default_factory=list)
-    epistemic_rules: list[dict] = Field(default_factory=list)
-    content_rules: list[dict] = Field(default_factory=list)
 
 class FictionFrame(LenientModel):
     frame_id: str = ""
@@ -974,36 +946,6 @@ class FictionFrame(LenientModel):
     observer_ids: list[str] = Field(default_factory=list)
     stakes: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
-
-class ScenePressure(LenientModel):
-    threat: float = 0.0
-    mystery: float = 0.0
-    social: float = 0.0
-    environmental: float = 0.0
-    recent_release: float = 0.0
-
-# ---- Time ----
-
-class SimulationClock(LenientModel):
-    elapsed_seconds: float = 0.0
-    calendar: Optional[dict[str, Any]] = None
-    display: str = "now"
-    time_scale: str = "scene"
-
-class TimeDiff(LenientModel):
-    start_seconds: float = 0.0
-    duration_seconds: float = 0.0
-    end_seconds: float = 0.0
-    mode: str = "action"
-    explicit: bool = False
-    display_advance: str = ""
-
-class TemporalProperties(LenientModel):
-    rate_numerator: float = 1.0
-    rate_denominator: float = 1.0
-    offset_seconds: float = 0.0
-    causal_ordering: str = "global"
-    supports_time_travel: bool = False
 
 # ---- Actions ----
 
@@ -1070,20 +1012,6 @@ class DiceSpec(LenientModel):
     ability: str = ""
     difficulty: str = "medium"
 
-class ResolutionCheck(LenientModel):
-    check_id: str = ""
-    event_id: str = ""
-    actor_id: str = ""
-    opposing_actor_id: Optional[str] = None
-    ability: str = ""
-    opposing_ability: Optional[str] = None
-    difficulty: str = "medium"
-    modifiers: list[dict] = Field(default_factory=list)
-    seed: str = ""
-    roll: Optional[int] = None
-    opposing_roll: Optional[int] = None
-    outcome: str = ""
-
 class MovementDecl(LenientModel):
     to_room: str
     why: str = ""
@@ -1117,31 +1045,6 @@ class MovementDecl(LenientModel):
     # existed meant arrival, and a default of False would strand every one of
     # them.
     arrives: bool = True
-
-# ---- Authority ----
-
-class AuthorityClaim(LenientModel):
-    claim_id: str = ""
-    scope: str = "action"
-    subject_id: Optional[str] = None
-    predicate: str = ""
-    value: Any = None
-    commitment: str = "asserted"
-    source_text: str = ""
-
-class ClaimDisposition(LenientModel):
-    claim_id: str = ""
-    status: str = "realized"
-    realized_event_ids: list[str] = Field(default_factory=list)
-    notes: str = ""
-
-class GenerationRequest(LenientModel):
-    kind: str
-    subject: str = ""
-    location_id: Optional[str] = None
-    constraints: list[str] = Field(default_factory=list)
-    evidence_event_ids: list[str] = Field(default_factory=list)
-    urgency: str = "now"
 
 # ---- Flow ----
 
@@ -1337,125 +1240,28 @@ class RoomDef(LenientModel):
     # `anchors` did.
     size: Optional[str] = None
 
-class WorldEntity(LenientModel):
-    entity_id: str
-    kind: str
-    subtype: str = ""
-    name: str = ""
-    aliases: list[str] = Field(default_factory=list)
-    description: str = ""
-    tags: list[str] = Field(default_factory=list)
-    properties: dict[str, Any] = Field(default_factory=dict)
-    state: dict[str, Any] = Field(default_factory=dict)
-    provenance: dict[str, Any] = Field(default_factory=dict)
-    created_turn: Optional[int] = None
-    retired_turn: Optional[int] = None
-
-class AggregateEntity(LenientModel):
-    entity_id: str
-    name: str
-    aggregate_kind: str
-    member_kind: str = ""
-    named_member_ids: list[str] = Field(default_factory=list)
-    estimated_count: Optional[int] = None
-    strength: float = 1.0
-    cohesion: float = 1.0
-    morale: float = 1.0
-    readiness: float = 1.0
-    supply: float = 1.0
-    mobility: float = 1.0
-    command_quality: float = 0.5
-    sensor_quality: float = 0.5
-    capabilities: list[dict] = Field(default_factory=list)
-    objectives: list[dict] = Field(default_factory=list)
-    state: dict[str, Any] = Field(default_factory=dict)
-
-class ComponentState(LenientModel):
-    component_id: str
-    parent_entity_id: str
-    kind: str
-    name: str
-    integrity: float = 1.0
-    operational: bool = True
-    capabilities: list[str] = Field(default_factory=list)
-    dependencies: list[str] = Field(default_factory=list)
-    conditions: list[str] = Field(default_factory=list)
-    state: dict[str, Any] = Field(default_factory=dict)
-
-# ---- World and Location Hierarchy ----
+# The macro-world declarations that lived here and in five other sections are
+# gone -- twenty-nine models reachable from no entry in SCHEMA_MAP, no other
+# model's annotation, and no module outside this file. WorldDef, LocationDef
+# and TransitEdge named the fiction_worlds/fiction_locations/transit_edges
+# schema the movement/space phases deprecated, under their own comment saying
+# "MARKED FOR REMOVAL ... removed in Phase 3"; StrategicPlacement named the
+# decommissioned world_placements; the rest (the fiction/time/authority
+# models, the entity ontology, the inventory and lorebook shapes) were an
+# early world model the unified scene blob replaced.
 #
-# DEPRECATED -- MARKED FOR REMOVAL (movement/space Phase 2, removed in
-# Phase 3): WorldDef, LocationDef, and TransitEdge belong to the dead
-# fiction_worlds/fiction_locations/transit_edges macro schema that nothing
-# in the runtime pipeline ever writes. Their roles are absorbed by the
-# unified model: macro geography = upper lorebook-tree books; macro
-# transit = portal links (entity.state.link) + scheduled_events latency.
-# Kept only so old imports/checkpoint blobs keep tolerating the shapes.
-
-class WorldDef(LenientModel):
-    world_id: str
-    name: str
-    kind: str = "world"
-    parent_world_id: Optional[str] = None
-    description: str = ""
-    aliases: list[str] = Field(default_factory=list)
-    ontology: dict[str, Any] = Field(default_factory=dict)
-    mechanics: list[str] = Field(default_factory=list)
-    genre_overrides: dict[str, Any] = Field(default_factory=dict)
-    temporal_properties: dict[str, Any] = Field(default_factory=dict)
-    spatial_properties: dict[str, Any] = Field(default_factory=dict)
-    state: dict[str, Any] = Field(default_factory=dict)
-    provenance: dict[str, Any] = Field(default_factory=dict)
-
-# DEPRECATED -- see the WorldDef block comment above.
-class LocationDef(LenientModel):
-    location_id: str
-    world_id: str
-    parent_location_id: Optional[str] = None
-    kind: str = "location"
-    name: str = ""
-    description: str = ""
-    aliases: list[str] = Field(default_factory=list)
-    scale: str = "site"
-    tags: list[str] = Field(default_factory=list)
-    children: list[str] = Field(default_factory=list)
-    connections: list[str] = Field(default_factory=list)
-    properties: dict[str, Any] = Field(default_factory=dict)
-    state: dict[str, Any] = Field(default_factory=dict)
-    provenance: dict[str, Any] = Field(default_factory=dict)
-
-class SpatialZone(LenientModel):
-    zone_id: str
-    location_id: str
-    name: str
-    zone_kind: str = "area"
-    neighbors: list[dict] = Field(default_factory=list)
-    properties: dict[str, Any] = Field(default_factory=dict)
-
-# DEPRECATED -- see the WorldDef block comment above.
-class TransitEdge(LenientModel):
-    edge_id: str
-    from_world_id: str
-    from_location_id: Optional[str] = None
-    to_world_id: str
-    to_location_id: Optional[str] = None
-    kind: str
-    bidirectional: bool = False
-    traversal_time_seconds: Optional[float] = None
-    requirements: list[dict] = Field(default_factory=list)
-    costs: list[dict] = Field(default_factory=list)
-    hazards: list[dict] = Field(default_factory=list)
-    state: dict[str, Any] = Field(default_factory=dict)
-    source_entity_id: Optional[str] = None
-
-class StrategicPlacement(LenientModel):
-    subject_id: str
-    zone_id: str
-    posture: str = ""
-    range_band_to: dict[str, str] = Field(default_factory=dict)
-    heading: Optional[str] = None
-    altitude_band: Optional[str] = None
-    depth_band: Optional[str] = None
+# A declared-and-unreferenced model is worse than no model, which is why this
+# is a deletion rather than a wiring: nothing validates against it, so it
+# states a shape the engine does not enforce while reading as the contract.
+# That is not hypothetical -- the body specialist's sheet asks for
+# `tick_interval_seconds`, and the only place that field exists in code is a
+# model no call has ever validated. Same removal as `PerceptionOutput`
+# further down, for the same reason.
+#
+# `PersistentCondition` is kept until the open question about condition
+# ticking (build the due-tick sweep, or drop the field, the NULL `next_tick`
+# column and its index) is answered; `CausalRegime`, `FictionFrame` and
+# `SpeechElement` are kept because tests use them as fixtures.
 
 # ---- Conditions and Scheduling ----
 
@@ -1470,17 +1276,6 @@ class PersistentCondition(LenientModel):
     next_tick_seconds: Optional[float] = None
     state: dict[str, Any] = Field(default_factory=dict)
     source_event_id: Optional[str] = None
-
-class ScheduledEvent(LenientModel):
-    event_id: str
-    due_at_seconds: float
-    kind: str
-    subject_ids: list[str] = Field(default_factory=list)
-    location_id: Optional[str] = None
-    trigger: dict[str, Any] = Field(default_factory=dict)
-    payload: dict[str, Any] = Field(default_factory=dict)
-    source_event_id: Optional[str] = None
-    status: str = "pending"
 
 class DestructionEffect(LenientModel):
     """REVIVED (movement/space Phase 2, item 4) as the Director's
@@ -1535,41 +1330,7 @@ class Engagement(LenientModel):
     started_at_seconds: float = 0.0
     state: dict[str, Any] = Field(default_factory=dict)
 
-# ---- Inventory and Mutations ----
-
-class InventoryOp(LenientModel):
-    op: str
-    object_id: str
-    from_id: Optional[str] = None
-    to_id: Optional[str] = None
-    relation: str = "held_by"
-    details: dict[str, Any] = Field(default_factory=dict)
-
-class ObjectStatePatch(LenientModel):
-    object_id: str
-    set_fields: dict[str, Any] = Field(default_factory=dict)
-    add_tags: list[str] = Field(default_factory=list)
-    remove_tags: list[str] = Field(default_factory=list)
-
 # ---- Reactions and Perception ----
-
-class ReactionDeclaration(LenientModel):
-    actor_id: str
-    trigger_event_ids: list[str] = Field(default_factory=list)
-    sequence: list[dict] = Field(default_factory=list)
-    urgency: float = 0.0
-
-class EventAtom(LenientModel):
-    atom_id: str
-    event_id: str
-    kind: str
-    source_ids: list[str] = Field(default_factory=list)
-    target_ids: list[str] = Field(default_factory=list)
-    location_id: Optional[str] = None
-    start_offset_seconds: float = 0.0
-    duration_seconds: float = 0.0
-    channels: dict[str, dict] = Field(default_factory=dict)
-    observable: dict[str, Any] = Field(default_factory=dict)
 
 class Observation(LenientModel):
     observation_id: str
@@ -1610,34 +1371,6 @@ class Observation(LenientModel):
     _clamp_ambiguity = validator(
         "ambiguity", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.15))
-
-class SensorChannel(LenientModel):
-    channel_id: str
-    owner_id: str
-    kind: str
-    range: str
-    resolution: str
-    latency_seconds: float = 0.0
-    coverage: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-    state: dict[str, Any] = Field(default_factory=dict)
-
-class ActorDef(LenientModel):
-    entity_id: str
-    name: str
-    kind: str = "creature"
-    description: str = ""
-    aliases: list[str] = Field(default_factory=list)
-    tags: list[str] = Field(default_factory=list)
-    abilities: list[dict] = Field(default_factory=list)
-    drives: list[str] = Field(default_factory=list)
-    behavior_model: str = "reactive"
-    cognition_tier: str = "background"
-    senses: list[dict] = Field(default_factory=list)
-    body: dict[str, Any] = Field(default_factory=dict)
-    inventory: list[str] = Field(default_factory=list)
-    state: dict[str, Any] = Field(default_factory=dict)
-    provenance: dict[str, Any] = Field(default_factory=dict)
 
 # ---- Establishment and Resolve ----
 
@@ -3275,31 +3008,6 @@ class MappingCommit(LenientModel):
     coherence_notes: list[str] = Field(default_factory=list)
     validated_introductions: list[ValidatedIntroduction] = Field(default_factory=list)
 
-# ---- Lorebook Tree ----
-
-class LorebookDef(LenientModel):
-    id: int
-    parent_id: Optional[int] = None
-    name: str
-    book_type: str = "general"
-    summary: str = ""
-    scope_world_id: Optional[str] = None
-    scope_location_id: Optional[str] = None
-    inheritance_mode: str = "inherit"
-    sort_order: int = 0
-
-class LoreEntryScope(LenientModel):
-    world_ids: list[str] = Field(default_factory=list)
-    location_ids: list[str] = Field(default_factory=list)
-    entity_ids: list[str] = Field(default_factory=list)
-    valid_from: Optional[float] = None
-    valid_until: Optional[float] = None
-
-class LoreEntryRelation(LenientModel):
-    supersedes_entry_id: Optional[int] = None
-    refines_entry_ids: list[int] = Field(default_factory=list)
-    contradicts_entry_ids: list[int] = Field(default_factory=list)
-    
 # `PerceptionOutput` lived here, keyed as the `perception` step. Removed: it
 # was unreachable. Perception makes no model call -- every view is composed
 # deterministically in `agents/composer.py` -- so there is no model output to
@@ -3345,18 +3053,28 @@ class GreetingKnowledgeSeed(LenientModel):
     )
 
 class GreetingInterpret(LenientModel):
-    location: str = ""
+    """Two fields, because two are read.
+
+    This model used to declare eleven: a whole scene graph (`rooms`,
+    `positions`, `entities`, `attire`, `player_room`), plus `location`,
+    `scene_description`, `character_state` and `notes`. `story.greetings`
+    reads `time` and `knowledge_seeds` and nothing else, and the scene half
+    was never a gap waiting to be wired -- `start_story` stores the greeting
+    prose itself as the chat's scenario, so `director_establish` builds the
+    scene graph from the SAME passage one turn later, with the engine's full
+    payload behind it. Asking a second, weaker pass for the same graph and
+    discarding the answer cost a large prompt and most of the tokens of every
+    card-ingest call.
+
+    Extra keys are ignored rather than refused, as everywhere else here, so a
+    stored extraction written by an older extractor still reads.
+    """
+
+    #: Seeds the chat's `simulation_clock.display` at launch.
     time: str = "now"
-    scene_description: str = ""
-    # freeform dicts (kept tolerant, consumed defensively by the launch merge)
-    rooms: dict = Field(default_factory=dict)
-    positions: dict = Field(default_factory=dict)
-    entities: dict = Field(default_factory=dict)
-    attire: dict = Field(default_factory=dict)
-    character_state: dict = Field(default_factory=dict)
+    #: The point of the call: what the greeting implies the CHARACTER knows,
+    #: routed to that character's private memory.
     knowledge_seeds: list[GreetingKnowledgeSeed] = Field(default_factory=list)
-    player_room: str = ""           # room id {{PLAYER}} occupies, if present
-    notes: str = ""
 
 # ---- Validation ----
 
@@ -4962,22 +4680,12 @@ OUTPUT_EXAMPLES = {
         ],
     },
     "greeting_interpret": {
-        "location": "a dim tavern",
         "time": "night",
-        "scene_description": "A low-ceilinged tavern, rain against the shutters.",
-        "rooms": {"tavern": {"name": "The Tavern", "desc": "Low-ceilinged, smoke-hazed.",
-                              "adjacent": []}},
-        "positions": {"Kara": "tavern", "{{PLAYER}}": "tavern"},
-        "entities": {},
-        "attire": {"Kara": {"summary": "a travel-worn cloak"}},
-        "character_state": {"mood": "wary", "goal": "size up the newcomer"},
         "knowledge_seeds": [
             {"content": "I have been waiting here for three nights for a courier.",
              "about_entity": "self", "kind": "recent_event", "salience": 0.7,
              "revealed_in_prose": False},
         ],
-        "player_room": "tavern",
-        "notes": "",
     },
     "resolve_reconcile": {
         "omissions": [
