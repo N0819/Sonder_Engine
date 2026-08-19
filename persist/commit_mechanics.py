@@ -69,7 +69,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         )]
         prev_scene = wget(cid, "scene", {}) or {}
 
-        _, event_ops, notices = mechanics_sweep(
+        _, event_ops, notices, counts = mechanics_sweep(
             sc, clock, frame_id, pending,
             conditions=conditions, prev_scene=prev_scene, chat_id=cid,
             turn_id=ctx.turn.id, turn_idx=ctx.turn.idx,
@@ -78,9 +78,16 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             player_room=_player_room,
         )
 
-        kind_by_id = {row["event_id"]: row["kind"] for row in pending}
         row_by_id = {row["event_id"]: row for row in pending}
-        fired = scheduled = expired = news_fired = consequences_fired = 0
+        # What fired, and of which kind, is counted by the pass that fired it
+        # (`mechanics.mechanics_sweep`). Rebuilding it here from the ops meant
+        # two implementations of one count, and the one further from the
+        # firing was the one that reached the caller (WORLD-F3). `scheduled`
+        # and `expired` stay local: they count ops this loop applies.
+        fired = counts["fired"]
+        news_fired = counts["news_fired"]
+        consequences_fired = counts["consequences_fired"]
+        scheduled = expired = 0
         fired_consequence_rows = []
         fired_events = []
         for op in event_ops:
@@ -103,14 +110,8 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                             "payload": row_by_id[event_id]["payload"],
                             "seed": row_by_id[event_id]["seed"],
                         })
-                    if kind_by_id.get(event_id) == "news_arrival":
-                        news_fired += 1
-                    elif kind_by_id.get(event_id) == "consequence":
-                        consequences_fired += 1
-                        if event_id in row_by_id:
-                            fired_consequence_rows.append(row_by_id[event_id])
-                    else:
-                        fired += 1
+                    if row_by_id.get(event_id, {}).get("kind") == "consequence":
+                        fired_consequence_rows.append(row_by_id[event_id])
             elif op[0] == "schedule":
                 row = op[1]
                 qtx(
