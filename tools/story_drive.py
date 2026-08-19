@@ -299,25 +299,6 @@ class Author:
             return out
         if role == "narrator":
             return {"prose": "The gate hall is quiet."}
-        if role == "perception":
-            # `views is missing perceiver IDs` -- perception must answer for
-            # exactly the perceivers it was handed, so this reads them off the
-            # payload rather than guessing.
-            def views(payload):
-                ids = []
-                for key in ("perceivers", "observers", "views"):
-                    value = (payload or {}).get(key)
-                    if isinstance(value, list):
-                        ids = [str(v.get("id") if isinstance(v, dict) else v)
-                               for v in value]
-                        break
-                    if isinstance(value, dict):
-                        ids = [str(k) for k in value]
-                        break
-                return {"views": {i: {"summary": "The hall is busy.",
-                                      "sensed": [], "unknowns": []}
-                                  for i in ids}}
-            return views
         if role == "character":
             out = _base("character")
             out["sequence"] = []

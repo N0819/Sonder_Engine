@@ -1278,9 +1278,6 @@ def install_scripted_models(name, walls):
                     "dialogue_log": [], "obligations": [],
                     "changes_asserted": [], "fact_adjudications": [],
                     "state_diff": {"positions": {name: _rid(nxt)}}}
-        if role == "perception":
-            return {"views": {str(p["id"]): "A stone chamber."
-                              for p in (payload.get("perceivers") or [])}}
         return {}
 
     for mod in (ch, pc, dr, mp):
