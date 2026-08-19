@@ -69,6 +69,9 @@ from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 from .common import (
     _agent_json,
     _books,
+    _self_second_person,
+    character_scene_keys,
+    self_name_forms,
     declared_goal,
     observer_label_fn,
     observer_name_scrub,
@@ -484,7 +487,7 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
     return {"awaiting_your_answer": asked} if asked else {}
 
 
-def _player_quiet_beats(chat_id, current_turn_idx, frame_id, chat, cap=8):
+def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
     """How many consecutive beats up to and including this one the player has
     not spoken on. 1 means only this beat.
 
@@ -809,7 +812,7 @@ _UNBIDDEN_ABSORPTION_CEILING = 0.85
 _UNBIDDEN_PLATEAU_BEATS = 3
 
 
-def _barren_intent(active_annotated, stored_state):
+def _barren_intent(stored_state):
     """Is a live intention being pressed with nothing to show for it.
 
     Reads the same `barren_attempts` the character's own payload carries and
@@ -854,7 +857,7 @@ def _unbidden_trigger(stored_state, active_annotated, refrain, turn_idx,
         reason = "refrain"
     elif ledger.get("repeat_flag"):
         reason = "verbatim_repeat"
-    elif _barren_intent(active_annotated, st):
+    elif _barren_intent(st):
         # THE SIGNAL THAT ACTUALLY CAUGHT THE LIVE CASE. A goal carrying
         # `barren_attempts` was pressed on a beat that repeated an earlier
         # move and gained nothing (`affect._advance_intent`). The three
@@ -1352,15 +1355,12 @@ def _verdict(entry, frontier_hops=None):
         # arm. Every arrival is a cul-de-sac: you go to the shrine, the
         # bedroom, the vault BECAUSE of what is in it, not to pass through.
         if key == "visibly_no_way_through" and entry.get("untried"):
-            label = "unentered"
-            because = ("it has no other way out, but you have never been "
-                       "inside it -- what is IN a room is a different "
-                       "question from what it leads to, and things worth "
-                       "reaching are usually not thoroughfares")
+            label, because = _ling("_VERDICT_UNENTERED")
         detail = because
+        _details = _ling("_VERDICT_DETAILS")
         if verdict_key == "circling_here" and entry.get("entered_recently"):
-            detail = (f"you have been in there {entry['entered_recently']} "
-                      "times in your last dozen paces")
+            detail = _details["entered_recently"].format(
+                count=entry["entered_recently"])
         # The distance rides ANY verdict that has one, not only `known`.
         # Restricting it to `known` suppressed it exactly where it mattered
         # most: measured in maze arm A11, a character stood with both exits
@@ -1372,12 +1372,12 @@ def _verdict(entry, frontier_hops=None):
         # still be the way out.
         if isinstance(frontier_hops, int) and frontier_hops >= 1:
             if frontier_hops == 1:
-                detail += ("; the room through it still has a door you have "
-                           "never taken")
+                detail += _details["frontier_adjacent"]
             else:
-                detail += ("; the nearest door you have never taken lies "
-                           f"about {frontier_hops} rooms down that way")
-        entry["verdict"] = f"{label} — {detail}"
+                detail += _details["frontier_distant"].format(
+                    hops=frontier_hops)
+        entry["verdict"] = _ling("_VERDICT_TEMPLATE").format(
+            label=label, detail=detail)
         if verdict_key in _DISCOURAGING:
             # These numbers all say the same thing as the verdict, and
             # together they were three times the text of the untried door
@@ -3245,7 +3245,7 @@ def character_step(ctx, cid, nonce):
             **_player_silence_note(
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
-                    chat.id, ctx.turn.idx, ctx.turn.frame_id, chat))),
+                    chat.id, ctx.turn.idx, ctx.turn.frame_id))),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_unanswered_question_note(
@@ -3295,7 +3295,23 @@ def character_step(ctx, cid, nonce):
             ctx.add_warning(
                 f"character {character_name(sh)}: scrubbed unearned "
                 "identities out of while_you_were_offscreen gap text")
-        payload["while_you_were_offscreen"] = _gated_interim
+        # TWO floors, not one. `observer_name_scrub` gates OTHER people's
+        # names; it says nothing about the mind's own. Every tick composer in
+        # `world/offscreen.py` leads with the subject's display name ("{who}
+        # goes about their own business...", "{who} keeps quietly at it: ..."),
+        # `gaps._skeleton` copies that straight into `events[].summary`, and
+        # the one reader hands the whole record to THAT SUBJECT. So a mind's
+        # own interval arrived written about them in the third person -- the
+        # exception to `Design.md`'s "a mind is never told about itself in the
+        # third person, by name OR by the label strangers use for it".
+        #
+        # Latent until the seeded rung writes a batch, and repaired before it
+        # does rather than after.
+        _self_forms = self_name_forms(character_name(sh),
+                                      character_scene_keys(sh))
+        _owned_interim = scrub_names_deep(
+            _gated_interim, lambda text: _self_second_person(text, _self_forms))
+        payload["while_you_were_offscreen"] = _owned_interim
 
     # Authorial offers (P3): propositions the PLAYER authored about THIS
     # character's interior/behavior, rerouted here instead of being enacted as

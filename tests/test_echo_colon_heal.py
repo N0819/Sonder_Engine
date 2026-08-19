@@ -101,12 +101,15 @@ def test_the_verb_healer_and_the_colon_healer_share_one_vocabulary():
         assert _DANGLING_SPEECH_VERB_RE.search("as you %s," % verb), verb
 
 
-def test_the_verbs_the_colon_healer_never_had_are_kept():
-    """`call` and `shout` were only ever in the verb healer. Merging the two
-    lists must not quietly drop them."""
-    from agents.common import _DANGLING_SPEECH_VERB_RE
+def test_the_verbs_only_one_healer_had_now_reach_both():
+    """`call` and `shout` were only ever in the verb healer -- the drift ran
+    the other way this time, and the earlier version of this test asserted the
+    asymmetry as though it were intended. One vocabulary means both."""
+    from agents.common import _DANGLING_SPEECH_VERB_RE, _dangling_speech
+    colon = _dangling_speech("colon", "en")
     for verb in ("call", "called", "shout", "shouted", "says", "asked"):
         assert _DANGLING_SPEECH_VERB_RE.search("she %s," % verb), verb
+        assert colon.search("she %s: Something" % verb), verb
 
 
 def test_healing_never_welds_two_paragraphs():
@@ -117,3 +120,56 @@ def test_healing_never_welds_two_paragraphs():
     healed = _DANGLING_SPEECH_VERB_RE.sub(
         lambda m: "%s it." % m.group(1), "you add,\n\nThe next paragraph.")
     assert "\n\n" in healed
+
+
+def test_one_vocabulary_reaches_both_wounds_in_every_installed_pack():
+    """The two healers are the same wound from the same cut, so they must not
+    be able to disagree about what counts as speech -- not by discipline, but
+    by construction. Measured before the repair: `en` had `call`/`shout` in the
+    verb healer and not the colon healer, and `ja` had zero Japanese verbs in
+    either while its `_SPEECH_CUE` carried eight."""
+    from language_runtime import installed_language_packs, linguistic
+    from agents.common import _dangling_speech
+
+    for language_id in sorted(installed_language_packs()):
+        cue = str(linguistic("agents.common", "_SPEECH_CUE", language_id))
+        verb = _dangling_speech("verb", language_id).pattern
+        colon = _dangling_speech("colon", language_id).pattern
+        for alternative in cue.split("|"):
+            assert alternative in verb, (language_id, alternative)
+            assert alternative in colon, (language_id, alternative)
+
+
+def test_a_japanese_pack_states_its_speech_vocabulary_in_japanese():
+    """`"story": true` is a claim to support play. A pack whose speech
+    vocabulary is English-only heals nothing on every turn, silently."""
+    from language_runtime import linguistic
+
+    cue = str(linguistic("agents.common", "_SPEECH_CUE", "ja"))
+    japanese = [alt for alt in cue.split("|")
+                if any(ord(ch) > 0x2E80 for ch in alt)]
+    assert len(japanese) >= 8, cue
+
+
+def test_a_japanese_dangling_speech_verb_is_healed():
+    """The Japanese wound: the quote sits before the particle, so stripping it
+    leaves the particle and the verb with nothing to refer to."""
+    from language_runtime import language_scope
+    from agents.common import _dangling_speech, _heal_dangling_verb
+
+    with language_scope("ja"):
+        healed = _dangling_speech("verb").sub(
+            _heal_dangling_verb, "ヒナミはと言った。")
+    assert "はと言った" not in healed, healed
+    assert "言った" in healed, healed
+
+
+def test_a_japanese_dangling_attributive_colon_is_healed():
+    from language_runtime import language_scope
+    from agents.common import _dangling_speech, _heal_dangling_colon
+
+    with language_scope("ja"):
+        healed = _dangling_speech("colon").sub(
+            _heal_dangling_colon, "声はさらに静かになり、ほとんど優しく囁く：")
+    assert "：" not in healed, healed
+    assert healed.rstrip().endswith("。"), healed

@@ -38,7 +38,6 @@
         "plan",
         "believe",
         "doubt",
-        "focus",
         "assume",
         "recollect",
         "realize",
@@ -46,12 +45,10 @@
         "hope",
         "decide",
         "wonder",
-        "resolve",
         "recall",
         "visualize",
         "consider",
         "visualise",
-        "feel",
         "ponder",
         "imagine",
         "deliberate",
@@ -62,8 +59,6 @@
         "think",
         "realise",
         "understand",
-        "reflect",
-        "sense",
         "recognize",
         "fear",
         "思う",
@@ -77,6 +72,19 @@
         "疑う",
         "望む",
         "恐れる"
+      ]
+    },
+    "_AMBIGUOUS_MENTAL_VERBS": {
+      "$type": "set",
+      "items": [
+        "feel",
+        "focus",
+        "reflect",
+        "resolve",
+        "sense",
+        "感じる",
+        "感じ取る",
+        "集中する"
       ]
     },
     "_AUTONOMY_VERBS": {
@@ -326,50 +334,6 @@
       "flags": 34
     },
     "_ATTRIBUTION_VERBS": "say(?:e?s|ed|ing|d)?|speak(?:e?s|ed|ing|d)?|reply(?:e?s|ed|ing|d)?|respond(?:e?s|ed|ing|d)?|answer(?:e?s|ed|ing|d)?|add(?:e?s|ed|ing|d)?|offer(?:e?s|ed|ing|d)?|remark(?:e?s|ed|ing|d)?|observe(?:e?s|ed|ing|d)?|note(?:e?s|ed|ing|d)?|comment(?:e?s|ed|ing|d)?|continue(?:e?s|ed|ing|d)?|go(?:e?s|ed|ing|d)?\\s+on|put(?:e?s|ed|ing|d)?\\s+in|interject(?:e?s|ed|ing|d)?|interrupt(?:e?s|ed|ing|d)?|counter(?:e?s|ed|ing|d)?|retort(?:e?s|ed|ing|d)?|insist(?:e?s|ed|ing|d)?|repeat(?:e?s|ed|ing|d)?|explain(?:e?s|ed|ing|d)?|admit(?:e?s|ed|ing|d)?|confess(?:e?s|ed|ing|d)?|agree(?:e?s|ed|ing|d)?|protest(?:e?s|ed|ing|d)?|object(?:e?s|ed|ing|d)?|ask(?:e?s|ed|ing|d)?|inquire(?:e?s|ed|ing|d)?|wonder(?:e?s|ed|ing|d)?\\s+aloud|murmur(?:e?s|ed|ing|d)?|mutter(?:e?s|ed|ing|d)?|mumble(?:e?s|ed|ing|d)?|whisper(?:e?s|ed|ing|d)?|breathe(?:e?s|ed|ing|d)?|hiss(?:e?s|ed|ing|d)?|growl(?:e?s|ed|ing|d)?|purr(?:e?s|ed|ing|d)?|drawl(?:e?s|ed|ing|d)?|call(?:e?s|ed|ing|d)?|shout(?:e?s|ed|ing|d)?|yell(?:e?s|ed|ing|d)?|cry(?:e?s|ed|ing|d)?|exclaim(?:e?s|ed|ing|d)?|declare(?:e?s|ed|ing|d)?|announce(?:e?s|ed|ing|d)?|state(?:e?s|ed|ing|d)?|tell(?:e?s|ed|ing|d)?|greet(?:e?s|ed|ing|d)?|chuckle(?:e?s|ed|ing|d)?\\s+out|manage(?:e?s|ed|ing|d)?|言う|話す|答える|尋ねる|囁く|つぶやく|叫ぶ",
-    "_LOCOMOTION_STEMS": {
-      "$type": "tuple",
-      "items": [
-        "step",
-        "walk",
-        "stride",
-        "move",
-        "approach",
-        "advance",
-        "close",
-        "cross",
-        "back",
-        "retreat",
-        "withdraw",
-        "edge",
-        "inch",
-        "sidle",
-        "lean",
-        "kneel",
-        "crouch",
-        "climb",
-        "duck",
-        "slide",
-        "settle",
-        "follow",
-        "enter",
-        "leave",
-        "come",
-        "came",
-        "go",
-        "went",
-        "reach",
-        "closes the distance",
-        "draw closer",
-        "draw nearer",
-        "歩く",
-        "進む",
-        "近づく",
-        "下がる",
-        "走る",
-        "渡る",
-        "移動する"
-      ]
-    },
     "_LOCOMOTION_VERBS": "step(?:e?s|ed|ing|d)?|walk(?:e?s|ed|ing|d)?|stride(?:e?s|ed|ing|d)?|move(?:e?s|ed|ing|d)?|approach(?:e?s|ed|ing|d)?|advance(?:e?s|ed|ing|d)?|close(?:e?s|ed|ing|d)?|cross(?:e?s|ed|ing|d)?|back(?:e?s|ed|ing|d)?|retreat(?:e?s|ed|ing|d)?|withdraw(?:e?s|ed|ing|d)?|edge(?:e?s|ed|ing|d)?|inch(?:e?s|ed|ing|d)?|sidle(?:e?s|ed|ing|d)?|lean(?:e?s|ed|ing|d)?|kneel(?:e?s|ed|ing|d)?|crouch(?:e?s|ed|ing|d)?|climb(?:e?s|ed|ing|d)?|duck(?:e?s|ed|ing|d)?|slide(?:e?s|ed|ing|d)?|settle(?:e?s|ed|ing|d)?|follow(?:e?s|ed|ing|d)?|enter(?:e?s|ed|ing|d)?|leave(?:e?s|ed|ing|d)?|come(?:e?s|ed|ing|d)?|came(?:e?s|ed|ing|d)?|go(?:e?s|ed|ing|d)?|went(?:e?s|ed|ing|d)?|reach(?:e?s|ed|ing|d)?|closes(?:e?s|ed|ing|d)?\\s+the\\ distance|draw(?:e?s|ed|ing|d)?\\s+closer|draw(?:e?s|ed|ing|d)?\\s+nearer|歩く|進む|近づく|下がる|走る|渡る|移動する",
     "_PROSE_QUOTE_RES": {
       "$type": "tuple",
@@ -429,51 +393,6 @@
         "恐れる",
         "決める",
         "気づく"
-      ]
-    },
-    "_MANIPULATION_STEMS": {
-      "$type": "tuple",
-      "items": [
-        "grip",
-        "grab",
-        "take",
-        "took",
-        "hold",
-        "held",
-        "pull",
-        "push",
-        "press",
-        "lift",
-        "open",
-        "close",
-        "drop",
-        "place",
-        "put",
-        "set",
-        "hand",
-        "accept",
-        "drink",
-        "eat",
-        "clutch",
-        "seize",
-        "tug",
-        "twist",
-        "touch",
-        "grasp",
-        "wrap",
-        "pick",
-        "pocket",
-        "snatch",
-        "shove",
-        "haul",
-        "掴む",
-        "取る",
-        "持つ",
-        "引く",
-        "押す",
-        "上げる",
-        "開ける",
-        "閉める"
       ]
     },
     "_MANIPULATION_VERBS": "grip(?:e?s|ed|ing|d)?|grab(?:e?s|ed|ing|d)?|take(?:e?s|ed|ing|d)?|took(?:e?s|ed|ing|d)?|hold(?:e?s|ed|ing|d)?|held(?:e?s|ed|ing|d)?|pull(?:e?s|ed|ing|d)?|push(?:e?s|ed|ing|d)?|press(?:e?s|ed|ing|d)?|lift(?:e?s|ed|ing|d)?|open(?:e?s|ed|ing|d)?|close(?:e?s|ed|ing|d)?|drop(?:e?s|ed|ing|d)?|place(?:e?s|ed|ing|d)?|put(?:e?s|ed|ing|d)?|set(?:e?s|ed|ing|d)?|hand(?:e?s|ed|ing|d)?|accept(?:e?s|ed|ing|d)?|drink(?:e?s|ed|ing|d)?|eat(?:e?s|ed|ing|d)?|clutch(?:e?s|ed|ing|d)?|seize(?:e?s|ed|ing|d)?|tug(?:e?s|ed|ing|d)?|twist(?:e?s|ed|ing|d)?|touch(?:e?s|ed|ing|d)?|grasp(?:e?s|ed|ing|d)?|wrap(?:e?s|ed|ing|d)?|pick(?:e?s|ed|ing|d)?|pocket(?:e?s|ed|ing|d)?|snatch(?:e?s|ed|ing|d)?|shove(?:e?s|ed|ing|d)?|haul(?:e?s|ed|ing|d)?|掴む|取る|持つ|引く|押す|上げる|開ける|閉める",
@@ -851,16 +770,20 @@
         }
       ]
     },
-    "_SPEECH_CUE": "say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered|言う|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ",
-    "_DANGLING_SPEECH_VERB_RE": {
-      "$type": "regex",
-      "pattern": "\\b(say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered|call|calls|called|shout|shouts|shouted)\\b,?[^\\S\\n]*(?:(?P<end>[.!?])|(?P<cont>,(?![^.!?\\n]*[\\\"“]))|(?P<eol>$))",
-      "flags": 42
-    },
-    "_DANGLING_SPEECH_COLON_RE": {
-      "$type": "regex",
-      "pattern": "(\\b(?:say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered)\\b[^.!?:]*):\\s*\\.?\\s*(?=[A-Z]|$)",
-      "flags": 34
+    "_SPEECH_CUE": "say|says|said|speak|speaks|spoke|speaking|add|adds|added|ask|asks|asked|tell|tells|told|reply|replies|replied|answer|answers|answered|voice|voices|voiced|murmur|murmurs|murmured|whisper|whispers|whispered|continue|continues|continued|offer|offers|offered|言う|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ|言った|言って|話した|答えた|尋ねた|囁いた|ささやいた|つぶやいた|叫んだ|続ける|続けた|付け加える|付け加えた|返す|返した",
+    "_DANGLING_SPEECH": {
+      "verb": {
+        "pattern": "(?:と|って)?(?<!そう)({cue})[^\\S\\n]*(?:(?P<end>[。！？.!?])|(?P<cont>、)|(?P<eol>$))",
+        "flags": 42
+      },
+      "colon": {
+        "pattern": "([^。！？：:\\n]*(?:{cue})[^\\S\\n]*)[：:]\\s*[。.]?\\s*(?=\\S|$)",
+        "flags": 34
+      },
+      "heal_end": "そう{verb}{end}",
+      "heal_cont": "そう{verb}、",
+      "heal_stop": "そう{verb}。",
+      "heal_colon": "{lead}。"
     },
     "_EMPTY_QUOTE_RE": {
       "$type": "regex",
@@ -923,156 +846,6 @@
         "here",
         "in"
       ]
-    },
-    "_SPEECH_VERBS": {
-      "$type": "tuple",
-      "items": [
-        "say",
-        "says",
-        "said",
-        "saying",
-        "whisper",
-        "whispers",
-        "whispered",
-        "whispering",
-        "mutter",
-        "mutters",
-        "muttered",
-        "muttering",
-        "murmur",
-        "murmurs",
-        "murmured",
-        "murmuring",
-        "manage",
-        "managed",
-        "manages",
-        "breathe",
-        "breathes",
-        "breathed",
-        "gasp",
-        "gasps",
-        "gasped",
-        "gasping",
-        "croak",
-        "croaks",
-        "croaked",
-        "rasp",
-        "rasps",
-        "rasped",
-        "reply",
-        "replies",
-        "replied",
-        "replying",
-        "answer",
-        "answers",
-        "answered",
-        "answering",
-        "hiss",
-        "hisses",
-        "hissed",
-        "stammer",
-        "stammers",
-        "stammered",
-        "whimper",
-        "whimpers",
-        "whimpered",
-        "choke",
-        "chokes",
-        "force",
-        "forces",
-        "add",
-        "adds",
-        "added",
-        "plead",
-        "pleads",
-        "pleaded",
-        "pleading",
-        "beg",
-        "begs",
-        "begged",
-        "begging",
-        "cry",
-        "cries",
-        "call",
-        "calls",
-        "called",
-        "get out",
-        "let out",
-        "shout",
-        "shouts",
-        "shouted",
-        "shouting",
-        "scream",
-        "screams",
-        "screamed",
-        "screaming",
-        "yell",
-        "yells",
-        "yelled",
-        "yelling",
-        "ask",
-        "asks",
-        "asked",
-        "asking",
-        "respond",
-        "responds",
-        "responded",
-        "sob",
-        "sobs",
-        "sobbed",
-        "sobbing",
-        "snap",
-        "snaps",
-        "snapped",
-        "growl",
-        "growls",
-        "growled",
-        "blurt",
-        "blurts",
-        "blurted",
-        "exclaim",
-        "exclaims",
-        "exclaimed",
-        "repeat",
-        "repeats",
-        "repeated",
-        "insist",
-        "insists",
-        "insisted",
-        "demand",
-        "demands",
-        "demanded",
-        "announce",
-        "announces",
-        "announced",
-        "declare",
-        "declares",
-        "declared",
-        "wail",
-        "wails",
-        "wailed",
-        "moan",
-        "moans",
-        "moaned",
-        "intone",
-        "intones",
-        "intoned",
-        "utter",
-        "utters",
-        "uttered",
-        "speak",
-        "speaks",
-        "spoke",
-        "speaking",
-        "tell",
-        "tells",
-        "told"
-      ]
-    },
-    "_SPEECH_VERB_RE": {
-      "$type": "regex",
-      "pattern": "(?:\\b(?:say|says|said|saying|whisper|whispers|whispered|whispering|mutter|mutters|muttered|muttering|murmur|murmurs|murmured|murmuring|manage|managed|manages|breathe|breathes|breathed|gasp|gasps|gasped|gasping|croak|croaks|croaked|rasp|rasps|rasped|reply|replies|replied|replying|answer|answers|answered|answering|hiss|hisses|hissed|stammer|stammers|stammered|whimper|whimpers|whimpered|choke|chokes|force|forces|add|adds|added|plead|pleads|pleaded|pleading|beg|begs|begged|begging|cry|cries|call|calls|called|get\\ out|let\\ out|shout|shouts|shouted|shouting|scream|screams|screamed|screaming|yell|yells|yelled|yelling|ask|asks|asked|asking|respond|responds|responded|sob|sobs|sobbed|sobbing|snap|snaps|snapped|growl|growls|growled|blurt|blurts|blurted|exclaim|exclaims|exclaimed|repeat|repeats|repeated|insist|insists|insisted|demand|demands|demanded|announce|announces|announced|declare|declares|declared|wail|wails|wailed|moan|moans|moaned|intone|intones|intoned|utter|utters|uttered|speak|speaks|spoke|speaking|tell|tells|told)\\b|言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ)",
-      "flags": 34
     },
     "_DIALOGUE_CUE_RE": {
       "$type": "regex",
@@ -1282,19 +1055,6 @@
         "近づこうとする"
       ]
     },
-    "ASSERTION_SKIP_CUES": {
-      "$type": "tuple",
-      "items": [
-        "try",
-        "attempt",
-        "aim ",
-        "try to",
-        "attempt to",
-        "しようとする",
-        "試みる",
-        "狙う"
-      ]
-    },
     "_BREATH_CONJUNCTIONS": {
       "$type": "frozenset",
       "items": [
@@ -1373,77 +1133,6 @@
         "さん"
       ]
     },
-    "_PLAYER_ACT_STEMS": {
-      "$type": "tuple",
-      "items": [
-        "take",
-        "took",
-        "grab",
-        "lift",
-        "raise",
-        "lower",
-        "drink",
-        "drank",
-        "sip",
-        "eat",
-        "ate",
-        "swallow",
-        "nod",
-        "shrug",
-        "smile",
-        "step",
-        "walk",
-        "move",
-        "turn",
-        "stand",
-        "stood",
-        "straighten",
-        "rise",
-        "rose",
-        "sit",
-        "sat",
-        "kneel",
-        "crouch",
-        "lean",
-        "shift",
-        "reach",
-        "push",
-        "pull",
-        "open",
-        "close",
-        "hand",
-        "press",
-        "grip",
-        "hold",
-        "held",
-        "accept",
-        "follow",
-        "drop",
-        "place",
-        "put",
-        "set",
-        "wipe",
-        "brush",
-        "tighten",
-        "loosen",
-        "cross",
-        "tilt",
-        "lift",
-        "swing",
-        "climb",
-        "duck",
-        "slide",
-        "settle",
-        "取る",
-        "掴む",
-        "持つ",
-        "飲む",
-        "食べる",
-        "歩く",
-        "走る",
-        "見る"
-      ]
-    },
     "_NAME_LEADERS": {
       "$type": "set",
       "items": [
@@ -1484,68 +1173,6 @@
       "$type": "regex",
       "pattern": "(?:^(?:he|she|they|it|who|which|that|i|we|you)\\b|^(?:私|僕|俺|あなた|君|彼|彼女|彼ら|それ|これ|あれ))",
       "flags": 34
-    },
-    "_ATTRIBUTION_STEMS": {
-      "$type": "tuple",
-      "items": [
-        "say",
-        "speak",
-        "reply",
-        "respond",
-        "answer",
-        "add",
-        "offer",
-        "remark",
-        "observe",
-        "note",
-        "comment",
-        "continue",
-        "go on",
-        "put in",
-        "interject",
-        "interrupt",
-        "counter",
-        "retort",
-        "insist",
-        "repeat",
-        "explain",
-        "admit",
-        "confess",
-        "agree",
-        "protest",
-        "object",
-        "ask",
-        "inquire",
-        "wonder aloud",
-        "murmur",
-        "mutter",
-        "mumble",
-        "whisper",
-        "breathe",
-        "hiss",
-        "growl",
-        "purr",
-        "drawl",
-        "call",
-        "shout",
-        "yell",
-        "cry",
-        "exclaim",
-        "declare",
-        "announce",
-        "state",
-        "tell",
-        "greet",
-        "chuckle out",
-        "manage",
-        "言う",
-        "話す",
-        "答える",
-        "尋ねる",
-        "囁く",
-        "つぶやく",
-        "叫ぶ"
-      ]
     },
     "_PROXIMITY_RE": {
       "$type": "regex",
@@ -1721,6 +1348,177 @@
       "$type": "regex",
       "pattern": "(?:\\b(?:lift(?:s|ed|ing)?|rais(?:e|es|ed|ing)|hoist(?:s|ed|ing)?|upwards?)\\b|上げる|持ち上げる|昇る)",
       "flags": 34
+    },
+    "_CONFLICT_VERBS": {
+      "$type": "tuple",
+      "items": [
+        "attack",
+        "grab",
+        "restrain",
+        "steal",
+        "break",
+        "force",
+        "cast",
+        "shoot",
+        "stab",
+        "strike",
+        "move into",
+        "leave",
+        "enter",
+        "攻撃",
+        "掴む",
+        "拘束",
+        "盗む",
+        "壊す",
+        "破る",
+        "押し入る",
+        "撃つ",
+        "刺す",
+        "殴る",
+        "斬る",
+        "入る",
+        "出る",
+        "立ち去る"
+      ]
+    },
+    "_LEADING_SUBJECT_PRONOUNS": {
+      "$type": "frozenset",
+      "items": [
+        "she",
+        "he",
+        "they",
+        "it",
+        "彼",
+        "彼女",
+        "彼ら",
+        "それ"
+      ]
+    },
+    "_VISUAL_CONTRADICTION_RES": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "regex",
+          "pattern": "\\bno visual sign of the speaker is visible\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "\\bno clear figure visible\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "\\bthe speaker is not visible\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "\\bcannot see (?:them|the speaker|anyone)\\b",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "話し手の姿は見えない",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "はっきりした人影は見えない",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "(?:相手|話し手|誰)の?姿は見えない",
+          "flags": 34
+        },
+        {
+          "$type": "regex",
+          "pattern": "(?:相手|話し手|誰も)を?見ることはできない",
+          "flags": 34
+        }
+      ]
+    },
+    "_PARTIAL_QUOTE_PREFIXES": {
+      "$type": "tuple",
+      "items": [
+        "something about ",
+        "何か",
+        "……何か"
+      ]
+    },
+    "_GENERIC_ROOM_WORDS": {
+      "$type": "frozenset",
+      "items": [
+        "room",
+        "area",
+        "here",
+        "部屋",
+        "場所",
+        "ここ",
+        "区画"
+      ]
+    },
+    "_PLACEMENT_PHRASE": {
+      "pattern": "(?:\\b(?:back\\s+)?(?:in|inside|within|into|at)\\s+(?:the\\s+)?(?:\\w+[ -]){0,2}?{room}\\b|{room}(?:の(?:中|なか|奥))?(?:に|で|へ|にて))",
+      "flags": 34
+    },
+    "_PORTAL_STATE": {
+      "open": "(?:open|ajar|wide[- ]open|開いて|開いた|開け放たれ|開け放た)",
+      "shut": "(?:shut|closed|sealed|locked|閉じ|閉ま|閉ざされ|施錠され)",
+      "modifier": "(?:\\b{state}(?:\\s+\\w+)?\\s+{name}\\b|{state}(?:た|ている)?{name})",
+      "predicate": "(?:\\b{name}\\b[^.!?\\n,;]{0,60}?\\b{state}\\b|{name}[^。！？\\n、；]{0,60}?{state})",
+      "join": "\\s*"
+    },
+    "_VIEW_QUOTE_BODY_RE": {
+      "$type": "regex",
+      "pattern": "[\"“「『]([^\"“”」』]{1,})[\"”」』]",
+      "flags": 32
+    },
+    "_QUOTE_PAIRS": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            "\"",
+            "\""
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "“",
+            "”"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "「",
+            "」"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "『",
+            "』"
+          ]
+        }
+      ]
+    },
+    "_QUOTE_CHARS": {
+      "$type": "tuple",
+      "items": [
+        "\"",
+        "“",
+        "”",
+        "「",
+        "」",
+        "『",
+        "』"
+      ]
     }
   },
   "agents.director": {
@@ -2173,6 +1971,19 @@
           ]
         }
       ]
+    },
+    "_VERDICT_TEMPLATE": "{label}——{detail}",
+    "_VERDICT_UNENTERED": {
+      "$type": "tuple",
+      "items": [
+        "未踏",
+        "他に出口はないが、まだ中に入ったことがない。部屋の中に何があるかは、その先に何があるかとは別の問題であり、たどり着く価値のあるものはたいてい通り道ではない"
+      ]
+    },
+    "_VERDICT_DETAILS": {
+      "entered_recently": "直近の十数歩でそこに{count}回入っている",
+      "frontier_adjacent": "。その先の部屋には、まだ通ったことのない扉がある",
+      "frontier_distant": "。まだ通ったことのない最も近い扉は、その方向におよそ{hops}部屋先にある"
     }
   },
   "agents.narration": {

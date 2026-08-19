@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import hashlib
 import json
 import re
@@ -39,6 +40,7 @@ from world.spatial import (
     _body_interior_holder,
     ambient_scope,
     containment_conceals,
+    effective_room_size,
     entity_arc,
     has_visual,
     hear_level,
@@ -59,34 +61,6 @@ _REACTIVE_STAGES = {
     "preparation", "approach", "contact", "sustained",
 }
 
-# Verbs whose act is INTERIOR -- it happens inside the actor's mind and has no
-# outward manifestation a bystander could perceive. An observer cannot see
-# someone "remember" or "decide"; surfacing such an act to another perceiver
-# is a pure information-barrier leak (the actor's private cognition). Used by
-# norm_sequence to default an action element's `observable` surface to "" (see
-# observable_action_text) so the deterministic perception-delivery backstops
-# never paste it into an observer's view. A mental act that DOES have an
-# outward tell (eyes going distant, a whispered incantation) can still be
-# delivered -- the director just authors an explicit `observable` for it,
-# which overrides this default.
-
-# Outcomes only the person undergoing them may declare: interior volition
-# (agreeing, submitting, giving in) and involuntary body events (fainting,
-# panicking, knees buckling). AGENTS.md's AUTHORITY STOPS AT OTHER MINDS makes
-# these the character's own to enact, so a player-authored element whose
-# SUBJECT is a cast member and whose outcome is one of these is rerouted to
-# that character as an OFFER rather than enacted as objective truth (see
-# director._route_authorial_npc_beat). A player act that merely CAUSES such an
-# outcome ('stabs Sarah') is untouched -- the player is the agent there, and
-# the target's response is resolved through the reaction phase.
-
-
-# Words that can OPEN a clause without being its verb. A player action element
-# is authored verb-first by convention ('takes a deep breath...'), so an
-# attempt opening with one of these is a noun/pronoun-led clause -- somebody
-# or something OTHER than the declaring player is its subject.
-
-
 def _ling(name):
     return linguistic("agents.common", name)
 
@@ -94,11 +68,28 @@ def _ling(name):
 def _text(key, **values):
     return compositor_text(key, **values)
 
+
+def _dangling_speech(part, language_id=None):
+    """The healer pattern for one wound, built from the ONE speech vocabulary.
+
+    A dangling verb and a dangling colon are the same wound from the same cut,
+    so what counts as speech is a single pack value (`_SPEECH_CUE`) and the two
+    patterns are shapes around it. They were two independent literals before,
+    and they drifted: `en`'s verb healer knew `call` and `shout` and its colon
+    healer did not, and neither of `ja`'s carried a single Japanese verb while
+    its `_SPEECH_CUE` carried eight. The SHAPE stays per-language because the
+    wound is: English strands a verb before a comma, Japanese strands the
+    quotative particle before a clause-final verb.
+    """
+    shape = linguistic("agents.common", "_DANGLING_SPEECH", language_id)[part]
+    cue = str(linguistic("agents.common", "_SPEECH_CUE", language_id))
+    return re.compile(str(shape["pattern"]).replace("{cue}", cue),
+                      int(shape.get("flags") or 0))
+
 # Read-only English compatibility views for diagnostics/tests that import the
-# historical constants. Runtime guards use `_ling(...)` and remain context
-# local; these names are not consulted by a story pipeline.
-_DANGLING_SPEECH_VERB_RE = english_linguistic(
-    "agents.common", "_DANGLING_SPEECH_VERB_RE")
+# historical constants. Runtime guards resolve through the active pack and
+# remain context local; these names are not consulted by a story pipeline.
+_DANGLING_SPEECH_VERB_RE = _dangling_speech("verb", "en")
 _SPEECH_CUE = english_linguistic("agents.common", "_SPEECH_CUE")
 
 def _stem_token(tok):
@@ -107,11 +98,6 @@ def _stem_token(tok):
         if len(tok) > len(suf) + 2 and tok.endswith(suf):
             return tok[:-len(suf)]
     return tok
-
-
-# Where one subject's predicate ends. Used to scope the autonomy test to the
-# clause that actually belongs to the named character -- see
-# _predicate_after_name.
 
 
 def _predicate_after_name(text_cf, end):
@@ -126,6 +112,9 @@ def _predicate_after_name(text_cf, end):
     the character is actually the subject of -- 'steps back', not '...and I
     enjoy the view'."""
     tail = text_cf[end:].lstrip(" '’,")
+    # Where one subject's predicate ends. The autonomy test is scoped to the
+    # clause that actually belongs to the named character, and this is the
+    # cut -- see the docstring above for the two live cases it answers.
     cut = _ling("_CLAUSE_BREAKS").search(tail)
     return tail[:cut.start()] if cut else tail
 
@@ -138,6 +127,15 @@ def _is_autonomous_response(verb, text):
     _predicate_after_name); this scans all of it rather than only the leading
     token, because the construction that matters routinely buries the verb
     ('...pushes Dr. Moon over the edge')."""
+    # Outcomes only the person undergoing them may declare: interior volition
+    # (agreeing, submitting, giving in) and involuntary body events (fainting,
+    # panicking, knees buckling). AGENTS.md's AUTHORITY STOPS AT OTHER MINDS makes
+    # these the character's own to enact, so a player-authored element whose
+    # SUBJECT is a cast member and whose outcome is one of these is rerouted to
+    # that character as an OFFER rather than enacted as objective truth (see
+    # director._route_authorial_npc_beat). A player act that merely CAUSES such an
+    # outcome ('stabs Sarah') is untouched -- the player is the agent there, and
+    # the target's response is resolved through the reaction phase.
     v = str(verb or "").strip().casefold()
     if v in _ling("_AUTONOMY_VERBS") or _stem_token(v) in _ling("_AUTONOMY_VERBS"):
         return True
@@ -150,19 +148,75 @@ def _is_autonomous_response(verb, text):
     )
 
 
+# Verbs whose act is INTERIOR -- it happens inside the actor's mind and has no
+# outward manifestation a bystander could perceive. An observer cannot see
+# someone "remember" or "decide"; surfacing such an act to another perceiver
+# is a pure information-barrier leak (the actor's private cognition). Used by
+# norm_sequence to default an action element's `observable` surface to "" (see
+# observable_action_text) so the deterministic perception-delivery backstops
+# never paste it into an observer's view. A mental act that DOES have an
+# outward tell (eyes going distant, a whispered incantation) can still be
+# delivered -- the director just authors an explicit `observable` for it,
+# which overrides this default.
+def _in_mental_vocabulary(token, key):
+    token = str(token or "").strip().lower()
+    words = _ling(key)
+    return bool(token) and (token in words or _stem_token(token) in words)
+
+
 def _is_mental_action(verb, attempt):
-    """True when an action element is purely interior (no outward surface):
-    its declared verb is a mental verb, or -- for a weak model that left verb
-    unset -- its attempt LEADS with a mental verb ('remember the runes her
-    mother taught her'). Conservative: only the leading token is checked, so a
+    """True when an action element is purely interior (no outward surface).
+
+    Answering wrongly here is not recoverable: a blanked `observable` is
+    skipped by every deterministic delivery site, so the act reaches no view,
+    no percept and no memory, and the only trace is an empty string in a
+    stored variant. Two rules keep the guess from overruling an answer.
+
+    A DECLARED VERB DECIDES. The leading-token scan below exists, in this
+    docstring's own words, "for a weak model that left verb unset" -- so it
+    only runs when the verb is unset. It used to run regardless, and blanked
+    `verb: "search"` / `attempt: "feel along the desk surface in total
+    darkness, searching by touch for anything resembling a radio unit"`
+    because the attempt happened to open with `feel` (live corpus, measured).
+
+    A VERB THAT NAMES BOTH NEEDS AN INWARD OBJECT. `feel`, `focus`, `reflect`,
+    `resolve` and `sense` lead ordinary conduct as readily as they lead a
+    thought, and the leading token alone cannot tell which. What the act
+    REACHES FOR can: turned on the actor's own body or on a state they are in,
+    it is interior; directed at anything else, it is not. Held in the pack as
+    `_AMBIGUOUS_MENTAL_VERBS` so a language can name its own such verbs.
+
+    Conservative in the other direction too: only the LEAD is classified, so a
     physical act that merely mentions thought later ('carve while recalling
-    the shape') is NOT suppressed."""
-    v = str(verb or "").strip().lower()
-    if v in _ling("_MENTAL_VERBS") or _stem_token(v) in _ling("_MENTAL_VERBS"):
-        return True
+    the shape') is NOT suppressed.
+    """
+    verb = str(verb or "").strip().lower()
+    if verb:
+        if _in_mental_vocabulary(verb, "_MENTAL_VERBS"):
+            return True
+        if not _in_mental_vocabulary(verb, "_AMBIGUOUS_MENTAL_VERBS"):
+            return False
+        return _reaches_inward(attempt)
     head = re.split(r"[^\w]+", str(attempt or "").strip().lower(), maxsplit=1)
     lead = head[0] if head else ""
-    return bool(lead) and (lead in _ling("_MENTAL_VERBS") or _stem_token(lead) in _ling("_MENTAL_VERBS"))
+    if _in_mental_vocabulary(lead, "_MENTAL_VERBS"):
+        return True
+    if _in_mental_vocabulary(lead, "_AMBIGUOUS_MENTAL_VERBS"):
+        return _reaches_inward(attempt)
+    return False
+
+
+def _reaches_inward(attempt):
+    """Whether an act is turned on the actor rather than on the world.
+
+    The markers are the two the pack already keeps for exactly this
+    distinction: the actor's own body, and a state a person is in.
+    """
+    low = str(attempt or "").lower()
+    tokens = set(re.findall(r"[\w']+", low))
+    if tokens.intersection(_ling("_OWN_BODY_NOUNS")):
+        return True
+    return any(state in low for state in _ling("_INTERIOR_STATES"))
 
 
 def observable_action_text(elem):
@@ -180,7 +234,6 @@ def observable_action_text(elem):
     if obs is None:
         return str(elem.get("attempt") or "")
     return str(obs or "")
-
 
 
 def _dict(value):
@@ -813,12 +866,14 @@ def crowds_for_room(cid, sc, room_id):
     band and the ROOM and the crowd may have walked into a different one since
     it was minted.
     """
-    from core.db import wget
-
     if not room_id:
         return []
-    room = ((sc or {}).get("rooms") or {}).get(room_id) or {}
-    size = room.get("size")
+    # `effective_room_size`, not the raw authored string: an unsized "Great
+    # Hall" is `large` for proximity grading and was `medium` here, so
+    # `density("a throng", ...)` returned PACKED under one and CRUSH under the
+    # other -- and CRUSH is what `terrain` turns into a `membrane` you cannot
+    # see across and what `drift` turns into CARRY. One question, one answer.
+    size = effective_room_size(sc or {}, room_id)
     out = []
     for crowd in crowds_model.crowds_in_room(wget(cid, CROWDS_KEY, []) or [],
                                              room_id):
@@ -869,7 +924,6 @@ def couriers_for_room(cid, sc, room_id):
     questioning, or seizure, all of which are commit-validated ops.
     """
     from story import couriers as couriers_model
-    from core.db import wget
 
     if not room_id:
         return []
@@ -1258,6 +1312,10 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
     lead = lead_tokens[0] if lead_tokens else ""
     if lead in {str(f).casefold() for f in (actor_forms or ())}:
         return None
+    # Words that can OPEN a clause without being its verb. A player action element
+    # is authored verb-first by convention ('takes a deep breath...'), so an
+    # attempt opening with one of these is a noun/pronoun-led clause -- somebody
+    # or something OTHER than the declaring player is its subject.
     if lead not in _ling("_SUBJECT_LEADS"):
         return None
     named = []
@@ -1395,11 +1453,7 @@ def _requires_director_resolution(result):
             return True
         if action.get("commitment") == "contestable":
             return True
-        conflict_terms = (
-            "attack", "grab", "restrain", "steal", "break", "force",
-            "cast", "shoot", "stab", "strike", "move into", "leave", "enter",
-        )
-        if any(term in text for term in conflict_terms):
+        if any(term in text for term in _ling("_CONFLICT_VERBS")):
             return True
     return False
 
@@ -1435,6 +1489,51 @@ def _named_cast_subject(text, target_forms):
     return hits[0] if len(hits) == 1 else None
 
 
+def _effect_subject(event, eff, actor_name, target_forms, actor_forms):
+    """Who ONE effect is about, and whether that answer is a guess.
+
+    `targets` is a property of the ELEMENT; the effects hanging off it are
+    separate claims, and the question "who is this about" is asked once per
+    claim. Scoping the self-fallback to the element meant an element that acts
+    on somebody AND asserts something about the actor's own body lost the
+    subject on the body claim -- and `_named_cast_subject`, the guard added to
+    catch a claim plainly about someone else, was nested INSIDE the same
+    condition and so could not run there either.
+
+    Measured over every stored `director_interpret` active variant in the live
+    database, read-only: 1,673 effect claims, 856 (51.2%) with no subject, and
+    703 of those 856 hang off an element that DID name targets -- which is
+    exactly this scope error. Every one of them lands in
+    `director_reconcile._player_claim_findings`' "no resolvable subject;
+    coverage not checkable" note, so the player's asserted effect is never held
+    against the diff at all.
+    """
+    if eff.get("target_id"):
+        return eff["target_id"], False
+    own_text = " ".join(str(part) for part in
+                        (eff.get("kind"), eff.get("details")) if part)
+    named = _named_cast_subject(own_text, target_forms)
+    if named:
+        return named, True
+    # The effect's own text naming the ACTOR is the case the element scope hid:
+    # "Hinami is seated on the bed" on an element whose targets name someone
+    # else. It is the player's own body, and it is checkable.
+    if actor_name and any(
+            re.search(cue_boundary_pattern(re.escape(form)), own_text, re.I)
+            for form in (actor_forms or ()) if form):
+        return actor_name, True
+    if event.get("targets"):
+        # The element named somebody and this effect named nobody: a dropped
+        # reference, not the self. Left for the Director to adjudicate, as
+        # before -- resolving it to the player would hand them authorship of
+        # another character's body.
+        return None, False
+    named = _named_cast_subject(
+        f"{event.get('attempt') or ''} {_element_effect_text(event)}",
+        target_forms)
+    return (named or actor_name), bool(named or actor_name)
+
+
 def _extract_authority_claims(sequence, raw_input, actor_name=None,
                               target_forms=None):
     """Extract authority claims from the interpreted sequence.
@@ -1466,6 +1565,7 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
     cast member the text does is strictly better than either wrong answer --
     the resolve seam can then actually check the claim's coverage."""
     fallback_text = str(raw_input or "")
+    actor_forms = _player_name_forms(actor_name) if actor_name else ()
     claims = []
     for i, event in enumerate(sequence or []):
         if event.get("type") == "event":
@@ -1496,16 +1596,6 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                 event.get("raw_text") or event.get("attempt")
                 or fallback_text)
         event["commitment"] = commitment
-        # A null effect target is the actor's own body only when the action
-        # named no targets at all; if it did, the null is a dropped reference.
-        self_subject = actor_name if not (event.get("targets") or []) else None
-        if self_subject and target_forms:
-            # ...and only when the act is not plainly about someone else.
-            named = _named_cast_subject(
-                f"{event.get('attempt') or ''} {_element_effect_text(event)}",
-                target_forms)
-            if named:
-                self_subject = named
         if commitment == "asserted":
             for effect_index, effect in enumerate(
                 event.get("asserted_effects") or []
@@ -1513,19 +1603,28 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                 eff = _normalize_effect(effect)
                 if eff is None:
                     continue
+                predicate = str(eff.get("kind") or "").strip()
+                if not predicate and not eff.get("details"):
+                    # Nothing was claimed. An empty predicate with a resolvable
+                    # subject becomes an omission reading "player-asserted
+                    # completed effect '' on <subject>", which buys a full
+                    # resolve_repair Director call for a claim with no content.
+                    # Measured live: 48 of 1,673 effect claims (2.9%), and all
+                    # 48 carry an empty `value` too, so nothing is lost.
+                    continue
+                subject_id, inferred = _effect_subject(
+                    event, eff, actor_name, target_forms, actor_forms)
                 claims.append({
                     "claim_id": f"claim:{i}:effect:{effect_index}",
                     "scope": "effect",
-                    "subject_id": eff.get("target_id") or self_subject,
+                    "subject_id": subject_id,
                     # Whether that subject is the model's answer or this
-                    # function's GUESS. `self_subject` is a fallback for an
-                    # act that named no target, and "named no target" is not
-                    # the same fact as "was about my own body" -- see
+                    # function's GUESS -- "named no target" is not the same
+                    # fact as "was about my own body". See
                     # `_claim_authority_kind`, which may not read a guess as a
                     # grant.
-                    "subject_inferred": not eff.get("target_id")
-                    and bool(self_subject),
-                    "predicate": eff.get("kind", ""),
+                    "subject_inferred": inferred,
+                    "predicate": predicate,
                     "value": eff.get("details"),
                     "commitment": "asserted",
                     "source_text": event.get("raw_text")
@@ -1538,19 +1637,17 @@ def _extract_authority_claims(sequence, raw_input, actor_name=None,
                 eff = _normalize_effect(effect)
                 if eff is None:
                     continue
+                predicate = str(eff.get("kind") or "").strip()
+                if not predicate and not eff.get("details"):
+                    continue
+                subject_id, inferred = _effect_subject(
+                    event, eff, actor_name, target_forms, actor_forms)
                 claims.append({
                     "claim_id": f"claim:{i}:intent:{effect_index}",
                     "scope": "intent",
-                    "subject_id": eff.get("target_id") or self_subject,
-                    # Whether that subject is the model's answer or this
-                    # function's GUESS. `self_subject` is a fallback for an
-                    # act that named no target, and "named no target" is not
-                    # the same fact as "was about my own body" -- see
-                    # `_claim_authority_kind`, which may not read a guess as a
-                    # grant.
-                    "subject_inferred": not eff.get("target_id")
-                    and bool(self_subject),
-                    "predicate": eff.get("kind", ""),
+                    "subject_id": subject_id,
+                    "subject_inferred": inferred,
+                    "predicate": predicate,
                     "value": eff.get("details"),
                     "commitment": "contestable",
                     "source_text": event.get("raw_text")
@@ -1737,10 +1834,6 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
 # must not swallow the rest of the line looking for its partner.
 _STAGE_DIRECTION_RE = re.compile(r"\*([^*\n]{1,400}?)\*")
 
-# Function words carry no evidence that two descriptions name the same act --
-# "on her" appears in every second stage direction -- so they are excluded
-# before the overlap in _dedupe_promoted_actions is measured.
-
 
 def split_stage_directions(text):
     """Speech text -> (the words actually spoken, the conduct written into it).
@@ -1849,6 +1942,9 @@ def _dedupe_promoted_actions(clean):
     """
     def _content(text):
         words = re.sub(r"[^\w\s]", " ", str(text or "")).lower().split()
+        # Function words carry no evidence that two descriptions name the same act --
+        # "on her" appears in every second stage direction -- so they are excluded
+        # before the overlap in _dedupe_promoted_actions is measured.
         return {w for w in words if w not in _ling("_OVERLAP_STOPWORDS")}
 
     declared = [_content(e.get("observable") or e.get("attempt"))
@@ -1866,10 +1962,6 @@ def _dedupe_promoted_actions(clean):
         kept.append(e)
     return kept
 
-
-# Words a sentence leans on rather than lands on. An interruption arrives where
-# the speaker drew breath, and the breath is taken just before one of these or
-# just after a comma -- not at an arbitrary word count.
 
 # Below this, a line has nothing to cut. "Wait." interrupted is still "Wait."
 # -- truncating it produces "Wait.—", which reads as a typo, and fictionally
@@ -1916,6 +2008,9 @@ def cut_short_speech(text, ratio=0.6):
             if words[index - 1].endswith(","):
                 keep = index
                 break
+            # Words a sentence leans on rather than lands on. An interruption arrives where
+            # the speaker drew breath, and the breath is taken just before one of these or
+            # just after a comma -- not at an arbitrary word count.
             if words[index].lower().strip(",;:") in _ling("_BREATH_CONJUNCTIONS"):
                 keep = index
                 break
@@ -1965,6 +2060,9 @@ def norm_sequence(out, warn=None):
                     if warn:
                         warn("moved a stage direction out of spoken text into "
                              "its own action: '%s'" % _span[:80])
+                        if not clean[-1]["observable"]:
+                            warn("classified as interior, so no perceiver "
+                                 "receives it: %r" % _span[:120])
             if txt:
                 # Carry the speech element's OWN concealment through
                 # normalization. Dropping it here (as we used to) meant a
@@ -2000,6 +2098,13 @@ def norm_sequence(out, warn=None):
             if query and why:
                 out["ponder"] = {
                     "type": "ponder", "query": query, "why": why}
+            elif (query or why) and warn:
+                # A ponder is by design not in the public sequence, so nothing
+                # downstream can notice it went missing -- there is no view, no
+                # percept and no prose it would have shown up in. Dropping half
+                # of one silently is the same failure shape as blanking an act.
+                warn("dropped a ponder missing its %s: %r"
+                     % ("why" if query else "query", (query or why)[:80]))
         elif t in ("event", "environment", "environmental", "world"):
             # Actor-less environmental event ("the lights go out", "a
             # monster enters") declared by the player. These used to be
@@ -2061,8 +2166,18 @@ def norm_sequence(out, warn=None):
                 # delivery regression for un-migrated / plain physical acts).
                 observable = e.get("observable")
                 if observable is None:
-                    observable = "" if _is_mental_action(
-                        e.get("verb"), att) else att
+                    if _is_mental_action(e.get("verb"), att):
+                        observable = ""
+                        # SAY SO. Blanking is a decision that nobody will ever
+                        # perceive this act -- it is skipped by every delivery
+                        # site, so there is no view, no percept and no memory
+                        # to notice it by, and the only trace left behind is an
+                        # empty string in a stored variant.
+                        if warn:
+                            warn("classified as interior, so no perceiver "
+                                 "receives it: %r" % att[:120])
+                    else:
+                        observable = att
                 clean.append({
                     "type": "action",
                     "attempt": att,
@@ -2188,10 +2303,6 @@ def _append_once(view, text, marker=None):
         return view
     return f"{view} {text}".strip()
 
-# Rank/title/honorific tokens dropped before comparing names, plus single-letter
-# middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
-
-
 #: The word-runs of a NAME, in whatever script it is written. `[A-Za-z']+`
 #: describes the Latin script rather than a name, and returns nothing at all
 #: for the rest -- so every rule built on tokens (recognition variants,
@@ -2225,6 +2336,19 @@ def _name_token_floor(token):
             else _NAME_TOKEN_MIN)
 
 
+def _display_floor(name, spaced=4):
+    """The shortest a DISPLAY name can be and still be worth matching in prose.
+
+    Four characters is a floor drawn for a spaced script, where a name that
+    short is usually a common word too. An unspaced script writes the same
+    amount of name in two or three characters -- 鉄の扉 is a full portal name
+    at three -- so applying the spaced floor to it skips the guard outright,
+    silently, on every portal and every room in the story.
+    """
+    return (_UNSPACED_NAME_TOKEN_MIN if _UNSPACED_SCRIPT.match(str(name)[:1])
+            else spaced)
+
+
 def _significant_name_tokens(name):
     """Lower-cased identifying tokens of a name -- titles, ranks and single
     initials removed. 'Commander Riker' -> {'riker'}."""
@@ -2233,6 +2357,8 @@ def _significant_name_tokens(name):
         low = tok.strip(".'").casefold()
         if not low or len(low) < _name_token_floor(low):
             continue
+        # Rank/title/honorific tokens dropped before comparing names, plus single-letter
+        # middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
         if low in _ling("_NAME_TITLE_TOKENS"):
             continue
         out.add(low)
@@ -2583,10 +2709,6 @@ def _strip_identity_tokens(text, forms):
     out = re.sub(r"([,;])(\s*[,;])+", r"\1", out)
     return out.strip().lstrip(",;: ").strip()
 
-# Single-token names that are also everyday English words ("Rose walks in"
-# vs "the rose garden"). For these, only the exact capitalized form is
-# scrubbed, so ordinary lowercase prose is never mangled.
-
 # Mirrors _protected_view_quotes' quoted-span shape: a name inside a quote
 # is sensory signal the observer legitimately heard (an introduction, a
 # name called aloud) and must survive the identity scrub verbatim.
@@ -2653,6 +2775,9 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
                     and not _UNSPACED_SCRIPT.match(form[:1])):
                 continue
             if (len(form.split()) == 1
+                    # Single-token names that are also everyday English words ("Rose walks in"
+                    # vs "the rose garden"). For these, only the exact capitalized form is
+                    # scrubbed, so ordinary lowercase prose is never mangled.
                     and form.casefold() in _ling("_COMMON_WORD_NAMES")):
                 # common-word guard: exact capitalized form only
                 exact = form[:1].upper() + form[1:]
@@ -3076,17 +3201,6 @@ def player_speech_lines(interp):
     return lines
 
 
-# Physical verbs a resolved_event uses when it gives someone an ACT. Kept to
-# unambiguous bodily/manipulative verbs: the check exists to catch the player
-# being handed conduct they never declared, not to police prose.
-# Verb STEMS a resolved_event uses when it gives someone an ACT, matched with
-# ordinary English inflection (-s/-es/-ed/-ing) so "straightens", "shifting"
-# and "reached" all count. Kept to unambiguous bodily/manipulative verbs: this
-# exists to catch the player being handed conduct they never declared, not to
-# police prose.
-
-
-
 # Leading words that are not the name itself. Splitting a name on whitespace
 # and taking token 0 matched "The" for a player called "The Stranger", which
 # then matched almost every sentence in the beat.
@@ -3114,13 +3228,15 @@ def _player_name_forms(player_name):
     return sorted(set(forms), key=len, reverse=True)
 
 
-# A sentence whose subject is a bare pronoun, optionally after a short leading
-# adverbial ("After a moment, he lowers the device"). Bounded so it cannot
-# reach past a genuine subject into a subordinate clause.
+#: Bounded, because this is the file's one piece of mutable module state and it
+#: is keyed by NAME FORM -- so it grows with every cast of every chat the
+#: process has served, and nothing ever cleared it. An LRU is the right shape:
+#: the working set is one scene's cast, and a form that falls out is recompiled
+#: in microseconds.
+_SUBJECT_OPENER_CACHE = 512
 
-_SUBJECT_OPENERS = {}
 
-
+@lru_cache(maxsize=_SUBJECT_OPENER_CACHE)
 def _subject_opener(form):
     """Does a sentence OPEN with this name, as subject or possessive?
 
@@ -3143,24 +3259,20 @@ def _subject_opener(form):
     case-sensitively as before, so an ordinary noun that happens to spell a
     name does not bind.
     """
-    pat = _SUBJECT_OPENERS.get(form)
-    if pat is None:
-        # `name_boundary_pattern`, not a trailing `\b`: `\b` asserts a
-        # transition between word and non-word characters, which describes
-        # scripts that space their words and nothing else. A Japanese particle
-        # is a word character, so 「ヒナミは」 never matched `ヒナミ\b` -- and
-        # this is the primitive every subject-anchored guard in the file is
-        # built on, so all of them, player-act authority included, resolved
-        # NOBODY as the subject of any sentence in such a story. The boundary
-        # the pattern does apply still refuses a Latin name inside a longer
-        # word ("Hinamis"), and the leading article stays this function's own
-        # rule.
-        pat = re.compile(
-            rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
-            rf"(?:['’]s)?",
-            re.I if form[:1].islower() else 0)
-        _SUBJECT_OPENERS[form] = pat
-    return pat
+    # `name_boundary_pattern`, not a trailing `\b`: `\b` asserts a
+    # transition between word and non-word characters, which describes
+    # scripts that space their words and nothing else. A Japanese particle
+    # is a word character, so 「ヒナミは」 never matched `ヒナミ\b` -- and
+    # this is the primitive every subject-anchored guard in the file is
+    # built on, so all of them, player-act authority included, resolved
+    # NOBODY as the subject of any sentence in such a story. The boundary
+    # the pattern does apply still refuses a Latin name inside a longer
+    # word ("Hinamis"), and the leading article stays this function's own
+    # rule.
+    return re.compile(
+        rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
+        rf"(?:['’]s)?",
+        re.I if form[:1].islower() else 0)
 
 
 def _sentence_subjects(prose, names, split=None):
@@ -3253,23 +3365,6 @@ def _strip_subject(sentence, name):
     return sentence[match.end():] if match else ""
 
 
-# Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
-# Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
-# not speech, and a character who declared silence is entitled to all of them.
-def _inflect(stem):
-    """A stem as a regex matching its inflections.
-
-    English inflects a phrasal verb on its HEAD, not its tail: "puts in", not
-    "put ins". Appending the suffix group to the whole escaped stem silently
-    produced a pattern that could never match the form people actually write,
-    which is worse than not listing the verb at all -- it reads as covered.
-    """
-    head, _, rest = str(stem).partition(" ")
-    pattern = rf"{re.escape(head)}(?:e?s|ed|ing|d)?"
-    return rf"{pattern}\s+{re.escape(rest)}" if rest else pattern
-
-
-
 # How far past the name to look for the verb. Same window the player check
 # uses, and for the same reason: the act must be what this body is DOING, not
 # a word appearing anywhere in a long sentence.
@@ -3318,7 +3413,7 @@ def _check_character_speech_authority(resolved_event, silent_names,
         # this one: what this catches is the contentless attribution a quote
         # check cannot see -- "X adds a comment" quotes nothing, so nothing
         # downstream can tell it was invented.
-        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         for head, _clause in _predicate_heads(tail, _SPEECH_VERB_WINDOW):
             if re.search(cue_boundary_pattern(_ling("_ATTRIBUTION_VERBS")), head, re.I):
@@ -3329,19 +3424,6 @@ def _check_character_speech_authority(resolved_event, silent_names,
                 )
                 break
     return warnings
-
-
-# Verbs that change where a body IS or how far it is from someone else. The
-# Director may render a declared act richly; it may not relocate a character
-# who declared no movement, because distance is load-bearing -- it decides
-# what perception delivers, what contact is possible, and (chat 56 t1391) it
-# can directly reverse the intent the character declared, which was to scan
-# her "without crowding her".
-
-# Movement is not always written as a locomotion VERB. The live case wrote it
-# as a verb plus a distance noun -- "takes a half-step closer" -- whose head
-# verb is "take", which is no more locomotive than taking a screwdriver. What
-# marks it as movement is the distance word, so read the clause for one.
 
 
 def _check_character_act_authority(resolved_event, declared_actions, name,
@@ -3377,11 +3459,27 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
     if declared_actions:
         # Already moving under their own declaration: the Director may render
         # that movement however it likes.
+        # Verbs that change where a body IS or how far it is from someone else. The
+        # Director may render a declared act richly; it may not relocate a character
+        # who declared no movement, because distance is load-bearing -- it decides
+        # what perception delivers, what contact is possible, and (chat 56 t1391) it
+        # can directly reverse the intent the character declared, which was to scan
+        # her "without crowding her".
+        #
+        # Movement is not always written as a locomotion VERB. The live case wrote it
+        # as a verb plus a distance noun -- "takes a half-step closer" -- whose head
+        # verb is "take", which is no more locomotive than taking a screwdriver. What
+        # marks it as movement is the distance word, so read the clause for one.
         if re.search(cue_boundary_pattern(_ling("_LOCOMOTION_VERBS")), declared_text, re.I):
             return []
         verbs, kind, proximity = (
             _ling("_LOCOMOTION_VERBS"), "undeclared movement", True)
     else:
+        # Verb STEMS a resolved_event uses when it gives someone an ACT, matched with
+        # ordinary English inflection (-s/-es/-ed/-ing) so "straightens", "shifting"
+        # and "reached" all count. Kept to unambiguous bodily/manipulative verbs: this
+        # exists to catch the player being handed conduct they never declared, not to
+        # police prose.
         verbs, kind, proximity = _ling("_PLAYER_ACT_VERBS"), "act not declared", False
 
     warnings = []
@@ -3389,7 +3487,7 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
     for sentence, subject in _sentence_subjects(resolved_event, all_names):
         if subject != name:
             continue
-        without_quotes = re.sub(r'"[^"]*"|“[^”]*”', " ", sentence)
+        without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         for head, clause in _predicate_heads(tail, 3):
             if re.search(rf"\b(?:{verbs})\b", head, re.I) or (
@@ -3401,11 +3499,6 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
                 break
     return warnings
 
-
-# Quoted spans, in every style the resolve model actually produces. The single
-# -quote form must not mistake an apostrophe for a delimiter, so a quote may
-# only OPEN where no letter precedes it and CLOSE where no letter follows --
-# which leaves "You're" intact inside the span.
 
 # Below this, a quoted span is a label or a scare quote rather than an
 # utterance -- a readout reading "STABLE", the word "safe".
@@ -3436,6 +3529,10 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
     # Director RE-PUNCTUATES a line it is quoting, and an exact membership
     # test then reads its own faithful rendering as an invention.
     folded_allowed = [_echo_fold(a) for a in (allowed_bodies or ()) if _echo_fold(a)]
+    # Quoted spans, in every style the resolve model actually produces. The single
+    # -quote form must not mistake an apostrophe for a delimiter, so a quote may
+    # only OPEN where no letter precedes it and CLOSE where no letter follows --
+    # which leaves "You're" intact inside the span.
     for pattern in _ling("_PROSE_QUOTE_RES"):
         for span in pattern.findall(resolved_event or ""):
             body = _quote_body(span)
@@ -3472,13 +3569,6 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
                 f"(prose-quote authority): {body[:120]!r}"
             )
     return warnings
-
-
-# Determiners that make a reference DEFINITE. "That explains the strange
-# coins" refers to HER coins, a thing in the world; "local trade runs on
-# copper and silver coins" is knowledge about coins in general. The definite
-# article is what turns a generality into a claim of acquaintance, so it is
-# what gates the single-word match below.
 
 
 # WHAT THE DIRECTOR MAY STILL SPEAK FOR.
@@ -3614,6 +3704,11 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                     break
             elif re.search(
                     r"(?<!\w)(?:%s)\s+(?:[\w'-]+\s+){0,2}%s(?!\w)"
+                    # Determiners that make a reference DEFINITE. "That explains the strange
+                    # coins" refers to HER coins, a thing in the world; "local trade runs on
+                    # copper and silver coins" is knowledge about coins in general. The definite
+                    # article is what turns a generality into a claim of acquaintance, so it is
+                    # what gates the single-word match below.
                     % ("|".join(_ling("_DEFINITE_DETS")), re.escape(pcf)), q):
                 hit = p
                 break
@@ -3628,16 +3723,6 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                 + " (presence-knowledge channel)."
             )
     return warnings
-
-
-# Interior states a resolved_event may not assert about the PLAYER. Nouns and
-# adjectives that name what is INSIDE a mind, as against the surface a body
-# shows: "trembling", "wide eyes", "a shrill cry" are observable and always
-# allowed; "terror", "panic", "she realises" are not.
-
-# Verbs that report a mind's own operation rather than its body's motion.
-
-# Words that assert an interior state is TRUE, which no observer may know.
 
 
 def _check_player_interiority_authority(resolved_event, player_name,
@@ -3684,6 +3769,14 @@ def _check_player_interiority_authority(resolved_event, player_name,
         low = body.casefold()
         if subject != player_name and not _mentions_player(low, player_name):
             continue
+        # Interior states a resolved_event may not assert about the PLAYER. Nouns and
+        # adjectives that name what is INSIDE a mind, as against the surface a body
+        # shows: "trembling", "wide eyes", "a shrill cry" are observable and always
+        # allowed; "terror", "panic", "she realises" are not.
+        #
+        # Verbs that report a mind's own operation rather than its body's motion.
+        #
+        # Words that assert an interior state is TRUE, which no observer may know.
         hits = [w for w in _ling("_INTERIOR_STATES")
                 if re.search(rf"\b{re.escape(w)}\b", low)
                 and not re.search(rf"\b{re.escape(w)}\b", declared)]
@@ -3714,28 +3807,26 @@ def _mentions_player(low_sentence, player_name):
     return False
 
 
-# Verbs that put a body in contact with something outside itself.
-# Deliberately excludes verbs that read as manipulation but usually are not:
-# "catch" ("her hair catching the warm light"), "draw" ("draws a breath"),
-# "find" ("finds the words"). The list must earn its flags -- an act guard
-# that fires on scenery is one a maintainer learns to ignore.
-
-# The player's own body is not a new object. An act on it re-describes what
-# they are doing with themselves, which is elaboration however it is worded --
-# "pushes herself upright" for a declared "slowly stands up".
-
-# The DIRECT object a verb takes -- the noun it acts ON, with no preposition
-# in between. "grip the edge" is taking hold of the world; "pressed flat
-# AGAINST the cold metal" is a body bracing itself, and reading that as
-# seizing the metal is how a guard starts crying wolf on ordinary prose.
-# The captured group is the whole noun phrase after the article; the HEAD noun
-# is its last word, so "the warm light" reads as "light" rather than "warm".
-
-
 def _undeclared_world_object(clause, declared_low):
     """The world object a clause has the player take hold of, when the player's
     own declaration never mentions it. None when the clause touches only their
     own body, reaches for nothing, or names something they already declared."""
+    # Verbs that put a body in contact with something outside itself.
+    # Deliberately excludes verbs that read as manipulation but usually are not:
+    # "catch" ("her hair catching the warm light"), "draw" ("draws a breath"),
+    # "find" ("finds the words"). The list must earn its flags -- an act guard
+    # that fires on scenery is one a maintainer learns to ignore.
+    #
+    # The player's own body is not a new object. An act on it re-describes what
+    # they are doing with themselves, which is elaboration however it is worded --
+    # "pushes herself upright" for a declared "slowly stands up".
+    #
+    # The DIRECT object a verb takes -- the noun it acts ON, with no preposition
+    # in between. "grip the edge" is taking hold of the world; "pressed flat
+    # AGAINST the cold metal" is a body bracing itself, and reading that as
+    # seizing the metal is how a guard starts crying wolf on ordinary prose.
+    # The captured group is the whole noun phrase after the article; the HEAD noun
+    # is its last word, so "the warm light" reads as "light" rather than "warm".
     for match in re.finditer(cue_boundary_pattern(_ling("_MANIPULATION_VERBS")), clause, re.I):
         obj = _ling("_DIRECT_OBJECT_RE").match(clause[match.end():])
         if not obj:
@@ -3929,7 +4020,7 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
         # Speech attribution ("Hinami says, ...") is not a physical act; the
         # quote itself is guarded separately by the dialogue_log check and by
         # `_check_prose_quote_authority`.
-        without_quotes = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+        without_quotes = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
         tail = _strip_subject(without_quotes, subject)
         # Per conjunct, not three words from the subject: one subject governs
         # several verbs, and a window measured from the name sees only the
@@ -3950,13 +4041,6 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
             )
             break
     return warnings
-
-
-# Both quote-span shapes below are constants, hoisted to module level like the
-# other hot-path patterns in this file (_QUOTED_SPAN_RE etc.) -- each was being
-# re-compiled on every narrator validation pass. The capper keeps the
-# surrounding marks (it rewrites spans); the fidelity check needs only the
-# body, and tolerates shorter lines.
 
 
 def _cap_repeated_quotes(prose, view, exclude_bodies=()):
@@ -3999,8 +4083,8 @@ def _cap_repeated_quotes(prose, view, exclude_bodies=()):
         return prose
     out_parts.append(prose[last:])
     result = "".join(out_parts)
-    result = _ling("_DANGLING_SPEECH_VERB_RE").sub(_heal_dangling_verb, result)
-    result = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, result)
+    result = _dangling_speech("verb").sub(_heal_dangling_verb, result)
+    result = _dangling_speech("colon").sub(_heal_dangling_colon, result)
     result = _collapse_empty_quote_debris(result)
     return re.sub(r"\s{2,}", " ", result).strip()
 
@@ -4044,11 +4128,6 @@ def _muffle_tokens(body):
             _MUFFLE_KEEP_MIN)
 
 
-def _compositor_value(name):
-    from language_runtime import compositor_value
-    return compositor_value(name)
-
-
 def _muffle_middle(body, keep=3):
     """The middle few content chunks of a line, for the interaction loop.
 
@@ -4071,7 +4150,7 @@ def _muffle_middle(body, keep=3):
     if not kept:
         return _text("muffled_indistinct")
     start = max(0, len(kept) // 2)
-    join = str(_compositor_value("muffle_join"))
+    join = str(compositor_value("muffle_join"))
     return join.join(kept[start:start + keep])
 
 
@@ -4109,8 +4188,8 @@ def _muffled_fragment(body):
     # with half-width gaps read as broken typography inside Japanese prose.
     # The pack's own `muffled_indistinct` already used the right form, so the
     # same feature was being typeset two different ways.
-    lead = str(_compositor_value("muffle_ellipsis"))
-    join = str(_compositor_value("muffle_join"))
+    lead = str(compositor_value("muffle_ellipsis"))
+    join = str(compositor_value("muffle_join"))
     return lead + join.join(kept) + lead
 
 
@@ -4198,7 +4277,6 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
         add = _text("dialogue_unseen", label=display, verb=bare,
                     articulation=artic, body=body)
     return _append_once(view, add)
-
 
 
 def _content_tokens(text):
@@ -4378,20 +4456,6 @@ def _self_second_person(text, forms):
     return "".join(segments)
 
 
-# Third-person-singular forms that must agree with an inserted "you".
-
-# Words that can follow a subject, end in -s, and are NOT verbs -- the guard
-# on the regular-verb rule below, which otherwise strips a meaningful "s"
-# ("You always" -> "You alway"). Deliberately a closed list: a missed entry
-# costs one dropped letter, while dropping the rule entirely costs "You steps".
-
-
-# Stems that take -es rather than a bare -s ("catch/catches", "push/pushes",
-# "fix/fixes", "go/goes", "pass/passes"); everything else drops a single -s.
-# "ss" not "s": a stem ending in ONE s is rare ("bus"), while "loses",
-# "raises", "closes" are common and keep their stem-final e.
-
-
 def _base_from_third_person_s(word):
     """Undo third-person-singular -s/-es/-ies on a regular present verb, or
     return None when the word is not one."""
@@ -4416,6 +4480,18 @@ def _fix_you_agreement(text):
     """
     def _sub(m):
         you, gap, word = m.group(1), m.group(2), m.group(3)
+        # Third-person-singular forms that must agree with an inserted "you".
+        #
+        # Words that can follow a subject, end in -s, and are NOT verbs -- the guard
+        # on the regular-verb rule below, which otherwise strips a meaningful "s"
+        # ("You always" -> "You alway"). Deliberately a closed list: a missed entry
+        # costs one dropped letter, while dropping the rule entirely costs "You steps".
+        #
+        #
+        # Stems that take -es rather than a bare -s ("catch/catches", "push/pushes",
+        # "fix/fixes", "go/goes", "pass/passes"); everything else drops a single -s.
+        # "ss" not "s": a stem ending in ONE s is rare ("bus"), while "loses",
+        # "raises", "closes" are common and keep their stem-final e.
         fixed = _ling("_YOU_AGREEMENT").get(word.lower())
         if fixed is None:
             fixed = _base_from_third_person_s(word)
@@ -4455,7 +4531,8 @@ def _observable_predicate(display, surface):
     words = surface.split()
     # Peel leading actor-name tokens / a leading pronoun off the surface.
     while words and (words[0].strip(".,;:'").casefold() in disp_tokens
-                     or words[0].casefold() in ("she", "he", "they", "it")):
+                     or words[0].casefold()
+                     in _ling("_LEADING_SUBJECT_PRONOUNS")):
         words = words[1:]
     stripped = " ".join(words).strip()
     if not stripped:
@@ -4579,20 +4656,8 @@ def _inject_visible_actor(
 
     text = str(view or "").strip()
 
-    contradiction_patterns = (
-        r"\bno visual sign of the speaker is visible\b",
-        r"\bno clear figure visible\b",
-        r"\bthe speaker is not visible\b",
-        r"\bcannot see (?:them|the speaker|anyone)\b",
-    )
-
-    for pattern in contradiction_patterns:
-        text = re.sub(
-            pattern,
-            "",
-            text,
-            flags=re.I,
-        )
+    for pattern in _ling("_VISUAL_CONTRADICTION_RES"):
+        text = pattern.sub("", text)
 
     text = re.sub(r"\s{2,}", " ", text).strip()
 
@@ -4738,13 +4803,15 @@ def _fallback_perception_views(perceivers, dlog, resolved_event=None, known=None
 # NPC dialogue whenever the same beat also stripped a player echo (v4).
 
 
-# ONE vocabulary, shared with the colon healer below. These two lists drifted:
-# the colon healer knew `add`, `speak`, `voice`, `continue` and `offer` and this
-# one did not, so a quote stripped after "as you add," left the fragment
-# "You let the wry amusement show as you add," standing on the page with
-# nothing after it (live, chat 72). A dangling verb and a dangling colon are
-# the same wound from the same cut, and there is no reason for them to disagree
-# about what counts as speech. `_SPEECH_CUE` is defined below and reused here.
+# ONE vocabulary, shared with the colon healer below -- by construction, not by
+# discipline. Two independent literals drifted twice: the colon healer knew
+# `add`, `speak`, `voice`, `continue` and `offer` and the verb healer did not,
+# so a quote stripped after "as you add," left the fragment "You let the wry
+# amusement show as you add," standing on the page with nothing after it (live,
+# chat 72); and later the verb healer alone gained `call` and `shout`. Both now
+# read `_SPEECH_CUE` through `_dangling_speech` (defined at the top of this
+# file), so a pack states what counts as speech ONCE and neither healer can
+# hold a vocabulary the other does not.
 
 
 def _heal_dangling_verb(match):
@@ -4754,6 +4821,7 @@ def _heal_dangling_verb(match):
     knows and what this function exists to keep off the page, so the
     replacement must refer to the utterance without reproducing it.
     """
+    heal = _ling("_DANGLING_SPEECH")
     verb = match.group(1)
     if match.group("cont"):
         # A capital straight after the comma means the cut left two sentences
@@ -4761,11 +4829,13 @@ def _heal_dangling_verb(match):
         # first rather than running them together with an object between.
         rest = match.string[match.end():].lstrip()
         if rest[:1].isupper():
-            return f"{verb} it."
-        return f"{verb} it,"          # attribution mid-sentence: keep going
+            return heal["heal_stop"].format(verb=verb)
+        # attribution mid-sentence: keep going
+        return heal["heal_cont"].format(verb=verb)
     if match.group("end"):
-        return f"{verb} it{match.group('end')}"   # consume it; never double
-    return f"{verb} it."              # end of paragraph or of the prose
+        # consume the punctuation the wound left; never double it
+        return heal["heal_end"].format(verb=verb, end=match.group("end"))
+    return heal["heal_stop"].format(verb=verb)   # end of paragraph or prose
 
 
 # `, ,` and `,,` left where a quote sat between an attribution and its
@@ -4789,7 +4859,7 @@ _DOUBLED_COMMA_RE = re.compile(r",(?:[^\S\n]*,)+")
 
 
 def _heal_dangling_colon(m):
-    return m.group(1) + ". "
+    return _ling("_DANGLING_SPEECH")["heal_colon"].format(lead=m.group(1))
 
 def _protected_view_quotes(view, player_lines=None):
     """Quoted spans in a perceiver's view that belong to a NON-player speaker
@@ -4803,7 +4873,7 @@ def _protected_view_quotes(view, player_lines=None):
         if _quote_body(line)
     }
     quotes = []
-    for match in re.finditer(r'["“]([^"“”]{1,})["”]', str(view or "")):
+    for match in _ling("_VIEW_QUOTE_BODY_RE").finditer(str(view or "")):
         body = _quote_body(match.group(1))
         if not body:
             continue
@@ -4849,7 +4919,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         body = _quote_body(quote)
         if not body:
             continue
-        forms = ['"%s"' % body, "“%s”" % body]
+        forms = [o + body + c for o, c in _ling("_QUOTE_PAIRS")]
         if len(body) >= 8:
             forms.append(body)
         for form in forms:
@@ -4872,7 +4942,7 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # corrupting unrelated words ("know", "not"). Without this split,
         # short player lines (e.g. "Stop!", "Wait!") were never stripped at
         # all and echoed verbatim in narrator prose.
-        quoted_forms = ('"%s"' % body, "\u201c%s\u201d" % body)
+        quoted_forms = tuple(o + body + c for o, c in _ling("_QUOTE_PAIRS"))
         matched = any(q in prose for q in quoted_forms)
         if len(body) >= 8 and body in prose:
             matched = True
@@ -4890,9 +4960,9 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
             if hit is None:
                 continue
             prose = prose[:hit.start()] + prose[hit.end():]
-            prose = _ling("_DANGLING_SPEECH_VERB_RE").sub(
+            prose = _dangling_speech("verb").sub(
                 _heal_dangling_verb, prose)
-            prose = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, prose)
+            prose = _dangling_speech("colon").sub(_heal_dangling_colon, prose)
             continue
         for quoted in quoted_forms:
             prose = prose.replace(quoted, "")
@@ -4902,8 +4972,8 @@ def _strip_player_echo(prose, lines, protect_quotes=None):
         # "I ask,", "Alex says.") with nothing after it -- the subject varies
         # with narration_person (first/second/third), so match on the verb
         # rather than assuming "you".
-        prose = _ling("_DANGLING_SPEECH_VERB_RE").sub(_heal_dangling_verb, prose)
-        prose = _ling("_DANGLING_SPEECH_COLON_RE").sub(_heal_dangling_colon, prose)
+        prose = _dangling_speech("verb").sub(_heal_dangling_verb, prose)
+        prose = _dangling_speech("colon").sub(_heal_dangling_colon, prose)
     for token, form in masks:
         prose = prose.replace(token, form)
     prose = _collapse_empty_quote_debris(prose)
@@ -5018,16 +5088,6 @@ def _already_established_phrases(view, recent_prose, limit=12):
         hits |= (view_shingles & _word_shingles(prev))
     return sorted(hits)[:limit]
 
-# Within-view dedupe (W12): the same sentence rendered twice in ONE turn's
-# view/prose ("Picard turns his head slightly toward Troi" appearing twice in
-# a single beat). Splitting is a plain sentence-boundary regex; a quote whose
-# body contains sentence punctuation mis-splits into fragments, but every such
-# fragment carries a quote character and is therefore exempt from dropping
-# (below), so mis-splits can only UNDER-dedupe, never eat real content.
-# Attribution cue for the dialogue-fidelity floor: a speech verb, or a bare
-# voice noun ("A muffled voice: ..."). Deliberately excludes reading verbs
-# (reads, is written/painted/carved, displays) so quoted ENVIRONMENTAL text --
-# signage, labels, screens -- is never mistaken for dialogue.
 _YOU_RE = re.compile(r"\byou\b|\byour\b", re.I)
 
 
@@ -5079,8 +5139,10 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
         chunks = []
         for c in re.split(r"\.{2,}|…", body):
             c = c.strip(" ,;:—–-.!?")
-            if c.startswith("something about "):
-                c = c[len("something about "):]
+            for prefix in _ling("_PARTIAL_QUOTE_PREFIXES"):
+                if c.startswith(prefix):
+                    c = c[len(prefix):]
+                    break
             if len(c) >= 3:
                 chunks.append(c)
         return bool(chunks) and all(any(c in L for L in legit) for c in chunks)
@@ -5094,11 +5156,11 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
     # sentence terminators OUTSIDE any quote, plus the END of each quoted span
     # (a new clause almost always begins after a quoted line).
     quote_spans = [(m.start(), m.end(), m.group(1))
-                   for m in re.finditer(r'["“]([^"”]*)["”]', view)]
+                   for m in _ling("_VIEW_QUOTE_BODY_RE").finditer(view)]
     boundaries = {0}
     inside = False
     for i, ch in enumerate(view):
-        if ch in '"“”':
+        if ch in _ling("_QUOTE_CHARS"):
             inside = not inside
         elif ch in ".!?…" and not inside:
             boundaries.add(i + 1)
@@ -5151,6 +5213,10 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
             start, end = _clause_start(qs), qe
         else:
             cstart = _clause_start(qs)
+            # Attribution cue for the dialogue-fidelity floor: a speech verb, or a bare
+            # voice noun ("A muffled voice: ..."). Deliberately excludes reading verbs
+            # (reads, is written/painted/carved, displays) so quoted ENVIRONMENTAL text --
+            # signage, labels, screens -- is never mistaken for dialogue.
             pre_attr = bool(_ling("_DIALOGUE_CUE_RE").search(view[cstart:qs]))
             tstop = _tail_stop(qe)
             tail = view[qe:tstop]
@@ -5192,10 +5258,13 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
         cast_names=cast_names, mode="player")
 
 
+# Within-view dedupe (W12): the same sentence rendered twice in ONE turn's
+# view/prose ("Picard turns his head slightly toward Troi" appearing twice in
+# a single beat). Splitting is a plain sentence-boundary regex; a quote whose
+# body contains sentence punctuation mis-splits into fragments, but every such
+# fragment carries a quote character and is therefore exempt from dropping
+# (below), so mis-splits can only UNDER-dedupe, never eat real content.
 _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
-# Double-quote characters only: curly/straight single quotes double as
-# apostrophes in ordinary prose and cannot mark dialogue reliably.
-_VIEW_QUOTE_CHARS = ('"', "“", "”")
 _VIEW_DEDUPE_MIN_WORDS = 5
 
 _VIEW_MASK = "\x00Q%d\x00"
@@ -5280,7 +5349,11 @@ def _dedupe_view_sentences(text):
             # check stays alongside it for an UNTERMINATED quote, which the
             # span regex cannot match and which must still be protected.
             and "\x00" not in sent
-            and not any(qc in sent for qc in _VIEW_QUOTE_CHARS)
+            # Double-quote characters only: curly/straight single quotes double as
+            # apostrophes in ordinary prose and cannot mark dialogue reliably. The
+            # pack names them, because which glyphs open a spoken line is the one
+            # thing about dialogue that every language answers differently.
+            and not any(qc in sent for qc in _ling("_QUOTE_CHARS"))
         )
         if droppable:
             if key in seen:
@@ -5377,11 +5450,6 @@ def _pronoun_to_group():
 # so every pronoun scored against every name in it.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])[」』\"\'”’)\]]*\s*")
 
-# Names that are also ordinary capitalized English words. A cast member called
-# one of these can't be told apart from the common word, so we decline to score
-# their clauses rather than burn a rewrite on "Will you hand him the padd".
-
-
 def _pronoun_group(pronouns):
     """The closed paradigm a declared pronoun set belongs to, or None when the
     declared forms are absent, unknown, or disagree with each other."""
@@ -5424,9 +5492,19 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
         canonical = str(name or "").strip()
         if not group or not canonical:
             continue
-        for token in re.findall(r"[A-Za-z']+", canonical):
-            if len(token) < 3 or not token[:1].isupper():
+        for token in _name_tokens(canonical):
+            if len(token) < _name_token_floor(token):
                 continue
+            # The capital is what separates a name part from an ordinary word
+            # it sits beside -- in a script that HAS capitals. Demanding one of
+            # a caseless script drops every token, which is how this guard came
+            # to return [] for a Japanese cast before consulting a pronoun at
+            # all. Same reasoning as `_player_name_forms`.
+            if not _UNSPACED_SCRIPT.match(token[:1]) and not token[:1].isupper():
+                continue
+            # Names that are also ordinary capitalized English words. A cast member called
+            # one of these can't be told apart from the common word, so we decline to score
+            # their clauses rather than burn a rewrite on "Will you hand him the padd".
             if token.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
                 continue
             if token in token_owner and token_owner[token][0] != canonical:
@@ -5440,13 +5518,21 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
     # A pronoun inside quoted dialogue belongs to the speaker talking about
     # whoever they mean -- often someone the clause never names -- so it can't
     # be scored against the clause's named subject.
-    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
+    scan = _ling("_NARRATION_QUOTE_RE").sub(" ", prose)
 
     warnings = []
     flagged = set()
     for sentence in _SENTENCE_SPLIT.split(scan):
         for clause in _ling("_CLAUSE_SPLIT").split(sentence):
-            words = re.findall(r"[A-Za-z']+", clause)
+            # MEASURED BEFORE ENFORCING, because this warning's prefix is in
+            # `_ENFORCEABLE_PREFIXES` and a false positive buys a full narrator
+            # rewrite. Replayed over every stored narrator variant in the live
+            # database (2,350 with prose, 69,589 clauses): 0 clauses tokenise
+            # differently. `_NAME_TOKEN_RE` opens with the same `[A-Za-z']+`,
+            # so the English answer is unchanged by construction and the whole
+            # of the new exposure is in scripts where this guard returns
+            # nothing at all today.
+            words = _name_tokens(clause)
             if len(words) < 2:
                 continue
             present = {token_owner[w] for w in words if w in token_owner}
@@ -5643,14 +5729,6 @@ def _check_event_order(prose, event_order):
     return warnings
 
 
-# _NARR_LOWERING and _NARR_RAISING are deliberately TIGHTER than a natural
-# reading of "goes down" / "goes up": only verbs naming a deliberate directed
-# movement, plus the unambiguous adverbs. Bare "up"/"down" ("heat scorching up
-# your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
-# all appear constantly in ordinary prose, and every one of them would turn
-# this into a false-positive generator that spends a rewrite on correct pages.
-
-
 def _check_action_direction(prose, event_order):
     """F5: an ACT listed in event_order, rendered in the wrong direction or
     dropped from the page entirely.
@@ -5671,6 +5749,12 @@ def _check_action_direction(prose, event_order):
     """
     if not prose or not event_order:
         return []
+    # _NARR_LOWERING and _NARR_RAISING are deliberately TIGHTER than a natural
+    # reading of "goes down" / "goes up": only verbs naming a deliberate directed
+    # movement, plus the unambiguous adverbs. Bare "up"/"down" ("heat scorching up
+    # your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
+    # all appear constantly in ordinary prose, and every one of them would turn
+    # this into a false-positive generator that spends a rewrite on correct pages.
     p_low = bool(_ling("_NARR_LOWERING").search(prose))
     p_high = bool(_ling("_NARR_RAISING").search(prose))
     warnings = []
@@ -5710,21 +5794,32 @@ def _actor_reference_patterns(display):
     if not display:
         return []
     head = display.split()[0]
-    if head.lower() in ("the", "a", "an") or not display[:1].isupper():
-        phrase = re.sub(r"^(?:the|a|an)\s+", "", display, flags=re.I).strip()
-        if len(phrase) < 4:
+    # The pack's own article list -- the same one the compositor uses when it
+    # BUILDS a descriptor label. A language with no articles supplies an empty
+    # list and the leading-article branch simply never fires.
+    articles = [str(a).lower() for a in (compositor_value("articles") or [])]
+    article_re = ("^(?:%s)\\s+" % "|".join(re.escape(a) for a in articles)
+                  if articles else None)
+    proper = display[:1].isupper() or bool(_UNSPACED_SCRIPT.match(display[:1]))
+    if head.lower() in articles or not proper:
+        phrase = display
+        if article_re:
+            phrase = re.sub(article_re, "", phrase, flags=re.I)
+        phrase = phrase.strip()
+        if len(phrase) < _display_floor(phrase):
             return []
-        return [re.compile(
-            r"(?<!\w)" + r"\s+".join(re.escape(w) for w in phrase.split())
-            + r"(?!\w)", re.I)]
+        return [re.compile(cue_boundary_pattern(
+            r"\s+".join(re.escape(w) for w in phrase.split())), re.I)]
     pats = []
-    for tok in re.findall(r"[A-Za-z']+", display):
-        if len(tok) < 3 or not tok[:1].isupper():
+    for tok in _name_tokens(display):
+        if len(tok) < _name_token_floor(tok):
+            continue
+        if not _UNSPACED_SCRIPT.match(tok[:1]) and not tok[:1].isupper():
             continue
         if tok.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
             continue
-        pats.append(re.compile(
-            r"(?<!\w)" + re.escape(tok) + r"(?:['’]s)?(?!\w)"))
+        pats.append(re.compile(cue_boundary_pattern(
+            re.escape(tok) + r"(?:['’]s)?")))
     return pats
 
 
@@ -5785,10 +5880,11 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         # OPENING delimiter sits just before `start` and must not truncate
         # the context it opens.
         prefix = prose[:start].rstrip()
-        while prefix and prefix[-1] in '"“':
+        while prefix and prefix[-1] in _ling("_QUOTE_CHARS"):
             prefix = prefix[:-1]
         cut = max(prefix.rfind("\n"),
-                  max((prefix.rfind(qc) for qc in ('"', "”", "“")), default=-1))
+                  max((prefix.rfind(qc) for qc in _ling("_QUOTE_CHARS")),
+                      default=-1))
         prefix = prefix[cut + 1:]
         best = None  # (pos, actor)
         for actor, pats in pat_map.items():
@@ -5804,8 +5900,16 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         between = prefix[best[0]:]
         cand_group = _group_of(best[1])
         ambiguous = False
-        for pm in re.finditer(r"\b(he|she|they)\b", between, re.I):
-            pg = _pronoun_to_group().get(pm.group(1).lower())
+        # The groups the ACTIVE pack declares, not three English words: the
+        # Japanese pack adds 彼/彼女/彼ら groups and this scan could not see
+        # any of them, so the ambiguity brake never engaged for a Japanese
+        # story -- the same defect `_pronoun_to_group` was written to fix.
+        groups = _pronoun_to_group()
+        subjects = sorted(_ling("_PRONOUN_GROUPS"), key=len, reverse=True)
+        subject_re = re.compile(cue_boundary_pattern(
+            "|".join(re.escape(w) for w in subjects)), re.I)
+        for pm in subject_re.finditer(between):
+            pg = groups.get(pm.group(0).lower())
             if cand_group and pg and pg != cand_group:
                 ambiguous = True
                 break
@@ -5842,7 +5946,8 @@ def _check_position_fidelity(prose, position_facts, room_names):
     usable_rooms = {}
     for rid, rname in (room_names or {}).items():
         rname = str(rname or "").strip()
-        if len(rname) < 4 or rname.lower() in ("room", "area", "here"):
+        if (len(rname) < _display_floor(rname)
+                or rname.lower() in _ling("_GENERIC_ROOM_WORDS")):
             continue
         usable_rooms[rid] = rname
     warnings = []
@@ -5857,7 +5962,7 @@ def _check_position_fidelity(prose, position_facts, room_names):
         own_name = str(usable_rooms.get(own_room) or "").lower()
         for sentence in _SENTENCE_SPLIT.split(prose):
             # Quoted speech is a speaker's claim, not narration.
-            scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", sentence)
+            scan = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
             best = max((mm.start() for p in pats for mm in p.finditer(scan)),
                        default=-1)
             if best < 0:
@@ -5870,10 +5975,14 @@ def _check_position_fidelity(prose, position_facts, room_names):
                 # character's own room's name cannot be told apart reliably.
                 if own_name and (low in own_name or own_name in low):
                     continue
+                # A language marks place with an adposition, and which SIDE of
+                # the room name it sits on is the language's business, not this
+                # guard's -- Japanese postposes it. The pack holds the whole
+                # phrase with a {room} slot for that reason.
+                shape = _ling("_PLACEMENT_PHRASE")
                 place = re.compile(
-                    r"\b(?:back\s+)?(?:in|inside|within|into|at)\s+"
-                    r"(?:the\s+)?(?:\w+[ -]){0,2}?" + re.escape(rname)
-                    + r"\b", re.I)
+                    str(shape["pattern"]).replace("{room}", re.escape(rname)),
+                    int(shape.get("flags") or 0))
                 pm = place.search(scan, best)
                 if not pm:
                     continue
@@ -5893,10 +6002,6 @@ def _check_position_fidelity(prose, position_facts, room_names):
     return warnings
 
 
-_PORTAL_OPEN_RE = r"(?:open|ajar|wide[- ]open)"
-_PORTAL_SHUT_RE = r"(?:shut|closed|sealed|locked)"
-
-
 def _check_portal_fidelity(prose, portal_states):
     """F3: named portal state in prose must match the committed scene (DW t9
     shuts the double doors; t12 renders 'through the open doors' with no
@@ -5904,22 +6009,28 @@ def _check_portal_fidelity(prose, portal_states):
     player can currently see (built in agents/narration.py)."""
     if not prose or not portal_states:
         return []
-    scan = re.sub(r'"[^"]*"|“[^“”]*”', " ", prose)
+    scan = _ling("_NARRATION_QUOTE_RE").sub(" ", prose)
     warnings = []
     for name, state in portal_states.items():
         name = str(name or "").strip()
         state = str(state or "").strip().lower()
-        if len(name) < 4 or state not in ("open", "shut"):
+        if len(name) < _display_floor(name) or state not in ("open", "shut"):
             continue
-        wrong = _PORTAL_SHUT_RE if state == "open" else _PORTAL_OPEN_RE
-        name_pat = r"\s+".join(re.escape(w) for w in name.split())
+        shape = _ling("_PORTAL_STATE")
+        wrong = shape["shut"] if state == "open" else shape["open"]
+        name_pat = str(shape["join"]).join(
+            re.escape(w) for w in name.split()) or re.escape(name)
+
+        def _asserted(form):
+            return re.search(
+                str(shape[form]).replace("{state}", wrong)
+                                .replace("{name}", name_pat), scan, re.I)
+
         asserted = (
             # "the open doors" / "still-sealed hatch"
-            re.search(r"\b" + wrong + r"(?:\s+\w+)?\s+" + name_pat + r"\b",
-                      scan, re.I)
+            _asserted("modifier")
             # "the doors ... stand open" (same clause)
-            or re.search(r"\b" + name_pat + r"\b[^.!?\n,;]{0,60}?\b" + wrong
-                         + r"\b", scan, re.I)
+            or _asserted("predicate")
         )
         if asserted:
             opposite = "shut" if state == "open" else "open"
@@ -6150,11 +6261,21 @@ def _llm_resolve_player_room(sc, pers, cast, interp, player_input):
         out = jparse(chat_complete("utility", get_prompt("position_resolver"),
                                    json.dumps(payload, ensure_ascii=False),
                                    temperature=0.0, max_tokens=1000))
-        key = out.get("key") if isinstance(out, dict) else None
-        if key and key in positions:
-            return positions[key]
-    except Exception:
-        pass
+    except Exception as exc:
+        # A provider failure and "the model found no match" used to be the
+        # same answer here: both returned None, and the caller reported the
+        # player's room as unresolved. They are different facts, and only one
+        # of them is a system fault -- so the fault says so. The value is
+        # still checked against `positions` before use, so this stays a
+        # warning rather than a raise.
+        note_step_warning(
+            "position_resolver call failed (%s: %s); the player's room falls "
+            "back to the committed position"
+            % (type(exc).__name__, str(exc)[:120]))
+        return None
+    key = out.get("key") if isinstance(out, dict) else None
+    if key and key in positions:
+        return positions[key]
     return None
 
 def _resolve_player_room(sc, pers, interp, cast, player_input=None):

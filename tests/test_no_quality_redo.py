@@ -117,7 +117,7 @@ class TestTheReplacement:
             {"id": "ia1", "status": "dormant", "barren_attempts": 3}]},
             "unbidden": {}}
 
-        assert character._barren_intent({}, state) is False
+        assert character._barren_intent(state) is False
 
     def test_the_existing_suppressions_still_outrank_it(self):
         """A barren goal must not force reminiscence on a mind the engine has
