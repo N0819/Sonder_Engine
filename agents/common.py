@@ -33,7 +33,7 @@ from mind.memory import chat_lorebook_ids, chat_lorebook_weights
 from llm.providers import chat_complete
 from llm.prompts import get_prompt
 from story.scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
-                   PLAYER_AUTHORITY_GRANTS)
+                   normalize_player_authority, PLAYER_AUTHORITY_GRANTS)
 from llm.schemas import normalize_speech_volume
 from world.spatial import (
     _body_interior_holder,
@@ -3797,9 +3797,14 @@ def apply_player_authority(out, mode, player_name=None):
     puts in front of the Director and on the step, so a refusal is answerable
     rather than silent.
     """
-    mode = str(mode or "world_author")
-    granted = PLAYER_AUTHORITY_GRANTS.get(
-        mode, PLAYER_AUTHORITY_GRANTS["world_author"])
+    # `normalize_player_authority` owns this vocabulary (story/scene.py): it is
+    # what `player_authority` runs on the stored mode and on every history
+    # entry, and it folds an unreadable value to the DEFAULT. A second copy
+    # here -- a bare `str()` and a dict `.get` with the top rung as fallback --
+    # answered `world_author` for any spelling the table did not hold
+    # literally, so a story tightened to `actor_only` was handed the whole
+    # ladder back by a capital letter.
+    granted = PLAYER_AUTHORITY_GRANTS[normalize_player_authority(mode)]
     if not isinstance(out, dict):
         return []
     flow = out.get("flow")
