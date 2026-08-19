@@ -141,3 +141,31 @@ def test_a_failed_insert_leaves_the_step_with_its_active_variant(temp_db,
         "WHERE s.turn_id=? AND s.key='narrator'", (turn_id,))
     assert len(active) == 1
     assert json.loads(active[0]["content"])["prose"] == "The original line."
+
+
+def test_a_prose_edit_is_refused_while_that_chat_has_a_live_pipeline(temp_db):
+    """WEB-18. This route WRITES a variant, so an edit issued during a reroll
+    of the same turn races the pipeline's own write to that step: whichever
+    `UPDATE variants SET active=0` lands second wins, and either the edit
+    vanishes or it silences the beat the pipeline just produced.
+
+    Not marking anything stale is what makes the route safe to run on an OLD
+    turn; it was never an argument for running it against a LIVE one, and its
+    sibling `edit_input` has taken the same guard all along.
+    """
+    chat_id = _make_chat(temp_db)
+    turn_id = _make_turn(temp_db, chat_id)
+    save_step(turn_id, "narrator", "Narrator · render", 6, {"prose": "As written."})
+
+    app.ABORTS[(chat_id, None)] = object()
+    try:
+        with pytest.raises(HTTPException) as caught:
+            app.edit_prose(turn_id, {"prose": "As edited."})
+        assert caught.value.status_code == 409
+    finally:
+        app.ABORTS.pop((chat_id, None), None)
+
+    assert app.active_content(turn_id, "narrator")["prose"] == "As written."
+
+    # ...and the moment the pipeline is done, the same edit lands.
+    assert app.edit_prose(turn_id, {"prose": "As edited."})["prose"] == "As edited."

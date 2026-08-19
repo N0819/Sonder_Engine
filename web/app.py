@@ -5214,6 +5214,16 @@ def edit_prose(tid: int, body: dict = Body(...)):
     if not turn:
         raise HTTPException(404, "Turn not found")
 
+    # The same reason `edit_input` above takes it, and the reason applies
+    # here more sharply rather than less: this route WRITES a variant, so a
+    # prose edit issued while a reroll of the same turn is running races the
+    # pipeline's own write to that step. Whichever `UPDATE variants SET
+    # active=0` lands second wins, and the edit either vanishes or silences
+    # the beat the pipeline just produced. Not marking anything stale
+    # (argued below) is what makes this route safe to run on an OLD turn --
+    # it was never an argument for running it against a LIVE one.
+    _require_chat_idle(turn["chat_id"])
+
     step = q(
         "SELECT * FROM steps WHERE turn_id=? AND key='narrator'",
         (tid,),
