@@ -529,6 +529,13 @@ def appraise(goal_impacts, priority_of, dimensions=None, unresolved_drive=0.0):
     # because an intention wound (weight 0.43) narrowly out-ranked it, so the
     # drive never registered the hit -- the exact reason ruptures never built.
     drive_impact, drive_weight = None, -1.0
+    # Every impact this beat actually appraised, in the order it was given.
+    # `_relief_impacts` has always read this key and `appraise` never wrote
+    # it, so only the single highest-weight impact could ever dissolve an
+    # undercurrent -- a confirmed win on the very goal the dread is about was
+    # discarded whenever anything else outweighed it, which on a beat carrying
+    # a dread is most of the time.
+    impacts = []
 
     for raw in goal_impacts or []:
         if not isinstance(raw, dict):
@@ -548,6 +555,7 @@ def appraise(goal_impacts, priority_of, dimensions=None, unresolved_drive=0.0):
             dominant, dominant_weight = norm, weight
         if norm["serves"] == "drive" and weight > drive_weight:
             drive_impact, drive_weight = norm, weight
+        impacts.append(norm)
 
     # Intrinsic bodily pleasantness and appraisal-process dimensions are
     # orthogonal to goal success. A current touch can hurt or feel good even
@@ -588,6 +596,7 @@ def appraise(goal_impacts, priority_of, dimensions=None, unresolved_drive=0.0):
         "emotions": emotions,
         "dominant": dominant,
         "drive_impact": drive_impact,
+        "impacts": impacts,
     }
     if extended:
         result.update({
@@ -762,13 +771,18 @@ def _undercurrent_label(emotions, proposed, d_v, d_a):
     return quadrant_label(d_v, d_a)
 
 def _relief_impacts(appraisal):
-    """Positive, confirmed impacts — candidates for clearing an undercurrent."""
+    """Positive, confirmed impacts — candidates for clearing an undercurrent.
+
+    `dominant` is still read first, and separately, so an appraisal written
+    before `impacts` existed -- a replay, a stored older shape -- still
+    relieves what it always did.
+    """
     impacts = []
     dominant = (appraisal or {}).get("dominant")
     if isinstance(dominant, dict):
         impacts.append(dominant)
     for extra in (appraisal or {}).get("impacts") or []:
-        if isinstance(extra, dict):
+        if isinstance(extra, dict) and extra is not dominant:
             impacts.append(extra)
     return [i for i in impacts
             if _float_or(i.get("impact")) > 0
