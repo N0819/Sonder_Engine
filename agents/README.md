@@ -34,19 +34,26 @@ pipeline drawer on its own. See [`docs/guides/EXTENSIONS.md`](../docs/guides/EXT
 1. Put the implementation in the closest role module, or create a new focused module.
 2. Add its structured output contract to `llm/schemas.py` (including `SCHEMA_MAP`, keyed by step id) and prompt to `llm/prompts.py`.
 3. Register the fixed step in `runtime.STEP_HANDLERS`.
-4. Insert it into `runtime.build_plan()` and/or `runtime.establishment_plan()`.
-5. Give it a field on `PipelineContext` (`core/pipeline_context.py`) if later stages read its output.
-6. Add persistence logic in `persist/commit.py` only when the stage owns durable output.
-7. Re-export it from `agents/__init__.py` when external callers need it.
-8. Add a focused regression test, then run `make check`.
+4. Give it a reader-facing name in `runtime.STEP_LABELS`. This is the step
+   easiest to skip and the only one whose omission is visible to a player:
+   `step_label()` falls back to the raw step key, so a stage with no entry
+   shows its id in the turn-status bar and the pipeline drawer, in every
+   language. `tools/extract_ui_catalog.py` harvests this table, so the label
+   also has to be translated before `make structure` will pass.
+5. Insert it into `runtime.build_plan()` and/or `runtime.establishment_plan()`.
+6. Give it a field on `PipelineContext` (`core/pipeline_context.py`) if later stages read its output.
+7. Add persistence logic in `persist/commit.py` only when the stage owns durable output.
+8. Re-export it from `agents/__init__.py` when external callers need it.
+9. Add a focused regression test, then run `make check`.
 
 Keep role modules one-directional: they may import `common.py`, but `common.py`
 should never import a role module — that direction holds today and is the one
 worth defending. Role modules importing each other is discouraged rather than
 prevented, and `loops.py → character.py` and `background.py → perception.py`
 already do. `runtime.py` should stay the only module that knows the plan;
-step ids themselves are also named in `schemas.SCHEMA_MAP` and
-`core/pipeline_context.py`, which is why steps 2 and 5 exist. Keep plan placement
+a step id is nevertheless named in FOUR registries — `runtime.STEP_HANDLERS`,
+`runtime.STEP_LABELS`, `schemas.SCHEMA_MAP` and `core/pipeline_context.py` —
+which is why steps 2, 4 and 6 exist. Keep plan placement
 explicit even when dispatch is registered dynamically.
 
 One consequence of the extension splice hook that is easy to miss: **the anchor
