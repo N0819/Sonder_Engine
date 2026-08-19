@@ -69,6 +69,9 @@ from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 from .common import (
     _agent_json,
     _books,
+    _self_second_person,
+    character_scene_keys,
+    self_name_forms,
     declared_goal,
     observer_label_fn,
     observer_name_scrub,
@@ -3292,7 +3295,23 @@ def character_step(ctx, cid, nonce):
             ctx.add_warning(
                 f"character {character_name(sh)}: scrubbed unearned "
                 "identities out of while_you_were_offscreen gap text")
-        payload["while_you_were_offscreen"] = _gated_interim
+        # TWO floors, not one. `observer_name_scrub` gates OTHER people's
+        # names; it says nothing about the mind's own. Every tick composer in
+        # `world/offscreen.py` leads with the subject's display name ("{who}
+        # goes about their own business...", "{who} keeps quietly at it: ..."),
+        # `gaps._skeleton` copies that straight into `events[].summary`, and
+        # the one reader hands the whole record to THAT SUBJECT. So a mind's
+        # own interval arrived written about them in the third person -- the
+        # exception to `Design.md`'s "a mind is never told about itself in the
+        # third person, by name OR by the label strangers use for it".
+        #
+        # Latent until the seeded rung writes a batch, and repaired before it
+        # does rather than after.
+        _self_forms = self_name_forms(character_name(sh),
+                                      character_scene_keys(sh))
+        _owned_interim = scrub_names_deep(
+            _gated_interim, lambda text: _self_second_person(text, _self_forms))
+        payload["while_you_were_offscreen"] = _owned_interim
 
     # Authorial offers (P3): propositions the PLAYER authored about THIS
     # character's interior/behavior, rerouted here instead of being enacted as
