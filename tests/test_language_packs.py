@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import json
 from pathlib import Path
 import re
@@ -675,9 +674,11 @@ def test_no_english_compat_export_survives_without_a_reader():
         "English compat exports nothing reads: " + ", ".join(orphans))
 
 
-#: Authored fragments the prompt card also embeds verbatim inside prompt
-#: bodies, with the number of copies English currently carries. Four
-#: fragments, seventeen copies, each maintained by hand.
+#: Authored fragments the prompt card embeds inside prompt bodies, with the
+#: number of `{{fragment:<name>}}` references each pack's RAW card carries.
+#: Four fragments, seventeen embeddings. Resolution happens at pack load
+#: (`language_runtime._resolve_prompt_fragments`), so the loaded card holds
+#: only resolved text; the references live in the file on disk.
 _EMBEDDED_FRAGMENTS = {
     "category_note": 5,
     "book_type_note": 3,
@@ -686,49 +687,64 @@ _EMBEDDED_FRAGMENTS = {
 }
 
 
-def _authored_leaves(value, path=()):
-    # Mapping, not dict: `LanguagePack.card()` hands back the frozen
-    # mappingproxy `language_runtime._freeze` builds, which is not a dict
-    # subclass -- type-testing for dict walks zero leaves and silently
-    # disarms the check, exactly as it once did in tools/project_check.py.
-    if isinstance(value, Mapping):
+def _raw_string_leaves(value, path=()):
+    if isinstance(value, dict):
         for key, child in value.items():
-            yield from _authored_leaves(child, path + (str(key),))
-    elif isinstance(value, (list, tuple)):
+            yield from _raw_string_leaves(child, path + (str(key),))
+    elif isinstance(value, list):
         for index, child in enumerate(value):
-            yield from _authored_leaves(child, path + (str(index),))
+            yield from _raw_string_leaves(child, path + (str(index),))
     elif isinstance(value, str):
         yield ".".join(path), value
 
 
-def test_every_embedded_copy_of_a_fragment_still_equals_the_fragment():
-    """Four fragments are ALSO pasted verbatim into seventeen prompt bodies.
+def test_every_embedding_of_a_fragment_is_a_reference_no_pack_keeps_a_copy():
+    """Four fragments are embedded in seventeen prompt bodies -- as
+    `{{fragment:...}}` references, never as pasted text.
 
-    `category_note` into five, `book_type_note` into three, `transit_note`
-    into three, `extra_parts_note` into six -- each a hand-maintained copy of
-    a value the card already holds once. Editing the fragment and not its
-    copies leaves two prompts teaching different rules for the same field,
-    and nothing anywhere compares them.
-
-    English is the reference pack and this holds it exact. The Japanese pack
-    is a known and separate gap: ZERO of its seventeen copies equal their own
-    Japanese fragment, because the translation pass rendered the fragment and
-    each embedded copy independently. Closing that needs either seventeen
-    re-translations or a fragment-substitution mechanism in the card format,
-    which is a bigger decision than this guard.
+    They were pastes once, and an earlier revision of this guard could only
+    hold the English copies byte-equal to their fragment by hand while the
+    Japanese pack drifted freely: ZERO of its seventeen copies matched their
+    own fragment, because the translation pass rendered each one
+    independently, and three of the four differed inside the first fifty
+    characters -- past the point where a copy could even be located
+    mechanically. References resolved at card load make that drift
+    structurally impossible, so the guard now asserts the stronger property
+    on the raw files: every pack embeds each fragment by reference at
+    exactly the paths English does, and no pack smuggles a literal copy
+    back in beside its own fragment.
     """
-    english = installed_language_packs(refresh=True)["en"]
-    card = english.card("system_prompts")
-    leaves = dict(_authored_leaves(card))
-    for name, expected in _EMBEDDED_FRAGMENTS.items():
-        fragment = str(card[name])
-        copies = [path for path, body in leaves.items()
-                  if path != name and fragment in body]
-        head = fragment[:60]
-        drifted = [path for path, body in leaves.items()
-                   if path != name and head in body and fragment not in body]
-        assert not drifted, (
-            f"{name} has drifted from its copies at: {drifted}")
-        assert len(copies) == expected, (
-            f"{name} is embedded {len(copies)} times, not {expected} -- "
-            "update the count deliberately, or a copy went missing")
+    packs = installed_language_packs(refresh=True)
+    english_raw = json.loads(
+        (ROOT / "language_packs/en/cards/system_prompts.json")
+        .read_text(encoding="utf-8"))
+    reference_paths = {
+        name: {path for path, body in _raw_string_leaves(english_raw)
+               if f"{{{{fragment:{name}}}}}" in body}
+        for name in _EMBEDDED_FRAGMENTS
+    }
+    for pack in packs.values():
+        if not pack.story:
+            continue
+        raw = json.loads(
+            (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json")
+            .read_text(encoding="utf-8"))
+        leaves = dict(_raw_string_leaves(raw))
+        for name, expected in _EMBEDDED_FRAGMENTS.items():
+            marker = f"{{{{fragment:{name}}}}}"
+            references = sum(body.count(marker) for body in leaves.values())
+            assert references == expected, (
+                f"{pack.id}: {name} is referenced {references} times, not "
+                f"{expected} -- update the count deliberately, or an "
+                "embedding went missing")
+            referencing_paths = {path for path, body in leaves.items()
+                                 if marker in body}
+            assert referencing_paths == reference_paths[name], (
+                f"{pack.id}: {name} references sit at different paths than "
+                "the English card's")
+            fragment = str(raw[name])
+            pasted = [path for path, body in leaves.items()
+                      if path != name and fragment in body]
+            assert not pasted, (
+                f"{pack.id}: {name} is pasted verbatim at {pasted}; embed it "
+                "as {{fragment:" + name + "}} so it cannot drift")
