@@ -397,3 +397,134 @@ def test_no_pack_stores_a_second_copy_of_an_assembled_director_sheet():
             f"language pack {pack.id!r} stores a second body for "
             f"{', '.join(duplicated)}; those sheets are assembled from "
             "`specialists`/`prose_author_sheet` and must live there only")
+
+
+# --- Decision 2: the deterministic recognizers inside `mind/` ---------------
+#
+# Two dozen recognizers -- belief-confidence calibration, claim similarity,
+# memory salience, durable-quote detection, mood valence -- decided their
+# answers from English literals in a pack engine, and the linguistics card had
+# no `mind.*` key at all, so a pack had nowhere to put a translation even if
+# somebody wrote one. `ja` declares `"story": true`, which under AGENTS.md is a
+# claim that deterministic recognition is covered in that language.
+
+#: (module, name) -> the live constant it must still equal in English, or None
+#: where the value is inlined at its call site and has no constant to compare.
+#: Parity is checked only while the constant EXISTS: the call sites belong to
+#: `mind/` and `persist/`, and repointing one deletes its constant.
+_MIND_LINGUISTICS = {
+    ("mind.theory_of_mind", "_STOPWORDS"): ("mind.theory_of_mind", "_STOPWORDS"),
+    ("mind.theory_of_mind", "_TOKEN_RE"): None,
+    ("mind.theory_of_mind", "_KIND_CUES"): ("mind.theory_of_mind", "_KIND_CUES"),
+    ("mind.affect", "AFFECT_LEXICON"): ("mind.affect", "AFFECT_LEXICON"),
+    ("mind.affect", "_QUADRANT_DEFAULTS"): None,
+    ("mind.memory", "_STOPWORDS"): ("mind.memory", "_STOPWORDS"),
+    ("mind.memory", "_WORD_RE"): None,
+    ("mind.memory", "_OLD_CUES"): ("mind.memory", "_OLD_CUES"),
+    ("mind.memory", "_RECENT_CUES"): ("mind.memory", "_RECENT_CUES"),
+    ("mind.memory", "_ENTITY_CANDIDATE_RE"): None,
+    ("mind.memory", "_ENTITY_BLOCKED"): None,
+    ("mind.memory", "_MOOD_TOKEN_RE"): None,
+    ("mind.memory", "_MOOD_VALENCE"): ("mind.memory", "_MOOD_VALENCE"),
+    ("mind.memory", "_PROMISE_QUERY_CUES"): None,
+    ("mind.memory", "_CLAUSE_SPLIT"): ("mind.memory", "_CLAUSE_SPLIT"),
+    ("mind.memory", "_SUPPORT_STOPWORDS"): ("mind.memory", "_SUPPORT_STOPWORDS"),
+    ("mind.memory", "_SUPPORT_WORD_RE"): None,
+    ("persist.commit_memory", "_SALIENCE_CUES"): None,
+    ("persist.commit_memory", "_DURABLE_QUOTE_MARKERS"): None,
+}
+
+
+def test_every_mind_recognizer_has_a_place_in_every_story_pack():
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        for module, name in _MIND_LINGUISTICS:
+            value = linguistic(module, name, pack.id)
+            assert value, f"{pack.id} pack has an empty {module}.{name}"
+
+
+def test_the_english_mind_cards_still_equal_the_constants_they_replace():
+    """A card that has drifted from the module is worse than no card.
+
+    Checked only while the constant still exists -- the call sites live in
+    `mind/` and `persist/`, and repointing one to `linguistic(...)` deletes
+    its constant. Until then this is what keeps the two spellings level.
+    """
+    import importlib
+
+    for (card_module, card_name), source in _MIND_LINGUISTICS.items():
+        if source is None:
+            continue
+        module_name, constant_name = source
+        constant = getattr(
+            importlib.import_module(module_name), constant_name, None)
+        if constant is None:
+            continue
+        value = linguistic(card_module, card_name, "en")
+        if hasattr(constant, "pattern"):
+            assert value.pattern == constant.pattern, card_name
+        else:
+            assert value == constant, f"en {card_module}.{card_name}"
+
+
+def test_japanese_mind_recognizers_actually_recognize_japanese():
+    """The point of decision 2: the claim `"story": true` becomes true.
+
+    English word regexes return NOTHING on unspaced Japanese, so before this
+    every claim comparison scored 0 against every other claim, every FTS query
+    was empty, `_inferred_kind` returned None on every claim (silently
+    retiring the confidence-calibration guard entirely), no quote was ever
+    kept verbatim and every memory scored the flat length-only salience.
+    """
+    import re
+
+    claim = "彼女は私が鍵を欲しがっていると思っている"
+    tokens = linguistic("mind.theory_of_mind", "_TOKEN_RE", "ja").findall(claim)
+    assert len(tokens) > 3, tokens
+    assert not linguistic(
+        "mind.theory_of_mind", "_TOKEN_RE", "en").findall(claim)
+
+    kinds = [kind for kind, cues
+             in linguistic("mind.theory_of_mind", "_KIND_CUES", "ja")
+             if any(re.search(cue, claim) for cue in cues)]
+    assert kinds[:1] == ["second_order"], kinds
+
+    line = "必ず戻ると約束する"
+    markers = linguistic("persist.commit_memory", "_DURABLE_QUOTE_MARKERS", "ja")
+    assert any(re.search(pattern, line) for pattern in markers["promise"])
+
+    salient = "血の匂いがした"
+    assert any(cue in salient for cue
+               in linguistic("persist.commit_memory", "_SALIENCE_CUES", "ja"))
+
+    mood = set(linguistic("mind.memory", "_MOOD_TOKEN_RE", "ja")
+               .findall("不安で眠れない"))
+    signs = [sign for words, sign
+             in linguistic("mind.memory", "_MOOD_VALENCE", "ja")
+             if mood & set(words)]
+    assert signs == [-1.0], signs
+
+    entities = linguistic(
+        "mind.memory", "_ENTITY_CANDIDATE_RE", "ja").findall(
+            "カレンさんが桟橋にいた")
+    assert "カレン" in entities, entities
+
+
+def test_the_quadrant_fallback_label_exists_in_every_packs_lexicon():
+    """`quadrant_label` is the label used when nothing the model proposed
+    survives reconciliation, and `label_matches` must then accept it. A
+    Japanese lexicon with English fallback labels would return a label its own
+    pack cannot judge, which reads as agreement rather than as a miss."""
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        lexicon = linguistic("mind.affect", "AFFECT_LEXICON", pack.id)
+        defaults = dict(
+            linguistic("mind.affect", "_QUADRANT_DEFAULTS", pack.id))
+        assert len(defaults) == 9, (pack.id, defaults)
+        for (v_sign, a_sign), label in defaults.items():
+            entry = lexicon.get(label)
+            assert entry is not None, (pack.id, label)
+            assert (entry["v"], entry["a"]) == (v_sign, a_sign), (
+                pack.id, label, entry)

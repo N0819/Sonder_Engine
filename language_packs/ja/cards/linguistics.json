@@ -2581,5 +2581,1543 @@
       "pattern": "(?:^[\\\"'“‘(\\[]*\\s*(?:he|she|they|it|his|her|hers|their|theirs|its|him|them)\\b|^[「『\"'“‘(\\[]*\\s*(?:彼女ら|彼女|彼ら|彼|そいつ|その人|それ|そこ))",
       "flags": 34
     }
+  },
+  "mind.theory_of_mind": {
+    "_STOPWORDS": {
+      "$type": "frozenset",
+      "items": [
+        "a",
+        "about",
+        "an",
+        "and",
+        "appear",
+        "appears",
+        "are",
+        "around",
+        "as",
+        "at",
+        "be",
+        "been",
+        "being",
+        "but",
+        "by",
+        "can",
+        "could",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "he",
+        "her",
+        "hers",
+        "him",
+        "his",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "just",
+        "may",
+        "might",
+        "near",
+        "no",
+        "not",
+        "of",
+        "on",
+        "or",
+        "out",
+        "seem",
+        "seems",
+        "she",
+        "so",
+        "still",
+        "than",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "to",
+        "toward",
+        "up",
+        "very",
+        "was",
+        "were",
+        "when",
+        "while",
+        "will",
+        "with",
+        "would",
+        "は",
+        "が",
+        "を",
+        "に",
+        "で",
+        "と",
+        "も",
+        "の",
+        "へ",
+        "や",
+        "か",
+        "ね",
+        "よ",
+        "な",
+        "だ",
+        "です",
+        "ます",
+        "ました",
+        "ません",
+        "した",
+        "して",
+        "している",
+        "していた",
+        "する",
+        "される",
+        "された",
+        "されて",
+        "いる",
+        "いた",
+        "ある",
+        "あった",
+        "ない",
+        "なかった",
+        "なく",
+        "った",
+        "って",
+        "られ",
+        "られて",
+        "せる",
+        "たい",
+        "たら",
+        "ても",
+        "ては",
+        "から",
+        "まで",
+        "より",
+        "ほど",
+        "だけ",
+        "など",
+        "ような",
+        "ように",
+        "という",
+        "こと",
+        "もの",
+        "ため",
+        "とき",
+        "この",
+        "その",
+        "あの",
+        "どの",
+        "これ",
+        "それ",
+        "あれ",
+        "そして",
+        "しかし",
+        "でも",
+        "だが",
+        "また",
+        "まだ",
+        "もう",
+        "とても",
+        "少し",
+        "私",
+        "僕",
+        "俺",
+        "彼",
+        "彼女",
+        "自分",
+        "あなた",
+        "君"
+      ]
+    },
+    "_TOKEN_RE": {
+      "$type": "regex",
+      "pattern": "[a-z0-9']+|[一-鿿々〆ヶ]+|[ァ-ヶー]{2,}|[ぁ-ゖ]+"
+    },
+    "_KIND_CUES": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            "second_order",
+            {
+              "$type": "tuple",
+              "items": [
+                "\\bthinks (?:that )?(?:i|we|he|she|they)\\b",
+                "\\bbelieves (?:that )?(?:i|we|he|she|they)\\b",
+                "\\b(?:knows|suspects|assumes|reckons) (?:that )?(?:i|we)\\b",
+                "\\bthinks .{0,24}\\bbelieves\\b",
+                "(?:私|わたし|俺|僕|我々|彼|彼女|彼ら)[はがを].{0,16}?と(?:思|考|信じ|疑)",
+                "と(?:思|信じ)っていると(?:思|考)"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "stated_fact",
+            {
+              "$type": "tuple",
+              "items": [
+                "\\b(?:said|told|claimed|admitted|swore|promised|announced)\\b",
+                "と(?:言った|話した|告げた|認めた|誓った|約束した|発表した|明かした)"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "identity",
+            {
+              "$type": "tuple",
+              "items": [
+                "\\bis really\\b",
+                "\\bis actually\\b",
+                "\\bmust be the\\b",
+                "\\bis the one who\\b",
+                "\\bgoes by\\b",
+                "(?:実は|本当は).{0,12}(?:だ|である|らしい)",
+                "の正体は",
+                "と名乗",
+                "本名は"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "trait",
+            {
+              "$type": "tuple",
+              "items": [
+                "\\bis (?:a|an) \\w+",
+                "\\balways\\b",
+                "\\bnever\\b",
+                "\\b(?:kind|sort|type) of person\\b",
+                "\\bby nature\\b",
+                "いつも",
+                "決して",
+                "必ず",
+                "(?:ああいう|そういう)(?:人|やつ|たち)",
+                "生まれつき",
+                "性格(?:だ|的)"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "goal",
+            {
+              "$type": "tuple",
+              "items": [
+                "\\bwants?\\b",
+                "\\bintends?\\b",
+                "\\bplans? to\\b",
+                "\\btrying to\\b",
+                "\\bmeans to\\b",
+                "\\bhopes? to\\b",
+                "\\baims? to\\b",
+                "\\bis going to\\b",
+                "\\bafter the\\b",
+                "(?:し|やり)たがって",
+                "しようとして",
+                "(?:する|やる)つもり",
+                "を狙って",
+                "を目指して",
+                "を望んで",
+                "を求めて"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "emotion",
+            {
+              "$type": "tuple",
+              "items": [
+                "\\bfeels?\\b",
+                "\\bis (?:afraid|angry|frightened|upset|nervous|happy|sad|ashamed|jealous|calm)\\b",
+                "(?:怖|怯え|怒|不安|動揺|嬉し|悲し|恥じ|嫉妬|落ち着)",
+                "と感じて"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "mind.affect": {
+    "AFFECT_LEXICON": {
+      "fear": {
+        "v": -1,
+        "a": 1
+      },
+      "afraid": {
+        "v": -1,
+        "a": 1
+      },
+      "terrified": {
+        "v": -1,
+        "a": 1
+      },
+      "panicked": {
+        "v": -1,
+        "a": 1
+      },
+      "anxious": {
+        "v": -1,
+        "a": 1
+      },
+      "nervous": {
+        "v": -1,
+        "a": 1
+      },
+      "dread": {
+        "v": -1,
+        "a": 1
+      },
+      "alarmed": {
+        "v": -1,
+        "a": 1
+      },
+      "wary": {
+        "v": -1,
+        "a": 0
+      },
+      "suspicious": {
+        "v": -1,
+        "a": 0
+      },
+      "anger": {
+        "v": -1,
+        "a": 1
+      },
+      "angry": {
+        "v": -1,
+        "a": 1
+      },
+      "furious": {
+        "v": -1,
+        "a": 1
+      },
+      "irritated": {
+        "v": -1,
+        "a": 1
+      },
+      "frustrated": {
+        "v": -1,
+        "a": 1
+      },
+      "resentful": {
+        "v": -1,
+        "a": 0
+      },
+      "sadness": {
+        "v": -1,
+        "a": -1
+      },
+      "sad": {
+        "v": -1,
+        "a": -1
+      },
+      "grief": {
+        "v": -1,
+        "a": -1
+      },
+      "sorrowful": {
+        "v": -1,
+        "a": -1
+      },
+      "despairing": {
+        "v": -1,
+        "a": -1
+      },
+      "melancholy": {
+        "v": -1,
+        "a": -1
+      },
+      "lonely": {
+        "v": -1,
+        "a": -1
+      },
+      "downcast": {
+        "v": -1,
+        "a": -1
+      },
+      "disgusted": {
+        "v": -1,
+        "a": 0
+      },
+      "contemptuous": {
+        "v": -1,
+        "a": 0
+      },
+      "ashamed": {
+        "v": -1,
+        "a": -1
+      },
+      "guilty": {
+        "v": -1,
+        "a": -1
+      },
+      "embarrassed": {
+        "v": -1,
+        "a": 1
+      },
+      "joyful": {
+        "v": 1,
+        "a": 1
+      },
+      "happy": {
+        "v": 1,
+        "a": 1
+      },
+      "cheerful": {
+        "v": 1,
+        "a": 1
+      },
+      "excited": {
+        "v": 1,
+        "a": 1
+      },
+      "elated": {
+        "v": 1,
+        "a": 1
+      },
+      "delighted": {
+        "v": 1,
+        "a": 1
+      },
+      "amused": {
+        "v": 1,
+        "a": 1
+      },
+      "hope": {
+        "v": 1,
+        "a": 1
+      },
+      "hopeful": {
+        "v": 1,
+        "a": 1
+      },
+      "eager": {
+        "v": 1,
+        "a": 1
+      },
+      "curious": {
+        "v": 1,
+        "a": 1
+      },
+      "satisfaction": {
+        "v": 1,
+        "a": -1
+      },
+      "satisfied": {
+        "v": 1,
+        "a": -1
+      },
+      "content": {
+        "v": 1,
+        "a": -1
+      },
+      "calm": {
+        "v": 1,
+        "a": -1
+      },
+      "relaxed": {
+        "v": 1,
+        "a": -1
+      },
+      "serene": {
+        "v": 1,
+        "a": -1
+      },
+      "peaceful": {
+        "v": 1,
+        "a": -1
+      },
+      "relieved": {
+        "v": 1,
+        "a": -1
+      },
+      "grateful": {
+        "v": 1,
+        "a": -1
+      },
+      "proud": {
+        "v": 1,
+        "a": 1
+      },
+      "confident": {
+        "v": 1,
+        "a": 0
+      },
+      "tender": {
+        "v": 1,
+        "a": -1
+      },
+      "affectionate": {
+        "v": 1,
+        "a": 0
+      },
+      "warm": {
+        "v": 1,
+        "a": -1
+      },
+      "fond": {
+        "v": 1,
+        "a": -1
+      },
+      "pleased": {
+        "v": 1,
+        "a": 0
+      },
+      "bored": {
+        "v": -1,
+        "a": -1
+      },
+      "weary": {
+        "v": -1,
+        "a": -1
+      },
+      "tired": {
+        "v": 0,
+        "a": -1
+      },
+      "numb": {
+        "v": 0,
+        "a": -1
+      },
+      "subdued": {
+        "v": 0,
+        "a": -1
+      },
+      "neutral": {
+        "v": 0,
+        "a": 0
+      },
+      "alert": {
+        "v": 0,
+        "a": 1
+      },
+      "surprised": {
+        "v": 0,
+        "a": 1
+      },
+      "startled": {
+        "v": 0,
+        "a": 1
+      },
+      "unhappy": {
+        "v": -1,
+        "a": 0
+      },
+      "uneasy": {
+        "v": -1,
+        "a": 0
+      },
+      "恐怖": {
+        "v": -1,
+        "a": 1
+      },
+      "怖い": {
+        "v": -1,
+        "a": 1
+      },
+      "怯え": {
+        "v": -1,
+        "a": 1
+      },
+      "恐慌": {
+        "v": -1,
+        "a": 1
+      },
+      "不安": {
+        "v": -1,
+        "a": 1
+      },
+      "緊張": {
+        "v": -1,
+        "a": 1
+      },
+      "動揺": {
+        "v": -1,
+        "a": 1
+      },
+      "警戒": {
+        "v": -1,
+        "a": 0
+      },
+      "疑念": {
+        "v": -1,
+        "a": 0
+      },
+      "怒り": {
+        "v": -1,
+        "a": 1
+      },
+      "激怒": {
+        "v": -1,
+        "a": 1
+      },
+      "苛立ち": {
+        "v": -1,
+        "a": 1
+      },
+      "憤り": {
+        "v": -1,
+        "a": 0
+      },
+      "悲しみ": {
+        "v": -1,
+        "a": -1
+      },
+      "嘆き": {
+        "v": -1,
+        "a": -1
+      },
+      "絶望": {
+        "v": -1,
+        "a": -1
+      },
+      "憂鬱": {
+        "v": -1,
+        "a": -1
+      },
+      "孤独": {
+        "v": -1,
+        "a": -1
+      },
+      "落胆": {
+        "v": -1,
+        "a": -1
+      },
+      "嫌悪": {
+        "v": -1,
+        "a": 0
+      },
+      "侮蔑": {
+        "v": -1,
+        "a": 0
+      },
+      "恥": {
+        "v": -1,
+        "a": -1
+      },
+      "罪悪感": {
+        "v": -1,
+        "a": -1
+      },
+      "気まずさ": {
+        "v": -1,
+        "a": 1
+      },
+      "喜び": {
+        "v": 1,
+        "a": 1
+      },
+      "嬉しさ": {
+        "v": 1,
+        "a": 1
+      },
+      "上機嫌": {
+        "v": 1,
+        "a": 1
+      },
+      "興奮": {
+        "v": 1,
+        "a": 1
+      },
+      "歓喜": {
+        "v": 1,
+        "a": 1
+      },
+      "愉快": {
+        "v": 1,
+        "a": 1
+      },
+      "希望": {
+        "v": 1,
+        "a": 1
+      },
+      "期待": {
+        "v": 1,
+        "a": 1
+      },
+      "意欲": {
+        "v": 1,
+        "a": 1
+      },
+      "好奇心": {
+        "v": 1,
+        "a": 1
+      },
+      "満足": {
+        "v": 1,
+        "a": -1
+      },
+      "安らぎ": {
+        "v": 1,
+        "a": -1
+      },
+      "平静": {
+        "v": 1,
+        "a": -1
+      },
+      "落ち着き": {
+        "v": 1,
+        "a": -1
+      },
+      "安堵": {
+        "v": 1,
+        "a": -1
+      },
+      "感謝": {
+        "v": 1,
+        "a": -1
+      },
+      "誇り": {
+        "v": 1,
+        "a": 1
+      },
+      "自信": {
+        "v": 1,
+        "a": 0
+      },
+      "優しさ": {
+        "v": 1,
+        "a": -1
+      },
+      "愛情": {
+        "v": 1,
+        "a": 0
+      },
+      "温かさ": {
+        "v": 1,
+        "a": -1
+      },
+      "慈しみ": {
+        "v": 1,
+        "a": -1
+      },
+      "満悦": {
+        "v": 1,
+        "a": 0
+      },
+      "退屈": {
+        "v": -1,
+        "a": -1
+      },
+      "疲労": {
+        "v": -1,
+        "a": -1
+      },
+      "眠気": {
+        "v": 0,
+        "a": -1
+      },
+      "無感覚": {
+        "v": 0,
+        "a": -1
+      },
+      "沈んだ": {
+        "v": 0,
+        "a": -1
+      },
+      "平常": {
+        "v": 0,
+        "a": 0
+      },
+      "覚醒": {
+        "v": 0,
+        "a": 1
+      },
+      "驚き": {
+        "v": 0,
+        "a": 1
+      },
+      "驚愕": {
+        "v": 0,
+        "a": 1
+      },
+      "不満": {
+        "v": -1,
+        "a": 0
+      },
+      "落ち着かない": {
+        "v": -1,
+        "a": 0
+      }
+    },
+    "_QUADRANT_DEFAULTS": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                0,
+                0
+              ]
+            },
+            "平常"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                0,
+                1
+              ]
+            },
+            "覚醒"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                0,
+                -1
+              ]
+            },
+            "沈んだ"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                1,
+                0
+              ]
+            },
+            "満悦"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                1,
+                1
+              ]
+            },
+            "興奮"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                1,
+                -1
+              ]
+            },
+            "満足"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                -1,
+                0
+              ]
+            },
+            "不満"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                -1,
+                1
+              ]
+            },
+            "不安"
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                -1,
+                -1
+              ]
+            },
+            "落胆"
+          ]
+        }
+      ]
+    }
+  },
+  "mind.memory": {
+    "_STOPWORDS": {
+      "$type": "frozenset",
+      "items": [
+        "about",
+        "after",
+        "again",
+        "against",
+        "also",
+        "and",
+        "are",
+        "because",
+        "been",
+        "before",
+        "being",
+        "but",
+        "can",
+        "could",
+        "did",
+        "does",
+        "doing",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "her",
+        "hers",
+        "him",
+        "his",
+        "how",
+        "into",
+        "its",
+        "itself",
+        "just",
+        "might",
+        "not",
+        "now",
+        "other",
+        "our",
+        "ours",
+        "said",
+        "says",
+        "she",
+        "should",
+        "something",
+        "than",
+        "that",
+        "the",
+        "their",
+        "theirs",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "under",
+        "very",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "who",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+        "yours",
+        "は",
+        "が",
+        "を",
+        "に",
+        "で",
+        "と",
+        "も",
+        "の",
+        "へ",
+        "や",
+        "か",
+        "ね",
+        "よ",
+        "な",
+        "だ",
+        "です",
+        "ます",
+        "ました",
+        "ません",
+        "した",
+        "して",
+        "している",
+        "していた",
+        "する",
+        "される",
+        "された",
+        "されて",
+        "いる",
+        "いた",
+        "ある",
+        "あった",
+        "ない",
+        "なかった",
+        "なく",
+        "った",
+        "って",
+        "られ",
+        "られて",
+        "せる",
+        "たい",
+        "たら",
+        "ても",
+        "ては",
+        "から",
+        "まで",
+        "より",
+        "ほど",
+        "だけ",
+        "など",
+        "ような",
+        "ように",
+        "という",
+        "こと",
+        "もの",
+        "ため",
+        "とき",
+        "この",
+        "その",
+        "あの",
+        "どの",
+        "これ",
+        "それ",
+        "あれ",
+        "そして",
+        "しかし",
+        "でも",
+        "だが",
+        "また",
+        "まだ",
+        "もう",
+        "とても",
+        "少し",
+        "私",
+        "僕",
+        "俺",
+        "彼",
+        "彼女",
+        "自分",
+        "あなた",
+        "君"
+      ]
+    },
+    "_WORD_RE": {
+      "$type": "regex",
+      "pattern": "[A-Za-z0-9'-]{3,}|[一-鿿々〆ヶ]+|[ァ-ヶー]{2,}"
+    },
+    "_OLD_CUES": {
+      "$type": "tuple",
+      "items": [
+        "\\blong ago\\b",
+        "\\byears? ago\\b",
+        "\\bmonths? ago\\b",
+        "\\bback then\\b",
+        "\\bearliest\\b",
+        "\\bfirst time\\b",
+        "\\boriginally\\b",
+        "ずっと前",
+        "何年も前",
+        "何ヶ月も前",
+        "あの頃",
+        "最初の頃",
+        "もともと",
+        "昔",
+        "かつて"
+      ]
+    },
+    "_RECENT_CUES": {
+      "$type": "tuple",
+      "items": [
+        "\\brecently\\b",
+        "\\bjust now\\b",
+        "\\ba moment ago\\b",
+        "\\blast turn\\b",
+        "\\bjust happened\\b",
+        "最近",
+        "たった今",
+        "今しがた",
+        "さっき",
+        "ついさっき",
+        "起きたばかり",
+        "直前"
+      ]
+    },
+    "_ENTITY_CANDIDATE_RE": {
+      "$type": "regex",
+      "pattern": "\\b(?:[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})\\b|[ァ-ヶー]{3,}|[一-鿿々]{1,4}(?=(?:さん|さま|様|氏|くん|君|ちゃん|先生|殿))"
+    },
+    "_ENTITY_BLOCKED": {
+      "$type": "frozenset",
+      "items": [
+        "A",
+        "An",
+        "And",
+        "At",
+        "But",
+        "He",
+        "Her",
+        "Here",
+        "His",
+        "I",
+        "It",
+        "Its",
+        "Later",
+        "Now",
+        "She",
+        "So",
+        "Something",
+        "That",
+        "The",
+        "Their",
+        "Then",
+        "There",
+        "These",
+        "They",
+        "This",
+        "Those",
+        "We",
+        "What",
+        "When",
+        "Where",
+        "Which",
+        "While",
+        "Who",
+        "Why",
+        "With",
+        "You",
+        "Your",
+        "ドア",
+        "テーブル",
+        "カーテン",
+        "ランプ",
+        "ベッド",
+        "ナイフ",
+        "コート",
+        "ボタン",
+        "ガラス",
+        "スカート",
+        "シャツ",
+        "ポケット",
+        "テント"
+      ]
+    },
+    "_MOOD_TOKEN_RE": {
+      "$type": "regex",
+      "pattern": "[a-z']+|[一-鿿々〆ヶ]+|[ァ-ヶー]{2,}"
+    },
+    "_MOOD_VALENCE": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                "afraid",
+                "fear",
+                "fearful",
+                "terrified",
+                "scared",
+                "anxious",
+                "dread",
+                "panic",
+                "angry",
+                "furious",
+                "rage",
+                "resentful",
+                "bitter",
+                "grief",
+                "grieving",
+                "ashamed",
+                "humiliated",
+                "guilty",
+                "miserable",
+                "despair",
+                "hopeless",
+                "lonely",
+                "hurt",
+                "sad",
+                "sick",
+                "desperate",
+                "wary",
+                "distrustful",
+                "uneasy",
+                "unease",
+                "tense",
+                "shaken",
+                "恐怖",
+                "怖",
+                "恐",
+                "怯",
+                "不安",
+                "動揺",
+                "緊張",
+                "警戒",
+                "不信",
+                "怒",
+                "激怒",
+                "苛立",
+                "憤",
+                "悲",
+                "嘆",
+                "絶望",
+                "孤独",
+                "憂鬱",
+                "恥",
+                "屈辱",
+                "罪悪",
+                "惨",
+                "傷",
+                "必死",
+                "苦"
+              ]
+            },
+            -1.0
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            {
+              "$type": "tuple",
+              "items": [
+                "happy",
+                "glad",
+                "delighted",
+                "elated",
+                "warm",
+                "fond",
+                "affectionate",
+                "content",
+                "calm",
+                "safe",
+                "relieved",
+                "hopeful",
+                "proud",
+                "amused",
+                "playful",
+                "curious",
+                "eager",
+                "tender",
+                "grateful",
+                "trusting",
+                "composed",
+                "steady",
+                "嬉",
+                "喜",
+                "幸",
+                "温",
+                "慕",
+                "愛情",
+                "満足",
+                "穏",
+                "安全",
+                "安堵",
+                "希望",
+                "誇",
+                "楽",
+                "好奇",
+                "熱心",
+                "優",
+                "感謝",
+                "信頼",
+                "冷静",
+                "平静"
+              ]
+            },
+            1.0
+          ]
+        }
+      ]
+    },
+    "_PROMISE_QUERY_CUES": {
+      "$type": "tuple",
+      "items": [
+        "promise",
+        "promised",
+        "swore",
+        "vow",
+        "agreed",
+        "約束",
+        "誓",
+        "誓い",
+        "同意",
+        "承知"
+      ]
+    },
+    "_CLAUSE_SPLIT": {
+      "$type": "regex",
+      "pattern": "(?<=[.!?])\\s+(?=[A-Z\\\"'“‘])|(?<=[。！？])(?![」』\\s])"
+    },
+    "_SUPPORT_STOPWORDS": {
+      "$type": "frozenset",
+      "items": [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "but",
+        "by",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "he",
+        "her",
+        "him",
+        "his",
+        "i",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "me",
+        "my",
+        "not",
+        "of",
+        "on",
+        "or",
+        "she",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "they",
+        "this",
+        "to",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "will",
+        "with",
+        "you",
+        "your",
+        "は",
+        "が",
+        "を",
+        "に",
+        "で",
+        "と",
+        "も",
+        "の",
+        "へ",
+        "や",
+        "か",
+        "ね",
+        "よ",
+        "な",
+        "だ",
+        "です",
+        "ます",
+        "ました",
+        "ません",
+        "した",
+        "して",
+        "している",
+        "していた",
+        "する",
+        "される",
+        "された",
+        "されて",
+        "いる",
+        "いた",
+        "ある",
+        "あった",
+        "ない",
+        "なかった",
+        "なく",
+        "った",
+        "って",
+        "られ",
+        "られて",
+        "せる",
+        "たい",
+        "たら",
+        "ても",
+        "ては",
+        "から",
+        "まで",
+        "より",
+        "ほど",
+        "だけ",
+        "など",
+        "ような",
+        "ように",
+        "という",
+        "こと",
+        "もの",
+        "ため",
+        "とき",
+        "この",
+        "その",
+        "あの",
+        "どの",
+        "これ",
+        "それ",
+        "あれ",
+        "そして",
+        "しかし",
+        "でも",
+        "だが",
+        "また",
+        "まだ",
+        "もう",
+        "とても",
+        "少し",
+        "私",
+        "僕",
+        "俺",
+        "彼",
+        "彼女",
+        "自分",
+        "あなた",
+        "君"
+      ]
+    },
+    "_SUPPORT_WORD_RE": {
+      "$type": "regex",
+      "pattern": "[a-z0-9']{3,}|[一-鿿々〆ヶ]+|[ァ-ヶー]{2,}"
+    }
+  },
+  "persist.commit_memory": {
+    "_SALIENCE_CUES": {
+      "$type": "tuple",
+      "items": [
+        "attack",
+        "blood",
+        "secret",
+        "betray",
+        "kiss",
+        "dead",
+        "weapon",
+        "threat",
+        "love",
+        "steal",
+        "scream",
+        "knife",
+        "confess",
+        "liar",
+        "promise",
+        "攻撃",
+        "襲",
+        "血",
+        "秘密",
+        "裏切",
+        "口づけ",
+        "キス",
+        "死",
+        "武器",
+        "脅",
+        "愛",
+        "盗",
+        "悲鳴",
+        "ナイフ",
+        "刃",
+        "告白",
+        "嘘つき",
+        "約束"
+      ]
+    },
+    "_DURABLE_QUOTE_MARKERS": {
+      "promise": {
+        "$type": "tuple",
+        "items": [
+          "\\bpromise",
+          "\\bi\\ swear",
+          "\\bi\\ vow",
+          "\\byou\\ have\\ my\\ word",
+          "\\bi'll\\ return",
+          "\\bi\\ will\\ return",
+          "約束",
+          "誓う",
+          "誓います",
+          "必ず戻",
+          "きっと戻"
+        ]
+      },
+      "dialogue": {
+        "$type": "tuple",
+        "items": [
+          "\\bmy\\ name\\ is",
+          "\\bcall\\ me",
+          "\\bi\\ confess",
+          "\\bthe\\ truth\\ is",
+          "\\bi\\ killed",
+          "\\bi\\ betrayed",
+          "\\bi\\ love\\ you",
+          "\\bi\\ hate\\ you",
+          "\\bi'll\\ kill",
+          "\\bi\\ will\\ kill",
+          "名前は",
+          "と呼んで",
+          "告白",
+          "本当のことを言う",
+          "殺した",
+          "裏切った",
+          "愛してる",
+          "愛している",
+          "憎んでいる",
+          "殺してやる"
+        ]
+      }
+    }
   }
 }
