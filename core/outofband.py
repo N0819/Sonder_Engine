@@ -48,8 +48,16 @@ from __future__ import annotations
 
 import contextlib
 import threading
+import time
+import weakref
 
 from core.logging_utils import logger
+
+# Every live queue, so a process shutting down can reach all of them through
+# `drain_all` without importing `backdrops` and `ambience` to name the two they
+# own. Weak, because a queue built for one test must not be kept alive -- or
+# drained -- by this registry after that test drops it.
+_QUEUES = weakref.WeakSet()
 
 # How many past failures one queue remembers. Capped for the same reason the
 # lock table is pruned, and small on purpose: a remembered error exists so the
@@ -140,6 +148,7 @@ class Queue:
         self._guard = threading.Lock()
         self._active = {}     # signature -> Work, pending or running only
         self._errors = {}     # signature -> str, insertion-ordered and capped
+        _QUEUES.add(self)
 
     def __len__(self):
         with self._guard:
@@ -163,6 +172,22 @@ class Queue:
             # A fresh attempt clears the last failure, so a retry is not
             # reported as still broken while it is running.
             self._errors.pop(signature, None)
+        try:
+            threading.Thread(target=self._run, args=(work, fn), daemon=True,
+                             name="%s-%s" % (self._name,
+                                             signature[:8])).start()
+        except BaseException as exc:
+            # The replacement is already published and cannot make progress, so
+            # leaving it there wedges the signature: `submit` joins the
+            # incumbent on the ordinary path, so every later request for that
+            # room's picture or sound would join a worker that does not exist
+            # and poll to its 75s budget, and only another forced reroll could
+            # clear it. `_fail` records the failure and releases the slot by
+            # the same identity check every other exit uses, and hands the
+            # signature back to the incumbent under the same guard.
+            return self._fail(work, "%s: %s" % (type(exc).__name__,
+                                                str(exc)[:300]),
+                              restore=existing)
         if existing is not None:
             # Superseded, not joined. `force` and `reroll` are explicit
             # instructions, and the answer the incumbent is about to produce is
@@ -170,9 +195,11 @@ class Queue:
             # silently dropped the instruction. The incumbent stops at its next
             # step boundary; the per-signature lock keeps the two off each
             # other in the meantime.
+            #
+            # AFTER the start, never before: invalidating the one that works on
+            # behalf of a replacement that then failed to start left the room
+            # with no generation running at all.
             existing.cancelled.set()
-        threading.Thread(target=self._run, args=(work, fn), daemon=True,
-                         name="%s-%s" % (self._name, signature[:8])).start()
         return work
 
     def _run(self, work, fn):
@@ -191,17 +218,34 @@ class Queue:
         return self._finish(work,
                             "cancelled" if work.cancelled.is_set() else "done")
 
-    def _fail(self, work, message):
+    def _fail(self, work, message, restore=None):
         with self._guard:
+            # Identity, for the error table as much as for the active one.
+            # `_retire` was checked and this write was not, so a unit that had
+            # been SUPERSEDED and then failed filed its message over the reroll
+            # that replaced it -- and if the reroll succeeded, the signature
+            # reported 'error' with the message of an attempt nobody was
+            # waiting on, undoing the guarantee `submit` gives two lines above.
+            # It also makes `reset` safe against a worker still running: reset
+            # empties the active table, so a late failure writes nothing.
+            mine = self._active.get(work.signature) is work
             work.state = "failed"
             work.error = message
             self._retire(work)
-            self._errors[work.signature] = message
-            # Oldest out first: the failures a reader is still looking at are
-            # the recent ones, and the alternative -- keeping all of them -- is
-            # the leak this module exists to close.
-            while len(self._errors) > self._error_limit:
-                self._errors.pop(next(iter(self._errors)))
+            if restore is not None:
+                # A replacement that could not start hands the signature back
+                # to the unit it was going to supersede, inside the same guard
+                # so no reader finds the slot empty in between. setdefault, not
+                # assignment: anything that claimed the signature meanwhile is
+                # live and this is not.
+                self._active.setdefault(work.signature, restore)
+            if mine:
+                self._errors[work.signature] = message
+                # Oldest out first: the failures a reader is still looking at
+                # are the recent ones, and the alternative -- keeping all of
+                # them -- is the leak this module exists to close.
+                while len(self._errors) > self._error_limit:
+                    self._errors.pop(next(iter(self._errors)))
         logger.info("%s work failed: signature=%s error=%s",
                     self._name, work.signature, message)
         return work
@@ -209,7 +253,14 @@ class Queue:
     def _finish(self, work, state):
         with self._guard:
             work.state = state
+            mine = self._active.get(work.signature) is work
             self._retire(work)
+            if mine and state == "done":
+                # `submit` clears the last failure when a fresh attempt STARTS;
+                # nothing cleared it when one SUCCEEDED, so a message written
+                # by a sibling while this attempt was already running outlived
+                # the picture it was supposed to explain the absence of.
+                self._errors.pop(work.signature, None)
         return work
 
     def _retire(self, work):
@@ -266,14 +317,76 @@ class Queue:
             work.cancelled.set()
         return len(works)
 
+    def cancel_all(self):
+        """Ask everything in flight to stop, whatever group it belongs to.
+
+        The process-wide half of `cancel_group`, for a server shutting down: at
+        that point there is no chat left to name.
+        """
+        with self._guard:
+            works = list(self._active.values())
+        for work in works:
+            work.cancelled.set()
+        return len(works)
+
+    def drain(self, timeout=2.0):
+        """Cancel everything and wait up to `timeout` seconds for it to file.
+
+        Returns what is STILL in flight when the wait runs out -- empty when
+        the queue drained. Cooperative like `cancel`, so work inside a provider
+        call finishes that call and a bounded shutdown can legitimately return
+        a non-empty list; the threads are daemons and cannot hold the process
+        open, so this reports rather than joins.
+        """
+        self.cancel_all()
+        return self._wait_out(time.monotonic() + max(0.0, float(timeout)))
+
+    def _wait_out(self, deadline):
+        while True:
+            with self._guard:
+                left = list(self._active.values())
+            if not left or time.monotonic() >= deadline:
+                return left
+            time.sleep(0.01)
+
     def active(self, group=None):
         with self._guard:
             return [w for w in self._active.values()
                     if group is None or w.group == group]
 
     def reset(self):
-        """Drop all queue state. For tests and for a fresh process; it does not
-        stop threads already running."""
+        """Drop all queue state and ask everything still running to stop.
+
+        It does not JOIN those threads -- cancellation is cooperative here --
+        but nothing they do afterwards reaches this queue: `_fail` and
+        `_finish` both write only while the active table still holds THAT unit,
+        and this has just emptied it. Without that, a worker released after the
+        tables were cleared repopulated `_errors` for whoever came next. Use
+        `drain` when the caller can wait; this is for tests and for a fresh
+        process, where waiting is the wrong trade.
+        """
         with self._guard:
+            live = list(self._active.values())
             self._active.clear()
             self._errors.clear()
+        for work in live:
+            work.cancelled.set()
+
+
+def drain_all(timeout=2.0):
+    """Cancel and drain every live queue, inside one shared `timeout`.
+
+    One entry point for a process shutting down, so the caller does not have to
+    import `backdrops` and `ambience` to reach the two queues they own.
+    Everything is cancelled first and waited on afterwards, so the budget is
+    spent once rather than per queue. Returns what is still in flight when it
+    runs out.
+    """
+    queues = list(_QUEUES)
+    for queue in queues:
+        queue.cancel_all()
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    left = []
+    for queue in queues:
+        left.extend(queue._wait_out(deadline))
+    return left
