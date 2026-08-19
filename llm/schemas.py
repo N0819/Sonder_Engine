@@ -3052,19 +3052,108 @@ class GreetingKnowledgeSeed(LenientModel):
         lambda cls, v: _clamp_float(v, 0.0, 0.7, 0.6)
     )
 
-class GreetingInterpret(LenientModel):
-    """Two fields, because two are read.
+class GreetingBeliefSeed(LenientModel):
+    """Something one mind HOLDS at the story's open -- true or not.
 
-    This model used to declare eleven: a whole scene graph (`rooms`,
-    `positions`, `entities`, `attire`, `player_room`), plus `location`,
-    `scene_description`, `character_state` and `notes`. `story.greetings`
-    reads `time` and `knowledge_seeds` and nothing else, and the scene half
-    was never a gap waiting to be wired -- `start_story` stores the greeting
-    prose itself as the chat's scenario, so `director_establish` builds the
-    scene graph from the SAME passage one turn later, with the engine's full
-    payload behind it. Asking a second, weaker pass for the same graph and
-    discarding the answer cost a large prompt and most of the tokens of every
-    card-ingest call.
+    There is deliberately no truth flag: the extraction records what the mind
+    holds, `director_establish` records (from the same passage, with the full
+    payload) what is, and the gap between them IS the false belief -- the
+    seed of every deception downstream. A truth flag would be a second copy
+    of objective state inside a schema about minds.
+    """
+    belief: str = ""
+    #: "self", "world", or the name of another person in `minds`. The name of
+    #: a person routes through theory of mind at seeding, so the engine's own
+    #: per-kind ceilings bound what a greeting may assert about someone else.
+    about_entity: str = "world"
+    #: Only read when `about_entity` is another mind: a theory-of-mind kind
+    #: (observation|stated_fact|emotion|goal|trait|identity|second_order);
+    #: empty lets `theory_of_mind.effective_kind` infer one from the claim.
+    kind: str = ""
+    # Capped BELOW certainty for the same reason salience is capped below the
+    # consolidation floor: a seed is scaffolding for a story that has not
+    # happened yet, and it must start where lived reinforcement could have
+    # put it, never above. The weakening step in `apply_belief_updates` is
+    # absolute, so a capped seed stays revisable.
+    confidence: float = Field(default=0.5, ge=0.0, le=0.85)
+    #: A conviction the mind DEFENDS (weakening step halved), the same flag
+    #: `psychology.self_model.protected_beliefs` sets. `start_story` keeps at
+    #: most two per mind and only on self/world beliefs -- protection is a
+    #: card-psychology decision when it covers a worldview.
+    protected: bool = False
+    emotional_charge: float = 0.0
+    # true = the passage states it on the page (the player legitimately saw
+    # it); false = implied only. Both routes are private stores, so today the
+    # flag is provenance -- the durable record of what the player was shown,
+    # which any future mind-summarizing surface must consult.
+    revealed_in_prose: bool = False
+
+    _clamp_confidence = validator("confidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 0.85, 0.5)
+    )
+    _clamp_charge = validator("emotional_charge", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, -1.0, 1.0, 0.0)
+    )
+
+class GreetingStanceSeed(LenientModel):
+    """Where one mind STANDS toward another as the story opens -- absolute
+    starting points on exactly the axes `relationship_events` records, so the
+    seeded stance and every later movement live in one vocabulary."""
+    toward: str = ""
+    trust: float = 0.0
+    warmth: float = 0.0
+    fear: float = 0.0
+    #: Why, from the passage -- becomes the ledger row's note, so the stance
+    #: can explain itself later the way every other stance movement can.
+    because: str = ""
+    revealed_in_prose: bool = False
+
+    _clamp_axes = validator("trust", "warmth", "fear", pre=True,
+                            allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, -1.0, 1.0, 0.0)
+    )
+
+class GreetingAffectSeed(LenientModel):
+    """The emotional state a passage SHOWS at the opening moment. Seeds the
+    affect surface only; the card's initial_state stays the baseline the
+    moment decays back toward. Absent (`null`) means the passage does not
+    establish one -- absence is not neutrality, and a zeroed default would
+    silently overwrite every authored opening mood with calm."""
+    label: str = ""
+    valence: float = 0.0
+    arousal: float = 0.0
+
+    _clamp_va = validator("valence", "arousal", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, -1.0, 1.0, 0.0)
+    )
+
+class GreetingMind(LenientModel):
+    """One person's whole opening mind: what they know, hold, feel, and where
+    they stand toward the others. One entry per person the passage puts on
+    the page; `who` is the passage's own name for them, or the player token
+    for the player's slot. Deliberately absent: projects and intentions (both
+    must be arrived at in play), psychology (the card's), and the scene
+    (establishment's). See docs/design/DESIGN_GREETING_MINDS.md."""
+    who: str = ""
+    knowledge_seeds: list[GreetingKnowledgeSeed] = Field(default_factory=list)
+    beliefs: list[GreetingBeliefSeed] = Field(default_factory=list)
+    stances: list[GreetingStanceSeed] = Field(default_factory=list)
+    affect: Optional[GreetingAffectSeed] = None
+
+class GreetingInterpret(LenientModel):
+    """The MIND half of a greeting, per person present.
+
+    This model once declared eleven fields including a whole scene graph;
+    nine were deleted because `start_story` stores the greeting prose itself
+    as the chat's scenario, so `director_establish` builds the scene from the
+    SAME passage one turn later with the engine's full payload behind it.
+    That deletion stands: the world half is establishment's and no world
+    field returns here. What replaced the single per-card seed list is
+    `minds` -- one `GreetingMind` per person the passage puts on the page,
+    because a greeting routinely establishes an opening emotion, a stance,
+    and beliefs (including false ones) for more heads than the card's owner
+    (measured across the whole live corpus; see
+    docs/design/DESIGN_GREETING_MINDS.md).
 
     Extra keys are ignored rather than refused, as everywhere else here, so a
     stored extraction written by an older extractor still reads.
@@ -3072,8 +3161,11 @@ class GreetingInterpret(LenientModel):
 
     #: Seeds the chat's `simulation_clock.display` at launch.
     time: str = "now"
-    #: The point of the call: what the greeting implies the CHARACTER knows,
-    #: routed to that character's private memory.
+    #: The point of the call: one whole mind per person present.
+    minds: list[GreetingMind] = Field(default_factory=list)
+    #: v1's shape -- the card character's own seeds, un-keyed. Kept so a
+    #: hand-stamped stored extraction still routes; `start_story` folds these
+    #: into the card character's mind. The prompt no longer asks for it.
     knowledge_seeds: list[GreetingKnowledgeSeed] = Field(default_factory=list)
 
 # ---- Validation ----
@@ -4681,10 +4773,40 @@ OUTPUT_EXAMPLES = {
     },
     "greeting_interpret": {
         "time": "night",
-        "knowledge_seeds": [
-            {"content": "I have been waiting here for three nights for a courier.",
-             "about_entity": "self", "kind": "recent_event", "salience": 0.7,
-             "revealed_in_prose": False},
+        "minds": [
+            {"who": "Maren Kell",
+             "knowledge_seeds": [
+                 {"content": "I have been waiting here for three nights for a courier.",
+                  "about_entity": "self", "kind": "recent_event",
+                  "salience": 0.7, "revealed_in_prose": False},
+             ],
+             "beliefs": [
+                 {"belief": "The north road is still passable despite the storm.",
+                  "about_entity": "world", "kind": "", "confidence": 0.6,
+                  "protected": False, "emotional_charge": 0.0,
+                  "revealed_in_prose": False},
+                 {"belief": "{{PLAYER}} is the courier I have been waiting for.",
+                  "about_entity": "{{PLAYER}}", "kind": "identity",
+                  "confidence": 0.5, "protected": False,
+                  "emotional_charge": 0.3, "revealed_in_prose": True},
+             ],
+             "stances": [
+                 {"toward": "{{PLAYER}}", "trust": -0.2, "warmth": 0.1,
+                  "fear": 0.0,
+                  "because": "a stranger arriving at the hour the courier was due",
+                  "revealed_in_prose": True},
+             ],
+             "affect": {"label": "wary", "valence": -0.4, "arousal": 0.3}},
+            {"who": "{{PLAYER}}",
+             "knowledge_seeds": [
+                 {"content": "I crossed the pass after dark to reach this inn.",
+                  "about_entity": "self", "kind": "recent_event",
+                  "salience": 0.5, "revealed_in_prose": True},
+             ],
+             "beliefs": [], "stances": [],
+             # null, not a zeroed dict: the passage shows the innkeeper's
+             # state, not the player's, and absence must stay absent.
+             "affect": None},
         ],
     },
     "resolve_reconcile": {
@@ -4859,6 +4981,15 @@ def semantic_output_errors(
 
         if not isinstance(output.get("flow"), dict):
             errors.append("flow must be an object")
+
+    elif step_key == "greeting_interpret":
+        # A greeting always contains at least its own character's mind, so an
+        # empty `minds` is the silent-empty failure this subsystem is warned
+        # about by name -- caught here so extraction retries rather than
+        # launching a story whose opening seeded nobody.
+        if not output.get("minds"):
+            errors.append(
+                "minds is empty -- the greeting's own character is a mind")
 
     elif step_key == "director_establish":
         if not output.get("rooms"):
