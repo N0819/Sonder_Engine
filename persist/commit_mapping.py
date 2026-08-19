@@ -206,8 +206,10 @@ def prepare_mapping_commit(ctx):
     raw_intents = wget(cid, "standing_intentions", []) or []
     # Off-screen ticks no longer ride this call AT ALL. The dormant cast is
     # not offered to the model at any level: the stochastic rung is a seeded
-    # draw in `offscreen.stochastic_ticks` (free, replayable), taken at
-    # commit_mapping, and the model-priced rung above it is the out-of-band
+    # draw in `offscreen.stochastic_ticks` (free, replayable), taken in
+    # `offscreen.advance_epoch` -- a commit domain of its own
+    # (`commit.commit_offscreen_epoch`), which this module neither calls nor
+    # imports -- and the model-priced rung above it is the out-of-band
     # profile summary. Asking a lore validator to also author offscreen life
     # was an unadjudicated authoring channel wearing a payload field -- and
     # the seed it was shown seeded nothing, since no RNG ever consumed it.

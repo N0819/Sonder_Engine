@@ -109,6 +109,38 @@ def _run_turn(temp_db, ctx):
     return prepared, result
 
 
+def test_the_sweep_hands_back_the_counts_it_computed():
+    """WORLD-F3. `_fire_due_events` counts `news_fired` and
+    `consequences_fired` as it fires them, and `mechanics_sweep` dropped both
+    on the floor -- so `persist/commit_mechanics` rebuilt them from the ops it
+    was handed, against a `kind_by_id` map of its own. Two implementations of
+    one count, and on the day they disagree the surviving answer is the copy
+    furthest from the code that did the firing.
+
+    No database: the sweep is pure with respect to it.
+    """
+    from world.mechanics import mechanics_sweep
+
+    scene = {"rooms": {}, "entities": {}, "positions": {}}
+    pending = [
+        {"event_id": "n1", "kind": "news_arrival", "due_at": 50.0,
+         "location_id": None, "seed": None,
+         "payload": json.dumps({"frame_id": "f1", "audience": "the market",
+                                "summary": "a tower came down"})},
+        {"event_id": "c1", "kind": "consequence", "due_at": 50.0,
+         "location_id": None, "seed": None,
+         "payload": json.dumps({"frame_id": "f1", "what": "the roof gives"})},
+        {"event_id": "c2", "kind": "consequence", "due_at": 900.0,
+         "location_id": None, "seed": None,
+         "payload": json.dumps({"frame_id": "f1", "what": "not yet due"})},
+    ]
+    _, event_ops, _, counts = mechanics_sweep(
+        scene, {"elapsed_seconds": 100.0}, "f1", pending, turn_idx=5)
+
+    assert counts == {"fired": 0, "news_fired": 1, "consequences_fired": 1}
+    assert sorted(op[1] for op in event_ops if op[0] == "status") == ["c1", "n1"]
+
+
 def test_end_to_end_schedule_fire_expire_and_persist(temp_db):
     """Golden path across two turns: turn 1 schedules the arrival from
     entity.state.transit; turn 2 fires it (position moved, docked, eta

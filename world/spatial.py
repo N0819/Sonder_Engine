@@ -1,5 +1,31 @@
 # spatial.py
-"""Spatial reasoning with entity-aware scene merging and containment validation."""
+"""Spatial reasoning with entity-aware scene merging and containment validation.
+
+A FACADE. Every name below is defined in one of the `world/spatial_*` modules
+and re-exported here so that `from world.spatial import X` keeps meaning what
+it meant before the split -- an internal import contract for the engine, not
+the extension surface (that is `extension_runtime/api.py`, closed and versioned
+against deep-importable internals by design).
+
+Four public names here have no caller anywhere in the repository and are
+RETAINED deliberately rather than left to be re-found and deleted:
+
+  `comms_reach`          -- "every room a voice reaches", the whole-scene form
+                            of the live `comms_link`/`comms_between` pair.
+  `owned_region`         -- the `(who, where)` region token from a measured
+                            live confusion (chat 69 turns 78-80); its
+                            qualified-comparison sibling `same_owned_region`
+                            is live in `spatial_substance`.
+  `CONTAINMENT_MODES`    -- the vocabulary `scene.contained[*].mode` may hold.
+  `CONTAINER_ENCLOSURES` -- the vocabulary `entity.enclosure` may hold.
+
+The two constants are declared vocabularies their own normalisers do not
+enforce (SPATIAL-F1's shape, recorded in `docs/UNBUILT.md`); they document
+what the scene field means, which is a use, and validating against them is a
+behaviour change and not a cleanup. Six other uncalled names WERE removed --
+see `a17f383` and `ab25b24` for the standard: a name goes only when something
+else is its wired successor, or when the shape it speaks no longer exists.
+"""
 
 import copy
 import hashlib
@@ -36,7 +62,7 @@ from world.spatial_barriers import (
     _BARRIER_CLOSED_FORM, _BARRIER_CLOSED_QUALIFIERS, _barrier_exact,
     _BARRIER_OPEN_FORM, _BARRIER_OPEN_QUALIFIERS, _BARRIER_SEAL_QUALIFIERS,
     _BARRIER_SEALED_FORM, _OPENING_WORDS, _PASSABLE_BARRIERS, _SCENT_BARRIER_LEVELS,
-    _SIGHT_BARRIERS, _VALID_BARRIERS, normalize_barrier,
+    _SIGHT_BARRIERS, _VALID_BARRIERS, neighbor_map, normalize_barrier,
     normalize_scene_barriers, unresolved_barrier_words,
 )
 
@@ -58,9 +84,8 @@ from world.spatial_containment import (
     containment_broken_by_scale_change, containment_conceals,
     containment_facts, containment_hides, CONTAINMENT_MODES, contents_of,
     derive_contained_positions, hiding_holders_of,
-    normalize_scene_containment, normalize_scene_scales, scale_of,
-    scale_ratio, size_facts, size_relation, size_tier,
-    would_create_containment_cycle,
+    normalize_scene_containment, normalize_scene_scales, scale_changed_names,
+    scale_of, scale_ratio, size_facts, size_relation, size_tier,
 )
 
 
@@ -125,8 +150,7 @@ from world.spatial_light import (
 
 from world.spatial_routing import (
     _CORRIDOR_NAMED, _CORRIDOR_VAGUENESS, _DISTANCE_ALIASES,
-    _DISTANCE_UNIT_METERS, _is_carried_interior, _onward_exits, _reverse_dir,
-    _ROOM_COST, CORRIDOR_SIGHT_LIMIT, corridor_sightlines, DISTANCE_TIERS,
+    _DISTANCE_UNIT_METERS, _is_carried_interior, _onward_exits, _ROOM_COST, CORRIDOR_SIGHT_LIMIT, corridor_sightlines, DISTANCE_TIERS,
     nearby_rooms, normalize_edge_distance, passable_neighbors, passable_path,
     passable_route_exists, passable_route_next_step, rooms_adjacent,
     spatial_rel, SPRINT_BUDGET, sprint_reach, visible_adjacent_rooms,
@@ -139,9 +163,9 @@ from world.spatial_senses import (
     _comms_transmits, _COMPASS_WORDS, _edge_vertical,
     _material_shifted_barrier, _MATERIAL_SOUND_STEPS, _measured_intimacy,
     _opening_view_cap, _phrase_table, _RANGE_EXTENDED, _RANGE_REDUCED,
-    _sector_phrases, _SECTOR_PHRASES, _SECTOR_STEPS, _sense_channel,
+    _sector_phrases, _SECTOR_STEPS, _sense_channel,
     _SENSE_CHANNEL_ALIASES, _SENSE_LADDERS, _sight_line, _SIGHT_ORDER,
-    _sound_barrier_phrases, _SOUND_BARRIER_PHRASES, _SOUND_LADDER,
+    _sound_barrier_phrases, _SOUND_LADDER,
     _SOUND_WALK_BARRIERS, _weaker_sight, apply_comms_ops, can_perceive,
     can_perceive_onset, comms_between, comms_link, COMMS_MODES, comms_reach,
     crossing_visible_from, has_visual, hear_level, HEARING_LEVELS,
@@ -163,5 +187,5 @@ from world.spatial_merge import (
     _merge_entity, _merge_room, _position_key, _ROOM_SILENT_WHEN_EMPTY,
     _shield_standing_bearings, _shield_standing_passage, apply_following_ops,
     connect_orphan_new_rooms, merge_scene_with_diff, prune_bodiless_positions,
-    repair_entity_positions, validate_operations,
+    repair_entity_positions,
 )

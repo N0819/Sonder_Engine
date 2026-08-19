@@ -584,9 +584,16 @@ def prepare_scene_commit(ctx):
         # story acquires weather when its fiction says so, never by default.
         elapsed = float((clock or wget(cid, "simulation_clock", {}) or {})
                         .get("elapsed_seconds") or 0.0)
+        # `severity` is the story's authored ceiling. Passed here and nowhere
+        # else on purpose: the drift is the only thing that moves a sky the
+        # story did not ask to move, so it is the only thing a ceiling on how
+        # hard it may come down can honestly bind. A Director who declares a
+        # downpour has said what the beat is, and is not capped.
+        from story.scene import weather_severity
         sc["weather"] = advance_weather(
             sc.get("weather"), elapsed, seed="chat:%s" % cid,
-            cold=normalize_weather(sc.get("weather")).get("temperature") == "freezing")
+            cold=normalize_weather(sc.get("weather")).get("temperature") == "freezing",
+            severity=weather_severity(cid))
 
     _advance_ground(cid, sc)
 
