@@ -1,8 +1,10 @@
 # Restraint and awareness: the exits, and the vocabulary
 
-Status: LANDED 2026-08-18 (four commits: the restraint relation, the
-restraint exits/view/vocabulary, the widened restraint selector, the widened
-awareness kinds). This note is the argument; `AGENTS.md`'s routing rows for
+Status: LANDED on main 2026-08-18 (rebased across the wave-2 merges; four
+commits: the restraint relation, the restraint exits/view/vocabulary, the
+widened restraint selector, the widened awareness kinds — plus four
+hardening commits from the landing review, § "The stated weaknesses,
+answered" below). This note is the argument; `AGENTS.md`'s routing rows for
 "Going under and waking up" and "Being restrained and getting free" are the
 maintained authority.
 
@@ -149,23 +151,81 @@ escape hatch chat 40 lacked when its incident happened; chat 59
 (`preparing_for_sleep`) and chat 44's `consciousness` row deliberately
 still gate nothing.
 
+## The stated weaknesses, answered at landing
+
+The first draft of this note listed three weaknesses honestly. Each got a
+decision at the main landing, not a deferral:
+
+* **`_RELEASE_CUE` precision is now measured — against an adversarial
+  battery, since a live corpus cannot exist** (no restraint has ever
+  ended, so there are no historical release sentences). The battery
+  (`tests/test_restraint_exits.py::TestReleasePrecision`) brackets every
+  phrasing class an adversarial pass found, each false-positive paired
+  with the genuine release nearest it so precision cannot be bought by
+  silently dropping recall. Before hardening: 9 false positives, 0 false
+  negatives. After: 1 and 0. Four classes became rules in
+  `_release_attempts`: quoted spans are masked (a quoted "I will untie
+  you" is a plan); an act introduced as TRYING — or still beginning — is
+  not completed (`_RELEASE_ATTEMPT_MARKER`, adjacent-only so an earlier
+  unrelated "trying to be gentle" does not suppress a real release, and
+  span-internal for Japanese, where the volitional-plus-とする rides
+  inside the cue match); a transitive release names its object NEXT to
+  the verb (object gap ≤ 3 words, and never past the cue's own
+  free/loose token, `_RELEASE_OBJECT_BOUNDARY`); and a possessive name
+  never carries subject-side attribution ("Hinami's hair pulls loose"
+  frees hair, not Hinami — while object-side possessives still count,
+  because "unties Hinami's wrists" is her release). The surviving false
+  positive is metaphor ("breaks free of her paralysing fear"), which
+  needs semantics a regex does not have; its cost is a warned,
+  recoverable ending, and prose saying a physically-restrained body
+  "breaks free" is nearly always literal. Re-measure against real beats
+  once any exist.
+* **Partial release stays end-all-per-subject, as a decision.** The
+  alternative — ending only records whose free-string fields mention the
+  released means ("uncuffs" → rows saying cuffs) — is a literal guard
+  over model prose, the guard class that measurably fails as models
+  rewrite. The live evidence says multi-row subjects are redescriptions
+  of ONE binding (chat 80's six rows are one set of cuffs), so ending
+  all is right in every measured case; the residual risk — two genuinely
+  distinct bindings, one released — is visible (the warning names it)
+  and re-imposition uses the condition vocabulary models demonstrably
+  use unprompted (24 live rows written without any prompt asking).
+* **Holder resolution no longer guesses.** A `by` phrase naming two
+  distinct bodies ("the harness Sarah buckled while Marcos held it")
+  used to resolve to whichever candidate the pool offered first — and
+  resolution has teeth, since the floor auto-ends a hold when its
+  resolved holder exits, so a bystander's exit could free a body the
+  real holder still held. Now: a whole-phrase match is that candidate; a
+  match nested inside a longer candidate's span is the shorter spelling
+  of the same name ("Moon" in "Dr. Moon's hand"); and a phrase still
+  naming more than one body vouches for nobody — blocks nobody, never
+  auto-ends, Director's to settle. All six live hold rows re-measured to
+  the same single holder under the new rules.
+
+The landing review also found and fixed a class outside the weakness
+list: the shared clause-attribution idiom matched names with `\b`, which
+never matches a kana name against its trailing particle — so the rouse
+exit, the unconsciousness omission scan and the release scan were all
+dead for kana-named minds, and `_sentence_break_positions` knew only
+ASCII terminators, so a Japanese paragraph was one clause. Both floors
+now read the scripts the packs already promised
+(`name_boundary_pattern`, full-width terminators).
+
 ## Residuals — known, and deliberately not landed here
 
 * **The chats-24/25 uid gap.** Condition subjects written as scene-entity
   uids match no perceiver's display name, so those rows are inert under
-  any selector. The fix is identity folding (`same_subject` /
-  `normalize_scene_subjects` territory), not selector widening, and
-  folding `world_conditions` subjects touches commit, restore, and
-  branch-remap paths — its own change with its own tests.
-* **Partial release granularity.** Rule 2 ends every record on a released
-  subject; one-cuff-of-two is the Director's to re-impose, and the warning
-  says so. Prose attribution cannot pick which of six redescriptions a
-  sentence meant.
-* **`_RELEASE_CUE` precision is designed, not corpus-measured.** There are
-  zero historical release sentences to measure against (no restraint has
-  ever ended). The cues are completed-release verbs with the transitive
-  object held in a lookahead; the known hazard ("releases a breath") is
-  tested. Re-measure once live beats exist.
+  any selector (chat 26 holds a canonical `awareness` row with the same
+  uid-subject shape, so the gap is not created by kind widening). The
+  fix is identity folding (`same_subject` / `normalize_scene_subjects`
+  territory), not selector widening, and folding `world_conditions`
+  subjects touches commit, restore, and branch-remap paths — its own
+  change with its own tests.
+* **The one metaphorical false positive** ("breaks free of her fear")
+  and its mirror class (a possessive object like "pulls Hinami's file
+  free" happens to be unreachable today only because the apostrophe
+  breaks the cue's lookahead chain). Both need noun semantics; cost is a
+  warned, recoverable ending.
 * **Restraint synonym and holder-field tables are English.** Same standing
   gap as `_RESTRAINT_SYNONYMS` had before this work; owner decision 2
   (route recognizers through the packs) covers the class.
