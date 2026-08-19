@@ -35,6 +35,7 @@ from story.character_schema import (
 from core.frames import is_recognized_in_frame
 from world.gaps import interim_for
 from mind.memory import (
+    _RECALL_LIMIT,
     build_character_memory_context,
     contrast_memory,
     knowledge_for_character,
@@ -900,11 +901,21 @@ def _unbidden_entry(mem, turn_idx):
     return entry
 
 
-def _attach_unbidden(memory_context, entry, recall_limit=8):
+def _attach_unbidden(memory_context, entry, recall_limit=_RECALL_LIMIT):
     """Substitute, never add: the unbidden entry pays for itself out of the
     ordinary recall budget, so total recalled material per payload is
     constant. When recall came back under budget it simply takes the spare
-    slot; when full, the lowest-ranked ordinary recall yields."""
+    slot; when full, the lowest-ranked ordinary recall yields.
+
+    The budget is `memory`'s own, not a second number written down beside it.
+    The default was a hand-set 8 against a `_RECALL_LIMIT` of 16 and the one
+    caller passes nothing, so a calm mind -- the band where this fires most --
+    evicted a ranked memory with eight slots still empty, which is the exact
+    opposite of the spare-slot case the docstring describes. Absorption
+    narrows the budget further INSIDE `build_character_memory_context`; a list
+    shortened that way cannot reach this ceiling, so the substitution does not
+    fire and the entry takes a spare slot, which is the side of the rule this
+    function is written to prefer."""
     if not isinstance(memory_context, dict):
         return
     recalled = list(memory_context.get("recalled_old_memories") or [])
