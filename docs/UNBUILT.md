@@ -2953,6 +2953,84 @@ does not re-derive the same wrong fix — the entry that is actionable is this
 one.
 
 
+### 1.64 Thirty-four assertions that read Python source instead of running it
+
+**Census 2026-08-18**, by parsing the suite rather than grepping it: **34
+negative source-substring assertions against PYTHON source, across 18 test
+files**, plus 128 `inspect.getsource` calls of which 18 pass a whole MODULE.
+Separately, 19 negative assertions in 10 files read a non-Python asset — a
+`.js`, `.html`, `.css` or `.sh` file — and those are a different thing, treated
+below.
+
+Three faults, and only the first is the one usually noticed.
+
+1. **It passes for code that does the wrong thing.** "This path makes no model
+   call" written as `"chat_complete" not in source` holds for an aliased
+   import, for a call through `llm_quality.complete_validated_json`, and for a
+   provider reached through a module the file already imports. It is also
+   false-POSITIVE on the word appearing in a comment, which is how a correct
+   file gets a red test and somebody deletes the prose instead of the import.
+2. **It fails a refactor that changed nothing.** Extracting a condition into a
+   named predicate — the ordinary tidy-up — breaks an assertion on the
+   condition's literal spelling.
+3. **It is NON-DETERMINISTIC, which is the fault that makes this a defect
+   rather than a preference.** `inspect.getsource` resolves the source through
+   `linecache`, reading the file from disk AT ASSERT TIME, while the module
+   object was imported earlier. Anything editing that file concurrently — a
+   second agent, an editor writing on save, a `git checkout` in another
+   worktree — yields a mismatch: the test fails once and passes on re-run. Two
+   agents hit this independently during the 2026-08-18 repair wave, in
+   different files, and both first read it as a real failure.
+
+**Two instruments now exist, and the row is what remains after using them.**
+
+- `tests/model_seams.py` seals every provider door (`chat_complete`,
+  `embed_texts`, `embed_texts_meta`, `complete_validated_json`, `_agent_json`)
+  including the aliases callers bound at import time, and raises from inside
+  the call naming which door opened. A "makes no model call" claim is now
+  DRIVEN. `tests/test_model_seams.py` proves each door is really shut by
+  opening it, because a sealer that silently misses one turns a weak assertion
+  into a false one.
+- Where the property genuinely is about the module rather than about a run,
+  the assertion goes against the PARSED TREE — imported names including the
+  original behind an `as`, called names, string constants, attribute access —
+  which answers the question the substring was approximating and is immune to
+  comments, spelling and formatting.
+
+**Converted so far**: `test_style_guide.py` (three assertions, driven through
+the payload), `test_offscreen_reactive.py`, `test_offscreen_resolution.py`'s
+seeded draw (both sealed and driven), `test_perception_has_no_model.py`,
+`test_story_view.py`'s layering rule and
+`test_offscreen_agent_context.py`'s fail-closed allowlist (all four to AST).
+
+**Left, and left honestly.** A source assertion that is the only available
+instrument is a different thing from one that was merely easier, and both
+kinds remain:
+
+- **The only instrument.** The 19 assertions against `.js`, `.html`, `.css`
+  and `.sh` files (`test_ui_themes.py`, the three `test_frontend_*` files,
+  `test_guest_page.py`, `test_provider_fallbacks.py`,
+  `test_launcher_python_range.py`). A Python suite cannot execute a stylesheet
+  or a shell installer, so reading it IS the test; there is also no imported
+  module for the read to disagree with, so fault 3 does not apply to them at
+  all. These should be left alone.
+- **Merely easier**, and still open: the 34 Python ones, chiefly
+  `test_crowds.py` (5), `test_offscreen_resolution.py` (6),
+  `test_offscreen_life.py` (3), `test_launcher_python_range.py` (3),
+  `test_body_position.py` (2), `test_pipeline_audit_leak_gaps.py` (2),
+  `test_living_world.py` (2). Each needs its own judgement about what the
+  property IS, which is why this is a row rather than a sweep — and a sweep is
+  what would produce 34 tests that pass and mean nothing.
+
+**No new one should be written.** Both instruments are in `tests/`, and a
+third option exists that beats either: give the code the seam the test wants.
+`tests/test_carriers.py` keeps one source assertion and says so in its own
+docstring — `prepare_memory_commit` offers no way to observe which clock it
+stamped without running a commit, and inventing that seam belongs to whoever
+owns `persist/`. That is the right shape for a residual: named, reasoned, and
+pointing at the change that would remove it.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
