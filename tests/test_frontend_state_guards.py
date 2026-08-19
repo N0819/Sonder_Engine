@@ -302,3 +302,18 @@ def test_every_engine_plan_step_has_a_friendly_progress_label():
     labelled = set(re.findall(r"^  (\w+):", block, re.MULTILINE))
     assert not handlers - labelled, \
         f"plan steps with no friendly label: {sorted(handlers - labelled)}"
+
+
+def test_the_global_error_net_catches_synchronous_throws_too():
+    """The rejection listener covers every handler that awaits. A handler that
+    throws before its first await produced the identical "clicking does
+    nothing" and reached nothing -- the failure mode the net was written to
+    eliminate, surviving in the half nobody installed."""
+    assert 'window.addEventListener("unhandledrejection"' in APP
+    assert 'window.addEventListener("error"' in APP
+    net = APP[APP.index('window.addEventListener("error"'):]
+    # A failed script/image load has no usable message; it must not become a
+    # toast the reader can do nothing with.
+    assert "if (!message) return;" in net
+    # And whatever already toasted itself must not toast twice.
+    assert "__handled" in net
