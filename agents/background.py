@@ -59,6 +59,7 @@ from persist.commit import (
     _fold_duplicate_presences,
     _known_name_roster,
     overt_declaration,
+    presence_room,
     _presence_speech_verdict,
     _quote_body,
     _registered_name_roster,
@@ -329,7 +330,7 @@ def background_react(ctx, nonce):
         # Per presence, not once for the batch: each one gets the cast under
         # its OWN recognition (see _present_others).
         present_others = _present_others(
-            ctx, sc, _presence_room(sc, name, presences.get(name) or {}),
+            ctx, sc, presence_room(sc, name, presences.get(name) or {}),
             _presence_recognizes(ctx, name))
         entry = _react_one(ctx, dr, name, present_others, roster, sc,
                            presences.get(name) or {}, nonce)
@@ -392,37 +393,6 @@ def _place_block(ctx, room_id):
     return block
 
 
-def _name_to_entity_id(sc):
-    """Display name -> scene entity id. Scene positions are keyed by the opaque
-    entity id ("barkeep") while background presences are tracked by the display
-    name ("The Barkeep"), so a direct _room_of(name) lookup misses almost every
-    presence. commit.track_background_presences already folds the other
-    direction for the same reason."""
-    out = {}
-    for eid, edef in ((sc.get("entities") or {}).items()):
-        if not isinstance(edef, dict):
-            continue
-        nm = str(edef.get("name") or "").strip()
-        if nm:
-            out[nm.casefold()] = eid
-    return out
-
-
-def _presence_room(sc, name, rec, name_ids=None):
-    """Best room for a tracked presence: its own position, its entity id's
-    position, or the sketch's station room."""
-    room = _room_of(sc, name)
-    if room:
-        return room
-    ids = name_ids if name_ids is not None else _name_to_entity_id(sc)
-    eid = ids.get(str(name).strip().casefold())
-    if eid:
-        room = (sc.get("positions") or {}).get(eid) or _room_of(sc, eid)
-        if room:
-            return room
-    return (rec.get("sketch") or {}).get("station_room")
-
-
 def _player_room(ctx, sc):
     try:
         from story.scene import persona_of, persona_name
@@ -465,7 +435,6 @@ def managed_presences(ctx, cap):
         except Exception:
             scope = None
 
-    name_ids = _name_to_entity_id(sc)
     out = []
     for name, rec in presences.items():
         # Title-aware: the Enterprise run tracked "Captain Jean-Luc Picard"
@@ -488,7 +457,7 @@ def managed_presences(ctx, cap):
         # verdict logic applies.
         if _presence_speech_verdict(sc, name, rec) != "person":
             continue
-        room = _presence_room(sc, name, rec, name_ids)
+        room = presence_room(sc, name, rec)
         if scope is not None and room and room not in scope:
             continue
         if scope is not None and not room:
@@ -1016,13 +985,22 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
     # commit.track_background_presences) from the director's own entity
     # description/position when this presence was introduced.
     sketch = rec.get("sketch") or {}
+    # WHERE THEY ARE, not where they were first seen. The sketch is harvested
+    # once, when the presence is introduced, and this path read its
+    # `station_room` for every question about what reaches this body -- who
+    # addressed it, what of the beat it perceived, which place it stands in --
+    # while the scene-manager path, on the same beat, resolved the live
+    # position. A presence who has since walked out was fed the beat at a
+    # room it had left, and one who has walked in was refused the beat it was
+    # standing in.
+    here = presence_room(sc, name, rec)
 
     # If a registered character (or the player) spoke directly TO this presence
     # -- this beat, or last beat with the gate spent elsewhere -- surface that
     # line so the reaction can answer it. `beats_ago` marks fresh (0) vs owed
     # (1). The line already rendered; the reply is appended after it, no chain.
     addressed_by = None
-    fresh = _character_address_of(dr, name, roster, sc, sketch.get("station_room"))
+    fresh = _character_address_of(dr, name, roster, sc, here)
     if fresh:
         addressed_by = {"speaker": fresh.get("speaker"),
                         "exact_quote": fresh.get("exact_quote", ""),
@@ -1037,8 +1015,7 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
         # The per-presence path carried NO place block whatever -- not the
         # room, not the time, not the setting, not a word of lore. It knew its
         # own role_hint and the beat, and nothing about the world it stands in.
-        "place": _place_block(ctx, sketch.get("station_room")
-                              or _player_room(ctx, sc)),
+        "place": _place_block(ctx, here or _player_room(ctx, sc)),
         "entity": {
             "name": name,
             "role_hint": sketch.get("role_hint", ""),
@@ -1046,11 +1023,11 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
         },
         "beat": {
             "resolved_event": _beat_for_presence(
-                dr, sc, sketch.get("station_room"), name,
+                dr, sc, here, name,
                 beat_room=_player_room(ctx, sc)),
             "addressed_by": addressed_by,
             "player_declaration": _filtered_player_declaration(
-                ctx, sc, name, sketch.get("station_room")),
+                ctx, sc, name, here),
             "present_others": [p for p in present_others if p != name],
         },
         "variant_seed": nonce,

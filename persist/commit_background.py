@@ -185,6 +185,31 @@ def _presence_scene_entity(scene, name):
     return None, None
 
 
+def presence_room(scene, name, record=None):
+    """Where a tracked presence is STANDING: its own scene position, its
+    entity id's position, or -- only when the scene places it nowhere -- the
+    room its sketch was harvested in.
+
+    One answer, because there were two. The scene-manager path resolved the
+    live position; the per-presence path and this module's gate read
+    `sketch.station_room`, which is where the presence stood when it was
+    INTRODUCED (`track_background_presences` harvests it once). So a presence
+    who had since walked out was gated, addressed and fed its beat at a room
+    it had left, while the other path, on the same beat, used the room it was
+    in. Nothing reconciled them, and neither is wrong-looking on its own.
+    """
+    scene = scene or {}
+    room = room_of(scene, name)
+    if room:
+        return room
+    eid, _ent = _presence_scene_entity(scene, name)
+    if eid:
+        room = (scene.get("positions") or {}).get(eid) or room_of(scene, eid)
+        if room:
+            return room
+    return ((record or {}).get("sketch") or {}).get("station_room")
+
+
 def _presence_speech_verdict(scene, name, record=None):
     """May this presence hold a background SPEAKING turn?
 
@@ -1191,7 +1216,9 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # presence this beat -- read-only here; the owed-reply debt is written
         # at commit (track_background_presences), never in this pre-commit gate.
         station_room = (record.get("sketch") or {}).get("station_room")
-        char_addr = _character_address_of(dr_output, name, roster, sc, station_room)
+        # Where they ARE, for anything about what reaches them.
+        here = presence_room(sc, name, record)
+        char_addr = _character_address_of(dr_output, name, roster, sc, here)
         owed = _valid_pending_reply(record, turn_idx)
         mentioned = _background_name_mentioned(name, resolved_event)
         dialogue_turns = record.get("dialogue_turns") or []
@@ -1208,8 +1235,12 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # work is the weakest possible claim on a beat -- far weaker than being
         # addressed -- and `cap` still bounds how many are picked, so a busy
         # room does not become a chorus.
-        at_post = bool(station_room) and _at_post_within_earshot(
-            sc, station_room, player_room)
+        # AT their post, not merely POSTED there: a presence the scene has
+        # since placed somewhere else is not standing behind the bar, and
+        # this signal is the claim that they are. A presence the scene places
+        # nowhere still falls back to its station, exactly as before.
+        at_post = (bool(station_room) and str(here) == str(station_room)
+                   and _at_post_within_earshot(sc, here, player_room))
         if not (flow_addressed or routed or addressed or char_addr or owed
                 or mentioned or dialogue_turns or at_post):
             continue
