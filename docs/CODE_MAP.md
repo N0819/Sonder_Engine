@@ -48,7 +48,7 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 900 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory.py` | 263 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 539 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_lore_entries.py` | 520 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
@@ -58,6 +58,7 @@
 | `mind/memory_retrieval.py` | 796 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
 | `mind/memory_snapshot.py` | 586 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
+| `mind/memory_vectors.py` | 662 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 594 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
@@ -563,14 +564,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `rebuild_embeddings()` | 272 | 213 lines |
-| `embedding_bank_status()` | 122 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 524 | 124 lines |
-| `reconcile_inference_confidence()` | 831 | 70 lines |
-| `start_rebuild_if_needed()` | 707 | 48 lines |
-| `_run_rebuild()` | 679 | 26 lines |
-| `_vector_key()` | 487 | 22 lines |
-| `_rebuild_book_ids()` | 249 | 21 lines |
+| `reconcile_inference_confidence()` | 194 | 70 lines |
+| `_abandoned_confidence()` | 179 | 13 lines |
+| `_mint_confidence_of()` | 165 | 12 lines |
 
 ### `mind/memory_common.py`
 
@@ -684,6 +680,19 @@
 | `save_memory_summary()` | 247 | 39 lines |
 | `get_memory_summary()` | 30 | 38 lines |
 | `memory_summary_coverage()` | 451 | 37 lines |
+
+### `mind/memory_vectors.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `rebuild_embeddings()` | 178 | 213 lines |
+| `embedding_bank_status()` | 28 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 430 | 124 lines |
+| `start_rebuild_if_needed()` | 613 | 48 lines |
+| `_run_rebuild()` | 585 | 26 lines |
+| `_vector_key()` | 393 | 22 lines |
+| `_rebuild_book_ids()` | 155 | 21 lines |
+| `_summary_vector_key()` | 422 | 6 lines |
 
 ### `mind/memory_write.py`
 
