@@ -844,35 +844,6 @@ def refine_layers(layers, place):
         return layers, {}
 
 
-def refine_query(draft, place):
-    """Optionally rewrite the deterministic draft with the `ambience_prompt`
-    model. Returns the draft unchanged if no model is configured or the call
-    fails -- a nicety, never a dependency.
-
-    This is where a fictional referent becomes an acoustic description: a model
-    asked for "the bridge of a starship" returns hum, air handling and sparse
-    console tones, which a sound library can actually match. Searching the
-    proper noun matches nothing.
-    """
-    try:
-        from llm.providers import resolve_role_candidates
-        resolve_role_candidates("ambience_prompt")
-    except Exception:
-        return {"query": draft, "avoid": ""}
-    try:
-        from agents.common import _agent_json
-        from language_runtime import DEFAULT_LANGUAGE
-        from llm.prompts import get_prompt
-        out = _agent_json("ambience_prompt", "ambience_prompt",
-                          get_prompt("ambience_prompt", DEFAULT_LANGUAGE),
-                          {"place": place, "draft": draft}, temperature=0.4)
-        query = str((out or {}).get("query") or "").strip()
-        return {"query": query or draft,
-                "avoid": str((out or {}).get("avoid") or "").strip()}
-    except Exception:
-        return {"query": draft, "avoid": ""}
-
-
 # --- sources ---------------------------------------------------------------
 
 def library_files(library=None, limit=2000):
