@@ -370,3 +370,103 @@ class TestKnowledgeSeedRouting:
         assert len(rows) == 2
         assert all(r["embedding_model"] and r["embedding_dim"] and r["embedding"]
                    for r in rows)
+
+
+class TestTheExtractorVersionIsStampedAndChecked:
+    """`EXTRACTOR_VERSION` existed for one purpose -- refusing an extraction
+    produced by an older extractor -- and nothing stamped it or read it. Both
+    producers of a greeting record wrote `extractor_version: None` outright,
+    and `start_story` replayed any stored `extraction` with no version test at
+    all, so a card carrying scaffolding from any past extractor was replayed
+    as current.
+
+    That matters because the extraction is not cosmetic: it is what routes
+    the character's PRIVATE knowledge into memory at turn 0, and its shape
+    has already changed once under a cap the schema now enforces on the way
+    in. A stored extraction is the one path that reaches the seeding code
+    without passing through today's schema."""
+
+    def _fixtures(self, monkeypatch, extraction, version, calls):
+        from story import greetings
+        from core.db import q, qi
+        import json as _json
+
+        def fake_extract(sheet, prose):
+            calls.append(prose)
+            return {"knowledge_seeds": [], "time": "now"}
+
+        monkeypatch.setattr(greetings, "extract_greeting", fake_extract)
+        monkeypatch.setattr(greetings, "_run_pipeline", lambda cid, tid: iter(()))
+
+        cid_char, _ = importers.import_character(_card(), reinterpret=False)
+        pid, _ = importers.import_persona({"name": "Dana"}, reinterpret=False)
+        row = q("SELECT sheet FROM characters WHERE id=?", (cid_char,), one=True)
+        sheet = _json.loads(row["sheet"])
+        record = sheet["opening"]["greetings"][0]
+        record["extraction"] = extraction
+        record["extractor_version"] = version
+        qi("UPDATE characters SET sheet=? WHERE id=?",
+           (_json.dumps(sheet), cid_char))
+        return greetings, cid_char, pid
+
+    def test_a_stored_extraction_of_this_version_is_replayed(
+            self, temp_db, monkeypatch):
+        from story.greetings import EXTRACTOR_VERSION
+        calls = []
+        greetings, cid_char, pid = self._fixtures(
+            monkeypatch, {"knowledge_seeds": [], "time": "stored"},
+            EXTRACTOR_VERSION, calls)
+
+        greetings.start_story(cid_char, pid, greeting_index=0)
+
+        assert calls == []
+
+    def test_an_unstamped_extraction_is_re_extracted(self, temp_db, monkeypatch):
+        """Every stored extraction in the wild is unstamped, because nothing
+        ever stamped one. Unknown provenance is not this version."""
+        calls = []
+        greetings, cid_char, pid = self._fixtures(
+            monkeypatch, {"knowledge_seeds": [], "time": "stored"}, None, calls)
+
+        greetings.start_story(cid_char, pid, greeting_index=0)
+
+        assert len(calls) == 1
+
+    def test_an_older_extraction_is_re_extracted(self, temp_db, monkeypatch):
+        from story.greetings import EXTRACTOR_VERSION
+        calls = []
+        greetings, cid_char, pid = self._fixtures(
+            monkeypatch, {"knowledge_seeds": [], "time": "stored"},
+            EXTRACTOR_VERSION - 1, calls)
+
+        greetings.start_story(cid_char, pid, greeting_index=0)
+
+        assert len(calls) == 1
+
+    def test_a_fresh_extraction_carries_its_own_stamp(self, monkeypatch):
+        """Stamped where it is MINTED, not where it is filed: the record's
+        sibling field and the extraction can be separated by any writer, and
+        an extraction that cannot say what made it is unversionable forever
+        after."""
+        from story import greetings
+        from story.greetings import EXTRACTOR_VERSION
+
+        monkeypatch.setattr(greetings, "complete_validated_json",
+                            lambda **kw: {"knowledge_seeds": [], "time": "now"})
+        out = greetings.extract_greeting({"identity": {"name": "X"}}, "Hello.")
+
+        assert out["extractor_version"] == EXTRACTOR_VERSION
+
+    def test_the_stamp_on_the_extraction_itself_is_enough(
+            self, temp_db, monkeypatch):
+        from story.greetings import EXTRACTOR_VERSION
+        calls = []
+        greetings, cid_char, pid = self._fixtures(
+            monkeypatch,
+            {"knowledge_seeds": [], "time": "stored",
+             "extractor_version": EXTRACTOR_VERSION},
+            None, calls)
+
+        greetings.start_story(cid_char, pid, greeting_index=0)
+
+        assert calls == []

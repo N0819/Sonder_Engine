@@ -28,6 +28,12 @@ from mind.memory import add_memories_batch, duplicate_lorebook_for_chat
 from agents.runtime import _run_pipeline
 from agents.storage import active_content
 
+#: What produced an extraction, so a stored one can be refused. Raise this
+#: whenever `extract_greeting`'s prompt, schema or post-processing changes in
+#: a way that makes an older extraction wrong -- the salience cap below is the
+#: worked example of exactly such a change, and it shipped while nothing
+#: stamped or checked this, so every stored extraction ever written is of
+#: unknown provenance and re-extracts.
 EXTRACTOR_VERSION = 1
 
 #: The player's slot in imported prose. ONE definition, in the module that
@@ -124,7 +130,31 @@ def extract_greeting(sheet: dict, greeting_prose: str) -> dict:
     for seed in out.get("knowledge_seeds") or []:
         if PLAYER_TOKEN in str(seed.get("content", "")):
             seed["revealed_in_prose"] = True
+    # STAMPED WHERE IT IS MINTED, not where it is filed. The greeting record
+    # has a sibling `extractor_version` field, and a writer that copies the
+    # extraction without it -- an archive, an editor, a hand-written card --
+    # would leave scaffolding that can never say what made it.
+    out["extractor_version"] = EXTRACTOR_VERSION
     return out
+
+
+def _usable_stored_extraction(record):
+    """A stored extraction is replayable only if THIS extractor made it.
+
+    `start_story` replays `record["extraction"]` instead of paying for a
+    model call, and that stored blob is the one path into the turn-0 seeding
+    code that never passes through today's schema -- the salience cap above
+    exists because of what came through it. An extraction of unknown
+    provenance is therefore not trusted: unstamped means older than the
+    stamp, which is every extraction written before this check.
+    """
+    stored = (record or {}).get("extraction")
+    if not stored:
+        return None
+    version = (record or {}).get("extractor_version")
+    if version is None and isinstance(stored, dict):
+        version = stored.get("extractor_version")
+    return stored if version == EXTRACTOR_VERSION else None
 
 
 def _greeting_record(sheet: dict, index: int):
@@ -220,7 +250,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # Scoped here rather than after the chat row exists: this is a model call,
     # and it runs before there is a chat whose story language could be read.
     with language_scope(language or DEFAULT_LANGUAGE):
-        extraction = rec.get("extraction") or extract_greeting(sheet, prose_tok)
+        extraction = (_usable_stored_extraction(rec)
+                      or extract_greeting(sheet, prose_tok))
 
     def sub(s):  # deterministic {{PLAYER}} -> persona name
         return str(s or "").replace(PLAYER_TOKEN, p_name)
