@@ -2485,20 +2485,22 @@ function renderFullApiSettings(b) {
       (S.boot.exemplars || []).forEach(addRow);
       if (!areas.length) addRow("");
       b.append(el("h4", {}, "Narrator voice"),
+        // One string rather than three around the two numbers: a sentence
+        // split at an interpolation reaches the UI catalog as fragments no
+        // translator can put back together in another word order.
         el("div", { class: "small dim" },
-          "Up to " + maxCount + " short passages the narrator studies for "
-          + "voice, rhythm and restraint. This is the one part of a turn the "
-          + "narrator is told to IMITATE, so keep them to style: a passage "
-          + "that names people, places or events will be read as facts about "
-          + "your story. Each is capped at " + maxChars + " characters, "
-          + "because every passage rides every narrator call for the life of "
-          + "the install."),
+          `Up to ${maxCount} short passages the narrator studies for voice, `
+          + `rhythm and restraint. This is the one part of a turn the narrator `
+          + `is told to IMITATE, so keep them to style: a passage that names `
+          + `people, places or events will be read as facts about your story. `
+          + `Each is capped at ${maxChars} characters, because every passage `
+          + `rides every narrator call for the life of the install.`),
         rows,
         el("div", { class: "row", style: "margin-top:6px" },
           el("button", {
             onclick: () => {
               if (areas.length >= maxCount) {
-                return toast("That is the limit — " + maxCount + " passages.", "warn");
+                return toast(`That is the limit — ${maxCount} passages.`, "warn");
               }
               addRow("");
             },
@@ -2508,7 +2510,7 @@ function renderFullApiSettings(b) {
                                 { exemplars: areas.map(ta => ta.value) });
             await boot();
             toast(r.count
-              ? r.count + " passage(s) saved — the narrator will study them."
+              ? `${r.count} passage(s) saved — the narrator will study them.`
               : "Cleared. The narrator writes from the prompt alone.", "ok");
           } }, "Save passages")));
     }

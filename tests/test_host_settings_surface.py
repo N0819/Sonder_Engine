@@ -35,10 +35,13 @@ UTILS_JS = (ROOT / "static/js/utils.js").read_text(encoding="utf-8")
 
 
 class TestAutoPromoteIsOneAnswer:
-    """FRONTEND-2. The gate is `persist/commit_background._auto_promote_enabled`."""
+    """FRONTEND-2. The gate is `_auto_promote_enabled`, defined in
+    `persist/commit_background.py` and reached through the commit facade."""
 
     def test_an_unset_setting_reads_off_everywhere(self, temp_db):
-        from persist.commit_background import _auto_promote_enabled
+        # Through the facade: `persist/commit.py` re-exports every moved
+        # name, private ones included, and it is the universal import path.
+        from persist.commit import _auto_promote_enabled
         from web import app
 
         assert _auto_promote_enabled() is False
@@ -46,7 +49,9 @@ class TestAutoPromoteIsOneAnswer:
         assert app.bootstrap()["auto_promote"] is False
 
     def test_switching_it_on_reads_on_everywhere(self, temp_db):
-        from persist.commit_background import _auto_promote_enabled
+        # Through the facade: `persist/commit.py` re-exports every moved
+        # name, private ones included, and it is the universal import path.
+        from persist.commit import _auto_promote_enabled
         from web import app
 
         app.set_auto_promote({"enabled": True})
@@ -56,7 +61,9 @@ class TestAutoPromoteIsOneAnswer:
         assert app.bootstrap()["auto_promote"] is True
 
     def test_switching_it_off_reads_off_everywhere(self, temp_db):
-        from persist.commit_background import _auto_promote_enabled
+        # Through the facade: `persist/commit.py` re-exports every moved
+        # name, private ones included, and it is the universal import path.
+        from persist.commit import _auto_promote_enabled
         from web import app
 
         app.set_auto_promote({"enabled": True})
