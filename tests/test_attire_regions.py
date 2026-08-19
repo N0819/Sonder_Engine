@@ -1207,3 +1207,26 @@ def test_a_zoned_region_and_a_plain_one_render_a_garment_the_same_way():
     plain_piece = plain.split("legs:", 1)[1].split("|", 1)[0]
     assert zoned_piece == plain_piece
     assert plain_piece.startswith("kimono(loosened;wine-stained)=")
+
+
+def test_every_known_diff_key_is_handled_rather_than_filed_as_a_note():
+    """`_DIFF_KNOWN_KEYS` is a second copy of `coerce_diff_shape`'s dispatch
+    chain, and had no consumer and no test -- so the two were free to drift,
+    in a direction nothing errors on. A key the chain does not handle falls
+    through to `notes`, where commit resolves it as a GARMENT HANDLE: the
+    change it described is not lost, it is misfiled onto a garment named
+    after the field.
+
+    Passes today, because the two agree today. It is the binding, not a
+    reproduction.
+    """
+    for key in attire._DIFF_KNOWN_KEYS:
+        out = attire.coerce_diff_shape({key: {"a kimono": "loosened"}})
+        assert key not in (out.get("notes") or {}), key
+
+
+def test_a_key_the_chain_does_not_know_is_still_read():
+    """The other half of the same rule, and the reason the fall-through
+    exists: an unrecognised key is kept as a note rather than dropped."""
+    out = attire.coerce_diff_shape({"shift": "hem rucked up"})
+    assert out["notes"] == {"shift": "hem rucked up"}

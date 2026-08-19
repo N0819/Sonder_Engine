@@ -1268,6 +1268,14 @@ _NO_CHANGE_NOTES = frozenset({
     "none", "unaffected", "untouched", "still on", "as is",
 })
 
+#: Every attire-diff key `coerce_diff_shape` HANDLES, as opposed to files as
+#: a garment note. A hand-maintained mirror of that function's dispatch chain
+#: with nothing to keep the two in step -- and the drift is silent in the
+#: worst direction: a key the chain learns to handle but this list forgets
+#: reads as unknown to any caller consulting the list, while a key this list
+#: claims and the chain drops becomes a note about a garment named
+#: "coverage". Bound by
+#: `test_every_known_diff_key_is_handled_rather_than_filed_as_a_note`.
 _DIFF_KNOWN_KEYS = ("wearing", "add", "remove", "replace", "state",
                     "conditions", "coverage", "regions", "notes", "placement")
 
