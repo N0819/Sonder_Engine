@@ -1,4 +1,18 @@
-"""Memory system with hierarchical lorebook support and expanded categories."""
+"""Memory system with hierarchical lorebook support and expanded categories.
+
+A FACADE. Every name below is defined in one of the `mind/memory_*` modules and
+re-exported here so that `from mind.memory import X` keeps meaning what it meant
+before the split — 105 names across the engine import it that way, and not one
+of them changed. Plan and range table: `docs/design/SPLIT_MEMORY.md`.
+
+The import block below is RETAINED rather than pruned. Two things depend on it
+and neither is visible from this file: `payload_legacy` is imported from
+`llm.prompts` here and re-imported *out* of `mind.memory` elsewhere, and fifteen
+test files monkeypatch `memory.<imported-name>` — `chat_complete`,
+`embed_texts`, `embed_texts_meta`, `embedding_model_key`. A patch on this
+module is inert for any reader that moved, so those tests name the sibling that
+defines the reader; the names must still resolve here regardless.
+"""
 
 import base64
 import hashlib
@@ -17,181 +31,15 @@ from mind.theory_of_mind import belief_credence
 from core.db import active_frame_id as _active_frame_id
 from language_runtime import linguistic
 
-
-def _ling(name):
-    """One deterministic recognizer, from the story's own language pack.
-
-    Read at use time, never at import: two stories in different languages run
-    concurrently and each must see its own vocabulary. A pack that lacks the
-    key raises rather than returning empty -- a recognizer that quietly
-    matches nothing is the failure this file is least able to notice, because
-    every one of them degrades to "no signal" rather than to an error.
-    """
-    return linguistic("mind.memory", name)
-
-_UNSET = object()
-
-LORE_CATEGORIES = [
-    "location", "layout", "event", "mechanic", "myth",
-    "character", "faction", "species", "culture", "technology",
-    "knowledge", "other",
-]
-
-LOREBOOK_TYPES = [
-    "general", "world", "knowledge", "location", "system",
-    "characters", "events", "vehicle",
-]
-
-LOREBOOK_LINK_TYPES = [
-    "related",
-    "references",
-    "depends_on",
-    "supplements",
-    "overlaps",
-    "supersedes",
-    "contradicts",
-    "alternate_version",
-    "same_setting",
-    "portal",
-    # "is at right now": a mobile (anchored) book's live presence link to
-    # the book of wherever its anchor entity currently is, rewritten from
-    # scene positions at every commit (commit.sync_anchored_books).
-    # Distinct from parent_id, which is canonical "belongs to" and is
-    # never mutated by commit. Retrieval follows it so docked-location
-    # lore stays reachable; it is NEVER perception authorization.
-    "currently_within",
-]
-
-KNOWLEDGE_TAGS = ["common", "scholarly", "esoteric"]
-KNOWLEDGE_RANGES = ["local", "global"]
-
-LORE_INHERITANCE_MODES = ["inherit", "isolated", "reference_only"]
-
-MEMORY_CATEGORIES = [
-    "episode", "dialogue", "promise", "relationship",
-    "person", "place", "semantic", "intention",
-    "emotion", "self", "inference",
-]
-
-MEMORY_PROVENANCE = [
-    "witnessed", "heard", "told", "read",
-    "inferred", "remembered",
-]
-
-# P8: which rolling summary a memory folds into.
-#
-# Consolidation used to melt every provenance into ONE autobiographical string
-# that was then fed back wholesale each turn -- so the distinction this engine's
-# thesis rests on, between what a character SAW, what they were TOLD, and what
-# they GUESSED, did not survive the summary layer. A belief they inferred came
-# back a few turns later indistinguishable from something they had witnessed,
-# which is belief laundering into knowledge inside a single mind.
-#
-# Three scopes rather than a provenance tag per sentence, because the summary is
-# prose written by a model and a tag inside prose is a convention it can drop.
-# A separate row cannot be dropped. `memory_summaries` is already keyed
-# (chat_id, char_id, scope) and every dump/restore/archive path iterates rows
-# generically, so this needs no migration and rides existing round-trips.
-SUMMARY_SCOPE_FIRSTHAND = "autobiographical"
-SUMMARY_SCOPE_HEARSAY = "hearsay"
-SUMMARY_SCOPE_SURMISE = "surmise"
-
-_PROVENANCE_SCOPE = {
-    "witnessed": SUMMARY_SCOPE_FIRSTHAND,
-    "remembered": SUMMARY_SCOPE_FIRSTHAND,
-    "heard": SUMMARY_SCOPE_HEARSAY,
-    "told": SUMMARY_SCOPE_HEARSAY,
-    "read": SUMMARY_SCOPE_HEARSAY,
-    "inferred": SUMMARY_SCOPE_SURMISE,
-}
-
-# Keyed by scope: the model field carrying it, and how the character's own
-# context labels it back to them.
-_SUMMARY_SCOPES = (
-    (SUMMARY_SCOPE_FIRSTHAND, "summary", "what_i_experienced"),
-    (SUMMARY_SCOPE_HEARSAY, "hearsay_summary", "what_i_was_told"),
-    (SUMMARY_SCOPE_SURMISE, "surmise_summary", "what_i_concluded"),
+from mind.memory_common import (  # noqa: F401
+    KNOWLEDGE_RANGES, KNOWLEDGE_TAGS, LOREBOOK_LINK_TYPES, LOREBOOK_TYPES,
+    LORE_CATEGORIES, LORE_INHERITANCE_MODES, MEMORY_CATEGORIES,
+    MEMORY_PROVENANCE, SUMMARY_SCOPE_FIRSTHAND, SUMMARY_SCOPE_HEARSAY,
+    SUMMARY_SCOPE_SURMISE, _PROVENANCE_SCOPE, _SUMMARY_SCOPES, _UNSET,
+    _b64_to_blob, _blob, _blob_to_b64, _cos, _fts_query, _ids, _kw_scores,
+    _ling, _storage_json, _summary_retrieval_text, _vec,
+    summary_context_label, summary_scope_for,
 )
-
-
-def summary_scope_for(provenance):
-    return _PROVENANCE_SCOPE.get(
-        str(provenance or "").strip().casefold(), SUMMARY_SCOPE_FIRSTHAND)
-
-def summary_context_label(scope):
-    return next((label for value, _field, label in _SUMMARY_SCOPES
-                 if value == scope), "what_i_experienced")
-
-def _blob(v): return np.asarray(v, dtype=np.float32).tobytes()
-def _vec(b):  return np.frombuffer(b, dtype=np.float32) if b else None
-
-def _blob_to_b64(b):
-    """Raw embedding BLOB -> JSON-safe base64 string (None if absent).
-
-    Snapshot/export dumps are stored as JSON, so raw bytes must be
-    encoded. The round trip through base64 is byte-identical, which is
-    what lets checkpoint restore put embeddings back verbatim instead
-    of re-embedding (and risking a silent crc32-fallback downgrade)."""
-    if not b:
-        return None
-    return base64.b64encode(bytes(b)).decode("ascii")
-
-def _b64_to_blob(s):
-    """Inverse of _blob_to_b64; returns None on anything malformed so
-    callers fall back to re-embedding rather than storing garbage."""
-    if not s or not isinstance(s, str):
-        return None
-    try:
-        raw = base64.b64decode(s, validate=True)
-    except Exception:
-        return None
-    # Stored vectors are float32 arrays; anything that can't be one is
-    # not a usable embedding.
-    if not raw or len(raw) % 4 != 0:
-        return None
-    return raw
-def _storage_json(value):
-    if value is None or isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False)
-
-def _ids(lorebook_ids):
-    if lorebook_ids is None: return []
-    if isinstance(lorebook_ids, int): return [lorebook_ids]
-    out = []
-    for i in lorebook_ids:
-        if i and i not in out: out.append(i)
-    return out
-
-def _fts_query(text):
-    toks = re.findall(r"[A-Za-z0-9]{3,}", text or "")[:12]
-    return " OR ".join(f'"{t}"' for t in toks) if toks else None
-
-def _kw_scores(fts_table, query, limit=50):
-    fq = _fts_query(query)
-    if not fq: return {}
-    try:
-        rows = q(f"SELECT rowid FROM {fts_table} WHERE {fts_table} MATCH ? ORDER BY rank LIMIT ?", (fq, limit))
-        return {r["rowid"]: 1.0 - i / max(len(rows), 1) for i, r in enumerate(rows)}
-    except Exception:
-        return {}
-
-def _cos(a, b):
-    """Cosine between two STORED vectors, which are already unit length.
-
-    Both producers normalise before returning -- `providers.cheap_embed`
-    divides by its norm, and `embed_texts_meta` does the same to every vector
-    a provider hands back -- so the divisor here was two `np.linalg.norm`
-    calls per comparison that both computed 1.0. Dropping them makes this a
-    plain dot product and about 4x faster, which is the whole cost of the
-    retrieval scan: `search_memories` calls this twice per candidate row.
-
-    A zero vector is the one input that is not unit length, and it is still
-    correct: its dot product is 0.0, which is what the old expression returned
-    for it too.
-    """
-    if a is None or b is None or len(a) != len(b): return 0.0
-    return float(np.dot(a, b))
 
 # ---- Hierarchical Lorebook Functions ----
 
@@ -2391,10 +2239,6 @@ def get_memory_summary(chat_id, char_id, scope="autobiographical", *,
     return {"scope": row["scope"], "start_turn_idx": row["start_turn_idx"], "end_turn_idx": row["end_turn_idx"],
             "summary": row["summary"], "key_phrases": _json_list(row["key_phrases"]),
             "unresolved_threads": _json_list(row["unresolved_threads"]), "updated": row["updated"]}
-
-def _summary_retrieval_text(summary, key_phrases, unresolved_threads):
-    return "\n".join([summary or "", ", ".join(key_phrases or []),
-                      "\n".join(unresolved_threads or [])])
 
 def search_memory_summaries(chat_id, char_id, query, k=3, *,
                             scope="autobiographical", before_turn_idx=None,

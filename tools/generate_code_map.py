@@ -50,6 +50,7 @@ MODULE_PURPOSES = {
     "llm.llm_quality": "Strict JSON parsing, schema validation, and model-assisted repair.",
     "core.logging_utils": "Structured timing and observability helpers.",
     "mind.memory": "Lorebook graph, memory retrieval/consolidation, relationships, and vector search.",
+    "mind.memory_common": "Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine.",
     "core.pipeline_context": "Typed mutable context passed through a turn pipeline.",
     "persist.pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "llm.prompt_cache": "Provider-specific prompt-cache helpers.",
