@@ -6,7 +6,7 @@ by a retired model scores 0.0 on every semantic ranking forever and looks
 exactly like a row that simply does not match, so a bank silently splits into
 two eras and nothing anywhere says so. The engine repairs the live tables on
 its own -- `start_rebuild_if_needed` offers a rebuild when a story opens, and
-retrieval warns once per situation -- but one repair has no way in at all:
+retrieval warns once per situation -- but two repairs have no way in at all:
 
   * `rebuild_checkpoint_embeddings` carries a completed rebuild BACK through a
     story's saved states. A checkpoint stores each vector verbatim, so one
@@ -17,17 +17,29 @@ retrieval warns once per situation -- but one repair has no way in at all:
     is substitution. 99,442 saved memories across 1,040 checkpoints in 98
     seconds and zero API calls, when it was last run by hand.
 
-It was built, documented and tested, and had no caller anywhere in the tree.
-That is what this file is: the entry point, not new machinery.
+  * `backfill_lore_embedding_stamps` decides what embedded each unstamped lore
+    entry, once, and records it. `lore_entries` gained
+    `embedding_model`/`embedding_dim` long after it gained vectors, so every
+    row written before that carries bytes and no provenance, and can never be
+    judged stale or fresh -- it is outside the reconciliation system
+    `memories` has always been in. Measured on the owner's corpus: 1,160 of
+    2,586 rows. It embeds nothing either; `cheap_embed` is a pure function of
+    the text, so "is this the fallback" is answered by recomputing and
+    comparing bytes, with the provider face-down.
+
+Both were built, documented and tested, and neither had a caller anywhere in
+the tree. That is what this file is: the entry point, not new machinery.
 
     python3 tools/embedding_maintenance.py status
     python3 tools/embedding_maintenance.py status --chat 59 --json
     python3 tools/embedding_maintenance.py checkpoints              # dry run
     python3 tools/embedding_maintenance.py checkpoints --apply
     python3 tools/embedding_maintenance.py checkpoints --chat 59 --apply
+    python3 tools/embedding_maintenance.py lore-stamps             # dry run
+    python3 tools/embedding_maintenance.py lore-stamps --apply
 
-`status` never writes. `checkpoints` writes only with `--apply`; without it it
-reports what it would do and changes nothing.
+`status` never writes. `checkpoints` and `lore-stamps` write only with
+`--apply`; without it they report what they would do and change nothing.
 Point at another database with `ENGINE_DB=/path/to/other.db`.
 
 Unlike `tools/fire_rates.py` this DOES import the engine -- substituting a
@@ -58,7 +70,19 @@ def _report(payload, as_json):
 
 def cmd_status(args):
     """What is comparable right now, before anything is written."""
-    _report(memory.embedding_bank_status(args.chat) or {}, args.json)
+    payload = {
+        "memory_bank": memory.embedding_bank_status(args.chat) or {},
+        # Deliberately whole-corpus: lorebooks are shared between stories, so
+        # "is my lore reachable" is not a per-chat question.
+        "lore": memory.lore_embedding_health() or {},
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return
+    for section in sorted(payload):
+        print(f"[{section}]")
+        _report(payload[section], False)
+        print()
 
 
 def cmd_checkpoints(args):
@@ -73,6 +97,18 @@ def cmd_checkpoints(args):
 
     _report(memory.rebuild_checkpoint_embeddings(
         args.chat, dry_run=not args.apply, progress=_progress), args.json)
+
+
+def cmd_lore_stamps(args):
+    if not args.apply:
+        # The backfill has no dry run of its own -- deciding IS the operation,
+        # and it is meant to happen once -- so the dry run is the health
+        # report of exactly the rows `--apply` would stamp.
+        print("dry run: nothing written. `unstamped` is what --apply would "
+              "decide and record.", file=sys.stderr)
+        _report(memory.lore_embedding_health() or {}, args.json)
+        return
+    _report(memory.backfill_lore_embedding_stamps(), args.json)
 
 
 def main(argv=None):
@@ -98,6 +134,12 @@ def main(argv=None):
     p_ckpt.add_argument("--apply", action="store_true",
                         help="write; without it, report and change nothing")
     p_ckpt.set_defaults(func=cmd_checkpoints)
+
+    p_lore = _command(
+        "lore-stamps", "record what embedded each unstamped lore entry")
+    p_lore.add_argument("--apply", action="store_true",
+                        help="write; without it, report and change nothing")
+    p_lore.set_defaults(func=cmd_lore_stamps)
 
     args = parser.parse_args(argv)
     args.func(args)

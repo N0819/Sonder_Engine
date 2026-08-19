@@ -474,3 +474,59 @@ def test_a_degraded_probe_is_not_mistaken_for_the_live_model(temp_db,
 
     assert health["current_dimensions"] == 2560, "believed the fallback probe"
     assert health["stale"] == 0
+
+
+# ---- MIND-F8: the retrofit had no way to be run ---------------------------
+
+
+class TestTheLoreBackfillHasAWayIn:
+    """`backfill_lore_embedding_stamps` and `lore_embedding_health` had zero
+    callers anywhere in the tree. The writer half landed -- new entries record
+    what embedded them -- so this is a one-time repair of rows written before
+    the columns existed, not a leak-stopper: 1,160 of 2,586 entries on the
+    owner's corpus, permanently outside the reconciliation `memories` has
+    always been in and judged on width alone forever.
+    """
+
+    def _tool(self):
+        import importlib
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        return importlib.import_module("embedding_maintenance")
+
+    def test_the_backfill_is_reachable_from_a_command(self, temp_db):
+        book = _book(temp_db)
+        entry = _entry(temp_db, book, "Third Floor", "the roost", 256)
+        assert temp_db.q("SELECT embedding_model FROM lore_entries WHERE id=?",
+                         (entry,), one=True)["embedding_model"] is None
+
+        assert self._tool().main(["lore-stamps", "--apply"]) == 0
+
+        assert temp_db.q("SELECT embedding_model FROM lore_entries WHERE id=?",
+                         (entry,), one=True)["embedding_model"] == "unknown:256"
+
+    def test_the_dry_run_stamps_nothing(self, temp_db, capsys):
+        """Deciding IS the operation here -- it is meant to happen once -- so
+        the dry run reports the rows `--apply` would stamp instead of
+        pretending to stamp them."""
+        book = _book(temp_db)
+        entry = _entry(temp_db, book, "Third Floor", "the roost", 256)
+
+        assert self._tool().main(["lore-stamps"]) == 0
+
+        assert temp_db.q("SELECT embedding_model FROM lore_entries WHERE id=?",
+                         (entry,), one=True)["embedding_model"] is None
+        assert "unstamped" in capsys.readouterr().out
+
+    def test_status_reports_lore_health_beside_the_memory_bank(self, temp_db,
+                                                               capsys):
+        import json as _json
+
+        _entry(temp_db, _book(temp_db), "Third Floor", "the roost", 256)
+        assert self._tool().main(["status", "--json"]) == 0
+        payload = _json.loads(capsys.readouterr().out)
+        assert payload["lore"]["total"] == 1
+        assert payload["lore"]["unstamped"] == 1
+        assert "memories" in payload["memory_bank"]
