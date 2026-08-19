@@ -2445,6 +2445,35 @@ hardening items are closed.
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
 
+### 1.51b A retired setting's row outlives its feature
+
+Found 2026-08-18 while checking the owner's live database for something else.
+Nothing prunes `settings` when a feature is deleted, so a retired key stays
+forever and the only symptom is that a later reader greps the tree, finds
+nothing, greps the database, and finds a row. Four of 29 keys on the live
+install have no reader anywhere in the engine:
+
+- `director_orchestration` — the flag the orchestrated Director shipped
+  behind, deleted when the monolith went (§2.18). Empty.
+- `character_reflection` — same shape, empty.
+- `host_secret`, `host_secret_hash` — the auth scheme that preceded the
+  PBKDF2 host account (`host_pw_hash`/`host_pw_salt`, both live).
+
+**Checked, because two of them are credentials: there is nothing sensitive at
+rest.** `host_secret` is empty, `host_secret_hash` is a 64-character digest
+and not a plaintext token, so `tests/test_host_secret_hashing.py`'s standing
+claim — that a readable `engine.db` never yields a working host credential —
+still holds. Inspected read-only, values never printed.
+
+So this is tidiness, not a defect, and it is registered rather than repaired
+because the repair writes to live stories: a migration deleting retired keys
+runs on the owner's database at next launch, and that is their call to make.
+What makes it worth writing down is the CLASS. A settings key is the one kind
+of configuration the engine cannot check — `tools/project_check.py` reads the
+tree and the tree is exactly where a retired key is absent. Anything that
+enforces this has to compare a list of live keys against a database, which
+means the list has to exist first.
+
 ### 1.52 The monolith-split audit: 43 findings, 20 repaired, 23 open
 
 The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and `agents/director.py`
