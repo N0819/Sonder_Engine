@@ -418,6 +418,21 @@ def _stream_parallel(bus, jobs, holders):
             )
             holders[k] = {"e": exc}
         finally:
+            # The reasoning trace, carried out of the worker BY HAND -- the
+            # same hand-off `_stream_one` does, for the same reason, in the
+            # copy the fix did not touch. `providers.last_reasoning` is a
+            # ContextVar written on THIS thread; `save_step`'s fallback reads
+            # it on the generator thread, where the write was never visible,
+            # so every parallel step's stored trace was empty. Copying a
+            # context carries values inward and nothing carries one back out,
+            # so it rides `holders`.
+            try:
+                from llm.providers import last_reasoning
+
+                holders.setdefault(k, {})["reasoning"] = (
+                    last_reasoning.get() or "")
+            except Exception:
+                holders.setdefault(k, {})["reasoning"] = ""
             bus.q.put({
                 "type": "__done__",
                 "key": k,
