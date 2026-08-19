@@ -1212,6 +1212,42 @@ def check_engine_imports_resolve(errors: list[str]) -> None:
             errors.append(f"{rel}:{lineno}: {message}")
 
 
+ASGI_TARGET = re.compile(r"uvicorn\s+(?:[-\w]+\s+)*([\w.]+):(\w+)")
+
+
+def check_asgi_targets(errors: list[str]) -> None:
+    """Every `uvicorn module:attr` a launcher runs must name a real module.
+
+    The launchers are shell, batch and make — nothing imports them, nothing
+    compiles them, and the suite cannot see them at all. `tools/test_server.sh`
+    still said `uvicorn app:app` nine days after the app became `web.app`, so
+    the script whose whole job is "start a server against a COPY of the
+    database, never the live one" failed at startup and sent anyone who
+    reached for it back to the launcher that uses the real database.
+    """
+    names, by_tail = _engine_module_index()
+    launchers = [ROOT / "Makefile"] + sorted((ROOT / "tools").glob("*.sh"))
+    launchers += sorted(ROOT.glob("*.bat"))
+    for path in launchers:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for match in ASGI_TARGET.finditer(line):
+                module = match.group(1)
+                if module in names:
+                    continue
+                moved = sorted(by_tail.get(module.rpartition(".")[2], []))
+                where = (" It is now %s." % " or ".join(moved)) if moved else ""
+                errors.append(
+                    f"{rel}:{lineno}: runs {match.group(0)!r}, but "
+                    f"{module!r} is not a module in this tree.{where}")
+
+
 def check_conftest_not_imported(errors: list[str]) -> None:
     """`conftest.py` is pytest's to import, and only pytest's.
 
@@ -1266,6 +1302,7 @@ def main() -> int:
     check_facade_import_direction(errors)
     check_conftest_not_imported(errors)
     check_engine_imports_resolve(errors)
+    check_asgi_targets(errors)
     check_duplicate_python_symbols(errors)
     check_duplicate_dict_keys(errors)
     check_install_root_derivations(errors)
