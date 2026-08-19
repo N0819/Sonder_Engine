@@ -36,8 +36,9 @@ That split was a real trade when it was written. `db.init()` is fsync-bound —
 file — and a `temp_db` setup measured 1.2–1.6s on a loaded checkout against
 test bodies of 0.02–0.10s. That one call was ~90% of the suite's wall clock.
 
-Moving the fixture's temp directory to tmpfs (`tests/conftest.py`,
-`_fast_tmp_dir`) removed it: **15m35s → 36s for all 3799 tests**, measured at
+Moving the fixture's temp directory to tmpfs (`tests/helpers.py`,
+`fast_tmp_dir`; a test that builds its own database calls `scratch_db_path`)
+removed it: **15m35s → 36s for all 3799 tests**, measured at
 the time. The suite has since grown to 6329 tests and ~74s, which is the same
 per-test cost.
 Nothing about the database changed — same schema, same WAL, same isolation,

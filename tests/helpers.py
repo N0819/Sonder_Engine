@@ -15,6 +15,59 @@ an import. Anything a test must NAME belongs here.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+
+
+def fast_tmp_dir():
+    """A RAM-backed directory for test databases, where the platform has one.
+
+    ``db.init()`` is fsync-bound, not compute-bound: ``executescript(SCHEMA)``
+    auto-commits ~117 DDL statements (53 tables, 64 indexes, FTS5 virtuals,
+    triggers) against a brand-new file, and pays a flush for each. That single
+    call was the dominant cost of the whole suite -- 159 of 252 test files
+    request ``temp_db``, and their test BODIES run in 0.02--0.10s against a
+    setup measured at 0.2s idle and 1.2--1.6s on a loaded checkout.
+
+    Measured here, 13 database-backed tests: 2.93s on disk, 0.61s on tmpfs.
+    Nothing about the database changes -- same schema, same WAL, same
+    isolation, same per-test file. Only the storage backing moves, so a test
+    cannot tell the difference; the suite just stops waiting on the platter.
+
+    Returns None where no tmpfs exists (macOS, Windows), which falls back to
+    tempfile's own default. Correct everywhere, fast where it can be.
+    ``ENGINE_TEST_TMPDIR`` overrides, for a host where /dev/shm is too small.
+
+    It lives HERE rather than in `conftest.py` because a test file that builds
+    its own database has to be able to name it. Two did not, and paid the
+    platter for a full `db.init()` -- in the fast tier, which is documented as
+    database-independent.
+    """
+    override = os.environ.get("ENGINE_TEST_TMPDIR")
+    if override:
+        return override
+    if os.path.isdir("/dev/shm") and os.access("/dev/shm", os.W_OK):
+        return "/dev/shm"
+    return None
+
+
+TMP_DIR = fast_tmp_dir()
+
+
+def scratch_db_path():
+    """A path for a database a test will create itself, on tmpfs where there is
+    one. The file is removed immediately: `db.init()` wants to make it."""
+    fd, path = tempfile.mkstemp(suffix=".db", dir=TMP_DIR)
+    os.close(fd)
+    os.remove(path)
+    return path
+
+
+def remove_scratch_db(path):
+    """Delete a scratch database and the WAL/SHM sidecars it leaves behind."""
+    for leftover in (path, path + "-wal", path + "-shm"):
+        if os.path.exists(leftover):
+            os.remove(leftover)
 
 
 def fanout_resolve_agent(output, *, per_step=None, calls=None):
