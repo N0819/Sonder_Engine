@@ -277,3 +277,28 @@ def test_every_chat_scoped_toolbar_button_is_disabled_without_a_chat():
     block = _between(CHAT, "function updateChatScopedButtons()", "function renderChat()")
     listed = set(re.findall(r'"(#b-[\w-]+)"', block))
     assert listed == guarded, f"listed {sorted(listed)} vs guarded {sorted(guarded)}"
+
+
+def test_every_engine_plan_step_has_a_friendly_progress_label():
+    """The progress line exists so "a long-running turn never looks like
+    nothing is happening, without requiring anyone to know what
+    `perception_outcome` means". A step missing from the table falls through to
+    the technical label, which is the one thing it was built to avoid --
+    `narrator_extra` did, on exactly the stage a multiplayer chat spends its
+    time in. Read from the handler registry so a fifteenth stage cannot be
+    added to the engine alone.
+    """
+    import ast
+
+    tree = ast.parse((ROOT / "agents/runtime.py").read_text(encoding="utf-8"))
+    handlers = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", "") == "STEP_HANDLERS" for t in node.targets)):
+            handlers = {k.value for k in node.value.keys}
+    assert handlers, "STEP_HANDLERS not found in agents/runtime.py"
+
+    block = _between(CHAT, "const FRIENDLY_STEP_LABELS = {", "const FRIENDLY_SUBAGENTS")
+    labelled = set(re.findall(r"^  (\w+):", block, re.MULTILINE))
+    assert not handlers - labelled, \
+        f"plan steps with no friendly label: {sorted(handlers - labelled)}"
