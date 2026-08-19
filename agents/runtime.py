@@ -687,10 +687,13 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
 
     plan += [
         ("director_resolve", "Director · resolve"),
-        # Unconditional but self-gating: pick_background_reactor (commit.py)
-        # is a cheap, LLM-free check that returns None for the large
-        # majority of turns (no salient, un-voiced background presence this
-        # beat) -- only then does background_react spend an LLM call.
+        # Unconditional but self-gating: `pick_background_reactors`
+        # (persist/commit_background.py) is a cheap, LLM-free check that
+        # returns [] for the large majority of turns (no salient, un-voiced
+        # background presence this beat) -- only then does background_react
+        # spend an LLM call, and at most `background_config.max_reactors` of
+        # them. The singular `pick_background_reactor` beside it is a
+        # single-winner wrapper this stage does not call.
         (_BG_KEY, _background_stage_label(chat_id)),
         ("perception_outcome", "Perception · pass 2 — the outcome"),
         ("narrator", "Narrator · render"),
