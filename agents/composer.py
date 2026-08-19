@@ -363,8 +363,9 @@ def concealed_from_observer(entry, observer_name, observer_id=None):
     """Is this concealed event element withheld from this observer?
 
     An empty conceal_from means hidden from every non-actor; a populated list
-    is an explicit excluded audience. (The onset/outcome model paths apply
-    the same rule through perception's `_concealed_from_perceiver`.)"""
+    is an explicit excluded audience. This is now the only reading of that
+    rule: the second copy lived on the retired onset/outcome prose paths and
+    went with them."""
     if entry.get("visibility") != "concealed":
         return False
     refs = {
@@ -901,9 +902,10 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if level == "none" and rel.get("open_group_continuity") \
             and volume.casefold() in ("normal", "loud", "shout"):
         # Compatibility floor for a rerolled checkpoint predating the
-        # near-group position repair (mirrors `_inject_onset_speech`). It
-        # grants hearing only; sight and every other channel still ride the
-        # relation's real spatial fields.
+        # near-group position repair. It grants hearing only; sight and every
+        # other channel still ride the relation's real spatial fields. (The
+        # onset prose path carried the twin of this rescue and has since been
+        # deleted, so this is the only copy.)
         level = "full"
     if level == "none":
         return None
@@ -1712,8 +1714,8 @@ _MAX_OBSERVATION_ATOMS = 8
 # before this change carry the full shape and read identically.
 #
 # THAT MEASUREMENT IS OF A DERIVATION THAT NO LONGER RUNS, and one of the six
-# rows no longer holds. It was taken against
-# `perception._observations_from_clean_views`, which computed
+# rows no longer holds. It was taken against the prose-cue derivation
+# `perception._observations_from_clean_views` (since deleted), which computed
 # `0.35 + 0.2 * cue_hits` and therefore sat on the base whenever no cue
 # matched. `observations_from_render` computes `0.35 + 0.4 * salience`, and
 # the lowest salience any builder in this module assigns is 0.2

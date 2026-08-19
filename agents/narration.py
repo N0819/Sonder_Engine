@@ -926,8 +926,10 @@ def narrator(ctx, nonce):
         # room RECORDS ({room_id, room_name, barrier, description}), not ids
         # -- set() over them raised TypeError: unhashable type: 'dict' and
         # crashed the narrator on every awake, non-establishment turn whose
-        # room had a sight-permitting adjacency. Same unpacking as
-        # perception.py's _observer_scene_payload.
+        # room had a sight-permitting adjacency. Perception unpacked the
+        # same records the same way, in the scene payload it built for the
+        # retired model path; this is now the only reader of that shape
+        # outside `world/spatial.py`.
         _visible = {
             str(r["room_id"]) for r in visible_adjacent_rooms(_scene_for_frame, p_room)
             if isinstance(r, dict) and r.get("room_id")
