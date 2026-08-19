@@ -4774,7 +4774,15 @@ OUTPUT_EXAMPLES = {
              "target": "Sable", "target_part": "shoulder",
              "manner": "rest", "relation": "surface", "motion": "settled"},
         ],
-        "substance_ops": [],
+        # Matter that landed somewhere is the commonest smell in play, and
+        # `scent` had to be SHOWN rather than only described: this was `[]`,
+        # and an empty list teaches the shape of nothing.
+        "substance_ops": [
+            {"op": "add", "source": "Mara", "source_part": "forearm",
+             "substance": "blood", "target": "lamp_room",
+             "placement": "room", "amount": "a few drops",
+             "scent": "wet iron"},
+        ],
         "containment": {},
         "scales": {},
         "notes": [],
@@ -4785,7 +4793,15 @@ OUTPUT_EXAMPLES = {
                               "description": "a brass storm lantern",
                               "aliases": [], "portable": True,
                               "container": False, "interior_rooms": [],
-                              "state": {"lit": True}},
+                              "state": {"lit": True},
+                              # A lit lamp is the smallest honest scent
+                              # example: the thing that emits light emits
+                              # something on the other channel too, and a
+                              # field shown as absent in the object a repair
+                              # is told to imitate reads as "not part of the
+                              # answer" -- what `ratified_claims` and
+                              # `state_diff.time` each cost a beat for.
+                              "scent": "hot brass and lamp oil"},
         },
         "remove_entities": [],
         "inventory_ops": [],
