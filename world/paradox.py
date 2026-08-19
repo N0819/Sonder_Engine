@@ -66,7 +66,7 @@ import time as _time
 from story.character_schema import character_name
 from core.db import active_frame_id, q, qi, transaction, wget, wset
 from core.frames import get_frame
-from world.spatial import room_of
+from world.spatial import merge_scene_with_diff, room_of
 
 MODES = ("dread", "hazard", "toll", "warden", "bureau")
 DEFAULT_MODE = "hazard"
@@ -367,6 +367,30 @@ def _apply_toll(chat_id, state, policy):
         )
 
 
+def _project_entity_row(chat_id, entity_id, entity_def):
+    """Keeps the `world_entities` projection in step with a scene write made
+    outside the commit's own scene->projection pass (AGENTS.md Phase 3a:
+    every scene writer owes the pair). The row is written FROM the blob's
+    merged entity, the same direction `commit_world_entities` projects --
+    never the other way around."""
+    payload = json.dumps(entity_def, ensure_ascii=False)
+    kind = str(entity_def.get("kind") or "object")
+    subtype = str(entity_def.get("subtype") or "")
+    name = str(entity_def.get("name") or entity_id)
+    if _entity_exists(chat_id, entity_id):
+        qi(
+            "UPDATE world_entities SET kind=?,subtype=?,name=?,payload=? "
+            "WHERE entity_id=? AND chat_id=?",
+            (kind, subtype, name, payload, entity_id, chat_id),
+        )
+    else:
+        qi(
+            "INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload) "
+            "VALUES(?,?,?,?,?,?)",
+            (entity_id, chat_id, kind, subtype, name, payload),
+        )
+
+
 def _apply_warden_stage(chat_id, state, stage):
     """Places (or moves) a hunting scene entity at the epicenter -- an
     ordinary state_diff-shaped entity/position edit, so spatial gating,
@@ -392,6 +416,10 @@ def _apply_warden_stage(chat_id, state, stage):
     entities.setdefault(warden_id, {"kind": "creature", "subtype": "paradox_warden", "hostile": True})
     positions[warden_id] = epicenter
     wset(chat_id, "scene", sc)
+    # A scene entity with no world_entities row is the exact divergence
+    # tools/scene_lint.py reports ("scene entity missing from
+    # world_entities") -- the warden previously lived in the blob alone.
+    _project_entity_row(chat_id, warden_id, entities[warden_id])
 
 
 def _apply_stage_consequence(chat_id, state, stage, policy):
@@ -491,7 +519,7 @@ def _advance_paradox(chat_id, state):
         # restore un-consumes, but a toll decay is irreversible and a
         # spawned warden outlives its own resolved wound.
         if anchor:
-            _force_restore_anchor(chat_id, anchor)
+            _force_restore_anchor(chat_id, anchor, state)
         _restore_consumed(chat_id, state)
         _clear_paradox(chat_id, state.get("frame_id"))
         return {**state, "resolved": True, "forced": True}
@@ -505,28 +533,52 @@ def _advance_paradox(chat_id, state):
     return state
 
 
-def _force_restore_anchor(chat_id, anchor):
-    # NOTE, unrepaired: these two statements write `world_entities` directly,
-    # and `world_entities` is a DERIVED PROJECTION of the scene commit -- the
-    # INSERT mints a durable row for a body the scene blob does not hold, and
-    # the retire semantics the projection has since grown do not know about
-    # it. The right restore path writes the anchor back into `world.scene` and
-    # lets the projection follow, which needs a decision about what "force
-    # restore" means when reality wins. Recorded rather than guessed at.
-    #
-    # The `world_placements` DELETE that stood beside them is gone: that table
-    # is decommissioned, nothing on the live path has written it for
-    # releases, and a delete against a table nobody fills is a statement that
-    # a second ledger still matters.
-    exists = _entity_exists(chat_id, anchor["entity_id"])
+def _force_restore_anchor(chat_id, anchor, state=None):
+    """Reality wins by rewriting REALITY'S ledger: the frame-scoped scene
+    blob is the single runtime source of truth, so "force restore" means
+    editing the operative frame's scene through the engine's own merge --
+    `merge_scene_with_diff`, so removal cleans positions/poses/substances by
+    the entity record's names exactly as a committed `remove_entities` would
+    -- and keeping the `world_entities` projection in step in the same call
+    (the pair every scene writer owes; AGENTS.md Phase 3a). The old shape
+    wrote the projection ALONE: its DELETE left the erased body standing in
+    the blob for every perceiver and for the next commit to re-mint the row
+    from (re-tripping the anchor), and its INSERT minted a durable row for a
+    body the scene never held. This resolves the deferral that stood here.
+
+    A restored body reappears at the wound's epicenter when this scene still
+    has that room -- the tear is where reality knits itself back together,
+    and it is the only place the wound knows. Without a scene or a standing
+    epicenter, existence is restored without a place (the projection row
+    plus, where a scene exists, an unplaced entity record) and the Director
+    brings the body onstage; inventing a room here is how a body appears
+    somewhere nobody was standing.
+    """
+    eid = anchor["entity_id"]
+    exists = _entity_exists(chat_id, eid)
+    sc = wget(chat_id, "scene", None)
     if anchor["required_exists"] and not exists:
-        qi(
-            "INSERT INTO world_entities(entity_id,chat_id,kind,subtype,name,payload) "
-            "VALUES(?,?,?,?,?,?)",
-            (anchor["entity_id"], chat_id, "person", "", anchor["entity_id"], "{}"),
-        )
+        entity_def = {"kind": "person", "name": eid}
+        if isinstance(sc, dict):
+            diff = {"entities": {eid: dict(entity_def)}}
+            epicenter = (state or {}).get("epicenter_room")
+            if epicenter and epicenter in (sc.get("rooms") or {}):
+                diff["positions"] = {eid: epicenter}
+            sc = merge_scene_with_diff(sc, diff)
+            wset(chat_id, "scene", sc)
+            merged = (sc.get("entities") or {}).get(eid)
+            if isinstance(merged, dict):
+                entity_def = merged
+        _project_entity_row(chat_id, eid, entity_def)
     elif not anchor["required_exists"] and exists:
-        qi("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?", (chat_id, anchor["entity_id"]))
+        if isinstance(sc, dict):
+            sc = merge_scene_with_diff(sc, {"remove_entities": [eid]})
+            # The merge's removal cleans by the entity RECORD's names and
+            # skips a body that has no record; an anchor subject standing in
+            # `positions` without one (a cast member's shape) still leaves.
+            (sc.get("positions") or {}).pop(eid, None)
+            wset(chat_id, "scene", sc)
+        qi("DELETE FROM world_entities WHERE chat_id=? AND entity_id=?", (chat_id, eid))
 
 
 def check_and_apply_paradox(ctx, nonce):

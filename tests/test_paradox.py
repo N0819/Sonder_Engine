@@ -306,9 +306,16 @@ class TestEscalation:
         assert sc["entities"][warden_name]["hostile"] is True
 
     def test_dread_mode_never_touches_the_scene(self, temp_db):
+        """Below the ceiling: dread configures the CONSEQUENCE layer down to
+        nothing, so no rung of the ladder may edit the scene. The ceiling is
+        not a rung of that layer -- reality winning force-restores the anchor
+        in every mode, dread included (it always deleted the projection row;
+        the authority blob now changes with it), so this pins 0.9, the top of
+        the ladder, not 1.0."""
         chat_id, ctx = self._setup_active_paradox(temp_db, mode="dread")
         before = wget(chat_id, "scene")
-        wset(chat_id, "simulation_clock", {"elapsed_seconds": paradox.ESCALATION_SECONDS})
+        wset(chat_id, "simulation_clock",
+             {"elapsed_seconds": paradox.ESCALATION_SECONDS * 0.9})
         paradox.check_and_apply_paradox(ctx, 0)
         after = wget(chat_id, "scene")
         assert before == after
@@ -835,6 +842,115 @@ class TestResolution:
         # Reality won: Pete no longer exists, satisfying the anchor.
         assert not q("SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
                      (chat_id, "pete"), one=True)
+
+
+class TestForceRestoreWritesTheScene:
+    """The frame-scoped `world.scene` blob is the single runtime source of
+    truth and `world_entities` is a derived projection of the scene commit
+    (AGENTS.md, Phase 3a). "Reality wins" therefore means rewriting
+    reality's own ledger -- the scene -- with the projection kept in step in
+    the same call, the pair every scene writer owes. The old
+    `_force_restore_anchor` wrote the projection ALONE: a DELETE that left
+    the erased body still standing in the blob (where every perceiver and
+    the next commit would find it, re-minting the row and re-tripping the
+    anchor), and an INSERT that minted a durable row for a body the scene
+    never held."""
+
+    def test_forced_deletion_removes_the_body_from_the_scene_blob(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "scene", {"rooms": {"road": {"name": "Road", "adjacent": []}},
+                                  "positions": {"pete": "road"},
+                                  "entities": {"pete": {"kind": "person", "name": "Pete"}}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                 required_exists=False, label="x")
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": paradox.ESCALATION_SECONDS * 10})
+        result = paradox.check_and_apply_paradox(ctx, 0)
+
+        assert result["forced"] is True
+        sc = wget(chat_id, "scene")
+        assert "pete" not in (sc.get("entities") or {})
+        assert "pete" not in (sc.get("positions") or {})
+        assert not q("SELECT 1 FROM world_entities WHERE chat_id=? AND entity_id=?",
+                     (chat_id, "pete"), one=True)
+
+    def test_forced_deletion_clears_a_position_held_without_an_entity_record(self, temp_db):
+        """Cast members stand in `positions` with no `entities` record; the
+        merge's own removal cleans by the record's names and skips a body
+        that has none, so the restore must clear the position itself."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "scene", {"rooms": {"road": {"name": "Road", "adjacent": []}},
+                                  "positions": {"pete": "road"}, "entities": {}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                 required_exists=False, label="x")
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": paradox.ESCALATION_SECONDS * 10})
+        paradox.check_and_apply_paradox(ctx, 0)
+
+        assert "pete" not in (wget(chat_id, "scene").get("positions") or {})
+
+    def test_forced_restoration_returns_the_body_at_the_wounds_epicenter(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        persona_id = temp_db.qi("INSERT INTO personas(name,sheet) VALUES(?,?)",
+                                ("Rose", "{}"))
+        temp_db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, chat_id))
+        wset(chat_id, "scene", {"rooms": {"road": {"name": "Road", "adjacent": []}},
+                                  "positions": {"Rose": "road"}, "entities": {}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        # Pete must exist, and doesn't: the anchor is violated at once.
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                 required_exists=True, label="Pete must live")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+        assert paradox.get_paradox(chat_id, None)["epicenter_room"] == "road"
+
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": paradox.ESCALATION_SECONDS * 10})
+        result = paradox.check_and_apply_paradox(ctx, 0)
+
+        assert result["forced"] is True
+        sc = wget(chat_id, "scene")
+        assert isinstance((sc.get("entities") or {}).get("pete"), dict)
+        # Reality reasserts the anchor at the tear.
+        assert (sc.get("positions") or {}).get("pete") == "road"
+        row = q("SELECT kind, name FROM world_entities WHERE chat_id=? AND entity_id=?",
+                (chat_id, "pete"), one=True)
+        assert row is not None and row["kind"] == "person"
+
+    def test_a_spawned_warden_is_projected_like_any_other_scene_entity(self, temp_db):
+        """`_apply_warden_stage` writes a body into the scene blob; a scene
+        entity with no `world_entities` row is the exact divergence
+        tools/scene_lint.py flags ("scene entity missing from
+        world_entities"). Same rule as the restore: a paradox scene writer
+        keeps the projection in step."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "scene", {"rooms": {"road": {"name": "Road", "adjacent": []}},
+                                  "positions": {"pete": "road"}, "entities": {}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        paradox.set_policy(chat_id, mode="warden")
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                 required_exists=False, label="x")
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+        wset(chat_id, "simulation_clock",
+             {"elapsed_seconds": paradox.ESCALATION_SECONDS * 0.3})
+        paradox.check_and_apply_paradox(ctx, 0)
+
+        warden_name = paradox.get_paradox(chat_id, None)["warden_entity_name"]
+        sc = wget(chat_id, "scene")
+        assert sc["entities"][warden_name]["subtype"] == "paradox_warden"
+        row = q("SELECT kind, subtype FROM world_entities WHERE chat_id=? AND entity_id=?",
+                (chat_id, warden_name), one=True)
+        assert row is not None
+        assert row["kind"] == "creature" and row["subtype"] == "paradox_warden"
 
 
 class TestCeilingIsTerminalNotARung:
