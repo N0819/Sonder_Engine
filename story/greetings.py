@@ -430,20 +430,36 @@ def generate_greeting(char_id: int, brief: str = "",
     }
 
 
+#: Every quote character that can wrap a whole greeting, opening or closing.
+_QUOTE_MARKS = "\"“”"
+
+
 def _strip_greeting_wrapping(raw: str) -> str:
-    """A utility model sometimes wraps prose in a code fence, a leading label,
-    or whole-string quotes despite the prompt. Peel those without touching the
-    prose itself."""
+    """A utility model sometimes wraps prose in a code fence or in whole-string
+    quotes despite the prompt. Peel those without touching the prose itself.
+
+    A LEADING LABEL IS DELIBERATELY NOT PEELED, and this docstring used to
+    claim it was. A short prefix before a colon cannot be told from a speaker
+    attribution, and an attribution is CONTENT -- dropping it loses who is
+    talking, which is worse than leaving a stray "Greeting:" where an author
+    can see and delete it.
+    """
     text = str(raw or "").strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[-1]
         if text.rstrip().endswith("```"):
             text = text.rstrip()[:-3]
     text = text.strip()
-    # A single pair of wrapping quotes around the ENTIRE greeting (not internal
-    # dialogue) -- only strip when both ends are quotes and there's no earlier
-    # closing quote that would make this real dialogue.
-    if len(text) >= 2 and text[0] in "\"“" and text[-1] in "\"”" \
-            and text.count('"') + text.count("“") == 1 + text.count("”"):
-        pass  # ambiguous -- leave dialogue-opening greetings intact
+    # ONE PAIR AROUND THE WHOLE THING, AND NOTHING INSIDE IT. A greeting may
+    # legitimately open and close on dialogue, so the two ends prove nothing;
+    # what distinguishes wrapping from speech is that wrapping is the only
+    # quote in the string. Anything else is somebody talking, and peeling it
+    # would take one mark off a line and leave its partner standing.
+    #
+    # The condition this replaces counted straight quotes against curly ones
+    # (`count('"') + count(open) == 1 + count(close)`) and its body was
+    # `pass`, so neither half of the peel this function documents ran.
+    if (len(text) >= 2 and text[0] in _QUOTE_MARKS and text[-1] in _QUOTE_MARKS
+            and not any(ch in _QUOTE_MARKS for ch in text[1:-1])):
+        text = text[1:-1]
     return text.strip()
