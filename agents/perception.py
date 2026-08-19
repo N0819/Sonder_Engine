@@ -51,6 +51,7 @@ from world.spatial import (
     containment_conceals,
     crossing_visible_from,
     egocentric_frame,
+    _entity_named,
     entity_arc,
     entity_side,
     has_visual,
@@ -4058,6 +4059,31 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     }
 
 
+def _mover_is_a_body(sc, mover):
+    """Does this `positions` key name somebody, or something.
+
+    A crossing percept says "a figure" about whatever it is handed, and
+    `state_diff.positions` is not a roster of people -- AGENTS.md's
+    body-enclosure row: it "legitimately keys objects and unregistered
+    presences by entity id" beside cast bodies keyed by display name. So a
+    crate carried from one room to the next arrived in every view at either
+    end as a person walking in.
+
+    The engine already answers this question once, in
+    `commit_background._is_inert_presence_candidate` -- an inert `kind`, or
+    portable and neither animate-kinded nor wearing anything -- and it is
+    conservative in the direction this needs. It calls something a thing
+    only when that is demonstrable, so an undressed unregistered presence
+    stays a body, and a mover with no entity record at all (every cast
+    member) is a body without being asked.
+    """
+    from persist.commit import _is_inert_presence_candidate
+    entity = _entity_named(sc, mover)
+    if not entity:
+        return True
+    return not _is_inert_presence_candidate(sc, mover, entity)
+
+
 def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       p_appearance, p_disguise, p_disguise_known,
                       p_disguise_conceals, p_disguise_terms, perceivers,
@@ -4178,6 +4204,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                             if isinstance(diff, dict) else ()):
         prev_room = room_of(prev_scene, str(mover))
         if not new_room or prev_room == str(new_room):
+            continue
+        if not _mover_is_a_body(sc, str(mover)):
             continue
         moves.append((str(mover), prev_room, str(new_room)))
 
