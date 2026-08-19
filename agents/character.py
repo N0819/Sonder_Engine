@@ -368,8 +368,16 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
         "FROM turns t JOIN steps s ON s.turn_id=t.id "
         "JOIN variants v ON v.step_id=s.id AND v.active=1 "
         "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
-        "AND s.key IN ('director_interpret','interaction_loop','reaction_loop',"
-        "'perception_act','perception_outcome') "
+        # `character:` steps too, and not as an afterthought: `build_plan`
+        # plans BARE character steps instead of an `interaction_loop`
+        # whenever `autonomy == 0` on an uncontested beat, so on those
+        # chats every declaration is stored under `character:<id>` and
+        # this note was permanently absent -- which is exactly what a beat
+        # with nothing owed looks like, so nothing could report it. The
+        # sibling ledger five hundred lines up reads both step keys.
+        "AND (s.key IN ('director_interpret','interaction_loop',"
+        "'reaction_loop','perception_act','perception_outcome') "
+        "OR s.key LIKE 'character:' || '%') "
         "ORDER BY t.idx, CASE s.key WHEN 'director_interpret' THEN 0 ELSE 1 END",
         (chat_id, lower, current_turn_idx, frame_id),
     )
@@ -426,8 +434,12 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             asked = {"from": "the player", "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
             continue
-        results = (content.get("character_results")
-                   or content.get("reaction_results") or {})
+        if str(row["step_key"]).startswith("character:"):
+            # A bare character step stores the one result whole.
+            results = {row["step_key"]: content}
+        else:
+            results = (content.get("character_results")
+                       or content.get("reaction_results") or {})
         if not isinstance(results, dict):
             continue
         for result in results.values():
