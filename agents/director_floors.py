@@ -262,7 +262,14 @@ def _clause_attributed_subjects(text_units, cue_re, subject_names,
     name is the waker. With the flag set, a name after the cue wins whenever
     the clause has one, and the preceding name is used only as a fallback ("she
     is shaken awake")."""
-    name_res = [(name, re.compile(r"\b" + re.escape(name.casefold()) + r"(?:'s)?\b"))
+    # `name_boundary_pattern`, not \b: a kana name has no word boundary
+    # against the particle that follows it, so under \b a Japanese cue could
+    # fire and never be pinned to its subject -- the rouse exit and the
+    # unconsciousness omission scan were both dead for kana-named minds.
+    # The possessive is consumed so "hinami's" does not leave a stray "s"
+    # inflating the word-gap count.
+    name_res = [(name, re.compile(
+                    name_boundary_pattern(name.casefold()) + "(?:'s|’s)?"))
                 for name in subject_names if name]
     if not name_res:
         return set()
