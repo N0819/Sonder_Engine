@@ -72,7 +72,7 @@ and says which is which.
 | Where in a room a body is | `world/spatial_geometry.py` (`derive_scene_stations`, `normalize_scene_stations`, `_station`, `proximity_rel`, `entity_side`, `entity_arc`) | `llm/schemas.py` (`StateDiff.stations`, `ScenePatch.stations`, `RoomDef.anchors`/`size`), `persist/commit_scene_state.py` (mapping fold), `world/comfort.py`, director + mapping prompts, `tests/test_stations.py` — `scene.stations` {name:{at,near:[]}} against per-room `anchors`. **Any new field on a scene-blob diff must be DECLARED on its Pydantic model**: `stations` was asked for by the prompts and merged by `merge_scene_with_diff` for two releases while `extra="ignore"` deleted it, and 0 of 45 live scenes ever got one. Keep `stations` a plain `dict[str, dict]`, never a typed sub-model — the merge is a PARTIAL per-entity update, so a default-filled `near: []` would clobber the standing roster, and `_dump`'s `exclude_none` would delete the explicit `{at: null}` that means "stepped away". Derivation from contact is additive and must never override a station the beat stated; a derived station outlives its contact but not a room change. "On the bed" is a station AT it + a contact WITH it + `state.posture` — do not add a fourth ledger for surfaces |
 | Authoring edits to live positions (GM relocation) | `web/app.py` (`GET /api/chats/{cid}/positions`, `PUT /api/chats/{cid}/characters/{ch}/position`) | `scene.get_scene`/`spatial.room_of`, `static/js/settings.js` cast tab, `tests/test_char_relocation.py` — writes only `scene.positions`, requires an idle chat, validates room ids, and queues no narrator beat |
 | Room identity/dedup/retirement, destruction (single-book + region cascades) | `persist/commit_room_registry.py` + `persist/commit_destruction.py` | `core/db.py` (`room_registry`), `persist/checkpoints.py`, `web/app.py` remaps, registry/destruction tests |
-| Lore retrieval or hierarchy | `mind/memory.py`, `agents/mapping.py` | `web/app.py`, lore tests |
+| Lore retrieval or hierarchy | `mind/memory_lorebooks.py` (books), `mind/memory_lore_entries.py` (entries), `agents/mapping.py` | `web/app.py`, lore tests |
 | Which lorebooks a chat *has* (browsing/editing) | `web/app.py` (`GET /api/chats/{cid}/lorebooks`) | `static/js/lorebooks.js` workspace tree, `tests/test_lore_tree_browser.py` — ownership, NOT `chat_lorebook_ids()`: that resolves reachability for retrieval and cannot see a book nothing hangs off |
 | Lorebook-tree generation (authoring, not pipeline) | `story/importers.py` (`generate_lorebook_plan`, `resume_lorebook_plan`, `apply_lorebook_plan`) | `generator_lorebook*` prompts, `core/db.py` (`lore_gen_jobs`), `web/app.py` job routes, `static/js/lorebooks.js` generator tab, `tests/test_lore_gen_resume.py` |
 | Character/persona format | `story/character_schema.py` | `story/importers.py`, generation/import/fill prompts, editor UI, schema and non-destructive-fill tests |
@@ -445,14 +445,35 @@ files are local state or private diagnostics and are ignored deliberately.
 
 ### `mind/memory.py`
 
-- Lorebook hierarchy and graph resolution
-- Chat lorebook attachment resolution
-- Memory normalization and hybrid retrieval
-- Summaries and consolidation
-- Snapshot/restore
-- Lore entries
-- Relationships
-- Vector index
+A FACADE since 2026-08-19, over twelve `mind/memory_*` siblings
+(`docs/design/SPLIT_MEMORY.md`). It holds no domain code at all — an AST walk
+of its body returns imports and a docstring and nothing else. `from
+mind.memory import X` still reaches every name, private ones included; all 105
+names the engine imports resolve unchanged.
+
+| sibling | owns |
+| --- | --- |
+| `memory_common` | Vocabularies, blob/base64/vector codecs, the FTS query builder, cosine. The leaf that makes the family acyclic. |
+| `memory_lorebooks` | The lorebook GRAPH: hierarchy, links, inheritance, per-chat attachment and weights, the link snapshot pair. |
+| `memory_write` | How a memory becomes a row: normalisation, extraction, FTS mirror, importance, the upsert, the embedding-repair thread. |
+| `memory_read` | `visible_memory_rows` — the firewall boundary for recall — and the `HOST_SCOPE_READERS` that cross it on purpose. |
+| `memory_retrieval` | Hybrid retrieval, RRF fusion, mood congruence, rank-normalised importance, contrast (unbidden) recall. |
+| `memory_summaries` | The three summary scopes, support sets, windowed consolidation and backfill. |
+| `memory_context` | `build_character_memory_context` — the assembly seam that decides what a mind is handed. |
+| `memory_lore_entries` | Lore ENTRIES: add/update/delete, embedding stamps and health, `search_lore`, knowledge scoping. |
+| `memory_snapshot` | Checkpoint and archive: vector addressing, the prepare/apply restore split, dump/restore. |
+| `memory_relationships` | The relationship graph and its two update paths, conduct and inference. |
+| `memory_vectors` | Rebuilding after an embedding-model change; owns `_REBUILD_LOCK`/`_REBUILD_STATE`. |
+| `memory_inference` | Belief confidence at mint and abandonment, and reconciliation. |
+
+**A monkeypatch must target the module that DEFINES the reader**, exactly as
+for `persist/commit.py`. `tools/project_check.py` enforces this — registering
+the family found seven inert patches in four files that PASSED, because a
+provider stub that never installs falls back silently. `_STRANDED_REPORTED` is
+the one piece of shared mutable state: `memory_retrieval` adds to it,
+`memory_vectors` clears it, and they share one set. Mutate it, never rebind
+it. `tests/helpers.py:patch_seam` is the general tool for a name imported into
+several modules.
 
 ### Frontend
 

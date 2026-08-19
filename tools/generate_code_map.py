@@ -49,7 +49,7 @@ MODULE_PURPOSES = {
     "story.importers": "Native and AI-assisted character, persona, and lorebook import/generation.",
     "llm.llm_quality": "Strict JSON parsing, schema validation, and model-assisted repair.",
     "core.logging_utils": "Structured timing and observability helpers.",
-    "mind.memory": "Lorebook graph, memory retrieval/consolidation, relationships, and vector search.",
+    "mind.memory": "Facade re-exporting every mind.memory_* name; holds no domain code of its own.",
     "mind.memory_common": "Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine.",
     "mind.memory_lorebooks": "The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights.",
     "mind.memory_write": "How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread.",

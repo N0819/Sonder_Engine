@@ -9,7 +9,9 @@ Two jobs are described here, and the argument of this note is that they are
 
 1. **Split the three monoliths** (`world/spatial.py`, `persist/commit.py`,
    `agents/director.py` — 24,783 lines between them) behind re-export facades,
-   so no import path anywhere changes.
+   so no import path anywhere changes. A FOURTH followed on 2026-08-19,
+   `mind/memory.py` at 5,676 lines (`docs/design/SPLIT_MEMORY.md`) — not one of
+   the three this note sized, and the argument applied to it unchanged.
 2. **Group the tree** into subsystem packages, so the repository root stops
    being 55 `.py` files, and rewrite the 2,544 import statements that names
    them.
@@ -54,10 +56,13 @@ The pattern already exists in this repo and is the one to follow:
 `world/spatial_orientation.py` was carved out of `world/spatial.py` and is
 re-exported through it; `agents/__init__.py` is an explicit compatibility
 facade. Re-exported means the sibling is no longer importable in its own right
-— `tools/project_check.py` holds all three families (`world.spatial`,
-`agents.director`, `persist.commit`) to the facade spelling, which is what
-stops a facade decaying into a directory of modules that merely share a
-prefix. Each monolith keeps its filename, keeps every name it
+— `tools/project_check.py` holds all four families (`world.spatial`,
+`agents.director`, `persist.commit`, `mind.memory`) to the facade spelling,
+which is what stops a facade decaying into a directory of modules that merely
+share a prefix. It also refuses a monkeypatch aimed at a facade name whose
+reader moved: registering `mind.memory` fired on seven such patches in four
+test files, none of which had failed, because a provider stub that never
+installs falls back silently. Each monolith keeps its filename, keeps every name it
 exports today — **including the private ones** — and becomes a module whose
 body is the orchestration plus a block of re-exports.
 

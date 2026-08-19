@@ -6,11 +6,7 @@ from tests.helpers import patch_provider_seam
 def test_restore_lorebook_preserves_entry_id(temp_db, monkeypatch):
     from mind import memory
 
-    monkeypatch.setattr(
-        memory,
-        "embed_texts",
-        lambda values: [[0.0] * 256 for _ in values],
-    )
+    patch_provider_seam(monkeypatch, 'embed_texts', lambda values: [[0.0] * 256 for _ in values])
 
     book_id = temp_db.qi(
         """
@@ -66,11 +62,7 @@ def test_restore_lorebook_deletes_entries_missing_from_snapshot(
 ):
     from mind import memory
 
-    monkeypatch.setattr(
-        memory,
-        "embed_texts",
-        lambda values: [[0.0] * 256 for _ in values],
-    )
+    patch_provider_seam(monkeypatch, 'embed_texts', lambda values: [[0.0] * 256 for _ in values])
 
     book_id = temp_db.qi(
         "INSERT INTO lorebooks(name) VALUES(?)",

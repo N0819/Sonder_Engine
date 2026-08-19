@@ -1410,6 +1410,7 @@ def facade_siblings(home: Path, stem: str) -> set:
 FACADE_FAMILIES = {
     "agents.director": (ROOT / "agents", "director"),
     "commit": (ROOT / "persist", "commit"),
+    "mind.memory": (ROOT / "mind", "memory"),
     "world.spatial": (ROOT / "world", "spatial"),
 }
 

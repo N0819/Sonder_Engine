@@ -123,7 +123,7 @@ Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` lo
   mutable story ledger. `scene.seed_initial_attire` seeds a non-empty outfit
   once at scene creation or first attachment/promotion; no card read or edit
   may overwrite clothing already changed in the story.
-- Avoid broad rewrites of `agents/runtime.py`, `web/app.py`, or `mind/memory.py` without dedicated tests — these are orchestration seams affecting reruns, variants, streaming, and commits.
+- Avoid broad rewrites of `agents/runtime.py` or `web/app.py` without dedicated tests — these are orchestration seams affecting reruns, variants, streaming, and commits. `mind/memory.py` was one until 2026-08-19; it is now a FACADE over twelve `mind/memory_*` siblings (`docs/design/SPLIT_MEMORY.md`), holding no code of its own. The same monkeypatch rule as `persist/commit.py` applies to it: patch the module that DEFINES the reader, never the facade — `tools/project_check.py` enforces it, and found seven inert patches that passed on registration.
 - Psychology changes must preserve the information firewall: a character may
   receive its own interoception/body state and its final scrubbed observations,
   never another character's vitals or raw Director event. Run the adversarial

@@ -271,15 +271,11 @@ def test_restore_preserves_archived_without_event_key(
 
     chat_id, character_id = _chat_and_character(temp_db)
 
-    monkeypatch.setattr(
-        memory,
-        "embed_texts_meta",
-        lambda texts: EmbeddingBatch(
+    patch_provider_seam(monkeypatch, 'embed_texts_meta', lambda texts: EmbeddingBatch(
             vectors=[[0.0] * 256 for _ in texts],
             model_key="test",
             dimensions=256,
-        ),
-    )
+        ))
 
     restore_chat_memories(chat_id, [{
         "char_id": character_id,
@@ -317,15 +313,11 @@ def test_restore_replaces_existing_chat_memories(
 
     chat_id, character_id = _chat_and_character(temp_db)
 
-    monkeypatch.setattr(
-        memory,
-        "embed_texts_meta",
-        lambda texts: EmbeddingBatch(
+    patch_provider_seam(monkeypatch, 'embed_texts_meta', lambda texts: EmbeddingBatch(
             vectors=[[0.0] * 256 for _ in texts],
             model_key="test",
             dimensions=256,
-        ),
-    )
+        ))
 
     restore_chat_memories(chat_id, [{
         "char_id": character_id,
