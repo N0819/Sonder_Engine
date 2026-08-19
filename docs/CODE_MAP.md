@@ -71,16 +71,16 @@
 | `persist/pipeline_trace.py` | 413 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
 | `story/artifacts.py` | 565 |  | `llm.prompts` |
-| `story/attire.py` | 2619 |  | — |
+| `story/attire.py` | 2690 |  | — |
 | `story/authored_events.py` | 124 |  | `core.db` |
-| `story/carriers.py` | 696 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.living_world`, `world.spatial` |
-| `story/character_schema.py` | 1634 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/carriers.py` | 707 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.living_world`, `world.spatial` |
+| `story/character_schema.py` | 1722 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1090 |  | `story.carriers`, `world` |
-| `story/dialogue_colors.py` | 248 |  | — |
-| `story/greetings.py` | 413 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `story.character_schema` |
-| `story/importers.py` | 2618 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema` |
-| `story/lore_structure.py` | 242 |  | — |
-| `story/scene.py` | 2012 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.character_schema`, `world.spatial` |
+| `story/dialogue_colors.py` | 263 |  | — |
+| `story/greetings.py` | 464 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.importers` |
+| `story/importers.py` | 2570 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema` |
+| `story/lore_structure.py` | 248 |  | — |
+| `story/scene.py` | 2126 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.character_schema`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 5795 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `core`, `core.db`, `core.frames`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.checkpoints`, `persist.commit`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 176 | Typed host-authentication HTTP routes and cookie transport. | `web` |
@@ -798,14 +798,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compact_line()` | 2440 | 161 lines |
-| `advance()` | 1771 | 135 lines |
-| `normalize_regions()` | 398 | 133 lines |
-| `coerce_diff_shape()` | 1250 | 124 lines |
-| `perceptible_region_surfaces()` | 2009 | 100 lines |
-| `_attributed_targets()` | 1455 | 90 lines |
-| `recover_shed_entity_changes()` | 1024 | 87 lines |
-| `dedupe_regions()` | 1113 | 87 lines |
+| `advance()` | 1853 | 135 lines |
+| `normalize_regions()` | 463 | 133 lines |
+| `coerce_diff_shape()` | 1323 | 124 lines |
+| `compact_line()` | 2549 | 123 lines |
+| `perceptible_region_surfaces()` | 2091 | 100 lines |
+| `_attributed_targets()` | 1537 | 90 lines |
+| `recover_shed_entity_changes()` | 1089 | 87 lines |
+| `dedupe_regions()` | 1178 | 87 lines |
 
 ### `story/authored_events.py`
 
@@ -820,27 +820,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_tellings()` | 498 | 199 lines |
+| `apply_tellings()` | 509 | 199 lines |
 | `advance_carriers()` | 116 | 131 lines |
 | `_carriers()` | 366 | 59 lines |
 | `_crowds_acquire()` | 249 | 56 lines |
 | `_invented_claim()` | 446 | 34 lines |
 | `persona_entry()` | 307 | 33 lines |
+| `_crowd_index()` | 482 | 25 lines |
 | `reports_for_state()` | 93 | 21 lines |
-| `_cast_index()` | 427 | 17 lines |
 
 ### `story/character_schema.py`
 
 | Function | Start | Size |
 |---|---:|---:|
 | `normalize_character_data()` | 974 | 159 lines |
-| `default_character_data()` | 553 | 95 lines |
+| `default_character_data()` | 569 | 95 lines |
 | `_normalize_psychology()` | 293 | 83 lines |
 | `repair_character_shape()` | 915 | 57 lines |
-| `_normalize_extra_parts()` | 499 | 52 lines |
+| `character_card_warnings()` | 1638 | 54 lines |
+| `_normalize_extra_parts()` | 515 | 52 lines |
 | `_as_profile_list()` | 38 | 50 lines |
 | `normalize_persona_data()` | 1134 | 50 lines |
-| `character_initial_active_state()` | 1428 | 48 lines |
 
 ### `story/couriers.py`
 
@@ -860,45 +860,45 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `personality_digest()` | 84 | 48 lines |
-| `resolve_cast_colors()` | 177 | 46 lines |
-| `_spread()` | 225 | 19 lines |
+| `resolve_cast_colors()` | 191 | 47 lines |
+| `_spread()` | 240 | 19 lines |
+| `_derived_hue()` | 151 | 16 lines |
 | `normalize_color()` | 69 | 13 lines |
-| `auto_dialogue_color()` | 151 | 13 lines |
 | `_hue_from()` | 134 | 10 lines |
-| `_hue_of()` | 166 | 9 lines |
-| `_hex_from_hsl()` | 146 | 3 lines |
+| `auto_dialogue_color()` | 169 | 9 lines |
+| `_hue_of()` | 180 | 9 lines |
 
 ### `story/greetings.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `start_story()` | 177 | 153 lines |
-| `generate_greeting()` | 332 | 63 lines |
-| `extract_greeting()` | 99 | 24 lines |
-| `_substitute_player_slot()` | 56 | 22 lines |
-| `player_handle_for()` | 80 | 17 lines |
-| `_strip_greeting_wrapping()` | 397 | 17 lines |
-| `_override_narrator()` | 134 | 13 lines |
-| `_greeting_record()` | 125 | 7 lines |
+| `start_story()` | 212 | 154 lines |
+| `generate_greeting()` | 368 | 62 lines |
+| `extract_greeting()` | 110 | 29 lines |
+| `_strip_greeting_wrapping()` | 436 | 29 lines |
+| `_substitute_player_slot()` | 67 | 22 lines |
+| `player_handle_for()` | 91 | 17 lines |
+| `_usable_stored_extraction()` | 141 | 17 lines |
+| `_override_narrator()` | 169 | 13 lines |
 
 ### `story/importers.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `import_lorebook()` | 1296 | 212 lines |
-| `_reinterpret_entries()` | 1169 | 126 lines |
-| `apply_lorebook_plan()` | 2416 | 124 lines |
-| `_lore_gen_entry_batch()` | 2068 | 118 lines |
-| `_run_lore_gen_job()` | 2190 | 112 lines |
-| `fill_appearance()` | 949 | 109 lines |
-| `import_character()` | 444 | 92 lines |
-| `generate_lore_entries()` | 2540 | 79 lines |
+| `import_lorebook()` | 1248 | 212 lines |
+| `_reinterpret_entries()` | 1121 | 126 lines |
+| `apply_lorebook_plan()` | 2368 | 124 lines |
+| `_lore_gen_entry_batch()` | 2020 | 118 lines |
+| `_run_lore_gen_job()` | 2142 | 112 lines |
+| `fill_appearance()` | 883 | 109 lines |
+| `import_character()` | 442 | 92 lines |
+| `generate_lore_entries()` | 2492 | 79 lines |
 
 ### `story/lore_structure.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_knowledge()` | 195 | 48 lines |
+| `derive_knowledge()` | 195 | 54 lines |
 | `parse_structure()` | 78 | 45 lines |
 | `clean_title()` | 46 | 16 lines |
 | `classify_title()` | 64 | 12 lines |
@@ -909,14 +909,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `active_disguises()` | 431 | 82 lines |
-| `normalize_transformed_parts()` | 522 | 60 lines |
-| `recent_events_for_observer()` | 1254 | 59 lines |
-| `_positive_presented_appearance()` | 719 | 58 lines |
-| `active_transformations()` | 584 | 54 lines |
-| `director_context()` | 1314 | 53 lines |
-| `conceal_disguised_parts()` | 834 | 48 lines |
-| `awareness_conditions()` | 975 | 47 lines |
+| `active_disguises()` | 469 | 82 lines |
+| `normalize_transformed_parts()` | 560 | 60 lines |
+| `recent_events_for_observer()` | 1378 | 59 lines |
+| `_positive_presented_appearance()` | 757 | 58 lines |
+| `active_transformations()` | 622 | 54 lines |
+| `awareness_conditions()` | 1023 | 54 lines |
+| `director_context()` | 1438 | 53 lines |
+| `conceal_disguised_parts()` | 872 | 48 lines |
 
 ### `web/app.py`
 
