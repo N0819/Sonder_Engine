@@ -1049,12 +1049,59 @@ def check_facade_import_direction(errors: list[str]) -> None:
                         f"the name, or move the name down.")
 
 
+def check_conftest_not_imported(errors: list[str]) -> None:
+    """`conftest.py` is pytest's to import, and only pytest's.
+
+    pytest loads a conftest under a name of its own choosing (`conftest` for a
+    directory with no `__init__.py`). Any other module that imports the same
+    file under a second name -- `tests.conftest`, `from conftest import X` --
+    does not reach that module object; Python builds a SECOND one. Every
+    import-time side effect then runs twice, and only one copy's fixtures are
+    registered, so whatever the second copy allocated has no owner and no
+    teardown.
+
+    Measured, 2026-08-18: five test files imported `tests.conftest` for one
+    plain helper function. `_redirect_default_database()` therefore ran twice
+    per session, `db.DB` ended the collection pointing at the unowned copy,
+    and every suite run left one more 516,096-byte scratch database in
+    /dev/shm -- 164 of them by the time anyone counted. Nothing failed.
+
+    A helper that tests share belongs in a module tests import BY NAME
+    (`tests/helpers.py`). A conftest holds fixtures and hooks, which pytest
+    delivers without an import.
+    """
+    for path in sorted((ROOT / "tests").rglob("*.py")) + engine_python_paths():
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        if path.name == "conftest.py":
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 0:
+                names = [node.module or ""]
+            elif isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            else:
+                continue
+            for name in names:
+                if name.rpartition(".")[2] == "conftest":
+                    errors.append(
+                        f"{rel}:{node.lineno}: imports {name!r}. pytest already "
+                        f"imported that file under its own name, so this builds "
+                        f"a second module object and runs its import-time side "
+                        f"effects again. Move the shared helper into a plain "
+                        f"module (tests/helpers.py) and import that.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
     check_extension_manifests(errors)
     check_extension_imports(errors)
     check_facade_import_direction(errors)
+    check_conftest_not_imported(errors)
     check_duplicate_python_symbols(errors)
     check_duplicate_dict_keys(errors)
     check_install_root_derivations(errors)
