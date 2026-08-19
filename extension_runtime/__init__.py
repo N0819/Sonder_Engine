@@ -727,10 +727,15 @@ def apply_plan_splices(plan, chat_id=None):
             core = core.strip()
             if mode not in ("after", "before") or not core:
                 continue
-            # `character:<id>` is the runtime's reserved dynamic namespace and
-            # is planned as a parallel group; splicing into the middle of one
-            # would silently serialize it.
-            if core.startswith("character:") or core.startswith("ext:"):
+            # Backstop only. `api.add_stage` refuses both of these at
+            # registration now, with a reason the host can read
+            # (`_UNSPLICEABLE_ANCHOR_PREFIXES`): `character:<id>` is the
+            # runtime's reserved dynamic namespace, planned as a parallel
+            # group that splicing would silently serialize, and
+            # `ext:<id>:<key>` is another extension's stage, which this very
+            # pass has not placed yet. A stage recorded before that check
+            # existed still must not be planned somewhere arbitrary.
+            if core.startswith(("character:", "ext:")):
                 continue
             (after if mode == "after" else before).setdefault(core, []).append(
                 (stage["full_key"], stage["label"]))
