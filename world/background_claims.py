@@ -292,7 +292,58 @@ CANON_CATEGORY = "other"
 CANON_SOURCE_PREFIX = "ratified background claim"
 
 
-def canon_entry(rec):
+# Where the engine holds no sayable name for the claimant. Canon has to
+# attribute the line to somebody -- an unattributed quotation is a fact wearing
+# quotation marks -- and "somebody in the room" is the honest attribution.
+ANONYMOUS_CLAIMANT = "a bystander"
+
+# Symmetric pairs a quoted line may already be wrapped in. `canon_entry` quotes
+# the line itself, and a quotation of a quotation is a different sentence.
+_QUOTE_PAIRS = ('""', "''", "“”", "‘’", "«»", "「」")
+
+
+def _unwrap_quotes(text):
+    """One symmetric pair of quotation marks stripped, repeatedly.
+
+    Whether the line arrives quoted is the background lane's business and it
+    varies: a model asked for an `exact_quote` sometimes includes the marks
+    and sometimes does not. Canon supplies its own, so what it receives must
+    be the line rather than a rendering of it.
+    """
+    out = str(text or "").strip()
+    while len(out) >= 2:
+        pair = out[0] + out[-1]
+        if pair not in _QUOTE_PAIRS:
+            break
+        out = out[1:-1].strip()
+    return out
+
+
+def claimant_label(chat_id, claimant, scene=None):
+    """The name canon may attribute a claim to, or "" for none.
+
+    The claimant reaches this module as whatever spelling the background lane
+    keyed the presence by, and that lane keys some presences by scene entity
+    id. `world.subjects.speakable_name` is the seam that knows the difference:
+    it round-trips an id to the display name its ledger holds, passes a plain
+    name through, and answers "" for a handle no ledger owns.
+    """
+    text = str(claimant or "").strip()
+    if not text:
+        return ""
+    from world.subjects import is_opaque_handle, speakable_name
+
+    try:
+        if scene is None:
+            scene = wget(chat_id, "scene", {}) or {}
+        return speakable_name(chat_id, scene, text)
+    except Exception:
+        # Canonicalisation is a courtesy; the floor is that an engine id never
+        # reaches prose, and that holds without a database.
+        return "" if is_opaque_handle(text) else text
+
+
+def canon_entry(rec, speaker=None):
     """The lore row a ratified claim becomes: keys, title, content, provenance.
 
     Attributed, never paraphrased. The claim is a line somebody said, and the
@@ -301,17 +352,36 @@ def canon_entry(rec):
     canon ends up saying. The refs are the entry's `keys` because they already
     are short referring phrases (MAX_REF_WORDS exists for exactly that), which
     is what lore keys are for.
+
+    And the entry says the line was SAID, never that it is TRUE. That is what
+    ratification establishes: the Director let a bystander's line stand as part
+    of the story. What the line itself asserts is a separate question the
+    Director did not answer, and a wrapper that answers it inverts an entire
+    class of ordinary utterance -- a denial, a boast, a mistake, a rumour
+    repeated. Live, chat 67: "Never heard of Lugunica" was stamped "the
+    Director has established this as true."
+
+    `speaker` is the resolved display name (`claimant_label`). Absent one, the
+    stored claimant is used, and an engine handle is refused here too: this is
+    the last place before the text becomes canon, so the floor belongs here
+    rather than only at the callers.
     """
-    claimant = str(rec.get("claimant") or "").strip() or "a bystander"
-    said = " ".join(str(rec.get("text") or "").split())
+    from world.subjects import is_opaque_handle
+
+    named = str(speaker or rec.get("claimant") or "").strip()
+    if not named or is_opaque_handle(named):
+        named = ANONYMOUS_CLAIMANT
+    said = " ".join(_unwrap_quotes(rec.get("text")).split())
     refs = [str(r).strip() for r in (rec.get("refs") or []) if str(r).strip()]
     return {
         "keys": ", ".join(refs),
         "title": refs[0] if refs else "",
-        "content": '%s said: "%s" — the Director has established this as true.'
-                   % (claimant, said),
+        "content": '%s said: "%s" — the Director let this stand as part of the '
+                   'story. What is established is that it was said; the line '
+                   'itself may be true, mistaken, a boast or a denial.'
+                   % (named, said),
         "source_notes": "%s: claimed turn %s by %s, ratified turn %s" % (
-            CANON_SOURCE_PREFIX, rec.get("turn"), claimant,
+            CANON_SOURCE_PREFIX, rec.get("turn"), named,
             rec.get("ratified_turn")),
     }
 
@@ -333,7 +403,7 @@ def write_canon(chat_id, claim_key, rec, embedding=None):
     book_id = ensure_chat_canon_book(chat_id)
     if not book_id:
         return None
-    entry = canon_entry(rec)
+    entry = canon_entry(rec, speaker=claimant_label(chat_id, rec.get("claimant")))
     return add_lore(
         book_id, entry["keys"], entry["content"],
         turn_added=rec.get("ratified_turn"), category=CANON_CATEGORY,
@@ -363,7 +433,14 @@ def prepare_canon(chat_id, turn_idx, new_claims, resolved_text,
         return {}
     from llm.providers import embed_texts
 
-    entries = [canon_entry(stored[k]) for k in ratified]
+    # One scene read for the whole batch: the two passes must agree, and
+    # `write_canon` resolves the same claimant against the same ledger.
+    scene = wget(chat_id, "scene", {}) or {}
+    entries = [
+        canon_entry(stored[k],
+                    speaker=claimant_label(chat_id, stored[k].get("claimant"),
+                                           scene=scene))
+        for k in ratified]
     vectors = embed_texts([
         (e["keys"] + " " + e["content"]).strip() for e in entries])
     return {k: v for k, v in zip(ratified, vectors) if v is not None}

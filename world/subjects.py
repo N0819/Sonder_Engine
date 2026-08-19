@@ -52,6 +52,7 @@ strictly worse than two spellings of one.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 
 from mind.canon_provenance import Subject
@@ -88,6 +89,29 @@ def _display_or_none(display, sid):
     if not text or text.casefold() == _fold(sid):
         return None
     return text
+
+
+# A generated handle rather than a word: a long separator-free run of hex, or
+# a long run of digits. Live scenes key some entities this way
+# ("10ae6b6a11324780") beside semantic ones, and the background lane keys some
+# presences by the entity id, so a spelling arriving from either may be one.
+_OPAQUE_HANDLE = re.compile(r"[0-9a-f]{12,}|[0-9]{6,}", re.I)
+
+
+def is_opaque_handle(spelling) -> bool:
+    """True when the spelling is an engine identifier rather than a name.
+
+    Identity holds two things for one being and only one of them is sayable.
+    Anything that writes a being into PROSE -- canon lore, narration, a
+    payload a mind reads -- needs the distinction, because an id spliced into
+    a sentence is a name nobody in the fiction could have used.
+
+    Whole-spelling only. A false negative costs one odd-looking name; a false
+    positive erases a real one, so a handle embedded in something longer is
+    left alone.
+    """
+    text = str(spelling or "").strip()
+    return bool(text) and bool(_OPAQUE_HANDLE.fullmatch(text))
 
 
 # ---------------------------------------------------------------------------
@@ -447,3 +471,26 @@ def resolve_subject(cid, scene, kind, spelling, frame_id=None) -> Resolution:
         None, reason=f"no identity authority owns kind {k!r}; scene entities "
         "were tried and none answers to " + repr(text),
     )
+
+
+def speakable_name(cid, scene, spelling, kind="character", frame_id=None):
+    """A name PROSE may use for `spelling`, or "" when the engine holds none.
+
+    Resolution first, because the ledger that owns the being answers with the
+    display name and that is how an id already in hand round-trips to the word
+    people use for it. A spelling no ledger owns is used as written -- most
+    background presences are keyed by a display name and by nothing else, and
+    refusing those would anonymise the ordinary case -- unless the spelling is
+    itself an engine handle, which names nobody in either direction.
+
+    Deliberately answers "" rather than raising or guessing: a caller writing
+    prose needs somewhere to put the anonymous case, and inventing a name for
+    a being no ledger owns is the minting this module exists to refuse.
+    """
+    text = str(spelling or "").strip()
+    if not text:
+        return ""
+    resolved = resolve_subject(cid, scene, kind, text, frame_id)
+    if resolved.subject:
+        return resolved.subject.display or ""
+    return "" if is_opaque_handle(text) else text
