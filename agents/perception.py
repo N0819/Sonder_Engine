@@ -3901,7 +3901,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
             percepts = composer.residue_percepts(p["awareness"])
             company[pid] = []       # an unconscious observer sees nobody
         else:
-            others = [b for b in bodies if b["name"] != name]
+            others = [b for b in bodies
+                      if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
                 sc, name, others, known)
             gate = _authored_prose_gate(
@@ -3981,7 +3982,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 loud_event=onset_loud, pain=pain)
             company[pid] = []       # an unconscious observer sees nobody
         else:
-            others = [b for b in co_present if b["name"] != name]
+            others = [b for b in co_present
+                      if not _is_the_observer(sc, b["name"], name)]
             others.append(actor_body)
             display_map = composer.observer_display_map(
                 sc, name, others, known)
@@ -4057,6 +4059,29 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "composer_ledger": merged,
         "company": company,
     }
+
+
+def _is_the_observer(sc, candidate, observer, observer_aliases=()):
+    """Is `candidate` another spelling of the observer's own name.
+
+    AGENTS.md: one being, one name -- and a being routinely carries several
+    at once. `character_scene_keys` names the cast half and says why readers
+    must try all of them: "the director sometimes keys by identity.uid (or an
+    alias)". `same_subject` covers the scene half, an entity id and its
+    aliases. A bare `==` between two of those spellings is False, and this
+    module already learned that lesson five times.
+
+    Asked in the direction that matters: everything in a view is suppressed
+    for the one person it is about, so a miss here does not leak -- it hands
+    an observer their own line and their own act as somebody else's.
+    """
+    if same_subject(sc, candidate, observer):
+        return True
+    cand = str(candidate or "").strip().casefold()
+    if not cand:
+        return False
+    return any(str(alias or "").strip().casefold() == cand
+               for alias in observer_aliases or ())
 
 
 def _mover_is_a_body(sc, mover):
@@ -4251,7 +4276,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 pain=pain)
             company[pid] = []       # an unconscious observer sees nobody
         else:
-            others = [b for b in bodies if b["name"] != name]
+            others = [b for b in bodies
+                      if not _is_the_observer(sc, b["name"], name)]
             display_map = composer.observer_display_map(
                 sc, name, others, known)
             percepts = _composer_standing_percepts(
@@ -4271,7 +4297,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             order = 0
             for d in enriched_dlog:
                 speaker = d.get("speaker", "?")
-                if speaker == name or (
+                if _is_the_observer(
+                        sc, speaker, name, cast_aliases.get(name)) or (
                         pid == "player"
                         and is_player_speaker(speaker, chat)):
                     order += 1
@@ -4312,7 +4339,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 order += 1
             for act in last_overt_by_actor.values():
                 actor = act["actor"]
-                if actor == name or actor in behind:
+                if _is_the_observer(
+                        sc, actor, name, cast_aliases.get(name)) \
+                        or actor in behind:
                     continue
                 rel = spatial.get(actor)
                 if rel is None:
