@@ -358,3 +358,61 @@ def test_no_schema_model_is_declared_without_anything_reaching_it():
         "nothing -- no SCHEMA_MAP entry, no other model's field, no module "
         "outside the file. Wire it up or delete it; a shape nothing "
         "validates is not a contract.")
+
+
+def test_greeting_interpret_asks_only_for_what_the_launch_reads():
+    """The greeting extraction declared eleven fields and `story.greetings`
+    read two.
+
+    The other nine were a whole scene graph -- rooms, positions, entities,
+    attire, player_room -- plus location, scene_description, character_state
+    and notes. None was a gap waiting to be wired: `start_story` stores the
+    greeting prose as the chat's scenario, so `director_establish` builds the
+    scene from the SAME passage one turn later with the engine's full payload
+    behind it. Every card ingest paid for a second, weaker pass at that job
+    and threw the answer away.
+
+    Two assertions, because the defect can come back from either side: a
+    field re-added to the schema that nothing reads, or a prompt that goes on
+    asking for one the schema dropped.
+    """
+    import re
+
+    from llm.schemas import GreetingInterpret
+    from language_runtime import installed_language_packs
+
+    declared = set(GreetingInterpret.__fields__)
+    assert declared == {"time", "knowledge_seeds"}, (
+        "GreetingInterpret declares a field story/greetings.py does not read; "
+        "wire the reader or drop the field")
+
+    # A stored extraction written by the older extractor still reads: extra
+    # keys are ignored here as everywhere else in this module.
+    legacy = {
+        "location": "a dim tavern", "time": "night",
+        "scene_description": "Rain against the shutters.",
+        "rooms": {"tavern": {"name": "The Tavern"}},
+        "positions": {"Kara": "tavern"}, "entities": {},
+        "attire": {"Kara": {"summary": "a travel-worn cloak"}},
+        "character_state": {"mood": "wary"}, "player_room": "tavern",
+        "notes": "", "knowledge_seeds": [],
+    }
+    report = validate_llm_output_strict("greeting_interpret", legacy)
+    assert report.valid, report.errors
+    assert set(report.output) == declared
+    assert report.output["time"] == "night"
+
+    # And every pack's output line names those fields and no others.
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        prompt = pack.card("system_prompts")["prompts"]["greeting_interpret"]
+        for field in declared:
+            assert field in prompt, (
+                f"{pack.id} never names {field!r}, which the schema requires")
+        for dropped in ("rooms", "positions", "player_room",
+                        "scene_description", "character_state"):
+            # Word-bounded: "Dispositions" in the psychology clause is not a
+            # request for `positions`.
+            assert not re.search(r"\b%s\b" % dropped, prompt), (
+                f"{pack.id} still asks for {dropped!r}, which nothing reads")

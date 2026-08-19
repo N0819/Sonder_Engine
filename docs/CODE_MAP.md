@@ -513,14 +513,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 3910 | 344 lines |
+| `preprocess_llm_output()` | 3920 | 344 lines |
 | `_lenient_coerce()` | 690 | 159 lines |
 | `validate_llm_output_strict()` | 5014 | 130 lines |
 | `semantic_output_errors()` | 4816 | 103 lines |
-| `canonicalize_prose_markup()` | 3715 | 102 lines |
-| `_uncross_concealed_speech()` | 3839 | 69 lines |
+| `canonicalize_prose_markup()` | 3725 | 102 lines |
+| `_uncross_concealed_speech()` | 3849 | 69 lines |
 | `_coerce_list_valued_map()` | 128 | 57 lines |
-| `_coerce_conditions()` | 3257 | 55 lines |
+| `_coerce_conditions()` | 3267 | 55 lines |
 
 ### `mind/affect.py`
 
