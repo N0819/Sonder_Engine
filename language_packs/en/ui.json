@@ -1143,6 +1143,7 @@
   "No extra players attached yet -- invite one from the Multiplayer tab first.": "No extra players attached yet -- invite one from the Multiplayer tab first.",
   "No extra players attached yet.": "No extra players attached yet.",
   "No file selected": "No file selected",
+  "no frame ${frame_id} in chat ${int(chat_id)}": "no frame ${frame_id} in chat ${int(chat_id)}",
   "No Freesound API key configured.": "No Freesound API key configured.",
   "No greetings found in this character's imported card": "No greetings found in this character's imported card",
   "No greetings yet — add one, or recover them from the imported card.": "No greetings yet — add one, or recover them from the imported card.",
