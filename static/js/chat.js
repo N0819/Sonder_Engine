@@ -714,6 +714,12 @@ const FRIENDLY_STEP_LABELS = {
   director_resolve: "Deciding what happens",
   perception_outcome: "Working out what everyone just saw",
   narrator: "Writing the scene",
+  // narrator_extra is a real plan step for any chat with extra players, and
+  // fell through to the technical label on exactly the stage a multiplayer
+  // chat spends its time in. It shares the narrator's wording deliberately:
+  // it IS the same stage, run again for another player's view, and one line
+  // per view is what the reader is watching happen.
+  narrator_extra: "Writing the scene",
   commit: "Saving the story",
   // background_react was missing entirely, so it fell through to the raw
   // technical label. It covers two very different paths, named at plan time.
@@ -741,6 +747,10 @@ function friendlyPhase(key, label) {
     const name = String(label || "").replace(/^Character\s*·\s*/, "").trim();
     return (name || "A character") + " is deciding what to do";
   }
+  // An extension step keeps its own label rather than being flattened: the
+  // extension author wrote it, and no table here could name a stage this
+  // engine has never heard of. "Working…" is the last resort for a step that
+  // arrived with no label at all.
   return label || "Working…";
 }
 
