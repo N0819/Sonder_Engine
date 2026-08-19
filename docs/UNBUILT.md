@@ -2957,11 +2957,15 @@ Still missing:
   different axis: `at_frame` chooses an ERA, a snapshot would fix a MOMENT.
   `tests/test_extensions.py::test_no_capability_is_declared_for_work_that_is_not_built`
   names it as today's example of a capability that must not be declared.
-- **The host's own `story_view`/`player_view` HTTP routes take no `frame`
-  parameter.** The extension API was the reviewed surface and gained the
-  selection; `web/app.py`'s two routes did not, because the host UI has no
-  consumer for it yet. Add the parameter when one appears — the underlying
-  functions already accept it.
+- ~~The host's own `story_view`/`player_view` HTTP routes take no `frame`
+  parameter.~~ **Built 2026-08-19.** Both routes take `frame`, omitted rather
+  than defaulted when the caller does not ask — the underlying default is a
+  sentinel meaning "the latest committed turn across every frame", and `None`
+  is a different question that would be validated as a frame id. The entry
+  said to wait for a consumer; the reason to build it anyway is that an
+  asymmetry between two doors onto one room is its own defect: one surface
+  could compose a frame-coherent read and its HTTP twin could not say which
+  era it wanted.
 
 ### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md)
 

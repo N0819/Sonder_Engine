@@ -4442,7 +4442,7 @@ def bg_cfg_put(cid: int, body: dict = Body(...)):
     return config
 
 @app.get("/api/chats/{cid}/story_view")
-def story_view_get(cid: int, events: int = 20):
+def story_view_get(cid: int, events: int = 20, frame: int | None = None):
     """Canonical story state, versioned. The read `story_view.py` documents.
 
     THE OUT-OF-PROCESS SURFACE, and nothing in this repository calls it.
@@ -4458,18 +4458,32 @@ def story_view_get(cid: int, events: int = 20):
     """
     from web import story_view
 
+    # `frame` is OMITTED, not defaulted, when the caller did not ask for one.
+    # The underlying default is a sentinel meaning "the latest committed turn
+    # across every frame"; `None` is a different question and would be
+    # validated as a frame id. The extension API gained this selection in
+    # 9.6 and these routes did not, which left one surface able to compose a
+    # frame-coherent read and its HTTP twin unable to -- an asymmetry between
+    # two doors onto one room, which is how a caller ends up straddling eras
+    # without being able to say so.
+    kwargs = {} if frame is None else {"frame_id": frame}
     try:
-        return story_view.story_view(cid, events=events)
+        return story_view.story_view(cid, events=events, **kwargs)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
 @app.get("/api/chats/{cid}/player_view")
-def player_view_get(cid: int, viewer: str = "player", memories: int = 12):
-    """What one viewer may be shown. See `story_view.player_view`."""
+def player_view_get(cid: int, viewer: str = "player", memories: int = 12,
+                    frame: int | None = None):
+    """What one viewer may be shown. See `story_view.player_view`.
+
+    `frame` selects the era, omitted-not-defaulted for the reason
+    `story_view_get` gives."""
     from web import story_view
 
+    kwargs = {} if frame is None else {"frame_id": frame}
     try:
-        return story_view.player_view(cid, viewer, memories=memories)
+        return story_view.player_view(cid, viewer, memories=memories, **kwargs)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
 
