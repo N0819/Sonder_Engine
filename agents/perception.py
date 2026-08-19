@@ -65,6 +65,7 @@ from world.spatial import (
     scent_level,
     comms_link,
     same_subject,
+    spatial_rel,
     spatial_rel_between,
     substance_event_clause,
     visible_adjacent_rooms,
