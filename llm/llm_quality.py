@@ -337,6 +337,15 @@ def complete_validated_json(
     # gate into a formality, and one that cannot is no worse off (providers
     # falls back to json_object, then to nothing). Best-effort by design --
     # a schema this fails to build must never cost the call.
+    #
+    # Sent on EVERY rung that rebuilds this same object, not only the first.
+    # It was first-call-only, which is backwards: the later rungs are the ones
+    # answering a request that has already failed validation once. The
+    # truncation re-ask gains most -- a constrained model cannot pad, so the
+    # object it writes fits in the budget the unconstrained one overflowed.
+    # `_targeted_field_patch` deliberately does NOT get it: that rung returns
+    # the corrected FIELDS, not the step's object, so the step's grammar would
+    # refuse the only shape it is allowed to send.
     json_schema = _step_json_schema(step_key)
 
     try:
@@ -439,6 +448,7 @@ def complete_validated_json(
                     sampler=sampler,
                     candidate_offset=0,
                     token_ceiling=token_ceiling,
+                    json_schema=json_schema,
                 )
             except Aborted:
                 raise
@@ -530,6 +540,7 @@ def complete_validated_json(
                 max_tokens=max_tokens,
                 candidate_offset=0,
                 token_ceiling=token_ceiling,
+                json_schema=json_schema,
             )
         except Aborted:
             raise
@@ -595,6 +606,7 @@ def complete_validated_json(
                 sampler=sampler,
                 candidate_offset=candidate_offset,
                 token_ceiling=token_ceiling,
+                json_schema=json_schema,
             )
         except Aborted:
             raise
