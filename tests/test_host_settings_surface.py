@@ -29,6 +29,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_JS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
 LOREBOOKS_JS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
+EDITORS_JS = (ROOT / "static/js/editors.js").read_text(encoding="utf-8")
+UTILS_JS = (ROOT / "static/js/utils.js").read_text(encoding="utf-8")
 
 
 class TestAutoPromoteIsOneAnswer:
@@ -232,3 +234,81 @@ class TestAnAttachedLorebookCanBeSilenced:
         with pytest.raises(HTTPException) as caught:
             app.set_book_enabled(cid, lid, {"enabled": False})
         assert caught.value.status_code == 404
+
+
+class TestEveryCardProducingRouteWarns:
+    """STORY-F15. `character_card_warnings` reached ONE of nine surfaces that
+    create or edit a card -- the import route -- while `char_create` produced,
+    by construction, the exact empty-drive sheet the first three warnings
+    exist to catch, and said nothing.
+
+    Nothing about the answer depends on where the sheet came from, so the
+    rule is "every route that hands back a card hands back its warnings",
+    not a list of routes that happen to.
+    """
+
+    BLANK_WARNS = 3  # empty drive, no goals, unset capacity
+
+    def _blank(self, temp_db):
+        from web import app
+
+        return app.char_create({"name": "Unnamed"})
+
+    def test_the_blank_card_route_warns(self, temp_db):
+        created = self._blank(temp_db)
+        assert len(created["warnings"]) >= self.BLANK_WARNS
+
+    def test_a_hand_edit_warns(self, temp_db):
+        from web import app
+
+        created = self._blank(temp_db)
+        edited = app.char_edit(created["id"], {"sheet": created["sheet"]})
+        assert edited["warnings"] == created["warnings"]
+
+    def test_a_filled_card_warns_about_nothing(self, temp_db):
+        from web import app
+
+        created = self._blank(temp_db)
+        sheet = dict(created["sheet"])
+        sheet["psychology"] = dict(sheet.get("psychology") or {})
+        sheet["psychology"]["drive"] = {
+            "essence": "to be believed", "expression": "tells the truth "
+            "loudly", "taboo": "being humoured"}
+        sheet["psychology"]["capacity"] = "ordinary"
+        sheet["initial_state"] = dict(sheet.get("initial_state") or {})
+        sheet["initial_state"]["goals"] = [{"text": "get the ledger back"}]
+
+        assert app.char_edit(created["id"], {"sheet": sheet})["warnings"] == []
+
+    def test_the_per_story_card_override_warns(self, temp_db):
+        import time
+
+        from web import app
+
+        created = self._blank(temp_db)
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        app.chat_add_char(cid, {"char_id": created["id"]})
+
+        saved = app.chat_char_card_put(
+            cid, created["id"], {"sheet": created["sheet"]})
+        assert len(saved["warnings"]) >= self.BLANK_WARNS
+
+    def test_starting_a_story_warns_before_the_card_starts_behaving(
+        self, temp_db, monkeypatch,
+    ):
+        from story import greetings
+        from web import app
+
+        created = self._blank(temp_db)
+        monkeypatch.setattr(greetings, "start_story",
+                            lambda *a, **k: (1, 2))
+        launched = app.character_start_story(
+            created["id"], {"persona_id": 1, "language": "en"})
+        assert len(launched["warnings"]) >= self.BLANK_WARNS
+
+    def test_the_browser_shows_them_through_one_helper(self):
+        """A copy per call site is how eight of nine went silent. One
+        helper, called wherever a card response comes back."""
+        assert "function showCardWarnings(result)" in UTILS_JS
+        assert EDITORS_JS.count("showCardWarnings(") >= 5

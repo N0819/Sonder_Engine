@@ -40,6 +40,7 @@ from agents import (
     fanout_is_parallel as director_fanout_is_parallel,
 )
 from story.character_schema import (
+    character_card_warnings,
     character_export_document,
     character_initial_outfit,
     character_name,
@@ -66,7 +67,7 @@ from story.importers import (
     import_character, import_persona, import_lorebook,
     generate_character, generate_persona, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
-    recover_greetings_from_source, character_import_warnings,
+    recover_greetings_from_source,
     fill_character_psychology, fill_appearance,
 )
 from persist.commit import (promotable_background_presences,
@@ -2337,7 +2338,8 @@ def char_generate(body: dict = Body(default={})):
     except Exception as exc:
         raise HTTPException(502, f"Character generation failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
-    return {"id": cid, "sheet": sheet}
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters")
 def char_create(body: dict = Body(...)):
@@ -2358,7 +2360,11 @@ def char_create(body: dict = Body(...)):
             new_uid("char"),
         ),
     )
-    return {"id": cid, "sheet": sheet}
+    # The blank card is the sharpest case for this: `default_character_data`
+    # ships an empty drive, no goals and an unset capacity, which is by
+    # construction the exact sheet the first three warnings exist to catch.
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters/import")
 def char_import(body: dict = Body(...)):
@@ -2373,7 +2379,7 @@ def char_import(body: dict = Body(...)):
         raise HTTPException(502 if reinterpret else 400, f"Character import failed: {exc}") from exc
     _ensure_resource_uid("characters", cid, "char")
     return {"id": cid, "sheet": sheet,
-            "warnings": character_import_warnings(sheet)}
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters/{cid}/start")
 def character_start_story(cid: int, body: dict = Body(default={})):
@@ -2392,7 +2398,14 @@ def character_start_story(cid: int, body: dict = Body(default={})):
             language=_require_story_language(body.get("language")))
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return {"chat_id": chat_id, "turn_id": turn_id}
+    # The last moment before the card starts BEHAVING. A driveless sheet reads
+    # as a dull character rather than a missing field once play begins, and
+    # this is the surface where the host is about to find that out the slow
+    # way.
+    row = q("SELECT sheet FROM characters WHERE id=?", (cid,), one=True)
+    warnings = character_card_warnings(
+        normalize_character_data(json.loads(row["sheet"] or "{}"))) if row else []
+    return {"chat_id": chat_id, "turn_id": turn_id, "warnings": warnings}
 
 @app.post("/api/characters/{cid}/recover_greetings")
 def char_recover_greetings(cid: int):
@@ -2431,7 +2444,8 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, f"Psychology fill failed: {exc}") from exc
-    return {"id": cid, "sheet": sheet}
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 def _appearance_fill(kind, entity_id, body):
     """Shared handler for the two card editors' body-and-clothing generator."""
@@ -2451,7 +2465,9 @@ def _appearance_fill(kind, entity_id, body):
 @app.post("/api/characters/{cid}/fill_appearance")
 def char_fill_appearance(cid: int, body: dict = Body(default={})):
     """Preview a generated body and outfit for editor review. Writes nothing."""
-    return {"id": cid, "sheet": _appearance_fill("character", cid, body)}
+    sheet = _appearance_fill("character", cid, body)
+    return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/personas/{pid}/fill_appearance")
 def persona_fill_appearance(pid: int, body: dict = Body(default={})):
@@ -2473,7 +2489,8 @@ def char_edit(cid: int, body: dict = Body(...)):
         "UPDATE characters SET name=?,sheet=? WHERE id=?",
         (character_name(sheet), json.dumps(sheet, ensure_ascii=False), cid),
     )
-    return {"ok": True, "sheet": sheet}
+    return {"ok": True, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
 
 @app.delete("/api/characters/{cid}")
 def char_del(cid: int):
@@ -3424,7 +3441,10 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
     memory_seeds = [str(m) for m in (body.get("memory_seeds") or []) if str(m).strip()]
     char_id = promote_background_character(
         cid, name, sheet=sheet, memory_seeds=memory_seeds)
-    return {"ok": True, "char_id": char_id}
+    # The confirm route takes whatever sheet the host approved, which may not
+    # be the draft `draft_promoted_character` warned about.
+    return {"ok": True, "char_id": char_id,
+            "warnings": character_card_warnings(sheet)}
 
 @app.get("/api/auto_promote")
 def get_auto_promote():
@@ -3785,7 +3805,8 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
                 cid, ch,
             ),
         )
-    return {"ok": True, "sheet": sheet, "card_source": "chat"}
+    return {"ok": True, "sheet": sheet, "card_source": "chat",
+            "warnings": character_card_warnings(sheet)}
 
 @app.get("/api/chats/{cid}/survival")
 def survival_get(cid: int):
