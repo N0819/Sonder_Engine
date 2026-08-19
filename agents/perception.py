@@ -46,8 +46,6 @@ from world.spatial import (
     hiding_holders_of,
     ambient_scope,
     contact_sensation,
-    containment_conceals,
-    crossing_visible_from,
     egocentric_frame,
     _entity_named,
     entity_arc,
@@ -68,7 +66,6 @@ from world.spatial import (
     comms_link,
     same_subject,
     scent_level,
-    sense_adjusted,
     spatial_facts,
     spatial_rel_between,
     substance_event_clause,
@@ -397,14 +394,6 @@ _SIGHT_ASSERTION = re.compile(
     re.I,
 )
 
-# Atoms per view. High enough that a busy beat still decomposes, low enough
-# that a character payload stays readable.
-_MAX_OBSERVATION_ATOMS = 8
-
-# Sentences per atom, so a long stretch of one-channel prose still arrives as
-# several observations rather than one undifferentiated block.
-_MAX_SPAN_SENTENCES = 3
-
 
 def _cue_hits(cues, folded):
     return sum(1 for cue in cues if re.search(cue, folded))
@@ -599,16 +588,12 @@ from .common import (
     preview_player_state_assertions,
     _append_micro_view,
     _append_once,
-    _contextual_rooms,
     _dedupe_view_sentences,
     _player_name_forms,
     self_name_forms,
     self_reference_forms,
     _sentence_subjects,
-    _ensure_environment,
-    _fallback_perception_views,
     _appearance_as_prose,
-    _inject_visible_actor,
     _resolve_player_room,
     _room_notes_from_lore,
     crowds_for_room,
@@ -619,9 +604,10 @@ from .common import (
     _unmask_quoted_spans,
     _VIEW_MASK,
     _scrub_invented_dialogue,
-    _scrub_undeclared_player_speech,
-    _compose_residue_view,
     _recognizes,
+    # Re-export only: tests/test_name_variant_recognition.py:18 imports it
+    # through this module. It belongs to common.py and should be imported
+    # from there; the test file is outside this slice's ownership.
     _significant_name_tokens,
     observable_action_text,
     player_speech_lines,
