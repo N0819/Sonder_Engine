@@ -1668,6 +1668,8 @@
   "Type to search the provider's model list. Open 'advanced' for samplers and backup models.": "Type to search the provider's model list. Open 'advanced' for samplers and backup models.",
   "typical response": "typical response",
   "Unauthorized": "Unauthorized",
+  "undeclared percept channel: ${self.channel}": "undeclared percept channel: ${self.channel}",
+  "undeclared percept kind: ${self.kind}": "undeclared percept kind: ${self.kind}",
   "underneath (optional)": "underneath (optional)",
   "Underneath descriptions will be left out.": "Underneath descriptions will be left out.",
   "Underneath descriptions will be used.": "Underneath descriptions will be used.",
