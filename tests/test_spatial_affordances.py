@@ -610,6 +610,47 @@ class TestCorridorPacingIsCaught:
         assert "beats_since_new_ground" not in f
 
 
+class TestWhenTheDoorwaysCannotBeRead:
+    """A bare `except Exception` emptied `seen_onward` -- the sole source of
+    `onward_exits_visible`, `onward_bearings` and `visibly_no_way_through` --
+    and wrote nothing anywhere. `visibly_no_way_through` is the first key
+    `_verdict` tests and the only gate on the `unentered` verdict, so the
+    payload degraded to its pre-A11 shape and the only way to notice was to
+    read a character's exits and know what should have been there."""
+
+    SCENE = {"rooms": {"rHere": {"name": "Here"}, "rNew": {"name": "New"}},
+             "positions": {}, "entities": {}}
+    DIGEST = {"ahead": [{"room": "New", "barrier": "open"}]}
+
+    def test_a_failure_to_read_them_is_reported(self, monkeypatch):
+        from agents import character
+
+        def boom(*_a, **_k):
+            raise RuntimeError("place graph unavailable")
+
+        monkeypatch.setattr(character, "visible_adjacent_rooms", boom)
+        said = []
+        character._annotate_known_exits(
+            dict(self.DIGEST), self.SCENE, ["rHere"], here_rid="rHere",
+            warn=said.append)
+
+        assert said and "rHere" in said[0]
+
+    def test_the_exits_still_come_back(self, monkeypatch):
+        """Warned, not failed: the beat goes on with what history alone can
+        say about each doorway."""
+        from agents import character
+
+        monkeypatch.setattr(character, "visible_adjacent_rooms",
+                            lambda *_a, **_k: (_ for _ in ()).throw(
+                                RuntimeError("boom")))
+        out = character._annotate_known_exits(
+            dict(self.DIGEST), self.SCENE, ["rHere"], here_rid="rHere",
+            warn=lambda _m: None)
+
+        assert out["ahead"][0]["untried"] is True
+
+
 class TestTheRightDoorIsNotTheLightestEntry:
     """We annotated the doors he should not take and left the one he should
     take nearly bare.

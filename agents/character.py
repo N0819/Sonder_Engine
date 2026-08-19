@@ -1911,7 +1911,7 @@ def _en_route(stored_state, here_rid, destination):
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None,
                           known_dead_ends=None, place_graph=None,
-                          destination=None):
+                          destination=None, warn=None):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -1943,23 +1943,36 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # a missing sense.
     seen_onward, seen_bearings = {}, {}
     if here_rid:
+        # Narrow, and it SAYS SO when it fires. The guard used to wrap the
+        # whole loop AND a local re-import of a function already imported at
+        # module scope, so an import error and a spatial failure read
+        # identically -- and either emptied `seen_onward`, the sole source of
+        # `onward_exits_visible`, `onward_bearings` and
+        # `visibly_no_way_through`. That last is the first key `_verdict`
+        # tests and the only gate on the `unentered` verdict, so the exits
+        # payload degraded to its pre-A11 shape with nothing written to
+        # `ctx.warnings` and no way to tell it had.
         try:
-            from world.spatial import visible_adjacent_rooms
-            for item in visible_adjacent_rooms(scene, here_rid) or []:
-                if isinstance(item, dict) and "onward_exits" in item:
-                    rid_seen = str(item.get("room_id"))
-                    seen_onward[rid_seen] = item["onward_exits"]
-                    # WHICH way on, not merely how many. The digest buckets
-                    # exits egocentrically (ahead/behind/left), so a count
-                    # sitting on the "behind" bucket carries no heading of its
-                    # own and gets read as "on in the direction I was already
-                    # facing" -- which is how a runner came to hunt a westward
-                    # exit, four times, out of a chamber whose only other way
-                    # out went north.
-                    if item.get("onward_bearings"):
-                        seen_bearings[rid_seen] = item["onward_bearings"]
-        except Exception:
-            seen_onward, seen_bearings = {}, {}
+            neighbours = visible_adjacent_rooms(scene, here_rid) or []
+        except Exception as exc:
+            neighbours = []
+            if warn:
+                warn("exits: what is visible through the doorways of "
+                     f"{here_rid!r} could not be read ({exc}); onward counts "
+                     "and bearings are absent this beat")
+        for item in neighbours:
+            if isinstance(item, dict) and "onward_exits" in item:
+                rid_seen = str(item.get("room_id"))
+                seen_onward[rid_seen] = item["onward_exits"]
+                # WHICH way on, not merely how many. The digest buckets
+                # exits egocentrically (ahead/behind/left), so a count
+                # sitting on the "behind" bucket carries no heading of its
+                # own and gets read as "on in the direction I was already
+                # facing" -- which is how a runner came to hunt a westward
+                # exit, four times, out of a chamber whose only other way
+                # out went north.
+                if item.get("onward_bearings"):
+                    seen_bearings[rid_seen] = item["onward_bearings"]
     worked = routes_that_worked if isinstance(routes_that_worked, dict) else {}
     route = [r for r in (visited_rooms or []) if isinstance(r, str)]
     counts = {}
@@ -3143,7 +3156,9 @@ def character_step(ctx, cid, nonce):
                 place_graph=stored_state.get("place_graph") or {},
                 # The room his own goal text names, if he owns a node for
                 # it -- see _destination_from_goals for the double gate.
-                destination=_goal_destination),
+                destination=_goal_destination,
+                warn=lambda message: ctx.add_warning(
+                    f"character {character_name(sh)}: {message}")),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
