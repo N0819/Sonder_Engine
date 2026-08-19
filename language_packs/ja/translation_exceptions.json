@@ -143,7 +143,6 @@
   "rgba(238,243,251,": "source, style, selector, or markup fragment",
   "script,style,[data-no-i18n],[translate=\"no\"]": "path, selector, markup, or query fragment",
   "sideCollapsed": "identifier, route, enum, class, or filename",
-  "sonder.reopenExtensions": "identifier, route, enum, class, or filename",
   "sonder.reopenPrompts": "identifier, route, enum, class, or filename",
   "sonder.ui.proseSize": "identifier, route, enum, class, or filename",
   "specialist ${full_name} declares ${unknown} list-shaped, but does not own them": "developer-facing extension API error, never player text",
