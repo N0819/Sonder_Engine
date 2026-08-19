@@ -3073,24 +3073,6 @@ def _player_name_forms(player_name):
     return sorted(set(forms), key=len, reverse=True)
 
 
-def _player_subject_sentences(prose, player_name):
-    """Sentences of `prose` whose grammatical subject is plainly the player --
-    the sentence OPENS with their name (optionally possessive). Deliberately
-    narrow: a pronoun subject ("She lifts it") could refer to any character in
-    the beat, and guessing would make this cry wolf on ordinary narration."""
-    forms = _player_name_forms(player_name)
-    if not prose or not forms:
-        return []
-    out = []
-    for sentence in re.split(r"(?<=[.!?])\s+", prose):
-        stripped = sentence.strip()
-        for form in forms:
-            if re.match(rf"^{re.escape(form)}(?:'s)?\b", stripped):
-                out.append(stripped)
-                break
-    return out
-
-
 # A sentence whose subject is a bare pronoun, optionally after a short leading
 # adverbial ("After a moment, he lowers the device"). Bounded so it cannot
 # reach past a genuine subject into a subordinate clause.
@@ -3132,8 +3114,8 @@ def _subject_opener(form):
 def _sentence_subjects(prose, names, split=None):
     """Each sentence of `prose` paired with the name that is plainly its subject.
 
-    `_player_subject_sentences` deliberately refuses to resolve pronouns, on
-    the ground that "She lifts it" could be anyone in the beat. That is true of
+    The version this replaced refused to resolve pronouns at all, on the
+    ground that "She lifts it" could be anyone in the beat. That is true of
     a pronoun read in ISOLATION and false of one read in sequence: prose
     establishes a subject by name and then continues it, which is why the
     live miss (chat 56 t1391) slipped through -- the Director named the Doctor
@@ -5317,25 +5299,6 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
             seen_pronouns.add(pron)
             counts["third"] += len(re.findall(rf"\b{re.escape(pron)}\b", narrative, re.IGNORECASE))
     return counts
-
-def _detect_narration_person(raw_input, player_name=None, player_pronouns=None):
-    """Guess which grammatical person the PLAYER used to phrase their own
-    input this turn -- 'first' ("I open the door"), 'second' ("You open the
-    door"), 'third' ("Alex opens the door") -- so the narrator can match it
-    instead of always defaulting to 'you'. Whichever person has strictly more
-    evidence (see _narration_person_counts) than every other wins. Ties or
-    zero matches (e.g. a turn that's pure dialogue with no narrative frame)
-    return None -- ambiguous, caller should fall back to whatever was already
-    established.
-    """
-    counts = _narration_person_counts(raw_input, player_name, player_pronouns)
-    best = max(counts, key=counts.get)
-    if counts[best] == 0:
-        return None
-    others = [v for k, v in counts.items() if k != best]
-    if others and counts[best] <= max(others):
-        return None
-    return best
 
 # Third-person paradigms screened by _check_pronoun_fidelity. Only these three
 # closed sets are checked: a character whose declared pronouns fall outside the
