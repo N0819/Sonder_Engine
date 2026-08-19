@@ -51,13 +51,13 @@ flow, including the different opening-turn path.
 
 ## Run locally
 
-Python 3.11 or newer.
+Python 3.11, 3.12 or 3.13. **Not newer yet** — the pinned dependencies have no prebuilt wheel above 3.13, so pip falls back to compiling pydantic-core from source and fails inside a Rust toolchain.
 
 **Windows:** double-click `Start Sonder.bat` — it creates the environment,
 installs dependencies, and opens the app.
 
 **macOS / Linux:** run `./"Start Sonder.sh"` — it does the same: finds a
-Python 3.11+, builds the environment, installs dependencies, starts the server
+a supported Python (3.11-3.13), builds the environment, installs dependencies, starts the server
 and opens the app. It never touches a database. `--port N`, `--host ADDR` and
 `--no-browser` are there when the defaults do not suit; `--help` lists them.
 

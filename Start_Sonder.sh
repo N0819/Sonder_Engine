@@ -46,6 +46,13 @@ VENV=".venv"
 VENV_PY="${VENV}/bin/python"
 STAMP="${VENV}/.deps-installed"
 MIN_PY="3.11"
+# ...and a CEILING, which is the half this launcher was missing. The pinned
+# dependency set is built for 3.11-3.13; on 3.14 there is no pydantic-core
+# wheel, so pip falls back to compiling it from source and that source pins a
+# PyO3 which refuses 3.14. Reported from a Windows install that had 3.14.5 and
+# a launcher that asked only for "the newest" -- the failure surfaced as a Rust
+# compiler error naming neither Python nor Sonder.
+MAX_PY="3.13"
 
 # --- Legible failure -------------------------------------------
 # Every exit path says what was being attempted and what to do next.
@@ -183,15 +190,41 @@ PY=""
 find_python() {
     step "looking for a Python interpreter"
     local candidate version old=""
-    for candidate in python3.14 python3.13 python3.12 python3.11 python3 python; do
+    local too_new=""
+    # Newest SUPPORTED first. `python3.14` is deliberately absent from the
+    # front of this list rather than tried and rejected -- but a bare
+    # `python3` may still BE 3.14, so the range is checked, not assumed.
+    for candidate in python3.13 python3.12 python3.11 python3 python; do
         command -v "$candidate" >/dev/null 2>&1 || continue
         version="$("$candidate" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null)" || continue
-        if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+        if "$candidate" -c 'import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 13) else 1)' 2>/dev/null; then
             PY="$candidate"
             return 0
         fi
-        [ -n "$old" ] || old="Python ${version} (${candidate})"
+        if "$candidate" -c 'import sys; sys.exit(0 if sys.version_info[:2] > (3, 13) else 1)' 2>/dev/null; then
+            [ -n "$too_new" ] || too_new="Python ${version} (${candidate})"
+        else
+            [ -n "$old" ] || old="Python ${version} (${candidate})"
+        fi
     done
+
+    if [ -n "$too_new" ]; then
+        fail "Sonder Engine supports Python ${MIN_PY} to ${MAX_PY}.
+    The one on this computer is ${too_new}, which is too NEW.
+
+    This is not a warning you should route around. On a newer Python the
+    pinned dependencies have no prebuilt wheel, so pip tries to compile
+    pydantic-core from source and fails inside a Rust toolchain -- with an
+    error that names neither Python nor Sonder.
+
+    Install a supported one alongside it (they coexist):
+
+$(python_install_hint)
+    then run this launcher again. If a .venv already exists on the wrong
+    interpreter, rename it first -- this launcher will never delete it:
+
+        mv .venv .venv-unsupported"
+    fi
 
     if [ -n "$old" ]; then
         fail "Sonder Engine needs Python ${MIN_PY} or newer.
@@ -237,6 +270,25 @@ if [ ! -x "$VENV_PY" ]; then
 
         sudo apt-get install python3-venv"
     "$PY" -m venv "$VENV"
+fi
+
+# An existing environment on an UNSUPPORTED interpreter. Reusing .venv is the
+# whole point of a second run, so nothing above re-checks which Python built
+# it -- and a box that once had 3.14 keeps the environment that failed, even
+# after this launcher learned to choose better. Detected, named, and never
+# deleted: removing somebody's environment to fix their environment is not
+# this script's call to make.
+if [ -x "$VENV_PY" ] && ! "$VENV_PY" -c 'import sys; sys.exit(0 if (3, 11) <= sys.version_info[:2] <= (3, 13) else 1)' >/dev/null 2>&1; then
+    venv_ver="$("$VENV_PY" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])' 2>/dev/null || echo "unknown")"
+    fail "The environment in \"${ROOT}/${VENV}\" was built with Python ${venv_ver},
+    which is outside the supported range ${MIN_PY}-${MAX_PY}.
+
+    Rename it (do not delete it -- it costs nothing to keep until this works):
+
+        mv \"${ROOT}/${VENV}\" \"${ROOT}/${VENV}-unsupported\"
+
+    then run this launcher again. It will build a new one with a supported
+    Python and install the dependencies into it."
 fi
 
 # --- Install / update dependencies -----------------------------

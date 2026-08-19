@@ -26,21 +26,41 @@ set "URL=http://%HOST%:%PORT%"
 set "VENV=.venv"
 set "STAMP=%VENV%\.deps-installed"
 
-REM --- Find a usable Python launcher -----------------------------
+REM --- Find a SUPPORTED Python ------------------------------------
+REM Newest first, but only within the range this engine's pinned
+REM dependencies are built for. `py -3` alone takes whatever is NEWEST on the
+REM machine, which is how a reporter landed on 3.14.5: pydantic-core has no
+REM wheel for it, so pip fell back to building from source, and that source
+REM pins a PyO3 that refuses 3.14. The error arrives from a Rust compiler
+REM three layers down and names neither Python nor this launcher.
 set "PY="
-where py >nul 2>&1 && set "PY=py -3"
+for %%V in (3.13 3.12 3.11) do (
+    if not defined PY (
+        py -%%V -c "import sys" >nul 2>&1 && set "PY=py -%%V"
+    )
+)
 if not defined PY (
-    where python >nul 2>&1 && set "PY=python"
+    REM No py launcher, or no supported version registered with it. A bare
+    REM `python` is only accepted after it says what it is.
+    for /f "delims=" %%O in ('python -c "import sys;print(1 if (3,11)<=sys.version_info[:2]<=(3,13) else 0)" 2^>nul') do set "PYOK=%%O"
+    if "!PYOK!"=="1" set "PY=python"
 )
 if not defined PY (
     echo.
-    echo [!] Python was not found on this computer.
-    echo     Install Python 3.11+ from https://www.python.org/downloads/
-    echo     and be sure to tick "Add Python to PATH" during install.
+    echo [!] No supported Python was found.
+    echo     Sonder needs Python 3.11, 3.12 or 3.13.
+    echo.
+    echo     A NEWER Python does not work yet: the pinned dependencies have no
+    echo     prebuilt wheel for it, so pip tries to compile pydantic-core from
+    echo     source and fails inside a Rust toolchain.
+    echo.
+    echo     Install one from https://www.python.org/downloads/
+    echo     tick "Add Python to PATH", then run this file again.
     echo.
     pause
     exit /b 1
 )
+echo Using %PY%
 
 REM --- Create the virtual environment on first run ---------------
 if not exist "%VENV%\Scripts\python.exe" (
