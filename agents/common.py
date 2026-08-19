@@ -61,34 +61,6 @@ _REACTIVE_STAGES = {
     "preparation", "approach", "contact", "sustained",
 }
 
-# Verbs whose act is INTERIOR -- it happens inside the actor's mind and has no
-# outward manifestation a bystander could perceive. An observer cannot see
-# someone "remember" or "decide"; surfacing such an act to another perceiver
-# is a pure information-barrier leak (the actor's private cognition). Used by
-# norm_sequence to default an action element's `observable` surface to "" (see
-# observable_action_text) so the deterministic perception-delivery backstops
-# never paste it into an observer's view. A mental act that DOES have an
-# outward tell (eyes going distant, a whispered incantation) can still be
-# delivered -- the director just authors an explicit `observable` for it,
-# which overrides this default.
-
-# Outcomes only the person undergoing them may declare: interior volition
-# (agreeing, submitting, giving in) and involuntary body events (fainting,
-# panicking, knees buckling). AGENTS.md's AUTHORITY STOPS AT OTHER MINDS makes
-# these the character's own to enact, so a player-authored element whose
-# SUBJECT is a cast member and whose outcome is one of these is rerouted to
-# that character as an OFFER rather than enacted as objective truth (see
-# director._route_authorial_npc_beat). A player act that merely CAUSES such an
-# outcome ('stabs Sarah') is untouched -- the player is the agent there, and
-# the target's response is resolved through the reaction phase.
-
-
-# Words that can OPEN a clause without being its verb. A player action element
-# is authored verb-first by convention ('takes a deep breath...'), so an
-# attempt opening with one of these is a noun/pronoun-led clause -- somebody
-# or something OTHER than the declaring player is its subject.
-
-
 def _ling(name):
     return linguistic("agents.common", name)
 
@@ -128,11 +100,6 @@ def _stem_token(tok):
     return tok
 
 
-# Where one subject's predicate ends. Used to scope the autonomy test to the
-# clause that actually belongs to the named character -- see
-# _predicate_after_name.
-
-
 def _predicate_after_name(text_cf, end):
     """The clause remainder belonging to a subject whose name ends at `end`.
 
@@ -145,6 +112,9 @@ def _predicate_after_name(text_cf, end):
     the character is actually the subject of -- 'steps back', not '...and I
     enjoy the view'."""
     tail = text_cf[end:].lstrip(" '’,")
+    # Where one subject's predicate ends. The autonomy test is scoped to the
+    # clause that actually belongs to the named character, and this is the
+    # cut -- see the docstring above for the two live cases it answers.
     cut = _ling("_CLAUSE_BREAKS").search(tail)
     return tail[:cut.start()] if cut else tail
 
@@ -157,6 +127,15 @@ def _is_autonomous_response(verb, text):
     _predicate_after_name); this scans all of it rather than only the leading
     token, because the construction that matters routinely buries the verb
     ('...pushes Dr. Moon over the edge')."""
+    # Outcomes only the person undergoing them may declare: interior volition
+    # (agreeing, submitting, giving in) and involuntary body events (fainting,
+    # panicking, knees buckling). AGENTS.md's AUTHORITY STOPS AT OTHER MINDS makes
+    # these the character's own to enact, so a player-authored element whose
+    # SUBJECT is a cast member and whose outcome is one of these is rerouted to
+    # that character as an OFFER rather than enacted as objective truth (see
+    # director._route_authorial_npc_beat). A player act that merely CAUSES such an
+    # outcome ('stabs Sarah') is untouched -- the player is the agent there, and
+    # the target's response is resolved through the reaction phase.
     v = str(verb or "").strip().casefold()
     if v in _ling("_AUTONOMY_VERBS") or _stem_token(v) in _ling("_AUTONOMY_VERBS"):
         return True
@@ -169,6 +148,16 @@ def _is_autonomous_response(verb, text):
     )
 
 
+# Verbs whose act is INTERIOR -- it happens inside the actor's mind and has no
+# outward manifestation a bystander could perceive. An observer cannot see
+# someone "remember" or "decide"; surfacing such an act to another perceiver
+# is a pure information-barrier leak (the actor's private cognition). Used by
+# norm_sequence to default an action element's `observable` surface to "" (see
+# observable_action_text) so the deterministic perception-delivery backstops
+# never paste it into an observer's view. A mental act that DOES have an
+# outward tell (eyes going distant, a whispered incantation) can still be
+# delivered -- the director just authors an explicit `observable` for it,
+# which overrides this default.
 def _in_mental_vocabulary(token, key):
     token = str(token or "").strip().lower()
     words = _ling(key)
@@ -245,7 +234,6 @@ def observable_action_text(elem):
     if obs is None:
         return str(elem.get("attempt") or "")
     return str(obs or "")
-
 
 
 def _dict(value):
@@ -1324,6 +1312,10 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
     lead = lead_tokens[0] if lead_tokens else ""
     if lead in {str(f).casefold() for f in (actor_forms or ())}:
         return None
+    # Words that can OPEN a clause without being its verb. A player action element
+    # is authored verb-first by convention ('takes a deep breath...'), so an
+    # attempt opening with one of these is a noun/pronoun-led clause -- somebody
+    # or something OTHER than the declaring player is its subject.
     if lead not in _ling("_SUBJECT_LEADS"):
         return None
     named = []
@@ -1842,10 +1834,6 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
 # must not swallow the rest of the line looking for its partner.
 _STAGE_DIRECTION_RE = re.compile(r"\*([^*\n]{1,400}?)\*")
 
-# Function words carry no evidence that two descriptions name the same act --
-# "on her" appears in every second stage direction -- so they are excluded
-# before the overlap in _dedupe_promoted_actions is measured.
-
 
 def split_stage_directions(text):
     """Speech text -> (the words actually spoken, the conduct written into it).
@@ -1954,6 +1942,9 @@ def _dedupe_promoted_actions(clean):
     """
     def _content(text):
         words = re.sub(r"[^\w\s]", " ", str(text or "")).lower().split()
+        # Function words carry no evidence that two descriptions name the same act --
+        # "on her" appears in every second stage direction -- so they are excluded
+        # before the overlap in _dedupe_promoted_actions is measured.
         return {w for w in words if w not in _ling("_OVERLAP_STOPWORDS")}
 
     declared = [_content(e.get("observable") or e.get("attempt"))
@@ -1971,10 +1962,6 @@ def _dedupe_promoted_actions(clean):
         kept.append(e)
     return kept
 
-
-# Words a sentence leans on rather than lands on. An interruption arrives where
-# the speaker drew breath, and the breath is taken just before one of these or
-# just after a comma -- not at an arbitrary word count.
 
 # Below this, a line has nothing to cut. "Wait." interrupted is still "Wait."
 # -- truncating it produces "Wait.—", which reads as a typo, and fictionally
@@ -2021,6 +2008,9 @@ def cut_short_speech(text, ratio=0.6):
             if words[index - 1].endswith(","):
                 keep = index
                 break
+            # Words a sentence leans on rather than lands on. An interruption arrives where
+            # the speaker drew breath, and the breath is taken just before one of these or
+            # just after a comma -- not at an arbitrary word count.
             if words[index].lower().strip(",;:") in _ling("_BREATH_CONJUNCTIONS"):
                 keep = index
                 break
@@ -2313,10 +2303,6 @@ def _append_once(view, text, marker=None):
         return view
     return f"{view} {text}".strip()
 
-# Rank/title/honorific tokens dropped before comparing names, plus single-letter
-# middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
-
-
 #: The word-runs of a NAME, in whatever script it is written. `[A-Za-z']+`
 #: describes the Latin script rather than a name, and returns nothing at all
 #: for the rest -- so every rule built on tokens (recognition variants,
@@ -2371,6 +2357,8 @@ def _significant_name_tokens(name):
         low = tok.strip(".'").casefold()
         if not low or len(low) < _name_token_floor(low):
             continue
+        # Rank/title/honorific tokens dropped before comparing names, plus single-letter
+        # middle initials. So "Commander Riker" and "Cmdr. Riker" reduce to {riker}.
         if low in _ling("_NAME_TITLE_TOKENS"):
             continue
         out.add(low)
@@ -2721,10 +2709,6 @@ def _strip_identity_tokens(text, forms):
     out = re.sub(r"([,;])(\s*[,;])+", r"\1", out)
     return out.strip().lstrip(",;: ").strip()
 
-# Single-token names that are also everyday English words ("Rose walks in"
-# vs "the rose garden"). For these, only the exact capitalized form is
-# scrubbed, so ordinary lowercase prose is never mangled.
-
 # Mirrors _protected_view_quotes' quoted-span shape: a name inside a quote
 # is sensory signal the observer legitimately heard (an introduction, a
 # name called aloud) and must survive the identity scrub verbatim.
@@ -2791,6 +2775,9 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
                     and not _UNSPACED_SCRIPT.match(form[:1])):
                 continue
             if (len(form.split()) == 1
+                    # Single-token names that are also everyday English words ("Rose walks in"
+                    # vs "the rose garden"). For these, only the exact capitalized form is
+                    # scrubbed, so ordinary lowercase prose is never mangled.
                     and form.casefold() in _ling("_COMMON_WORD_NAMES")):
                 # common-word guard: exact capitalized form only
                 exact = form[:1].upper() + form[1:]
@@ -3214,17 +3201,6 @@ def player_speech_lines(interp):
     return lines
 
 
-# Physical verbs a resolved_event uses when it gives someone an ACT. Kept to
-# unambiguous bodily/manipulative verbs: the check exists to catch the player
-# being handed conduct they never declared, not to police prose.
-# Verb STEMS a resolved_event uses when it gives someone an ACT, matched with
-# ordinary English inflection (-s/-es/-ed/-ing) so "straightens", "shifting"
-# and "reached" all count. Kept to unambiguous bodily/manipulative verbs: this
-# exists to catch the player being handed conduct they never declared, not to
-# police prose.
-
-
-
 # Leading words that are not the name itself. Splitting a name on whitespace
 # and taking token 0 matched "The" for a player called "The Stranger", which
 # then matched almost every sentence in the beat.
@@ -3450,19 +3426,6 @@ def _check_character_speech_authority(resolved_event, silent_names,
     return warnings
 
 
-# Verbs that change where a body IS or how far it is from someone else. The
-# Director may render a declared act richly; it may not relocate a character
-# who declared no movement, because distance is load-bearing -- it decides
-# what perception delivers, what contact is possible, and (chat 56 t1391) it
-# can directly reverse the intent the character declared, which was to scan
-# her "without crowding her".
-
-# Movement is not always written as a locomotion VERB. The live case wrote it
-# as a verb plus a distance noun -- "takes a half-step closer" -- whose head
-# verb is "take", which is no more locomotive than taking a screwdriver. What
-# marks it as movement is the distance word, so read the clause for one.
-
-
 def _check_character_act_authority(resolved_event, declared_actions, name,
                                    other_names=()):
     """Physical acts a resolved_event gives a CHARACTER they did not declare.
@@ -3496,11 +3459,27 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
     if declared_actions:
         # Already moving under their own declaration: the Director may render
         # that movement however it likes.
+        # Verbs that change where a body IS or how far it is from someone else. The
+        # Director may render a declared act richly; it may not relocate a character
+        # who declared no movement, because distance is load-bearing -- it decides
+        # what perception delivers, what contact is possible, and (chat 56 t1391) it
+        # can directly reverse the intent the character declared, which was to scan
+        # her "without crowding her".
+        #
+        # Movement is not always written as a locomotion VERB. The live case wrote it
+        # as a verb plus a distance noun -- "takes a half-step closer" -- whose head
+        # verb is "take", which is no more locomotive than taking a screwdriver. What
+        # marks it as movement is the distance word, so read the clause for one.
         if re.search(cue_boundary_pattern(_ling("_LOCOMOTION_VERBS")), declared_text, re.I):
             return []
         verbs, kind, proximity = (
             _ling("_LOCOMOTION_VERBS"), "undeclared movement", True)
     else:
+        # Verb STEMS a resolved_event uses when it gives someone an ACT, matched with
+        # ordinary English inflection (-s/-es/-ed/-ing) so "straightens", "shifting"
+        # and "reached" all count. Kept to unambiguous bodily/manipulative verbs: this
+        # exists to catch the player being handed conduct they never declared, not to
+        # police prose.
         verbs, kind, proximity = _ling("_PLAYER_ACT_VERBS"), "act not declared", False
 
     warnings = []
@@ -3520,11 +3499,6 @@ def _check_character_act_authority(resolved_event, declared_actions, name,
                 break
     return warnings
 
-
-# Quoted spans, in every style the resolve model actually produces. The single
-# -quote form must not mistake an apostrophe for a delimiter, so a quote may
-# only OPEN where no letter precedes it and CLOSE where no letter follows --
-# which leaves "You're" intact inside the span.
 
 # Below this, a quoted span is a label or a scare quote rather than an
 # utterance -- a readout reading "STABLE", the word "safe".
@@ -3555,6 +3529,10 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
     # Director RE-PUNCTUATES a line it is quoting, and an exact membership
     # test then reads its own faithful rendering as an invention.
     folded_allowed = [_echo_fold(a) for a in (allowed_bodies or ()) if _echo_fold(a)]
+    # Quoted spans, in every style the resolve model actually produces. The single
+    # -quote form must not mistake an apostrophe for a delimiter, so a quote may
+    # only OPEN where no letter precedes it and CLOSE where no letter follows --
+    # which leaves "You're" intact inside the span.
     for pattern in _ling("_PROSE_QUOTE_RES"):
         for span in pattern.findall(resolved_event or ""):
             body = _quote_body(span)
@@ -3591,13 +3569,6 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
                 f"(prose-quote authority): {body[:120]!r}"
             )
     return warnings
-
-
-# Determiners that make a reference DEFINITE. "That explains the strange
-# coins" refers to HER coins, a thing in the world; "local trade runs on
-# copper and silver coins" is knowledge about coins in general. The definite
-# article is what turns a generality into a claim of acquaintance, so it is
-# what gates the single-word match below.
 
 
 # WHAT THE DIRECTOR MAY STILL SPEAK FOR.
@@ -3733,6 +3704,11 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                     break
             elif re.search(
                     r"(?<!\w)(?:%s)\s+(?:[\w'-]+\s+){0,2}%s(?!\w)"
+                    # Determiners that make a reference DEFINITE. "That explains the strange
+                    # coins" refers to HER coins, a thing in the world; "local trade runs on
+                    # copper and silver coins" is knowledge about coins in general. The definite
+                    # article is what turns a generality into a claim of acquaintance, so it is
+                    # what gates the single-word match below.
                     % ("|".join(_ling("_DEFINITE_DETS")), re.escape(pcf)), q):
                 hit = p
                 break
@@ -3747,16 +3723,6 @@ def _check_presence_knowledge_channel(speaker, quote, sc, presence_rec,
                 + " (presence-knowledge channel)."
             )
     return warnings
-
-
-# Interior states a resolved_event may not assert about the PLAYER. Nouns and
-# adjectives that name what is INSIDE a mind, as against the surface a body
-# shows: "trembling", "wide eyes", "a shrill cry" are observable and always
-# allowed; "terror", "panic", "she realises" are not.
-
-# Verbs that report a mind's own operation rather than its body's motion.
-
-# Words that assert an interior state is TRUE, which no observer may know.
 
 
 def _check_player_interiority_authority(resolved_event, player_name,
@@ -3803,6 +3769,14 @@ def _check_player_interiority_authority(resolved_event, player_name,
         low = body.casefold()
         if subject != player_name and not _mentions_player(low, player_name):
             continue
+        # Interior states a resolved_event may not assert about the PLAYER. Nouns and
+        # adjectives that name what is INSIDE a mind, as against the surface a body
+        # shows: "trembling", "wide eyes", "a shrill cry" are observable and always
+        # allowed; "terror", "panic", "she realises" are not.
+        #
+        # Verbs that report a mind's own operation rather than its body's motion.
+        #
+        # Words that assert an interior state is TRUE, which no observer may know.
         hits = [w for w in _ling("_INTERIOR_STATES")
                 if re.search(rf"\b{re.escape(w)}\b", low)
                 and not re.search(rf"\b{re.escape(w)}\b", declared)]
@@ -3833,28 +3807,26 @@ def _mentions_player(low_sentence, player_name):
     return False
 
 
-# Verbs that put a body in contact with something outside itself.
-# Deliberately excludes verbs that read as manipulation but usually are not:
-# "catch" ("her hair catching the warm light"), "draw" ("draws a breath"),
-# "find" ("finds the words"). The list must earn its flags -- an act guard
-# that fires on scenery is one a maintainer learns to ignore.
-
-# The player's own body is not a new object. An act on it re-describes what
-# they are doing with themselves, which is elaboration however it is worded --
-# "pushes herself upright" for a declared "slowly stands up".
-
-# The DIRECT object a verb takes -- the noun it acts ON, with no preposition
-# in between. "grip the edge" is taking hold of the world; "pressed flat
-# AGAINST the cold metal" is a body bracing itself, and reading that as
-# seizing the metal is how a guard starts crying wolf on ordinary prose.
-# The captured group is the whole noun phrase after the article; the HEAD noun
-# is its last word, so "the warm light" reads as "light" rather than "warm".
-
-
 def _undeclared_world_object(clause, declared_low):
     """The world object a clause has the player take hold of, when the player's
     own declaration never mentions it. None when the clause touches only their
     own body, reaches for nothing, or names something they already declared."""
+    # Verbs that put a body in contact with something outside itself.
+    # Deliberately excludes verbs that read as manipulation but usually are not:
+    # "catch" ("her hair catching the warm light"), "draw" ("draws a breath"),
+    # "find" ("finds the words"). The list must earn its flags -- an act guard
+    # that fires on scenery is one a maintainer learns to ignore.
+    #
+    # The player's own body is not a new object. An act on it re-describes what
+    # they are doing with themselves, which is elaboration however it is worded --
+    # "pushes herself upright" for a declared "slowly stands up".
+    #
+    # The DIRECT object a verb takes -- the noun it acts ON, with no preposition
+    # in between. "grip the edge" is taking hold of the world; "pressed flat
+    # AGAINST the cold metal" is a body bracing itself, and reading that as
+    # seizing the metal is how a guard starts crying wolf on ordinary prose.
+    # The captured group is the whole noun phrase after the article; the HEAD noun
+    # is its last word, so "the warm light" reads as "light" rather than "warm".
     for match in re.finditer(cue_boundary_pattern(_ling("_MANIPULATION_VERBS")), clause, re.I):
         obj = _ling("_DIRECT_OBJECT_RE").match(clause[match.end():])
         if not obj:
@@ -4069,13 +4041,6 @@ def _check_player_act_authority(resolved_event, declared_actions, player_name,
             )
             break
     return warnings
-
-
-# Both quote-span shapes below are constants, hoisted to module level like the
-# other hot-path patterns in this file (_QUOTED_SPAN_RE etc.) -- each was being
-# re-compiled on every narrator validation pass. The capper keeps the
-# surrounding marks (it rewrites spans); the fidelity check needs only the
-# body, and tolerates shorter lines.
 
 
 def _cap_repeated_quotes(prose, view, exclude_bodies=()):
@@ -4314,7 +4279,6 @@ def _inject_dialogue(view, display, quote, level, volume, can_see,
     return _append_once(view, add)
 
 
-
 def _content_tokens(text):
     """Distinctive (stopword-stripped, crudely stemmed) word tokens of a phrase
     -- the basis for 'has this beat already been narrated?' overlap."""
@@ -4492,20 +4456,6 @@ def _self_second_person(text, forms):
     return "".join(segments)
 
 
-# Third-person-singular forms that must agree with an inserted "you".
-
-# Words that can follow a subject, end in -s, and are NOT verbs -- the guard
-# on the regular-verb rule below, which otherwise strips a meaningful "s"
-# ("You always" -> "You alway"). Deliberately a closed list: a missed entry
-# costs one dropped letter, while dropping the rule entirely costs "You steps".
-
-
-# Stems that take -es rather than a bare -s ("catch/catches", "push/pushes",
-# "fix/fixes", "go/goes", "pass/passes"); everything else drops a single -s.
-# "ss" not "s": a stem ending in ONE s is rare ("bus"), while "loses",
-# "raises", "closes" are common and keep their stem-final e.
-
-
 def _base_from_third_person_s(word):
     """Undo third-person-singular -s/-es/-ies on a regular present verb, or
     return None when the word is not one."""
@@ -4530,6 +4480,18 @@ def _fix_you_agreement(text):
     """
     def _sub(m):
         you, gap, word = m.group(1), m.group(2), m.group(3)
+        # Third-person-singular forms that must agree with an inserted "you".
+        #
+        # Words that can follow a subject, end in -s, and are NOT verbs -- the guard
+        # on the regular-verb rule below, which otherwise strips a meaningful "s"
+        # ("You always" -> "You alway"). Deliberately a closed list: a missed entry
+        # costs one dropped letter, while dropping the rule entirely costs "You steps".
+        #
+        #
+        # Stems that take -es rather than a bare -s ("catch/catches", "push/pushes",
+        # "fix/fixes", "go/goes", "pass/passes"); everything else drops a single -s.
+        # "ss" not "s": a stem ending in ONE s is rare ("bus"), while "loses",
+        # "raises", "closes" are common and keep their stem-final e.
         fixed = _ling("_YOU_AGREEMENT").get(word.lower())
         if fixed is None:
             fixed = _base_from_third_person_s(word)
@@ -5126,16 +5088,6 @@ def _already_established_phrases(view, recent_prose, limit=12):
         hits |= (view_shingles & _word_shingles(prev))
     return sorted(hits)[:limit]
 
-# Within-view dedupe (W12): the same sentence rendered twice in ONE turn's
-# view/prose ("Picard turns his head slightly toward Troi" appearing twice in
-# a single beat). Splitting is a plain sentence-boundary regex; a quote whose
-# body contains sentence punctuation mis-splits into fragments, but every such
-# fragment carries a quote character and is therefore exempt from dropping
-# (below), so mis-splits can only UNDER-dedupe, never eat real content.
-# Attribution cue for the dialogue-fidelity floor: a speech verb, or a bare
-# voice noun ("A muffled voice: ..."). Deliberately excludes reading verbs
-# (reads, is written/painted/carved, displays) so quoted ENVIRONMENTAL text --
-# signage, labels, screens -- is never mistaken for dialogue.
 _YOU_RE = re.compile(r"\byou\b|\byour\b", re.I)
 
 
@@ -5261,6 +5213,10 @@ def _scrub_invented_dialogue(view, spoken_bodies, *, cast_names=(), mode="all"):
             start, end = _clause_start(qs), qe
         else:
             cstart = _clause_start(qs)
+            # Attribution cue for the dialogue-fidelity floor: a speech verb, or a bare
+            # voice noun ("A muffled voice: ..."). Deliberately excludes reading verbs
+            # (reads, is written/painted/carved, displays) so quoted ENVIRONMENTAL text --
+            # signage, labels, screens -- is never mistaken for dialogue.
             pre_attr = bool(_ling("_DIALOGUE_CUE_RE").search(view[cstart:qs]))
             tstop = _tail_stop(qe)
             tail = view[qe:tstop]
@@ -5302,11 +5258,13 @@ def _scrub_undeclared_player_speech(view, declared_bodies, protected_bodies=(),
         cast_names=cast_names, mode="player")
 
 
+# Within-view dedupe (W12): the same sentence rendered twice in ONE turn's
+# view/prose ("Picard turns his head slightly toward Troi" appearing twice in
+# a single beat). Splitting is a plain sentence-boundary regex; a quote whose
+# body contains sentence punctuation mis-splits into fragments, but every such
+# fragment carries a quote character and is therefore exempt from dropping
+# (below), so mis-splits can only UNDER-dedupe, never eat real content.
 _VIEW_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…])(\s+)")
-# Double-quote characters only: curly/straight single quotes double as
-# apostrophes in ordinary prose and cannot mark dialogue reliably. The
-# pack names them, because which glyphs open a spoken line is the one
-# thing about dialogue that every language answers differently.
 _VIEW_DEDUPE_MIN_WORDS = 5
 
 _VIEW_MASK = "\x00Q%d\x00"
@@ -5391,6 +5349,10 @@ def _dedupe_view_sentences(text):
             # check stays alongside it for an UNTERMINATED quote, which the
             # span regex cannot match and which must still be protected.
             and "\x00" not in sent
+            # Double-quote characters only: curly/straight single quotes double as
+            # apostrophes in ordinary prose and cannot mark dialogue reliably. The
+            # pack names them, because which glyphs open a spoken line is the one
+            # thing about dialogue that every language answers differently.
             and not any(qc in sent for qc in _ling("_QUOTE_CHARS"))
         )
         if droppable:
@@ -5488,11 +5450,6 @@ def _pronoun_to_group():
 # so every pronoun scored against every name in it.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])[」』\"\'”’)\]]*\s*")
 
-# Names that are also ordinary capitalized English words. A cast member called
-# one of these can't be told apart from the common word, so we decline to score
-# their clauses rather than burn a rewrite on "Will you hand him the padd".
-
-
 def _pronoun_group(pronouns):
     """The closed paradigm a declared pronoun set belongs to, or None when the
     declared forms are absent, unknown, or disagree with each other."""
@@ -5545,6 +5502,9 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
             # all. Same reasoning as `_player_name_forms`.
             if not _UNSPACED_SCRIPT.match(token[:1]) and not token[:1].isupper():
                 continue
+            # Names that are also ordinary capitalized English words. A cast member called
+            # one of these can't be told apart from the common word, so we decline to score
+            # their clauses rather than burn a rewrite on "Will you hand him the padd".
             if token.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
                 continue
             if token in token_owner and token_owner[token][0] != canonical:
@@ -5769,14 +5729,6 @@ def _check_event_order(prose, event_order):
     return warnings
 
 
-# _NARR_LOWERING and _NARR_RAISING are deliberately TIGHTER than a natural
-# reading of "goes down" / "goes up": only verbs naming a deliberate directed
-# movement, plus the unambiguous adverbs. Bare "up"/"down" ("heat scorching up
-# your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
-# all appear constantly in ordinary prose, and every one of them would turn
-# this into a false-positive generator that spends a rewrite on correct pages.
-
-
 def _check_action_direction(prose, event_order):
     """F5: an ACT listed in event_order, rendered in the wrong direction or
     dropped from the page entirely.
@@ -5797,6 +5749,12 @@ def _check_action_direction(prose, event_order):
     """
     if not prose or not event_order:
         return []
+    # _NARR_LOWERING and _NARR_RAISING are deliberately TIGHTER than a natural
+    # reading of "goes down" / "goes up": only verbs naming a deliberate directed
+    # movement, plus the unambiguous adverbs. Bare "up"/"down" ("heat scorching up
+    # your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
+    # all appear constantly in ordinary prose, and every one of them would turn
+    # this into a false-positive generator that spends a rewrite on correct pages.
     p_low = bool(_ling("_NARR_LOWERING").search(prose))
     p_high = bool(_ling("_NARR_RAISING").search(prose))
     warnings = []
