@@ -149,6 +149,59 @@ class TestFlowAddressedForcedReactor:
         assert out["flow"]["addressed_to_refs"] == ["Troi", 3]
 
 
+class TestTheGateReadsWhatTheBystanderCouldHave:
+    """The payload was filtered for concealed content and this gate was not,
+    so naming a presence WHILE concealing still made them qualify, get picked,
+    and react to words nobody delivered to them."""
+
+    def _whisper(self, cid, line, **interp):
+        ctx = _ctx(cid, 7, "I lean close and whisper: " + line)
+        ctx["director_interpret"] = {
+            "sequence": [{"type": "speech", "text": line,
+                          "visibility": "concealed",
+                          "conceal_from": ["Vorne"]}],
+            **interp}
+        return ctx
+
+    def test_a_concealed_line_naming_a_presence_does_not_qualify_them(
+            self, temp_db):
+        cid = _make_chat(temp_db)
+        temp_db.wset(cid, "background_presences", {"Vorne": _presence(1, 1)})
+        ctx = self._whisper(cid, "Vorne must not hear this one.")
+        dr = {"resolved_event": "The tribunal chamber stays quiet.",
+              "dialogue_log": []}
+
+        assert pick_background_reactors(ctx, dr, cap=1) == []
+
+    def test_an_overt_line_naming_a_presence_still_qualifies_them(
+            self, temp_db):
+        cid = _make_chat(temp_db)
+        temp_db.wset(cid, "background_presences", {"Vorne": _presence(1, 1)})
+        ctx = _ctx(cid, 7, "Vorne, what did you see?")
+        ctx["director_interpret"] = {"sequence": [
+            {"type": "speech", "text": "Vorne, what did you see?",
+             "visibility": "overt"}]}
+        dr = {"resolved_event": "The tribunal chamber stays quiet.",
+              "dialogue_log": []}
+
+        assert pick_background_reactors(ctx, dr, cap=1) == ["Vorne"]
+
+    def test_a_private_thought_withholds_an_unstructured_declaration(
+            self, temp_db):
+        """No sequence to filter element by element, so the one signal that
+        something was withheld withholds the whole of it -- the same rule the
+        payload side applies."""
+        cid = _make_chat(temp_db)
+        temp_db.wset(cid, "background_presences", {"Vorne": _presence(1, 1)})
+        ctx = _ctx(cid, 7, "I mouth Vorne's name at the guard.")
+        ctx["director_interpret"] = {
+            "sequence": [], "private_thought": "not out loud"}
+        dr = {"resolved_event": "The tribunal chamber stays quiet.",
+              "dialogue_log": []}
+
+        assert pick_background_reactors(ctx, dr, cap=1) == []
+
+
 # ---- W4: reusable promotion helper + autonomous commit-side sweep ----
 
 _SHEET = {"identity": {"name": "Data"}}

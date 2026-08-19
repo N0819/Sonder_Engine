@@ -58,6 +58,7 @@ from persist.commit import (
     _character_address_of,
     _fold_duplicate_presences,
     _known_name_roster,
+    overt_declaration,
     _presence_speech_verdict,
     _quote_body,
     _registered_name_roster,
@@ -108,12 +109,15 @@ def _filtered_player_declaration(ctx, sc, name, here):
     it happened in -- as its outward surface, since a bystander sees what a
     body does and never what it meant by it. Unknown rooms deliver nothing.
     """
-    interp = ctx.get("director_interpret") or {}
     here = str(here or "").strip()
     p_room = str(_player_room(ctx, sc) or "").strip()
     if not here or not p_room:
         return ""
     p_name = persona_name(persona_of(ctx.chat))
+    # What is OVERT is decided once, in `overt_declaration`, because the
+    # deterministic gate that picks who reacts reads the same answer; this
+    # function adds only the channel to each presence.
+    elements, raw = overt_declaration(ctx)
 
     def _hearing(volume):
         """This presence's hearing of the player, or "none". An unnameable
@@ -126,12 +130,9 @@ def _filtered_player_declaration(ctx, sc, name, here):
                                 observer_room=here, target_room=p_room),
             volume or "normal")
 
-    seq = [e for e in (interp.get("sequence") or []) if isinstance(e, dict)]
-    if seq:
+    if elements:
         parts = []
-        for e in seq:
-            if e.get("visibility") == "concealed":
-                continue
+        for e in elements:
             if e.get("type") == "speech" and e.get("text"):
                 level = _hearing(e.get("volume"))
                 if level == "none":
@@ -147,14 +148,9 @@ def _filtered_player_declaration(ctx, sc, name, here):
                 if surface:
                     parts.append(str(surface))
         return " ".join(parts).strip()
-    # No structured sequence to filter against; the raw input may contain the
-    # concealed words verbatim, and there is no volume to grade it by. Withhold
-    # it entirely whenever a private thought exists (the one signal available
-    # here that something was withheld), and otherwise only for a presence
-    # standing where the beat happened.
-    if interp.get("private_thought") or here != p_room:
-        return ""
-    return ctx.input or ""
+    # An unstructured declaration has no volume to grade it by, so the only
+    # channel that can still be established is standing where it happened.
+    return raw if here == p_room else ""
 
 
 def _beat_for_presence(dr, sc, station_room, name, beat_room=None):
