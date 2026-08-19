@@ -107,22 +107,43 @@ _SUPPORT_MANNERS = frozenset({
 
 
 def _tokens(*texts):
+    """One flat token stream. For membership questions only."""
     out = []
     for text in texts:
-        out.extend(t for t in re.split(r"[^a-z0-9]+",
-                                       str(text or "").casefold()) if t)
+        out.extend(_field_tokens(text))
     return out
 
 
-def _soft(tokens):
-    return any(t in SOFT_SUPPORT_TOKENS for t in tokens)
+def _field_tokens(text):
+    return [t for t in re.split(r"[^a-z0-9]+", str(text or "").casefold()) if t]
 
 
-def _warm(tokens):
-    if any(t in WARMTH_TOKENS for t in tokens):
-        return True
-    return any(a in _WARM_QUALIFIERS and b in _WARM_MEDIA
-               for a, b in zip(tokens, tokens[1:]))
+def _fields(*texts):
+    """Tokens PER FIELD, one list each.
+
+    Kept separate because ADJACENCY is meaningful here: `_warm` reads a
+    qualifier beside a medium ("warm spring", "hot bath"), since the bare
+    nouns cannot tell a cold spring from a heated one. A flat stream made the
+    last word of one field adjacent to the first word of the next -- an entity
+    named "Runoff, Never Warm" beside a description opening "Pool of
+    snowmelt..." read as warm water. Two fields are two sentences; nothing is
+    adjacent across them.
+    """
+    return [_field_tokens(text) for text in texts]
+
+
+def _soft(fields):
+    return any(t in SOFT_SUPPORT_TOKENS for field in fields for t in field)
+
+
+def _warm(fields):
+    for field in fields:
+        if any(t in WARMTH_TOKENS for t in field):
+            return True
+        if any(a in _WARM_QUALIFIERS and b in _WARM_MEDIA
+               for a, b in zip(field, field[1:])):
+            return True
+    return False
 
 
 def _ci_eq(a, b):
@@ -246,7 +267,7 @@ def _derive(scene, name):
         display = str((ent or {}).get("name") or other or "").strip()
         if _is_body(scene, eid, ent, other):
             continue
-        tokens = _tokens(other, eid, (ent or {}).get("kind"),
+        tokens = _fields(other, eid, (ent or {}).get("kind"),
                          (ent or {}).get("name"),
                          (ent or {}).get("description"))
         if _soft(tokens):
@@ -269,7 +290,7 @@ def _derive(scene, name):
         desc = str((anchor if isinstance(anchor, dict) else {}).get("desc")
                    or "").strip()
         display = desc or str(at).replace("_", " ")
-        tokens = _tokens(at, desc)
+        tokens = _fields(at, desc)
         if _soft(tokens):
             if posture == "lying":
                 consider(_LEVEL_LYING, display, lying_support=True)
@@ -288,7 +309,7 @@ def _derive(scene, name):
             continue
         if _is_body(scene, eid, ent, other):
             continue
-        tokens = _tokens(other, eid, ent.get("kind"), ent.get("name"),
+        tokens = _fields(other, eid, ent.get("kind"), ent.get("name"),
                          ent.get("description"))
         if _soft(tokens) or _warm(tokens):
             consider(_LEVEL_NEAR, str(ent.get("name") or other).strip())
