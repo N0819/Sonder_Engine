@@ -195,16 +195,20 @@ class TestTheSeededDraw:
         }
         assert len(outputs) > 1
 
-    def test_no_model_is_consulted(self):
-        """The whole point of the step. The draw is importable and runnable
-        with no provider configured and no database."""
-        import inspect
+    def test_no_model_is_consulted(self, monkeypatch):
+        """The whole point of the step: the draw is runnable with no provider
+        configured and no database.
 
-        from world import offscreen
+        DRIVEN rather than read. The substring form this replaces --
+        `"chat_complete" not in src` -- holds for any spelling that avoids
+        those two words, including the one wrapper (`complete_validated_json`)
+        that is itself only a spelling of the same call.
+        """
+        from model_seams import seal_model_seams
 
-        src = inspect.getsource(offscreen.stochastic_ticks)
-        assert "chat_complete" not in src
-        assert "complete_validated_json" not in src
+        seal_model_seams(monkeypatch)
+        ticks = stochastic_ticks("tick:59:165", self.ACTORS, self.INTENTIONS, 3)
+        assert ticks, "the draw returned nothing, so nothing was proved"
 
     def test_ticks_are_keyed_by_subject_id_from_birth(self):
         """offscreen_log's name-keyed `actor` is the live section 2A defect
