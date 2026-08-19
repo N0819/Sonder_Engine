@@ -23,7 +23,9 @@ from language_runtime import (
     installed_language_packs, language_pack, linguistic,
     require_language_pack, story_language,
 )
-from llm.prompts import DEFAULT_PROMPTS, character_prompt, get_prompt
+from llm.prompts import (
+    DEFAULT_PROMPTS, character_prompt, default_prompts_for, get_prompt,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,15 +59,18 @@ def test_english_is_an_installed_complete_default_pack():
     # 42, not 43: `move_repeat_screen` was retired with the quality re-ask it
     # existed to gate. A floor rather than an equality, so a prompt going
     # MISSING still fails here while a deliberate retirement is one edit.
-    assert len(packs["en"].card("system_prompts")["prompts"]) >= 42
+    # Counted over what the pack PUBLISHES, not what it stores: the seven
+    # Director sheets are assembled from `specialists`/`prose_author_sheet`
+    # and deliberately carry no stored body of their own.
+    assert len(default_prompts_for("en")) >= 42
     # Perception composes every view deterministically and has no model role,
     # so it must carry no prompt: one in the pack is 28k characters shipped to
     # nobody, surfaced in the host's prompt editor as if it were editable, and
     # paid for again in every translation.
     assert "perception" not in packs["en"].card("system_prompts")["prompts"]
     # The Director monolith is gone; only the scoped prose-author sheet remains.
-    assert "director_resolve" not in packs["en"].card("system_prompts")["prompts"]
-    assert "director_resolve_lean" in packs["en"].card("system_prompts")["prompts"]
+    assert "director_resolve" not in default_prompts_for("en")
+    assert "director_resolve_lean" in default_prompts_for("en")
     assert "agents.common" in packs["en"].card("linguistics")
     assert len(packs["en"].ui_catalog) > 1000
 
@@ -79,7 +84,7 @@ def test_japanese_is_a_complete_selectable_story_and_ui_pack():
     assert japanese.adapter == "japanese"
     assert japanese.translation_status == "model-draft"
     assert require_language_pack("ja", capability="story") is japanese
-    assert set(japanese.card("system_prompts")["prompts"]) == set(DEFAULT_PROMPTS)
+    assert set(default_prompts_for("ja")) == set(DEFAULT_PROMPTS)
     assert set(japanese.ui_catalog) == set(packs["en"].ui_catalog)
     exceptions = json.loads((ROOT / "language_packs/ja/translation_exceptions.json")
                             .read_text(encoding="utf-8"))
@@ -335,3 +340,60 @@ def test_pack_lookup_rejects_invalid_and_uninstalled_ids():
     with pytest.raises(LanguagePackError):
         require_language_pack("es", capability="story")
     assert language_pack("en-US").id == "en"
+
+
+def _assembled_specialist_sheet(card, name):
+    spec = card["specialists"][name]
+    return spec["core"] + "".join(
+        spec["chunks"][channel] for channel in spec["order"])
+
+
+def test_every_director_sheet_the_editor_publishes_is_the_one_a_beat_assembles():
+    """The prompt editor must show the sheet the runtime actually loads.
+
+    A specialist sheet has exactly one authored source -- its core plus the
+    per-channel chunks scoping selects from. Publishing a second, separately
+    stored body under the same prompt id is a sheet with two spellings, and
+    the editor shows the copy no beat runs. Saving that copy as a preset
+    replaces the assembled sheet with it for every beat afterwards.
+    """
+    from language_runtime import apply_prompt_policy
+    from llm import prompts as prompt_module
+
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        card = pack.card("system_prompts")
+        published = prompt_module.default_prompts_for(pack.id)
+        for name in card["specialists"]:
+            pid = f"director_{name}"
+            expected = apply_prompt_policy(
+                _assembled_specialist_sheet(card, name), pack.id, pid)
+            assert published[pid] == expected, (
+                f"{pack.id} pack publishes a {pid} sheet that is not the "
+                f"assembly the runtime loads "
+                f"({len(published[pid])} chars vs {len(expected)})")
+        lean = apply_prompt_policy(
+            "".join(text for _name, text in card["prose_author_sheet"]),
+            pack.id, "director_resolve_lean")
+        assert published["director_resolve_lean"] == lean
+
+
+def test_no_pack_stores_a_second_copy_of_an_assembled_director_sheet():
+    """The duplication itself, refused at the source.
+
+    Byte-equal copies are drift in waiting; these had already drifted (the
+    English `director_spatial` body was 1,518 characters short of its own
+    assembly -- the whole `comms_ops` chunk -- and every Japanese sheet
+    differed). Keeping the bodies out of the card is what makes the equality
+    above unbreakable rather than merely currently true.
+    """
+    from llm.prompts import ASSEMBLED_SHEET_IDS
+
+    for pack in installed_language_packs(refresh=True).values():
+        stored = set(pack.card("system_prompts")["prompts"])
+        duplicated = sorted(stored & set(ASSEMBLED_SHEET_IDS))
+        assert not duplicated, (
+            f"language pack {pack.id!r} stores a second body for "
+            f"{', '.join(duplicated)}; those sheets are assembled from "
+            "`specialists`/`prose_author_sheet` and must live there only")
