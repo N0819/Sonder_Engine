@@ -10,8 +10,9 @@ from itertools import product
 
 import pytest
 
+from language_runtime import english_linguistic
+
 from mind.affect import (
-    AFFECT_LEXICON,
     _va_pair,
     appraise,
     apply_intent_ops,
@@ -53,13 +54,15 @@ def test_unknown_label_is_never_rejected():
     assert label_matches(None, -0.7, 0.7)
 
 def test_quadrant_labels_are_lexicon_consistent():
+    lexicon = english_linguistic("mind.affect", "AFFECT_LEXICON")
     for v, a in product((-0.5, 0.0, 0.5), repeat=2):
         label = quadrant_label(v, a)
-        assert label in AFFECT_LEXICON
+        assert label in lexicon
         assert label_matches(label, v, a)
 
 def test_lexicon_signs_are_valid():
-    for label, entry in AFFECT_LEXICON.items():
+    for label, entry in english_linguistic(
+            "mind.affect", "AFFECT_LEXICON").items():
         assert entry["v"] in (-1, 0, 1), label
         assert entry["a"] in (-1, 0, 1), label
 

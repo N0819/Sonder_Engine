@@ -15,6 +15,19 @@ from core import frames as _frames
 from core.logging_utils import logger
 from mind.theory_of_mind import belief_credence
 from core.db import active_frame_id as _active_frame_id
+from language_runtime import linguistic
+
+
+def _ling(name):
+    """One deterministic recognizer, from the story's own language pack.
+
+    Read at use time, never at import: two stories in different languages run
+    concurrently and each must see its own vocabulary. A pack that lacks the
+    key raises rather than returning empty -- a recognizer that quietly
+    matches nothing is the failure this file is least able to notice, because
+    every one of them degrades to "no signal" rather than to an error.
+    """
+    return linguistic("mind.memory", name)
 
 _UNSET = object()
 
@@ -663,25 +676,11 @@ def monitoring_subtree(chat_id, book_id, scene=None, max_depth=6):
 
 # ---- Memory normalization and storage helpers ----
 
-_STOPWORDS = {
-    "about", "after", "again", "against", "also", "and", "are", "because",
-    "before", "being", "but", "can", "could", "did", "does", "doing", "for",
-    "from", "had", "has", "have", "her", "hers", "him", "his", "how", "into",
-    "its", "itself", "just", "might", "not", "now", "other", "our", "ours",
-    "said", "says", "she", "should", "something", "than", "that", "the", "their",
-    "theirs", "them", "then", "there", "these", "they", "this", "those", "through",
-    "under", "very", "was", "we", "were", "what", "when", "where", "which", "while",
-    "who", "will", "with", "would", "you", "your", "yours", "been",
-}
-
-_OLD_CUES = (
-    r"\blong ago\b", r"\byears? ago\b", r"\bmonths? ago\b",
-    r"\bback then\b", r"\bearliest\b", r"\bfirst time\b", r"\boriginally\b",
-)
-_RECENT_CUES = (
-    r"\brecently\b", r"\bjust now\b", r"\ba moment ago\b",
-    r"\blast turn\b", r"\bjust happened\b",
-)
+# The stopword set, the word regex and the two temporal cue tables all live
+# in the pack (`mind.memory.*`). They decide FTS query terms, key phrases and
+# whether a recall leans old or recent; word regexes anchored on `[A-Za-z]`
+# return nothing at all on unspaced Japanese, so every query there was empty
+# and every recall neutral, with no error anywhere to say so.
 
 def _json_list(value) -> list:
     if isinstance(value, list):
@@ -739,15 +738,12 @@ def _gist(text: str, limit: int = 240) -> str:
 
 def _extract_entities(text: str, limit: int = 12) -> list[str]:
     text = str(text or "")
-    matches = list(re.finditer(
-        r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b", text))
-    blocked = {
-        "A", "An", "And", "At", "But", "He", "Her", "Here", "His",
-        "I", "It", "Its", "Later", "Now", "She", "So",
-        "Something", "That", "The", "Their", "Then", "There", "These", "They",
-        "This", "Those", "We", "What", "When", "Where", "Which", "While", "Who",
-        "Why", "With", "You", "Your",
-    }
+    # Capitalisation is an English convention for marking a name, and the
+    # block list is English function words wearing it. Both live in the pack:
+    # a script with no letter case has to recognise its names some other way,
+    # and against this pattern found none at all.
+    matches = list(_ling("_ENTITY_CANDIDATE_RE").finditer(text))
+    blocked = _ling("_ENTITY_BLOCKED")
     # Legacy inference rows encode their subject explicitly as
     # ``About <subject>: <claim>``.  Preserve that semantic handle even when
     # the subject is a lower-case role ("the stranger"), which capitalization
@@ -783,13 +779,14 @@ def _extract_key_phrases(text: str, entities: list[str] | None = None, limit: in
         quote = re.sub(r"\s+", " ", quote).strip()
         if quote and quote.lower() not in {p.lower() for p in phrases}:
             phrases.append(quote)
-    words = re.findall(r"[A-Za-z0-9'-]{3,}", text.lower())
+    words = _ling("_WORD_RE").findall(text.lower())
+    stopwords = _ling("_STOPWORDS")
     counts = defaultdict(int)
     for i, w in enumerate(words):
-        if w in _STOPWORDS:
+        if w in stopwords:
             continue
         counts[w] += 1
-        if i + 1 < len(words) and words[i + 1] not in _STOPWORDS:
+        if i + 1 < len(words) and words[i + 1] not in stopwords:
             counts[f"{w} {words[i + 1]}"] += 1.5
     ranked = sorted(counts, key=lambda item: (-counts[item], -len(item.split()), item))
     for e in entities or []:
@@ -1579,7 +1576,9 @@ def delete_memory(mid):
 # ---- Hybrid retrieval ----
 
 def _memory_fts_query(text):
-    tokens = [t.lower() for t in re.findall(r"[A-Za-z0-9'-]{3,}", text or "") if t.lower() not in _STOPWORDS]
+    stopwords = _ling("_STOPWORDS")
+    tokens = [t.lower() for t in _ling("_WORD_RE").findall(text or "")
+              if t.lower() not in stopwords]
     tokens = list(dict.fromkeys(tokens))[:16]
     if not tokens:
         return None
@@ -1599,9 +1598,9 @@ def _lexical_memory_ranking(chat_id, char_id, query_text, limit=60):
 
 def _temporal_mode(query_text):
     text = (query_text or "").lower()
-    if any(re.search(p, text) for p in _OLD_CUES):
+    if any(re.search(p, text) for p in _ling("_OLD_CUES")):
         return "old"
-    if any(re.search(p, text) for p in _RECENT_CUES):
+    if any(re.search(p, text) for p in _ling("_RECENT_CUES")):
         return "recent"
     return "neutral"
 
@@ -1625,8 +1624,13 @@ def _exact_cue_score(memory, query_text):
     return score
 
 def _jaccard_text(a, b):
-    la = set(re.findall(r"[a-z0-9']{3,}", (a or "").lower()))
-    lb = set(re.findall(r"[a-z0-9']{3,}", (b or "").lower()))
+    # Same content-word rule as `_content_words`, and the same pack key: this
+    # is the fallback whenever two memories have no vectors to compare, and an
+    # English-only tokenizer scored every Japanese pair at 0.0 similarity --
+    # which reads as "unrelated", not as "could not tell".
+    word_re = _ling("_SUPPORT_WORD_RE")
+    la = set(word_re.findall((a or "").lower()))
+    lb = set(word_re.findall((b or "").lower()))
     if not la or not lb:
         return 0.0
     return len(la & lb) / len(la | lb)
@@ -1768,28 +1772,15 @@ def _congruence_valence(mem) -> float:
         return incoming
     return (_ENCODED_SHARE * encoded) + ((1.0 - _ENCODED_SHARE) * incoming)
 
-_MOOD_VALENCE = (
-    (("afraid", "fear", "fearful", "terrified", "scared", "anxious", "dread",
-      "panic", "angry", "furious", "rage", "resentful", "bitter", "grief",
-      "grieving", "ashamed", "humiliated", "guilty", "miserable", "despair",
-      "hopeless", "lonely", "hurt", "sad", "sick", "desperate", "wary",
-      "distrustful", "uneasy", "unease", "tense", "shaken"), -1.0),
-    (("happy", "glad", "delighted", "elated", "warm", "fond", "affectionate",
-      "content", "calm", "safe", "relieved", "hopeful", "proud", "amused",
-      "playful", "curious", "eager", "tender", "grateful", "trusting",
-      "composed", "steady"), 1.0),
-)
-
-
 def _mood_axis(text):
     """The signed valence a mood/goal string implies, or None if it implies
     none. Word-matched against a small closed vocabulary rather than embedded:
     this is a tiebreak, and a wrong sign is worse than no sign."""
-    words = set(re.split(r"[^a-z']+", str(text or "").casefold()))
+    words = set(_ling("_MOOD_TOKEN_RE").findall(str(text or "").casefold()))
     if not words:
         return None
     score = 0.0
-    for vocab, sign in _MOOD_VALENCE:
+    for vocab, sign in _ling("_MOOD_VALENCE"):
         score += sign * len(words & set(vocab))
     return None if score == 0 else (1.0 if score > 0 else -1.0)
 
@@ -2085,7 +2076,9 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
             fused[mid] += 0.05
             if "visible from here" not in reasons[mid]:
                 reasons[mid].append("visible from here")
-        if mem["category"] == "promise" and any(t in query_text.lower() for t in ("promise", "promised", "swore", "vow", "agreed")):
+        if mem["category"] == "promise" and any(
+                t in query_text.lower()
+                for t in _ling("_PROMISE_QUERY_CUES")):
             fused[mid] += 0.1
             reasons[mid].append("promise category")
     ranked = sorted(memories, key=lambda x: fused[x], reverse=True)
@@ -2468,11 +2461,10 @@ def search_memory_summaries(chat_id, char_id, query, k=3, *,
     return out
 
 
-_CLAUSE_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z\"'“‘])")
-_SUPPORT_STOPWORDS = frozenset(
-    "a an and are as at be been but by for from had has have he her him his i "
-    "in into is it its me my not of on or she that the their them then there "
-    "they this to was were what when where which who will with you your".split())
+# Clause boundary, content-word regex and stopwords all come from the pack
+# (`mind.memory.*`): "a sentence ends at a full stop followed by a capital"
+# is an English typographic rule, and against Japanese punctuation it found
+# one clause per summary and therefore one undifferentiated support set.
 # Two shared content words is coincidence in prose this dense; three is a
 # claim about the same thing. Calibrated against the live corpus rather than
 # guessed -- at two, every clause matched every memory in its own window.
@@ -2481,8 +2473,9 @@ _SUPPORT_MAX_REFS = 3
 
 
 def _content_words(text):
-    return {w for w in re.findall(r"[a-z0-9']{3,}", str(text or "").casefold())
-            if w not in _SUPPORT_STOPWORDS}
+    return {w for w in _ling("_SUPPORT_WORD_RE").findall(
+                str(text or "").casefold())
+            if w not in _ling("_SUPPORT_STOPWORDS")}
 
 
 def derive_summary_support(summary, memories):
@@ -2525,7 +2518,8 @@ def derive_summary_support(summary, memories):
             words |= _content_words(entity)
         rows.append((ref, words, mem.get("provenance")))
     out = []
-    for clause in [c.strip() for c in _CLAUSE_SPLIT.split(text) if c.strip()]:
+    for clause in [c.strip() for c in _ling("_CLAUSE_SPLIT").split(text)
+                   if c.strip()]:
         cw = _content_words(clause)
         scored = sorted(
             ((len(cw & words), ref, prov) for ref, words, prov in rows
@@ -4758,6 +4752,14 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
     save_relationships(chat_id, char_id, graph)
     return graph
 
+# How far one inference moves trust, by direction. Deliberately asymmetric:
+# concluding somebody cannot be trusted is worth more than concluding they
+# can, because the cost of the two mistakes is not the same. This is
+# psychology, not language, so it does NOT live in the pack -- only the
+# vocabularies that decide which direction a conclusion points do.
+_TRUST_INFERENCE_STEP = {"trusting": 0.1, "wary": -0.15}
+
+
 def update_relationships_from_inference(chat_id, char_id, turn_idx,
                                         inference_updates, existing=None,
                                         frame_id=_UNSET):
@@ -4777,9 +4779,11 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx,
     concluding somebody is dangerous and being told so are different
     provenances and the ledger already exists to keep that difference.
 
-    NOTE, still open: the word list below decides trust movement in English
-    only. It is the class registered as MIND-F4 -- routing it through
-    `language_runtime` needs a `mind.*` linguistics key that no pack has yet.
+    Which conclusions move trust is a question about WORDS, so the two
+    vocabularies live in the pack (`mind.memory._TRUST_INFERENCE_CUES`); how
+    far each moves it does not, so the step stays here. Before this, a
+    Japanese story drew every inference it liked and none of them ever moved
+    a relationship, silently.
     """
     graph = existing or get_relationships(chat_id, char_id)
     resolved_frame_id = (
@@ -4792,10 +4796,10 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx,
         conclusion = u.get("conclusion", "")
         cl = conclusion.lower()
         trust_delta = 0.0
-        if any(w in cl for w in ("trustworthy", "honest", "kind", "saved", "helped")):
-            trust_delta = 0.1 * confidence
-        elif any(w in cl for w in ("lied", "betrayed", "deceitful", "dangerous", "threat")):
-            trust_delta = -0.15 * confidence
+        for direction, cues in _ling("_TRUST_INFERENCE_CUES"):
+            if any(w in cl for w in cues):
+                trust_delta = _TRUST_INFERENCE_STEP[direction] * confidence
+                break
         if trust_delta != 0:
             graph.adjust_trust(about, trust_delta, conclusion[:200])
             # The conclusion IS the reason, so it is the note. No trigger ids:

@@ -3094,6 +3094,43 @@
     "_SUPPORT_WORD_RE": {
       "$type": "regex",
       "pattern": "[a-z0-9']{3,}"
+    },
+    "_TRUST_INFERENCE_CUES": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            "trusting",
+            {
+              "$type": "tuple",
+              "items": [
+                "trustworthy",
+                "honest",
+                "kind",
+                "saved",
+                "helped"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "wary",
+            {
+              "$type": "tuple",
+              "items": [
+                "lied",
+                "betrayed",
+                "deceitful",
+                "dangerous",
+                "threat"
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "persist.commit_memory": {

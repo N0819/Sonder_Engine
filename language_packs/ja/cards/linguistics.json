@@ -4035,6 +4035,43 @@
     "_SUPPORT_WORD_RE": {
       "$type": "regex",
       "pattern": "[a-z0-9']{3,}|[一-鿿々〆ヶ]+|[ァ-ヶー]{2,}"
+    },
+    "_TRUST_INFERENCE_CUES": {
+      "$type": "tuple",
+      "items": [
+        {
+          "$type": "tuple",
+          "items": [
+            "trusting",
+            {
+              "$type": "tuple",
+              "items": [
+                "信頼できる",
+                "正直",
+                "親切",
+                "助けてくれた",
+                "救ってくれた"
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "tuple",
+          "items": [
+            "wary",
+            {
+              "$type": "tuple",
+              "items": [
+                "嘘",
+                "裏切",
+                "欺",
+                "危険",
+                "脅威"
+              ]
+            }
+          ]
+        }
+      ]
     }
   },
   "persist.commit_memory": {
