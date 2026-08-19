@@ -48,8 +48,9 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 2664 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory.py` | 2151 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
+| `mind/memory_context.py` | 539 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_retrieval.py` | 796 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
@@ -559,14 +560,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 319 | 275 lines |
-| `rebuild_embeddings()` | 2036 | 213 lines |
-| `embedding_bank_status()` | 1886 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 2288 | 124 lines |
-| `_with_reading()` | 89 | 101 lines |
-| `_origin_on_drift()` | 220 | 97 lines |
-| `restore_lorebook()` | 1073 | 95 lines |
-| `prepare_chat_memory_restore()` | 817 | 75 lines |
+| `rebuild_embeddings()` | 1523 | 213 lines |
+| `embedding_bank_status()` | 1373 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 1775 | 124 lines |
+| `restore_lorebook()` | 560 | 95 lines |
+| `prepare_chat_memory_restore()` | 304 | 75 lines |
+| `backfill_lore_embedding_stamps()` | 941 | 71 lines |
+| `reconcile_inference_confidence()` | 2082 | 70 lines |
+| `search_lore()` | 874 | 66 lines |
 
 ### `mind/memory_common.py`
 
@@ -580,6 +581,16 @@
 | `_ids()` | 150 | 7 lines |
 | `_storage_json()` | 145 | 4 lines |
 | `summary_scope_for()` | 109 | 3 lines |
+
+### `mind/memory_context.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `build_character_memory_context()` | 253 | 275 lines |
+| `_with_reading()` | 23 | 101 lines |
+| `_origin_on_drift()` | 154 | 97 lines |
+| `_beats_ago_span()` | 126 | 21 lines |
+| `_summary_id()` | 149 | 3 lines |
 
 ### `mind/memory_lorebooks.py`
 
