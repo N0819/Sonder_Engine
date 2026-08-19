@@ -35,3 +35,27 @@ def test_perception_quality_names_the_symbols_its_gate_needs():
     symbols, _ = resolve_engine()
     for name in GATE_SYMBOLS:
         assert symbols.get(name) is not None, name
+
+
+def test_code_map_purposes_all_name_a_real_module():
+    """A purpose key that matches nothing renders an empty Purpose column.
+
+    The package move made 33 of 43 keys stale in one commit, and 100 of 110
+    rows in `docs/CODE_MAP.md` lost their Purpose with no diff to read:
+    `check_generated_map` regenerates the file and compares, so both sides
+    lost the purposes together.
+    """
+    from generate_code_map import MODULE_PURPOSES, module_name, source_paths
+
+    modules = {module_name(path) for path in source_paths()}
+    assert sorted(k for k in MODULE_PURPOSES if k not in modules) == []
+
+
+def test_code_map_generator_refuses_a_stale_purpose_key(monkeypatch):
+    import generate_code_map as gcm
+    import pytest
+
+    monkeypatch.setitem(gcm.MODULE_PURPOSES, "spatial", "pre-move name")
+    with pytest.raises(gcm.StalePurposeKeys) as exc:
+        gcm.generate()
+    assert "world.spatial" in str(exc.value)
