@@ -13,6 +13,11 @@ const LORE_LINK_TYPES = [
   "portal"
 ];
 
+// A language pack the server could not use is reported once per session.
+// `boot()` reruns on every import, save and NSFW toggle, and a report
+// repeated on each of those is a nag rather than a report.
+let languagePackErrorReported = false;
+
 async function boot() {
   S.boot = await api("GET", "/api/bootstrap");
   S.uiCatalog = S.boot.ui_messages || {};
@@ -21,6 +26,15 @@ async function boot() {
   localizeDocument();
   watchUILanguage();
   S.nsfw = S.boot.nsfw_enabled || false;
+
+  // The bootstrap refuses to die on a malformed pack and reports why instead
+  // -- and then nothing showed the report, so a host who installed a pack got
+  // English with no reason given. The wording is the server's because the
+  // reason IS the pack's own error, naming the file and what was wrong with it.
+  if (S.boot.language_error && !languagePackErrorReported) {
+    languagePackErrorReported = true;
+    toast(S.boot.language_error, "warn", 8000);
+  }
 
   if (!Array.isArray(S.boot.lorebook_link_types)) {
     S.boot.lorebook_link_types = LORE_LINK_TYPES;
