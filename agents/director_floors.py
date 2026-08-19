@@ -16,8 +16,9 @@ import re
 from story.character_schema import name_boundary_pattern
 from story.scene import (
     NON_AWAKE_GATED,
-    _normalize_awareness_level,
+    awareness_cond_level,
     awareness_conditions,
+    awareness_kind_level,
     awareness_of,
 )
 from world.spatial import room_of
@@ -167,7 +168,10 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
     for key, cond_value in (conditions or {}).items():
         cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
         for cond in cond_list:
-            if not isinstance(cond, dict) or cond.get("kind") != "awareness":
+            if not isinstance(cond, dict):
+                continue
+            level = awareness_cond_level(cond)
+            if level is None:
                 continue
             try:
                 if not int(cond.get("active", 1)):
@@ -180,9 +184,6 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
             )
             if subject != target:
                 continue
-            level = _normalize_awareness_level(
-                (cond.get("state") or {}).get("level")
-            )
             if level in NON_AWAKE_GATED:
                 unsupported.append((key, level))
                 break
@@ -776,7 +777,8 @@ def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions
     aware_subjects = set()
     for cond_value in (conditions or {}).values():
         for c in (cond_value if isinstance(cond_value, list) else [cond_value]):
-            if isinstance(c, dict) and c.get("kind") == "awareness":
+            if (isinstance(c, dict)
+                    and awareness_kind_level(c.get("kind")) is not None):
                 aware_subjects.add(str(c.get("subject_id") or "").casefold())
 
     flagged = _clause_attributed_subjects(
