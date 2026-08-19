@@ -196,6 +196,31 @@ def _join_relevant_lore(ctx, entries, hits):
     return joined
 
 
+# The phrases in the Director's free-text `flow.mapping_request` that mean this
+# beat needs a place STAGED rather than recalled.
+#
+# One list, because there were two and they had already drifted apart by
+# `"new location"`. They answer adjacent questions -- runtime's
+# `_mapping_must_precede_perception` decides whether mapping must run BEFORE
+# perception, `mapping_quick` below decides whether cached recall may serve at
+# all -- but a request that forces the serialization and does not force the
+# staging produces the worst of both: mapping runs first, cheaply, and the
+# location is never staged, so perception's room-notes fallback reads nothing.
+#
+# Still a naked substring test against model-authored prose, which is the
+# literal-guard shape that fails when a model rewrites. Keeping it in one place
+# is what makes replacing it with a structured signal a single edit later.
+STAGING_REQUEST_PHRASES = (
+    "new room", "generate room", "scene graph", "new location")
+
+
+def mapping_request_stages_a_room(request) -> bool:
+    """True when `flow.mapping_request` asks for a place to be brought into
+    existence, rather than for lore about one that already is."""
+    text = str(request or "").casefold()
+    return any(phrase in text for phrase in STAGING_REQUEST_PHRASES)
+
+
 def mapping_quick(ctx, nonce):
     chat = ctx.chat
     interp = ctx.get("director_interpret") or {}
@@ -210,8 +235,8 @@ def mapping_quick(ctx, nonce):
         # A captured player declaration awaits elaboration -- cached recall
         # cannot mint the declared content; escalate to the full stage.
         return mapping_stage(ctx, nonce)
-    mr = ((interp.get("flow") or {}).get("mapping_request") or "").lower()
-    if "new room" in mr or "generate room" in mr or "scene graph" in mr:
+    if mapping_request_stages_a_room(
+            (interp.get("flow") or {}).get("mapping_request")):
         return mapping_stage(ctx, nonce)
 
     pieces = [ctx.input or ""]
