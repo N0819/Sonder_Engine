@@ -26,7 +26,23 @@ from __future__ import annotations
 
 import re
 
-from agents.common import _check_player_act_authority, _player_subject_sentences
+from agents.common import _check_player_act_authority, _sentence_subjects
+
+
+def _player_sentences(prose, player_name):
+    """Sentences the live guard reads as the player's own.
+
+    These cases used to run against `_player_subject_sentences`, which was
+    superseded by `_sentence_subjects` and kept alive by this file alone. The
+    difference is deliberate and is why the old one had to go: the superseded
+    version refused a pronoun subject outright, and the live one continues the
+    most recently NAMED subject through one -- the miss (chat 56 t1391) was
+    four sentences of "he" after a single naming. Sentences opening with the
+    player's own name resolve identically in both.
+    """
+    return [sentence for sentence, subject
+            in _sentence_subjects(prose, [player_name])
+            if subject == player_name]
 
 PLAYER = "Hinami"
 
@@ -80,7 +96,7 @@ def test_pronoun_subject_is_not_guessed_at():
 def test_subject_detection_requires_the_sentence_to_open_with_the_name():
     prose = ("Dr. Moon presses the bottle into Hinami's palm. "
              "Hinami takes a small sip.")
-    subjects = _player_subject_sentences(prose, PLAYER)
+    subjects = _player_sentences(prose, PLAYER)
     assert subjects == ["Hinami takes a small sip."]
 
 
@@ -88,7 +104,7 @@ def test_act_authority_empty_and_missing_inputs_are_noops():
     assert _check_player_act_authority("", [], PLAYER) == []
     assert _check_player_act_authority(T63, [], "") == []
     assert _check_player_act_authority(T63, [], None) == []
-    assert _player_subject_sentences("", PLAYER) == []
+    assert _player_sentences("", PLAYER) == []
 
 
 def test_short_full_name_is_matched_but_short_fragments_are_not():
@@ -97,14 +113,14 @@ def test_short_full_name_is_matched_but_short_fragments_are_not():
     where a fragment could collide with ordinary words. Word boundaries keep
     "Al" from matching "Also"."""
     from agents.common import _player_name_forms
-    assert _player_subject_sentences("Al takes a sip.", "Al") == ["Al takes a sip."]
-    assert _player_subject_sentences("Also, the door opens.", "Al") == []
+    assert _player_sentences("Al takes a sip.", "Al") == ["Al takes a sip."]
+    assert _player_sentences("Also, the door opens.", "Al") == []
     assert "Jo" not in _player_name_forms("Jo Anne")
 
 
 def test_full_name_player_is_matched_on_first_name():
     prose = "Hinami takes a small sip."
-    assert _player_subject_sentences(prose, "Hinami Sato") == [prose]
+    assert _player_sentences(prose, "Hinami Sato") == [prose]
 
 
 # ---- Enforcement, not just detection ----
