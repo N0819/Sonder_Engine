@@ -20,7 +20,14 @@ from fastapi.testclient import TestClient
 from web import app as app_module
 from core import db
 from web import guest_access as guest
-from story.dialogue_colors import auto_dialogue_color
+#: What SHEET's card derives to, written out rather than recomputed.
+#: These assertions used to read `== auto_dialogue_color("Wren", SHEET)`,
+#: which holds for any pair of agreeing wrong answers -- and held at all only
+#: because the fixture cast has ONE member, so the collision spreading
+#: `resolve_cast_colors` applies is the identity. A literal is the only form
+#: of this assertion that can fail when the route stops deriving from the
+#: card.
+WREN_DERIVED = "#7e8df1"
 
 
 SHEET = {
@@ -67,7 +74,7 @@ def test_the_column_exists_and_defaults_to_derive(temp_db):
 def test_an_unpicked_character_is_coloured_from_their_card(client):
     cid, _ch = _story(client)
     body = client.get(f"/api/chats/{cid}").json()
-    assert body["dialogue_colors"]["Wren"] == auto_dialogue_color("Wren", SHEET)
+    assert body["dialogue_colors"]["Wren"] == WREN_DERIVED
     assert body["participants"][0]["dialogue_color"] == ""
 
 
@@ -93,8 +100,7 @@ def test_clearing_a_pick_returns_the_character_to_their_card(client):
     r = client.put(f"/api/chats/{cid}/characters/{ch}/dialogue_color",
                    json={"color": ""})
     assert r.json()["color"] == ""
-    assert r.json()["dialogue_colors"]["Wren"] == \
-        auto_dialogue_color("Wren", SHEET)
+    assert r.json()["dialogue_colors"]["Wren"] == WREN_DERIVED
 
 
 def test_an_unreadable_colour_is_refused_rather_than_stored(client):
@@ -246,3 +252,24 @@ class TestTheTintedUnitIsTheQuotedRegion:
         for parser_door in ("innerHTML", "outerHTML", "insertAdjacentHTML",
                             "document.write", "DOMParser"):
             assert parser_door not in block, parser_door
+
+
+def test_two_unpicked_characters_are_pushed_apart(client):
+    """The property the oracle could never see: `resolve_cast_colors` spreads
+    derived hues in cast order, and with one member spreading is the identity
+    -- so a route that skipped it entirely passed the old assertion."""
+    from story.dialogue_colors import MIN_HUE_SEPARATION, _hue_of
+
+    cid, _ch = _story(client)
+    twin = client.post("/api/characters", json={
+        "name": "Bram", "sheet": {"identity": {"name": "Bram"},
+                                  "psychology": SHEET["psychology"]}}).json()
+    client.post(f"/api/chats/{cid}/characters", json={"char_id": twin["id"]})
+
+    colors = client.get(f"/api/chats/{cid}").json()["dialogue_colors"]
+    assert colors["Wren"] == WREN_DERIVED
+    # Identically authored, so they derive the SAME hue and must not render
+    # as the same colour.
+    assert colors["Bram"] != colors["Wren"]
+    gap = abs(_hue_of(colors["Bram"]) - _hue_of(colors["Wren"])) % 360.0
+    assert min(gap, 360.0 - gap) >= MIN_HUE_SEPARATION
