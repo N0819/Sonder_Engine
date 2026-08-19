@@ -3989,6 +3989,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 sc, name, others, known)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
+                entity_state=p.get("entity_state")
+                or _own_body_state(sc, name),
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
                 extra_parts=cast_parts)
@@ -4059,6 +4061,46 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
         "composer_ledger": merged,
         "company": company,
     }
+
+
+def _own_body_state(sc, name):
+    """This observer's own posture, activity and held items, from the scene.
+
+    `body_state_percept` is interoception -- channel "interoception", source
+    label "you" -- and it could only ever fire from
+    `director_establish.entity_states`, which exists on the opening turn and
+    nowhere else. So a mind knew what was in its own hands on turn 0 and
+    never again, in an engine whose composer header says exactly why that
+    costs something: "a character agent is a stateless LLM call; if it is not
+    in context, the mind does not have it".
+
+    The durable home for the same three facts is the scene entity's `state`,
+    which `_PROTECTED_STATE_KEYS` already reserves as structural for
+    "perception's own deterministic backstop". Posture is the one of the
+    three with a second and better home -- `scene.poses`, which
+    `pose_percepts` renders with the sight grade and always delivers for the
+    observer themselves -- so it is read from here only when the pose ledger
+    is silent, rather than said twice.
+    """
+    state = (_entity_named(sc, name) or {}).get("state")
+    if not isinstance(state, dict):
+        return {}
+    out = {}
+    activity = str(state.get("activity") or "").strip()
+    if activity:
+        out["activity"] = activity
+    held = [str(item).strip() for item in (state.get("held_items") or [])
+            if str(item or "").strip()]
+    if held:
+        out["held_items"] = held
+    posture = str(state.get("posture") or "").strip()
+    if posture and not any(
+            same_subject(sc, key, name)
+            and str((value or {}).get("posture") or "").strip()
+            for key, value in ((sc.get("poses") or {}).items()
+                               if isinstance(sc.get("poses"), dict) else ())):
+        out["posture"] = posture
+    return out
 
 
 def _is_the_observer(sc, candidate, observer, observer_aliases=()):
@@ -4282,6 +4324,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 sc, name, others, known)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
+                entity_state=p.get("entity_state")
+                or _own_body_state(sc, name),
                 appearance_changed=appearance_changed,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
