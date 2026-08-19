@@ -255,3 +255,20 @@ def test_the_character_repair_example_names_the_psychology_tier():
         assert key in example, key
     for key in ("speech", "action", "actions"):
         assert key not in example, key
+
+
+def test_every_specialist_example_shows_exactly_the_channels_it_owns():
+    """The same rule as the prose author's, one level in. A specialist's
+    example is its `required_json_example` on repair, and a channel missing
+    from it reads as one it does not answer for -- `comms_ops` was absent
+    from the spatial specialist's, the same channel the published spatial
+    sheet had lost. A channel it does NOT own would be an invitation to
+    write into another hand's diff.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES, SPECIALIST_CHANNELS
+
+    for step_key, channels in SPECIALIST_CHANNELS.items():
+        example = OUTPUT_EXAMPLES[step_key]
+        shown = set(example) - {"notes"}
+        assert shown == set(channels), (
+            f"{step_key}: shows {sorted(shown)}, owns {sorted(channels)}")
