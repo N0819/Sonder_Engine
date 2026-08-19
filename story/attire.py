@@ -37,6 +37,7 @@ SHOWN is a separate per-story choice, and off by default.
 
 from __future__ import annotations
 
+import copy
 import re
 
 # Coarse and closed. Finer regions (chest vs. belly, thigh vs. calf) buy detail
@@ -1774,13 +1775,27 @@ def removal_directed_at(texts, garment_names, worn_names=()):
     return False
 
 
-def coverage_removal_escalations(texts, coverage, regions):
-    """Coverage claims that are removals filed on the wrong axis.
+def coverage_total_emptyings(coverage, regions):
+    """Coverage claims that would leave a garment covering nothing at all.
 
-    Returns the coverage HANDLES to escalate: entries that (a) resolve to a
-    worn garment, (b) would leave it covering nothing anywhere it covers,
-    and (c) are named by a removal-directed decisive phrase in this beat's
-    words. Anything less specific keeps its displacement reading.
+    Returns the coverage HANDLES whose entry (a) resolves to a worn garment
+    and (b) names an empty zone list for EVERY region that garment currently
+    covers. That is not a coverage change: coverage moves a garment off PART
+    of what it covers, and a garment off all of it has been taken off.
+
+    Two different things arrive in this shape and neither is a displacement:
+
+    * a removal filed on the wrong axis, which `coverage_removal_escalations`
+      routes to `remove` when the beat's words support it; and
+    * a RESTATEMENT of the current wardrobe, which is what a model writes when
+      it reads the field as "which regions does this cover" and puts the
+      regions in the keys -- leaving the zones, which are the actual payload,
+      empty.
+
+    Measured in chat 77 turn 8: one restatement of both characters' wardrobes
+    displaced two fully-dressed people out of everything they had on, silently,
+    and both narrated as bare for two beats while every garment record still
+    read `state: worn`.
     """
     if not isinstance(coverage, dict):
         return []
@@ -1812,11 +1827,59 @@ def coverage_removal_escalations(texts, coverage, regions):
                         for z in raw if str(z or "").strip()]
             if not supplied:
                 emptied.add(region)
-        if not covers <= emptied:
-            continue
-        if removal_directed_at(texts, [target, handle], worn):
+        if covers <= emptied:
             out.append(handle)
     return out
+
+
+def coverage_would_bare_the_body(regions, coverage):
+    """Would this coverage claim leave the body covered NOWHERE it now is?
+
+    Not the same question as `coverage_total_emptyings`, and the difference is
+    the whole guard. One garment emptied off everything it covers is an
+    ordinary, designed state -- trousers around the ankles are still worn and
+    cover nothing, and the ladder is built to complete a removal from there in
+    one rung. A claim that empties EVERY garment a body has on at once is a
+    different animal: nobody undresses completely by displacement, and the
+    shape arrives when a model restates the wardrobe into the coverage channel
+    -- putting the regions in the keys and leaving the zones, which are the
+    payload, empty.
+
+    Measured in chat 77 turn 8: one such block, covering both characters'
+    entire wardrobes, on a beat where the two of them were talking. Six
+    garments and five garments went to "displaced off" and both people
+    narrated as bare for two beats, while every garment record still read
+    `state: worn` and no warning was raised.
+
+    Answered by applying the claim to a copy and comparing, so it can never
+    disagree with what application actually does.
+    """
+    before = covered_regions(normalize_regions({"regions": regions}))
+    if not before:
+        return False
+    after, _ = apply_coverage_changes(copy.deepcopy(regions), coverage)
+    return not covered_regions(after)
+
+
+def coverage_removal_escalations(texts, coverage, regions):
+    """Coverage claims that are removals filed on the wrong axis.
+
+    Returns the coverage HANDLES to escalate: entries that (a) resolve to a
+    worn garment, (b) would leave it covering nothing anywhere it covers,
+    and (c) are named by a removal-directed decisive phrase in this beat's
+    words. Anything less specific keeps its displacement reading.
+
+    (a) and (b) are `coverage_total_emptyings`; this adds (c). The split is
+    what lets the caller tell the two total-emptying shapes apart -- the ones
+    the words explain become removals, and the rest are refused rather than
+    applied.
+    """
+    if not isinstance(coverage, dict):
+        return []
+    worn = flat_wearing(regions)
+    return [handle for handle in coverage_total_emptyings(coverage, regions)
+            if removal_directed_at(
+                texts, [resolve_garment(handle, worn), handle], worn)]
 
 
 def worn_conditions_dropped(previous, reconciled):

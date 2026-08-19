@@ -93,7 +93,7 @@ def _merge_attire_regions(target, record):
         target["regions"] = merged
 
 
-def _heal_attire_identity_keys(sc, cast):
+def _heal_attire_identity_keys(sc, cast, player_name=None):
     """Collapse scene.attire onto one key per character, and return the
     function that canonicalizes an incoming key.
 
@@ -124,7 +124,16 @@ def _heal_attire_identity_keys(sc, cast):
     # `aliases=False`. The Yuki guard -- a real name outranks somebody else's
     # alias for it, measured when Yuki's wardrobe collapsed onto another
     # woman -- now lives in the shared policy, where both callers get it.
-    canonical, _forms = cast_spelling_policy(cast)
+    # The PLAYER is a body with a wardrobe like any other, and omitting them
+    # here is what let one split in two. `canonicalize_positions` has always
+    # passed the player name; this side did not, so a persona keyed by the
+    # scene's entity id ("hinami") never folded onto the persona's own
+    # spelling ("Hinami") and both records stayed live, drifting apart.
+    # Measured in chat 77: `hinami.state` read "bare at the head" while
+    # `Hinami.state` held a full displaced wardrobe, for one woman.
+    # This is the same two-callers-disagree defect the docstring above
+    # records from chat 82, in the one axis that fix did not cover.
+    canonical, _forms = cast_spelling_policy(cast, player_name)
 
     attire = sc.get("attire")
     if isinstance(attire, dict):
@@ -700,7 +709,8 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
 
     att = sc.setdefault("attire", {})
     _overlay_by_subject = _overlay_texts_by_subject(diff)
-    canonical_attire_key = _heal_attire_identity_keys(sc, ctx.cast)
+    canonical_attire_key = _heal_attire_identity_keys(
+        sc, ctx.cast, _player_name_or_none(ctx))
     # WHOSE clothes this beat tore off, not merely whether somebody's did —
     # and whose undressing the prose leaves still IN PROGRESS. The two
     # readings share one attribution ladder (attire._attributed_targets) and
@@ -815,12 +825,22 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         # beat, wrongly removing it is not.
         _coverage = (d.get("coverage")
                      if isinstance(d.get("coverage"), dict) else {})
-        if _coverage and name in _decisive_names:
+        if _coverage:
+            # NOT gated on `name in _decisive_names` any more. The escalation
+            # test that matters is `removal_directed_at` -- whether THIS beat's
+            # words describe taking the garment off -- and it is inside
+            # `coverage_removal_escalations` already. The extra gate meant that
+            # on a beat where nobody did anything decisive the whole block was
+            # skipped, so a total emptying was neither escalated NOR examined:
+            # it fell straight through to `apply_coverage_changes` and stripped
+            # the wardrobe. Measured in chat 77 turn 8, where the beat was two
+            # people talking and both of them came out bare.
             _beat_texts = ([getattr(ctx.turn, "player_input", "") or ""]
                            + list(_beat_voices(ctx, res)))
             _coverage = dict(_coverage)
-            for _handle in attire_model.coverage_removal_escalations(
-                    _beat_texts, _coverage, _before):
+            _escalate = set(attire_model.coverage_removal_escalations(
+                _beat_texts, _coverage, _before))
+            for _handle in _escalate:
                 _coverage.pop(_handle, None)
                 _canonical = attire_model.resolve_garment(
                     _handle, cur["wearing"])
@@ -832,6 +852,35 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                         "the decisive removal this beat's words describe -- "
                         "a garment taken off the body is `remove`, not a "
                         "coverage change.")
+            # A claim that would leave this body covered NOWHERE, on a beat
+            # whose words removed nothing, is refused whole. Displacing one
+            # garment off everything it covers is ordinary -- trousers at the
+            # ankles are worn and cover nothing, and the ladder completes from
+            # there in one rung. Displacing a body's ENTIRE wardrobe at once is
+            # not: nobody undresses completely by displacement, and the shape
+            # is what a restatement of the wardrobe looks like when the regions
+            # go in the keys and the zones, which are the payload, are left
+            # empty. Chat 77 turn 8: two people talking, six garments and five
+            # garments to "displaced off", both narrated bare for two beats,
+            # every record still `worn`, and not one warning in thirteen turns.
+            # Refusing is the recoverable direction -- a garment wrongly held
+            # on the body is fixed next beat; one wrongly taken off is not.
+            if _coverage and attire_model.coverage_would_bare_the_body(
+                    _before, _coverage):
+                ctx.add_warning(
+                    f"attire: refused a coverage claim that would have left "
+                    f"{name} covered nowhere, on a beat whose words remove "
+                    "nothing. Coverage is partial displacement; taking a "
+                    "garment off is `remove`.")
+                if report:
+                    ctx.tell_director(
+                        f"attire: ignored the coverage block for {name}; it "
+                        "displaced every garment off every region at once, "
+                        "which reads as a restatement of the wardrobe rather "
+                        "than a change to it. `coverage` carries the zones a "
+                        "garment STILL covers -- to take one off, use "
+                        "`remove`.")
+                _coverage = {}
         _wanted_before = list(cur["wearing"])
         _after = attire_model.apply_flat_change(
             _before, cur["wearing"], decisive=name in _decisive_names,
