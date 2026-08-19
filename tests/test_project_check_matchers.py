@@ -138,3 +138,80 @@ def test_all_three_facade_families_are_checked():
     assert set(FACADE_FAMILIES) == {"agents.director", "commit", "world.spatial"}
     for facade, (home, stem) in FACADE_FAMILIES.items():
         assert facade_siblings(home, stem), facade
+
+
+# ---- cross-file duplicate definitions (STORY-F11) --------------------------
+
+
+def _duplicate_bodies(sources):
+    """Run the cross-file rule over a fake tree of `{relative path: source}`."""
+    import ast
+
+    import project_check
+
+    seen = {}
+    for rel, source in sorted(sources.items()):
+        tree = ast.parse(source)
+        for name, body in project_check._module_level_bodies(tree, source).items():
+            if name in project_check._PER_MODULE_HOOKS:
+                continue
+            if len(body.splitlines()) < project_check._DUPLICATE_MIN_LINES:
+                continue
+            seen.setdefault((name, body), []).append(rel)
+    return {name for (name, _), files in seen.items() if len(files) > 1}
+
+
+SANITIZE = '''def sanitize_attire_items(items):
+    result = []
+    for item in items or []:
+        if item:
+            result.append(item)
+    return result
+'''
+
+
+def test_one_definition_copied_into_two_modules_is_reported():
+    """The per-file check resolves a redefinition by discarding the first.
+
+    Python resolves this one by keeping BOTH, which is why it needs its own
+    rule: `sanitize_attire_items` lived in three modules with separate
+    consumers, and neither file was wrong on its own.
+    """
+    assert _duplicate_bodies({
+        "story/attire.py": SANITIZE,
+        "story/scene.py": SANITIZE,
+    }) == {"sanitize_attire_items"}
+
+
+def test_the_same_name_with_a_different_body_is_not_a_copy():
+    """Name alone would make this noise: every package has a `_normalize`."""
+    other = SANITIZE.replace("result.append(item)", "result.append(str(item))")
+    assert _duplicate_bodies({
+        "story/attire.py": SANITIZE,
+        "world/crowds.py": other,
+    }) == set()
+
+
+def test_a_module_hook_is_exempt_because_it_cannot_be_shared():
+    """A module-level `__getattr__` is resolved per module: defining one in
+    each module that needs it is the only way to have one at all, so "import
+    it instead" is advice that cannot be followed."""
+    hook = (
+        "def __getattr__(name):\n"
+        "    pid = _COMPAT.get(name)\n"
+        "    if pid is None:\n"
+        "        raise AttributeError(name)\n"
+        "    return pid\n"
+    )
+    assert _duplicate_bodies({
+        "story/importers.py": hook,
+        "world/offscreen.py": hook,
+    }) == set()
+
+
+def test_the_repo_has_no_cross_file_duplicates():
+    from project_check import check_cross_file_duplicate_definitions
+
+    errors: list[str] = []
+    check_cross_file_duplicate_definitions(errors)
+    assert errors == [], errors
