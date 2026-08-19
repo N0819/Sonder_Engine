@@ -10,7 +10,7 @@ from llm.providers import (
     chat_complete, token_sink, embed_texts, request_timeout,
     clamp_read_timeout,
 )
-from llm.prompts import EXTRA_PARTS_NOTE, get_prompt
+from llm.prompts import get_prompt
 from language_runtime import language_pack
 from story.character_schema import (
     _outfit_items as character_schema_outfit_items,
