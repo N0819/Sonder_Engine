@@ -58,6 +58,7 @@ MODULE_PURPOSES = {
     "mind.memory_summaries": "Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill.",
     "mind.memory_context": "The character memory payload: where retrieval, summaries and active state become one context.",
     "mind.memory_lore_entries": "Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping.",
+    "mind.memory_snapshot": "Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore.",
     "core.pipeline_context": "Typed mutable context passed through a turn pipeline.",
     "persist.pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "llm.prompt_cache": "Provider-specific prompt-cache helpers.",
