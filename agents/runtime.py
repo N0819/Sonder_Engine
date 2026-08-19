@@ -535,7 +535,34 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     yield _evt(key, label, sid, vid, n, saved)
 
 def resume_key_for_turn(turn_id, chat_id):
-    """Find the first missing or stale step in a turn's plan."""
+    """Find the first missing or stale step in a turn's plan.
+
+    THE PLAN IS NOT STABLE ACROSS THE TURN'S OWN COMMIT, so a key this function
+    computes is not by itself evidence that the run skipped anything.
+    `build_plan`'s consciousness gate reads `awareness_map` live, and
+    `director_resolve` merges condition ENDINGS that commit then persists -- so
+    the reactor set depends on state THIS turn writes. Inside `_run_pipeline`
+    that is safe by ordering: the pre-turn checkpoint is restored before the
+    plan is built. Here there is no such protection; this runs from web
+    handlers against the live, un-restored world.
+
+    Left alone it wedges a chat, and the chain is short. An asleep NPC is
+    shaken: the Director lists them as a reactor, the gate drops them, the
+    reactor set empties, and no `interaction_loop` is planned. `director_resolve`
+    rouses them and commit persists it. The next new-turn attempt recomputes
+    this plan against the now-awake map, finds an `interaction_loop` with no
+    step row, reports it, and the caller answers 409 "resume or reroll it
+    first". The resume then restores the pre-turn checkpoint -- asleep again --
+    rebuilds a plan WITHOUT that step, and raises. Neither forward nor back.
+
+    So a step with no row at all is only a resume point when the run did not
+    demonstrably finish without it. Steps execute in plan order, so if every
+    later planned step completed, this one was never in the plan the run used:
+    it is a step this recomputation GAINED, not one the turn abandoned. Stated
+    over the plan rather than over the awareness gate on purpose -- the gate is
+    only today's source of drift, and the same reasoning holds for a cast
+    change, an autonomy change, or an extension enabled mid-turn.
+    """
     turn = q(
         "SELECT * FROM turns WHERE id=? AND chat_id=?",
         (turn_id, chat_id),
@@ -578,9 +605,20 @@ def resume_key_for_turn(turn_id, chat_id):
         for row in rows
     }
 
-    for key, _label in plan:
+    def _complete(key):
+        current = status.get(key)
+        return bool(current and not current["stale"]
+                    and current["active_count"] == 1)
+
+    for index, (key, _label) in enumerate(plan):
         current = status.get(key)
         if current is None:
+            successors = plan[index + 1:]
+            # `successors` must be non-empty: a MISSING TAIL (a turn that never
+            # committed) is the ordinary interrupted turn and must still be
+            # reported.
+            if successors and all(_complete(k) for k, _ in successors):
+                continue
             return key
         if current["stale"]:
             return key
