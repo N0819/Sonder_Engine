@@ -47,7 +47,7 @@ from core.paths import INSTALL_ROOT
 from .api import (
     CharacterAccess, CharacterHandle, CommitView, CommittedTurn,
     DirectorBlock, DirectorContext, DocumentStore, ExtState,
-    ExtensionError, NarrationBlock, NarrationContext,
+    ExtensionError, HOST_CAPABILITIES, NarrationBlock, NarrationContext,
     PSYCHOLOGY_STATE_KEYS, PayloadContext, Request,
     SonderExtensionAPI, StepView, document_path, enter_commit_scope,
     in_commit_scope, leave_commit_scope,
@@ -488,7 +488,8 @@ def _record_stage(ext_id, key, full_key, *, anchor, label, handler) -> None:
 
 def _record_step_observer(ext_id, pattern, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_step needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_step needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.step_observers.append((pattern, fn))
@@ -496,7 +497,8 @@ def _record_step_observer(ext_id, pattern, fn) -> None:
 
 def _record_commit_observer(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_turn_committed needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_turn_committed needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.commit_observers.append(fn)
@@ -513,7 +515,8 @@ def _record_commit_domain(ext_id, name, fn, on_error) -> None:
 
 def _record_payload_hook(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_character_payload needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_character_payload needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.payload_hooks.append(fn)
@@ -521,7 +524,8 @@ def _record_payload_hook(ext_id, fn) -> None:
 
 def _record_result_validator(ext_id, fn, on_error) -> None:
     if not callable(fn):
-        raise ExtensionError("on_director_result needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_director_result needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.result_validators.append(
@@ -531,7 +535,8 @@ def _record_result_validator(ext_id, fn, on_error) -> None:
 
 def _record_director_hook(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_director_payload needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_director_payload needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.director_hooks.append(fn)
@@ -539,7 +544,8 @@ def _record_director_hook(ext_id, fn) -> None:
 
 def _record_narration_hook(ext_id, fn) -> None:
     if not callable(fn):
-        raise ExtensionError("on_narration_payload needs a callable")
+        raise ExtensionError(
+            f"extension {ext_id!r}: on_narration_payload needs a callable")
     with _lock:
         record = _registered.setdefault(ext_id, _Registration(ext_id))
         record.narration_hooks.append(fn)
@@ -643,6 +649,27 @@ def _drop_extension_modules(package: str) -> None:
         sys.modules.pop(name, None)
 
 
+def _error_chain(exc: BaseException) -> str:
+    """`ValueError: bad sheet <- KeyError: 'drive'` -- the whole chain.
+
+    `str(exc)` alone was what a host read for a failed extension, and it is
+    the least informative line in the traceback: `None` for a bare
+    `KeyError`, and silent about the `__cause__` that actually explains it.
+    The type is always named; the chain is followed while it says something
+    new, and stops at four so a deep re-raise cannot become the error message.
+    """
+    parts: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and len(parts) < 4 and id(current) not in seen:
+        seen.add(id(current))
+        text = str(current).strip()
+        parts.append(f"{type(current).__name__}: {text}" if text
+                     else type(current).__name__)
+        current = current.__cause__ or current.__context__
+    return " <- ".join(parts)
+
+
 def _deregister(ext_id: str, *, error: str | None = None) -> None:
     record = _registered.get(ext_id)
     if record is None:
@@ -665,9 +692,13 @@ def _deregister(ext_id: str, *, error: str | None = None) -> None:
         except Exception:
             log.exception(
                 "could not unregister specialists for extension %s", ext_id)
+    # Modules go in BOTH cases. A failed `register(api)` leaves the entry and
+    # every sibling it imported in `sys.modules`, and the next enable then
+    # executes a stale copy of a file the host may have replaced in between --
+    # which is exactly what fixing the failure consists of.
+    _drop_extension_modules(_module_name(ext_id))
     if error is None:
         _registered.pop(ext_id, None)
-        _drop_extension_modules(_module_name(ext_id))
     else:
         _registered[ext_id] = _Registration(ext_id, error=error)
 
@@ -695,7 +726,7 @@ def _activate_one(ext_id: str) -> None:
         # Isolated exactly like discovery: this extension is disabled with a
         # reason the host can read, and every sibling stays live.
         log.exception("extension %s failed to register", ext_id)
-        _deregister(ext_id, error=str(exc))
+        _deregister(ext_id, error=_error_chain(exc))
 
 
 def activate(*, refresh: bool = False) -> None:
@@ -742,6 +773,35 @@ def disabled_reasons() -> dict[str, str]:
     with _lock:
         return {ext_id: record.error for ext_id, record in _registered.items()
                 if record.error}
+
+
+def _serving_ids() -> set[str]:
+    """Enabled AND loaded: the set whose browser half may be served."""
+    try:
+        activate()
+    except Exception:                             # pragma: no cover - defensive
+        log.exception("extension activation failed while serving assets")
+    return set(enabled_ids()) - set(disabled_reasons())
+
+
+def failure_reason(ext_id: str) -> str:
+    """Why this extension is not live, or `""`.
+
+    Enabled and LIVE are two different states, and everything an extension
+    serves has to read the second. `is_enabled` answers "did the host switch
+    it on"; a `register(api)` that raised leaves it switched on and registered
+    NOTHING -- no stage, no route, no hook -- while its browser half went on
+    being served, so the UI of an extension whose Python never loaded was
+    calling routes that do not exist and reading state nothing writes.
+    """
+    ext_id = str(ext_id or "")
+    try:
+        activate()
+    except Exception:                             # pragma: no cover - defensive
+        log.exception("extension activation failed while checking %s", ext_id)
+    with _lock:
+        record = _registered.get(ext_id)
+    return (record.error or "") if record else ""
 
 
 def registered_stages() -> list[dict]:
@@ -1399,8 +1459,20 @@ def dispatch_route(ext_id: str, method: str, path: str, query=None, body=None):
         record = _registered.get(ext_id)
         entry = record.routes.get(f"{str(method).upper()} {path}") if record else None
     if entry is None:
+        # A failed extension registered NOTHING, so every one of its routes
+        # is missing and "serves no GET /x" is true of all of them and
+        # explains none. The host needs the reason it did not load, not the
+        # symptom -- its browser half is what is calling this.
+        failed = record.error if record else ""
+        if failed:
+            raise ExtensionError(
+                f"extension {ext_id!r} did not load, so it serves no routes: "
+                f"{failed}")
+        known = sorted(entry["path"] for entry in (record.routes.values()
+                                                   if record else ()))
         raise ExtensionError(
-            f"extension {ext_id!r} serves no {str(method).upper()} {path}")
+            f"extension {ext_id!r} serves no {str(method).upper()} {path}"
+            + (f"; it serves {', '.join(known)}" if known else ""))
     api = _apis.get(ext_id)
     if api is None:
         raise ExtensionError(f"extension {ext_id!r} is not active")
@@ -1535,22 +1607,32 @@ def asset_path(ext_id: str, relative: str) -> Path:
     Enabled as well as installed, which is the same rule `extension_script`
     and `extension_styles` apply: switching an extension off has to reach
     everything it serves, or `/asset/extension.py` hands back the source of
-    an extension the host believes is inert. Safe mode counts as off.
+    an extension the host believes is inert. Safe mode counts as off, and so
+    does a `register(api)` that raised -- see `failure_reason`.
     """
     ext = installed_extensions().get(str(ext_id or ""))
     if ext is None:
         raise ExtensionError(f"no installed extension {ext_id!r}")
     if not is_enabled(ext.id):
         raise ExtensionError(f"extension {ext.id!r} is not enabled")
+    failed = failure_reason(ext.id)
+    if failed:
+        raise ExtensionError(
+            f"extension {ext.id!r} did not load, so it serves nothing: "
+            f"{failed}")
     candidate = Path(str(relative or ""))
     if not str(relative or "").strip() or candidate.is_absolute():
-        raise ExtensionError("asset path must be relative")
+        raise ExtensionError(
+            f"extension {ext.id!r}: asset path must be relative")
     if any(part in ("..", "") for part in candidate.parts):
-        raise ExtensionError("asset path may not traverse directories")
+        raise ExtensionError(
+            f"extension {ext.id!r}: asset path may not traverse directories")
     base = ext.path.resolve()
     target = (base / candidate).resolve()
     if base not in target.parents:
-        raise ExtensionError("asset path escapes the extension directory")
+        raise ExtensionError(
+            f"extension {ext.id!r}: asset path escapes the extension "
+            f"directory")
     if not target.is_file():
         raise ExtensionError(f"extension {ext.id!r} has no asset {relative!r}")
     return target
@@ -1625,7 +1707,7 @@ def extension_script(ext_id: str) -> str:
     if safe_mode():
         return ""
     ext = installed_extensions().get(str(ext_id or ""))
-    if ext is None or not is_enabled(ext.id):
+    if ext is None or not is_enabled(ext.id) or failure_reason(ext.id):
         return ""
     parts = []
     if ext.ui_entry:
@@ -1642,7 +1724,8 @@ def extension_styles(ext_id: str) -> str:
     if safe_mode():
         return ""
     ext = installed_extensions().get(str(ext_id or ""))
-    if ext is None or not ext.css_entry or not is_enabled(ext.id):
+    if ext is None or not ext.css_entry or not is_enabled(ext.id) \
+            or failure_reason(ext.id):
         return ""
     source = _read_asset(ext, ext.css_entry)
     return "" if source is None else source
@@ -1658,7 +1741,7 @@ def ui_bundle() -> str:
     if safe_mode():
         return ""
     parts = []
-    enabled = set(enabled_ids())
+    enabled = _serving_ids()
     for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
         if ext.id not in enabled:
             continue
@@ -1686,7 +1769,7 @@ def ui_styles() -> str:
     if safe_mode():
         return ""
     parts = []
-    enabled = set(enabled_ids())
+    enabled = _serving_ids()
     for ext in sorted(installed_extensions().values(), key=lambda e: e.id):
         if ext.id not in enabled or not ext.css_entry:
             continue
@@ -1701,17 +1784,20 @@ __all__ = [
     "CharacterAccess", "CharacterHandle", "CommitView", "CommittedTurn",
     "DirectorBlock", "DirectorContext", "DocumentStore",
     "EXT_API_VERSION", "ENABLED_SETTING", "ExtState", "Extension",
-    "ExtensionError", "NarrationBlock", "NarrationContext",
+    "ExtensionError", "HOST_CAPABILITIES", "NarrationBlock",
+    "NarrationContext",
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext", "Request",
-    "SonderExtensionAPI", "StepView", "activate", "apply_plan_splices",
-    "asset_path", "check_update", "check_updates", "disable_extension",
+    "SonderExtensionAPI", "StepView", "TreeAudit", "activate",
+    "apply_plan_splices", "asset_path", "audit_extension_source",
+    "check_update", "check_updates", "disable_extension",
     "disabled_reasons",
     "dispatch_character_payload", "dispatch_director_payload",
     "validate_director_result",
     "dispatch_narration_payload",
     "dispatch_route", "dispatch_turn_committed", "document_path",
     "enable_extension", "enabled_ids", "extension", "extension_root",
-    "extension_script", "extension_styles", "in_commit_scope",
+    "extension_script", "extension_styles", "failure_reason",
+    "in_commit_scope",
     "installed_extensions", "is_enabled", "keep_orphan_lane_rows", "listing",
     "load_errors",
     "notify_step_saved", "observer_failures", "registered_commit_domains",
@@ -1754,7 +1840,30 @@ MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 4096
 
 
-def _safe_extract(archive, destination: Path) -> None:
+@dataclass(frozen=True)
+class TreeAudit:
+    """One manifest, already measured: what will be audited AND copied.
+
+    The two used to be different sets. `_audit_tree` walked `rglob("*")` and
+    counted everything; the copy that followed applied
+    `ignore_patterns(".git", "__pycache__", "*.pyc")` and installed less. A
+    developer therefore could not install their own checkout -- the reviewing
+    integrator's worktree holds >367,000 visible files against a tracked
+    shipping tree of 144 files and ~5.96 MiB -- and, worse, the set that
+    passed the ceilings was not the set that landed on disk. Auditing one set
+    and copying another is a time-of-check/time-of-use gap whichever direction
+    it leans.
+    """
+
+    files: tuple[Path, ...]
+    count: int
+    bytes: int
+
+    def as_dict(self) -> dict:
+        return {"file_count": self.count, "extracted_bytes": self.bytes}
+
+
+def _safe_extract(archive, destination: Path) -> "TreeAudit":
     """Extract a zip, refusing any member that would escape `destination` --
     or that would cost more than an extension has any business costing.
 
@@ -1798,10 +1907,12 @@ def _safe_extract(archive, destination: Path) -> None:
     # is caught before it costs anything -- but that is luck this code does not
     # own, and `extractall` would believe the declaration it was just handed.
     written = 0
+    landed: list[Path] = []
     for member in members:
         archive.extract(member, root)
         if member.is_dir():
             continue
+        landed.append(Path(member.filename))
         try:
             written += (root / member.filename).stat().st_size
         except OSError:
@@ -1810,6 +1921,9 @@ def _safe_extract(archive, destination: Path) -> None:
             raise ExtensionError(
                 f"archive expands to more than "
                 f"{MAX_EXTRACTED_BYTES // (1024 * 1024)}MB")
+    # Returned rather than discarded so every install path -- zip, clone,
+    # folder -- reports the same two numbers on the same record.
+    return TreeAudit(tuple(landed), len(landed), written)
 
 
 # ---------------------------------------------------------------- git sources
@@ -1964,36 +2078,169 @@ def _git_remote_head(url: str, ref: str | None, *, timeout=None) -> str:
         f"the remote has no {ref!r}" if ref else "the remote reported no refs")
 
 
-def _audit_tree(root: Path) -> None:
-    """Apply the archive ceilings to a directory that arrived some other way.
+#: Git file modes that are not a file this installer will copy. `120000` is a
+#: symlink, refused for the same reason a zip's is: a link is a path that
+#: resolves AFTER any check. It is read from git's index rather than from the
+#: filesystem because a checkout on a platform without symlink permission
+#: writes mode 120000 as an ORDINARY FILE holding the target path, where
+#: `Path.is_symlink()` is False and the audit would wave it through. `160000`
+#: is a gitlink -- a submodule, which is a second URL chosen by the repository
+#: rather than by the host, and clone already refuses those.
+_GIT_REFUSED_MODES = {"120000": "symlink", "160000": "submodule"}
 
-    A clone is not extracted, so `_safe_extract` never sees it -- and a git
-    repository can hold symlinks and gigabytes just as happily as a zip can.
-    The rules that govern what may be installed should not depend on how it
-    travelled.
+
+def _git_index_modes(root: Path) -> dict[str, str]:
+    """`{relative path: mode}` for every tracked entry, or `{}`."""
+    try:
+        out = _git("-C", str(root), "ls-files", "-z", "--stage")
+    except ExtensionError:
+        return {}
+    modes: dict[str, str] = {}
+    for record in out.split("\0"):
+        if not record:
+            continue
+        head, _, name = record.partition("\t")
+        parts = head.split()
+        if parts and name:
+            modes[name] = parts[0]
+    return modes
+
+
+def _git_source_files(root: Path) -> list[Path] | None:
+    """What git says this checkout would ship, or `None` if it is not one.
+
+    `--cached --others --exclude-standard` is tracked files plus the untracked
+    ones nobody ignored: it leaves out `.git`, `node_modules`, build output
+    and every other thing a `.gitignore` already declares is not part of the
+    package. That is a manifest the repository's own author wrote, which is
+    why it is trusted here and why NOTHING like it is inferred for a plain
+    directory -- see `_source_manifest`.
     """
-    total = 0
-    count = 0
+    try:
+        inside = _git("-C", str(root), "rev-parse",
+                      "--is-inside-work-tree").strip()
+    except ExtensionError:
+        return None
+    if inside != "true":
+        return None
+    try:
+        out = _git("-C", str(root), "ls-files", "-z",
+                   "--cached", "--others", "--exclude-standard")
+    except ExtensionError:
+        return None
+    return [root / name for name in out.split("\0") if name]
+
+
+def _audit_files(root: Path, paths, *, modes=None) -> TreeAudit:
+    """Apply the archive ceilings to an explicit list of paths.
+
+    Every limit `_safe_extract` applies to a zip, applied to a set that
+    arrived some other way, and reported with the observed number beside the
+    allowed one: "more than 4096 files" tells a host neither how far over they
+    are nor which ceiling they hit.
+    """
     base = root.resolve()
-    for path in root.rglob("*"):
+    modes = modes or {}
+    accepted: list[Path] = []
+    total = 0
+    for path in paths:
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            raise ExtensionError(
+                f"path escapes the extension directory: {path}") from None
+        mode = modes.get(relative.as_posix())
+        if mode in _GIT_REFUSED_MODES:
+            raise ExtensionError(
+                f"extension source contains a "
+                f"{_GIT_REFUSED_MODES[mode]}: {relative}")
         if path.is_symlink():
             raise ExtensionError(
-                f"repository contains a symlink: {path.relative_to(root)}")
+                f"extension source contains a symlink: {relative}")
         if not path.is_file():
             continue
-        count += 1
-        if count > MAX_ARCHIVE_MEMBERS:
+        # Containment is re-checked on the RESOLVED path. Nothing above chose
+        # it -- `rglob` follows nothing and git emits no `..` -- but the check
+        # costs a stat and the failure it guards against is silent.
+        resolved = path.resolve()
+        if resolved != base and base not in resolved.parents:
             raise ExtensionError(
-                f"repository holds more than {MAX_ARCHIVE_MEMBERS} files")
-        # Containment is re-checked on the resolved path even though nothing
-        # here chose it: `rglob` follows nothing, but a future caller might.
-        if base not in path.resolve().parents:
-            raise ExtensionError(f"path escapes the extension directory: {path}")
+                f"path escapes the extension directory: {relative}")
+        accepted.append(relative)
         total += path.stat().st_size
+        if len(accepted) > MAX_ARCHIVE_MEMBERS:
+            raise ExtensionError(
+                f"extension source holds at least {len(accepted)} files, more "
+                f"than the {MAX_ARCHIVE_MEMBERS} an extension may install; if "
+                f"this is a development checkout, install from its repository "
+                f"URL, or ignore what does not ship")
         if total > MAX_EXTRACTED_BYTES:
             raise ExtensionError(
-                f"repository is larger than "
-                f"{MAX_EXTRACTED_BYTES // (1024 * 1024)}MB")
+                f"extension source is at least {total} bytes, larger than the "
+                f"{MAX_EXTRACTED_BYTES} bytes "
+                f"({MAX_EXTRACTED_BYTES // (1024 * 1024)}MB) an extension may "
+                f"install")
+    return TreeAudit(tuple(accepted), len(accepted), total)
+
+
+def _source_manifest(root: Path) -> TreeAudit:
+    """The exact set that will be installed, measured before anything is copied.
+
+    A git checkout is audited as git would ship it. A plain directory is
+    audited whole, deliberately: a folder someone points the installer at is
+    already an explicit package, and inventing an ignore list for it --
+    `node_modules`, `__pycache__`, whatever else -- would be the installer
+    deciding what an author meant. If a plain package holds 100,000 files, the
+    strict limit is the right answer.
+    """
+    files = _git_source_files(root)
+    modes = _git_index_modes(root) if files is not None else {}
+    # A repository that ships this directory has a manifest in it. If git's
+    # own answer does not, this is a checkout in which the extension is
+    # IGNORED (a folder under someone's `~/work` inside an unrelated repo, a
+    # bundle staged under a `build/` that `.gitignore` names), and git's
+    # manifest is an answer to a different question. Fall back to the strict
+    # walk, which then either installs it or says exactly what is too big.
+    if files is not None and not any(
+            path.name == "manifest.json"
+            and len(path.relative_to(root).parts) <= 2 for path in files):
+        files = None
+        modes = {}
+    if files is None:
+        files = sorted(root.rglob("*"))
+    return _audit_files(root, files, modes=modes)
+
+
+def _copy_manifest(root: Path, staged: Path, audit: TreeAudit) -> None:
+    """Copy exactly what was audited. No filter runs after the measurement."""
+    import shutil
+
+    staged.mkdir(parents=True, exist_ok=True)
+    for relative in audit.files:
+        target = staged / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / relative, target, follow_symlinks=False)
+
+
+def audit_extension_source(source: str) -> dict:
+    """Measure a local folder the way an install would, WITHOUT installing it.
+
+    The dry run an extension author can put in their own CI: it answers "would
+    this package pass the host's ceilings" in the only way that counts, by
+    running the same manifest and the same limits. A repository URL is not
+    accepted because answering for one would mean cloning it, which is an
+    install in everything but name.
+    """
+    origin = Path(str(source or "").strip()).expanduser()
+    if not origin.is_dir():
+        raise ExtensionError(f"not a directory: {source}")
+    audit = _source_manifest(origin)
+    row = audit.as_dict()
+    row["source"] = str(origin)
+    row["git"] = _git_source_files(origin) is not None
+    row["max_files"] = MAX_ARCHIVE_MEMBERS
+    row["max_bytes"] = MAX_EXTRACTED_BYTES
+    return row
 
 
 def _staged_bundle_root(staged: Path) -> Path:
@@ -2045,10 +2292,8 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
             # with, and nothing of git's on the host's disk afterwards.
             checkout = Path(tmp) / "checkout"
             origin_url, origin_ref, commit = _git_clone(source, checkout)
-            _audit_tree(checkout)
-            shutil.copytree(checkout, staged, symlinks=False,
-                            ignore=shutil.ignore_patterns(
-                                ".git", "__pycache__", "*.pyc"))
+            audit = _source_manifest(checkout)
+            _copy_manifest(checkout, staged, audit)
         else:
             staged.mkdir()
         if kind == "zip":
@@ -2067,7 +2312,7 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
 
             try:
                 with zipfile.ZipFile(io.BytesIO(blob)) as archive:
-                    _safe_extract(archive, staged)
+                    audit = _safe_extract(archive, staged)
             except zipfile.BadZipFile as exc:
                 raise ExtensionError(f"not a zip archive: {exc}") from exc
             provenance = provenance or f"url:{source}"
@@ -2082,10 +2327,10 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
             # link rather than refusing it, so a link audited afterwards is
             # already a copy of whatever it pointed at. A folder is a source
             # like any other -- the rules must not depend on how it travelled.
-            _audit_tree(origin)
-            shutil.copytree(origin, staged, dirs_exist_ok=True,
-                            symlinks=False, ignore=shutil.ignore_patterns(
-                                "__pycache__", "*.pyc", ".git"))
+            # The audited manifest IS the copy list, so no ignore pattern runs
+            # after the measurement and the two sets cannot diverge.
+            audit = _source_manifest(origin)
+            _copy_manifest(origin, staged, audit)
             provenance = provenance or f"local:{origin.name}"
 
         bundle = _staged_bundle_root(staged)
@@ -2133,6 +2378,10 @@ def install_extension(source: str, *, provenance: str | None = None) -> dict:
     reload()
     for row in listing():
         if row["id"] == candidate.id:
+            # What the ceilings actually measured, carried on the install
+            # record: a host reading "144 files, 5.96 MiB" can tell a clean
+            # package from a development tree without re-walking it.
+            row.update(audit.as_dict())
             return row
     raise ExtensionError(f"{candidate.id!r} did not load after install")
 
@@ -2238,8 +2487,6 @@ def update_extension(extension_id: str) -> dict:
     The enabled set and everything under `world["ext:<id>"]` survive: an update
     is the same extension, so a story played with it keeps going.
     """
-    import shutil
-
     ext = installed_extensions().get(str(extension_id or ""))
     if ext is None:
         raise ExtensionError(f"{extension_id!r} is not installed")
@@ -2258,11 +2505,9 @@ def update_extension(extension_id: str) -> dict:
         if commit == ext.commit:
             return {"id": ext.id, "updated": False, "commit": commit,
                     "reason": "already at the newest commit"}
-        _audit_tree(checkout)
+        audit = _source_manifest(checkout)
         work = Path(tmp) / "work"
-        shutil.copytree(checkout, work, symlinks=False,
-                        ignore=shutil.ignore_patterns(
-                            ".git", "__pycache__", "*.pyc"))
+        _copy_manifest(checkout, work, audit)
         # The same one-level unwrap install does: a repository usually holds
         # the extension in a directory of its own rather than at its root.
         bundle = _staged_bundle_root(work)
@@ -2314,6 +2559,7 @@ def update_extension(extension_id: str) -> dict:
         if row["id"] == ext.id:
             row["updated"] = True
             row["previous_version"] = ext.version
+            row.update(audit.as_dict())
             return row
     raise ExtensionError(f"{ext.id!r} did not load after the update")
 

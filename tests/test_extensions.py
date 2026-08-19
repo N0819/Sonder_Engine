@@ -897,3 +897,354 @@ class TestHostSurface:
         # Never in the guest allowlist: extension code is host-session only.
         assert not any(str(path).startswith("/api/extensions")
                        for path in app.GUEST_ALLOWED_API_PATHS)
+
+
+# ------------------------------------------------- lifecycle, pinned together
+#
+# "Enabled" and "live" are two different states, and until now only some of the
+# code read the second. An extension whose `register(api)` raised is switched
+# ON and has registered NOTHING -- no stage, no route, no hook -- and it went
+# on being served its browser half, so the UI of an extension whose Python
+# never loaded was calling routes that do not exist.
+#
+# These pin the whole set at once rather than one property per file, because
+# the failure mode is a seam that was never taught the difference: each new
+# thing an extension can serve is a new place to forget it.
+
+BROKEN = {
+    "id": "broken-life", "version": "1.0.0", "ext_api": 1,
+    "name": "Broken", "capabilities": {"python": "extension.py",
+                                       "ui": {"js": "ui.js", "css": "ui.css"}},
+}
+WORKING = {
+    "id": "good-life", "version": "1.0.0", "ext_api": 1,
+    "name": "Good", "capabilities": {"python": "extension.py",
+                                     "ui": {"js": "ui.js", "css": "ui.css"}},
+}
+
+
+def _broken(root, *, entry=None):
+    return _write_extension(root, "broken-life", BROKEN, {
+        "extension.py": entry or (
+            "from .helper import MARK\n\n\n"
+            "def register(api):\n"
+            "    api.add_stage('s', anchor='after:narrator',\n"
+            "                  handler=lambda v, a, n: {})\n"
+            "    api.add_route('/ping', lambda r: {'mark': MARK})\n"
+            "    raise RuntimeError('register blew up')\n"),
+        "helper.py": "MARK = 'first'\n",
+        "ui.js": "window.BROKEN_UI = 1;\n",
+        "ui.css": ".broken { color: red }\n",
+    })
+
+
+def _working(root):
+    return _write_extension(root, "good-life", WORKING, {
+        "extension.py": (
+            "def register(api):\n"
+            "    api.add_stage('s', anchor='after:narrator',\n"
+            "                  handler=lambda v, a, n: {})\n"
+            "    api.add_route('/ping', lambda r: {'ok': 1})\n"
+            "    api.add_commit_domain('d', lambda v: {'ok': 1})\n"
+            "    api.on_turn_committed(lambda t: None)\n"
+            "    api.on_step('*', lambda k, c: None)\n"),
+        "ui.js": "window.GOOD_UI = 1;\n",
+        "ui.css": ".good { color: green }\n",
+    })
+
+
+class TestAFailedExtensionIsInertEverywhere:
+
+    def test_it_serves_no_assets(self, temp_db, ext_root):
+        _broken(ext_root)
+        _enable("broken-life")
+        assert extension_runtime.failure_reason("broken-life")
+
+        with pytest.raises(ExtensionError, match="did not load"):
+            extension_runtime.asset_path("broken-life", "ui.js")
+        assert extension_runtime.extension_script("broken-life") == ""
+        assert extension_runtime.extension_styles("broken-life") == ""
+        assert "BROKEN_UI" not in extension_runtime.ui_bundle()
+        assert "broken" not in extension_runtime.ui_styles()
+
+    def test_it_retains_no_registration(self, temp_db, ext_root):
+        from agents.runtime import STEP_HANDLERS
+
+        _broken(ext_root)
+        _enable("broken-life")
+        assert extension_runtime.registered_stages() == []
+        assert extension_runtime.registered_routes() == []
+        assert extension_runtime.registered_commit_domains() == []
+        assert "ext:broken-life:s" not in STEP_HANDLERS
+        plan = [("narrator", "Narrator")]
+        assert extension_runtime.apply_plan_splices(plan) == plan
+
+    def test_its_route_says_why_rather_than_what(self, temp_db, ext_root):
+        """"serves no GET /ping" is true of every route a failed extension
+        declares and explains none of them. Its browser half is what is
+        calling, so the answer it needs is the load failure."""
+        _broken(ext_root)
+        _enable("broken-life")
+        with pytest.raises(ExtensionError, match="did not load"):
+            extension_runtime.dispatch_route("broken-life", "GET", "/ping")
+
+    def test_it_injects_no_stored_context(self, temp_db, ext_root):
+        """State written in a session where it worked outlives the session.
+        A hook list a failed record leaves empty escapes by accident; a
+        DECLARATIVE block read from the database has nothing empty to
+        iterate, so it needs the liveness check made explicitly."""
+        from extension_runtime.api import SonderExtensionAPI
+
+        _broken(ext_root)
+        _enable("broken-life")
+        chat = _chat(temp_db)
+        api = SonderExtensionAPI("broken-life", ext_root / "broken-life")
+        api.narration_context(chat).set("A BLOCK NOBODY SHOULD SEE")
+        api.director_context(chat).set(interpret="ANOTHER ONE")
+
+        assert extension_runtime._narration_blocks(chat) == []
+        assert extension_runtime._director_blocks(chat, "interpret") == []
+
+    def test_it_leaves_no_stale_module_for_the_next_enable(self, temp_db,
+                                                          ext_root):
+        """Fixing a failure means editing the files. A package left in
+        `sys.modules` has the next enable execute the copy that failed --
+        `from .helper import MARK` resolves to the module already imported,
+        not to the file the host just repaired."""
+        import sys
+
+        directory = _broken(ext_root)
+        _enable("broken-life")
+        assert not [name for name in sys.modules
+                    if name.startswith("sonder_ext_broken_life")]
+
+        (directory / "helper.py").write_text("MARK = 'repaired'\n",
+                                             encoding="utf-8")
+        (directory / "extension.py").write_text(
+            "from .helper import MARK\n\n\n"
+            "def register(api):\n"
+            "    api.add_route('/ping', lambda r: {'mark': MARK})\n",
+            encoding="utf-8")
+        extension_runtime.reload()
+        _enable("broken-life")
+
+        assert extension_runtime.failure_reason("broken-life") == ""
+        assert extension_runtime.dispatch_route(
+            "broken-life", "GET", "/ping") == {"mark": "repaired"}
+
+    def test_the_reason_a_host_reads_names_the_type_and_the_cause(
+            self, temp_db, ext_root):
+        """`str(exc)` is the least informative line in a traceback: empty for
+        a bare `KeyError`, and silent about the `__cause__` that explains
+        it."""
+        _write_extension(ext_root, "broken-life", BROKEN, {
+            "extension.py": (
+                "def register(api):\n"
+                "    try:\n"
+                "        raise KeyError('drive')\n"
+                "    except KeyError as exc:\n"
+                "        raise ValueError('sheet is incomplete') from exc\n"),
+            "ui.js": "", "ui.css": "",
+        })
+        _enable("broken-life")
+        reason = extension_runtime.failure_reason("broken-life")
+        assert "ValueError: sheet is incomplete" in reason
+        assert "KeyError: 'drive'" in reason
+
+
+class TestDisableIsCompleteAndReEnableIsExactlyOnce:
+
+    def test_disable_takes_every_registration_and_every_asset(self, temp_db,
+                                                              ext_root):
+        from agents.runtime import STEP_HANDLERS
+
+        _working(ext_root)
+        _enable("good-life")
+        assert [row["full_key"] for row in
+                extension_runtime.registered_stages()] == ["ext:good-life:s"]
+
+        extension_runtime.disable_extension("good-life")
+        assert extension_runtime.registered_stages() == []
+        assert extension_runtime.registered_routes() == []
+        assert extension_runtime.registered_commit_domains() == []
+        assert "ext:good-life:s" not in STEP_HANDLERS
+        assert extension_runtime.ui_bundle() == ""
+        with pytest.raises(ExtensionError, match="not enabled"):
+            extension_runtime.asset_path("good-life", "ui.js")
+
+    def test_re_enabling_registers_each_hook_exactly_once(self, temp_db,
+                                                          ext_root):
+        _working(ext_root)
+        for _ in range(3):
+            _enable("good-life")
+            extension_runtime.disable_extension("good-life")
+        _enable("good-life")
+        extension_runtime.activate(refresh=True)
+
+        assert len(extension_runtime.registered_stages()) == 1
+        assert len(extension_runtime.registered_routes()) == 1
+        assert len(extension_runtime.registered_commit_domains()) == 1
+        with extension_runtime._lock:
+            record = extension_runtime._registered["good-life"]
+        assert len(record.commit_observers) == 1
+        assert len(record.step_observers) == 1
+        assert len(record.stages) == 1
+
+    def test_safe_mode_stops_everything_and_forgets_nothing(self, temp_db,
+                                                            ext_root,
+                                                            monkeypatch):
+        """Recovery must not be destructive: safe mode is a reason not to RUN
+        an extension, never the host changing their mind about it."""
+        _working(ext_root)
+        _enable("good-life")
+        monkeypatch.setenv(extension_runtime.SAFE_MODE_ENV, "1")
+
+        assert extension_runtime.enabled_ids() == []
+        assert extension_runtime._stored_enabled_ids() == ["good-life"]
+        assert extension_runtime.ui_bundle() == ""
+        assert extension_runtime.ui_styles() == ""
+        with pytest.raises(ExtensionError, match="not enabled"):
+            extension_runtime.asset_path("good-life", "ui.js")
+
+
+class TestTheHostSaysWhatItOffers:
+    """Version alone cannot answer "may I call this": `ext_api` moves once per
+    breaking change, and everything added between two breaks is invisible to
+    it. The integrator was reading internals instead, and internals move."""
+
+    def test_capabilities_are_named_and_include_the_contract_surface(self):
+        from extension_runtime.api import SonderExtensionAPI
+
+        api = SonderExtensionAPI("probe-ext", "/tmp")
+        assert isinstance(api.capabilities, frozenset)
+        assert api.capabilities is extension_runtime.HOST_CAPABILITIES
+        for name in ("list_channels", "install_limits", "stage_anchors",
+                     "commit_domains", "documents", "routes"):
+            assert name in api.capabilities
+
+    def test_the_version_is_the_loaders_own_constant(self):
+        from extension_runtime.api import SonderExtensionAPI
+
+        api = SonderExtensionAPI("probe-ext", "/tmp")
+        assert api.api_version == extension_runtime.EXT_API_VERSION
+
+    def test_no_capability_is_declared_for_work_that_is_not_built(self):
+        """The one thing capability discovery must never do.
+
+        This test was written while coordinated frame-coherent reads were the
+        unbuilt example, and it asserted their ABSENCE. They landed in the same
+        wave (`api.at_frame`), so the name is declared now and the assertion is
+        inverted -- which is the rule working, not the rule being weakened: a
+        name goes in when the behaviour lands, and this test is what makes
+        going in a deliberate act.
+
+        The unbuilt example is now the read SNAPSHOT: the integrator's
+        hardening list also asked for a read-transaction token so a DTO
+        combining several domains cannot straddle a concurrent write. That is a
+        different axis from frame coherence -- point in TIME rather than choice
+        of ERA -- and it is not built, so it is not named. `docs/UNBUILT.md`
+        holds it; `HOST_CAPABILITIES` must not."""
+        assert "frame_coherent_reads" in extension_runtime.HOST_CAPABILITIES
+        assert "frame_state" in extension_runtime.HOST_CAPABILITIES
+        for unbuilt in ("read_snapshot", "read_transaction",
+                        "archive_schema_version"):
+            assert unbuilt not in extension_runtime.HOST_CAPABILITIES
+
+    def test_every_declared_capability_names_something_reachable(self):
+        """A name is a promise. This is the cheapest check that one was not
+        added for a method nobody wrote."""
+        from extension_runtime.api import SonderExtensionAPI
+
+        reachable = {
+            "char_state": "char_state", "commit_domains": "add_commit_domain",
+            "context_blocks": "narration_context",
+            "director_corrections": "on_director_result",
+            "documents": "documents", "frame_state": "frame_state",
+            "frame_coherent_reads": "at_frame",
+            "list_channels": "add_director_specialist",
+            "model_lanes": "add_model_lane",
+            "payload_routing": "on_character_payload",
+            "provision_story": "provision_story", "routes": "add_route",
+            "stage_anchors": "add_stage",
+        }
+        for capability in extension_runtime.HOST_CAPABILITIES:
+            if capability == "install_limits":
+                assert callable(extension_runtime.audit_extension_source)
+                continue
+            assert capability in reachable, f"undocumented: {capability}"
+            assert hasattr(SonderExtensionAPI, reachable[capability])
+
+
+class TestAnErrorNamesWhoAndWhere:
+    """The host reads these on a settings row and in an HTTP body, where
+    nothing else says which extension asked."""
+
+    def _api(self):
+        from extension_runtime.api import SonderExtensionAPI
+        return SonderExtensionAPI("named-ext", "/tmp")
+
+    @pytest.mark.parametrize("call", [
+        lambda api: api.add_stage("s", anchor="beside:narrator",
+                                  handler=lambda v, a, n: {}),
+        lambda api: api.add_stage("s", anchor="after:character:kira",
+                                  handler=lambda v, a, n: {}),
+        lambda api: api.add_stage("s", anchor="before:ext:other:stage",
+                                  handler=lambda v, a, n: {}),
+        lambda api: api.add_stage("s", anchor="after:narrator", handler=None),
+        lambda api: api.add_stage("Bad Key", anchor="after:narrator",
+                                  handler=lambda v, a, n: {}),
+        lambda api: api.add_stage("s", anchor="after:narrator",
+                                  handler=lambda v, a, n: {}, on_error="oops"),
+        lambda api: api.add_commit_domain("Bad Name", lambda v: {}),
+        lambda api: api.add_commit_domain("d", None),
+        lambda api: api.add_commit_domain("d", lambda v: {}, on_error="oops"),
+        lambda api: api.add_route("/../escape", lambda r: {}),
+        lambda api: api.add_route("/ok", None),
+        lambda api: api.add_route("/ok", lambda r: {}, methods=("TRACE",)),
+        lambda api: api.add_model_lane("Bad Name"),
+        lambda api: api.add_model_lane("director"),
+    ])
+    def test_every_registration_refusal_names_the_extension(self, call):
+        with pytest.raises(ExtensionError) as caught:
+            call(self._api())
+        assert "named-ext" in str(caught.value), str(caught.value)
+
+    @pytest.mark.parametrize("call", [
+        lambda api: api.on_step("*", "not a function"),
+        lambda api: api.on_turn_committed("not a function"),
+        lambda api: api.on_character_payload("not a function"),
+        lambda api: api.on_narration_payload("not a function"),
+        lambda api: api.on_director_payload("not a function"),
+        lambda api: api.on_director_result("not a function"),
+    ])
+    def test_a_hook_given_a_non_callable_names_the_extension(self, call):
+        with pytest.raises(ExtensionError) as caught:
+            call(self._api())
+        assert "named-ext" in str(caught.value), str(caught.value)
+
+    def test_a_specialist_channel_collision_names_the_extension(self):
+        """The one registration two extensions really can collide on: the
+        merge resolves a channel to exactly one family, so a second claim is
+        refused rather than silently taking it. `register_specialist` raises
+        `ValueError` -- it is the Director's function and knows nothing about
+        extensions -- and a host reads this beside every other registration
+        refusal, so it arrives in the same shape."""
+        from agents.director import unregister_specialists
+
+        api = self._api()
+        try:
+            api.add_director_specialist("morale", channels=["ops"],
+                                        prompt="judge morale")
+            with pytest.raises(ExtensionError) as caught:
+                api.add_director_specialist("spirit", channels=["ops"],
+                                            prompt="also judge morale")
+        finally:
+            unregister_specialists("named-ext")
+        assert "named-ext" in str(caught.value), str(caught.value)
+
+    def test_an_unknown_route_lists_what_the_extension_does_serve(
+            self, temp_db, ext_root):
+        _working(ext_root)
+        _enable("good-life")
+        with pytest.raises(ExtensionError, match="/ping"):
+            extension_runtime.dispatch_route("good-life", "GET", "/nowhere")

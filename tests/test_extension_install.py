@@ -30,6 +30,16 @@ def root(tmp_path, monkeypatch, temp_db):
     ext.reload()
 
 
+@pytest.fixture
+def sources(tmp_path_factory):
+    """Somewhere to build a source that is NOT the extensions root.
+
+    `root` is `tmp_path`, so a source built there is discovered as an
+    installed extension and every "did it land" assertion finds the source.
+    """
+    return tmp_path_factory.mktemp("sources")
+
+
 def test_installing_from_a_folder_lands_it_switched_off(root):
     """Nothing runs until the host enables it -- install is not consent."""
     row = ext.install_extension(str(DEMO))
@@ -116,7 +126,7 @@ def test_a_symlink_member_is_refused(root, tmp_path):
 
 def test_a_folder_install_is_audited_like_every_other_source(root, tmp_path):
     """"The rules that govern what may be installed should not depend on how
-    it travelled" -- `_audit_tree`'s own words. A folder was bound by none of
+    it travelled" -- the audit's own words. A folder was bound by none of
     them, and `copytree(symlinks=False)` DEREFERENCES a link rather than
     refusing it, so a link in the source arrived as a copy of its target."""
     origin = tmp_path / "folder"
@@ -588,11 +598,11 @@ class TestGitSources:
         tree = tmp_path / "tree"
         (tree / "sub").mkdir(parents=True)
         (tree / "sub" / "real.txt").write_text("x" * 100, encoding="utf-8")
-        ext._audit_tree(tree)                       # fine as it stands
+        ext._source_manifest(tree)                  # fine as it stands
 
         monkeypatch.setattr(ext, "MAX_EXTRACTED_BYTES", 10)
         with pytest.raises(ext.ExtensionError, match="larger than"):
-            ext._audit_tree(tree)
+            ext._source_manifest(tree)
 
     def test_a_symlink_in_a_repository_is_refused(self, tmp_path):
         tree = tmp_path / "tree"
@@ -603,7 +613,7 @@ class TestGitSources:
         except (OSError, NotImplementedError):
             pytest.skip("this platform does not make symlinks")
         with pytest.raises(ext.ExtensionError, match="symlink"):
-            ext._audit_tree(tree)
+            ext._source_manifest(tree)
 
 
 class TestTheUpdateSweepIsBounded:
@@ -667,3 +677,209 @@ class TestTheUpdateSweepIsBounded:
         assert seen["timeout"] is not None, (
             "each remote must be given its share of the sweep's budget")
         assert seen["timeout"] <= 3.0
+
+
+# --- the audited set is the copied set --------------------------------------
+#
+# It was not. `_audit_tree` walked `rglob("*")` and counted everything; the
+# copy that followed applied `ignore_patterns(".git", "__pycache__", "*.pyc")`
+# and installed less. Two consequences, both found by an integrator trying to
+# install their own checkout: a development worktree of >367,000 visible files
+# was refused for a shipping tree of 144, and -- the part that is a defect
+# rather than an inconvenience -- the set that passed the ceilings was not the
+# set that landed on disk.
+
+def _repo(root: Path, files: dict, *, ignore: str = "") -> Path:
+    """A real git checkout with an index, because the manifest comes from git."""
+    root.mkdir(parents=True, exist_ok=True)
+    for name, body in files.items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+    if ignore:
+        (root / ".gitignore").write_text(ignore, encoding="utf-8")
+    ext._git("init", "--quiet", cwd=root)
+    ext._git("add", "-A", cwd=root)
+    return root
+
+
+def _ext_manifest(ext_id="tracked-ext"):
+    return json.dumps({"id": ext_id, "version": "1.0.0", "ext_api": 1,
+                       "name": "Tracked", "capabilities": {}})
+
+
+class TestTheInstalledSetIsTheAuditedSet:
+
+    def test_a_git_worktree_installs_what_git_would_ship(self, root, sources):
+        """Tracked files and un-ignored local ones; not `.git`, and not what
+        `.gitignore` already says is no part of the package."""
+        origin = _repo(sources / "tracked-ext", {
+            "manifest.json": _ext_manifest(),
+            "extension.py": "def register(api):\n    pass\n",
+            "node_modules/heavy.js": "x" * 4096,
+        }, ignore="node_modules/\n")
+        # Written AFTER the index was built, so it is untracked and un-ignored:
+        # the working file an author is mid-edit on still ships.
+        (origin / "local_ui.js").write_text("// wip", encoding="utf-8")
+
+        row = ext.install_extension(str(origin))
+        landed = root / "tracked-ext"
+        assert (landed / "manifest.json").is_file()
+        assert (landed / "extension.py").is_file()
+        assert (landed / "local_ui.js").is_file()
+        assert not (landed / "node_modules").exists()
+        assert not (landed / ".git").exists()
+        # And the audit counted exactly those, not the repository.
+        assert row["file_count"] == len(
+            [path for path in landed.rglob("*") if path.is_file()])
+
+    def test_a_development_tree_is_measured_by_what_ships(
+            self, root, sources, monkeypatch):
+        """The integrator's case: a checkout far over the file ceiling whose
+        shipping tree is small. Refusing that refuses files the installer was
+        never going to copy."""
+        monkeypatch.setattr(ext, "MAX_ARCHIVE_MEMBERS", 8)
+        origin = _repo(sources / "tracked-ext", {
+            "manifest.json": _ext_manifest(),
+            "extension.py": "def register(api):\n    pass\n",
+        }, ignore="build/\n")
+        build = origin / "build"
+        build.mkdir()
+        for index in range(40):
+            (build / f"chunk{index}.js").write_text("x", encoding="utf-8")
+
+        row = ext.install_extension(str(origin))
+        assert row["id"] == "tracked-ext"
+        assert row["file_count"] <= 8
+
+    def test_a_symlink_in_a_checkout_is_refused_before_anything_is_copied(
+            self, root, sources):
+        origin = _repo(sources / "tracked-ext",
+                       {"manifest.json": _ext_manifest()})
+        try:
+            (origin / "escape").symlink_to("/etc/passwd")
+        except (OSError, NotImplementedError):
+            pytest.skip("this platform does not make symlinks")
+        ext._git("add", "-A", cwd=origin)
+
+        with pytest.raises(ext.ExtensionError, match="symlink"):
+            ext.install_extension(str(origin))
+        assert not (root / "tracked-ext").exists()
+
+    def test_git_mode_120000_is_refused_with_no_symlink_on_disk(
+            self, root, sources):
+        """The check that cannot be made from the filesystem.
+
+        A checkout on a platform without symlink permission writes a mode
+        120000 entry as an ORDINARY FILE holding the target path, and one
+        staged into the index but never checked out is not on disk at all.
+        `Path.is_symlink()` is False either way, so the mode is read from
+        git's own index rather than inferred from what landed.
+        """
+        origin = _repo(sources / "tracked-ext",
+                       {"manifest.json": _ext_manifest()})
+        target = sources / "target.txt"
+        target.write_text("/etc/passwd", encoding="utf-8")
+        blob = ext._git("hash-object", "-w", "--", str(target),
+                        cwd=origin).strip()
+        ext._git("update-index", "--add", "--cacheinfo",
+                 f"120000,{blob},escape", cwd=origin)
+        assert not (origin / "escape").is_symlink()
+
+        with pytest.raises(ext.ExtensionError, match="symlink"):
+            ext.install_extension(str(origin))
+        assert not (root / "tracked-ext").exists()
+
+    def test_git_mode_160000_is_refused_as_a_submodule(self, root, sources):
+        """A gitlink is a second URL chosen by the repository rather than by
+        the host. Clone already refuses those; a folder install must too."""
+        origin = _repo(sources / "tracked-ext",
+                       {"manifest.json": _ext_manifest()})
+        # A gitlink still needs a syntactically real object id; any blob in
+        # this repository's own store will do, since nothing dereferences it.
+        blob = ext._git("hash-object", "-w", "--", "manifest.json",
+                        cwd=origin).strip()
+        ext._git("update-index", "--add", "--cacheinfo",
+                 f"160000,{blob},vendor", cwd=origin)
+
+        with pytest.raises(ext.ExtensionError, match="submodule"):
+            ext.install_extension(str(origin))
+
+    def test_an_audit_error_names_what_it_found_and_what_it_allows(
+            self, root, sources, monkeypatch):
+        """"repository holds more than 4096 files" says neither how far over
+        the package is nor which of the two ceilings it hit."""
+        monkeypatch.setattr(ext, "MAX_ARCHIVE_MEMBERS", 4)
+        origin = sources / "plain-ext"
+        origin.mkdir()
+        (origin / "manifest.json").write_text(_ext_manifest("plain-ext"),
+                                              encoding="utf-8")
+        for index in range(8):
+            (origin / f"f{index}.txt").write_text("x", encoding="utf-8")
+
+        with pytest.raises(ext.ExtensionError) as caught:
+            ext.install_extension(str(origin))
+        message = str(caught.value)
+        assert "5 files" in message, message
+        assert "the 4 an extension may install" in message, message
+
+    def test_a_plain_folder_is_still_audited_whole(self, root, sources,
+                                                   monkeypatch):
+        """No ignore list is invented for a directory. A folder someone points
+        the installer at is already an explicit package; deciding that its
+        `node_modules` does not count would be the installer deciding what its
+        author meant."""
+        monkeypatch.setattr(ext, "MAX_ARCHIVE_MEMBERS", 4)
+        origin = sources / "plain-ext"
+        (origin / "node_modules").mkdir(parents=True)
+        (origin / "manifest.json").write_text(_ext_manifest("plain-ext"),
+                                              encoding="utf-8")
+        for index in range(8):
+            (origin / "node_modules" / f"f{index}.js").write_text(
+                "x", encoding="utf-8")
+
+        with pytest.raises(ext.ExtensionError, match="more than"):
+            ext.install_extension(str(origin))
+        assert not (root / "plain-ext").exists()
+
+    def test_an_install_record_reports_what_the_ceilings_measured(self, root):
+        row = ext.install_extension(str(DEMO))
+        assert row["file_count"] > 0
+        assert row["extracted_bytes"] > 0
+        assert row["file_count"] == len(
+            [path for path in (root / row["id"]).rglob("*") if path.is_file()])
+
+    def test_a_dry_run_answers_without_installing(self, root, sources):
+        """What an extension author puts in their own CI: the same manifest
+        and the same ceilings, with nothing written."""
+        origin = _repo(sources / "tracked-ext", {
+            "manifest.json": _ext_manifest(),
+            "extension.py": "def register(api):\n    pass\n",
+        }, ignore="build/\n")
+        (origin / "build").mkdir()
+        (origin / "build" / "junk.js").write_text("x" * 999, encoding="utf-8")
+
+        report = ext.audit_extension_source(str(origin))
+        assert report["git"] is True
+        assert report["file_count"] == 3          # manifest, entry, .gitignore
+        assert report["max_files"] == ext.MAX_ARCHIVE_MEMBERS
+        assert not (root / "tracked-ext").exists()
+        with pytest.raises(ext.ExtensionError, match="not a directory"):
+            ext.audit_extension_source(str(sources / "nope"))
+
+    def test_a_folder_ignored_by_an_unrelated_repository_still_installs(
+            self, root, sources):
+        """git's manifest answers "what does THIS repository ship". A bundle
+        staged under a `build/` that some enclosing repository ignores is not
+        an empty package -- it is a package git was asked the wrong question
+        about, and the strict walk is the right answer."""
+        outer = _repo(sources / "outer", {"readme.md": "hi"},
+                      ignore="build/\n")
+        origin = outer / "build" / "plain-ext"
+        origin.mkdir(parents=True)
+        (origin / "manifest.json").write_text(_ext_manifest("plain-ext"),
+                                              encoding="utf-8")
+
+        row = ext.install_extension(str(origin))
+        assert row["id"] == "plain-ext"
+        assert row["file_count"] == 1

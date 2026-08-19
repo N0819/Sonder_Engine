@@ -1590,6 +1590,68 @@ class ChatAccess:
         return f"<ChatAccess {self._api.id}>"
 
 
+#: What THIS host offers, by name. Frozen, sorted, and stable within an
+#: `ext_api` version: a name is added when the behaviour lands and is not
+#: removed or repurposed while `ext_api` stays 1 -- an extension that branches
+#: on one is relying on that.
+#:
+#: Not to be confused with the manifest's `capabilities`, which points the
+#: other way: those are what an extension ASKS FOR and the host discloses to
+#: its owner before consent. These are what the host PROVIDES, so an
+#: integrator can gate a code path without probing internals -- which is what
+#: they were doing instead, and internals move.
+#:
+#: `frame_state` and `frame_coherent_reads` are two different promises and are
+#: named separately on purpose. The first says a frame-SCOPED store exists. The
+#: second says several reads can be made to resolve against ONE chosen frame --
+#: which is the whole of the Directive review's P0, because an extension had
+#: the first and assumed the second, and got a projection carrying the future's
+#: scene beside the present's mission. This block previously said the second
+#: was deliberately absent; it landed in the same wave (`api.at_frame`,
+#: `docs/design/DESIGN_FRAME_COHERENT_READS.md`), so the name is here now, and
+#: the rule that put the comment there stands: a name goes in when the
+#: behaviour lands and never before.
+HOST_CAPABILITIES = frozenset({
+    "frame_coherent_reads",
+    # `api.char_state(chat_id, char_id)` -- per-character per-story state.
+    "char_state",
+    # `api.add_commit_domain(..., on_error="fail")` -- runs inside the turn's
+    # transaction and may roll it back.
+    "commit_domains",
+    # `api.narration_context` / `api.director_context` -- standing per-story
+    # blocks that colour what the narrator and the Director are told.
+    "context_blocks",
+    # `api.on_director_result` + `api.correction` -- refuse a Director result
+    # with a coded correction rather than after the fact.
+    "director_corrections",
+    # `api.documents(...)` -- a per-story keyed document store with `verify`.
+    "documents",
+    # `api.frame_state(chat_id)` -- state scoped to one era rather than the
+    # whole story. NOT a claim about coordinated frame selection; see above.
+    "frame_state",
+    # The installer audits ONE manifest -- the exact set it will copy --
+    # against bounded file counts and bytes, and reports `file_count` and
+    # `extracted_bytes` on the install record.
+    "install_limits",
+    # `api.add_director_specialist(..., list_channels=[...])` -- declare which
+    # of your channels carry lists, so the merge does not coerce them away.
+    "list_channels",
+    # `api.add_model_lane` -- a configurable model role of your own.
+    "model_lanes",
+    # `api.on_character_payload` -- rewrite what one mind is given, with
+    # attribution recorded against your id.
+    "payload_routing",
+    # `api.provision_story(...)` -- create a story with cast and state in one
+    # atomic call.
+    "provision_story",
+    # `api.add_route` -- your own HTTP endpoints under the host session.
+    "routes",
+    # `api.add_stage(anchor="after:<step>"|"before:<step>")` with a validated
+    # anchor grammar and reserved prefixes. See EXTENSIONS.md section 4a.
+    "stage_anchors",
+})
+
+
 class SonderExtensionAPI:
     """Everything one extension can reach, bound to its own id."""
 
@@ -1598,6 +1660,28 @@ class SonderExtensionAPI:
         self.data_path = data_path
         self.log = logging.getLogger(f"ext.{self.id}")
         self.characters = CharacterAccess(self)
+
+    @property
+    def api_version(self) -> int:
+        """The `ext_api` an extension's manifest must declare to load at all.
+
+        Read from the loader's own constant rather than restated here: two
+        copies of a version number are one copy and one lie waiting.
+        """
+        from . import EXT_API_VERSION
+        return EXT_API_VERSION
+
+    @property
+    def capabilities(self) -> frozenset:
+        """What this host offers, by name -- `HOST_CAPABILITIES`.
+
+        The version number alone cannot answer "may I call this": `ext_api`
+        moves once per breaking change, and everything added between two
+        breaks is invisible to it. A named set is what lets an extension
+        support two hosts without importing anything private to find out
+        which one it is on.
+        """
+        return HOST_CAPABILITIES
 
     # -- pipeline
 
@@ -1611,22 +1695,28 @@ class SonderExtensionAPI:
         """
         key = str(key or "").strip()
         if not _STAGE_KEY.fullmatch(key):
-            raise ExtensionError(f"invalid extension stage key: {key!r}")
+            raise ExtensionError(
+                f"extension {self.id!r}: invalid stage key {key!r}; a key is "
+                f"lower-case letters, digits, '_' and '-', up to 64 characters")
         if not callable(handler):
             raise ExtensionError(
-                f"extension stage {key!r} needs a callable handler")
+                f"extension {self.id!r} stage {key!r} needs a callable "
+                f"handler")
         mode, _, core = str(anchor or "").partition(":")
         if mode not in _ANCHOR_MODES or not core.strip():
             raise ExtensionError(
-                f"stage {key!r} anchor must be 'after:<step>' or "
-                f"'before:<step>', not {anchor!r}")
+                f"extension {self.id!r} stage {key!r}: anchor must be "
+                f"'after:<step>' or 'before:<step>', not {anchor!r}")
         if core.strip().startswith(_UNSPLICEABLE_ANCHOR_PREFIXES):
             raise ExtensionError(
-                f"stage {key!r} anchor {anchor!r} names a step the plan "
-                f"cannot splice beside; anchor on a core step key")
+                f"extension {self.id!r} stage {key!r}: anchor {anchor!r} "
+                f"names a step the plan cannot splice beside; "
+                f"{_UNSPLICEABLE_ANCHOR_PREFIXES} are reserved, so anchor on "
+                f"a core step key")
         if on_error not in ("warn", "fail"):
             raise ExtensionError(
-                f"stage {key!r} on_error must be 'warn' or 'fail'")
+                f"extension {self.id!r} stage {key!r}: on_error must be "
+                f"'warn' or 'fail', not {on_error!r}")
 
         full_key = f"ext:{self.id}:{key}"
         wrapper = _stage_wrapper(self, key, handler, on_error)
@@ -1675,12 +1765,16 @@ class SonderExtensionAPI:
         """
         name = str(name or "").strip()
         if not _STAGE_KEY.fullmatch(name):
-            raise ExtensionError(f"invalid commit domain name: {name!r}")
+            raise ExtensionError(
+                f"extension {self.id!r}: invalid commit domain name {name!r}")
         if not callable(fn):
-            raise ExtensionError(f"commit domain {name!r} needs a callable")
+            raise ExtensionError(
+                f"extension {self.id!r} commit domain {name!r} needs a "
+                f"callable")
         if on_error not in ("warn", "fail"):
             raise ExtensionError(
-                f"commit domain {name!r} on_error must be 'warn' or 'fail'")
+                f"extension {self.id!r} commit domain {name!r}: on_error must "
+                f"be 'warn' or 'fail', not {on_error!r}")
         from . import _record_commit_domain
         _record_commit_domain(self.id, name, fn, on_error)
         return f"ext:{self.id}:{name}"
@@ -1723,9 +1817,18 @@ class SonderExtensionAPI:
         from agents.director import register_specialist
         from . import _record_specialist
 
-        full = register_specialist(self.id, name, channels=channels,
-                                   prompt=prompt, gate=gate, role=role,
-                                   label=label, list_channels=list_channels)
+        # `register_specialist` raises `ValueError`, because it is the
+        # Director's function and knows nothing about extensions. A host reads
+        # this on a settings row beside every other registration refusal, so
+        # it arrives in the same shape and names the same thing they do.
+        try:
+            full = register_specialist(self.id, name, channels=channels,
+                                       prompt=prompt, gate=gate, role=role,
+                                       label=label,
+                                       list_channels=list_channels)
+        except ValueError as exc:
+            raise ExtensionError(
+                f"extension {self.id!r} specialist {name!r}: {exc}") from exc
         _record_specialist(self.id, full)
         return full
 
@@ -1871,13 +1974,17 @@ class SonderExtensionAPI:
         """
         path = "/" + str(path or "").strip().strip("/")
         if ".." in path:
-            raise ExtensionError(f"invalid route path: {path!r}")
+            raise ExtensionError(
+                f"extension {self.id!r}: invalid route path {path!r}")
         if not callable(fn):
-            raise ExtensionError(f"route {path!r} needs a callable")
+            raise ExtensionError(
+                f"extension {self.id!r} route {path!r} needs a callable")
         wanted = tuple(str(m or "").upper() for m in (methods or ("GET",)))
         for method in wanted:
             if method not in ("GET", "POST", "PUT", "DELETE", "PATCH"):
-                raise ExtensionError(f"route {path!r} cannot serve {method!r}")
+                raise ExtensionError(
+                    f"extension {self.id!r} route {path!r} cannot serve "
+                    f"{method!r}")
         from . import _record_route
         _record_route(self.id, path, fn, wanted)
         return f"/api/extensions/{self.id}/x{path}"
@@ -1921,12 +2028,13 @@ class SonderExtensionAPI:
         """
         name = str(name or "").strip()
         if not _STAGE_KEY.fullmatch(name):
-            raise ExtensionError(f"invalid model lane name: {name!r}")
+            raise ExtensionError(
+                f"extension {self.id!r}: invalid model lane name {name!r}")
         from llm.providers import ROLES
         if name in ROLES:
             raise ExtensionError(
-                f"model lane {name!r} is a host role; a lane needs a name of "
-                "its own")
+                f"extension {self.id!r}: model lane {name!r} is a host role; "
+                f"a lane needs a name of its own")
         role = f"ext:{self.id}:{name}"
         from . import _record_model_lane
         _record_model_lane(self.id, name, role,
@@ -2433,6 +2541,7 @@ __all__ = [
     "ChatAccess", "Correction", "DirectorBlock", "DirectorContext",
     "DirectorResult", "DocumentStore",
     "ExtState", "ExtensionError", "ExtensionFrameView",
+    "HOST_CAPABILITIES",
     "PSYCHOLOGY_STATE_KEYS", "PayloadContext",
     "Request", "SonderExtensionAPI", "StepView", "document_path",
     "enter_commit_scope", "in_commit_scope", "leave_commit_scope",

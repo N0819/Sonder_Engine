@@ -627,8 +627,14 @@ class TestDirectorSpecialists:
 
     def test_a_list_channel_must_be_one_of_the_declared_channels(
             self, temp_db, bare):
-        """Otherwise the typo is a shape that never applies, silently."""
-        with pytest.raises(ValueError):
+        """Otherwise the typo is a shape that never applies, silently.
+
+        `ExtensionError`, not the `ValueError` the Director's own function
+        raises: a host reads this on a settings row beside every other
+        registration refusal, so it arrives in the same shape and names the
+        same extension they do.
+        """
+        with pytest.raises(ExtensionError, match="seams"):
             bare.add_director_specialist(
                 "morale", channels=["ops"], list_channels=["opz"], prompt="p")
 
@@ -701,7 +707,7 @@ class TestDirectorSpecialists:
         for kwargs in ({"channels": [], "prompt": "p"},
                        {"channels": ["ops"], "prompt": "  "},
                        {"channels": [""], "prompt": "p"}):
-            with pytest.raises(ValueError):
+            with pytest.raises(ExtensionError, match="seams"):
                 bare.add_director_specialist("bad", **kwargs)
 
     def test_it_runs_loose_because_schema_map_cannot_know_it(self, temp_db,
