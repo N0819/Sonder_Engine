@@ -2912,6 +2912,47 @@ views, so the narrator half is waiting for a key nothing writes, which is why
 this reads as built until you go looking for the producer. Audit RUNTIME-4.
 
 
+### 1.63 Six dropdowns show the reader the engine's stored enum values
+
+Not a translation gap. `Design.md` § Story and interface language packs states
+the rule and it is right: **the stored protocol stays canonical English —
+schema keys, enum values, step ids and ledger vocabulary are never translated**,
+which is what lets one deterministic engine read objects written by any
+language. `tools/project_check.py`'s `canonical_language_tokens` enforces it,
+and `extract_ui_catalog._message` implements it by refusing a bare lowercase
+token.
+
+The defect is one layer up, and it is in ENGLISH too. Six module-level tables
+in `static/js` are rendered straight into dropdowns and checkbox labels, and
+each element is both the `value` sent to the server and the text shown to the
+reader:
+
+| Table | Where | What a reader sees |
+|---|---|---|
+| `MEM_CATS_FALLBACK` | `utils.js:194` | `episode`, `semantic`, `self` |
+| `MEM_PROV_FALLBACK` | `utils.js:195` | `witnessed`, `inferred` |
+| `ATTIRE_REGIONS` | `components.js:445` | `torso`, `groin` |
+| `EXTRA_PART_ASPECTS` | `components.js:793` | `underside`, `sides` |
+| `LORE_INHERITANCE_MODES` | `lorebooks.js:3` | `reference_only` |
+| `DEFAULT_LORE_LINK_TYPES` | `lorebooks.js:15` | `alternate_version`, `currently_within`, `depends_on` |
+
+`alternate_version` is not a label in any language. The repair is the shape the
+attire coverage presets already use (`ATTIRE_COVERAGE` pairs an authored phrase
+with its region list): give each enum an authored LABEL beside its value, put
+the label in the catalog and the value on the `option`. `components.el()`
+already translates every text child and never touches a `value` attribute, so
+the mechanism is there and only the pairing is missing.
+
+Found while checking audit FRONTEND-23, which read the same symptom
+("`episode` appears zero times in `en/ui.json`") as an extractor bug. It is
+not: measured 2026-08-18, 688 distinct strings in `static/js` are rejected by
+that filter and 683 are CSS custom properties, MIME types, event names, class
+names and route fragments. Translating the other five is what the protocol rule
+forbids. **Refuted rather than repaired**, and recorded here so the next reader
+does not re-derive the same wrong fix — the entry that is actionable is this
+one.
+
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
