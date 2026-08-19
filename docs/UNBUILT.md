@@ -2585,13 +2585,6 @@ landed. What survives below is what survived that second reading.
   and `"def _reconcile_interpretation"`), and the audit's warning that the suite
   would hold more of the class was right: `391bf14` fixed two others.
 
-**Documentation describing something else.**
-
-- **COMMIT** — `update_place_graph` documents a `"told"` basis with no writer.
-  The docstring is honest about it, so this is a register entry rather than a
-  lie: a testimony-derived place-graph writer is designed, accepted by the data
-  model, and unbuilt. It belongs in §6 once someone moves it.
-
 **Landed 2026-08-18**, each in its own commit with a test:
 
 - DIRECTOR D1/D2/D9 — the three channel registries, two of them frozen against
