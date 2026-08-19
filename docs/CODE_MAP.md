@@ -48,7 +48,8 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 5676 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.theory_of_mind` |
+| `mind/memory.py` | 5520 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.theory_of_mind` |
+| `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
 | `persist/__init__.py` | 6 |  | — |
@@ -553,14 +554,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 2908 | 275 lines |
-| `search_memories()` | 1902 | 244 lines |
-| `rebuild_embeddings()` | 5048 | 213 lines |
-| `embedding_bank_status()` | 4898 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 5300 | 124 lines |
-| `contrast_memory()` | 2181 | 117 lines |
-| `_with_reading()` | 2678 | 101 lines |
-| `_origin_on_drift()` | 2809 | 97 lines |
+| `build_character_memory_context()` | 2752 | 275 lines |
+| `search_memories()` | 1750 | 244 lines |
+| `rebuild_embeddings()` | 4892 | 213 lines |
+| `embedding_bank_status()` | 4742 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 5144 | 124 lines |
+| `contrast_memory()` | 2029 | 117 lines |
+| `_with_reading()` | 2522 | 101 lines |
+| `_origin_on_drift()` | 2653 | 97 lines |
+
+### `mind/memory_common.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_cos()` | 171 | 16 lines |
+| `_b64_to_blob()` | 131 | 14 lines |
+| `_ling()` | 13 | 10 lines |
+| `_blob_to_b64()` | 120 | 10 lines |
+| `_kw_scores()` | 162 | 8 lines |
+| `_ids()` | 150 | 7 lines |
+| `_storage_json()` | 145 | 4 lines |
+| `summary_scope_for()` | 109 | 3 lines |
 
 ### `mind/psychology_runtime.py`
 
