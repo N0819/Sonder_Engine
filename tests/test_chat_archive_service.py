@@ -65,6 +65,29 @@ def test_legacy_archive_with_null_collections_imports(temp_db):
     assert imported["scenario"] == "Old archive"
 
 
+def test_every_world_table_the_archive_carries_is_declared():
+    """The model is the archive's specification or it is decoration.
+
+    Seven of the nine world tables the export writes and the import reads
+    were in neither the field list nor the null-list validator; they survived
+    on `extra="allow"` alone. An undeclared collection has no declared type,
+    no default and no legacy-null coercion -- and nothing anywhere says the
+    archive carries it, so the next table added to the export tuple inherits
+    the same silence.
+    """
+    from persist.chat_archive import WORLD_TABLES
+
+    fields = getattr(ChatArchiveData, "model_fields", None)
+    if fields is None:                      # pydantic 1.x
+        fields = ChatArchiveData.__fields__
+    missing = [table for table in WORLD_TABLES if table not in fields]
+    assert missing == []
+
+    for table in WORLD_TABLES:
+        archive = ChatArchiveData(chat={"name": "Legacy"}, **{table: None})
+        assert getattr(archive, table) == [], table
+
+
 def test_invalid_data_member_keeps_original_400_contract():
     with pytest.raises(HTTPException) as exc:
         app.chat_import({"data": []})

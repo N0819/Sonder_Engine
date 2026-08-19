@@ -51,6 +51,25 @@ from mind.memory import (
 )
 
 
+# The normalized world tables an archive carries whole, row for row. Named
+# once because three places have to agree about them -- the export tuple, the
+# import tuple, and `ChatArchiveData`'s field list -- and a table that is in
+# two of the three is carried without being specified, or specified without
+# being carried. Both were true here: seven of these nine were exported and
+# imported and declared nowhere, surviving on `extra="allow"`.
+WORLD_TABLES = (
+    "world_events",
+    "relationship_events",
+    "world_entities",
+    "world_placements",
+    "world_conditions",
+    "scheduled_events",
+    "room_registry",
+    "fiction_worlds",
+    "fiction_locations",
+)
+
+
 def _model_validate(model_type, value):
     """Validate on Pydantic 1.x and 2.x without version-specific callers."""
     validate = getattr(model_type, "model_validate", None)
@@ -98,8 +117,19 @@ class ChatArchiveData(LenientModel):
     # imported story's checkpoints would restore with no vectors at all.
     memory_vectors: list[dict[str, Any]] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
+    # Every name in WORLD_TABLES, because the archive carries every one of
+    # them. Seven of the nine used to be absent here and rode in on
+    # `extra="allow"` -- carried without being specified, which makes this
+    # model a description of some of the archive rather than of the archive.
     world_events: list[dict[str, Any]] = Field(default_factory=list)
     relationship_events: list[dict[str, Any]] = Field(default_factory=list)
+    world_entities: list[dict[str, Any]] = Field(default_factory=list)
+    world_placements: list[dict[str, Any]] = Field(default_factory=list)
+    world_conditions: list[dict[str, Any]] = Field(default_factory=list)
+    scheduled_events: list[dict[str, Any]] = Field(default_factory=list)
+    room_registry: list[dict[str, Any]] = Field(default_factory=list)
+    fiction_worlds: list[dict[str, Any]] = Field(default_factory=list)
+    fiction_locations: list[dict[str, Any]] = Field(default_factory=list)
     checkpoints: list[dict[str, Any]] = Field(default_factory=list)
     lorebook: dict[str, Any] | None = None
     lorebooks: list[dict[str, Any]] = Field(default_factory=list)
@@ -117,7 +147,7 @@ class ChatArchiveData(LenientModel):
         "memory_summaries",
         "memory_vectors",
         "events",
-        "world_events",
+        *WORLD_TABLES,
         "checkpoints",
         "lorebooks",
         "chat_personas",
@@ -256,17 +286,7 @@ class ChatArchiveService:
 
         # Live normalized world tables keep world.scene/fixed_points aligned
         # with actual rows on the first post-import commit.
-        for table in (
-            "world_events",
-            "relationship_events",
-            "world_entities",
-            "world_placements",
-            "world_conditions",
-            "scheduled_events",
-            "room_registry",
-            "fiction_worlds",
-            "fiction_locations",
-        ):
+        for table in WORLD_TABLES:
             export[table] = [
                 dict(row)
                 for row in q(f"SELECT * FROM {table} WHERE chat_id=?", (cid,))
@@ -900,17 +920,7 @@ class ChatArchiveService:
 
             world_tables = {
                 table: [dict(row) for row in data.get(table) or []]
-                for table in (
-                    "world_events",
-                    "relationship_events",
-                    "world_entities",
-                    "world_placements",
-                    "world_conditions",
-                    "scheduled_events",
-                    "room_registry",
-                    "fiction_worlds",
-                    "fiction_locations",
-                )
+                for table in WORLD_TABLES
             }
             for entity in world_tables["world_entities"]:
                 entity["created_turn_id"] = turn_idmap.get(
