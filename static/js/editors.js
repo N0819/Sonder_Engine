@@ -59,6 +59,46 @@ function defaultCharacterSheet() {
   };
 }
 
+// ---- Carrying the fields an editor has no widget for ----
+//
+// A card editor rebuilds its sheet field by field from its widgets, and the
+// PUT that saves it REPLACES the stored sheet wholesale -- there is no merge
+// on the server. Every field the editor has no widget for therefore dies the
+// first time anyone opens the card, and `_deep_defaults` backfills the hole
+// on the way back out, so the loss reads as a value somebody chose rather
+// than as a deletion. Measured on three live fields: `simulation.sampler`
+// (read by `character_sampler` and passed to the model call),
+// `simulation.curiosity` (reverted to 0.5 every save), and
+// `psychology.projects` -- a life's work a character adopted mid-play, erased
+// by looking at their card.
+//
+// The rule is structural rather than a list of those three, because the
+// fourth field would be lost the same way: what the editor PRESENTS it owns,
+// and what it does not present it carries forward unchanged. Arrays and
+// scalars the editor built always win -- clearing a list is an authored act.
+// Only a path the editor rebuilds WHOLE is exempt; see OWNED_SHEET_PATHS.
+function carryUnpresentedFields(stored, built, owned, path) {
+  const isMap = v => !!v && typeof v === "object" && !Array.isArray(v);
+  if (!isMap(stored) || !isMap(built)) return built;
+  const out = { ...built };
+  for (const key of Object.keys(stored)) {
+    const here = path ? path + "." + key : key;
+    if ((owned || []).includes(here)) continue;
+    if (!(key in out)) out[key] = stored[key];
+    else out[key] = carryUnpresentedFields(stored[key], out[key], owned, here);
+  }
+  return out;
+}
+
+// Paths whose widget rebuilds the entire subtree, so an absence underneath
+// one is an authored DELETION rather than a field the editor never knew
+// about. `initial_outfit` is the whole list: `regions` is a map the garment
+// widget rebuilds from scratch, so carrying a stored region back resurrects a
+// garment the author just removed -- and `wearing`/`state` are derived
+// mirrors `character_schema._normalize_initial_outfit` folds back INTO
+// `regions`, which would let the same garment return through the other door.
+const OWNED_SHEET_PATHS = ["initial_outfit"];
+
 // Editable, swipeable greetings for a saved character card. Greetings are
 // captured at import (first_mes + alternate_greetings, stored on
 // sheet.opening.greetings) and can be added/edited/removed here; the list is
@@ -476,7 +516,11 @@ function charEditor(c, options = {}) {
           if (f.knowledge_scholarly.checked) access_tags.push("scholarly");
           if (f.knowledge_esoteric.checked) access_tags.push("esoteric");
 
-          const s = {
+          // Everything below is what the widgets OWN. Anything else the
+          // stored sheet carries is merged back by carryUnpresentedFields --
+          // without it a full-replacement PUT behind a field-by-field editor
+          // deletes every field that has no widget.
+          const s = carryUnpresentedFields(sheet, {
             identity: {
               uid: sheet.identity?.uid,
               name: f.name.read(),
@@ -487,8 +531,10 @@ function charEditor(c, options = {}) {
             // sent from here -- two authored copies of one outfit is how the
             // ledger ends up saying different things about the same body.
             initial_outfit: { regions: f.outfit_regions.read() },
+            // No `sampler` key: there is no widget for it, so writing one
+            // here would erase whatever was authored or imported into it. It
+            // rides the carry with every other unpresented field.
             simulation: { tier: f.tier.read(), temperature: f.temperature.read(),
-              sampler: {},
               offscreen_agent: f.offscreen_agent.querySelector("input").checked },
             embodiment: {
               senses: f.senses.read(),
@@ -555,7 +601,7 @@ function charEditor(c, options = {}) {
               first_message: f.first_message.read(),
               greetings: gc ? gc.read() : (sheet.opening?.greetings || [])
             }
-          };
+          }, OWNED_SHEET_PATHS);
           try {
             let result = null;
             if (isChatCard) {
@@ -668,7 +714,7 @@ function personaEditor(p) {
       el("details", { open: "" }, el("summary", {}, "Private history"), ph.node),
       el("div", { class: "row", style: "margin-top:10px" },
         el("button", { class: "primary", onclick: async () => {
-          const s = {
+          const s = carryUnpresentedFields(sheet, {
             identity: {
               uid: sheet.identity?.uid,
               name: f.name.read(),
@@ -688,7 +734,7 @@ function personaEditor(p) {
             competence: { abilities: f.abilities.read() },
             knowledge: { public_history: f.public_history.read(), private_history: ph.read() },
             narration: { voice_setting: f.voice_setting.read() }
-          };
+          }, OWNED_SHEET_PATHS);
           try {
             if (p) await api("PUT", "/api/personas/" + p.id, { sheet: s });
             else await api("POST", "/api/personas", { sheet: s });
