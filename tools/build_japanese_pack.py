@@ -246,10 +246,8 @@ regex(common, "_SPEECH_NARRATION_RE", "言(?:う|った|って)|話す|答える
 ling[common]["_PLAYER_ACT_VERBS"] += "|取る|掴む|持つ|上げる|下げる|飲む|食べる|歩く|走る|開ける|閉める|見る"
 regex(common, "_SUBJECT_PRONOUN_RE", "^(?:彼|彼女|あの人|その人|彼ら)")
 ling[common]["_ATTRIBUTION_VERBS"] += "|言う|話す|答える|尋ねる|囁く|つぶやく|叫ぶ"
-add(common, "_LOCOMOTION_STEMS", "歩く", "進む", "近づく", "下がる", "走る", "渡る", "移動する")
 ling[common]["_LOCOMOTION_VERBS"] += "|歩く|進む|近づく|下がる|走る|渡る|移動する"
 add(common, "_INTERIOR_VERBS", "思う", "考える", "知る", "信じる", "疑う", "望む", "恐れる", "決める", "気づく")
-add(common, "_MANIPULATION_STEMS", "掴む", "取る", "持つ", "引く", "押す", "上げる", "開ける", "閉める")
 ling[common]["_MANIPULATION_VERBS"] += "|掴む|取る|持つ|引く|押す|上げる|開ける|閉める"
 add(common, "_OWN_BODY_NOUNS", "身体", "手", "腕", "足", "脚", "顔", "目", "口", "胸", "背中", "腰", "息", "心臓", "肌")
 regex(common, "_QUOTE_SPAN_RE", "(「)([^」]{2,})(」)|(『)([^』]{2,})(』)")
@@ -288,7 +286,6 @@ ling[common]["_DANGLING_SPEECH"] = {
     "heal_stop": "そう{verb}。",
     "heal_colon": "{lead}。",
 }
-regex(common, "_SPEECH_VERB_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
 regex(common, "_DIALOGUE_CUE_RE", "言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ")
 regex(common, "_NPC_PRONOUN_RE", "彼女|彼|彼ら|あの人|その人")
 regex(common, "_VIEW_QUOTED_SPAN_RE", "「[^」]*」|『[^』]*』")
@@ -308,13 +305,10 @@ regex(common, "_YOU_INTERIOR", "(?:あなた|君|お前)(?:自身)?(?:の)?(?:�
 add(common, "_SUBJECT_LEADS", "私", "僕", "俺", "あなた", "君", "彼", "彼女", "彼ら", "その", "この", "あの")
 regex(common, "_CLAUSE_BREAKS", "そして|しかし|だが|ので|から|ながら|とき|前に|後で|まで|、|；|：")
 add(common, "ATTEMPT_CUES", "しようとする", "試みる", "狙う", "手を伸ばす", "近づこうとする")
-add(common, "ASSERTION_SKIP_CUES", "しようとする", "試みる", "狙う")
 add(common, "_BREATH_CONJUNCTIONS", "そして", "しかし", "または", "ので", "から", "ながら", "とき", "まで")
 add(common, "_NAME_TITLE_TOKENS", "博士", "先生", "隊長", "司令官", "大尉", "中尉", "軍曹", "殿", "様", "さん")
-add(common, "_PLAYER_ACT_STEMS", "取る", "掴む", "持つ", "飲む", "食べる", "歩く", "走る", "見る")
 add(common, "_NAME_LEADERS", "博士", "先生", "隊長", "司令官", "大尉", "中尉", "軍曹")
 regex(common, "_NEW_SUBJECT_RE", "^(?:私|僕|俺|あなた|君|彼|彼女|彼ら|それ|これ|あれ)")
-add(common, "_ATTRIBUTION_STEMS", "言う", "話す", "答える", "尋ねる", "囁く", "つぶやく", "叫ぶ")
 regex(common, "_PROXIMITY_RE", "近づく|一歩近づく|距離を詰める|手の届く距離|一歩下がる|離れる")
 add(common, "_DEFINITE_DETS", "この", "その", "あの", "私の", "あなたの", "彼の", "彼女の")
 add(common, "_DIRECTOR_VOICEABLE_KINDS", "生物", "動物", "怪物", "ゴーレム", "自動人形", "ゾンビ", "ドローン", "群れ")

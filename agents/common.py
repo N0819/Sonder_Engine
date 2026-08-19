@@ -3270,23 +3270,6 @@ def _strip_subject(sentence, name):
     return sentence[match.end():] if match else ""
 
 
-# Speech verbs, as the stem-plus-inflection pattern `_PLAYER_ACT_VERBS` uses.
-# Only verbs that ASSERT an utterance: "considers", "hesitates", "looks" are
-# not speech, and a character who declared silence is entitled to all of them.
-def _inflect(stem):
-    """A stem as a regex matching its inflections.
-
-    English inflects a phrasal verb on its HEAD, not its tail: "puts in", not
-    "put ins". Appending the suffix group to the whole escaped stem silently
-    produced a pattern that could never match the form people actually write,
-    which is worse than not listing the verb at all -- it reads as covered.
-    """
-    head, _, rest = str(stem).partition(" ")
-    pattern = rf"{re.escape(head)}(?:e?s|ed|ing|d)?"
-    return rf"{pattern}\s+{re.escape(rest)}" if rest else pattern
-
-
-
 # How far past the name to look for the verb. Same window the player check
 # uses, and for the same reason: the act must be what this body is DOING, not
 # a word appearing anywhere in a long sentence.
