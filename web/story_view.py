@@ -227,6 +227,21 @@ def story_view(chat_id, *, events=DEFAULT_EVENT_LIMIT):
 # ------------------------------------------------------------ player-safe
 
 
+def _persona_sheet_name(sheet):
+    """An extra player's identity name, from their sheet. Same rule as the
+    primary persona -- `story/scene.py` seeds them under `persona_name(sheet)`
+    too, so that is the key the scene and the ledger will answer to."""
+    from story.character_schema import persona_name
+
+    try:
+        parsed = json.loads(sheet or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    return persona_name(parsed) or ""
+
+
 def viewers(chat_id):
     """Who this story can be projected for, as `{id, name, kind}`.
 
@@ -234,16 +249,30 @@ def viewers(chat_id):
     and a character's numeric id -- so a caller never has to guess the spelling
     of the thing it is about to ask for.
     """
+    from story.character_schema import persona_name
+    from story.scene import persona_of
+
     chat_id = int(chat_id)
     out = []
-    persona = q("SELECT p.id, p.name FROM personas p JOIN chats c "
-                "ON c.persona_id=p.id WHERE c.id=?", (chat_id,), one=True)
-    if persona:
-        out.append({"id": "player", "name": persona["name"], "kind": "player"})
-    for row in q("SELECT cp.persona_id, p.name FROM chat_personas cp "
+    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+    if chat:
+        # The name here is a JOIN KEY, not a label: `known` and the scene's
+        # `positions` are both keyed by the sheet's identity name. The
+        # denormalised `personas.name` column is a copy taken at insert time
+        # and free to diverge from the sheet forever after -- where it has,
+        # every lookup keyed on it misses silently and reads as "recognises
+        # nobody" rather than as a miss. `persona_of` also answers for a chat
+        # with no persona attached, with the same "The Stranger" the scene is
+        # seeded under; emitting nothing there made this the only reader in
+        # the engine that cannot see the default player.
+        out.append({"id": "player",
+                    "name": persona_name(persona_of(dict(chat))),
+                    "kind": "player"})
+    for row in q("SELECT cp.persona_id, p.name, p.sheet FROM chat_personas cp "
                  "JOIN personas p ON p.id=cp.persona_id WHERE cp.chat_id=? "
                  "ORDER BY cp.persona_id", (chat_id,)):
-        out.append({"id": f"extra:{row['persona_id']}", "name": row["name"],
+        out.append({"id": f"extra:{row['persona_id']}",
+                    "name": _persona_sheet_name(row["sheet"]) or row["name"],
                     "kind": "player"})
     for member in _cast(chat_id):
         out.append({"id": str(member["char_id"]), "name": member["name"],
