@@ -421,7 +421,6 @@ def generate_greeting(char_id: int, brief: str = "",
     # substitution downstream (start_story resolves it).
     prose = _substitute_macros(prose, name).strip()
 
-    import hashlib
     return {
         "greeting_id": "greet_" + hashlib.sha1(prose.encode("utf-8")).hexdigest()[:16],
         "prose": prose,
