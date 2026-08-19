@@ -3006,6 +3006,11 @@ def detach_book(cid: int, lid: int):
 @app.post("/api/chats/{cid}/lorebook")
 def bind_lore(cid: int, body: dict = Body(...)):
     _require_chat_idle(cid)
+    # Present-and-null is the caller SAYING none, which is how a book is
+    # unbound; only ABSENCE is a malformed request. Indexing conflated the
+    # two and turned the second into a 500.
+    if "lorebook_id" not in body:
+        raise HTTPException(400, "lorebook_id required")
     src = body["lorebook_id"]
     if not src:
         qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
@@ -3447,7 +3452,9 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
     existing single-persona chats.persona_id (untouched -- this is purely
     additive multiplayer support). Mirrors chat_add_char's pattern.
     """
-    pid = body["persona_id"]
+    pid = body.get("persona_id")
+    if pid is None:
+        raise HTTPException(400, "persona_id required")
     persona_row = q("SELECT sheet FROM personas WHERE id=?", (pid,), one=True)
     if not persona_row:
         raise HTTPException(404, "Persona not found")
@@ -3489,7 +3496,9 @@ def submit_extra_player_input(cid: int, idx: int, body: dict = Body(...)):
     already declared for it. Rejects submissions against an already-run
     turn (has active steps) since the beat has already resolved.
     """
-    pid = body["persona_id"]
+    pid = body.get("persona_id")
+    if pid is None:
+        raise HTTPException(400, "persona_id required")
     text = _player_input(body)
     attached = q(
         "SELECT 1 FROM chat_personas WHERE chat_id=? AND persona_id=? AND status='active'",
@@ -3519,7 +3528,9 @@ def _submit_player_input(cid: int, idx: int, pid: int, text: str):
 
 @app.post("/api/chats/{cid}/guest_invites")
 def create_guest_invite(cid: int, body: dict = Body(...)):
-    pid = body["persona_id"]
+    pid = body.get("persona_id")
+    if pid is None:
+        raise HTTPException(400, "persona_id required")
     attached = q(
         "SELECT 1 FROM chat_personas WHERE chat_id=? AND persona_id=? AND status='active'",
         (cid, pid), one=True,
