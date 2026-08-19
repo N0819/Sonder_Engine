@@ -3070,6 +3070,31 @@ def _take_embed_group_locked():
     return group
 
 
+def _report_embed_coalescing(callers, texts_sent):
+    """Say what the coalescing saved, on the groups where it saved anything.
+
+    `_EMBED_STATS` is described in its own comment as "visible arithmetic for
+    did this help" and was visible to nothing: four counters incremented on
+    every call with no reader anywhere but a test. A number nobody can read is
+    not a measurement -- and this one answers a question that decides whether
+    the queue, the leader election and the deadlock backstop above are earning
+    their complexity.
+
+    Reported only when a group actually merged callers, because a group of one
+    is the ordinary case and would be a log line per embedding. The cumulative
+    totals ride along so the ratio is readable without adding up the lines.
+    """
+    if callers < 2:
+        return
+    stats = dict(_EMBED_STATS)
+    _logger.info(
+        "embed_coalesced callers=%d texts_sent=%d "
+        "total_callers=%d total_groups=%d total_texts_in=%d "
+        "total_texts_sent=%d",
+        callers, texts_sent, stats["callers"], stats["groups"],
+        stats["texts_in"], stats["texts_sent"])
+
+
 def _serve_embed_group(group, config):
     """One request for the whole group, each caller handed back its own."""
     order, position = [], {}
@@ -3081,6 +3106,7 @@ def _serve_embed_group(group, config):
     got = _embed_with_retry(order, config)
     _EMBED_STATS["groups"] += 1
     _EMBED_STATS["texts_sent"] += len(order)
+    _report_embed_coalescing(len(group), len(order))
     for waiter in group:
         # Routed by position in BOTH outcomes, including the fallback, so a
         # caller can never receive another caller's vector. The dedupe above
