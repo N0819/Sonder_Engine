@@ -2122,6 +2122,28 @@ def _git_index_modes(root: Path) -> dict[str, str]:
     return modes
 
 
+#: What git says when the answer is "this is not a repository", as opposed to
+#: "this is a repository and I refused to read it". The first is a fact about
+#: the directory and the installer's plain-directory path handles it; the
+#: second is an error the host can act on, and swallowing it substitutes a
+#: diagnosis about size for one about ownership or permissions.
+#:
+#: Matched on git's own wording rather than an exit code because git returns
+#: 128 for both. Deliberately narrow: an unrecognised failure re-raises, which
+#: is the safe direction -- a real cause reported oddly beats a wrong cause
+#: reported clearly.
+_NOT_A_REPOSITORY = (
+    "not a git repository",
+    "not a working tree",
+    "does not exist",
+)
+
+
+def _git_says_not_a_repository(exc) -> bool:
+    text = str(exc).casefold()
+    return any(phrase in text for phrase in _NOT_A_REPOSITORY)
+
+
 def _git_source_files(root: Path) -> list[Path] | None:
     """What git says this checkout would ship, or `None` if it is not one.
 
@@ -2131,19 +2153,34 @@ def _git_source_files(root: Path) -> list[Path] | None:
     package. That is a manifest the repository's own author wrote, which is
     why it is trusted here and why NOTHING like it is inferred for a plain
     directory -- see `_source_manifest`.
+
+    A git FAILURE is not an answer to this question and is re-raised. The two
+    are easy to conflate and the cost of conflating them is a diagnosis about
+    the wrong thing: git rejected a reviewer's checkout for dubious ownership,
+    this returned `None`, `_source_manifest` walked the directory as though it
+    were a plain one -- `.git`, `node_modules` and every ignored artifact
+    included -- and the installer reported "at least 4097 files, more than the
+    4096 an extension may install". The package git would actually ship was
+    207 files and 8MB. The host was told to shrink an extension that was never
+    too big, and never told the thing they could have fixed in one command.
+    (Reported by the Directive team against alpha 9.6.1.)
+
+    `rev-parse` answering anything other than "true" IS an answer -- not a
+    work tree -- and keeps the fallback. `ls-files` failing after `rev-parse`
+    said "true" cannot be: the repository is established by then, so a failure
+    there is an inspection error and nothing else.
     """
     try:
         inside = _git("-C", str(root), "rev-parse",
                       "--is-inside-work-tree").strip()
-    except ExtensionError:
-        return None
+    except ExtensionError as exc:
+        if _git_says_not_a_repository(exc):
+            return None
+        raise
     if inside != "true":
         return None
-    try:
-        out = _git("-C", str(root), "ls-files", "-z",
-                   "--cached", "--others", "--exclude-standard")
-    except ExtensionError:
-        return None
+    out = _git("-C", str(root), "ls-files", "-z",
+               "--cached", "--others", "--exclude-standard")
     return [root / name for name in out.split("\0") if name]
 
 

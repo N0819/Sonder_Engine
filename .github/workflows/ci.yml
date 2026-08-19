@@ -114,13 +114,28 @@ jobs:
             requirements*.txt
       - name: Install browser-test dependencies
         run: python -m pip install -c constraints.txt -r requirements-browser.txt
+      # The browser payload, keyed on the pinned Playwright version. A cache
+      # hit removes the download entirely; it does nothing for apt, which is
+      # why apt is gone below.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('constraints.txt') }}
       - name: Install Chromium
-        # `--with-deps` shells out to apt-get, which is what hung for fifty
-        # minutes on 2026-08-19. Non-interactive so it cannot stop on a
-        # prompt no one can answer, and its own ceiling under the job's.
-        timeout-minutes: 12
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: python -m playwright install --with-deps chromium
+        # NO `--with-deps`. That flag shells out to apt-get to install system
+        # libraries, and apt is the part that is not deterministic here: it
+        # hung for fifty minutes on 2026-08-19 with no ceiling, and once a
+        # ceiling existed it spent twelve minutes downloading Ubuntu font
+        # packages and hit that instead -- so the tagged release commit has
+        # passing Python jobs and no browser evidence at all.
+        #
+        # The libraries are already on the runner image, which the green runs
+        # either side of that failure prove. `--with-deps` exists for bare
+        # containers, and paying apt on every run to reinstall what is already
+        # present bought nothing but a flaky mirror. If a future image ever
+        # does drop a library, Chromium fails to launch and says which one,
+        # which is a better failure than a twelve-minute download of fonts.
+        timeout-minutes: 6
+        run: python -m playwright install chromium
       - name: Run browser behavior tests
         run: make test-browser
