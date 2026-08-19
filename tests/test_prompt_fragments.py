@@ -129,3 +129,34 @@ def test_a_preset_body_carrying_a_placeholder_is_refused():
     }
     with pytest.raises(ValueError, match="narrator"):
         preset_import_document(document)
+
+
+def test_every_packs_fragments_teach_the_vocabulary_the_schema_accepts():
+    """A fragment is about to become the ONLY copy of its rule in a pack, so
+    a protocol literal it drops is dropped for every prompt that embeds it.
+
+    Schema keys, enum values and body-region ids are canonical English in
+    every language (language_packs/README.md); a fragment that translates
+    them away teaches the model an output vocabulary the committer will
+    refuse. The Japanese transit_note had measurably done so: `entities.` was
+    translated into prose, and `hatch:`/`phase:` became their katakana
+    glosses with full-width colons.
+    """
+    from story.attire import REGIONS
+    from story.character_schema import EXTRA_PART_ASPECTS
+
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        card = pack.card("system_prompts")
+        transit = str(card["transit_note"])
+        for literal in ("entities.<id>.state.transit", "positions[<entity>]",
+                        "hatch:'", "phase:'", "state.link"):
+            assert literal in transit, (pack.id, "transit_note", literal)
+        extra = str(card["extra_parts_note"])
+        for literal in REGIONS + EXTRA_PART_ASPECTS + (
+                "embodiment.extra_parts", "through_clothing"):
+            assert literal in extra, (pack.id, "extra_parts_note", literal)
+        category = str(card["category_note"])
+        for literal in ("common", "scholarly", "esoteric", "local", "global"):
+            assert literal in category, (pack.id, "category_note", literal)
