@@ -75,13 +75,11 @@ DEFAULT_PROMPTS = {
     pid: apply_prompt_policy(text, "en", pid)
     for pid, text in _prompt_bodies(_ENGLISH).items()
 }
-CATEGORY_NOTE = str(_ENGLISH["category_note"])
-BOOK_TYPE_NOTE = str(_ENGLISH["book_type_note"])
-TRANSIT_NOTE = str(_ENGLISH["transit_note"])
+# The one surviving eager English fragment, and it is read (story/importers.py).
+# `extra_parts_note(language)` below is the localized accessor that should
+# replace it: this constant resolves the ENGLISH card at import, so an import
+# running under a Japanese story gets the English note.
 EXTRA_PARTS_NOTE = str(_ENGLISH["extra_parts_note"])
-NSFW_OVERLAY = str(_ENGLISH["nsfw_overlay"])
-NSFW_PROMPT_IDS = frozenset(_ENGLISH["nsfw_prompt_ids"])
-INTERPRET_DELEGATION_NOTE = str(_ENGLISH["interpret_delegation_note"])
 SPECIALIST_PROMPT_SPECS = {
     name: {
         "core": apply_prompt_policy(
@@ -404,18 +402,6 @@ def character_prompt(payload, base=None, language=None):
     if not keep:
         return text
     return re.sub(r"\n{3,}", "\n\n", "\n".join(keep))
-
-
-DIRECTOR_RESOLVE_SHEET_IDS = (
-    "director_resolve_lean",
-    "director_body", "director_social", "director_contact",
-    "director_objects", "director_spatial", "director_offscreen",
-)
-
-
-def director_resolve_sheets(language=None):
-    bodies = _prompt_bodies(_prompt_card(language))
-    return {pid: bodies[pid] for pid in DIRECTOR_RESOLVE_SHEET_IDS}
 
 
 def get_prompt_body(pid, language=None):

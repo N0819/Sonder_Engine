@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import time
 from types import SimpleNamespace
 
@@ -591,3 +592,43 @@ def test_the_conditions_shape_a_prompt_shows_is_the_shape_declared():
             f"{pack.id} shows conditions keyed to a bare object; the field "
             "is dict[str, list[dict]]")
         assert plural.search(blob), f"{pack.id} shows no conditions shape"
+
+
+def test_no_english_compat_export_survives_without_a_reader():
+    """`llm/prompts.py`'s module constants are eagerly-bound views of the
+    ENGLISH pack, kept under the comment "compatibility exports used by the
+    prompt editor, project checks, benches, and tests". Seven of them had no
+    reader anywhere -- so they were not compatibility with anything, they were
+    the English text of seven fragments resolved at import in a module whose
+    whole point is that the story language is resolved at USE time.
+
+    The rule, rather than the seven: a name bound from the English card at
+    import must be read by something, or it is a second, language-blind
+    spelling of a value the localized accessor already provides.
+    """
+    import ast
+
+    prompts_path = ROOT / "llm" / "prompts.py"
+    tree = ast.parse(prompts_path.read_text(encoding="utf-8"))
+    english_bound = []
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name) or target.id.startswith("_"):
+            continue
+        if "_ENGLISH" in ast.dump(node.value):
+            english_bound.append(target.id)
+    assert english_bound, "the compat exports vanished entirely"
+
+    searched = [path for package in ("agents", "core", "llm", "mind",
+                                     "persist", "story", "web", "tools",
+                                     "tests", "extension_runtime")
+                for path in (ROOT / package).rglob("*.py")
+                if path != prompts_path]
+    bodies = {path: path.read_text(encoding="utf-8") for path in searched}
+    orphans = [name for name in english_bound
+               if not any(re.search(rf"\b{name}\b", body)
+                          for body in bodies.values())]
+    assert not orphans, (
+        "English compat exports nothing reads: " + ", ".join(orphans))
