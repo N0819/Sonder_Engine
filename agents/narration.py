@@ -30,7 +30,6 @@ from world.spatial import (
     room_of,
     same_subject,
     spatial_digest,
-    spatial_facts,
     spatial_rel,
     substances_for,
     visible_adjacent_rooms,
@@ -46,18 +45,6 @@ def _ling(name):
 _ENFORCEABLE_PREFIXES = english_linguistic(
     "agents.narration", "_ENFORCEABLE_PREFIXES")
 
-def _spatial_facts_field(scene, observer):
-    """Env-gated (SPATIAL_SCAFFOLD=1) deterministic ground-truth spatial facts
-    for the narrator. Off by default -> {} (no payload change, baseline
-    behavior). On -> {'spatial_facts': [...]} the narrator is told not to
-    contradict. Sources are everyone co-located with the observer."""
-    if not os.environ.get("SPATIAL_SCAFFOLD"):
-        return {}
-    o_room = room_of(scene, observer)
-    positions = scene.get("positions") or {}
-    names = [n for n, r in positions.items() if r == o_room and n != observer]
-    facts = spatial_facts(scene, observer, names)
-    return {"spatial_facts": facts} if facts else {}
 from llm.schemas import validate_llm_output
 
 from story.character_schema import (
@@ -66,6 +53,7 @@ from story.character_schema import (
     persona_appearance,
 )
 
+from . import composer
 from .common import (
     _agent_json,
     extra_parts_lines,
@@ -287,10 +275,18 @@ def _standing_substance_clauses(scene, you):
     return clauses
 
 
-#: Payload order for the manifest -- the fixed vocabulary of
-#: `composer.CHANNELS` minus `mixed`, which appears only when a merged span
-#: actually crossed channels (absent-when-empty, like the key itself).
-_MANIFEST_CHANNELS = ("sight", "hearing", "touch", "smell", "interoception")
+#: Payload order for the manifest -- DERIVED from `composer.CHANNELS` minus
+#: `mixed`, which appears only when a merged span actually crossed channels
+#: (absent-when-empty, like the key itself).
+#:
+#: It was a hand-written literal under a comment that said "the fixed
+#: vocabulary of composer.CHANNELS": two lists of one thing, agreeing today.
+#: A seventh channel added to the composer would be built into percepts,
+#: survive `observations_from_render`, arrive in `by_channel` -- and be
+#: dropped from the narrator payload by the loop below, silently, because the
+#: loop iterates this tuple. Derived, the same addition surfaces as a missing
+#: `statuses` entry, which the loop states rather than swallows.
+_MANIFEST_CHANNELS = tuple(c for c in composer.CHANNELS if c != "mixed")
 
 
 def _sensory_channels_manifest(scene, player_name, view, observations,
@@ -365,7 +361,6 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         scoped = weather_for_room(scene, p_room) or {}
     except Exception:
         scoped = {}
-    sight_standing = list(weather_words(scoped, "sight"))
     hearing_standing = list(weather_words(scoped, "sound"))
     if scoped.get("falls_on_you"):
         touch_standing.append("%s %s falling on you"
@@ -373,9 +368,22 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     if scoped.get("wind_reaches"):
         touch_standing.append("%s on your skin" % scoped["wind"])
 
+    # THE STATUS DECIDES, AND IT IS DECIDED FIRST. This was built the other way
+    # round: `sight_standing` was filled from the weather and then
+    # unconditionally appended with `light: {light}`, so the sight entry's
+    # standing list was never empty -- and `sight_status` was computed ten
+    # lines later, where it can come back "silent". `weather_words`' sight arm
+    # gates on room EXPOSURE (sky_visible / falls_on_you / wind_reaches),
+    # never on light, so an exposed room at night handed the narrator
+    # {"status": "silent", "why": "no light reaches this room",
+    #  "standing": ["storm sky", "heavy rain", "light: dark"]}.
+    #
+    # Not a firewall breach -- the weather is legitimately the player's, and
+    # they can hear it and feel it on the other two channels. But the payload
+    # contradicted itself in the one field the prompt's SENSORY CHANNELS block
+    # is told to read as authoritative, and a reader resolves that either way
+    # they like.
     light = effective_light(scene, p_room)
-    sight_standing.append(f"light: {light}")
-
     if light == "dark":
         # Content wins over aperture: a filling light source or a percept
         # that legitimately rode sight this beat means SOMETHING is seen.
@@ -386,6 +394,12 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         sight_status = ("degraded", "dim light -- shapes, not detail")
     else:
         sight_status = ("live", "")
+
+    # Silent means nothing is standing on this channel. The reason the player
+    # cannot see is already in `why`, so `light: dark` beside it would be the
+    # same fact a second time and the only copy shaped like content.
+    sight_standing = [] if sight_status[0] == "silent" else [
+        *weather_words(scoped, "sight"), f"light: {light}"]
 
     touch_live = bool(touch_standing or by_channel.get("touch"))
     statuses = {
@@ -404,7 +418,13 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     }
     manifest = {}
     for channel in _MANIFEST_CHANNELS:
-        status, why = statuses[channel]
+        # A channel the composer can mint and this function has no delivery
+        # rule for is a gap, and it says so. Dropping it -- which is what a
+        # hand-written vocabulary did by omission -- would tell the narrator
+        # the sense is absent, which is a stronger claim than "not computed".
+        status, why = statuses.get(
+            channel, ("unknown", "no delivery status is computed for this "
+                                 "channel yet"))
         entry = {"status": status}
         if why:
             entry["why"] = why
@@ -662,7 +682,7 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
     return payload, facts, room_names
 
 
-def _visible_portal_states(scene, room_id, visible_rooms=None):
+def _visible_portal_states(scene, room_id, visible_rooms):
     """F3: committed open/shut state of every door/portal the player can
     currently see, keyed by display name -- portal-link entities touching the
     player's room, door-like entities in it, transit hatches of an enclosure
@@ -672,22 +692,19 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
     entity (the DW t12 case).
 
     S3-A5: ``visible_rooms`` (the player's room plus any visible adjacent
-    rooms) gates which portal states are included.  A portal/door in a
-    room the player cannot see is withheld -- the player has not
-    perceived it and must not be told its state.  When ``visible_rooms``
-    is None (backwards-compatible callers) the behaviour is unchanged
-    (only the player's own room is considered)."""
+    rooms) gates which portal states are included.  A portal/door in a room
+    the player cannot see is withheld -- the player has not perceived it and
+    must not be told its state.
+
+    REQUIRED, since 2026-08. It defaulted to None for "backwards-compatible
+    callers", and there were none: the one production call site has always
+    passed the set. What the default actually did was make the gate optional
+    -- three `if _filter_adjacent` branches that fell open -- so the pre-S3-A5
+    leak stayed reachable by anyone who omitted an argument, and a test pinned
+    it as correct. A guard with an off switch is not a guard."""
     if not room_id or not isinstance(scene, dict):
         return {}
-    # Build the set of rooms whose portal states the player may perceive.
-    # When visible_rooms is None (backwards-compatible callers), only the
-    # player's own room is considered and adjacency barriers are NOT
-    # filtered (preserving the original behavior).
-    _filter_adjacent = visible_rooms is not None
-    if visible_rooms is None:
-        visible_rooms = {room_id}
-    else:
-        visible_rooms = set(visible_rooms) | {room_id}
+    visible_rooms = set(visible_rooms or ()) | {room_id}
     out = {}
     entities = scene.get("entities") or {}
     positions = scene.get("positions") or {}
@@ -704,14 +721,11 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
         link = state.get("link")
         if isinstance(link, dict) and room_id in (link.get("rooms") or []):
             # S3-A5: a portal-link that also touches a room the player
-            # cannot see still leaks state through the visible end.
-            # Only include if every room the portal connects is visible.
-            # Backwards-compatible callers (visible_rooms=None) skip this
-            # check (original behavior).
-            if _filter_adjacent:
-                portal_rooms = set(link.get("rooms") or [])
-                if portal_rooms and not portal_rooms.issubset(visible_rooms):
-                    continue
+            # cannot see still leaks state through the visible end, so it is
+            # included only when every room the portal connects is visible.
+            portal_rooms = set(link.get("rooms") or [])
+            if portal_rooms and not portal_rooms.issubset(visible_rooms):
+                continue
             out[name] = ("open" if str(link.get("phase") or "").lower()
                          == "open" else "shut")
             continue
@@ -724,10 +738,7 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
             continue
         blob = (str(ent.get("kind") or "") + " " + name).lower()
         # S3-A5: only include door-like entities positioned in a visible room.
-        # Backwards-compatible callers (visible_rooms=None) use the original
-        # behavior (ent_room == room_id only).
-        ent_room_check = ent_room in visible_rooms if _filter_adjacent else ent_room == room_id
-        if ent_room_check and any(
+        if ent_room in visible_rooms and any(
                 w in blob for w in ("door", "gate", "hatch", "portal",
                                     "shutter")):
             val = state.get("open")
@@ -748,10 +759,7 @@ def _visible_portal_states(scene, room_id, visible_rooms=None):
         if barrier not in ("closed_door", "open_door"):
             continue
         to = edge.get("to")
-        # S3-A5: only filter by visible_rooms when explicitly provided.
-        # Backwards-compatible callers (visible_rooms=None) get the
-        # original behavior: all adjacency barriers in the player's room.
-        if _filter_adjacent and to and to not in visible_rooms:
+        if to and to not in visible_rooms:
             continue
         to_name = str(((rooms.get(to) or {}).get("name")) or to or "").strip()
         state = "shut" if barrier == "closed_door" else "open"
@@ -796,7 +804,14 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
     out, warnings = validate_llm_output("narrator", out)
-    out.setdefault("prose", out.get("text", ""))
+    # `out.setdefault("prose", out.get("text", ""))` stood here and was doubly
+    # dead. `NarratorOutput.prose` is declared `str = ""` and `_dump` excludes
+    # only None, so the validated dict ALWAYS carries a `prose` key and the
+    # setdefault never assigned; and the strict path inside `_agent_json` has
+    # already rejected a `text`-only payload before this line runs, so the
+    # fallback could not have repaired one anyway. `NarratorOutput.text`, the
+    # field it reached for, has no reader either -- its deletion is Slice 8's,
+    # since `llm/schemas.py` is theirs.
     out.setdefault("new_specifics", [])
     # The player's own declared lines must NOT count toward DIALOGUE
     # FIDELITY -- PLAYER ECHO RULE requires the opposite of them (excluded,
@@ -818,7 +833,17 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
 def narrator(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
-    est = ctx.get("director_establish") or {}
+    # THE TURN ROW SAYS WHETHER THIS IS THE OPENING, and it is the only thing
+    # entitled to. This read `ctx.get("director_establish") or {}` and branched
+    # on the truthiness of a MODEL STAGE'S OUTPUT -- gating three separate
+    # things on it: which view is read, the `scene_opening` payload flag, and
+    # the whole `_world_fields`/`_fidelity_facts` block. `_run_pipeline`
+    # decides the same question from `turn_row["idx"] == 0`, so it was one rule
+    # with two owners, and the non-authoritative one could answer "no opening"
+    # for a turn the runtime had already planned as one. Latent rather than
+    # live today only because `DirectorEstablish` default-fills, which is a
+    # property of a schema and not of this decision.
+    est = ctx.turn["idx"] == 0
     if est:
         view = (ctx.get("perception_establish", {}).get("views") or {}).get("player") \
             or compositor_text("narrator_immediate", ctx.language)
@@ -873,7 +898,6 @@ def narrator(ctx, nonce):
     _scene_for_frame = ctx.get("outcome_scene") or get_scene(chat["id"], chat)
     _spatial_fields = ({} if player_awareness in NON_AWAKE_GATED else {
         "spatial_frame": spatial_digest(_scene_for_frame, player_name),
-        **_spatial_facts_field(_scene_for_frame, player_name),
     })
 
     # F1-F4 world-fidelity payload: the pipeline's own ordered event record,
@@ -926,8 +950,10 @@ def narrator(ctx, nonce):
         # room RECORDS ({room_id, room_name, barrier, description}), not ids
         # -- set() over them raised TypeError: unhashable type: 'dict' and
         # crashed the narrator on every awake, non-establishment turn whose
-        # room had a sight-permitting adjacency. Same unpacking as
-        # perception.py's _observer_scene_payload.
+        # room had a sight-permitting adjacency. Perception unpacked the
+        # same records the same way, in the scene payload it built for the
+        # retired model path; this is now the only reader of that shape
+        # outside `world/spatial.py`.
         _visible = {
             str(r["room_id"]) for r in visible_adjacent_rooms(_scene_for_frame, p_room)
             if isinstance(r, dict) and r.get("room_id")
@@ -1070,7 +1096,7 @@ def narrator_extra(ctx, nonce):
         return {}
 
     chat = ctx.chat
-    est = ctx.get("director_establish") or {}
+    est = ctx.turn["idx"] == 0          # see narrator() above
     outcome_views = (ctx.get("perception_outcome", {}) or {}).get("views") or {}
     establish_views = (ctx.get("perception_establish", {}) or {}).get("views") or {}
     di = ctx.get("director_interpret") or {}

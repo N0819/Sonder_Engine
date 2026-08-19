@@ -35,7 +35,7 @@ from agents.common import (
     _inject_action,
     _self_second_person,
 )
-from agents.narration import _ENFORCEABLE_PREFIXES
+from language_runtime import linguistic
 
 # The live observable Dr. Moon's character step emitted on turn 54.
 MOON_OBSERVABLE = (
@@ -52,6 +52,19 @@ LIVE_PLAYER_VIEW = (
 
 
 # --- floor 1: perception-side rewrite ---------------------------------------
+
+def _enforceable():
+    """The prefixes the ACTIVE story pack calls enforceable.
+
+    Not `narration._ENFORCEABLE_PREFIXES`, which every one of these files used
+    to import: that constant is bound once at import from the ENGLISH pack and
+    is a compatibility view for tests and audits, while the three live checks
+    read the active pack at use time (`narration.py:991, 1016, 1138`). Scoring
+    against the eagerly-bound copy is scoring against an object no story
+    evaluates -- `AUDIT_DIRECTOR.md` finding 4's shape, one module over.
+    """
+    return linguistic("agents.narration", "_ENFORCEABLE_PREFIXES")
+
 
 def test_perceivers_own_name_becomes_second_person():
     out = _self_second_person(MOON_OBSERVABLE, ["Hinami"])
@@ -266,7 +279,7 @@ def test_narrator_fidelity_surfaces_the_warning_and_it_is_enforceable():
     person = [w for w in warnings if w.startswith("Player named in third person")]
     assert len(person) == 1
     # Must land in the enforceable set so the existing rewrite-retry fires.
-    assert person[0].startswith(_ENFORCEABLE_PREFIXES)
+    assert person[0].startswith(_enforceable())
 
 
 def test_narrator_fidelity_silent_without_person_context():

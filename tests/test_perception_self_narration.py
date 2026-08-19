@@ -19,6 +19,8 @@ gets its own call, and this one echoed its input.
 
 from __future__ import annotations
 
+from language_runtime import linguistic
+
 from agents.perception import _strip_self_narration
 
 VIEW = (
@@ -29,6 +31,19 @@ VIEW = (
     'faltering as she watches. '
     'The hearth coals pulse low orange. You see Hinami.'
 )
+
+
+def _enforceable():
+    """The prefixes the ACTIVE story pack calls enforceable.
+
+    Not `narration._ENFORCEABLE_PREFIXES`, which every one of these files used
+    to import: that constant is bound once at import from the ENGLISH pack and
+    is a compatibility view for tests and audits, while the three live checks
+    read the active pack at use time (`narration.py:991, 1016, 1138`). Scoring
+    against the eagerly-bound copy is scoring against an object no story
+    evaluates -- `AUDIT_DIRECTOR.md` finding 4's shape, one module over.
+    """
+    return linguistic("agents.narration", "_ENFORCEABLE_PREFIXES")
 
 
 def test_the_live_failure_is_removed():
@@ -148,8 +163,7 @@ def test_a_feeling_the_view_already_carried_is_rendering_not_adding():
 def test_it_is_enforced_rather_than_merely_warned():
     """It is the LAST stage — an interior state asserted here reaches the
     reader as fact, so it earns a rewrite rather than a note nobody reads."""
-    from agents.narration import _ENFORCEABLE_PREFIXES
-    assert any("interior state" in p for p in _ENFORCEABLE_PREFIXES)
+    assert any("interior state" in p for p in _enforceable())
 
 
 def test_empty_prose_is_a_noop():

@@ -29,8 +29,9 @@ from agents.common import (
     _check_action_direction,
     _check_quote_attribution,
 )
+from language_runtime import linguistic
+
 from agents.narration import (
-    _ENFORCEABLE_PREFIXES,
     _ordered_beat_events,
     _position_delta_payload,
     _visible_portal_states,
@@ -40,6 +41,19 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
 # ---- F1: event order ----
+
+def _enforceable():
+    """The prefixes the ACTIVE story pack calls enforceable.
+
+    Not `narration._ENFORCEABLE_PREFIXES`, which every one of these files used
+    to import: that constant is bound once at import from the ENGLISH pack and
+    is a compatibility view for tests and audits, while the three live checks
+    read the active pack at use time (`narration.py:991, 1016, 1138`). Scoring
+    against the eagerly-bound copy is scoring against an object no story
+    evaluates -- `AUDIT_DIRECTOR.md` finding 4's shape, one module over.
+    """
+    return linguistic("agents.narration", "_ENFORCEABLE_PREFIXES")
+
 
 def _events(*pairs):
     out = []
@@ -252,7 +266,11 @@ def test_visible_portal_states_from_link_hatch_and_edges():
                                           "hatch": "closed"}}},
         },
     }
-    portals = _visible_portal_states(scene, "shop")
+    # The street is visible from the shop, so its edge and the portal-link
+    # touching it are both perceivable. Passing the set is not optional:
+    # `visible_rooms` is what decides whether a door into an unseen room is
+    # withheld, and it used to default to "do not filter".
+    portals = _visible_portal_states(scene, "shop", {"shop", "street"})
     assert portals["front double doors"] == "shut"
     assert portals["escape pod hatch"] == "shut"
     assert portals["door to Street"] == "shut"
@@ -260,7 +278,7 @@ def test_visible_portal_states_from_link_hatch_and_edges():
     assert portals["doors"] == "shut"
     # Mixed states -> no generic entry.
     scene["entities"]["front_doors"]["state"]["link"]["phase"] = "open"
-    portals = _visible_portal_states(scene, "shop")
+    portals = _visible_portal_states(scene, "shop", {"shop", "street"})
     assert portals["front double doors"] == "open"
     assert "doors" not in portals
 
@@ -621,7 +639,7 @@ def test_reversed_direction_fires_and_is_enforceable():
     warnings = _check_action_direction(prose, order)
     assert len(warnings) == 1
     assert warnings[0].startswith("Physical direction reversed")
-    assert warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+    assert warnings[0].startswith(_enforceable())
 
 
 def test_direction_rendered_correctly_passes():
@@ -640,7 +658,7 @@ def test_missing_act_warns_but_does_not_buy_a_rewrite():
     assert warnings[0].startswith("Physical act from event_order may be missing")
     # Deliberately NOT enforceable: correct prose can render a descent with no
     # directional verb in it at all.
-    assert not warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+    assert not warnings[0].startswith(_enforceable())
 
 
 def test_direction_check_ignores_ordinary_prose():
@@ -724,3 +742,51 @@ def test_background_act_survives_a_reaction_with_no_line(temp_db):
         scene=scene, p_room="yard")
     assert [e["kind"] for e in events] == ["action"]
     assert "half-meter closer" in events[0]["action"]
+
+
+def test_a_silent_sight_channel_carries_no_standing_sight():
+    """The manifest said `status: silent, why: no light reaches this room` and
+    listed `["storm sky", "heavy rain", "light: dark"]` as standing content on
+    the same channel, because `sight_standing` was assembled BEFORE
+    `sight_status` was decided and `light: {light}` was appended
+    unconditionally. `weather_words`' sight arm gates on room EXPOSURE, never
+    on light, so any exposed room at night produced it.
+
+    Not a leak -- the storm is legitimately the player's, and it still arrives
+    on hearing and touch. But SENSORY CHANNELS is the one payload field the
+    narrator prompt is told to read as authoritative, and it contradicted
+    itself there."""
+    from agents.narration import _sensory_channels_manifest
+
+    scene = {
+        "rooms": {"yard": {"name": "Yard", "adjacent": [],
+                           "light": "dark", "outdoor": True}},
+        "positions": {"Hinami": "yard"},
+        "entities": {}, "contacts": [], "attire": {}, "overlays": {},
+        "weather": {"sky": "storm", "precipitation": "rain",
+                    "intensity": "heavy", "wind": "gale"},
+    }
+    manifest = _sensory_channels_manifest(
+        scene, "Hinami", "", [], set(), {}, "yard")
+    sight = manifest["sight"]
+
+    assert sight["status"] == "silent"
+    assert "standing" not in sight
+    # The other two channels still carry the storm, which is the whole reason
+    # this is a contradiction rather than a subtraction.
+    assert manifest["hearing"]["status"] == "live"
+
+
+def test_a_lit_room_still_lists_its_standing_sight():
+    from agents.narration import _sensory_channels_manifest
+
+    scene = {
+        "rooms": {"yard": {"name": "Yard", "adjacent": [], "light": "lit"}},
+        "positions": {"Hinami": "yard"},
+        "entities": {}, "contacts": [], "attire": {}, "overlays": {},
+    }
+    sight = _sensory_channels_manifest(
+        scene, "Hinami", "", [], set(), {}, "yard")["sight"]
+
+    assert sight["status"] == "live"
+    assert "light: lit" in sight["standing"]

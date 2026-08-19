@@ -19,17 +19,24 @@ The missing representation: the engine had `event` (rendered once) and `state`
 PERCEPT -- true every beat and felt every beat until the ledger drops it.
 
 `spatial.contact_sensation` renders that percept from one party's side and
-`agents.perception._deliver_standing_sensations` is the deterministic floor
-that puts it in the view when the model left it out. Clinical register
-throughout, on purpose: the clause is engine output and has to read the same
-in every story.
+`composer.contact_percepts` admits it into the observer's percept list, where
+`render_view` realises it every beat. Clinical register throughout, on
+purpose: the clause is engine output and has to read the same in every story.
+
+The floor used to be `perception._deliver_standing_sensations`, which appended
+the clause to finished prose when the model had left it out, and half its
+tests were duplicate-detection heuristics -- match both body parts, refuse a
+part name inside a longer word, leave an already-rendered view alone. None of
+that survives the move and none of it is missing: the composer is the writer,
+so there is no model prose to check the clause against and no way for the
+clause to go missing in the first place. What survives is the property those
+heuristics existed to protect, asserted below against the live path.
 """
 
 from __future__ import annotations
 
-from agents.perception import (_deliver_standing_sensations,
-                               _observations_from_clean_views,
-                               _standing_contacts_for)
+from agents import composer
+from agents.perception import _standing_contacts_for
 from llm.prompts import DEFAULT_PROMPTS
 from world.spatial import (apply_contact_ops, contact_manner_kind, contact_motion,
                      contact_relation, contact_sensation)
@@ -51,9 +58,17 @@ SCENE = {
 LIT_VIEW = "Lamplight moves on the wall. Bram is watching you."
 
 
-def _deliver(view, who, scene=SCENE):
-    return _deliver_standing_sensations(
-        view, who, scene, _standing_contacts_for(scene, who))
+def _percepts(who, scene=SCENE):
+    """One observer's standing-contact percepts, built exactly as
+    `perception._composer_standing_percepts` builds them."""
+    return composer.contact_percepts([
+        (contact, contact_sensation(contact, you=who, scene=scene))
+        for contact in _standing_contacts_for(scene, who)
+    ])
+
+
+def _view(who, scene=SCENE):
+    return composer.render_view(_percepts(who, scene), mode="character").text
 
 
 class TestTheMannerReading:
@@ -304,84 +319,68 @@ class TestContactSemanticPersistence:
         assert ended["contacts"] == []
 
 
-class TestTheDeterministicFloor:
+class TestTheStandingContactReachesTheView:
+    """It is a percept, so it is in the view -- there is no beat on which it
+    can be left out, and no prose to check it against."""
 
-    def test_a_lit_view_that_ignored_the_contact_gets_it_anyway(self):
+    def test_a_lit_view_carries_every_standing_contact(self):
         """The defect in one assertion: sight was open, the model wrote what it
-        saw, and nothing required a word of what was felt."""
-        view = _deliver(LIT_VIEW, "Bram")
+        saw, and nothing required a word of what was felt. The composer builds
+        the view from the ledger, so both contacts are in it."""
+        view = _view("Bram")
 
-        assert view.startswith(LIT_VIEW)
         assert "Your sternum registers Reya's palm against it" in view
-        assert "Your body registers Reya's blade within your wound channel" in view
+        assert "Your body registers Reya's blade within your wound channel" \
+            in view
 
-    def test_it_subtracts_nothing(self):
-        assert LIT_VIEW in _deliver(LIT_VIEW, "Bram")
+    def test_it_subtracts_nothing_beside_it(self):
+        """A contact percept is added to the observer's list; the room, the
+        bodies and the beat's events are unaffected by its presence."""
+        room = composer.environment_percept("cell", "Cell", "", "lit")
+        view = composer.render_view([room] + _percepts("Bram"),
+                                    mode="character").text
 
-    def test_a_bystander_receives_no_addition(self):
-        assert _deliver(LIT_VIEW, "Wren") == LIT_VIEW
+        assert "Cell" in view
+        assert "sternum registers" in view
 
-    def test_both_ends_must_be_named_together_to_count_as_rendered(self):
-        """Scanning the whole view for each part separately matched a hip in
-        one clause against a hand in another and called the contact between
-        them delivered."""
-        scattered = ("Your palm is open at your side. His sternum rises and "
-                     "falls with his breathing.")
-        view = _deliver(scattered, "Bram")
+    def test_a_bystander_receives_no_sensation(self):
+        """`contact_sensation` returns "" for anyone who is not a party, so a
+        non-party contributes no percept by construction -- the subtraction
+        happens before any prose exists."""
+        assert _percepts("Wren") == []
+        assert _view("Wren") == ""
 
-        assert "sternum registers Reya's palm" in view
+    def test_no_contacts_means_no_percepts(self):
+        empty = {"positions": {}, "entities": {}, "contacts": []}
+        assert _percepts("Bram", empty) == []
 
-    def test_a_part_name_inside_a_longer_word_is_not_a_match(self):
-        scene = {"positions": {"Reya": "deck", "Bram": "deck"}, "entities": {},
-                 "contacts": [{"actor": "Reya", "actor_part": "hand",
-                               "target": "Bram", "target_part": "hip",
-                               "manner": "grip"}]}
-        view = _deliver_standing_sensations(
-            "The ship handles badly in this weather.", "Bram", scene,
-            _standing_contacts_for(scene, "Bram"))
-
-        assert "hip registers Reya's hand" in view
-
-    def test_a_view_that_already_rendered_the_contact_is_left_alone(self):
-        """Matched on the two body PARTS, because that is what a paraphrase
-        preserves -- a model rendering a palm on a sternum says palm and
-        sternum whatever else it rewrites -- while the manner is exactly what
-        it rewrites."""
-        rendered = ("Her palm is flat and warm on your sternum, and the blade "
-                    "sits deep in your shoulder, unmoving.")
-        assert _deliver(rendered, "Bram") == rendered
-
-    def test_a_partly_rendered_view_gets_only_the_missing_contact(self):
-        partial = "Her palm stays flat against your sternum."
-        view = _deliver(partial, "Bram")
-
-        assert view.count("registers") == 1
-        assert "within your wound channel" in view
-
-    def test_a_contact_with_no_parts_is_never_appended(self):
-        """`your body registers X against it` on every beat of an ordinary
-        embrace is noise, and an unmatched clause cannot be checked against the
-        view, so this one direction stays biased toward silence."""
+    def test_a_contact_with_no_parts_is_still_felt(self):
+        """The old floor refused this one on purpose: an unmatched clause could
+        not be checked against model prose, so it stayed biased toward silence.
+        The composer has no prose to check, so the honest answer is the one the
+        ledger gives -- a body IS in continuous contact and the mind is told
+        so. `player` mode still renders it once, on the beat it changed
+        (the dedupe key hashes the contact)."""
         scene = {"positions": {"Reya": "cell", "Bram": "cell"}, "entities": {},
                  "contacts": [{"actor": "Reya", "target": "Bram",
                                "manner": "lean"}]}
-        assert _deliver_standing_sensations(
-            LIT_VIEW, "Bram", scene,
-            _standing_contacts_for(scene, "Bram")) == LIT_VIEW
+        assert "Your body registers Reya against it" in _view("Bram", scene)
 
-    def test_no_contacts_means_no_change(self):
-        empty = {"positions": {}, "entities": {}, "contacts": []}
-        assert _deliver_standing_sensations(LIT_VIEW, "Bram", empty, []) \
-            == LIT_VIEW
+    def test_one_contact_is_one_dedupe_key(self):
+        """Which is what keeps it out of a delta view on the beats it has not
+        changed, and out of a memory episode as a non-event."""
+        keys = {p.dedupe_key for p in _percepts("Bram")}
+        assert len(keys) == 2
 
 
 class TestTheChannelItArrivesOn:
-    """Observations are re-derived from the scrubbed view, so the channel is
-    read back off the delivered prose rather than trusted from anywhere."""
+    """Observations are re-derived from the rendered view, so an atom's text is
+    a span of that view and its channel is the percept's own -- known, never
+    guessed back out of the prose."""
 
     def _atoms(self, who):
-        view = _deliver("The lamp gutters.", who)
-        return _observations_from_clean_views({"player": view})["player"]
+        rendered = composer.render_view(_percepts(who), mode="character")
+        return composer.observations_from_render("player", rendered)
 
     def test_a_surface_contact_arrives_as_touch(self):
         surface = [a for a in self._atoms("Bram")
@@ -389,24 +388,23 @@ class TestTheChannelItArrivesOn:
 
         assert surface and surface[0]["channel"] == "touch"
 
-    def test_an_interior_contact_arrives_as_interoception(self):
-        """It fired on 2.4% of the corpus because its vocabulary was distress
-        -- pain, nausea, wounds. Interior sensation is interoception whatever
-        its valence."""
-        interior = [a for a in self._atoms("Bram")
-                    if "wound channel" in a["observed"]["text"]]
-
-        assert interior and interior[0]["channel"] == "interoception"
-
     def test_the_perceiver_is_the_subject_of_their_own_sensation(self):
         """`_SELF_DIRECTED` recognised only agent-first constructions, so a
         percept whose subject is the perceiver's own body was filed as somebody
-        else's business."""
-        felt = [a for a in self._atoms("Bram") if "registers" in
-                a["observed"]["text"]]
+        else's business. It is now a field on the percept the builder sets."""
+        felt = [a for a in self._atoms("Bram")
+                if "registers" in a["observed"]["text"]]
 
         assert felt
         assert all(a["directed_at_self"] for a in felt)
+
+    def test_the_atom_text_is_a_span_of_the_view(self):
+        rendered = composer.render_view(_percepts("Bram"), mode="character")
+        atoms = composer.observations_from_render("player", rendered)
+
+        assert atoms
+        for atom in atoms:
+            assert atom["observed"]["text"] in rendered.text
 
 
 class TestMomentaryResidue:

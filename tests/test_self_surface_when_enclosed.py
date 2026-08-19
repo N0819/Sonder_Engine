@@ -32,90 +32,25 @@ and that is what it is for.
 
 from __future__ import annotations
 
-from agents.perception import _self_cannot_see_own_surface
-
-ACTOR = "Wren"
-HOST = "Vessel"
-HOST_ID = "vessel_entity"
-
-
-def _scene(contained=True):
-    sc = {
-        "rooms": {"hall": {"name": "Hall", "adjacent": []}},
-        "positions": {ACTOR: "hall", HOST: "hall", "Onlooker": "hall"},
-        "entities": {HOST_ID: {"name": HOST, "kind": "person", "aliases": []}},
-        "attire": {HOST: {}, ACTOR: {}},
-        "scales": {ACTOR: 0.05},
-        "contained": {},
-    }
-    if contained:
-        sc["contained"][ACTOR] = {"in": HOST_ID, "mode": "inside"}
-    return sc
-
-
-def _p(name):
-    return {"id": "1", "name": name}
-
-
-class TestTheEnclosedActor:
-    def test_their_own_surface_is_withheld(self):
-        assert _self_cannot_see_own_surface(_scene(), _p(ACTOR), ACTOR) is True
-
-    def test_it_holds_when_the_actor_is_named_by_entity_id(self):
-        """The actor arrives under whichever spelling the beat used."""
-        sc = _scene()
-        sc["entities"]["wren_entity"] = {"name": ACTOR, "kind": "person"}
-        assert _self_cannot_see_own_surface(sc, _p(ACTOR), "wren_entity") is True
-
-    def test_an_open_carry_is_not_an_enclosure(self):
-        """Being held in view is not being shut inside anything, and someone
-        carried in the open can see themselves perfectly well."""
-        sc = _scene()
-        sc["contained"][ACTOR] = {"in": HOST_ID, "mode": "held"}
-        assert _self_cannot_see_own_surface(sc, _p(ACTOR), ACTOR) is False
-
-
-class TestEveryoneElseIsUntouched:
-    def test_an_onlooker_still_receives_the_surface(self):
-        """The surface is exactly what an observer can see, which is what it
-        is for. Withholding it from them would be a different bug."""
-        assert _self_cannot_see_own_surface(
-            _scene(), _p("Onlooker"), ACTOR) is False
-
-    def test_the_host_still_receives_it(self):
-        assert _self_cannot_see_own_surface(_scene(), _p(HOST), ACTOR) is False
-
-    def test_an_unenclosed_actor_still_sees_themselves(self):
-        assert _self_cannot_see_own_surface(
-            _scene(contained=False), _p(ACTOR), ACTOR) is False
-
-
-class TestItNeverRaises:
-    def test_no_scene(self):
-        assert _self_cannot_see_own_surface(None, _p(ACTOR), ACTOR) is False
-
-    def test_no_perceiver(self):
-        assert _self_cannot_see_own_surface(_scene(), None, ACTOR) is False
-
-    def test_a_nameless_perceiver(self):
-        assert _self_cannot_see_own_surface(_scene(), {"id": "1"}, ACTOR) is False
-
-
-# --- what actually enforces the property now --------------------------------
+# --- what actually enforces the property ------------------------------------
 #
-# The two tests that used to stand here read `inspect.getsource` and asserted
-# statement ORDER inside `_inject_onset_sequence` -- one of them saying so in
-# its own docstring: "or it is a well-tested function nothing calls". That is
-# exactly what happened. `_inject_onset_sequence` has no production caller,
-# and neither does `_self_cannot_see_own_surface` outside it, so the wiring
-# guard was asserting the internal layout of dead code, and passing.
+# This file used to open with three classes over
+# `perception._self_cannot_see_own_surface`, plus two `inspect.getsource`
+# tests asserting that `_inject_onset_sequence` called it before
+# `_inject_action`. One of those said the failure out loud in its own
+# docstring -- "or it is a well-tested function nothing calls" -- and that is
+# exactly what had happened: neither function has a production caller, so
+# thirteen passing tests pinned the internal statement order of a retired
+# path.
 #
-# The property is not lost. The composer path enforces it by a stronger and
-# blunter mechanism: an actor never receives their OWN act surface in their
-# own view at all, enclosed or not, because `_composer_act` builds no
-# perceiver for the acting player and `_composer_outcome`'s act loop skips
-# the observer's own act. Nothing said so anywhere, which is how a guard came
-# to be left pointing at the mechanism that was retired.
+# The property is not lost, and it is not enforced by a guard either. The
+# composer path makes it structural: `_composer_act` builds no perceiver for
+# the acting player and `_composer_outcome`'s act loop skips `actor == name`,
+# so an actor never receives the outside shot of their own act in ANY scene,
+# enclosed or not. The enclosure special case became unnecessary rather than
+# wrong. The two tests at the bottom of this file assert that on the live
+# path, and assert the deliberate limit beside it: proprioception is not
+# sight.
 
 import json
 import time
@@ -124,6 +59,7 @@ from story.character_schema import default_character_data, default_persona_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 
+ACTOR = "Wren"
 PLAYER = "Hinami"
 SURFACE = "lifts the lantern high"
 LANTERN = "a brass lantern"

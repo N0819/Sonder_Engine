@@ -30,10 +30,23 @@ common than they were.
 from __future__ import annotations
 
 from agents.common import _check_narrator_fidelity
-from agents.narration import _ENFORCEABLE_PREFIXES
+from language_runtime import linguistic
 
 VIEW = ('the kitsune says: "Be at ease, both of you." '
         'The Doctor says: "Tamamo. A pleasure."')
+
+
+def _enforceable():
+    """The prefixes the ACTIVE story pack calls enforceable.
+
+    Not `narration._ENFORCEABLE_PREFIXES`, which every one of these files used
+    to import: that constant is bound once at import from the ENGLISH pack and
+    is a compatibility view for tests and audits, while the three live checks
+    read the active pack at use time (`narration.py:991, 1016, 1138`). Scoring
+    against the eagerly-bound copy is scoring against an object no story
+    evaluates -- `AUDIT_DIRECTOR.md` finding 4's shape, one module over.
+    """
+    return linguistic("agents.narration", "_ENFORCEABLE_PREFIXES")
 
 
 def _events(*pairs):
@@ -66,7 +79,7 @@ class TestTheLiveFailure:
     def test_it_is_enforceable_so_the_rewrite_loop_repairs_it(self):
         """The reader is not merely missing something here — they are told the
         wrong person said it, which is worth a rewrite."""
-        assert "Merged dialogue from different speakers" in _ENFORCEABLE_PREFIXES
+        assert "Merged dialogue from different speakers" in _enforceable()
 
     def test_dialogue_fidelity_alone_would_have_passed_it(self):
         """Why this needed its own check: both bodies ARE present verbatim."""
@@ -114,3 +127,28 @@ class TestItDoesNotOverfire:
             {"prose": '"Be at ease, both of you. Tamamo. A pleasure."'},
             VIEW, recent_prose=[], exclude_quotes=[])
         assert [w for w in out if w.startswith("Merged dialogue")] == []
+
+
+def test_a_japanese_story_evaluates_the_same_enforceable_set():
+    """And it MUST, today, for a reason worth writing down rather than
+    discovering later.
+
+    The two packs carry byte-identical English values for this key, so the
+    indirection buys nothing yet -- and that is correct, not an oversight. The
+    warnings these prefixes match are still minted as English literals in
+    `agents/common.py` ("Merged dialogue from different speakers in one quoted
+    span ...", `common.py:6107`). Translating the prefix list before the
+    PRODUCERS move would make `startswith` fail on every warning in a Japanese
+    story, so nothing would be enforceable and the rewrite-retry would never
+    fire -- a silent loss of the whole floor.
+
+    Both halves move together or neither does: the producer half is
+    `agents/common.py`'s, tracked as MINDS-22.
+    """
+    from language_runtime import current_language_id
+
+    token = current_language_id.set("ja")
+    try:
+        assert "Merged dialogue from different speakers" in _enforceable()
+    finally:
+        current_language_id.reset(token)
