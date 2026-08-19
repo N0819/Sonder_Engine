@@ -66,9 +66,11 @@ def set_survival_shows_npcs(chat_id, enabled: bool) -> bool:
 
 # --- the vitals -----------------------------------------------------------
 
-# name -> (baseline per HOUR of simulation time, starts_at)
-# Negative drains. Injury does not drain; it heals, slowly, and only rest or
-# treatment in the fiction should move it much.
+# name -> the value a body starts at, 0.0..1.0. Rates live in `_PER_HOUR`;
+# there is no `starts_at`, which is what the comment here used to promise.
+# Injury is the one that starts at zero and climbs, and it does not drain --
+# it heals, slowly, and only rest or treatment in the fiction should move it
+# much.
 VITALS = {
     "air": 1.0,
     "stamina": 1.0,

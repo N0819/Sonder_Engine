@@ -99,6 +99,25 @@ _OPEN_WORDS = (
     "outside", "open sky", "sky",
 )
 
+# Places that are deep by their nature. These matter only when the map cannot
+# answer: an unmapped room is normally assumed to be one layer in (the common
+# indoor case), but assuming that of a bunker or a cave system would put rain
+# inside a mountain. A story that has actually mapped its cave passages gets
+# the real depth from the graph and never consults this.
+_DEEP_WORDS = (
+    "cave", "cavern", "grotto", "bunker", "vault", "crypt", "catacomb",
+    "mine", "shaft", "tunnel", "sewer", "undercroft", "dungeon", "silo",
+    "sub-basement", "subbasement", "underground", "deep below", "buried",
+)
+
+# Precipitation that means the storm is NOT an electrical one. A blizzard is a
+# storm sky full of snow, and it does not flash: thundersnow exists, but it is
+# rare enough that having it every time is worse than never having it, and a
+# reader watching lightning play over a whiteout is being told something false
+# about the weather they are standing in. Hail is deliberately absent -- hail
+# comes out of exactly the convective storms that do throw lightning.
+_UNLIT_PRECIPITATION = ("snow", "sleet")
+
 
 # The words a model writes for weather that are not the words this vocabulary
 # uses. Not a nicety: the closed vocabulary is five short enums, a Director
@@ -343,17 +362,6 @@ _THUNDER_BY_MUFFLING = {"": "thunder", "muffled": "distant thunder",
 def _thunder_words(muffling):
     return _THUNDER_BY_MUFFLING.get(str(muffling or ""), "muffled thunder")
 
-# Places that are deep by their nature. These matter only when the map cannot
-# answer: an unmapped room is normally assumed to be one layer in (the common
-# indoor case), but assuming that of a bunker or a cave system would put rain
-# inside a mountain. A story that has actually mapped its cave passages gets
-# the real depth from the graph and never consults this.
-_DEEP_WORDS = (
-    "cave", "cavern", "grotto", "bunker", "vault", "crypt", "catacomb",
-    "mine", "shaft", "tunnel", "sewer", "undercroft", "dungeon", "silo",
-    "sub-basement", "subbasement", "underground", "deep below", "buried",
-)
-
 # Places with hard surfaces and volume, where a sound arriving from outside
 # arrives with the room's own tail on it. Purely a hint for choosing the
 # RECORDING -- "echoing muffled rain" and "muffled rain" are different clips.
@@ -520,14 +528,6 @@ def weather_for_room(scene, room_id):
         "gain": round(gain, 2) if audible else 0.0,
     })
 
-
-# Precipitation that means the storm is NOT an electrical one. A blizzard is a
-# storm sky full of snow, and it does not flash: thundersnow exists, but it is
-# rare enough that having it every time is worse than never having it, and a
-# reader watching lightning play over a whiteout is being told something false
-# about the weather they are standing in. Hail is deliberately absent -- hail
-# comes out of exactly the convective storms that do throw lightning.
-_UNLIT_PRECIPITATION = ("snow", "sleet")
 
 # One drift window in this many turns a snowing storm electrical. Chosen so a
 # passing squall almost never flashes and a long blizzard probably will once:
