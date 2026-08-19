@@ -901,6 +901,35 @@ def room_content_percepts(*groups):
     return out
 
 
+def micro_round_percept(text):
+    """One interaction-loop micro-round delivery, as a percept.
+
+    The micro loop renders its own prose and gated it with `_delivery_ok` when
+    the round ran, so admission is decided upstream and nothing is re-decided
+    here. What matters is that it goes in the SAME list as everything else:
+    appended to the finished view instead, it arrived after the tripwires had
+    run and its observation atom had to be hand-written -- the one atom in the
+    payload whose channel, intensity and self-direction were asserted rather
+    than derived, in a projection whose entire safety argument is that it is
+    derived (`observations_from_render`).
+
+    `mixed`, and said plainly: the loop hands over prose, not an IR, so the
+    channel genuinely is not known. An honest "several, or unclear" beats a
+    fabricated "sight". The residual that would fix it properly -- the micro
+    loop emitting percepts of its own -- is design_notes/13-composer-build.md's,
+    and lives in `agents/loops.py`.
+    """
+    text = " ".join(str(text or "").split())
+    if not text:
+        return None
+    return Percept(
+        kind="ambient", channel="mixed",
+        data={"desc": text},
+        salience=0.4,
+        dedupe_key="micro:" + _short_hash(text),
+    )
+
+
 def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
     """A non-awake mind gets the residue and nothing else."""
     return [Percept(

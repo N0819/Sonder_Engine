@@ -585,9 +585,7 @@ from . import composer
 
 from .common import (
     preview_player_state_assertions,
-    _append_micro_view,
     _append_once,
-    _dedupe_view_sentences,
     _player_name_forms,
     self_name_forms,
     self_reference_forms,
@@ -3230,9 +3228,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         moves.append((str(mover), prev_room, str(new_room)))
 
     # Micro-round deliveries were gated by `_delivery_ok` when the loop ran;
-    # they arrive pre-rendered and are appended after the composed view.
-    # (Residual: the micro loop should emit percepts -- noted in
-    # design_notes/13-composer-build.md.)
+    # they arrive pre-rendered. They are minted as percepts and go into the
+    # SAME list as everything else, so the tripwires see them and their
+    # observations are derived rather than asserted. (Residual: the micro loop
+    # should emit percepts of its own rather than prose -- noted in
+    # design_notes/13-composer-build.md, and it lives in agents/loops.py.)
     micro_by_pid = {}
     for round_data in (ctx.interaction_loop or {}).get("rounds") or []:
         for perceiver_id, additions in (
@@ -3396,6 +3396,10 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     percepts.append(percept)
                     order += 1
             company[pid] = _composer_company(others, display_map, percepts)
+        for additions in micro_by_pid.get(pid) or []:
+            micro = composer.micro_round_percept(additions)
+            if micro is not None:
+                percepts.append(micro)
         rendered = composer.render_view(
             percepts,
             mode="player" if is_player_view else "character",
@@ -3406,26 +3410,6 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
             spoken_lines=spoken_lines)
-        for additions in micro_by_pid.get(pid) or []:
-            current = clean_views.get(pid) or ""
-            appended = _dedupe_view_sentences(
-                _append_micro_view(current, additions))
-            if appended != current:
-                clean_views[pid] = appended
-                observations[pid] = list(observations.get(pid) or []) + [
-                    composer.compact_observation({
-                        "observation_id":
-                            f"current:{pid}:{len(observations.get(pid) or [])}",
-                        "perceiver_id": pid,
-                        "source_atom_id": "current",
-                        "channel": "mixed",
-                        "fidelity": "rendered",
-                        "observed": {"text": str(additions)},
-                        "intensity": 0.5,
-                        "suddenness": 0.2,
-                        "ambiguity": 0.3,
-                        "directed_at_self": False,
-                    })]
         if not is_player_view:
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,
