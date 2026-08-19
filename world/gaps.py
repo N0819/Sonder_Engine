@@ -21,15 +21,18 @@ Three properties, each from a defect already on the record:
   3. A gap that could not be produced says so, with a reason. Silence is how
      the abort path made a crash and a closed tab indistinguishable.
 
-RESOLUTION IS DERIVED, NOT OBEYED. The subject's own tier picks the rung --
-a caller that can pick the expensive tier is a caller that will -- and the
-``resolution`` argument may only lower it, never raise it. ``low`` is
-assembled from state the engine already has with NO model call; ``medium``
-adds one bounded call over that deterministic skeleton, so the skeleton is
-what the prose must stay true to rather than something it invents around.
-A medium call that fails, or that names a room outside the world, falls to
-the rung below after one retry: a deterministic "she was elsewhere" is worth
-more than a plausible lie.
+ONE RUNG, AND IT COSTS NOTHING. Every record here is assembled from state the
+engine already has, with NO model call. This module carried a second,
+model-priced rung for two releases -- a bounded call that wrote a 2-3 sentence
+``summary`` over the skeleton -- and both production callers asked it not to
+run, so it never once executed. It was superseded rather than forgotten, and
+by its own two paragraphs above: a stored SENTENCE is the shape that produced
+the "quiet office", and the answer is a record. Its replacement is
+``offscreen.profile_summary_record`` -- the same one bounded call over this
+same skeleton, out of band where section 1.0.2 requires a model-priced rung to
+live, with the same retry-once-then-fall-back and the same room gate, but a
+model half of STATE FIELDS (``doing``/``at``/``manner``) rather than prose.
+The ladder comment in ``story/scene.py`` names it as the medium tier by name.
 
 THE LOW RUNGS MAY DESCRIBE, NEVER COMMIT (section 1.0.1). ``deltas`` stays
 empty at both rungs built here, and the medium prompt is shaped so a
@@ -52,9 +55,6 @@ import json
 
 from mind.canon_provenance import is_node_id
 from core.db import active_frame_id, q, wget, wget_for_frame
-from core.logging_utils import logger
-from llm.providers import chat_complete
-from llm.prompts import get_prompt
 from world.spatial import room_of
 from world.subjects import resolve_subject
 
@@ -76,11 +76,18 @@ def _read_key(cid, key, default, frame_id=None):
     return wget(cid, key, default)
 
 
-def _record(subject, resolution, since, until, *, basis, moves=None,
-            events=None, reason=None, summary=None, inputs=None, seed=None):
+#: Every record this module produces. Kept as a field rather than dropped: the
+#: record is persisted (`offscreen_log`) and read back, and a reader that can
+#: see which rung answered can tell "nothing happened" from "nobody looked".
+#: There is exactly one rung here, and it is free -- see the module docstring.
+DETERMINISTIC_RUNG = "low"
+
+
+def _record(subject, since, until, *, basis, moves=None,
+            events=None, reason=None, inputs=None, seed=None):
     out = {
         "subject": subject,
-        "resolution": resolution,
+        "resolution": DETERMINISTIC_RUNG,
         "since_turn": since,
         "until_turn": until,
         "moves": moves or [],
@@ -95,39 +102,13 @@ def _record(subject, resolution, since, until, *, basis, moves=None,
     }
     if reason is not None:
         out["reason"] = reason
-    if summary is not None:
-        out["summary"] = summary
     return out
 
 
 def _unavailable(subject, since, until, reason, seed=""):
     """Section 1.2 property 3: never nothing. The reason rides the record."""
-    return _record(subject, "low", since, until, basis="unavailable",
+    return _record(subject, since, until, basis="unavailable",
                    reason=reason, seed=seed)
-
-
-def _derived_resolution(cid, subject, frame_id=None):
-    """The subject's own tier, from the one tier ledger the engine has.
-
-    Cast members carry ``simulation.tier``; a major character acting in the
-    background is the proposal's own line for medium. Every other kind has
-    no tier ledger at all yet -- section 1.2 step 3 (distance x importance)
-    is where that representation arrives -- so until it exists they are low,
-    which asserts almost nothing and therefore cannot contradict anything.
-    """
-    if subject["kind"] != "character":
-        return "low"
-    from story.character_schema import cast_entity_id, character_tier
-    from story.scene import extant_cast
-
-    for row in extant_cast(cid, frame_id):
-        try:
-            sheet = json.loads(row["sheet"] or "{}")
-        except Exception:
-            continue
-        if cast_entity_id(sheet, row["id"]) == subject["id"]:
-            return "medium" if character_tier(sheet) == "major" else "low"
-    return "low"
 
 
 def _subject_room(scene, subject):
@@ -321,69 +302,15 @@ def _skeleton(cid, scene, subject, since, until, frame_id=None):
     return moves, events, inputs
 
 
-class _MediumFallback(Exception):
-    pass
-
-
-def _medium_overlay(cid, scene, record):
-    """One bounded call over the skeleton. The model may narrate the trail;
-    it may not extend the world: rooms must come from the provided list, and
-    the output shape has nowhere to put an alliance, an object or a wound."""
-    known_rooms = {str(r) for r in (scene.get("rooms") or {})}
-    for row in q(
-        "SELECT room_uid FROM room_registry "
-        "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,),
-    ):
-        known_rooms.add(str(row["room_uid"]))
-    for mv in record["moves"]:
-        known_rooms.update((mv["from_room"], mv["to_room"]))
-
-    sys = get_prompt("gap_medium")
-    user = json.dumps({
-        "subject": record["subject"], "since_turn": record["since_turn"],
-        "until_turn": record["until_turn"], "moves": record["moves"],
-        "events": record["events"],
-        "rooms_available": sorted(known_rooms)[:40],
-    }, ensure_ascii=False)
-
-    last_error = "no attempt"
-    for attempt in range(2):  # reject and regenerate ONCE (section 1.0.3)
-        try:
-            out = json.loads(chat_complete(
-                "utility", sys, user, temperature=0.4, max_tokens=1000))
-        except Exception as exc:
-            last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
-            continue
-        if not isinstance(out, dict):
-            last_error = "output was not an object"
-            continue
-        summary = str(out.get("summary") or "").strip()
-        rooms = out.get("rooms") if isinstance(out.get("rooms"), list) else []
-        bad = [r for r in rooms if str(r) not in known_rooms]
-        if not summary:
-            last_error = "empty summary"
-            continue
-        if bad:
-            # The location gate, on the write path of this record: a room
-            # the world does not contain is refused, not stored.
-            last_error = f"named rooms outside the world: {bad[:3]!r}"
-            continue
-        record["summary"] = summary
-        record["basis"] = "model"
-        record["inputs"]["rooms_cited"] = [str(r) for r in rooms]
-        return record
-    raise _MediumFallback(last_error)
-
-
 def gap_for(cid, subject_kind, subject_id, since_turn, until_turn,
-            resolution=None, scene=None, frame_id=None):
+            scene=None, frame_id=None):
     """What changed about one subject over (since_turn, until_turn].
 
     Returns the section 1.2 record, always -- an ask that cannot be answered
     returns ``basis: "unavailable"`` with a reason, never raises and never
-    returns nothing. ``resolution`` may only LOWER the derived rung; the
-    proposal's exact words are that a caller able to pick the expensive tier
-    is a caller that will.
+    returns nothing. Deterministic and free at every tier: this is the
+    skeleton, and a caller that wants a model over it buys one where model
+    spend belongs (``offscreen.profile_summary_record``, out of band).
     """
     if scene is None:
         scene = _read_key(cid, "scene", {}, frame_id) or {}
@@ -410,25 +337,9 @@ def gap_for(cid, subject_kind, subject_id, since_turn, until_turn,
             f"empty window: until_turn {until} is not after since_turn {since}",
             seed=seed)
 
-    derived = _derived_resolution(cid, subject, frame_id)
-    effective = "low" if (resolution == "low" or derived == "low") else "medium"
-
     moves, events, inputs = _skeleton(cid, scene, subject, since, until, frame_id)
-    record = _record(subject, effective, since, until, basis="deterministic",
-                     moves=moves, events=events, inputs=inputs, seed=seed)
-
-    if effective == "medium":
-        try:
-            record = _medium_overlay(cid, scene, record)
-        except _MediumFallback as fell:
-            # The rung below, and the record says so: a fallen-back medium is
-            # a LOW record with its history attached, never a medium-shaped
-            # record whose model half silently did not run.
-            record["resolution"] = "low"
-            record["inputs"]["fell_back_from"] = f"medium: {fell}"
-            logger.info("gap medium fell back: chat=%s subject=%s: %s",
-                        cid, subject["id"], fell)
-    return record
+    return _record(subject, since, until, basis="deterministic",
+                   moves=moves, events=events, inputs=inputs, seed=seed)
 
 
 # ---------------------------------------------------------------------------
@@ -521,9 +432,10 @@ def interim_for(cid, scene, subject_kind, subject_id, current_turn,
     the last (no gap to fill), or a gap that is empty or unavailable (an
     injected "nothing happened" is noise wearing a key).
 
-    Asks for ``low`` explicitly -- this runs ON the turn path, and section
-    1.0.2 puts model-priced rungs out of band; low is the rung that is free,
-    and it is the one section 1.0.1a says to ship first and completely.
+    This runs ON the turn path, where section 1.0.2 puts nothing model-priced.
+    `gap_for` is free at every tier, so there is nothing here to ask it not to
+    spend -- it used to be asked, and that ask was one of the two that left
+    the module's other rung unreachable for two releases.
     """
     ledger = _read_key(cid, LAST_SEEN_KEY, {}, frame_id) or {}
     rec = ledger.get(str(subject_id)) or {}
@@ -534,7 +446,7 @@ def interim_for(cid, scene, subject_kind, subject_id, current_turn,
     if last >= int(current_turn) - 1:
         return None
     gap = gap_for(cid, subject_kind, subject_id, last, current_turn,
-                  resolution="low", scene=scene, frame_id=frame_id)
+                  scene=scene, frame_id=frame_id)
     if gap.get("basis") == "unavailable":
         return None
     if not gap.get("moves") and not gap.get("events"):

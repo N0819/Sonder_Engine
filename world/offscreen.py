@@ -1122,8 +1122,7 @@ def profile_summary_record(cid, scene, subject, sheet, since_turn, until_turn,
     from llm.providers import chat_complete
 
     trail = gap_for(cid, subject.get("kind", "character"), subject["id"],
-                    since_turn, until_turn, resolution="low", scene=scene,
-                    frame_id=frame_id)
+                    since_turn, until_turn, scene=scene, frame_id=frame_id)
     record = {
         "disposition": "provisional",
         "subject": dict(trail.get("subject") or subject),
