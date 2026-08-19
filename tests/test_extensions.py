@@ -206,6 +206,53 @@ class TestDiscovery:
         extension_runtime.activate(refresh=True)
         assert extension_runtime.registered_stages() == []
 
+    def test_safe_mode_toggles_do_not_destroy_the_stored_set(
+            self, temp_db, ext_root):
+        """The documented recovery workflow -- boot safe, disable the culprit
+        -- must not be the action that wipes everything else.
+
+        `enabled_ids()` is a filtered READ (empty in safe mode, and narrowed
+        to what currently loads); the stored set is what survives a reboot.
+        Computing the second from the first means one toggle persists the
+        filter."""
+        from core.db import get_setting
+
+        for ext_id in ("alpha", "beta", "gamma"):
+            _write_extension(ext_root, ext_id, {
+                "id": ext_id, "version": "1", "ext_api": 1})
+        _enable("alpha", "beta", "gamma")
+
+        monkeypatch = pytest.MonkeyPatch()
+        try:
+            monkeypatch.setenv(extension_runtime.SAFE_MODE_ENV, "1")
+            extension_runtime.disable_extension("beta")
+        finally:
+            monkeypatch.undo()
+
+        stored = json.loads(get_setting(extension_runtime.ENABLED_SETTING))
+        assert sorted(stored) == ["alpha", "gamma"]
+
+    def test_a_toggle_does_not_forget_an_extension_that_will_not_load(
+            self, temp_db, ext_root):
+        """An extension whose manifest breaks is filtered out of the read.
+        Disabling an unrelated one must not make that filtering durable --
+        fixing the manifest has to bring it back switched on."""
+        from core.db import get_setting
+
+        for ext_id in ("alpha", "broken"):
+            _write_extension(ext_root, ext_id, {
+                "id": ext_id, "version": "1", "ext_api": 1})
+        _enable("alpha", "broken")
+
+        (ext_root / "broken" / "manifest.json").write_text(
+            "{not json", encoding="utf-8")
+        extension_runtime.installed_extensions(refresh=True)
+        assert extension_runtime.enabled_ids() == ["alpha"]
+
+        extension_runtime.disable_extension("alpha")
+        stored = json.loads(get_setting(extension_runtime.ENABLED_SETTING))
+        assert stored == ["broken"]
+
     def test_a_python_entry_that_raises_disables_only_itself(self, temp_db,
                                                              ext_root):
         _write_extension(ext_root, "explodes", {
