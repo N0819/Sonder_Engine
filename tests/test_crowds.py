@@ -26,6 +26,27 @@ class TestTheCountIsABand:
         assert crowds.normalize_band("forty-ish") == crowds.BANDS[0]
         assert crowds.normalize_band(None) == crowds.BANDS[0]
 
+    def test_a_band_the_model_words_differently_is_still_that_band(self):
+        """`band` is a free string with its vocabulary in a schema comment,
+        so exact equality against four fixed phrases is a coin flip per
+        wording. Measured by execution before the fix: "dozens", "a crowd",
+        "a throng of dockworkers" -- all of them -- folded to "a handful"."""
+        assert crowds.normalize_band("a throng of dockworkers") == "a throng"
+        assert crowds.normalize_band("dozens of market-goers") == "a few dozen"
+        assert crowds.normalize_band("a few dozen fishmongers") == "a few dozen"
+        assert crowds.normalize_band("two dozen pilgrims") == "a dozen or so"
+        assert crowds.normalize_band("a mob") == "a throng"
+        assert crowds.normalize_band("a handful of guards") == "a handful"
+
+    def test_re_describing_a_crowd_cannot_shrink_it(self):
+        """The under-populate rule is right on a MINT, where there is nothing
+        to lose. On an EDIT there is a standing band, and replacing a throng
+        with a handful because the wording changed is a bigger invention than
+        keeping what was there. A word this vocabulary cannot read is not
+        evidence that people left."""
+        assert crowds.normalize_band("milling about", "a throng") == "a throng"
+        assert crowds.normalize_band("", "a throng") == "a throng"
+
     def test_splitting_is_band_preserving_not_count_preserving(self):
         """"A few dozen" toward two exits gives "a dozen or so" twice. No
         arithmetic, so no conservation bookkeeping and no drift — the moment
