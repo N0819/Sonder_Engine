@@ -134,6 +134,7 @@
   "<path d=\"": "<path d=\"",
   "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0": "<svg width=\"100%\" height=\"100%\" viewBox=\"0 0",
   "?frame_id=${run.frameId}": "?frame_id=${run.frameId}",
+  "?frame_id=${S.currentFrameId}": "?frame_id=${S.currentFrameId}",
   "[${channel}] ${text}${flags}": "[${channel}] ${text}${flags}",
   "[${operation.book_type || \"general\"}]": "[${operation.book_type || \"general\"}]",
   "[data-entry-id=\"${entryId}\"]": "[data-entry-id=\"${entryId}\"]",
