@@ -23,14 +23,18 @@ validates the whole pack before it can be selected for a story. It compares
 every story pack's prompt ids and every UI pack's message ids against English,
 so an omitted surface fails installation instead of falling back silently.
 
-The built-in `en` pack is the compatibility reference. Its cards own all 44
-system-prompt families, authoring defaults, compositor vocabulary/templates,
-89 deterministic linguistic structures, and the browser/API source-message
+The built-in `en` pack is the compatibility reference. Its cards own all 42
+system-prompt families — 35 authored bodies plus the seven Director sheets
+assembled from `specialists` and `prose_author_sheet`, which are never stored
+a second time — authoring defaults, compositor vocabulary/templates, 114
+deterministic linguistic structures, and the browser/API source-message
 catalog. The linguistic card includes quote and sentence rules, morphology,
 agreement, pronouns, action/authority cues, title handling, narration-person
-detection, and Director omission aliases. Lookups happen at use time through a
-context variable, so two concurrent stories can safely run different language
-packs. `llm/prompts.py` now contains assembly and gating code only. The project
+detection, Director omission aliases, and the `mind.*`/`persist.*`
+recognizers that decide belief-confidence calibration, claim similarity,
+memory salience, mood valence and durable-quote detection. Lookups happen at
+use time through a context variable, so two concurrent stories can safely
+run different language packs. `llm/prompts.py` now contains assembly and gating code only. The project
 check regenerates and compares the English UI source inventory, preventing a
 new reader-visible string from bypassing the catalog.
 
