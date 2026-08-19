@@ -34,6 +34,20 @@ from __future__ import annotations
 
 import re
 
+from language_runtime import linguistic
+
+
+def _ling(name):
+    """One deterministic recognizer, from the story's own language pack.
+
+    Read at use time, never at import: two stories in different languages run
+    concurrently and each must see its own vocabulary. A pack that lacks the
+    key raises rather than returning empty -- a recognizer that quietly
+    matches nothing is the failure this module is least able to notice.
+    """
+    return linguistic("mind.theory_of_mind", name)
+
+
 # ---- Per-kind parameters ----
 #
 # confidence cap: the ceiling a single claim of this kind may ever reach
@@ -82,17 +96,6 @@ _TOM_HALF_LIFE = {
 
 _SIMILARITY_THRESHOLD = 0.4
 _MAX_SUPPRESSION = 0.6
-
-_STOPWORDS = {
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "seems", "seem", "appears", "appear", "of", "to", "about", "that",
-    "this", "these", "those", "they", "them", "their", "he", "she", "him",
-    "her", "his", "hers", "it", "its", "and", "or", "but", "with", "for",
-    "on", "in", "at", "as", "has", "have", "had", "will", "would", "may",
-    "might", "can", "could", "from", "by", "so", "not", "than", "then",
-    "into", "up", "out", "if", "no", "there", "around", "near", "toward",
-    "when", "while", "very", "just", "still",
-}
 
 def _clamp01(value, fallback=0.5):
     try:
@@ -145,34 +148,11 @@ def cap_mind_model_updates(updates, absorption=0.0):
 #
 # Ordered: the first pattern to match wins, so more specific readings are tested
 # before the general ones ("thinks I want the letter" is second-order, not goal).
-_KIND_CUES = (
-    ("second_order", (
-        r"\bthinks (?:that )?(?:i|we|he|she|they)\b",
-        r"\bbelieves (?:that )?(?:i|we|he|she|they)\b",
-        r"\b(?:knows|suspects|assumes|reckons) (?:that )?(?:i|we)\b",
-        r"\bthinks .{0,24}\bbelieves\b",
-    )),
-    ("stated_fact", (
-        r"\b(?:said|told|claimed|admitted|swore|promised|announced)\b",
-    )),
-    ("identity", (
-        r"\bis really\b", r"\bis actually\b", r"\bmust be the\b",
-        r"\bis the one who\b", r"\bgoes by\b",
-    )),
-    ("trait", (
-        r"\bis (?:a|an) \w+", r"\balways\b", r"\bnever\b",
-        r"\b(?:kind|sort|type) of person\b", r"\bby nature\b",
-    )),
-    ("goal", (
-        r"\bwants?\b", r"\bintends?\b", r"\bplans? to\b",
-        r"\btrying to\b", r"\bmeans to\b", r"\bhopes? to\b",
-        r"\baims? to\b", r"\bis going to\b", r"\bafter the\b",
-    )),
-    ("emotion", (
-        r"\bfeels?\b", r"\bis (?:afraid|angry|frightened|upset|nervous|"
-        r"happy|sad|ashamed|jealous|calm)\b",
-    )),
-)
+# The cue table itself lives in the pack (`mind.theory_of_mind._KIND_CUES`),
+# because a claim's own language is the thing being read and language is what a
+# pack is for. In English the guard fired; in Japanese every claim matched no
+# cue, `_inferred_kind` returned None on all of them, and this whole
+# calibration silently stopped existing.
 
 
 def _inferred_kind(claim):
@@ -180,7 +160,7 @@ def _inferred_kind(claim):
     low = str(claim or "").casefold()
     if not low.strip():
         return None
-    for kind, cues in _KIND_CUES:
+    for kind, cues in _ling("_KIND_CUES"):
         if any(re.search(cue, low) for cue in cues):
             return kind
     return None
@@ -220,8 +200,9 @@ def decayed_confidence(confidence, kind, turns_elapsed):
     return conf * (0.5 ** (elapsed / half_life))
 
 def _tokens(text):
-    words = re.findall(r"[a-z0-9']+", str(text or "").casefold())
-    filtered = [w for w in words if w not in _STOPWORDS]
+    words = _ling("_TOKEN_RE").findall(str(text or "").casefold())
+    stopwords = _ling("_STOPWORDS")
+    filtered = [w for w in words if w not in stopwords]
     return set(filtered) if filtered else set(words)
 
 def claim_similarity(a, b, ignore=None):

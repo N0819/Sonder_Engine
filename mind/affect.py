@@ -36,7 +36,19 @@ theory_of_mind.claim_similarity, itself pure.
 
 from __future__ import annotations
 
+from language_runtime import linguistic
 from mind.theory_of_mind import claim_similarity
+
+
+def _ling(name):
+    """One deterministic recognizer, from the story's own language pack.
+
+    Read at use time, never at import: two stories in different languages run
+    concurrently and each must see its own vocabulary. A pack that lacks the
+    key raises rather than returning empty -- a lexicon that quietly holds
+    nothing reads here as agreement, not as a miss.
+    """
+    return linguistic("mind.affect", name)
 
 # ---- Tunables ----
 #
@@ -298,64 +310,19 @@ RUPTURE_MAX_OPEN = 6
 # the question is never "how happy is 'cheerful'", only "can 'cheerful'
 # coexist with negative valence".
 
-AFFECT_LEXICON = {
-    # fear / anxiety
-    "fear": {"v": -1, "a": 1}, "afraid": {"v": -1, "a": 1},
-    "terrified": {"v": -1, "a": 1}, "panicked": {"v": -1, "a": 1},
-    "anxious": {"v": -1, "a": 1}, "nervous": {"v": -1, "a": 1},
-    "dread": {"v": -1, "a": 1}, "alarmed": {"v": -1, "a": 1},
-    "wary": {"v": -1, "a": 0}, "suspicious": {"v": -1, "a": 0},
-    # anger
-    "anger": {"v": -1, "a": 1}, "angry": {"v": -1, "a": 1},
-    "furious": {"v": -1, "a": 1}, "irritated": {"v": -1, "a": 1},
-    "frustrated": {"v": -1, "a": 1}, "resentful": {"v": -1, "a": 0},
-    # sadness / grief
-    "sadness": {"v": -1, "a": -1}, "sad": {"v": -1, "a": -1},
-    "grief": {"v": -1, "a": -1}, "sorrowful": {"v": -1, "a": -1},
-    "despairing": {"v": -1, "a": -1}, "melancholy": {"v": -1, "a": -1},
-    "lonely": {"v": -1, "a": -1}, "downcast": {"v": -1, "a": -1},
-    # disgust / contempt
-    "disgusted": {"v": -1, "a": 0}, "contemptuous": {"v": -1, "a": 0},
-    # shame / guilt
-    "ashamed": {"v": -1, "a": -1}, "guilty": {"v": -1, "a": -1},
-    "embarrassed": {"v": -1, "a": 1},
-    # joy
-    "joyful": {"v": 1, "a": 1}, "happy": {"v": 1, "a": 1},
-    "cheerful": {"v": 1, "a": 1}, "excited": {"v": 1, "a": 1},
-    "elated": {"v": 1, "a": 1}, "delighted": {"v": 1, "a": 1},
-    "amused": {"v": 1, "a": 1},
-    # hope
-    "hope": {"v": 1, "a": 1}, "hopeful": {"v": 1, "a": 1},
-    "eager": {"v": 1, "a": 1}, "curious": {"v": 1, "a": 1},
-    # calm / contentment / relief
-    "satisfaction": {"v": 1, "a": -1}, "satisfied": {"v": 1, "a": -1},
-    "content": {"v": 1, "a": -1}, "calm": {"v": 1, "a": -1},
-    "relaxed": {"v": 1, "a": -1}, "serene": {"v": 1, "a": -1},
-    "peaceful": {"v": 1, "a": -1}, "relieved": {"v": 1, "a": -1},
-    "grateful": {"v": 1, "a": -1},
-    # pride / tenderness
-    "proud": {"v": 1, "a": 1}, "confident": {"v": 1, "a": 0},
-    "tender": {"v": 1, "a": -1}, "affectionate": {"v": 1, "a": 0},
-    "warm": {"v": 1, "a": -1}, "fond": {"v": 1, "a": -1},
-    "pleased": {"v": 1, "a": 0},
-    # boredom / fatigue
-    "bored": {"v": -1, "a": -1}, "weary": {"v": -1, "a": -1},
-    "tired": {"v": 0, "a": -1}, "numb": {"v": 0, "a": -1},
-    "subdued": {"v": 0, "a": -1},
-    # neutral / arousal-only
-    "neutral": {"v": 0, "a": 0}, "alert": {"v": 0, "a": 1},
-    "surprised": {"v": 0, "a": 1}, "startled": {"v": 0, "a": 1},
-    "unhappy": {"v": -1, "a": 0}, "uneasy": {"v": -1, "a": 0},
-}
+# The table itself lives in the pack (`mind.affect.AFFECT_LEXICON`), because
+# the labels are words and a model writing a Japanese story proposes Japanese
+# ones. Against an English-only table every such label was "unknown", and
+# `label_matches` returns True for unknown labels by design -- so the
+# contradiction check silently agreed with everything, and no undercurrent was
+# ever synthesised in that story.
+#
+# One canonical label per (v-sign, a-sign) cell (`mind.affect
+# ._QUADRANT_DEFAULTS`), used when no proposed label survives reconciliation.
+# Every value must exist in that pack's AFFECT_LEXICON with matching signs so
+# quadrant_label output always passes label_matches -- checked per pack by
+# test_the_quadrant_fallback_label_exists_in_every_packs_lexicon.
 
-# One canonical label per (v-sign, a-sign) cell, used when no proposed
-# label survives reconciliation. Every value must exist in AFFECT_LEXICON
-# with matching signs so quadrant_label output always passes label_matches.
-_QUADRANT_DEFAULTS = {
-    (0, 0): "neutral", (0, 1): "alert", (0, -1): "subdued",
-    (1, 0): "pleased", (1, 1): "excited", (1, -1): "content",
-    (-1, 0): "unhappy", (-1, 1): "anxious", (-1, -1): "downcast",
-}
 
 def _float_or(value, fallback=0.0):
     try:
@@ -406,7 +373,7 @@ def _has_va(value):
 
 def quadrant_label(v, a):
     """A sensible default label for the V/A quadrant of (v, a)."""
-    return _QUADRANT_DEFAULTS[(_sign(v), _sign(a))]
+    return dict(_ling("_QUADRANT_DEFAULTS"))[(_sign(v), _sign(a))]
 
 def label_matches(label, v, a):
     """True unless the label's lexicon quadrant *contradicts* sign(v), sign(a).
@@ -416,7 +383,7 @@ def label_matches(label, v, a):
     an outright opposition like "cheerful" over negative valence. Unknown
     labels return True: don't reject what we can't judge.
     """
-    entry = AFFECT_LEXICON.get(str(label or "").strip().casefold())
+    entry = _ling("AFFECT_LEXICON").get(str(label or "").strip().casefold())
     if entry is None:
         return True
     for lex_sign, observed in ((entry["v"], v), (entry["a"], a)):
@@ -785,8 +752,9 @@ def _proposed_label(proposed):
 def _undercurrent_label(emotions, proposed, d_v, d_a):
     """Name the suppressed feeling: the dominant emotion *opposite* the
     proposed label, falling back to the top emotion, then the quadrant."""
+    lexicon = _ling("AFFECT_LEXICON")
     for tag in emotions:
-        entry = AFFECT_LEXICON.get(tag, {"v": 0, "a": 0})
+        entry = lexicon.get(tag, {"v": 0, "a": 0})
         if not label_matches(proposed, entry["v"], entry["a"]):
             return tag
     if emotions:
