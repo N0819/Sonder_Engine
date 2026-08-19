@@ -185,7 +185,7 @@ def _place(obj, path, value):
         node[last] = value
 
 
-def _targeted_field_patch(step_key, parsed, errors, payload):
+def _targeted_field_patch(parsed, errors):
     """Fix the named fields with a small call, and splice deterministically.
 
     The repair rung above this one rebuilds the COMPLETE response on the
@@ -200,6 +200,12 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
     answer back at the paths that failed and NOWHERE ELSE. Everything
     outside those paths is byte-identical by construction, which is what
     makes a model this small safe to use here: it cannot touch the beat.
+
+    Takes the parsed object and the errors and NOTHING ELSE. It used to be
+    handed `step_key` and `payload` as well, and read neither -- which is the
+    honest signature for what this is allowed to do. The beat's own request
+    is exactly the context that would let a cheap model rewrite content
+    nobody complained about, and the guarantee above is that it cannot.
 
     Returns the patched object, or None to fall through to the full repair.
     """
@@ -476,13 +482,12 @@ def complete_validated_json(
 
     # THE CHEAP RUNG FIRST. One malformed field does not need the whole beat
     # re-authored on the stage's own model; the validator already said which
-    # path failed and why. Try a small `utility` call that returns only the
-    # corrected fields, spliced back at exactly those paths. Falls through
+    # path failed and why. Try a small `repair`-role call that returns only
+    # the corrected fields, spliced back at exactly those paths. Falls through
     # untouched to the full rebuild below on any doubt.
     if not provider_errored and repair_attempts > 0:
         _t0 = time.monotonic()
-        _patched = _targeted_field_patch(
-            step_key, previous_parsed, report.errors, payload)
+        _patched = _targeted_field_patch(previous_parsed, report.errors)
         if _patched is not None:
             _patched_report = validate_llm_output_strict(
                 step_key, _patched, source_payload=payload)
