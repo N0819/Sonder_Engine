@@ -175,11 +175,59 @@ _ATTACH_CUES = (
 )
 
 
+#: Where a garment name stops describing the garment and starts describing
+#: where it sits. Not `of`, which is part of the noun phrase ("a ring of
+#: keys", "a length of cord").
+_PLACEMENT_PHRASE = re.compile(
+    r"\b(?:on|at|over|under|underneath|beneath|around|across|through|from"
+    r"|with|in|against)\b")
+
+
+def _last_cue_at(text, cues):
+    """Where the LAST of these cues starts in `text`, or None for no match.
+
+    The same rule `region_of` runs on: English puts the noun at the end, so
+    the cue furthest into the phrase is the one naming the garment.
+    """
+    best = None
+    for cue in cues:
+        for match in re.finditer(r"\b%ss?\b" % re.escape(cue), text):
+            if best is None or match.start() > best:
+                best = match.start()
+    return best
+
+
 def attaches_only(garment):
-    """Is this worn AT a region rather than over it? Never fails."""
+    """Is this worn AT a region rather than over it? Never fails.
+
+    THE HEAD NOUN DECIDES, not any ornament word anywhere in the phrase. A
+    cord belt is a belt: `cord` sits in the attach table and in the waist cue
+    list, and asking whether an attach cue appears ANYWHERE made one
+    describing word turn a garment into something that covers nothing --
+    which is invisible, because the garment is still worn, still listed,
+    still at the right region, and merely conceals it not at all.
+
+    A tie stays attaching, since a word in both tables (`necklace`, `ring`,
+    `anklet`) is the same word matching itself: only a covering cue STRICTLY
+    later in the phrase -- a noun the ornament word was describing -- turns
+    the verdict over.
+
+    And only in the phrase naming the GARMENT. "A key ring on a belt" ends in
+    a covering noun that is not what the thing is; the preposition is the
+    boundary between what it is and where it hangs. `region_of` deliberately
+    keeps reading the whole phrase, because where it hangs is exactly the
+    question it answers -- the two functions ask different things about the
+    same words.
+    """
     text = str(garment or "").casefold()
-    return any(re.search(r"\b%ss?\b" % re.escape(cue), text)
-               for cue in _ATTACH_CUES)
+    head = _PLACEMENT_PHRASE.split(text, 1)[0]
+    attach_at = _last_cue_at(head, _ATTACH_CUES)
+    if attach_at is None:
+        return False
+    covering_at = _last_cue_at(
+        head, [cue for _region, cues in _REGION_CUES for cue in cues
+               if cue not in _ATTACH_CUES])
+    return covering_at is None or covering_at <= attach_at
 
 
 def regions_covered(garment):
@@ -204,7 +252,7 @@ def region_of(garment):
     text = str(garment or "").casefold()
     if not text.strip():
         return DEFAULT_REGION
-    best, best_at = DEFAULT_REGION, None
+    best, best_at, best_len = DEFAULT_REGION, None, 0
     for region, cues in _REGION_CUES:
         for cue in cues:
             match = re.search(r"\b%ss?\b" % re.escape(cue), text)
@@ -213,8 +261,17 @@ def region_of(garment):
             # The LAST cue in the phrase wins: English puts the noun at the end,
             # so "leather riding boots" is boots and "boot-black apron" is an
             # apron.
-            if best_at is None or match.start() > best_at:
-                best, best_at = region, match.start()
+            #
+            # AND ON A TIE, THE LONGER CUE. Two cues can match one string at
+            # one offset only when one is a longer spelling of the other, and
+            # the longer one is then the more specific description of the same
+            # garment -- `girdle-cloth` against `girdle`. Resolving that by
+            # table order instead made the specific entry unreachable from the
+            # moment it was written, with nothing to notice: the table has an
+            # entry for the garment, and the garment lands somewhere else.
+            length = match.end() - match.start()
+            if best_at is None or (match.start(), length) > (best_at, best_len):
+                best, best_at, best_len = region, match.start(), length
     return best
 
 
