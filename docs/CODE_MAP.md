@@ -48,9 +48,10 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 4403 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory.py` | 4083 | Lorebook graph, memory retrieval/consolidation, relationships, and vector search. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
+| `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_write.py` | 594 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
@@ -556,14 +557,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 1717 | 275 lines |
-| `search_memories()` | 715 | 244 lines |
-| `rebuild_embeddings()` | 3775 | 213 lines |
-| `embedding_bank_status()` | 3625 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 4027 | 124 lines |
-| `contrast_memory()` | 994 | 117 lines |
-| `_with_reading()` | 1487 | 101 lines |
-| `_origin_on_drift()` | 1618 | 97 lines |
+| `build_character_memory_context()` | 1397 | 275 lines |
+| `search_memories()` | 395 | 244 lines |
+| `rebuild_embeddings()` | 3455 | 213 lines |
+| `embedding_bank_status()` | 3305 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 3707 | 124 lines |
+| `contrast_memory()` | 674 | 117 lines |
+| `_with_reading()` | 1167 | 101 lines |
+| `_origin_on_drift()` | 1298 | 97 lines |
 
 ### `mind/memory_common.py`
 
@@ -590,6 +591,19 @@
 | `move_lorebook()` | 53 | 37 lines |
 | `reorder_lorebook()` | 91 | 30 lines |
 | `would_create_book_cycle()` | 25 | 27 lines |
+
+### `mind/memory_read.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `record_dispute()` | 238 | 56 lines |
+| `update_memory()` | 186 | 51 lines |
+| `visible_memory_rows()` | 50 | 45 lines |
+| `raise_importance()` | 296 | 44 lines |
+| `list_memories()` | 158 | 27 lines |
+| `dramatic_irony_feed()` | 108 | 26 lines |
+| `promise_ledger()` | 135 | 22 lines |
+| `delete_memory()` | 342 | 3 lines |
 
 ### `mind/memory_write.py`
 
