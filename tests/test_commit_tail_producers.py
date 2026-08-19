@@ -19,6 +19,12 @@ tested and never ran once".
 
 These drive a real commit and assert on the RESULT the tail returns, which is
 what a caller and the pipeline drawer actually see.
+
+This file is where the offscreen profile-tick producer is covered too:
+`test_offscreen_resolution.py` kept a placeholder method pointing here whose
+whole body was `import tests.test_commit_tail_producers`, which asserted
+nothing, collected as a passing test, and imported a test module under a second
+name.
 """
 
 from __future__ import annotations
