@@ -38,17 +38,41 @@ import time
 from agents.character import _player_quiet_beats, _unanswered_question_note
 
 
+CAST = ("The Doctor", "Tamamo", "Hinami")
+
+
 def _seed(temp_db, turns):
-    """turns: [(idx, player_speech, {char_id: result})]"""
+    """turns: [(idx, player_speech, {char_id: result})]
+
+    Everybody is in one room and hears everything: each beat's composed view
+    carries every line spoken on it, for every mind. That is the case these
+    tests are about — what a mind does with a question it RECEIVED. The
+    undelivered case has a class of its own, below.
+    """
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)", ("T", "", 0.0))
+    ids = {}
+    for name in CAST:
+        ids[name] = temp_db.qi(
+            "INSERT INTO characters(name,sheet,created) VALUES(?,?,?)",
+            (name, json.dumps({"identity": {"name": name}}), 0.0))
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+            (chat_id, ids[name], "active", "{}"))
     for idx, speech, results in turns:
         tid = temp_db.qi(
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
             (chat_id, idx, "", time.time()))
+        heard = [speech] + [element.get("text")
+                            for result in results.values()
+                            for element in (result.get("sequence") or [])
+                            if element.get("type") == "speech"]
+        view = "\n".join(line for line in heard if line)
         for key, content in (
             ("director_interpret", {"speech": speech}),
             ("interaction_loop", {"character_results": results}),
+            ("perception_outcome",
+             {"views": {str(cid): view for cid in ids.values()}}),
         ):
             sid = temp_db.qi(
                 "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
@@ -56,7 +80,7 @@ def _seed(temp_db, turns):
             temp_db.qi(
                 "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
                 (sid, json.dumps(content), time.time()))
-    return chat_id
+    return chat_id, ids
 
 
 def _asked(name, line, addresses):
@@ -73,12 +97,13 @@ def _said(name, line):
 
 class TestTheLiveFailure:
     def test_the_ignored_request_is_surfaced(self, temp_db):
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (145, "", {"41": _asked(
                 "Tamamo", "Doctor, describe its dimensional nature in your own terms.",
                 ["The Doctor"])}),
         ])
-        note = _unanswered_question_note(chat_id, "The Doctor", 146, None)
+        note = _unanswered_question_note(
+            chat_id, "The Doctor", ids["The Doctor"], 146, None)
         owed = note["awaiting_your_answer"]
         assert owed["from"] == "Tamamo"
         assert "dimensional nature" in owed["asked"]
@@ -88,48 +113,54 @@ class TestTheLiveFailure:
         """Every ask in the live case was an imperative — "describe...", "Name
         one way..." — so punctuation would have missed all of them. The engine's
         own `expects_response` is the test."""
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (146, "", {"41": _asked(
                 "Tamamo", "Name one way its dimensions interface with boundaries.",
                 ["The Doctor"])}),
         ])
         assert "?" not in _unanswered_question_note(
-            chat_id, "The Doctor", 147, None)["awaiting_your_answer"]["asked"]
+            chat_id, "The Doctor", ids["The Doctor"], 147,
+            None)["awaiting_your_answer"]["asked"]
 
     def test_speaking_clears_the_debt(self, temp_db):
         """Whether the reply was responsive is the asker's business, not a
         field's — having spoken is enough."""
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (145, "", {"41": _asked("Tamamo", "Describe it.", ["The Doctor"])}),
             (146, "", {"35": _said("The Doctor", "It is only a machine.")}),
         ])
-        assert _unanswered_question_note(chat_id, "The Doctor", 147, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", ids["The Doctor"], 147, None) == {}
 
     def test_the_asker_owes_nothing(self, temp_db):
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (145, "", {"41": _asked("Tamamo", "Describe it.", ["The Doctor"])}),
         ])
-        assert _unanswered_question_note(chat_id, "Tamamo", 146, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "Tamamo", ids["Tamamo"], 146, None) == {}
 
     def test_a_question_to_somebody_else_is_not_yours(self, temp_db):
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (145, "", {"41": _asked("Tamamo", "Hinami, will you stay?", ["Hinami"])}),
         ])
-        assert _unanswered_question_note(chat_id, "The Doctor", 146, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", ids["The Doctor"], 146, None) == {}
 
     def test_a_statement_is_not_a_debt(self, temp_db):
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (145, "", {"41": _said("Tamamo", "Your words are noted, Doctor.")}),
         ])
-        assert _unanswered_question_note(chat_id, "The Doctor", 146, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", ids["The Doctor"], 146, None) == {}
 
     def test_it_does_not_reach_back_forever(self, temp_db):
         """Three beats. A question nobody has picked up in that long has been
         dropped by the scene, and re-raising it is its own kind of stall."""
-        chat_id = _seed(temp_db, [
+        chat_id, ids = _seed(temp_db, [
             (140, "", {"41": _asked("Tamamo", "Describe it.", ["The Doctor"])}),
         ])
-        assert _unanswered_question_note(chat_id, "The Doctor", 147, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", ids["The Doctor"], 147, None) == {}
 
 
 class TestThePlayerAskingCountsToo:
@@ -149,39 +180,46 @@ class TestThePlayerAskingCountsToo:
         tid = temp_db.qi(
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
             (chat_id, 145, "", time.time()))
-        sid = temp_db.qi(
-            "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
-            (tid, "director_interpret", "d", 0))
-        temp_db.qi(
-            "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
-            (sid, json.dumps({"speech": speech,
-                              "flow": {"addressed_to": [addressed(char_id)]}}),
-             time.time()))
-        return chat_id
+        for key, content in (
+            ("director_interpret",
+             {"speech": speech,
+              "flow": {"addressed_to": [addressed(char_id)]}}),
+            # Standing in the same room: the line is in his view.
+            ("perception_act", {"views": {str(char_id): speech}}),
+        ):
+            sid = temp_db.qi(
+                "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
+                (tid, key, key, 0))
+            temp_db.qi(
+                "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+                (sid, json.dumps(content), time.time()))
+        return chat_id, char_id
 
     def test_a_question_from_the_player_is_surfaced(self, temp_db):
-        chat_id = self._seed_player_ask(
+        chat_id, char_id = self._seed_player_ask(
             temp_db, "So what is that box of yours, really?", lambda cid: cid)
         owed = _unanswered_question_note(
-            chat_id, "The Doctor", 146, None)["awaiting_your_answer"]
+            chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]
         assert owed["from"] == "the player"
         assert "box of yours" in owed["asked"]
 
     def test_addressed_to_resolves_by_name_as_well_as_id(self, temp_db):
-        chat_id = self._seed_player_ask(
+        chat_id, char_id = self._seed_player_ask(
             temp_db, "What is it?", lambda cid: "The Doctor")
         assert _unanswered_question_note(
-            chat_id, "The Doctor", 146, None)["awaiting_your_answer"]
+            chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]
 
     def test_a_statement_from_the_player_is_not_a_debt(self, temp_db):
-        chat_id = self._seed_player_ask(
+        chat_id, char_id = self._seed_player_ask(
             temp_db, "That box of yours is strange.", lambda cid: cid)
-        assert _unanswered_question_note(chat_id, "The Doctor", 146, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None) == {}
 
     def test_a_question_aimed_at_somebody_else_is_not_yours(self, temp_db):
-        chat_id = self._seed_player_ask(
+        chat_id, char_id = self._seed_player_ask(
             temp_db, "What is it?", lambda cid: "Tamamo")
-        assert _unanswered_question_note(chat_id, "The Doctor", 146, None) == {}
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None) == {}
 
 
 class TestSustainedSilenceIsADifferentEvent:
@@ -191,15 +229,15 @@ class TestSustainedSilenceIsADifferentEvent:
     "Hinami, your presence here is a quiet joy"."""
 
     def test_one_quiet_beat_counts_as_one(self, temp_db):
-        chat_id = _seed(temp_db, [(144, "I was being polite.", {})])
+        chat_id, ids = _seed(temp_db, [(144, "I was being polite.", {})])
         assert _player_quiet_beats(chat_id, 145, None, None) == 1
 
     def test_consecutive_silence_accumulates(self, temp_db):
-        chat_id = _seed(temp_db, [(144, "", {}), (145, "", {}), (146, "", {})])
+        chat_id, ids = _seed(temp_db, [(144, "", {}), (145, "", {}), (146, "", {})])
         assert _player_quiet_beats(chat_id, 147, None, None) == 4
 
     def test_speech_resets_the_run(self, temp_db):
-        chat_id = _seed(temp_db, [(144, "", {}), (145, "Still here.", {}),
+        chat_id, ids = _seed(temp_db, [(144, "", {}), (145, "Still here.", {}),
                                   (146, "", {})])
         assert _player_quiet_beats(chat_id, 147, None, None) == 2
 
@@ -246,3 +284,101 @@ def test_the_prompt_says_what_both_fields_mean():
     assert "player_quiet_for_beats" in text
     # Noticing is required; answering is not.
     assert "not obliged to answer" in text
+
+
+class TestADebtNeedsAChannel:
+    """A question becomes a debt through a line that REACHED this mind. The
+    asker's `expects_response`/`addresses` states the asker's own intent, and
+    intending to address somebody is not the same as their having heard it.
+
+    The engine already writes down what each mind was delivered — the composed
+    per-observer view (`perception_act`/`perception_outcome`) and the
+    micro-round's `delivered_views` — and this note read none of it, so a line
+    spoken through a shut door arrived verbatim in the payload of the mind it
+    never reached.
+    """
+
+    def _seed_turn(self, temp_db, *, speech=None, results=None, heard=None):
+        """One turn, with an explicit record of what this mind received."""
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)", ("T", "", 0.0))
+        char_id = temp_db.qi(
+            "INSERT INTO characters(name,sheet,created) VALUES(?,?,?)",
+            ("The Doctor", json.dumps({"identity": {"name": "The Doctor"}}), 0.0))
+        temp_db.qi(
+            "INSERT INTO chat_chars(chat_id,char_id,status,state) VALUES(?,?,?,?)",
+            (chat_id, char_id, "active", "{}"))
+        tid = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+            (chat_id, 145, "", time.time()))
+        steps = [("perception_outcome", {"views": {str(char_id): heard}})]
+        if speech is not None:
+            steps.append(("director_interpret",
+                          {"speech": speech,
+                           "flow": {"addressed_to": [char_id]}}))
+        if results is not None:
+            steps.append(("interaction_loop", {"character_results": results}))
+        for key, content in steps:
+            sid = temp_db.qi(
+                "INSERT INTO steps(turn_id,key,label,ord,stale) VALUES(?,?,?,?,0)",
+                (tid, key, key, 0))
+            temp_db.qi(
+                "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+                (sid, json.dumps(content), time.time()))
+        return chat_id, char_id
+
+    def test_a_question_that_reached_nobody_is_not_owed(self, temp_db):
+        chat_id, char_id = self._seed_turn(
+            temp_db, heard=None, results={"41": _asked(
+                "Tamamo", "Doctor, describe its dimensional nature.",
+                ["The Doctor"])})
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None) == {}
+
+    def test_the_players_question_needs_a_channel_too(self, temp_db):
+        chat_id, char_id = self._seed_turn(
+            temp_db, heard=None, speech="So what is that box of yours, really?")
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None) == {}
+
+    def test_a_line_that_arrived_muffled_is_not_quoted_back_in_full(self, temp_db):
+        """Partial hearing delivers a fragment, never the words. The note may
+        repeat only what the recorded view already carried."""
+        chat_id, char_id = self._seed_turn(
+            temp_db,
+            heard='Tamamo says something — "…dimensional…" — little of it.',
+            results={"41": _asked(
+                "Tamamo", "Doctor, describe its dimensional nature.",
+                ["The Doctor"])})
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None) == {}
+
+    def test_the_quoted_line_is_the_one_this_mind_actually_received(self, temp_db):
+        """An overt question followed by a concealed aside: `said[-1]` is the
+        aside, and the aside is not this mind's. The debt is the question."""
+        aside = "And I would not trust him with it."
+        result = {
+            "name": "Tamamo",
+            "sequence": [
+                {"type": "speech", "text": "Doctor, describe its nature."},
+                {"type": "speech", "text": aside, "visibility": "concealed",
+                 "conceal_from": ["The Doctor"]},
+            ],
+            "interaction": {"expects_response": True,
+                            "addresses": ["The Doctor"]},
+        }
+        chat_id, char_id = self._seed_turn(
+            temp_db, heard='Tamamo says, "Doctor, describe its nature."',
+            results={"41": result})
+        owed = _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]
+        assert owed["asked"] == "Doctor, describe its nature."
+        assert aside not in owed["asked"]
+
+    def test_a_delivered_question_still_becomes_a_debt(self, temp_db):
+        chat_id, char_id = self._seed_turn(
+            temp_db, heard='Tamamo says, "Doctor, describe its nature."',
+            results={"41": _asked("Tamamo", "Doctor, describe its nature.",
+                                  ["The Doctor"])})
+        assert _unanswered_question_note(
+            chat_id, "The Doctor", char_id, 146, None)["awaiting_your_answer"]

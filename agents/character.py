@@ -85,6 +85,7 @@ from .common import (
     cap_mind_model_updates,
     character_room,
     norm_sequence,
+    player_speech_lines,
 )
 
 def _ling(name):
@@ -282,10 +283,47 @@ def _addressed_names_include(chat_id, addressed, folded_name):
     return False
 
 
-def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
-                              n_turns=3):
+def _lines_delivered_to(char_id, rows):
+    """Per turn, the prose THIS mind is recorded as having received.
+
+    Three stores, all written by gates that already ran: the composed
+    per-observer view (`perception_act` / `perception_outcome`, keyed by
+    perceiver id, `None` when a mind was admitted nothing), and the
+    micro-round's `delivered_views`, which `deterministic_micro_perception`
+    fills through `_delivery_ok` per observer per element. Read together they
+    are the engine's own answer to "what words reached this mind on this
+    beat", and no other reader needs to re-derive it.
+    """
+    key = str(char_id)
+    heard = {}
+    for row in rows:
+        if row["step_key"] == "director_interpret":
+            continue
+        try:
+            content = json.loads(row["content"]) or {}
+        except (TypeError, ValueError):
+            continue
+        parts = []
+        view = (content.get("views") or {}).get(key)
+        if isinstance(view, str):
+            parts.append(view)
+        for rnd in content.get("rounds") or []:
+            if not isinstance(rnd, dict):
+                continue
+            delivered = (rnd.get("delivered_views") or {}).get(key)
+            if isinstance(delivered, str):
+                parts.append(delivered)
+            elif isinstance(delivered, list):
+                parts.extend(str(item) for item in delivered)
+        if parts:
+            heard.setdefault(int(row["idx"]), []).extend(parts)
+    return {idx: "\n".join(parts) for idx, parts in heard.items()}
+
+
+def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
+                              frame_id, n_turns=3):
     """`{"awaiting_your_answer": {...}}` when somebody asked THIS character
-    something and they have not spoken since.
+    something, they received it, and they have not spoken since.
 
     The engine already knows this and told nobody. `interaction.expects_response`
     is declared on every character result and consumed in exactly one place --
@@ -308,8 +346,19 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
     question was outstanding and it was his. Presence is the signal, like
     `_player_silence_note` beside it -- the field is absent on any beat where
     nothing is owed.
+
+    A DEBT IS MADE BY A LINE THAT REACHED THIS MIND, never by the asker's
+    intent to address it. `expects_response` + `addresses` (and, for the
+    player, `flow.addressed_to`) say who somebody MEANT to ask; they say
+    nothing about whether it was heard, and this note read nothing else -- so
+    a question put through a shut door arrived here verbatim, three turns
+    deep, for a mind perception had correctly told nothing. Every candidate
+    now has to appear in `_lines_delivered_to`, the record of what this mind
+    was actually handed, which is also what picks WHICH line is owed: a
+    concealed aside after an overt question is not this mind's line, and a
+    line that arrived muffled arrived as a fragment rather than as words.
     """
-    if current_turn_idx is None or not char_name:
+    if current_turn_idx is None or not char_name or char_id is None:
         return {}
     try:
         lower = max(0, int(current_turn_idx) - max(1, int(n_turns)))
@@ -320,10 +369,21 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
         "FROM turns t JOIN steps s ON s.turn_id=t.id "
         "JOIN variants v ON v.step_id=s.id AND v.active=1 "
         "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
-        "AND s.key IN ('director_interpret','interaction_loop','reaction_loop') "
+        "AND s.key IN ('director_interpret','interaction_loop','reaction_loop',"
+        "'perception_act','perception_outcome') "
         "ORDER BY t.idx, CASE s.key WHEN 'director_interpret' THEN 0 ELSE 1 END",
         (chat_id, lower, current_turn_idx, frame_id),
     )
+    heard = _lines_delivered_to(char_id, rows)
+
+    def _reached(text, idx):
+        """Was this line among the words this mind was handed on that beat?
+        Verbatim, because that is how a full-fidelity delivery renders a
+        quote: a muffled fragment or a contentless trace does not contain the
+        line, and a withheld one leaves no view at all."""
+        line = str(text or "").strip()
+        return bool(line) and line in (heard.get(int(idx)) or "")
+
     folded = str(char_name).casefold()
     asked = None
     for row in rows:
@@ -342,8 +402,8 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
         # query), because the player declares first and a character answering
         # in that same beat clears it.
         if row["step_key"] == "director_interpret":
-            speech = str(content.get("speech") or "").strip()
-            if not speech:
+            spoken = player_speech_lines(content)
+            if not spoken:
                 continue
             addressed = [str(a).casefold() for a in
                          ((content.get("flow") or {}).get("addressed_to_refs")
@@ -352,13 +412,19 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
             # caller already holds by asking the roster, not by matching ids.
             if not _addressed_names_include(chat_id, addressed, folded):
                 continue
+            # Per LINE, not per declaration: a declaration may carry a
+            # concealed element beside an overt one, and the whole string is
+            # what used to be copied. Only lines this mind received can be
+            # owed by it.
+            reached = [line for line in spoken if _reached(line, row["idx"])]
             # A statement aimed at somebody is not a debt. For the player the
             # question mark IS the available test -- there is no
             # `expects_response` on a player declaration, and inventing one
             # would mean guessing at intent the Director never recorded.
-            if "?" not in speech:
+            reached = [line for line in reached if "?" in line]
+            if not reached:
                 continue
-            asked = {"from": "the player", "asked": speech[:240],
+            asked = {"from": "the player", "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
             continue
         results = (content.get("character_results")
@@ -394,9 +460,15 @@ def _unanswered_question_note(chat_id, char_name, current_turn_idx, frame_id,
                          for a in (interaction.get("addresses") or [])]
             if folded not in addresses:
                 continue
-            if not said:
+            # The LAST line this mind received from them, which is not
+            # necessarily their last line: an overt question followed by a
+            # concealed aside used to be reported as the aside, because the
+            # element list was filtered on `type == "speech"` and nothing
+            # else. Nothing received, nothing owed.
+            reached = [line for line in said if _reached(line, row["idx"])]
+            if not reached:
                 continue
-            asked = {"from": speaker, "asked": str(said[-1])[:240],
+            asked = {"from": speaker, "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
     return {"awaiting_your_answer": asked} if asked else {}
 
@@ -3101,7 +3173,8 @@ def character_step(ctx, cid, nonce):
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
             **_unanswered_question_note(
-                chat.id, character_name(sh), ctx.turn.idx, ctx.turn.frame_id),
+                chat.id, character_name(sh), cid,
+                ctx.turn.idx, ctx.turn.frame_id),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
