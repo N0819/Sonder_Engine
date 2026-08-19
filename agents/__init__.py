@@ -2,6 +2,15 @@
 
 Agent implementations are separated by role. Importing from ``agents`` remains
 supported for the application and third-party extensions.
+
+A re-export here exists to serve an importer. Four private helpers were listed
+with no importer anywhere -- `_text_piece`, `_classify_action_commitment`,
+`_normalize_effect`, `_llm_resolve_player_room` -- and were removed rather than
+kept as contract: they are underscore-private, so no published surface names
+them, and every one of them is still live where it is defined, in
+``agents/common.py``. What the facade owes an extension is the PUBLIC names and
+every step handler under its own step key; a private helper it re-exported by
+habit is neither.
 """
 
 from story.scene import active_cast, is_player_speaker
@@ -12,7 +21,6 @@ from .common import (
     _dict,
     _list,
     _dict_list,
-    _text_piece,
     _join_text,
     _assert_plan_materialized,
     _character_by_id,
@@ -24,8 +32,6 @@ from .common import (
     _next_speaker_candidates,
     _requires_reaction_phase,
     _requires_director_resolution,
-    _classify_action_commitment,
-    _normalize_effect,
     _extract_authority_claims,
     _agent_json,
     jparse,
@@ -60,7 +66,6 @@ from .common import (
     _check_pronoun_fidelity,
     _self_second_person,
     self_reference_forms,
-    _llm_resolve_player_room,
     _resolve_player_room,
 )
 from .director import (director_establish, director_interpret,
