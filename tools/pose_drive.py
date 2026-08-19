@@ -32,14 +32,15 @@ from story.character_schema import default_character_data, default_persona_data 
 from core.pipeline_context import ChatData, PipelineContext, TurnData  # noqa: E402
 from world.spatial import merge_scene_with_diff, normalize_scene_poses  # noqa: E402
 import agents.perception as perception  # noqa: E402
-import agents.common as common  # noqa: E402
 
+# The same net the composer tests use, and for the same reason: this was
+# `common._agent_json = _boom`, which no role module reads -- each binds the
+# seam into its own globals at import, so the assignment guarded nothing. One
+# definition, in `tests/helpers.py`, because a harness that claims "zero model
+# calls" and a test that claims it must mean the same thing by it.
+from tests.helpers import forbid_model_calls  # noqa: E402
 
-def _boom(*a, **k):
-    raise AssertionError("a model call was attempted")
-
-
-common._agent_json = _boom
+forbid_model_calls(reason="a model call was attempted")
 
 PLAYER = "Vess"
 CAST = {"Reya": "A wiry courier with storm-grey eyes.",

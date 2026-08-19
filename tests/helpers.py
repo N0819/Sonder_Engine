@@ -110,3 +110,66 @@ def fanout_resolve_agent(output, *, per_step=None, calls=None):
             return json.loads(json.dumps(output or {}))
         return {}
     return fake
+
+
+#: Every seam a model call passes through, at the module that DEFINES it.
+#: `_agent_json` is the strict validated-JSON path every state-mutating stage
+#: uses; `complete_validated_json` is what it calls; `chat_complete` is the
+#: provider call under both.
+MODEL_SEAMS = (
+    ("agents.common", "_agent_json"),
+    ("llm.llm_quality", "complete_validated_json"),
+    ("llm.providers", "chat_complete"),
+)
+
+#: Only engine packages are swept. A third-party module that happens to hold a
+#: same-named attribute is not a model call.
+_SEAM_PACKAGES = ("agents", "llm", "core", "world", "mind", "story",
+                  "dressing", "persist", "web")
+
+
+def forbid_model_calls(monkeypatch=None, *,
+                       reason="a model call was attempted"):
+    """Make any model call raise, in every module that can reach one.
+
+    Patching the DEFINING module is not enough and was the defect this
+    replaces: every role module binds the seam into its own globals at import
+    (`from .common import _agent_json`), so `monkeypatch.setattr(common,
+    "_agent_json", boom)` leaves `mapping`, `narration`, `background` and the
+    Director calling the original. Two composer test files carried that
+    fixture as `autouse`, guarding nothing, and the modules they exercise do
+    not import the seam at all -- so no positive control was possible either.
+
+    This rebinds each seam wherever the ORIGINAL object is currently bound,
+    which is the set of readers by definition, and it patches the DEFINING
+    module first -- which covers the other order too: a role module imported
+    after this runs copies the raising version into its globals. Returns the
+    list of bindings, so a test can assert the net covers something rather
+    than trusting that it does. Pass a `monkeypatch` to have it undone after
+    the test; a driver script calls it with none.
+    """
+    import importlib
+    import sys
+
+    set_attr = setattr if monkeypatch is None else monkeypatch.setattr
+
+    def _boom(*args, **kwargs):
+        raise AssertionError(reason)
+
+    patched = []
+    for module_name, attr in MODEL_SEAMS:
+        try:
+            origin = importlib.import_module(module_name)
+        except ImportError:  # pragma: no cover - a tree without the seam
+            continue
+        original = getattr(origin, attr, None)
+        if original is None:
+            continue
+        for module in list(sys.modules.values()):
+            name = getattr(module, "__name__", "")
+            if not name.startswith(_SEAM_PACKAGES):
+                continue
+            if getattr(module, attr, None) is original:
+                set_attr(module, attr, _boom)
+                patched.append((name, attr))
+    return patched
