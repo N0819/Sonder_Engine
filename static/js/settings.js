@@ -1642,6 +1642,27 @@ function renderGuestInvitePanel(chatId) {
             }
           }, "🔗 Generate invite"));
         }
+        // Attaching was the only half with a control. `DELETE
+        // /api/chats/{cid}/personas/{pid}` has always existed and marks the
+        // attachment dormant AND revokes that player's live guest sessions in
+        // one transaction -- the two halves of the same lifecycle. Without a
+        // button, an extra player who joined once could never be removed
+        // except by editing the database.
+        row.append(el("button", {
+          title: "Detach this player",
+          style: "margin-left:auto",
+          onclick: async () => {
+            if (!await confirmModal(
+              `Detach ${p.name}? Any invite or live session of theirs stops `
+              + `working. The persona itself is kept, and you can attach them `
+              + `again later.`,
+              { danger: true, confirmLabel: "Detach" })) return;
+            await api("DELETE", `/api/chats/${chatId}/personas/${p.id}`);
+            await boot();
+            refresh();
+            toast(`${p.name} detached.`, "ok");
+          }
+        }, "detach"));
         panel.append(row);
       }
     } else {
@@ -2936,6 +2957,27 @@ function renderFullApiSettings(b) {
         closeModal();
         toast("Agent models saved.", "ok");
       } }, "Save all")));
+
+  // Signing out. The host cookie lasts thirty days and is SameSite=Strict,
+  // `POST /api/auth/logout` has always destroyed the session row and cleared
+  // the cookie -- and no page in the app offered it, so the only way off a
+  // shared or borrowed machine was to clear cookies by hand. It lives at the
+  // foot of this panel because this is where the host's own account settings
+  // are, and because it is not a control anyone should hit by accident.
+  b.append(el("h4", { style: "margin-top:18px" }, "Host sign-in"),
+    el("div", { class: "small dim" },
+      "Your sign-in lasts thirty days on this browser. Signing out ends it "
+      + "everywhere it was issued and returns you to the sign-in page. Guest "
+      + "invites are separate and are not affected."),
+    el("div", { class: "row", style: "margin-top:6px" },
+      el("button", {
+        onclick: async () => {
+          if (!await confirmModal("Sign out of this host session?",
+                                  { confirmLabel: "Sign out" })) return;
+          await api("POST", "/api/auth/logout", {});
+          window.location.href = "/login";
+        },
+      }, "Sign out")));
 }
 
 $("#b-api").onclick = () => {
