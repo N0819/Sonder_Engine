@@ -11,11 +11,26 @@ cases it must stay silent on.
 """
 
 from agents.common import _check_narrator_fidelity, _check_pronoun_fidelity
-from agents.narration import _ENFORCEABLE_PREFIXES, _cast_pronouns
+from language_runtime import linguistic
+
+from agents.narration import _cast_pronouns
 
 HE = {"subject": "he", "object": "him", "possessive": "his"}
 SHE = {"subject": "she", "object": "her", "possessive": "her"}
 THEY = {"subject": "they", "object": "them", "possessive": "their"}
+
+
+def _enforceable():
+    """The prefixes the ACTIVE story pack calls enforceable.
+
+    Not `narration._ENFORCEABLE_PREFIXES`, which every one of these files used
+    to import: that constant is bound once at import from the ENGLISH pack and
+    is a compatibility view for tests and audits, while the three live checks
+    read the active pack at use time (`narration.py:991, 1016, 1138`). Scoring
+    against the eagerly-bound copy is scoring against an object no story
+    evaluates -- `AUDIT_DIRECTOR.md` finding 4's shape, one module over.
+    """
+    return linguistic("agents.narration", "_ENFORCEABLE_PREFIXES")
 
 
 def test_flags_possessive_flip_on_named_subject():
@@ -30,7 +45,7 @@ def test_flagged_warning_is_enforceable():
     the step inspector -- that is the entire point of the deterministic floor."""
     warnings = _check_pronoun_fidelity(
         "Vorne straightened her shoulders.", {"Vorne": HE})
-    assert warnings and warnings[0].startswith(_ENFORCEABLE_PREFIXES)
+    assert warnings and warnings[0].startswith(_enforceable())
 
 
 def test_flags_subject_flip_for_a_they_them_character():
