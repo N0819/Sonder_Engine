@@ -12,6 +12,41 @@ from enum import Enum
 from typing import Any, NamedTuple, Optional, Union, get_args, get_origin
 
 
+def _note_drop(message):
+    """Say that model output was dropped, on the running step's engine notes.
+
+    This module subtracts in about a dozen places and every one of them was
+    silent. Each drop is individually argued and mostly right -- a dropped
+    alternative beats a crashed beat -- but the third option was always
+    available and only one site ever took it: keep the beat AND say what was
+    lost (`_uncross_concealed_speech`, which smuggles its notes back through
+    `result["concealment_repairs"]`). As it stood, a list truncated at 64 and
+    a well-formed list of 64 were indistinguishable in the stored variant.
+
+    Imported lazily: `llm.schemas` is imported by tools, tests and archive
+    readers that have no pipeline and no database, and a diagnostic must
+    never be the reason one of them cannot import. Outside a running step the
+    sink is unset and this is a no-op, exactly as it is for the repair ladder.
+    """
+    try:
+        from core.pipeline_context import note_step_warning
+    except Exception:      # pragma: no cover - diagnostics never fail a call
+        return
+    note_step_warning(f"llm output pruned: {message}")
+
+
+def _kept(what, before, after):
+    """Return `after`, saying how much of `before` did not survive."""
+    try:
+        lost = len(before) - len(after)
+    except TypeError:
+        return after
+    if lost > 0:
+        _note_drop(
+            f"{what}: dropped {lost} of {len(before)} entries the model sent")
+    return after
+
+
 def _coerce_str_list(value):
     """Normalize a value into a list[str], tolerating the shapes smaller /
     cheaper LLMs emit where the schema wants plain strings: a bare string,
@@ -657,8 +692,12 @@ def _reads_as_bool(value):
 FREE_STRING_LIST_LIMIT = 64
 
 
-def _lenient_coerce(value, declared):
-    """The one coercion, given a value and the shape its field declared."""
+def _lenient_coerce(value, declared, name=""):
+    """The one coercion, given a value and the shape its field declared.
+
+    `name` is only used to say which field lost something; it never changes
+    what the coercion does.
+    """
     if value is None and not declared.allows_none:
         if declared.default_factory is not None:
             return declared.default_factory()
@@ -720,6 +759,11 @@ def _lenient_coerce(value, declared):
         # The runaway ceiling, applied before the per-item coercion so a
         # thousand-element loop is not walked element by element first.
         if declared.item_type is str and len(value) > FREE_STRING_LIST_LIMIT:
+            _note_drop(
+                f"{name or 'a free-string list'} arrived with {len(value)} "
+                f"entries and was cut to {FREE_STRING_LIST_LIMIT} -- this is "
+                "the runaway ceiling, so read the tail as a stuck sampler "
+                "rather than as content")
             value = value[:FREE_STRING_LIST_LIMIT]
         members = [_coerce_member(item, declared.item_type) for item in value]
         if declared.item_type is dict:
@@ -736,7 +780,8 @@ def _lenient_coerce(value, declared):
             # beat. A PARAMETRIZED `list[dict[str, Any]]` is left strict on
             # purpose: that is what `chat_archive` declares its rows as, and
             # an archive quietly missing a turn is worse than one refused.
-            members = [m for m in members if isinstance(m, dict)]
+            members = _kept(name or "a list of objects", members,
+                            [m for m in members if isinstance(m, dict)])
         return members
     if declared.value_type is not None and isinstance(value, dict):
         return {key: _coerce_member(item, declared.value_type)
@@ -878,11 +923,14 @@ class LenientModel(BaseModel):
             field = _fields(cls).get(info.field_name)
             if field is None:
                 return value    # extra="allow" keys are not ours to reshape
-            return _lenient_coerce(value, _declared(field))
+            return _lenient_coerce(
+                value, _declared(field),
+                f"{cls.__name__}.{info.field_name}")
     else:
         @validator("*", pre=True, allow_reuse=True)
         def _coerce_structured_into_str(cls, value, field):
-            return _lenient_coerce(value, _declared(field))
+            return _lenient_coerce(
+                value, _declared(field), f"{cls.__name__}.{field.name}")
 
 
 class GenreProfile(LenientModel):
@@ -2895,6 +2943,10 @@ def _coerce_candidate_list(value):
             # Neither a candidate nor a map of them. Wrapping it produced a
             # blank `{"response": ""}` -- an option the character never
             # weighed, written into the record the variant viewer shows.
+            _note_drop(
+                "response_candidates arrived in a shape that is neither a "
+                f"candidate nor a map of them ({sorted(value)[:4]}); the "
+                "whole deliberation was dropped")
             value = []
     return [
         {"response": item} if isinstance(item, str) else item
@@ -2931,7 +2983,9 @@ class ResponseCandidate(LenientModel):
     selected: bool = False
 
     _lists = validator("serves", pre=True, allow_reuse=True)(
-        lambda cls, value: _coerce_str_list(value)[:CANDIDATE_SERVES_LIMIT]
+        lambda cls, value: _kept(
+            "response_candidates[].serves", _coerce_str_list(value),
+            _coerce_str_list(value)[:CANDIDATE_SERVES_LIMIT])
     )
     _coerce_response = validator("response", pre=True, allow_reuse=True)(
         lambda cls, value: _coerce_candidate_response(value)
@@ -3082,19 +3136,19 @@ class CharacterOutput(LenientModel):
 
     _coerce_remember_lines = validator(
         "remember_lines", pre=True, allow_reuse=True)(
-        lambda cls, v: [
-            item for item in (v if isinstance(v, (list, tuple)) else [])
+        lambda cls, v: _kept("remember_lines", v, [
+            item for item in v
             if isinstance(item, dict) and str(item.get("quote") or "").strip()
-        ] if isinstance(v, (list, tuple)) else [])
+        ]) if isinstance(v, (list, tuple)) else [])
     _coerce_disputes = validator(
         "memory_disputes", pre=True, allow_reuse=True)(
-        lambda cls, v: [
-            item for item in (v if isinstance(v, (list, tuple)) else [])
+        lambda cls, v: _kept("memory_disputes", v, [
+            item for item in v
             if isinstance(item, dict) and (
                 str(item.get("memory_ref") or "").strip() or
                 str(item.get("gist") or "").strip())
             and str(item.get("now_reads") or "").strip()
-        ] if isinstance(v, (list, tuple)) else [])
+        ]) if isinstance(v, (list, tuple)) else [])
 
     # `cue` is required and an entry without one names nothing, so it cannot be
     # applied -- but dropping the entry is right where failing the entire
@@ -3102,10 +3156,10 @@ class CharacterOutput(LenientModel):
     # a line with no quote rather than rejecting the beat.
     _drop_cueless = validator(
         "association_updates", pre=True, allow_reuse=True)(
-        lambda cls, v: [
-            item for item in (v if isinstance(v, (list, tuple)) else [])
+        lambda cls, v: _kept("association_updates", v, [
+            item for item in v
             if not isinstance(item, dict) or str(item.get("cue") or "").strip()
-        ] if isinstance(v, (list, tuple)) else v)
+        ]) if isinstance(v, (list, tuple)) else v)
     mind_model_updates: list[MindHypothesis] = Field(default_factory=list)
     relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
     interaction: InteractionControl = Field(default_factory=InteractionControl)
@@ -3405,6 +3459,11 @@ def _coerce_considered_responses(value):
     field with no behavioral effect. Coerce leniently instead.
     """
     if not isinstance(value, list):
+        if value not in (None, "", {}):
+            _note_drop(
+                "considered_responses was not a list "
+                f"({type(value).__name__}); the deliberation scratch was "
+                "dropped")
         return []
 
     result = []
@@ -3427,7 +3486,7 @@ def _coerce_considered_responses(value):
         if text:
             result.append(text)
 
-    return result
+    return _kept("considered_responses", value, result)
 
 def _coerce_empty_list_to_dict(value):
     """A field typed as a dict (positions/rooms/entities/conditions/...)
@@ -3479,6 +3538,11 @@ def _coerce_optional_time(value):
     two thousand lines away, so the model had a scalar to copy -- and the
     repair attempt was handed the same null and could not converge.
     """
+    if value is not None and not isinstance(value, dict):
+        _note_drop(
+            f"state_diff.time arrived as {type(value).__name__} "
+            f"({str(value)[:60]!r}) and was dropped; the beat asserts no "
+            "time advance and the clock drifts on its own")
     return value if isinstance(value, dict) else None
 
 
@@ -3509,6 +3573,9 @@ def _coerce_conditions(value):
         grouped = {}
         for i, cond in enumerate(value):
             if not isinstance(cond, dict):
+                _note_drop(
+                    f"state_diff.conditions[{i}] is a "
+                    f"{type(cond).__name__}, not a condition; dropped")
                 continue
             key = str(cond.get("condition_id") or f"condition_{i}")
             grouped.setdefault(key, []).append(condition_dict(cond))
@@ -3529,7 +3596,9 @@ def _coerce_conditions(value):
                 items = [condition_dict(entry, key)]
             else:
                 continue
-            fixed[key] = [item for item in items if isinstance(item, dict)]
+            fixed[key] = _kept(
+                f"state_diff.conditions[{key!r}]", items,
+                [item for item in items if isinstance(item, dict)])
         return fixed
     return value
 
@@ -4314,7 +4383,7 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
 
             cleaned_sequence.append(event)
 
-        result["sequence"] = cleaned_sequence
+        result["sequence"] = _kept("sequence", sequence, cleaned_sequence)
 
     if "considered_responses" in result:
         result["considered_responses"] = _coerce_considered_responses(
@@ -4374,7 +4443,8 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             if str(line.get("exact_quote") or "").strip():
                 cleaned_dialogue.append(line)
 
-        result["dialogue_log"] = cleaned_dialogue
+        result["dialogue_log"] = _kept(
+            "dialogue_log", dialogue_log, cleaned_dialogue)
 
     if step_key == "director_interpret":
         flow_raw = result.get("flow")
