@@ -85,7 +85,22 @@ def _load_extra_players(chat_id, turn_idx, frame_id=None):
     )
     extras = []
     for row in rows:
-        sheet = normalize_persona_data(json.loads(row["sheet"]))
+        try:
+            sheet = normalize_persona_data(json.loads(row["sheet"]))
+        except Exception:
+            # Skipped, not raised. This runs inside the PipelineContext
+            # construction -- before ensure_checkpoint means anything and
+            # before any step runs -- so one unparseable co-player sheet used
+            # to kill every turn in that chat at setup with a raw
+            # JSONDecodeError, including the turns of the players whose own
+            # sheets were fine. `_cast_pronouns` and `_authored_body_parts`
+            # read the same column and both already skip the row; this was
+            # the third reading of the same data and the only intolerant one.
+            _step_logger.exception(
+                "unreadable persona sheet for co-player %s in chat %s; "
+                "that player is not rendered this turn",
+                row["persona_id"], chat_id)
+            continue
         extras.append({
             "persona_id": row["persona_id"],
             # The whole sheet, not just the fields below. `narrator_extra`
