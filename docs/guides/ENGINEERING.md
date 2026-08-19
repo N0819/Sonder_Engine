@@ -319,9 +319,12 @@ flowchart LR
     C -->|"membrane: muffled<br/>window: blocks"| O
     TCH -->|"surface sensation only —<br/><b>cause-blind</b>"| O
 
-    O --> D{"_delivery_ok<br/><i>unified gate</i>"}
+    O --> D{"_delivery_ok<br/><i>micro-round path</i>"}
+    O --> P{"composer percept builders<br/><i>every other path</i>"}
     D -->|"passes"| V["delivered"]
     D -->|"fails"| X["never sent"]
+    P -->|"admits"| V
+    P -->|"declines"| X
 
     style X fill:#fdecea,stroke:#c62828
     style V fill:#e6f4ea,stroke:#1e8e3e
