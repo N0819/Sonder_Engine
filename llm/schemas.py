@@ -12,6 +12,41 @@ from enum import Enum
 from typing import Any, NamedTuple, Optional, Union, get_args, get_origin
 
 
+def _note_drop(message):
+    """Say that model output was dropped, on the running step's engine notes.
+
+    This module subtracts in about a dozen places and every one of them was
+    silent. Each drop is individually argued and mostly right -- a dropped
+    alternative beats a crashed beat -- but the third option was always
+    available and only one site ever took it: keep the beat AND say what was
+    lost (`_uncross_concealed_speech`, which smuggles its notes back through
+    `result["concealment_repairs"]`). As it stood, a list truncated at 64 and
+    a well-formed list of 64 were indistinguishable in the stored variant.
+
+    Imported lazily: `llm.schemas` is imported by tools, tests and archive
+    readers that have no pipeline and no database, and a diagnostic must
+    never be the reason one of them cannot import. Outside a running step the
+    sink is unset and this is a no-op, exactly as it is for the repair ladder.
+    """
+    try:
+        from core.pipeline_context import note_step_warning
+    except Exception:      # pragma: no cover - diagnostics never fail a call
+        return
+    note_step_warning(f"llm output pruned: {message}")
+
+
+def _kept(what, before, after):
+    """Return `after`, saying how much of `before` did not survive."""
+    try:
+        lost = len(before) - len(after)
+    except TypeError:
+        return after
+    if lost > 0:
+        _note_drop(
+            f"{what}: dropped {lost} of {len(before)} entries the model sent")
+    return after
+
+
 def _coerce_str_list(value):
     """Normalize a value into a list[str], tolerating the shapes smaller /
     cheaper LLMs emit where the schema wants plain strings: a bare string,
@@ -657,8 +692,12 @@ def _reads_as_bool(value):
 FREE_STRING_LIST_LIMIT = 64
 
 
-def _lenient_coerce(value, declared):
-    """The one coercion, given a value and the shape its field declared."""
+def _lenient_coerce(value, declared, name=""):
+    """The one coercion, given a value and the shape its field declared.
+
+    `name` is only used to say which field lost something; it never changes
+    what the coercion does.
+    """
     if value is None and not declared.allows_none:
         if declared.default_factory is not None:
             return declared.default_factory()
@@ -720,6 +759,11 @@ def _lenient_coerce(value, declared):
         # The runaway ceiling, applied before the per-item coercion so a
         # thousand-element loop is not walked element by element first.
         if declared.item_type is str and len(value) > FREE_STRING_LIST_LIMIT:
+            _note_drop(
+                f"{name or 'a free-string list'} arrived with {len(value)} "
+                f"entries and was cut to {FREE_STRING_LIST_LIMIT} -- this is "
+                "the runaway ceiling, so read the tail as a stuck sampler "
+                "rather than as content")
             value = value[:FREE_STRING_LIST_LIMIT]
         members = [_coerce_member(item, declared.item_type) for item in value]
         if declared.item_type is dict:
@@ -736,7 +780,8 @@ def _lenient_coerce(value, declared):
             # beat. A PARAMETRIZED `list[dict[str, Any]]` is left strict on
             # purpose: that is what `chat_archive` declares its rows as, and
             # an archive quietly missing a turn is worse than one refused.
-            members = [m for m in members if isinstance(m, dict)]
+            members = _kept(name or "a list of objects", members,
+                            [m for m in members if isinstance(m, dict)])
         return members
     if declared.value_type is not None and isinstance(value, dict):
         return {key: _coerce_member(item, declared.value_type)
@@ -878,11 +923,14 @@ class LenientModel(BaseModel):
             field = _fields(cls).get(info.field_name)
             if field is None:
                 return value    # extra="allow" keys are not ours to reshape
-            return _lenient_coerce(value, _declared(field))
+            return _lenient_coerce(
+                value, _declared(field),
+                f"{cls.__name__}.{info.field_name}")
     else:
         @validator("*", pre=True, allow_reuse=True)
         def _coerce_structured_into_str(cls, value, field):
-            return _lenient_coerce(value, _declared(field))
+            return _lenient_coerce(
+                value, _declared(field), f"{cls.__name__}.{field.name}")
 
 
 class GenreProfile(LenientModel):
@@ -1528,22 +1576,33 @@ class Observation(LenientModel):
     channel: str = "mixed"
     fidelity: str = "rendered"
     observed: dict[str, Any] = Field(default_factory=dict)
-    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
-    suddenness: float = Field(default=0.0, ge=0.0, le=1.0)
-    ambiguity: float = Field(default=0.5, ge=0.0, le=1.0)
+    # These three ARE composer.OBSERVATION_DEFAULTS, and must stay so. The
+    # comment above says absent means the default; it said that while the two
+    # sides disagreed on every axis (0.5/0.0/0.5 here against 0.35/0.1/0.15
+    # there), so a compacted observation read back through this model came
+    # out asserting values the compactor never wrote -- half again the
+    # intensity, three times the ambiguity, no suddenness where the resting
+    # value is 0.1. Restated rather than imported: `llm` may not import
+    # `agents`, so `tests/test_schemas.py` holds the two level instead.
+    intensity: float = Field(default=0.35, ge=0.0, le=1.0)
+    suddenness: float = Field(default=0.1, ge=0.0, le=1.0)
+    ambiguity: float = Field(default=0.15, ge=0.0, le=1.0)
     directed_at_self: bool = False
 
-    _clamp_observation_axes = validator(
-        "intensity", "ambiguity", pre=True, allow_reuse=True
-    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.5))
-    # Split out because its declared default is 0.0, not 0.5. A field
-    # validator runs BEFORE the inherited null-substitution, so the shared
-    # clamp's fallback was the effective value for `null` while an omitted
-    # field still got 0.0 -- the same field answering two different ways to
-    # two spellings of "not said", and neither matching the other.
+    # One validator per axis, because each carries its OWN resting value as
+    # the fallback. A field validator runs BEFORE the inherited null
+    # substitution, so the fallback is what an explicit `null` lands on while
+    # omission lands on the declared default -- the two spellings of "not
+    # said" have to agree, which they can only do per field.
+    _clamp_intensity = validator(
+        "intensity", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.35))
     _clamp_suddenness = validator(
         "suddenness", pre=True, allow_reuse=True
-    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.1))
+    _clamp_ambiguity = validator(
+        "ambiguity", pre=True, allow_reuse=True
+    )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.15))
 
 class SensorChannel(LenientModel):
     channel_id: str
@@ -2884,6 +2943,10 @@ def _coerce_candidate_list(value):
             # Neither a candidate nor a map of them. Wrapping it produced a
             # blank `{"response": ""}` -- an option the character never
             # weighed, written into the record the variant viewer shows.
+            _note_drop(
+                "response_candidates arrived in a shape that is neither a "
+                f"candidate nor a map of them ({sorted(value)[:4]}); the "
+                "whole deliberation was dropped")
             value = []
     return [
         {"response": item} if isinstance(item, str) else item
@@ -2920,7 +2983,9 @@ class ResponseCandidate(LenientModel):
     selected: bool = False
 
     _lists = validator("serves", pre=True, allow_reuse=True)(
-        lambda cls, value: _coerce_str_list(value)[:CANDIDATE_SERVES_LIMIT]
+        lambda cls, value: _kept(
+            "response_candidates[].serves", _coerce_str_list(value),
+            _coerce_str_list(value)[:CANDIDATE_SERVES_LIMIT])
     )
     _coerce_response = validator("response", pre=True, allow_reuse=True)(
         lambda cls, value: _coerce_candidate_response(value)
@@ -3071,19 +3136,19 @@ class CharacterOutput(LenientModel):
 
     _coerce_remember_lines = validator(
         "remember_lines", pre=True, allow_reuse=True)(
-        lambda cls, v: [
-            item for item in (v if isinstance(v, (list, tuple)) else [])
+        lambda cls, v: _kept("remember_lines", v, [
+            item for item in v
             if isinstance(item, dict) and str(item.get("quote") or "").strip()
-        ] if isinstance(v, (list, tuple)) else [])
+        ]) if isinstance(v, (list, tuple)) else [])
     _coerce_disputes = validator(
         "memory_disputes", pre=True, allow_reuse=True)(
-        lambda cls, v: [
-            item for item in (v if isinstance(v, (list, tuple)) else [])
+        lambda cls, v: _kept("memory_disputes", v, [
+            item for item in v
             if isinstance(item, dict) and (
                 str(item.get("memory_ref") or "").strip() or
                 str(item.get("gist") or "").strip())
             and str(item.get("now_reads") or "").strip()
-        ] if isinstance(v, (list, tuple)) else [])
+        ]) if isinstance(v, (list, tuple)) else [])
 
     # `cue` is required and an entry without one names nothing, so it cannot be
     # applied -- but dropping the entry is right where failing the entire
@@ -3091,10 +3156,10 @@ class CharacterOutput(LenientModel):
     # a line with no quote rather than rejecting the beat.
     _drop_cueless = validator(
         "association_updates", pre=True, allow_reuse=True)(
-        lambda cls, v: [
-            item for item in (v if isinstance(v, (list, tuple)) else [])
+        lambda cls, v: _kept("association_updates", v, [
+            item for item in v
             if not isinstance(item, dict) or str(item.get("cue") or "").strip()
-        ] if isinstance(v, (list, tuple)) else v)
+        ]) if isinstance(v, (list, tuple)) else v)
     mind_model_updates: list[MindHypothesis] = Field(default_factory=list)
     relationship_updates: list[RelationshipUpdate] = Field(default_factory=list)
     interaction: InteractionControl = Field(default_factory=InteractionControl)
@@ -3394,6 +3459,11 @@ def _coerce_considered_responses(value):
     field with no behavioral effect. Coerce leniently instead.
     """
     if not isinstance(value, list):
+        if value not in (None, "", {}):
+            _note_drop(
+                "considered_responses was not a list "
+                f"({type(value).__name__}); the deliberation scratch was "
+                "dropped")
         return []
 
     result = []
@@ -3416,7 +3486,7 @@ def _coerce_considered_responses(value):
         if text:
             result.append(text)
 
-    return result
+    return _kept("considered_responses", value, result)
 
 def _coerce_empty_list_to_dict(value):
     """A field typed as a dict (positions/rooms/entities/conditions/...)
@@ -3468,6 +3538,11 @@ def _coerce_optional_time(value):
     two thousand lines away, so the model had a scalar to copy -- and the
     repair attempt was handed the same null and could not converge.
     """
+    if value is not None and not isinstance(value, dict):
+        _note_drop(
+            f"state_diff.time arrived as {type(value).__name__} "
+            f"({str(value)[:60]!r}) and was dropped; the beat asserts no "
+            "time advance and the clock drifts on its own")
     return value if isinstance(value, dict) else None
 
 
@@ -3498,6 +3573,9 @@ def _coerce_conditions(value):
         grouped = {}
         for i, cond in enumerate(value):
             if not isinstance(cond, dict):
+                _note_drop(
+                    f"state_diff.conditions[{i}] is a "
+                    f"{type(cond).__name__}, not a condition; dropped")
                 continue
             key = str(cond.get("condition_id") or f"condition_{i}")
             grouped.setdefault(key, []).append(condition_dict(cond))
@@ -3518,7 +3596,9 @@ def _coerce_conditions(value):
                 items = [condition_dict(entry, key)]
             else:
                 continue
-            fixed[key] = [item for item in items if isinstance(item, dict)]
+            fixed[key] = _kept(
+                f"state_diff.conditions[{key!r}]", items,
+                [item for item in items if isinstance(item, dict)])
         return fixed
     return value
 
@@ -3546,17 +3626,39 @@ SPECIALIST_CHANNELS = {
                            "contradicted_claims"),
 }
 
-_SPECIALIST_DICT_CHANNELS = frozenset({
-    "attire", "conditions", "vitals", "overlays", "containment", "scales",
-    "entities", "positions", "rooms", "stations", "poses", "comms_ops",
-})
-_SPECIALIST_LIST_CHANNELS = frozenset({
-    "cast_changes", "introductions", "world_facts", "contact_ops",
-    "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
-    "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
-    "telling_ops", "offscreen_plan_ops", "ratified_claims",
-    "contradicted_claims",
-})
+def _specialist_channel_shapes():
+    """Which empty spelling each specialist channel has to be corrected TO.
+
+    DERIVED, because the two sets used to be written out by hand and had
+    drifted: `comms_ops` is declared `list[CommsOp]` and sat in the dict set,
+    so an empty `comms_ops: []` -- the ordinary way a model says no voice
+    channel changed this beat -- was rewritten to `{}` before validation.
+    Inert only because `LenientModel` turned it back, which is one mechanism
+    covering for another rather than a reason the first was right. A model
+    declares the shape once; nothing else should get to have an opinion.
+
+    Only the unambiguous empty case is ever corrected (see
+    `_coerce_empty_list_to_dict`), so a channel appearing here can cost a
+    beat nothing: a non-empty value of the wrong shape still reaches
+    validation and is still rejected.
+    """
+    dicts, lists = set(), set()
+    for step_key, channels in SPECIALIST_CHANNELS.items():
+        fields = _fields(SCHEMA_MAP.get(step_key)) or {}
+        for channel in channels:
+            field = fields.get(channel)
+            if field is None:
+                continue
+            declared = _declared(field)
+            if declared.is_list:
+                lists.add(channel)
+            elif declared.expects_object:
+                dicts.add(channel)
+    return frozenset(dicts), frozenset(lists)
+
+
+_SPECIALIST_DICT_CHANNELS, _SPECIALIST_LIST_CHANNELS = (
+    _specialist_channel_shapes())
 
 _STATE_DIFF_SIBLING_FIELDS = (
     "remove_entities", "remove_rooms", "remove_adjacent", "conditions",
@@ -4281,7 +4383,7 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
 
             cleaned_sequence.append(event)
 
-        result["sequence"] = cleaned_sequence
+        result["sequence"] = _kept("sequence", sequence, cleaned_sequence)
 
     if "considered_responses" in result:
         result["considered_responses"] = _coerce_considered_responses(
@@ -4341,7 +4443,8 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             if str(line.get("exact_quote") or "").strip():
                 cleaned_dialogue.append(line)
 
-        result["dialogue_log"] = cleaned_dialogue
+        result["dialogue_log"] = _kept(
+            "dialogue_log", dialogue_log, cleaned_dialogue)
 
     if step_key == "director_interpret":
         flow_raw = result.get("flow")
@@ -4511,13 +4614,35 @@ OUTPUT_EXAMPLES = {
         "notes": "",
     },
     "director_establish": {
-        "location": "",
-        "time": "now",
-        "scene_description": "",
-        "rooms": {},
+        # The one example that has to be a WORKED scene rather than a bare
+        # shape. Establishment's semantic check requires rooms and positions
+        # -- an opening in no place, with nobody anywhere, is not an opening
+        # -- so an all-empty example is an object this stage's own validator
+        # rejects, handed to the model as the thing to imitate on the repair
+        # that follows exactly that failure.
+        "location": "The Salt Quay",
+        "time": "before dawn",
+        "scene_description": (
+            "Fog off the water, one lamp still burning at the head of the "
+            "pier."),
+        "rooms": {
+            "pier_head": {
+                "name": "Pier Head",
+                "desc": "Wet boards, a bollard, the lamp on its iron post.",
+                "adjacent": [{"room": "quay_road", "barrier": "open"}],
+                "exposure": "open",
+                "anchors": {"lamp_post": {"desc": "the iron lamp post"}},
+            },
+            "quay_road": {
+                "name": "Quay Road",
+                "desc": "A cobbled run of shuttered warehouses.",
+                "adjacent": [{"room": "pier_head", "barrier": "open"}],
+                "exposure": "open",
+            },
+        },
         "entities": {},
-        "positions": {},
-        "stations": {},
+        "positions": {"{{PLAYER}}": "pier_head", "Maren": "pier_head"},
+        "stations": {"Maren": {"at": "lamp_post", "near": []}},
         "poses": {},
         "contact_ops": [],
         "substance_ops": [],
@@ -4528,33 +4653,35 @@ OUTPUT_EXAMPLES = {
         "fiction_frame": {},
         "simulation_clock": {
             "elapsed_seconds": 0.0,
-            "display": "now",
+            "display": "before dawn",
             "time_scale": "scene",
         },
-        "opening": "",
+        "opening": (
+            "The fog has not lifted. Maren waits under the lamp at the head "
+            "of the pier, watching the water rather than the road."),
     },
+    # This is the PROSE AUTHOR's example -- `director_resolve` is the step
+    # key its call runs under. It owns the beat's prose, its dialogue, the
+    # manifest and six `state_diff` channels; the other twenty-nine belong to
+    # the six specialists, whose own examples are below. So it shows those six
+    # and nothing else: a channel in this example that the author no longer
+    # owns is an instruction to spend the beat encoding something a specialist
+    # is being asked for in the same fan-out, and whatever it writes there is
+    # replaced by the owner anyway.
     "director_resolve": {
-        "resolved_event": "",
-        "summary": "",
-        "dialogue_order": [],
-        "dialogue_log": [],
+        "resolved_event": (
+            "Maren turns from the water as you reach the lamp. \"You're "
+            "late,\" she says. \"The boat went out an hour ago.\""),
+        "summary": "Maren says the boat left an hour ago",
+        "dialogue_order": ["Maren"],
+        "dialogue_log": [
+            {"speaker": "Maren",
+             "exact_quote": "You're late. The boat went out an hour ago.",
+             "volume": "normal", "intended_target": "{{PLAYER}}",
+             "tone": "flat"},
+        ],
         "state_diff": {
-            "positions": {},
-            "rooms": {},
-            "entities": {},
-            "remove_entities": [],
-            "remove_rooms": [],
-            "remove_adjacent": [],
-            "conditions": {},
-            "inventory_ops": [],
-            "contact_ops": [],
-            "substance_ops": [],
-            "poses": {},
-            "overlays": {},
-            "attire": {},
-            "cast_changes": [],
-            "world_facts": [],
-            "introductions": [],
+            "location": "Pier Head",
             # THE SHAPE, NOT A PLACEHOLDER. This was `None`, and the resolve
             # prompt describes the field in prose two thousand lines away
             # ("Emit state_diff.time with start_seconds, duration_seconds,
@@ -4572,17 +4699,26 @@ OUTPUT_EXAMPLES = {
             "time": {"start_seconds": 0, "duration_seconds": 60,
                      "end_seconds": 60, "mode": "action",
                      "explicit": False, "display_advance": ""},
+            # Written OVER the sky already blowing, so a beat reports what it
+            # noticed rather than restating the whole sky.
+            "weather": {"sky": "fog", "precipitation": "none",
+                        "intensity": "none", "wind": "breeze",
+                        "temperature": "cold"},
             "claim_dispositions": [],
-            "consequences": [],
-            "offscreen_plan_ops": [],
-            "crowd_ops": [],
-            "telling_ops": [],
-            "courier_ops": [],
-            "artifact_ops": [],
+            # Set in motion OFFSCREEN, fired when the clock reaches it --
+            # never this beat's own outcome, which is the prose above.
+            "consequences": [
+                {"what": "the harbourmaster's office opens for the morning",
+                 "where": "quay_road", "due_seconds": 5400,
+                 "witnessed": False},
+            ],
         },
+        # The manifest is where a change lands whose CHANNEL belongs to
+        # somebody else: the author narrated her turning, the body specialist
+        # owns `poses`, and this is how the two meet.
         "changes_asserted": [
-            {"category": "adjacency", "subject": "vault_door",
-             "change": "The vault door is sealed shut."},
+            {"category": "pose", "subject": "Maren",
+             "change": "Maren has turned from the water to face you."},
         ],
         "dice": [],
         "fiction_frame": {},
@@ -4655,6 +4791,14 @@ OUTPUT_EXAMPLES = {
         "remove_adjacent": [],
         "stations": {"Mara": {"at": "the_lamp", "near": []}},
         "poses": {},
+        # Equipment that carries a VOICE between places, which is a spatial
+        # fact about the rooms it joins rather than an object in one of them.
+        "comms_ops": [
+            {"id": "gallery_intercom", "op": "open",
+             "name": "the gallery intercom",
+             "rooms": ["lamp_room", "gallery"], "carriers": [],
+             "mode": "voice", "source": "", "private": False, "live": True},
+        ],
         "notes": [],
     },
     "director_offscreen": {
@@ -4681,6 +4825,19 @@ OUTPUT_EXAMPLES = {
         "contact_ops": [],
         "material_effects": [],
         "active_state": {},
+        # The psychology tier. The sheet asks for all five and the example
+        # named none of them, and an absent key in the object a repair is told
+        # to imitate reads as "not part of the answer" -- which is how a whole
+        # tier can be asked for on every call and arrive on none of them.
+        # Shown at their nothing-this-beat values, like every other key here:
+        # what the fields ARE is the sheet's to say, and an example that
+        # decided a project or a following change for the character would be
+        # the example making the decision.
+        "intent_ops": [],
+        "project_ops": [],
+        "follow_op": None,
+        "drive_shift": None,
+        "manifest": {"surface_demeanor": "", "tells": []},
         "belief_updates": [],
         "association_updates": [],
         "mind_model_updates": [],
@@ -4749,6 +4906,10 @@ OUTPUT_EXAMPLES = {
             {
                 "name": "Hettie Crawe",
                 "speech": {
+                    # The entry's own `name`, again. A dialogue-log line
+                    # carries its speaker, because the log is read by minds
+                    # that were never told whose entry it came from.
+                    "speaker": "Hettie Crawe",
                     "exact_quote": "Coin first. I've heard the songs.",
                     "volume": "normal",
                     "intended_target": "Bran",
@@ -5060,6 +5221,16 @@ def _name_what_was_discarded(step_key, raw, error):
     false: the model sent a sequence, and this code deleted it. Both repair
     and every fallback candidate then failed, and the turn died.
 
+    THAT WORKED CASE NO LONGER OCCURS, and this counts what survives rather
+    than what was an object. `_sequence_event_from_prose` now READS a plain
+    sentence -- as an action unless the whole string is a quotation -- so a
+    list of sentences arrives non-empty and never reaches this at all. What
+    still cannot be read is a blank string, or an entry that is neither an
+    object nor a string. Counting every non-object entry as discarded would
+    now blame the model for the one spelling the engine accepts, and the
+    remedy sentence would instruct it away from that spelling; both would be
+    false in the same message that exists because a false message cost a turn.
+
     Naming the real disagreement is not the same as guessing what the
     sentences MEANT -- a bare sentence does not say whether it is speech or
     action, and the engine must not decide that on the player's behalf. The
@@ -5069,18 +5240,23 @@ def _name_what_was_discarded(step_key, raw, error):
     if step_key != "director_interpret" or "sequence is empty" not in error:
         return error
     sent = raw.get("sequence") if isinstance(raw, dict) else None
-    if not isinstance(sent, list):
+    if not isinstance(sent, list) or not sent:
         return error
-    dropped = [item for item in sent if not isinstance(item, dict)]
-    if not dropped:
+    # Exactly what `preprocess_llm_output` keeps, asked the same way.
+    readable = [item for item in sent
+                if isinstance(item, dict)
+                or (isinstance(item, str)
+                    and _sequence_event_from_prose(item) is not None)]
+    if readable:
         return error
     return (
-        f"{error} -- because {len(dropped)} of the {len(sent)} sequence "
-        "entries you sent were not objects and were discarded. Every entry "
-        "must be an object, e.g. "
+        f"{error} -- because all {len(sent)} sequence entries you sent were "
+        "blank or were neither an object nor a sentence, so none could be "
+        "read. An entry must be an object, e.g. "
         '{"type": "action", "attempt": "..."} or '
-        '{"type": "speech", "text": "...", "volume": "normal"}. '
-        "Resend the same beat in that shape."
+        '{"type": "speech", "text": "...", "volume": "normal"}; '
+        "a plain sentence is read as an action. Resend the same beat in "
+        "one of those shapes."
     )
 
 
@@ -5200,7 +5376,7 @@ def validate_llm_output_strict(
                 return ValidationReport(
                     valid=True,
                     output=_dump(model),
-                    warnings=[
+                    warnings=repairs + [
                         "Dropped malformed state_diff.%s so the beat could "
                         "commit what it did adjudicate (%s)" % (field, detail)
                         for field, detail in
@@ -5224,7 +5400,7 @@ def validate_llm_output_strict(
                 return ValidationReport(
                     valid=True,
                     output=_dump(model),
-                    warnings=[
+                    warnings=repairs + [
                         "Dropped malformed specialist channel %s so the "
                         "beat could keep what it did encode (%s)"
                         % (field, detail)

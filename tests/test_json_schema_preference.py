@@ -198,3 +198,42 @@ def test_an_unknown_step_offers_none_rather_than_raising():
     from llm import llm_quality
 
     assert llm_quality._step_json_schema("not_a_real_step") is None
+
+
+def test_every_rung_that_rebuilds_the_object_carries_its_grammar(monkeypatch):
+    """The measured value of the grammar is large -- narrator 2/5 -> 5/5
+    valid, character 53.4s/2029 tokens -> 15.3s/587 -- and it was sent on the
+    FIRST call only. That is backwards: the later rungs are the ones answering
+    a request that has already failed validation once, and the truncation
+    re-ask gains most, because a constrained model cannot pad and so fits the
+    budget the unconstrained one overflowed.
+    """
+    import json as _json
+
+    from llm import llm_quality
+
+    seen = []
+
+    def fake_complete(role, system, user, **kwargs):
+        seen.append(kwargs.get("json_schema"))
+        # 1: truncated. 2: the re-ask, still truncated. 3: the temperature-0
+        # repair, still truncated. 4: the fallback candidate, which answers.
+        if len(seen) >= 4:
+            return _json.dumps({"sequence": [], "interaction": {}})
+        return '{"sequence": ['
+
+    monkeypatch.setattr(llm_quality, "chat_complete", fake_complete)
+    monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 2)
+    monkeypatch.setattr(llm_quality, "response_truncated", lambda: True)
+    monkeypatch.setattr(
+        llm_quality, "escalated_max_tokens", lambda cap: 20000)
+    monkeypatch.setattr(
+        llm_quality, "_targeted_field_patch", lambda parsed, errors: None)
+
+    llm_quality.complete_validated_json(
+        role="character", step_key="character", system="s", payload={})
+
+    assert len(seen) >= 4, seen
+    assert all(schema is not None for schema in seen), (
+        "a rung rebuilding the same object was left unconstrained at "
+        f"{[i for i, schema in enumerate(seen) if schema is None]}")

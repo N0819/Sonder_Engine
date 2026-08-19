@@ -199,3 +199,103 @@ def test_decision_review_retry_is_warned_even_when_it_succeeds(
     assert not [w for w in ctx.warnings if "decision review retry" in w]
     assert any("repeat_correction" in w and "the beat stands" in w
                for w in ctx.warnings)
+
+
+# --- The deterministic prune, which does not fail and does not speak --------
+#
+# Every rung above re-issues a model call, and the ladder narrates each one.
+# The prune inside `validate_llm_output_strict` costs nothing and therefore
+# runs on the SUCCESS path: a malformed `state_diff` channel (or a whole
+# specialist channel) is dropped, the report comes back `valid=True`, and the
+# beat commits without it. That is the right trade -- absent is "no change
+# asserted" and the reconcile seam catches the drift next beat -- but it is a
+# change to committed world state, and it was made silently.
+
+_DIFF_BAD = json.dumps({
+    "resolved_event": "The door swings wide.",
+    "summary": "the door opens",
+    "state_diff": {"weather": 12345},
+})
+
+_SPECIALIST_BAD = json.dumps({"attire": 12345, "poses": {}})
+
+
+def test_a_dropped_state_diff_channel_says_so(monkeypatch, sink):
+    _script(monkeypatch, [_DIFF_BAD])
+    out = llm_quality.complete_validated_json(
+        role="director", step_key="director_resolve",
+        system="s", payload={}, repair_attempts=1)
+    # The beat commits: prose, summary and every well-formed channel stand.
+    assert out["resolved_event"] == "The door swings wide."
+    assert "weather" not in (out.get("state_diff") or {})
+    assert any("state_diff.weather" in note for note in sink), (
+        "a channel was dropped from a committed beat with nothing said: "
+        f"{sink}")
+
+
+def test_a_dropped_specialist_channel_says_so(monkeypatch, sink):
+    _script(monkeypatch, [_SPECIALIST_BAD])
+    out = llm_quality.complete_validated_json(
+        role="director_body", step_key="director_body",
+        system="s", payload={}, repair_attempts=1)
+    assert not out.get("attire")
+    assert any("attire" in note for note in sink), (
+        f"a specialist channel was dropped with nothing said: {sink}")
+
+
+# --- LLM-11: the drops that had no way to say so ---------------------------
+
+
+def test_every_major_prune_in_schemas_says_what_it_dropped(sink):
+    """`llm/schemas.py` subtracts in about a dozen places and every one was
+    silent. Each is individually argued and mostly right -- a dropped
+    alternative beats a crashed beat -- but the third option was always
+    available and only `_uncross_concealed_speech` took it: keep the beat AND
+    say what went. A list truncated at 64 and a well-formed list of 64 were
+    indistinguishable in the stored variant.
+    """
+    from llm.schemas import FREE_STRING_LIST_LIMIT, validate_llm_output_strict
+
+    cases = {
+        "the free-string runaway ceiling": (
+            "character",
+            {"response_candidates": [
+                {"response": "wait", "serves": ["x"] * 9}]},
+            "serves"),
+        "a line with no quote": (
+            "director_resolve",
+            {"resolved_event": "a", "summary": "a",
+             "dialogue_log": [{"speaker": "Mara", "exact_quote": ""}]},
+            "dialogue_log"),
+        "a sequence entry that is neither object nor prose": (
+            "character",
+            {"sequence": [{"type": "action", "observable": "stands"}, 7]},
+            "sequence"),
+        "a scalar where the beat's clock belongs": (
+            "director_resolve",
+            {"resolved_event": "a", "summary": "a",
+             "state_diff": {"time": "a minute passes"}},
+            "state_diff.time"),
+        "a memory dispute with no locator": (
+            "character",
+            {"memory_disputes": [{"now_reads": "he lied"}]},
+            "memory_disputes"),
+        "the whole deliberation": (
+            "character",
+            {"response_candidates": {"unrelated": 3}},
+            "response_candidates"),
+    }
+    for label, (step_key, raw, expected) in cases.items():
+        del sink[:]
+        validate_llm_output_strict(step_key, raw)
+        assert any(expected in note for note in sink), (
+            f"{label}: nothing said about {expected} ({sink})")
+
+    # The runaway ceiling itself: the shape a stuck sampler produces, which
+    # is the one prune whose whole point is that the tail is not content.
+    del sink[:]
+    validate_llm_output_strict(
+        "character",
+        {"considered_responses":
+            [f"option {n}" for n in range(FREE_STRING_LIST_LIMIT + 5)]})
+    assert any("runaway ceiling" in note for note in sink), sink

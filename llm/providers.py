@@ -1597,6 +1597,50 @@ def _note_json_object_rejected(prov, model):
         _prov_field(prov, "name") or "provider", model)
 
 
+#: (role, provider) pairs already told that a request feature they have
+#: configured cannot be sent on this connection. Said once per process: it is
+#: a settings problem, not a per-call event.
+_UNSENT_ON_ANTHROPIC: set = set()
+_UNSENT_LOCK = threading.Lock()
+
+
+def _warn_unsent_on_anthropic(prov, role, json_schema):
+    """Say so when a configured request feature cannot reach this provider.
+
+    The native Anthropic branch builds its body and RETURNS before
+    `_apply_reasoning_effort` and `_apply_json_mode` are reached, so both are
+    OpenAI-path only. Neither is a small setting: reasoning effort is a
+    first-class per-role control in the settings panel, and the JSON grammar
+    is worth a measured narrator 2/5 -> 5/5 valid and character 53.4s/2029
+    tokens -> 15.3s/587. Configured against a native Anthropic connection
+    they change nothing, and nothing said so -- the host reads the panel,
+    sees the value they set, and attributes the difference to the model.
+
+    Sending them is a request-shape decision (Anthropic spells reasoning as
+    `thinking: {type, budget_tokens}` and constrains output through tools,
+    neither of which this module emits) and is the owner's to make. Saying
+    that a set dial is inert is not.
+    """
+    name = _prov_field(prov, "name") or "provider"
+    unsent = []
+    if reasoning_effort_for(role):
+        unsent.append("reasoning effort")
+    if json_schema:
+        unsent.append("the JSON grammar")
+    if not unsent:
+        return
+    key = (str(role), name, tuple(unsent))
+    with _UNSENT_LOCK:
+        if key in _UNSENT_ON_ANTHROPIC:
+            return
+        _UNSENT_ON_ANTHROPIC.add(key)
+    _logger.warning(
+        "providers: %s is a native Anthropic connection, which this engine "
+        "does not yet send %s on; the setting is configured for role %r and "
+        "is having no effect",
+        name, " or ".join(unsent), role)
+
+
 _NO_JSON_SCHEMA: set = set()
 _NO_JSON_SCHEMA_LOCK = threading.Lock()
 
@@ -1800,8 +1844,19 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                 msg = err.get("message") if isinstance(err, dict) else str(err)
                 raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
             if j.get("type") == "message_start":
-                usage = _merge_usage(
-                    usage, (j.get("message") or {}).get("usage"))
+                message = j.get("message") or {}
+                usage = _merge_usage(usage, message.get("usage"))
+                # The model of record. Anthropic states it once, on this
+                # event -- the same object this line already opens for
+                # `usage` -- and `served` was assigned `""` at the top of
+                # the function and never again, so `_note_served_model`
+                # returned on its own `if not served` and the ledger
+                # recorded served == requested by fallback. Both
+                # OpenAI-compatible stream readers do this; neither
+                # Anthropic one did, and the streaming path is the one the
+                # pipeline runs.
+                if not served:
+                    served = str(message.get("model") or "").strip()
             elif j.get("type") == "message_delta":
                 usage = _merge_usage(usage, j.get("usage"))
                 # Anthropic reports `max_tokens` here rather than on a choice.
@@ -2077,10 +2132,20 @@ def _chat_complete_once(
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
-    sink = token_sink.get()
+    raw_sink = token_sink.get()
+    streaming = bool(raw_sink)
 
-    if sink:
-        sink = _guarded_sink(sink)
+    # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
+    # fed and judges a 4KB tail plus a 16KB loop window, so one guard shared
+    # across this function's several stream attempts -- the two json_schema
+    # rejection stages and the placeholder-skeleton re-stream -- judges the
+    # concatenation of two different responses. Two attempts at the same
+    # object look exactly like the failure it exists to catch, so the guard
+    # could abort a healthy second attempt precisely because the first one
+    # was retried; and `_checked_len` carried over, so the first stride of
+    # the second response went unexamined. A guard is about ONE response.
+    def guarded():
+        return _guarded_sink(raw_sink)
 
     if prov["kind"] == "anthropic":
         h = {
@@ -2105,12 +2170,14 @@ def _chat_complete_once(
             if key in merged:
                 body[key] = merged[key]
 
-        if sink:
+        _warn_unsent_on_anthropic(prov, role, json_schema)
+
+        if streaming:
             return _sse_anthropic(
                 base,
                 h,
                 dict(body),
-                sink,
+                guarded(),
                 role=role,
                 model=model,
             )
@@ -2163,13 +2230,13 @@ def _chat_complete_once(
     url = base + "/chat/completions"
     headers = _headers(prov)
 
-    if sink:
+    if streaming:
         try:
             out = _sse_openai(
                 url,
                 headers,
                 dict(body),
-                sink,
+                guarded(),
                 role=role,
                 model=model,
             )
@@ -2189,7 +2256,7 @@ def _chat_complete_once(
                         url,
                         headers,
                         stage_one,
-                        sink,
+                        guarded(),
                         role=role,
                         model=model,
                     )
@@ -2208,7 +2275,7 @@ def _chat_complete_once(
                     url,
                     headers,
                     fallback_body,
-                    sink,
+                    guarded(),
                     role=role,
                     model=model,
                 )
@@ -2225,7 +2292,7 @@ def _chat_complete_once(
                 url,
                 headers,
                 retry_body,
-                sink,
+                guarded(),
                 role=role,
                 model=model,
             )
@@ -2468,9 +2535,20 @@ async def _chat_complete_async_once(
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
-    sink = token_sink.get()
-    if sink:
-        sink = _guarded_sink(sink)
+    raw_sink = token_sink.get()
+    streaming = bool(raw_sink)
+
+    # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
+    # fed and judges a 4KB tail plus a 16KB loop window, so one guard shared
+    # across this function's several stream attempts -- the two json_schema
+    # rejection stages and the placeholder-skeleton re-stream -- judges the
+    # concatenation of two different responses. Two attempts at the same
+    # object look exactly like the failure it exists to catch, so the guard
+    # could abort a healthy second attempt precisely because the first one
+    # was retried; and `_checked_len` carried over, so the first stride of
+    # the second response went unexamined. A guard is about ONE response.
+    def guarded():
+        return _guarded_sink(raw_sink)
 
     if prov["kind"] == "anthropic":
         h = {"x-api-key": prov["api_key"] or "", "anthropic-version": "2023-06-01", "content-type": "application/json"}
@@ -2478,9 +2556,10 @@ async def _chat_complete_async_once(
         for k in ANTHROPIC_SAMPLERS:
             if k in merged:
                 body[k] = merged[k]
+        _warn_unsent_on_anthropic(prov, role, json_schema)
         async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
-            if sink:
-                return await _sse_anthropic_async(base, h, dict(body), sink, client, role=role, model=model)
+            if streaming:
+                return await _sse_anthropic_async(base, h, dict(body), guarded(), client, role=role, model=model)
             _t0 = time.time()
             r = await client.post(base + "/v1/messages", headers=h, json=body)
             if r.status_code >= 400:
@@ -2499,9 +2578,9 @@ async def _chat_complete_async_once(
     _apply_json_mode(body, prov, model, json_mode, json_schema)
 
     async with httpx.AsyncClient(timeout=_httpx_timeout()) as client:
-        if sink:
+        if streaming:
             try:
-                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), sink, client, role=role, model=model)
+                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), guarded(), client, role=role, model=model)
             except LLMError as e:
                 if e.status_code == 400:
                     # Staged, as on the sync paths: response_format first so a
@@ -2511,7 +2590,7 @@ async def _chat_complete_async_once(
                         b1 = dict(body)
                         b1.pop("response_format", None)
                         try:
-                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b1, sink, client, role=role, model=model)
+                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b1, guarded(), client, role=role, model=model)
                             _note_json_object_rejected(prov, model)
                             recovered = True
                         except LLMError as e1:
@@ -2521,7 +2600,7 @@ async def _chat_complete_async_once(
                         b2 = dict(body)
                         b2.pop("response_format", None)
                         b2 = _strip_extended(b2)
-                        out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, sink, client, role=role, model=model)
+                        out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, guarded(), client, role=role, model=model)
                 else:
                     raise
             # Same placeholder-skeleton guard as the sync streaming path:
@@ -2532,7 +2611,7 @@ async def _chat_complete_async_once(
             if json_mode and _is_placeholder_json(out):
                 retry_body = dict(body)
                 retry_body.pop("response_format", None)
-                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), retry_body, sink, client, role=role, model=model)
+                out = await _sse_openai_async(base + "/chat/completions", _headers(prov), retry_body, guarded(), client, role=role, model=model)
             return out
         _t0 = time.time()
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
@@ -2650,7 +2729,10 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
                 msg = err.get("message") if isinstance(err, dict) else str(err)
                 raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
             if j.get("type") == "message_start":
-                usage = _merge_usage(usage, (j.get("message") or {}).get("usage"))
+                message = j.get("message") or {}
+                usage = _merge_usage(usage, message.get("usage"))
+                if not served:
+                    served = str(message.get("model") or "").strip()
             elif j.get("type") == "message_delta":
                 usage = _merge_usage(usage, j.get("usage"))
                 stop = (j.get("delta") or {}).get("stop_reason")
@@ -3035,6 +3117,31 @@ def _take_embed_group_locked():
     return group
 
 
+def _report_embed_coalescing(callers, texts_sent):
+    """Say what the coalescing saved, on the groups where it saved anything.
+
+    `_EMBED_STATS` is described in its own comment as "visible arithmetic for
+    did this help" and was visible to nothing: four counters incremented on
+    every call with no reader anywhere but a test. A number nobody can read is
+    not a measurement -- and this one answers a question that decides whether
+    the queue, the leader election and the deadlock backstop above are earning
+    their complexity.
+
+    Reported only when a group actually merged callers, because a group of one
+    is the ordinary case and would be a log line per embedding. The cumulative
+    totals ride along so the ratio is readable without adding up the lines.
+    """
+    if callers < 2:
+        return
+    stats = dict(_EMBED_STATS)
+    _logger.info(
+        "embed_coalesced callers=%d texts_sent=%d "
+        "total_callers=%d total_groups=%d total_texts_in=%d "
+        "total_texts_sent=%d",
+        callers, texts_sent, stats["callers"], stats["groups"],
+        stats["texts_in"], stats["texts_sent"])
+
+
 def _serve_embed_group(group, config):
     """One request for the whole group, each caller handed back its own."""
     order, position = [], {}
@@ -3046,6 +3153,7 @@ def _serve_embed_group(group, config):
     got = _embed_with_retry(order, config)
     _EMBED_STATS["groups"] += 1
     _EMBED_STATS["texts_sent"] += len(order)
+    _report_embed_coalescing(len(group), len(order))
     for waiter in group:
         # Routed by position in BOTH outcomes, including the fallback, so a
         # caller can never receive another caller's vector. The dedupe above

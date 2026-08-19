@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import json
 from pathlib import Path
+import re
 import time
 from types import SimpleNamespace
 
@@ -23,7 +25,9 @@ from language_runtime import (
     installed_language_packs, language_pack, linguistic,
     require_language_pack, story_language,
 )
-from llm.prompts import DEFAULT_PROMPTS, character_prompt, get_prompt
+from llm.prompts import (
+    DEFAULT_PROMPTS, character_prompt, default_prompts_for, get_prompt,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,21 +58,25 @@ def test_english_is_an_installed_complete_default_pack():
     assert packs["en"].adapter == "english"
     assert packs["en"].translation_status == "native"
     assert packs["en"].card("compositor")["ordinal_words"]["2"] == "second"
-    # 41, not 43: `move_repeat_screen` was retired with the quality re-ask it
-    # existed to gate, and `gap_medium` with the gap generator's second rung
-    # (superseded by `offscreen.profile_summary_record`, which does the same
-    # bounded call out of band and in state fields rather than prose). A floor
-    # rather than an equality, so a prompt going MISSING still fails here
-    # while a deliberate retirement is one edit.
-    assert len(packs["en"].card("system_prompts")["prompts"]) >= 41
+    # A FLOOR, not an equality, so a prompt going MISSING still fails here
+    # while a deliberate retirement is one edit. Two have been retired:
+    # `move_repeat_screen` with the quality re-ask it existed to gate, and
+    # `gap_medium` with the gap generator's second rung (superseded by
+    # `offscreen.profile_summary_record`, which makes the same bounded call
+    # out of band and into state fields rather than prose).
+    #
+    # Counted over what the pack PUBLISHES, not what it stores: the seven
+    # Director sheets are assembled from `specialists`/`prose_author_sheet`
+    # and deliberately carry no stored body of their own.
+    assert len(default_prompts_for("en")) >= 41
     # Perception composes every view deterministically and has no model role,
     # so it must carry no prompt: one in the pack is 28k characters shipped to
     # nobody, surfaced in the host's prompt editor as if it were editable, and
     # paid for again in every translation.
     assert "perception" not in packs["en"].card("system_prompts")["prompts"]
     # The Director monolith is gone; only the scoped prose-author sheet remains.
-    assert "director_resolve" not in packs["en"].card("system_prompts")["prompts"]
-    assert "director_resolve_lean" in packs["en"].card("system_prompts")["prompts"]
+    assert "director_resolve" not in default_prompts_for("en")
+    assert "director_resolve_lean" in default_prompts_for("en")
     assert "agents.common" in packs["en"].card("linguistics")
     assert len(packs["en"].ui_catalog) > 1000
 
@@ -82,7 +90,7 @@ def test_japanese_is_a_complete_selectable_story_and_ui_pack():
     assert japanese.adapter == "japanese"
     assert japanese.translation_status == "model-draft"
     assert require_language_pack("ja", capability="story") is japanese
-    assert set(japanese.card("system_prompts")["prompts"]) == set(DEFAULT_PROMPTS)
+    assert set(default_prompts_for("ja")) == set(DEFAULT_PROMPTS)
     assert set(japanese.ui_catalog) == set(packs["en"].ui_catalog)
     exceptions = json.loads((ROOT / "language_packs/ja/translation_exceptions.json")
                             .read_text(encoding="utf-8"))
@@ -338,3 +346,353 @@ def test_pack_lookup_rejects_invalid_and_uninstalled_ids():
     with pytest.raises(LanguagePackError):
         require_language_pack("es", capability="story")
     assert language_pack("en-US").id == "en"
+
+
+def _assembled_specialist_sheet(card, name):
+    spec = card["specialists"][name]
+    return spec["core"] + "".join(
+        spec["chunks"][channel] for channel in spec["order"])
+
+
+def test_every_director_sheet_the_editor_publishes_is_the_one_a_beat_assembles():
+    """The prompt editor must show the sheet the runtime actually loads.
+
+    A specialist sheet has exactly one authored source -- its core plus the
+    per-channel chunks scoping selects from. Publishing a second, separately
+    stored body under the same prompt id is a sheet with two spellings, and
+    the editor shows the copy no beat runs. Saving that copy as a preset
+    replaces the assembled sheet with it for every beat afterwards.
+    """
+    from language_runtime import apply_prompt_policy
+    from llm import prompts as prompt_module
+
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        card = pack.card("system_prompts")
+        published = prompt_module.default_prompts_for(pack.id)
+        for name in card["specialists"]:
+            pid = f"director_{name}"
+            expected = apply_prompt_policy(
+                _assembled_specialist_sheet(card, name), pack.id, pid)
+            assert published[pid] == expected, (
+                f"{pack.id} pack publishes a {pid} sheet that is not the "
+                f"assembly the runtime loads "
+                f"({len(published[pid])} chars vs {len(expected)})")
+        lean = apply_prompt_policy(
+            "".join(text for _name, text in card["prose_author_sheet"]),
+            pack.id, "director_resolve_lean")
+        assert published["director_resolve_lean"] == lean
+
+
+def test_no_pack_stores_a_second_copy_of_an_assembled_director_sheet():
+    """The duplication itself, refused at the source.
+
+    Byte-equal copies are drift in waiting; these had already drifted (the
+    English `director_spatial` body was 1,518 characters short of its own
+    assembly -- the whole `comms_ops` chunk -- and every Japanese sheet
+    differed). Keeping the bodies out of the card is what makes the equality
+    above unbreakable rather than merely currently true.
+    """
+    from llm.prompts import ASSEMBLED_SHEET_IDS
+
+    for pack in installed_language_packs(refresh=True).values():
+        stored = set(pack.card("system_prompts")["prompts"])
+        duplicated = sorted(stored & set(ASSEMBLED_SHEET_IDS))
+        assert not duplicated, (
+            f"language pack {pack.id!r} stores a second body for "
+            f"{', '.join(duplicated)}; those sheets are assembled from "
+            "`specialists`/`prose_author_sheet` and must live there only")
+
+
+# --- Decision 2: the deterministic recognizers inside `mind/` ---------------
+#
+# Two dozen recognizers -- belief-confidence calibration, claim similarity,
+# memory salience, durable-quote detection, mood valence -- decided their
+# answers from English literals in a pack engine, and the linguistics card had
+# no `mind.*` key at all, so a pack had nowhere to put a translation even if
+# somebody wrote one. `ja` declares `"story": true`, which under AGENTS.md is a
+# claim that deterministic recognition is covered in that language.
+
+#: (module, name) -> the live constant it must still equal in English, or None
+#: where the value is inlined at its call site and has no constant to compare.
+#: Parity is checked only while the constant EXISTS: the call sites belong to
+#: `mind/` and `persist/`, and repointing one deletes its constant.
+_MIND_LINGUISTICS = {
+    ("mind.theory_of_mind", "_STOPWORDS"): ("mind.theory_of_mind", "_STOPWORDS"),
+    ("mind.theory_of_mind", "_TOKEN_RE"): None,
+    ("mind.theory_of_mind", "_KIND_CUES"): ("mind.theory_of_mind", "_KIND_CUES"),
+    ("mind.affect", "AFFECT_LEXICON"): ("mind.affect", "AFFECT_LEXICON"),
+    ("mind.affect", "_QUADRANT_DEFAULTS"): None,
+    ("mind.memory", "_STOPWORDS"): ("mind.memory", "_STOPWORDS"),
+    ("mind.memory", "_WORD_RE"): None,
+    ("mind.memory", "_OLD_CUES"): ("mind.memory", "_OLD_CUES"),
+    ("mind.memory", "_RECENT_CUES"): ("mind.memory", "_RECENT_CUES"),
+    ("mind.memory", "_ENTITY_CANDIDATE_RE"): None,
+    ("mind.memory", "_ENTITY_BLOCKED"): None,
+    ("mind.memory", "_MOOD_TOKEN_RE"): None,
+    ("mind.memory", "_MOOD_VALENCE"): ("mind.memory", "_MOOD_VALENCE"),
+    ("mind.memory", "_PROMISE_QUERY_CUES"): None,
+    ("mind.memory", "_CLAUSE_SPLIT"): ("mind.memory", "_CLAUSE_SPLIT"),
+    ("mind.memory", "_SUPPORT_STOPWORDS"): ("mind.memory", "_SUPPORT_STOPWORDS"),
+    ("mind.memory", "_SUPPORT_WORD_RE"): None,
+    ("persist.commit_memory", "_SALIENCE_CUES"): None,
+    ("persist.commit_memory", "_DURABLE_QUOTE_MARKERS"): None,
+}
+
+
+def test_every_mind_recognizer_has_a_place_in_every_story_pack():
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        for module, name in _MIND_LINGUISTICS:
+            value = linguistic(module, name, pack.id)
+            assert value, f"{pack.id} pack has an empty {module}.{name}"
+
+
+def test_the_english_mind_cards_still_equal_the_constants_they_replace():
+    """A card that has drifted from the module is worse than no card.
+
+    Checked only while the constant still exists -- the call sites live in
+    `mind/` and `persist/`, and repointing one to `linguistic(...)` deletes
+    its constant. Until then this is what keeps the two spellings level.
+    """
+    import importlib
+
+    for (card_module, card_name), source in _MIND_LINGUISTICS.items():
+        if source is None:
+            continue
+        module_name, constant_name = source
+        constant = getattr(
+            importlib.import_module(module_name), constant_name, None)
+        if constant is None:
+            continue
+        value = linguistic(card_module, card_name, "en")
+        if hasattr(constant, "pattern"):
+            assert value.pattern == constant.pattern, card_name
+        else:
+            assert value == constant, f"en {card_module}.{card_name}"
+
+
+def test_japanese_mind_recognizers_actually_recognize_japanese():
+    """The point of decision 2: the claim `"story": true` becomes true.
+
+    English word regexes return NOTHING on unspaced Japanese, so before this
+    every claim comparison scored 0 against every other claim, every FTS query
+    was empty, `_inferred_kind` returned None on every claim (silently
+    retiring the confidence-calibration guard entirely), no quote was ever
+    kept verbatim and every memory scored the flat length-only salience.
+    """
+    import re
+
+    claim = "彼女は私が鍵を欲しがっていると思っている"
+    tokens = linguistic("mind.theory_of_mind", "_TOKEN_RE", "ja").findall(claim)
+    assert len(tokens) > 3, tokens
+    assert not linguistic(
+        "mind.theory_of_mind", "_TOKEN_RE", "en").findall(claim)
+
+    kinds = [kind for kind, cues
+             in linguistic("mind.theory_of_mind", "_KIND_CUES", "ja")
+             if any(re.search(cue, claim) for cue in cues)]
+    assert kinds[:1] == ["second_order"], kinds
+
+    line = "必ず戻ると約束する"
+    markers = linguistic("persist.commit_memory", "_DURABLE_QUOTE_MARKERS", "ja")
+    assert any(re.search(pattern, line) for pattern in markers["promise"])
+
+    salient = "血の匂いがした"
+    assert any(cue in salient for cue
+               in linguistic("persist.commit_memory", "_SALIENCE_CUES", "ja"))
+
+    mood = set(linguistic("mind.memory", "_MOOD_TOKEN_RE", "ja")
+               .findall("不安で眠れない"))
+    signs = [sign for words, sign
+             in linguistic("mind.memory", "_MOOD_VALENCE", "ja")
+             if mood & set(words)]
+    assert signs == [-1.0], signs
+
+    entities = linguistic(
+        "mind.memory", "_ENTITY_CANDIDATE_RE", "ja").findall(
+            "カレンさんが桟橋にいた")
+    assert "カレン" in entities, entities
+
+
+def test_the_quadrant_fallback_label_exists_in_every_packs_lexicon():
+    """`quadrant_label` is the label used when nothing the model proposed
+    survives reconciliation, and `label_matches` must then accept it. A
+    Japanese lexicon with English fallback labels would return a label its own
+    pack cannot judge, which reads as agreement rather than as a miss."""
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        lexicon = linguistic("mind.affect", "AFFECT_LEXICON", pack.id)
+        defaults = dict(
+            linguistic("mind.affect", "_QUADRANT_DEFAULTS", pack.id))
+        assert len(defaults) == 9, (pack.id, defaults)
+        for (v_sign, a_sign), label in defaults.items():
+            entry = lexicon.get(label)
+            assert entry is not None, (pack.id, label)
+            assert (entry["v"], entry["a"]) == (v_sign, a_sign), (
+                pack.id, label, entry)
+
+
+#: Names that reached the shipped prompt cards from one of the owner's live
+#: stories. A prompt is read by EVERY story, so an example drawn from one of
+#: them narrows what the model thinks the field is for (CLAUDE.md, fix the
+#: class not the instance). This is a tripwire, not the rule: the rule is that
+#: a prompt names the distinction -- "any craft whose inside is rooms you
+#: stand in", "the perceiver is you" -- and these two are what taught it.
+_STORY_INSTANCE_NAMES = ("TARDIS", "Hinami")
+
+
+def test_no_prompt_card_names_a_character_or_vehicle_from_one_story():
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        body = json.dumps(
+            (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json")
+            .read_text(encoding="utf-8"))
+        found = [name for name in _STORY_INSTANCE_NAMES if name in body]
+        assert not found, (
+            f"{pack.id} prompt card names {found} -- an instance from one "
+            "story, in a sheet every story reads")
+
+
+def test_every_nsfw_prompt_id_names_a_prompt_that_exists():
+    """`nsfw_prompt_ids` is an ALLOW-list, so an id naming nothing is not a
+    no-op waiting to be useful -- it is a claim that a sheet gets the overlay,
+    made in a place where being wrong is invisible. `perception` sat in both
+    packs' lists after the perception prompt was retired (perception composes
+    every view deterministically and has no model role at all)."""
+    from llm.prompts import ASSEMBLED_SHEET_IDS
+
+    for pack in installed_language_packs(refresh=True).values():
+        card = pack.card("system_prompts")
+        known = set(card["prompts"]) | set(ASSEMBLED_SHEET_IDS)
+        unmatched = sorted(set(card["nsfw_prompt_ids"]) - known)
+        assert not unmatched, (
+            f"language pack {pack.id!r} marks {unmatched} NSFW-overlaid, and "
+            "no such prompt exists")
+
+
+def test_the_conditions_shape_a_prompt_shows_is_the_shape_declared():
+    """`StateDiff.conditions` is `dict[str, list[dict]]`, and the worked
+    example writes a list of one -- while `resolve_repair` and the body
+    specialist's own chunk both printed `conditions:{condition_id:{...}}`, a
+    bare object under each id. `_coerce_conditions` accepts the singular form
+    and wraps it, so nothing ever failed and nothing said the sheet was
+    wrong; a model taught the singular simply cannot express the second
+    reading of a condition it is otherwise being asked for.
+    """
+    import re
+
+    singular = re.compile(r"conditions:\\?\{condition_id:\\?\{")
+    plural = re.compile(r"conditions:\\?\{condition_id:\\?\[")
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        blob = (ROOT / f"language_packs/{pack.id}/cards/system_prompts.json"
+                ).read_text(encoding="utf-8")
+        assert not singular.search(blob), (
+            f"{pack.id} shows conditions keyed to a bare object; the field "
+            "is dict[str, list[dict]]")
+        assert plural.search(blob), f"{pack.id} shows no conditions shape"
+
+
+def test_no_english_compat_export_survives_without_a_reader():
+    """`llm/prompts.py`'s module constants are eagerly-bound views of the
+    ENGLISH pack, kept under the comment "compatibility exports used by the
+    prompt editor, project checks, benches, and tests". Seven of them had no
+    reader anywhere -- so they were not compatibility with anything, they were
+    the English text of seven fragments resolved at import in a module whose
+    whole point is that the story language is resolved at USE time.
+
+    The rule, rather than the seven: a name bound from the English card at
+    import must be read by something, or it is a second, language-blind
+    spelling of a value the localized accessor already provides.
+    """
+    import ast
+
+    prompts_path = ROOT / "llm" / "prompts.py"
+    tree = ast.parse(prompts_path.read_text(encoding="utf-8"))
+    english_bound = []
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name) or target.id.startswith("_"):
+            continue
+        if "_ENGLISH" in ast.dump(node.value):
+            english_bound.append(target.id)
+    assert english_bound, "the compat exports vanished entirely"
+
+    searched = [path for package in ("agents", "core", "llm", "mind",
+                                     "persist", "story", "web", "tools",
+                                     "tests", "extension_runtime")
+                for path in (ROOT / package).rglob("*.py")
+                if path != prompts_path]
+    bodies = {path: path.read_text(encoding="utf-8") for path in searched}
+    orphans = [name for name in english_bound
+               if not any(re.search(rf"\b{name}\b", body)
+                          for body in bodies.values())]
+    assert not orphans, (
+        "English compat exports nothing reads: " + ", ".join(orphans))
+
+
+#: Authored fragments the prompt card also embeds verbatim inside prompt
+#: bodies, with the number of copies English currently carries. Four
+#: fragments, seventeen copies, each maintained by hand.
+_EMBEDDED_FRAGMENTS = {
+    "category_note": 5,
+    "book_type_note": 3,
+    "transit_note": 3,
+    "extra_parts_note": 6,
+}
+
+
+def _authored_leaves(value, path=()):
+    # Mapping, not dict: `LanguagePack.card()` hands back the frozen
+    # mappingproxy `language_runtime._freeze` builds, which is not a dict
+    # subclass -- type-testing for dict walks zero leaves and silently
+    # disarms the check, exactly as it once did in tools/project_check.py.
+    if isinstance(value, Mapping):
+        for key, child in value.items():
+            yield from _authored_leaves(child, path + (str(key),))
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            yield from _authored_leaves(child, path + (str(index),))
+    elif isinstance(value, str):
+        yield ".".join(path), value
+
+
+def test_every_embedded_copy_of_a_fragment_still_equals_the_fragment():
+    """Four fragments are ALSO pasted verbatim into seventeen prompt bodies.
+
+    `category_note` into five, `book_type_note` into three, `transit_note`
+    into three, `extra_parts_note` into six -- each a hand-maintained copy of
+    a value the card already holds once. Editing the fragment and not its
+    copies leaves two prompts teaching different rules for the same field,
+    and nothing anywhere compares them.
+
+    English is the reference pack and this holds it exact. The Japanese pack
+    is a known and separate gap: ZERO of its seventeen copies equal their own
+    Japanese fragment, because the translation pass rendered the fragment and
+    each embedded copy independently. Closing that needs either seventeen
+    re-translations or a fragment-substitution mechanism in the card format,
+    which is a bigger decision than this guard.
+    """
+    english = installed_language_packs(refresh=True)["en"]
+    card = english.card("system_prompts")
+    leaves = dict(_authored_leaves(card))
+    for name, expected in _EMBEDDED_FRAGMENTS.items():
+        fragment = str(card[name])
+        copies = [path for path, body in leaves.items()
+                  if path != name and fragment in body]
+        head = fragment[:60]
+        drifted = [path for path, body in leaves.items()
+                   if path != name and head in body and fragment not in body]
+        assert not drifted, (
+            f"{name} has drifted from its copies at: {drifted}")
+        assert len(copies) == expected, (
+            f"{name} is embedded {len(copies)} times, not {expected} -- "
+            "update the count deliberately, or a copy went missing")

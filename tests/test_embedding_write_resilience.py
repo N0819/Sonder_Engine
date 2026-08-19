@@ -557,3 +557,38 @@ def test_a_woken_caller_with_no_result_serves_itself(monkeypatch):
     got = providers.embed_texts_meta(["a memory"])
     assert got is not None, "a caller may be woken empty, never answered empty"
     assert not got.fallback
+
+
+def test_the_coalescing_arithmetic_reaches_somebody(monkeypatch, caplog):
+    """`_EMBED_STATS` calls itself "visible arithmetic for did this help" and
+    was visible to nothing: four counters incremented on every embedding call,
+    with no reader anywhere outside a test. The question it answers -- did the
+    queue, the leader election and the deadlock backstop buy anything -- is
+    the argument for that machinery existing, and it could not be asked.
+
+    Reported on the groups that actually merged callers; a group of one is the
+    ordinary case and would be a log line per embedding.
+    """
+    import logging
+
+    from llm import providers
+
+    monkeypatch.setattr(
+        providers, "_embed_with_retry",
+        lambda order, config: providers.EmbeddingBatch(
+            vectors=[[0.0] for _ in order], model_key="m", dimensions=1))
+
+    waiters = [providers._EmbedWaiter(["one", "two"]),
+               providers._EmbedWaiter(["two", "three"])]
+    with caplog.at_level(logging.INFO, logger="fiction_engine"):
+        providers._serve_embed_group(waiters, {})
+    merged = [r for r in caplog.records if "embed_coalesced" in r.getMessage()]
+    assert merged, [r.getMessage() for r in caplog.records]
+    # Three distinct texts for four requested: the saving is the point.
+    assert "texts_sent=3" in merged[0].getMessage()
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="fiction_engine"):
+        providers._serve_embed_group([providers._EmbedWaiter(["solo"])], {})
+    assert not [r for r in caplog.records
+                if "embed_coalesced" in r.getMessage()]
