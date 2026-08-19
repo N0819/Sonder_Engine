@@ -179,8 +179,6 @@ class PipelineContext:
     _player_room: Optional[str] = None
     _books: Optional[list[int]] = None
     _persona: Optional[dict] = None
-    _fiction_model: Optional[dict] = None
-    _simulation_clock: Optional[dict] = None
 
     # What the deterministic layer had to REPAIR in this beat's model output,
     # tagged with the step that raised each message (see StepTaggedWarnings)
