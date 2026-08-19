@@ -529,6 +529,15 @@ class TestRerollAndRestoreCannotDoubleLand:
 
 
 class TestTheTierIsReachable:
+    def test_the_commit_tail_schedules_the_rung(self):
+        """Superseded by `tests/test_commit_tail_producers.py`.
+
+        This asserted a substring of `inspect.getsource`, which cannot fail on a
+        behavioural change: `job = None if True else schedule_agent_ticks(ctx)`
+        keeps the text and never runs the call. The replacement drives a real
+        commit and asserts the producer was reached.
+        """
+        import tests.test_commit_tail_producers  # noqa: F401  (the real cover)
     def test_end_to_end_from_epoch_to_landed_tick(self, temp_db, monkeypatch):
         """The whole reduced turn, in order: private context, one character
         call, one Director adjudication, one atomic landing — state stamp,
