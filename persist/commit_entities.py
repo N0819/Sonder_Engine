@@ -18,15 +18,17 @@ def _is_gated_awareness(cond):
     """Is this an awareness condition at a level that removes a mind from play?
 
     `dazed` is deliberately not gated -- a dazed mind is present but degraded --
-    so it is not caught here either. See scene.NON_AWAKE_GATED.
+    so it is not caught here either. See scene.NON_AWAKE_GATED. The family is
+    `awareness_cond_level`'s: a kind spelled as the level word itself
+    (`unconscious`, `asleep`) gates exactly as the canonical kind does,
+    since the perception and planning readers now read it.
     """
-    from story.scene import NON_AWAKE_GATED, _normalize_awareness_level
-    if str(cond.get("kind") or "") != "awareness":
+    from story.scene import NON_AWAKE_GATED, awareness_cond_level
+    level = awareness_cond_level(cond)
+    if level is None:
         return False
     if not cond.get("active", True):
         return False
-    state = cond.get("state") if isinstance(cond.get("state"), dict) else {}
-    level = _normalize_awareness_level(state.get("level"))
     return level in NON_AWAKE_GATED
 
 

@@ -190,6 +190,21 @@ class TestBeingWokenBySomebodyElse:
         assert "c1" in endings
         assert any("Ended awareness 'asleep'" in w for w in warnings)
 
+    def test_a_kana_named_sleeper_can_be_roused(self):
+        """The shared attribution idiom matched names with \\b, and a kana
+        name has no word boundary against the particle that follows it --
+        so in a Japanese story the rouse cue fired and could never be
+        pinned to its sleeper, and the deterministic rouse exit was dead
+        for every kana-named mind. The release scan hit the identical
+        class; both now go through `name_boundary_pattern`."""
+        from language_runtime import language_scope
+
+        with language_scope("ja"):
+            endings, _ = _exits(
+                [_record(subject="タマモ")], "",
+                char_actions={"カエデ": [{"attempt": "タマモを揺さぶる"}]})
+        assert "c1" in endings
+
     def test_a_rouse_in_the_players_own_sequence_counts(self):
         endings, _ = _exits(
             [_record(subject=SLEEPER)], "You shake her awake.",

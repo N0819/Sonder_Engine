@@ -16,10 +16,14 @@ import re
 from story.character_schema import name_boundary_pattern
 from story.scene import (
     NON_AWAKE_GATED,
-    _normalize_awareness_level,
+    awareness_cond_level,
     awareness_conditions,
+    awareness_kind_level,
+    awareness_of,
 )
+from world.spatial import room_of
 
+from .common import _mask_quoted_spans
 from .director_lingua import _ling
 
 # Keep the keyword list small and specific so it does not fire on ordinary
@@ -93,11 +97,13 @@ _MAX_UNCONSCIOUSNESS_GAP = 5  # word tokens between a cue and its subject name
 
 def _sentence_break_positions(low):
     """Offsets in casefolded `low` that terminate a sentence -- a '.', '!',
-    '?' or newline -- excluding an abbreviation period (one preceded by a
-    short title word in _TITLE_ABBREV). Used as clause barriers so a cue and
-    a name on opposite sides of a real break are never paired."""
+    '?', their full-width forms, or newline -- excluding an abbreviation
+    period (one preceded by a short title word in _TITLE_ABBREV). Used as
+    clause barriers so a cue and a name on opposite sides of a real break
+    are never paired: without the full-width forms, a rope untied in one
+    Japanese sentence attributed itself to the bystander of the next."""
     breaks = []
-    for m in re.finditer(r"[.!?]|\n", low):
+    for m in re.finditer(r"[.!?。！？]|\n", low):
         if low[m.start()] == ".":
             wm = re.search(r"([a-z]+)$", low[:m.start()])
             if wm and wm.group(1) in _ling("_TITLE_ABBREV"):
@@ -165,7 +171,10 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
     for key, cond_value in (conditions or {}).items():
         cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
         for cond in cond_list:
-            if not isinstance(cond, dict) or cond.get("kind") != "awareness":
+            if not isinstance(cond, dict):
+                continue
+            level = awareness_cond_level(cond)
+            if level is None:
                 continue
             try:
                 if not int(cond.get("active", 1)):
@@ -178,9 +187,6 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
             )
             if subject != target:
                 continue
-            level = _normalize_awareness_level(
-                (cond.get("state") or {}).get("level")
-            )
             if level in NON_AWAKE_GATED:
                 unsupported.append((key, level))
                 break
@@ -258,7 +264,14 @@ def _clause_attributed_subjects(text_units, cue_re, subject_names,
     name is the waker. With the flag set, a name after the cue wins whenever
     the clause has one, and the preceding name is used only as a fallback ("she
     is shaken awake")."""
-    name_res = [(name, re.compile(r"\b" + re.escape(name.casefold()) + r"(?:'s)?\b"))
+    # `name_boundary_pattern`, not \b: a kana name has no word boundary
+    # against the particle that follows it, so under \b a Japanese cue could
+    # fire and never be pinned to its subject -- the rouse exit and the
+    # unconsciousness omission scan were both dead for kana-named minds.
+    # The possessive is consumed so "hinami's" does not leave a stray "s"
+    # inflating the word-gap count.
+    name_res = [(name, re.compile(
+                    name_boundary_pattern(name.casefold()) + "(?:'s|’s)?"))
                 for name in subject_names if name]
     if not name_res:
         return set()
@@ -401,14 +414,17 @@ def _already_ended(cond_value):
     return False
 
 
-def _ending_condition(record, reason):
+def _ending_condition(record, reason, kind="awareness"):
     """The same condition, closed. Built from the stored payload so nothing
     authored on it is lost, and keyed by the SAME condition_id -- commit
     UPDATEs on that id, and a fresh one would open a second row."""
     ended = dict(record.get("payload") or {})
     ended["condition_id"] = record["condition_id"]
     ended["subject_id"] = record["subject"]
-    ended["kind"] = "awareness"
+    # The payload's own kind survives (post-vocabulary, a live row may spell
+    # its family member differently); the fallback names the canonical kind
+    # of the floor that ends it.
+    ended["kind"] = str(ended.get("kind") or "").strip() or kind
     ended["active"] = 0
     ended["ended_reason"] = reason
     return ended
@@ -514,6 +530,356 @@ def _awareness_exits(chat_id, conditions, player_name, player_input,
     return endings, warnings
 
 
+# ---------------------------------------------------------------------------
+# RESTRAINT as a relation. `story/scene.py` reads each record's rung and
+# holder; whether a record actually STOPS a body needs the scene, so it is
+# decided here. A standing record (`bound`/`encased`, or `pinned` by a mass)
+# holds with nobody attending it. A hold (`held`, or `pinned` by a body) is a
+# live relation: it is in force only while the named holder is co-present and
+# conscious, and a record that names no holder the scene can vouch for is a
+# description handed to the Director, never a floor -- measured live, the
+# holderless "held" rows are embraces whose own descriptions say "not a
+# binding restraint" (chats 50/51) and a body gripping a console lever
+# (chats 57/58), not captives.
+
+
+def _restraint_holder_in(record, candidate_names):
+    """The tracked body the record's holder field names, or None.
+
+    Live rows name the holder inside a phrase as often as bare --
+    `restrained_by: "Dr. Moon's hand"`, `enveloped_by: "Elyndra's
+    entrance"` -- so a candidate name found inside the field, on its own
+    word boundaries, counts. But resolution has TEETH: the floor auto-ends
+    a hold the moment its resolved holder leaves or goes under, so a wrong
+    answer releases a body somebody is still holding. Three rules keep the
+    answer honest:
+
+    - A candidate matching the WHOLE phrase is that candidate, always.
+    - A match whose span sits inside a longer candidate's match is the
+      shorter spelling of the longer name ("Moon" inside "Dr. Moon's
+      hand") and is dropped, whatever order the pool offered them in.
+    - A phrase still naming MORE THAN ONE body ("the harness Sarah
+      buckled while Marcos held it") vouches for nobody: picking either
+      is a guess wearing a match, and ambiguity is the Director's to
+      settle -- the view already says the record vouches for nobody, and
+      a vouched-for-nobody hold blocks nobody and never auto-ends."""
+    by = str(record.get("by") or "").strip().casefold()
+    if not by:
+        return None
+    matches = []
+    for name in candidate_names:
+        label = str(name or "").strip()
+        if not label:
+            continue
+        if label.casefold() == by:
+            return label
+        for m in re.finditer(name_boundary_pattern(label.casefold()), by):
+            matches.append((m.start(), m.end(), label))
+    kept = {
+        label for s, e, label in matches
+        if not any(s2 <= s and e <= e2 and (e - s) < (e2 - s2)
+                   for s2, e2, _l in matches)
+    }
+    if len(kept) == 1:
+        return next(iter(kept))
+    return None
+
+
+def _restraint_holder_pool(sc, extra_names=()):
+    """Everything a holder field could legitimately name: tracked minds,
+    every body with a position, and every scene entity by name or id --
+    because a vine, a mechanism or a crowd-mass can hold a body exactly as a
+    person can."""
+    pool = [str(n) for n in (extra_names or ()) if n]
+    pool += [str(k) for k in ((sc or {}).get("positions") or {})]
+    for eid, ent in ((sc or {}).get("entities") or {}).items():
+        name = str((ent or {}).get("name") or "").strip()
+        if name:
+            pool.append(name)
+        pool.append(str(eid))
+    return pool
+
+
+def _hold_is_live(record, sc, amap, candidate_names):
+    """Is a non-standing record's grip still physically in force?
+
+    True: the holder is resolvable and nothing disproves the grip.
+    False: positively broken -- the holder is in another room or below
+    waking. A grip is a live relation between two bodies; it does not
+    persist from another room or from unconsciousness.
+    None: no holder the scene can vouch for. Unknown positions keep the
+    hold (absence of data is not evidence of departure); an unresolvable
+    holder never establishes one.
+    """
+    holder = _restraint_holder_in(record, candidate_names)
+    if holder is None:
+        return None
+    if awareness_of(amap or {}, holder) in NON_AWAKE_GATED:
+        return False
+    subject_room = room_of(sc, record.get("subject"))
+    holder_room = room_of(sc, holder)
+    if subject_room and holder_room and subject_room != holder_room:
+        return False
+    return True
+
+
+def _restraint_blocked_moves(sd, sc, records, amap, candidate_names):
+    """[(who, record)] for each self-relocation this diff writes that a
+    restraint actually stops. Judged per record, because restraints are
+    additive: a body is as restrained as the strongest thing on it, and six
+    live rows on one body (chat 80) must not be masked by the vaguest.
+
+    Being CARRIED somewhere while restrained is legitimate -- that is the
+    restrainer moving them, not them walking off -- and a position write
+    that changes nothing (or first places the body) is no move at all.
+    """
+    out = []
+    positions = sd.get("positions") if isinstance(sd, dict) else None
+    if not records or not isinstance(positions, dict):
+        return out
+    prior = (sc.get("positions") or {})
+    by_subject = {}
+    for record in records:
+        by_subject.setdefault(record["subject"].casefold(), []).append(record)
+    for who in list(positions):
+        subject_records = by_subject.get(str(who).casefold())
+        if not subject_records:
+            continue
+        was = prior.get(who)
+        if was is None or positions[who] == was:
+            continue
+        if (sc.get("contained") or {}).get(who):
+            continue
+        for record in subject_records:
+            if record.get("standing") or _hold_is_live(
+                    record, sc, amap, candidate_names):
+                out.append((who, record))
+                break
+    return out
+
+
+# ---------------------------------------------------------------------------
+# RELEASE (the exit side of restraint).
+#
+# The same trap the WAKING block above records for awareness, one section up:
+# a gate that can be entered and not left is worse than no gate. Measured
+# against the author's live corpus before this landed, the Director had never
+# once ended ANY condition by re-emitting it with active:0 (0 of 1483
+# resolves), and the restraint rows bear it out: 24 active, zero ever ended,
+# the oldest standing for a whole story. The same two causes, the same two
+# repairs: the resolve payload never showed the Director a restraint or its
+# condition_id (`_restraint_view` now does), and nothing deterministic
+# enforced the exits that are not judgement calls (`_restraint_exits`).
+#
+# What is deterministic here is narrower than waking, because restraints do
+# not end by themselves on a clock: a rope stays tied all night. The floor
+# ends only (1) a hold whose holder is POSITIVELY gone -- physics, not
+# adjudication -- and (2) a release the Director's own resolved prose already
+# asserts. Escape ATTEMPTS -- struggling, working at the knots -- are
+# contests, and contests are the Director's.
+
+
+#: How far after a release verb its object can sit. Deliberately tighter than
+#: `_MAX_UNCONSCIOUSNESS_GAP`: a transitive release names what it releases
+#: NEXT to the verb ("unties the ropes binding Hinami" is the long form), and
+#: every measured false positive of the wider window was a restrained name
+#: further out in the clause than any object ever sits ("unties her apron and
+#: hands Hinami the tray").
+_MAX_RELEASE_OBJECT_GAP = 3
+
+
+def _release_attempts(resolved_event, restrained_names):
+    """Restrained subjects whose release the resolved prose asserts.
+
+    Reads ONLY resolved_event -- the Director's own adjudicated account --
+    never declared acts (an attempt is not a completion). Cues are
+    completed-release verbs (`_RELEASE_CUE`); attribution is DELIBERATELY
+    stricter than `_clause_attributed_subjects`, because ending a restraint
+    on prose that did not assert a release frees a body the fiction still
+    holds. The cue battery in `tests/test_restraint_exits.py` is the measure
+    for every rule here -- there are no historical release sentences to
+    measure against, since no live restraint has ever ended:
+
+    - QUOTED SPANS ARE MASKED FIRST. "I will untie you" is a plan spoken by
+      someone still holding the rope, and resolved prose embeds dialogue
+      routinely.
+    - AN ACT INTRODUCED AS TRYING IS NOT COMPLETED. A cue immediately
+      preceded by an attempt marker ("tries to", "begins to", "cannot"), or
+      carrying one inside its own span (Japanese volitional-plus-とする
+      attaches to the verb the cue matched), is an attempt or a
+      failure -- and escape attempts are contests, which are the Director's.
+    - A TRANSITIVE RELEASE NAMES ITS OBJECT NEXT TO THE VERB. An object-side
+      name is accepted only within `_MAX_RELEASE_OBJECT_GAP` words of the
+      cue, and never past the cue's own "free"/"loose" token
+      (`_RELEASE_OBJECT_BOUNDARY`) -- past it, the freed thing was something
+      else and the name is a bystander ("works the cork loose and pours
+      Hinami a glass").
+    - A POSSESSION COMING LOOSE IS NOT THE PERSON COMING FREE. Subject-side
+      attribution ("Hinami wriggles free") never rides a possessive
+      occurrence: "Hinami's hair pulls loose" frees hair, not Hinami.
+
+    Names are matched with `name_boundary_pattern`, not `\\b`, because a
+    kana name has no word boundary against the particle that follows it --
+    under the shared idiom a Japanese release could never be pinned to its
+    subject at all."""
+    if not restrained_names:
+        return set()
+    masked, _spans = _mask_quoted_spans(str(resolved_event or ""))
+    low = masked.casefold()
+    if not low:
+        return set()
+    name_hits = []
+    for name in restrained_names:
+        label = str(name or "").strip()
+        if not label:
+            continue
+        for m in re.finditer(name_boundary_pattern(label.casefold()), low):
+            name_hits.append((m.start(), m.end(), label))
+    if not name_hits:
+        return set()
+    marker = _ling("_RELEASE_ATTEMPT_MARKER")
+    boundary = _ling("_RELEASE_OBJECT_BOUNDARY")
+    breaks = _sentence_break_positions(low)
+    released = set()
+    for cm in _ling("_RELEASE_CUE").finditer(low):
+        cs, ce = cm.start(), cm.end()
+        if marker.search(low, cs, ce):
+            continue                      # the attempt rode into the span
+        last = None
+        for mm in marker.finditer(low, 0, cs):
+            last = mm
+        if (last is not None
+                and not any(last.end() <= p < cs for p in breaks)
+                and len(re.findall(r"\w+", low[last.end():cs])) <= 1):
+            continue                      # "tries to work ... free"
+        bm = boundary.search(low, ce, ce + 40)
+        limit = bm.start() if bm else None
+        best = None                       # (side_rank, word_gap, name)
+        for ns, ne, name in name_hits:
+            if ns >= ce:                  # object side: the thing released
+                if limit is not None and ns >= limit:
+                    continue
+                if any(ce <= p < ns for p in breaks):
+                    continue
+                gap = len(re.findall(r"\w+", low[ce:ns]))
+                if gap > _MAX_RELEASE_OBJECT_GAP:
+                    continue
+                side = 0
+            elif ne <= cs:                # subject side: "Hinami slips free"
+                if low[ne:ne + 2] in ("'s", "’s"):
+                    continue
+                if any(ne <= p < cs for p in breaks):
+                    continue
+                gap = len(re.findall(r"\w+", low[ne:cs]))
+                if gap > _MAX_UNCONSCIOUSNESS_GAP:
+                    continue
+                side = 1
+            else:
+                continue
+            if best is None or (side, gap) < best[:2]:
+                best = (side, gap, name)
+        if best is not None:
+            released.add(best[2])
+    return released
+
+
+def _restraint_view(records, sc, amap, clock, sd_time, candidate_names):
+    """The `active_restraints` block the resolve payload carries.
+
+    The Director has never once ended a restraint condition, and the first
+    reason is that it was never shown one. Each entry names the condition_id
+    it must re-emit with active:0, who or what holds the subject, whether
+    that hold is still physically live, and how long the body has been
+    restrained on the simulation clock."""
+    view = []
+    for record in records or []:
+        elapsed = _sleep_elapsed(record, clock, sd_time)
+        hold = (None if record.get("standing")
+                else _hold_is_live(record, sc, amap, candidate_names))
+        view.append({
+            "condition_id": record["condition_id"],
+            "subject": record["subject"],
+            "level": record["level"],
+            "by": record["by"],
+            "means": record["means"],
+            "escapable_by": record["escapable_by"],
+            "holds_unattended": bool(record.get("standing")),
+            # None: this hold names no holder the scene can vouch for, so
+            # it blocks nothing and only the Director can settle it.
+            "holder_still_holding": hold,
+            "restrained_for_seconds": (None if elapsed is None
+                                       else round(elapsed)),
+            "blocks_self_relocation": bool(record.get("standing") or hold),
+        })
+    return view
+
+
+def _restraint_exits(records, resolved_event, sc, amap, candidate_names):
+    """Restraint conditions the world has ENDED this beat, whatever the diff says.
+
+    Returns (endings, warnings) exactly as `_awareness_exits` does: endings
+    is {condition_id: [ending_condition]} to merge into
+    state_diff.conditions, warnings is prose for ctx.
+
+    Two rules, each covering only the part of release that is not a
+    judgement call:
+
+    1. A HOLD NEEDS A HOLDER. A hold (`held`, or `pinned` by a body) whose
+       named holder is positively elsewhere or below waking has physically
+       ended -- a grip is a live relation, and nobody goes on gripping from
+       another room or from unconsciousness. Standing restraints are
+       untouched: a knot stays tied when the tier walks away. So is a hold
+       whose holder the scene cannot vouch for -- ending what cannot be
+       verified is adjudication, and the view already tells the Director the
+       record vouches for nobody.
+
+    2. A RELEASE THE PROSE ASSERTS. A completed-release cue pinned to a
+       restrained subject in resolved_event ends every record on them: the
+       Director adjudicated the release when it wrote the sentence, and the
+       floor only encodes what the prose already asserts. A partial release
+       (one cuff of two) is the Director's to re-impose, which the warning
+       says.
+    """
+    endings, warnings = {}, []
+    if not records:
+        return endings, warnings
+
+    # 1. holds whose holder is positively gone
+    for record in records:
+        if record.get("standing"):
+            continue
+        if _hold_is_live(record, sc, amap, candidate_names) is False:
+            endings[record["condition_id"]] = [
+                _ending_condition(record, "the holder is no longer holding "
+                                  "them", kind="restraint")]
+            warnings.append(
+                f"Ended restraint '{record['level']}' on {record['subject']}"
+                + (f" (by {record['by']})" if record["by"] else "")
+                + ": the holder is in another room or below waking, and a "
+                "grip cannot outlive its holder's presence. Narrate the "
+                "release if it has not been, or re-impose the hold with the "
+                "holder actually there.")
+
+    # 2. releases the resolved prose asserts
+    released = _release_attempts(
+        resolved_event, [r["subject"] for r in records])
+    for record in records:
+        if record["subject"] not in released:
+            continue
+        if record["condition_id"] in endings:
+            continue
+        endings[record["condition_id"]] = [
+            _ending_condition(record, "a release narrated this beat",
+                              kind="restraint")]
+        warnings.append(
+            f"Ended restraint '{record['level']}' on {record['subject']}: "
+            "the resolved prose asserts their release and the diff did not "
+            "record it. If anything still holds them -- a second binding, "
+            "one cuff of two -- re-impose it as its own condition.")
+
+    return endings, warnings
+
+
 def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions,
                                         tracked_names):
     """Named, tracked characters narrated as losing consciousness with no
@@ -531,7 +897,8 @@ def _untracked_unconsciousness_subjects(resolved_event, dialogue_log, conditions
     aware_subjects = set()
     for cond_value in (conditions or {}).values():
         for c in (cond_value if isinstance(cond_value, list) else [cond_value]):
-            if isinstance(c, dict) and c.get("kind") == "awareness":
+            if (isinstance(c, dict)
+                    and awareness_kind_level(c.get("kind")) is not None):
                 aware_subjects.add(str(c.get("subject_id") or "").casefold())
 
     flagged = _clause_attributed_subjects(
