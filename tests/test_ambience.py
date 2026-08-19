@@ -1128,6 +1128,9 @@ class TestAPinResolvesTheSoundItPinned:
         monkeypatch.setattr(amb, "freesound_sound",
                             lambda sid, key=None: by_id.get(int(sid)))
         # The search endpoint must not be consulted for a known id at all.
+        # Its positive control is the test below: an UNPINNED query with the
+        # same stub installed must reach it, or "the pinned path did not
+        # search" is a claim about a stub nobody calls.
         monkeypatch.setattr(amb, "search_freesound", lambda *a, **k: (_ for _ in ()).throw(
             AssertionError("a pinned id must not go through the text search")))
         monkeypatch.setattr(amb, "_fetch_preview",
@@ -1146,6 +1149,27 @@ class TestAPinResolvesTheSoundItPinned:
         assert [l["role"] for l in manifest["layers"]] == ["tone", "weather"]
         # Distinct files. One name for two layers is the bug itself.
         assert len({l["file"] for l in manifest["layers"]}) == 2
+
+    def test_an_unpinned_query_does_reach_the_text_search(self, monkeypatch):
+        """The positive control for the throw-stub above.
+
+        The pinned test asserts an absence -- `search_freesound` was not
+        called -- and an absence is also what a stub on a name nothing reads
+        produces. This installs the same stub and takes the ordinary path,
+        which must reach it.
+        """
+        from dressing import ambience as amb
+
+        calls = []
+        monkeypatch.setattr(amb, "ambience_settings",
+                            lambda: {"source": "freesound"})
+        monkeypatch.setattr(amb, "search_freesound",
+                            lambda query, **kw: calls.append(query) or [])
+
+        amb.search_candidates("rain on a canal")
+        assert calls == ["rain on a canal"], (
+            "an unpinned query did not reach search_freesound: the stub the "
+            "pinned test installs cannot fire")
 
     def test_a_missing_sound_is_an_error_not_a_wrong_sound(
             self, tmp_path, monkeypatch):
