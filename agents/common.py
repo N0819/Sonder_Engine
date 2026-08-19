@@ -2256,9 +2256,14 @@ def observer_label_fn(chat, observer_name, cast):
     at. She had asked twice, in dialogue, and been refused both times; six
     beats later she used the surname aloud.
 
-    Same rule as `agents/perception.py`'s own gate, from the same `known` map
-    and through the same `_unknown_actor_label`, so this is one identity floor
-    rather than a second one that can drift from it.
+    Same rule as `agents/perception.py`'s own gate, from the same `known` map,
+    through the same `_recognizes` predicate and the same
+    `_unknown_actor_label`, so this is one identity floor rather than a second
+    one that can drift from it. The predicate is the half that HAD drifted:
+    membership in `known` is string equality, and perception asks `_recognizes`
+    at nine sites, so a rank or title variant of somebody the observer knows
+    ("Commander Riker" to a mind introduced to "William T. Riker") was a
+    person in the view and a stranger in every payload beside it.
     """
     known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
     sheets = {}
@@ -2277,7 +2282,7 @@ def observer_label_fn(chat, observer_name, cast):
 
     def label(name):
         text = str(name or "").strip()
-        if not text or text == observer_name or text in known:
+        if not text or text == observer_name or _recognizes(text, known):
             return text
         sheet = sheets.get(text)
         if sheet is None:
@@ -2335,7 +2340,10 @@ def observer_name_scrub(chat, observer_name, cast):
     subjects = []
     for sheet in sheets:
         name = character_name(sheet)
-        if not name or name == observer_name or name in known:
+        # `_recognizes`, not membership: the same predicate `observer_label_fn`
+        # above resolves a label with, so a mind's structured payload and its
+        # prose cannot disagree about who it has met.
+        if not name or name == observer_name or _recognizes(name, known):
             continue
         forms = {name} | {
             str(alias) for alias in (character_scene_keys(sheet)[1:] or [])
