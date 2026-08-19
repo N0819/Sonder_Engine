@@ -471,13 +471,15 @@ function switchFrame(frameId) {
   renderChat();
 }
 
-// #b-world/#b-cast/#b-attire/#b-dlg all no-op with no chat open (each
-// checks `if (!S.chatId) return` at the top of its own handler already) --
-// disabling them when there's nothing for them to act on turns a silent
-// dead click into an honest, visibly-inert control.
+// Every toolbar button whose handler opens with `if (!S.chatId) return` is
+// listed here. Such a button no-ops with no chat open, and disabling it turns
+// a silent dead click into an honest, visibly-inert control. The membership
+// test is that guard and nothing else -- #b-style had it and was left out of
+// the list, so it stayed lit and did nothing. A test derives the set from
+// settings.js and holds this list equal to it.
 function updateChatScopedButtons() {
   const ready = !!S.chatId;
-  for (const id of ["#b-world", "#b-cast", "#b-attire", "#b-dlg"]) {
+  for (const id of ["#b-world", "#b-cast", "#b-attire", "#b-dlg", "#b-style"]) {
     const btn = $(id);
     if (btn) btn.disabled = !ready;
   }

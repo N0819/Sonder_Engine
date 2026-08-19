@@ -5,6 +5,7 @@ checks pin the small sequencing guards that prevent delayed fetches and mutable
 navigation state from crossing story/provider boundaries.
 """
 
+import re
 from pathlib import Path
 
 
@@ -261,3 +262,18 @@ def test_boot_reports_a_language_pack_the_server_could_not_use():
     assert "toast(S.boot.language_error" in block
     assert "let languagePackErrorReported = false;" in APP
     assert "languagePackErrorReported = true;" in block
+
+
+def test_every_chat_scoped_toolbar_button_is_disabled_without_a_chat():
+    """The membership rule is the handler's own guard, so derive the set from
+    it rather than trusting a hand-kept list. `#b-style` had the guard and was
+    missing from the list, so with no story open it stayed lit and did nothing
+    -- the silent dead click the disabling exists to eliminate."""
+    guarded = set(re.findall(
+        r'\$\("(#b-[\w-]+)"\)\.onclick = async \(\) => \{\s*\n\s*if \(!S\.chatId\) return;',
+        SETTINGS))
+    assert guarded, "no chat-scoped handlers found -- the pattern moved"
+
+    block = _between(CHAT, "function updateChatScopedButtons()", "function renderChat()")
+    listed = set(re.findall(r'"(#b-[\w-]+)"', block))
+    assert listed == guarded, f"listed {sorted(listed)} vs guarded {sorted(guarded)}"
