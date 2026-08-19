@@ -40,6 +40,7 @@ from world.spatial import (
     _body_interior_holder,
     ambient_scope,
     containment_conceals,
+    effective_room_size,
     entity_arc,
     has_visual,
     hear_level,
@@ -879,8 +880,12 @@ def crowds_for_room(cid, sc, room_id):
     """
     if not room_id:
         return []
-    room = ((sc or {}).get("rooms") or {}).get(room_id) or {}
-    size = room.get("size")
+    # `effective_room_size`, not the raw authored string: an unsized "Great
+    # Hall" is `large` for proximity grading and was `medium` here, so
+    # `density("a throng", ...)` returned PACKED under one and CRUSH under the
+    # other -- and CRUSH is what `terrain` turns into a `membrane` you cannot
+    # see across and what `drift` turns into CARRY. One question, one answer.
+    size = effective_room_size(sc or {}, room_id)
     out = []
     for crowd in crowds_model.crowds_in_room(wget(cid, CROWDS_KEY, []) or [],
                                              room_id):
