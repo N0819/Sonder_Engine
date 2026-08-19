@@ -14,7 +14,13 @@ import time
 from web import app
 from persist.checkpoints import restore_checkpoint, snapshot_state
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from story.scene import active_cast, private_knowledge_for, set_char_state, set_char_status
+from story.scene import (
+    active_cast,
+    extant_cast,
+    private_knowledge_for,
+    set_char_state,
+    set_char_status,
+)
 from persist.commit import commit_cast_changes
 
 
@@ -120,6 +126,62 @@ class TestActiveCastIsFrameAware:
         future_cast = active_cast(chat_id, frame_id=future["id"])
         assert [c["id"] for c in future_cast] == [alice]
         assert json.loads(future_cast[0]["cstate"]) == {"mood": "calm"}
+
+
+class TestExtantCastIsFrameAware:
+    """A frame is an ERA. `extant_cast` answers "is this a person the story
+    knows about", and the story is a different story in each frame: a
+    character written out in the era being played is not someone that era
+    knows about, however alive they are in the present. The parameter was
+    accepted and never read, so every caller that passed one -- the carrier
+    roster, the gap subjects, the telling listeners -- asked about an era and
+    was answered about the base row.
+    """
+
+    def test_a_character_departed_only_in_a_future_frame_is_gone_from_that_frame(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        alice = _make_char(temp_db, "Alice")
+        _add_to_chat(temp_db, chat_id, alice, status="active", state={"mood": "calm"})
+        future = app.frames_create(chat_id, {"label": "Future", "ordinal": 10, "kind": "future"})
+        set_char_status(chat_id, alice, "departed", frame_id=future["id"])
+
+        assert [c["id"] for c in extant_cast(chat_id, frame_id=None)] == [alice]
+        assert extant_cast(chat_id, frame_id=future["id"]) == []
+
+    def test_a_character_departed_in_the_present_is_still_extant_in_a_frame_that_kept_them(self, temp_db):
+        """The override runs in both directions, exactly as `active_cast`'s
+        does. An era that never wrote them out still knows them."""
+        chat_id = _make_chat(temp_db)
+        alice = _make_char(temp_db, "Alice")
+        _add_to_chat(temp_db, chat_id, alice, status="departed", state={"mood": "calm"})
+        past = app.frames_create(chat_id, {"label": "Past", "ordinal": -10, "kind": "past"})
+        set_char_status(chat_id, alice, "active", frame_id=past["id"])
+
+        assert extant_cast(chat_id, frame_id=None) == []
+        assert [c["id"] for c in extant_cast(chat_id, frame_id=past["id"])] == [alice]
+
+    def test_an_untouched_frame_falls_back_to_the_base_row_and_its_state(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        alice = _make_char(temp_db, "Alice")
+        _add_to_chat(temp_db, chat_id, alice, status="dormant", state={"mood": "calm"})
+        future = app.frames_create(chat_id, {"label": "Future", "ordinal": 10, "kind": "future"})
+
+        rows = extant_cast(chat_id, frame_id=future["id"])
+        assert [c["id"] for c in rows] == [alice]
+        assert json.loads(rows[0]["cstate"]) == {"mood": "calm"}
+
+    def test_the_frame_row_supplies_the_state_too(self, temp_db):
+        """The roster and the state it carries must come from the same era,
+        or a caller reads an era's cast with the present's private state."""
+        chat_id = _make_chat(temp_db)
+        alice = _make_char(temp_db, "Alice")
+        _add_to_chat(temp_db, chat_id, alice, status="active", state={"mood": "calm"})
+        future = app.frames_create(chat_id, {"label": "Future", "ordinal": 10, "kind": "future"})
+        set_char_state(chat_id, alice, json.dumps({"mood": "terrified"}), frame_id=future["id"])
+
+        rows = extant_cast(chat_id, frame_id=future["id"])
+        assert json.loads(rows[0]["cstate"]) == {"mood": "terrified"}
+        assert json.loads(extant_cast(chat_id)[0]["cstate"]) == {"mood": "calm"}
 
 
 class TestPrivateKnowledgeIsFrameAware:
