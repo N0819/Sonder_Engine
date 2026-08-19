@@ -368,14 +368,32 @@ def _ling(name):
     return linguistic("agents.perception", name)
 
 
-# Closing quotes and brackets ride with the sentence they end.
-# Sentence end, script-aware. The ASCII branch needs trailing whitespace;
-# the CJK branch must not, because Japanese writes no space after 。 -- so
-# an English-only splitter returned the WHOLE Japanese event as one
-# "sentence", and every guard that keeps a safe subset of sentences (the
-# concealment redactor above all) had no subset to keep and failed open.
+# Sentence end, script-aware, and the module's ONLY definition -- a second,
+# weaker binding of this name lived 1,250 lines below and silently won, so
+# every reader got a splitter that treated neither `...` nor a trailing
+# bracket as an ending while this comment described one that did.
+#
+# The ASCII branch needs trailing whitespace; the CJK branch must not,
+# because Japanese writes no space after 。 -- so an English-only splitter
+# returned the WHOLE Japanese event as one "sentence", and every guard that
+# keeps a safe subset of sentences (the concealment redactor above all) had
+# no subset to keep.
+#
+# The terminator class carries `…`, because an ellipsis is how prose ends a
+# sentence and a beat written with one reached the redactor as a single
+# unsplittable block that had to be thrown away whole to protect one clause.
+#
+# Closing quotes and brackets ride WITH the sentence they end -- '…to me!?"
+# The voice is…' must keep its quote -- so they sit inside the LOOKBEHIND
+# rather than inside the match, where the split would eat them. That was the
+# deleted twin's one genuine advantage over this one, and the reason the
+# repair is a union rather than a deletion. Python requires a lookbehind to
+# be fixed-width, hence one alternative per closer count rather than a `*`.
 _SENTENCE_SPLIT = re.compile(
-    r"(?<=[.!?…])[\"'”’)\]]*\s+|(?<=[。！？])[」』\"'”’)\]]*\s*")
+    r"(?<=[.!?…])\s+"
+    r"|(?<=[.!?…][\"'”’)\]])\s+"
+    r"|(?<=[.!?…][\"'”’)\]][\"'”’)\]])\s+"
+    r"|(?<=[。！？])[」』\"'”’)\]]*\s*")
 
 # Does this sentence ASSERT SIGHT -- somebody looking at something, in the
 # verbs a view actually uses for it. Read by `_strip_self_narration`'s floor,
@@ -1618,23 +1636,6 @@ def _pronouns_for_perceiver(all_pronouns, perceiver, known):
         who: pronouns for who, pronouns in (all_pronouns or {}).items()
         if _recognizes(who, recognized)
     }
-
-
-# Sentence boundaries, tolerating a closing quote between the terminal
-# punctuation and the space ('...to me!?" The voice is...'). A lone
-# `(?<=[.!?])\s+` cannot split there, which silently made a whole passage one
-# "sentence" and let the self-narration guard pass everything. Two alternated
-# lookbehinds rather than an optional group, because Python requires them
-# fixed-width -- and this way the quote stays attached to the sentence it
-# closes instead of being eaten by the split.
-# Sentence end, script-aware. The ASCII branch needs trailing whitespace;
-# the CJK branch must not, because Japanese writes no space after 。 -- so
-# an English-only splitter returned the WHOLE Japanese event as one
-# "sentence", and every guard that keeps a safe subset of sentences (the
-# concealment redactor above all) had no subset to keep and failed open.
-_SENTENCE_SPLIT = re.compile(
-    r'(?<=[.!?])\s+|(?<=[.!?]["\u201d\u2019\'])\s+'
-    r'|(?<=[\u3002\uff01\uff1f])[\u300d\u300f"\u201d\u2019\')\]]*\s*')
 
 
 def _strip_self_narration(view, perceiver_name, other_names=(), refusals=None):
