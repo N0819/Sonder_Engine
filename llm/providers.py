@@ -1800,8 +1800,19 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                 msg = err.get("message") if isinstance(err, dict) else str(err)
                 raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
             if j.get("type") == "message_start":
-                usage = _merge_usage(
-                    usage, (j.get("message") or {}).get("usage"))
+                message = j.get("message") or {}
+                usage = _merge_usage(usage, message.get("usage"))
+                # The model of record. Anthropic states it once, on this
+                # event -- the same object this line already opens for
+                # `usage` -- and `served` was assigned `""` at the top of
+                # the function and never again, so `_note_served_model`
+                # returned on its own `if not served` and the ledger
+                # recorded served == requested by fallback. Both
+                # OpenAI-compatible stream readers do this; neither
+                # Anthropic one did, and the streaming path is the one the
+                # pipeline runs.
+                if not served:
+                    served = str(message.get("model") or "").strip()
             elif j.get("type") == "message_delta":
                 usage = _merge_usage(usage, j.get("usage"))
                 # Anthropic reports `max_tokens` here rather than on a choice.
@@ -2650,7 +2661,10 @@ async def _sse_anthropic_async(base, headers, body, sink, client, role=None, mod
                 msg = err.get("message") if isinstance(err, dict) else str(err)
                 raise LLMError(f"provider stream error: {msg or 'overloaded'}", 0, True)
             if j.get("type") == "message_start":
-                usage = _merge_usage(usage, (j.get("message") or {}).get("usage"))
+                message = j.get("message") or {}
+                usage = _merge_usage(usage, message.get("usage"))
+                if not served:
+                    served = str(message.get("model") or "").strip()
             elif j.get("type") == "message_delta":
                 usage = _merge_usage(usage, j.get("usage"))
                 stop = (j.get("delta") or {}).get("stop_reason")
