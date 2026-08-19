@@ -148,16 +148,30 @@ def _hex_from_hsl(hue, saturation=AUTO_SATURATION, lightness=AUTO_LIGHTNESS):
     return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
 
 
-def auto_dialogue_color(uid, sheet=None):
-    """The colour a character gets when nobody has chosen one.
+def _derived_hue(uid, sheet):
+    """The hue a character derives from who they are, or None.
+
+    ONE DERIVATION, because there were two: `auto_dialogue_color` and the
+    inline block in `resolve_cast_colors` computed the same
+    `_hue_from(personality_digest(...) or uid)` chain, and only one of them
+    was ever called in production. A rule written twice is a rule free to
+    drift, and its `hue is None` guard proved the drift had already started
+    -- reachable in one copy, dead in the other.
 
     The digest drives the hue; the uid is the fallback for a card with no
     authored psychology at all, and only the fallback -- otherwise two
     identically-authored characters would be told apart by an id the reader
     cannot see, and the colour would stop meaning anything about the person.
     """
-    seed = personality_digest(sheet) or str(uid or "")
-    hue = _hue_from(seed)
+    return _hue_from(personality_digest(sheet) or str(uid or ""))
+
+
+def auto_dialogue_color(uid, sheet=None):
+    """The colour a character gets when nobody has chosen one, ignoring the
+    rest of the cast. `resolve_cast_colors` is what a story renders with --
+    it derives the same hue and then pushes it clear of everyone else's.
+    """
+    hue = _derived_hue(uid, sheet)
     if hue is None:
         return ""
     return _hex_from_hsl(hue)
@@ -212,10 +226,11 @@ def resolve_cast_colors(cast):
     for uid, member in entries:
         if uid in resolved:
             continue
-        hue = _hue_from(personality_digest(member.get("sheet")) or uid)
-        if hue is None:
-            continue
-        hue = _spread(hue, taken)
+        # Never None here: `entries` admits only a member with a non-empty
+        # uid, so the seed is non-empty even for a card with no psychology at
+        # all. The guard this replaces was copied from `auto_dialogue_color`,
+        # where a falsy uid IS possible and the empty string is the answer.
+        hue = _spread(_derived_hue(uid, member.get("sheet")), taken)
         taken.append(hue)
         resolved[uid] = _hex_from_hsl(hue)
 
