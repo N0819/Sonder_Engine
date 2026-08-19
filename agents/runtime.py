@@ -34,7 +34,7 @@ from .background import background_react
 from .character import character_step
 from .common import _assert_plan_materialized, _dict
 from .director import director_establish, director_interpret, director_resolve
-from .loops import interaction_loop, reaction_loop
+from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import mapping_quick, mapping_stage
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
@@ -746,6 +746,54 @@ def _rehydrate_loop_results(ctx, key, content):
         if isinstance(result, dict):
             target.setdefault(cid, result)
 
+
+def _rehydrate_side_channels(ctx, key, content):
+    """Rebuild everything a stage left on `ctx` that its step content does NOT
+    carry, after the pre-turn checkpoint has been restored.
+
+    `ctx[key] = content` restores a stage's OUTPUT. Four cross-stage values are
+    not part of any output: the two loop result maps (above), the two loop
+    micro-view maps, and `outcome_scene`. All five were written by direct
+    assignment, so every resume and every single-step reroll silently ran the
+    remaining stages against a different context than the uninterrupted turn.
+
+    `outcome_scene` is the costly one. The narrator reads it for its spatial
+    frame, its position deltas, its portal states and its sensory manifest,
+    with `get_scene()` as the fallback -- and `perception_outcome`'s own
+    comment says why that fallback is wrong: the committed scene describes the
+    space with LAST beat's facing on movement beats, because commit runs after
+    the narrator. So a narrator reroll restored the pre-turn checkpoint and
+    then re-rendered against it with the beat's own movement missing.
+    Measured: 450 of 451 multi-variant narrator steps in the live corpus sit
+    on turns that also carry a commit step.
+
+    Perception is deterministic and makes no provider call, so the stage is
+    simply re-run for its side effects rather than having its merge duplicated
+    here -- the merge is a pure function of (restored scene, director_resolve)
+    and duplicating it is how the two copies drift. The stored content stays
+    authoritative: only what the stage left on `ctx` is taken. Best-effort,
+    because a side channel must never be the reason a reroll fails.
+    """
+    _rehydrate_loop_results(ctx, key, content)
+    if key in ("interaction_loop", "reaction_loop"):
+        rehydrate_loop_views(ctx, key, content)
+        return
+    if key != "perception_outcome":
+        return
+    if "outcome_scene" in ctx._extra or not ctx.get("director_resolve"):
+        return
+    handler = STEP_HANDLERS.get("perception_outcome")
+    if handler is None:
+        return
+    token = current_step_key.set("perception_outcome")
+    try:
+        handler(ctx, 0)
+    except Exception:
+        _step_logger.exception("outcome_scene rebuild failed on resume")
+    finally:
+        current_step_key.reset(token)
+        ctx["perception_outcome"] = content
+
 # Presentational tail stages: they render the committed turn for the reader and
 # nothing downstream except commit consumes them, so rerolling one may flow
 # straight through commit and leave the turn committed (see the only_key branch).
@@ -796,11 +844,12 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     has_existing_steps = bool(q("SELECT 1 FROM steps WHERE turn_id=? LIMIT 1", (turn_id,), one=True))
 
     if only_key:
+        hydrated = []
         for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (turn_id,)):
             c = active_content(turn_id, s["key"])
             if c is not None:
                 ctx[s["key"]] = c
-                _rehydrate_loop_results(ctx, s["key"], c)
+                hydrated.append((s["key"], c))
         s = q("SELECT * FROM steps WHERE turn_id=? AND key=?", (turn_id, only_key), one=True)
         if not s:
             raise RuntimeError(f"step '{only_key}' not found on this turn")
@@ -838,6 +887,11 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # leaving the turn in an explicit needs-resume state rather than a
             # half-committed one.
             _restore_and_refresh()
+        # AFTER the restore, never before: a side channel rebuilt from the
+        # live world would be rebuilt from the OUTCOME this branch just rolled
+        # back, which is the leak the restore exists to prevent.
+        for _key, _content in hydrated:
+            _rehydrate_side_channels(ctx, _key, _content)
         # Marked stale BEFORE computing (not after) so a crash/abort mid-step
         # leaves accurate breadcrumbs instead of the pre-existing downstream
         # content silently continuing to look fresh.
@@ -1007,7 +1061,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                     "rerun before continuing from a later stage"
                 )
             ctx[key] = c
-            _rehydrate_loop_results(ctx, key, c)
+            _rehydrate_side_channels(ctx, key, c)
             i += 1
             continue
         if key.startswith("character:"):
