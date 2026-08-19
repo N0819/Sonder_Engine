@@ -20,6 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from mind import memory
+from tests.helpers import patch_provider_seam
 
 
 def _unit_vector(dims):
@@ -63,7 +64,7 @@ def _stub_embedder(monkeypatch, dims):
     def embed_texts(texts):
         v = _unit_vector(dims)
         return [v for _ in texts]
-    monkeypatch.setattr(memory, "embed_texts", embed_texts)
+    patch_provider_seam(monkeypatch, "embed_texts", embed_texts)
 
 
 def test_a_stale_vector_is_counted_rather_than_silently_scoring_zero(
@@ -164,8 +165,8 @@ def _live_embedder(monkeypatch, dims=2560):
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="test:1:model", dimensions=dims,
                               fallback=False)
-    monkeypatch.setattr(memory, "embed_texts_meta", meta)
-    monkeypatch.setattr(memory, "embed_texts",
+    patch_provider_seam(monkeypatch, "embed_texts_meta", meta)
+    patch_provider_seam(monkeypatch, "embed_texts",
                         lambda texts: meta(texts).vectors)
 
 
@@ -210,7 +211,7 @@ def test_a_rebuild_uses_the_same_document_update_lore_builds(temp_db,
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="test:1:model", dimensions=2560,
                               fallback=False)
-    monkeypatch.setattr(memory, "embed_texts_meta", meta)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", meta)
 
     memory.rebuild_embeddings(chat_id=chat)
 
@@ -237,7 +238,7 @@ def test_a_provider_hiccup_never_writes_a_fallback_over_lore(temp_db,
         return EmbeddingBatch(vectors=[v for _ in texts],
                               model_key="cheap:crc32:256", dimensions=256,
                               fallback=True, error="provider down")
-    monkeypatch.setattr(memory, "embed_texts_meta", degraded)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", degraded)
 
     report = memory.rebuild_embeddings(chat_id=chat)
 
@@ -298,7 +299,7 @@ def test_an_entry_written_during_an_outage_says_it_was(temp_db, monkeypatch):
     """
     from llm.providers import EmbeddingBatch
     book = _book(temp_db)
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
+    patch_provider_seam(monkeypatch, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
         model_key="cheap:crc32:256", dimensions=256, fallback=True,
         error="provider down"))
@@ -417,7 +418,7 @@ def test_health_answers_correctly_with_no_provider_at_all(temp_db,
 
     def no_provider(texts):
         raise RuntimeError("provider down")
-    monkeypatch.setattr(memory, "embed_texts", no_provider)
+    patch_provider_seam(monkeypatch, "embed_texts", no_provider)
 
     health = memory.lore_embedding_health([book])
 
@@ -465,7 +466,7 @@ def test_a_narrower_live_model_does_not_invert_the_reference(temp_db,
     temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
                "WHERE id=?", ("old-wide:1:model", 2560, wide_but_retired))
 
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
+    patch_provider_seam(monkeypatch, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(1024, dtype=np.float32) / 32 for _ in texts],
         model_key="new-narrow:1:model", dimensions=1024, fallback=False))
 
@@ -488,7 +489,7 @@ def test_a_degraded_probe_is_not_mistaken_for_the_live_model(temp_db,
     temp_db.qi("UPDATE lore_entries SET embedding_model=?,embedding_dim=? "
                "WHERE id=?", ("real:1:model", 2560, good))
 
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
+    patch_provider_seam(monkeypatch, "embed_texts_meta", lambda texts, **_k: EmbeddingBatch(
         vectors=[np.ones(256, dtype=np.float32) / 16 for _ in texts],
         model_key="cheap:crc32:256", dimensions=256, fallback=True,
         error="down"))

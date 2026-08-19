@@ -6,6 +6,7 @@ import pytest
 from mind import memory
 from llm import providers
 from story.character_schema import default_character_data
+from tests.helpers import patch_provider_seam
 
 
 @pytest.fixture
@@ -140,7 +141,7 @@ def test_a_provider_failure_never_writes_fallback_over_real_vectors(bank, monkey
             model_key="cheap:crc32:256", dimensions=256,
             fallback=True, error="connection refused")
 
-    monkeypatch.setattr(memory, "embed_texts_meta", fake)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", fake)
     report = memory.rebuild_embeddings()
     assert report["stopped_early"]
     assert "connection refused" in report["error"]

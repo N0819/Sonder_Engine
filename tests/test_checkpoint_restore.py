@@ -5,6 +5,7 @@ import time
 
 from story.character_schema import default_character_data
 from mind.memory import restore_chat_memories
+from tests.helpers import patch_provider_seam
 
 
 def _chat_and_character(db):
@@ -190,8 +191,8 @@ def test_restore_books_recreates_a_book_deleted_since_the_snapshot(
     from mind import memory as memory_mod
     from mind.memory import add_lorebook_link
 
-    monkeypatch.setattr(
-        memory_mod, "embed_texts", lambda texts: [[0.5, 0.5] for _ in texts]
+    patch_provider_seam(
+        monkeypatch, "embed_texts", lambda texts: [[0.5, 0.5] for _ in texts]
     )
 
     chat_id, first, second = _chat_with_two_books(temp_db)

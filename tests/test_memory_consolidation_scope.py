@@ -12,6 +12,7 @@ import time
 
 from mind import memory
 from story.character_schema import default_character_data
+from tests.helpers import patch_provider_seam
 
 
 def _make_chat_and_char(db):
@@ -43,7 +44,7 @@ def test_second_consolidation_only_sends_memories_since_last_summary(
         captured["payload"] = json.loads(user)
         return json.dumps({"summary": "first summary", "key_phrases": [], "stable_facts": []})
 
-    monkeypatch.setattr(memory, "chat_complete", fake_chat_complete)
+    patch_provider_seam(monkeypatch, "chat_complete", fake_chat_complete)
 
     memory.consolidate_character_memory(chat_id, char_id)
     first_turns = {m["turn_idx"] for m in captured["payload"]["memories_chronological"]}
@@ -87,7 +88,7 @@ def test_archived_memories_are_excluded_from_the_payload(temp_db, monkeypatch):
         captured["payload"] = json.loads(user)
         return json.dumps({"summary": "s", "key_phrases": [], "stable_facts": []})
 
-    monkeypatch.setattr(memory, "chat_complete", fake_chat_complete)
+    patch_provider_seam(monkeypatch, "chat_complete", fake_chat_complete)
 
     memory.consolidate_character_memory(chat_id, char_id)
     turns = {m["turn_idx"] for m in captured["payload"]["memories_chronological"]}

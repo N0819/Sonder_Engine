@@ -33,6 +33,7 @@ import time
 from mind import memory
 from story.character_schema import default_character_data
 from core.frames import create_frame
+from tests.helpers import patch_provider_seam
 
 
 def _make_chat(db):
@@ -68,7 +69,7 @@ class TestConsolidationRespectsFrameVisibility:
             captured["payload"] = json.loads(user)
             return json.dumps({"summary": "stub", "key_phrases": [], "unresolved_threads": []})
 
-        monkeypatch.setattr(memory, "chat_complete", fake_chat_complete)
+        patch_provider_seam(monkeypatch, "chat_complete", fake_chat_complete)
 
         memory.consolidate_character_memory(chat_id, alice, through_turn_idx=10)
 
@@ -92,7 +93,7 @@ class TestConsolidationRespectsFrameVisibility:
             captured["payload"] = json.loads(user)
             return json.dumps({"summary": "stub", "key_phrases": [], "unresolved_threads": []})
 
-        monkeypatch.setattr(memory, "chat_complete", fake_chat_complete)
+        patch_provider_seam(monkeypatch, "chat_complete", fake_chat_complete)
 
         memory.consolidate_character_memory(chat_id, alice, through_turn_idx=10)
 
@@ -126,7 +127,7 @@ class TestMaybeConsolidateFrameGuardSurvivesThreadPool:
         def boom(*a, **k):
             raise AssertionError("consolidation must not run while frozen to a real frame")
 
-        monkeypatch.setattr(memory, "chat_complete", boom)
+        patch_provider_seam(monkeypatch, "chat_complete", boom)
 
         from core.db import active_frame_id
         assert active_frame_id.get() is None  # the ambient default, as in a bare worker thread
@@ -144,8 +145,8 @@ class TestMaybeConsolidateFrameGuardSurvivesThreadPool:
             memory.add_memory(chat_id, alice, None, "episodic", "witnessed", 0.5,
                               f"Event {i}.", turn_idx=i, frame_id=None)
 
-        monkeypatch.setattr(
-            memory, "chat_complete",
+        patch_provider_seam(
+            monkeypatch, "chat_complete",
             lambda *a, **k: json.dumps({"summary": "ok", "key_phrases": [], "unresolved_threads": []}),
         )
 

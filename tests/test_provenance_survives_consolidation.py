@@ -21,6 +21,7 @@ import time
 import pytest
 
 from mind import memory
+from tests.helpers import patch_provider_seam
 from mind.memory import (
     SUMMARY_SCOPE_FIRSTHAND,
     SUMMARY_SCOPE_HEARSAY,
@@ -73,8 +74,8 @@ def _stub_consolidator(monkeypatch):
             "key_phrases": ["gate"], "unresolved_threads": ["who poisoned it"],
             "stable_facts": [],
         })
-    monkeypatch.setattr(memory, "chat_complete", fake)
-    monkeypatch.setattr(memory, "embed_texts_meta", lambda texts, **k: type(
+    patch_provider_seam(monkeypatch, "chat_complete", fake)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", lambda texts, **k: type(
         "E", (), {"vectors": [[0.0] * 8 for _ in texts],
                   "model_key": "stub", "dimensions": 8})())
 

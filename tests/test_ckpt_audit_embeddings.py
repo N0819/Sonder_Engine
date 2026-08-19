@@ -11,7 +11,7 @@ import time
 import numpy as np
 
 from mind import memory
-from tests.helpers import patch_embedding_seam
+from tests.helpers import patch_provider_seam
 from story.character_schema import default_character_data
 from mind.memory import (
     add_lore, add_memory, dump_chat_memories, dump_lorebook,
@@ -34,8 +34,8 @@ def _install_stub(monkeypatch, counter, model_key=REAL_MODEL, fill=1.5):
     def fake_plain(texts):
         return fake_meta(texts).vectors
 
-    patch_embedding_seam(monkeypatch, "embed_texts_meta", fake_meta)
-    patch_embedding_seam(monkeypatch, "embed_texts", fake_plain)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", fake_meta)
+    patch_provider_seam(monkeypatch, "embed_texts", fake_plain)
 
 
 def _chat_and_character(db):

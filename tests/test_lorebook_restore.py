@@ -1,6 +1,7 @@
 """Tests for lorebook snapshot restoration."""
 
 from mind.memory import add_lore, restore_lorebook
+from tests.helpers import patch_provider_seam
 
 def test_restore_lorebook_preserves_entry_id(temp_db, monkeypatch):
     from mind import memory
@@ -121,8 +122,8 @@ def test_dump_and_restore_carry_the_embedding_stamp(temp_db, monkeypatch):
     """
     from mind import memory
 
-    monkeypatch.setattr(
-        memory, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
+    patch_provider_seam(
+        monkeypatch, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
 
     source = temp_db.qi(
         "INSERT INTO lorebooks(name,book_type,summary,resource_uid) "
@@ -163,8 +164,8 @@ def test_a_legacy_dump_with_no_stamp_still_restores_unstamped(
     as a measurement."""
     from mind import memory
 
-    monkeypatch.setattr(
-        memory, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
+    patch_provider_seam(
+        monkeypatch, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
 
     book = temp_db.qi(
         "INSERT INTO lorebooks(name,book_type,summary,resource_uid) "
@@ -190,8 +191,8 @@ def test_cloning_a_book_for_a_chat_keeps_the_stamp(temp_db, monkeypatch):
     behind."""
     from mind import memory
 
-    monkeypatch.setattr(
-        memory, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
+    patch_provider_seam(
+        monkeypatch, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
 
     root = temp_db.qi(
         "INSERT INTO lorebooks(name,book_type,summary,resource_uid) "

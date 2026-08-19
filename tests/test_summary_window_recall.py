@@ -33,6 +33,7 @@ import pytest
 
 from mind import memory
 from story.character_schema import default_character_data
+from tests.helpers import patch_provider_seam
 
 
 @pytest.fixture
@@ -258,7 +259,7 @@ def test_the_window_layer_costs_no_extra_embedding_call(bank, monkeypatch):
         calls.append(list(texts))
         return real(texts)
 
-    monkeypatch.setattr(memory, "embed_texts_meta", counted)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", counted)
     _context(bank, "the ferryman and his silver")
     assert len(calls) == 1
 
