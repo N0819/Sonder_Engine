@@ -185,6 +185,31 @@ def _presence_scene_entity(scene, name):
     return None, None
 
 
+def presence_room(scene, name, record=None):
+    """Where a tracked presence is STANDING: its own scene position, its
+    entity id's position, or -- only when the scene places it nowhere -- the
+    room its sketch was harvested in.
+
+    One answer, because there were two. The scene-manager path resolved the
+    live position; the per-presence path and this module's gate read
+    `sketch.station_room`, which is where the presence stood when it was
+    INTRODUCED (`track_background_presences` harvests it once). So a presence
+    who had since walked out was gated, addressed and fed its beat at a room
+    it had left, while the other path, on the same beat, used the room it was
+    in. Nothing reconciled them, and neither is wrong-looking on its own.
+    """
+    scene = scene or {}
+    room = room_of(scene, name)
+    if room:
+        return room
+    eid, _ent = _presence_scene_entity(scene, name)
+    if eid:
+        room = (scene.get("positions") or {}).get(eid) or room_of(scene, eid)
+        if room:
+            return room
+    return ((record or {}).get("sketch") or {}).get("station_room")
+
+
 def _presence_speech_verdict(scene, name, record=None):
     """May this presence hold a background SPEAKING turn?
 
@@ -339,6 +364,54 @@ def _fold_duplicate_presences(presences, scene=None):
         for other_name in rest:
             _merge_presence_record(target, presences.pop(other_name))
     return presences
+
+
+def overt_declaration(ctx):
+    """The player's declared beat with concealed content removed, as
+    ``(elements, raw_text)``.
+
+    ONE answer to "what of this declaration may a bystander be told about, or
+    be judged against", read by both halves of the background stage: the
+    payload builder in `agents/background.py`, which gates these elements
+    further by the channel that reaches each presence, and
+    `pick_background_reactors` below, which decides who gets a beat at all.
+
+    The two halves used to disagree. The payload was fixed to strip concealed
+    elements and the private thought; the gate went on reading `ctx.input`
+    whole, which is the raw text the player typed, whispers included. A
+    declaration that named a presence WHILE concealing therefore still made
+    that presence qualify as addressed, get picked, and react to words nobody
+    delivered -- the exact failure `_filtered_player_declaration`'s own
+    docstring records as fixed, still live one module over because the gate is
+    a different function in a different package. Having one function say what
+    is overt is the only arrangement in which they cannot drift apart again.
+
+    An unstructured declaration cannot be filtered element by element, so a
+    private thought (the one signal available that something was withheld)
+    withholds the whole of it.
+    """
+    interp = ctx.get("director_interpret") or {}
+    seq = [e for e in (interp.get("sequence") or []) if isinstance(e, dict)]
+    if seq:
+        return [e for e in seq if e.get("visibility") != "concealed"], ""
+    if interp.get("private_thought"):
+        return [], ""
+    return [], str(ctx.get("input") or "")
+
+
+def overt_declaration_text(ctx):
+    """`overt_declaration` flattened for deterministic name matching. Engine
+    side only -- it carries an act's raw `attempt`, which is the actor's
+    purpose and is never delivered to anyone."""
+    elements, raw = overt_declaration(ctx)
+    parts = [raw]
+    for element in elements:
+        if element.get("type") == "speech":
+            parts.append(str(element.get("text") or ""))
+        else:
+            parts.append(str(element.get("observable")
+                             or element.get("attempt") or ""))
+    return " ".join(p for p in parts if p).strip()
 
 
 def _background_name_mentioned(name, text):
@@ -1077,7 +1150,9 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     voiced_this_beat -= {n.casefold() for n in forced_routed}
 
     resolved_event = str(dr_output.get("resolved_event") or "")
-    player_input = str(ctx.get("input") or "")
+    # NOT `ctx.input`, which is the raw text the player typed. See
+    # `overt_declaration`: a whispered name used to qualify its own presence.
+    player_input = overt_declaration_text(ctx)
     turn_idx = ctx.turn.idx
     sc = wget(cid, "scene", {}) or {}
     # Read through the duplicate fold: the ledger is healed at commit, but
@@ -1141,7 +1216,9 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # presence this beat -- read-only here; the owed-reply debt is written
         # at commit (track_background_presences), never in this pre-commit gate.
         station_room = (record.get("sketch") or {}).get("station_room")
-        char_addr = _character_address_of(dr_output, name, roster, sc, station_room)
+        # Where they ARE, for anything about what reaches them.
+        here = presence_room(sc, name, record)
+        char_addr = _character_address_of(dr_output, name, roster, sc, here)
         owed = _valid_pending_reply(record, turn_idx)
         mentioned = _background_name_mentioned(name, resolved_event)
         dialogue_turns = record.get("dialogue_turns") or []
@@ -1158,8 +1235,12 @@ def pick_background_reactors(ctx, dr_output, cap=1):
         # work is the weakest possible claim on a beat -- far weaker than being
         # addressed -- and `cap` still bounds how many are picked, so a busy
         # room does not become a chorus.
-        at_post = bool(station_room) and _at_post_within_earshot(
-            sc, station_room, player_room)
+        # AT their post, not merely POSTED there: a presence the scene has
+        # since placed somewhere else is not standing behind the bar, and
+        # this signal is the claim that they are. A presence the scene places
+        # nowhere still falls back to its station, exactly as before.
+        at_post = (bool(station_room) and str(here) == str(station_room)
+                   and _at_post_within_earshot(sc, here, player_room))
         if not (flow_addressed or routed or addressed or char_addr or owed
                 or mentioned or dialogue_turns or at_post):
             continue

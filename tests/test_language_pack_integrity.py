@@ -146,7 +146,8 @@ def test_no_prompt_english_supplies_is_blank(language_id):
 #: named here does an exact lookup and a miss is silent.
 CANONICAL_BEARING = {
     ("agents.character", "_VERDICTS"):
-        "element [0] is the maze exit-entry key read by affect's verdict table",
+        "element [0] is the exit marker key that character._verdict_key "
+        "ranks, prunes and clamps on; [1] and [2] are reader prose",
     ("agents.director", "_OMISSION_CATEGORY_ALIASES"):
         "values are state_diff channel names routed by the Director",
     ("agents.narration", "_ENFORCEABLE_PREFIXES"):

@@ -45,6 +45,43 @@ from .common import (
     normalize_character_refs,
 )
 
+def _cut_into_last_element(sequence):
+    """Cut the ONE element an interruption landed during -- the victim's most
+    recent -- and report whether anything was cut.
+
+    `ctx.character_results[id]` is the MERGED result across every micro-round
+    (`_merge_character_results` concatenates sequences), so a character who
+    spoke in round 0 and again in round 2 carries both lines. This used to
+    truncate BOTH, and mark every action element in either round
+    `interrupted`. Only the line being cut into was interrupted; the earlier
+    one completed and was answered -- and `deterministic_micro_perception`
+    had already appended it IN FULL to every eligible observer's local view,
+    so rewriting it afterwards left the stored record disagreeing with what
+    the other minds in the room were told they heard.
+
+    Design.md states the contract as one line: `interrupts: "<name>"` says the
+    beat landed DURING that line. A line too short to get inside stays whole
+    (`cut_short_speech` returns None) and nothing was cut into.
+    """
+    elements = [e for e in (sequence or []) if isinstance(e, dict)]
+    if not elements:
+        return False
+    last = elements[-1]
+    if last.get("type") == "speech":
+        shortened = cut_short_speech(last.get("text"))
+        if not shortened:
+            return False
+        last["text"] = shortened
+        last["cut_short"] = True
+        return True
+    if last.get("type") == "action":
+        # Marked, never rewritten: what happens to a reach that got grabbed
+        # is causality, and causality belongs to the Director.
+        last["interrupted"] = True
+        return True
+    return False
+
+
 def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     actor_row = _character_by_id(ctx, actor_id)
     actor_sheet = json.loads(actor_row["sheet"])
@@ -486,7 +523,7 @@ def interaction_loop(ctx, nonce):
         except Exception:
             continue
         debt = (_unanswered_question_note(
-            ctx.chat.id, name, ctx.turn.idx, ctx.turn.frame_id)
+            ctx.chat.id, name, char_id, ctx.turn.idx, ctx.turn.frame_id)
             or {}).get("awaiting_your_answer")
         if not debt:
             continue
@@ -689,17 +726,7 @@ def interaction_loop(ctx, nonce):
                     f"-- the interrupter could not hear them")
                 continue
             victim = ctx.character_results.get(victim_id) or {}
-            cut_any = False
-            for prior in (victim.get("sequence") or []):
-                if prior.get("type") == "speech":
-                    shortened = cut_short_speech(prior.get("text"))
-                    if shortened:
-                        prior["text"] = shortened
-                        prior["cut_short"] = True
-                        cut_any = True
-                elif prior.get("type") == "action":
-                    prior["interrupted"] = True
-                    cut_any = True
+            cut_any = _cut_into_last_element(victim.get("sequence"))
             element["interrupted"] = _character_display_name(
                 _character_by_id(ctx, victim_id))
             if cut_any:

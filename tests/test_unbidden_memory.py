@@ -228,18 +228,35 @@ def test_provenance_labels_match_the_summary_vocabulary():
 
 
 def test_attach_substitutes_never_adds():
-    """The unbidden entry pays for itself out of the recall budget."""
+    """The unbidden entry pays for itself out of the recall budget -- and the
+    budget is the one recall was actually given, not a second number written
+    down beside it."""
+    from mind.memory import _RECALL_LIMIT
+
+    full = _RECALL_LIMIT
     ctx = {"recalled_old_memories": [
-        {"id": i, "score": 0.1 * i} for i in range(1, 9)]}
-    _attach_unbidden(ctx, {"it_comes_back_to_me": "x"}, recall_limit=8)
-    assert len(ctx["recalled_old_memories"]) == 7
+        {"id": i, "score": 0.1 * i} for i in range(1, full + 1)]}
+    _attach_unbidden(ctx, {"it_comes_back_to_me": "x"})
+    assert len(ctx["recalled_old_memories"]) == full - 1
     assert all(m["id"] != 1 for m in ctx["recalled_old_memories"]), \
         "the lowest-ranked ordinary recall yields"
     assert ctx["surfaces_unbidden"]["it_comes_back_to_me"] == "x"
     # Under budget: takes the spare slot, drops nothing.
     ctx = {"recalled_old_memories": [{"id": 1, "score": 0.5}]}
-    _attach_unbidden(ctx, {"it_comes_back_to_me": "y"}, recall_limit=8)
+    _attach_unbidden(ctx, {"it_comes_back_to_me": "y"})
     assert len(ctx["recalled_old_memories"]) == 1
+
+
+def test_a_spare_slot_is_not_paid_for_twice():
+    """The defect: the default was a hand-set 8 against a budget of 16, so a
+    calm mind evicted a ranked memory with half the slots still empty."""
+    from mind.memory import _RECALL_LIMIT
+
+    half = _RECALL_LIMIT // 2
+    ctx = {"recalled_old_memories": [
+        {"id": i, "score": 0.1 * i} for i in range(1, half + 1)]}
+    _attach_unbidden(ctx, {"it_comes_back_to_me": "z"})
+    assert len(ctx["recalled_old_memories"]) == half
 
 
 def test_the_payload_key_is_documented_in_the_character_prompt():

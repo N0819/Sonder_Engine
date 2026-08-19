@@ -277,6 +277,23 @@ class TestSilenceIsSomethingThePlayerDid:
             self._sc(player_room="console_room"), self._chat(),
             self._sh(), "") == {}
 
+    def test_a_position_stored_under_a_uid_still_places_the_body(
+            self, monkeypatch):
+        """One being, one name. `positions` may key a body by `identity.uid`,
+        an alias or a different case, which is the whole reason `room_of` and
+        `character_room` exist -- a raw dict hit reads a body that IS in the
+        room as absent, and the signal disappears with no warning."""
+        import agents.character as character
+        monkeypatch.setattr(character, "persona_of",
+                            lambda chat: {"identity": {"name": "Hinami"}})
+        sheet = {"identity": {"name": "The Doctor", "uid": "char_doctor"}}
+        scene = {"positions": {"Hinami": "alley", "char_doctor": "alley"}}
+
+        note = character._player_silence_note(
+            scene, self._chat(), sheet, "")
+
+        assert note.get("player_said_nothing") is True
+
     def test_the_prompt_forbids_answering_an_older_line(self):
         from llm.prompts import DEFAULT_PROMPTS
         prompt = DEFAULT_PROMPTS["character"]

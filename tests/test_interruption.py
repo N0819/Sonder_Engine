@@ -129,14 +129,11 @@ def _resolver(ctx, spoke, heard):
                 ctx.warnings.append("dropped: not heard")
                 continue
             victim = ctx.character_results.get(victim_id) or {}
-            for prior in (victim.get("sequence") or []):
-                if prior.get("type") == "speech":
-                    shortened = cut_short_speech(prior.get("text"))
-                    if shortened:
-                        prior["text"] = shortened
-                        prior["cut_short"] = True
-                elif prior.get("type") == "action":
-                    prior["interrupted"] = True
+            # The production helper, not a copy of it: what this closure
+            # rebuilds is the guard chain around the cut, and a second
+            # implementation of the cut itself would keep passing after the
+            # real one changed.
+            loops._cut_into_last_element(victim.get("sequence"))
             element["interrupted"] = "Bram"
     return apply
 
@@ -207,6 +204,35 @@ class TestResolvingTheClaim:
         prior = ctx.character_results[2]["sequence"][0]
         assert prior["interrupted"] is True
         assert prior["attempt"] == "reaches for the blade"
+
+    def test_only_the_line_being_cut_into_is_cut(self):
+        """`ctx.character_results[id]` is the MERGED result across every
+        micro-round, so a character who spoke in round 0 and again in round 2
+        carries both lines. The earlier one completed, was answered, and was
+        already delivered IN FULL to every observer -- truncating it now
+        leaves the stored record disagreeing with what the other minds in the
+        room were told they heard."""
+        ctx = _Ctx()
+        ctx.character_results[2] = {"sequence": [
+            {"type": "speech",
+             "text": "I told you already, the shipment left on Tuesday and "
+                     "nobody signed for it."},
+            {"type": "action", "attempt": "sets the ledger down",
+             "observable": "sets the ledger down"},
+            {"type": "speech",
+             "text": "And the second consignment went out the same night, "
+                     "which anyone at the yard will tell you."},
+        ]}
+        result = {"sequence": [{"type": "speech", "text": "No, listen to me",
+                                "interrupts": "Bram"}]}
+        _resolver(ctx, spoke={2}, heard={1: {2}})(1, result)
+
+        first, act, last = ctx.character_results[2]["sequence"]
+        assert first["text"].endswith("signed for it.")
+        assert "cut_short" not in first
+        assert "interrupted" not in act
+        assert last["text"].endswith("—")
+        assert last["cut_short"] is True
 
     def test_the_claim_is_consumed_either_way(self):
         """`interrupts` is an instruction to the engine, not a field anything
