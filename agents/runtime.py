@@ -34,8 +34,9 @@ from .background import background_react
 from .character import character_step
 from .common import _assert_plan_materialized, _dict
 from .director import director_establish, director_interpret, director_resolve
-from .loops import interaction_loop, reaction_loop
-from .mapping import mapping_quick, mapping_stage
+from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
+from .mapping import (mapping_quick, mapping_request_stages_a_room,
+                      mapping_stage)
 from .narration import narrator, narrator_extra
 from .perception import perception_act, perception_establish, perception_outcome
 from .storage import (
@@ -85,7 +86,22 @@ def _load_extra_players(chat_id, turn_idx, frame_id=None):
     )
     extras = []
     for row in rows:
-        sheet = normalize_persona_data(json.loads(row["sheet"]))
+        try:
+            sheet = normalize_persona_data(json.loads(row["sheet"]))
+        except Exception:
+            # Skipped, not raised. This runs inside the PipelineContext
+            # construction -- before ensure_checkpoint means anything and
+            # before any step runs -- so one unparseable co-player sheet used
+            # to kill every turn in that chat at setup with a raw
+            # JSONDecodeError, including the turns of the players whose own
+            # sheets were fine. `_cast_pronouns` and `_authored_body_parts`
+            # read the same column and both already skip the row; this was
+            # the third reading of the same data and the only intolerant one.
+            _step_logger.exception(
+                "unreadable persona sheet for co-player %s in chat %s; "
+                "that player is not rendered this turn",
+                row["persona_id"], chat_id)
+            continue
         extras.append({
             "persona_id": row["persona_id"],
             # The whole sheet, not just the fields below. `narrator_extra`
@@ -195,6 +211,49 @@ STEP_HANDLERS = {
     "narrator_extra": narrator_extra,
     "commit": commit_all,
 }
+
+
+# Every phase name the reader sees in the turn-status bar and the pipeline
+# drawer, in one module-level table.
+#
+# They were inline literals inside `build_plan`, `establishment_plan`,
+# `_background_stage_label` and one `_step_stream` call, which is why
+# `tools/extract_ui_catalog.py` could not harvest them: its
+# `READER_FACING_TABLES` has named a `STEP_LABELS` in this file for as long as
+# it has existed, and there was none, so every pipeline label shipped
+# untranslated in every language pack while the extractor's promise looked kept.
+#
+# Keyed by step key where a step has exactly one name. Three keys need more
+# than that and are spelled out rather than derived: `narrator` renders an
+# opening beat under a different name, `background_react` is named after the
+# path it will take, and `character:<id>` carries the character's own name and
+# is a template.
+STEP_LABELS = {
+    "director_interpret": "Director · interpret & flow plan",
+    "mapping_stage": "Mapping · route books & lore",
+    "mapping_quick": "Mapping · cached recall",
+    "perception_act": "Perception · pass 1 — the act",
+    "reaction_loop": "Characters · physical reactions",
+    "interaction_loop": "Characters · interaction loop",
+    "character": "Character · {name}",
+    "director_resolve": "Director · resolve",
+    "background_react": "Background · presence reaction",
+    "background_react.ambient": "Scene life · manager (ambient)",
+    "background_react.full": "Scene life · manager (full)",
+    "perception_outcome": "Perception · pass 2 — the outcome",
+    "narrator": "Narrator · render",
+    "narrator_extra": "Narrator · render (other players)",
+    "commit": "Mapping & memory · commit-up",
+    "director_establish": "Director · establish scene",
+    "perception_establish": "Perception · opening player view",
+    "narrator.establish": "Narrator · opening",
+}
+
+
+def step_label(key, **fields):
+    """The reader-facing name for a plan step, or the key if it has none."""
+    label = STEP_LABELS.get(key, key)
+    return label.format(**fields) if fields else label
 
 
 def _extension_splices(plan, chat_id):
@@ -418,6 +477,21 @@ def _stream_parallel(bus, jobs, holders):
             )
             holders[k] = {"e": exc}
         finally:
+            # The reasoning trace, carried out of the worker BY HAND -- the
+            # same hand-off `_stream_one` does, for the same reason, in the
+            # copy the fix did not touch. `providers.last_reasoning` is a
+            # ContextVar written on THIS thread; `save_step`'s fallback reads
+            # it on the generator thread, where the write was never visible,
+            # so every parallel step's stored trace was empty. Copying a
+            # context carries values inward and nothing carries one back out,
+            # so it rides `holders`.
+            try:
+                from llm.providers import last_reasoning
+
+                holders.setdefault(k, {})["reasoning"] = (
+                    last_reasoning.get() or "")
+            except Exception:
+                holders.setdefault(k, {})["reasoning"] = ""
             bus.q.put({
                 "type": "__done__",
                 "key": k,
@@ -464,10 +538,20 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
     jobs = [(k, (lambda kk=k: compute_step(kk, ctx, variant_count(turn_id, kk))))
             for k in members]
     yield from _stream_parallel(bus, jobs, holders)
+    # Every member has ALREADY finished by the time this loop runs --
+    # `_stream_parallel` joins them all. Raising on the first failure in plan
+    # order therefore threw away the paid, completed output of any sibling
+    # that came later and succeeded: unsaved, unset on ctx, and re-run from
+    # scratch on the resume. The pairings exist to save provider latency, so
+    # discarding a finished call is the one cost they must not have. Save what
+    # succeeded, then raise the first failure in plan order exactly as before.
+    failure = None
     for k, lbl in group:
         h = holders[k]
         if "e" in h:
-            raise h["e"]
+            if failure is None:
+                failure = h["e"]
+            continue
         ctx[k] = h["v"]
         saved = _with_engine_notes(
             h["v"], ctx, k, parallel_with=[m for m in members if m != k])
@@ -475,6 +559,8 @@ def _run_parallel_group(bus, turn_id, group, keys, ctx):
                                 reasoning=h.get("reasoning"))
         _extension_step_saved(ctx, k, saved)
         yield _evt(k, lbl, sid, vid, n, saved)
+    if failure is not None:
+        raise failure
 
 
 def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
@@ -493,7 +579,34 @@ def _step_stream(bus, turn_id, key, label, ordn, ctx, nonce):
     yield _evt(key, label, sid, vid, n, saved)
 
 def resume_key_for_turn(turn_id, chat_id):
-    """Find the first missing or stale step in a turn's plan."""
+    """Find the first missing or stale step in a turn's plan.
+
+    THE PLAN IS NOT STABLE ACROSS THE TURN'S OWN COMMIT, so a key this function
+    computes is not by itself evidence that the run skipped anything.
+    `build_plan`'s consciousness gate reads `awareness_map` live, and
+    `director_resolve` merges condition ENDINGS that commit then persists -- so
+    the reactor set depends on state THIS turn writes. Inside `_run_pipeline`
+    that is safe by ordering: the pre-turn checkpoint is restored before the
+    plan is built. Here there is no such protection; this runs from web
+    handlers against the live, un-restored world.
+
+    Left alone it wedges a chat, and the chain is short. An asleep NPC is
+    shaken: the Director lists them as a reactor, the gate drops them, the
+    reactor set empties, and no `interaction_loop` is planned. `director_resolve`
+    rouses them and commit persists it. The next new-turn attempt recomputes
+    this plan against the now-awake map, finds an `interaction_loop` with no
+    step row, reports it, and the caller answers 409 "resume or reroll it
+    first". The resume then restores the pre-turn checkpoint -- asleep again --
+    rebuilds a plan WITHOUT that step, and raises. Neither forward nor back.
+
+    So a step with no row at all is only a resume point when the run did not
+    demonstrably finish without it. Steps execute in plan order, so if every
+    later planned step completed, this one was never in the plan the run used:
+    it is a step this recomputation GAINED, not one the turn abandoned. Stated
+    over the plan rather than over the awareness gate on purpose -- the gate is
+    only today's source of drift, and the same reasoning holds for a cast
+    change, an autonomy change, or an extension enabled mid-turn.
+    """
     turn = q(
         "SELECT * FROM turns WHERE id=? AND chat_id=?",
         (turn_id, chat_id),
@@ -503,7 +616,7 @@ def resume_key_for_turn(turn_id, chat_id):
         return "director_interpret"
 
     if turn["idx"] == 0:
-        plan = establishment_plan()
+        plan = establishment_plan(chat_id)
     else:
         interpretation = active_content(turn_id, "director_interpret")
         if not isinstance(interpretation, dict):
@@ -536,9 +649,20 @@ def resume_key_for_turn(turn_id, chat_id):
         for row in rows
     }
 
-    for key, _label in plan:
+    def _complete(key):
+        current = status.get(key)
+        return bool(current and not current["stale"]
+                    and current["active_count"] == 1)
+
+    for index, (key, _label) in enumerate(plan):
         current = status.get(key)
         if current is None:
+            successors = plan[index + 1:]
+            # `successors` must be non-empty: a MISSING TAIL (a turn that never
+            # committed) is the ordinary interrupted turn and must still be
+            # reported.
+            if successors and all(_complete(k) for k, _ in successors):
+                continue
             return key
         if current["stale"]:
             return key
@@ -551,16 +675,16 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if not isinstance(interp, dict):
         interp = {}
         
-    plan = [("director_interpret", "Director · interpret & flow plan")]
+    plan = [("director_interpret", step_label("director_interpret"))]
     fl = interp.get("flow")
     if not isinstance(fl, dict):
         fl = {}
         
     if fl.get("needs_mapping"):
-        plan.append(("mapping_stage", "Mapping · route books & lore"))
+        plan.append(("mapping_stage", step_label("mapping_stage")))
     else:
-        plan.append(("mapping_quick", "Mapping · cached recall"))
-    plan.append(("perception_act", "Perception · pass 1 — the act"))
+        plan.append(("mapping_quick", step_label("mapping_quick")))
+    plan.append(("perception_act", step_label("perception_act")))
 
     valid_ids = {int(row["id"]) for row in cast_rows}
     reactors = [int(char_id) for char_id in (fl.get("reactors") or [])
@@ -586,15 +710,16 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     flags = _dict(fl.get("resolution_flags"))
     contested = bool(flags.get("contested") and reactors)
     if contested:
-        plan.append(("reaction_loop", "Characters · physical reactions"))
+        plan.append(("reaction_loop", step_label("reaction_loop")))
 
     if reactors:
         if autonomy > 0:
-            plan.append(("interaction_loop", "Characters · interaction loop"))
+            plan.append(("interaction_loop", step_label("interaction_loop")))
         elif not contested:
             names = {row["id"]: character_name_from_text(row["sheet"]) for row in cast_rows}
             for char_id in reactors:
-                plan.append((f"character:{char_id}", f"Character · {names[char_id]}"))
+                plan.append((f"character:{char_id}",
+                             step_label("character", name=names[char_id])))
         # Contested at autonomy == 0: reaction_loop above already gives every
         # reactor its single character_step declaration for this beat, and
         # director_resolve consumes those via ctx.reaction_loop. Appending the
@@ -605,14 +730,17 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         # dialogue_log while perception_outcome still injected its actions.
 
     plan += [
-        ("director_resolve", "Director · resolve"),
-        # Unconditional but self-gating: pick_background_reactor (commit.py)
-        # is a cheap, LLM-free check that returns None for the large
-        # majority of turns (no salient, un-voiced background presence this
-        # beat) -- only then does background_react spend an LLM call.
+        ("director_resolve", step_label("director_resolve")),
+        # Unconditional but self-gating: `pick_background_reactors`
+        # (persist/commit_background.py) is a cheap, LLM-free check that
+        # returns [] for the large majority of turns (no salient, un-voiced
+        # background presence this beat) -- only then does background_react
+        # spend an LLM call, and at most `background_config.max_reactors` of
+        # them. The singular `pick_background_reactor` beside it is a
+        # single-winner wrapper this stage does not call.
         (_BG_KEY, _background_stage_label(chat_id)),
-        ("perception_outcome", "Perception · pass 2 — the outcome"),
-        ("narrator", "Narrator · render"),
+        ("perception_outcome", step_label("perception_outcome")),
+        ("narrator", step_label("narrator")),
     ]
     # Prefer pre-loaded extra_players (already on ctx from _load_extra_players
     # during pipeline setup) to avoid a redundant DB query every turn. Fall
@@ -625,8 +753,8 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     else:
         _has_extras = False
     if _has_extras:
-        plan.append(("narrator_extra", "Narrator · render (other players)"))
-    plan.append(("commit", "Mapping & memory · commit-up"))
+        plan.append(("narrator_extra", step_label("narrator_extra")))
+    plan.append(("commit", step_label("commit")))
     # Last, so an extension anchors against the plan the engine actually built
     # this beat -- and only against it: splices derive from the enabled set and
     # installed manifests alone, never from anything this turn happens to be,
@@ -650,11 +778,9 @@ def _background_stage_label(chat_id):
         level = str(background_config(chat_id).get("scene_life") or "off").casefold()
     except Exception:
         level = "off"
-    if level == "ambient":
-        return "Scene life · manager (ambient)"
-    if level == "full":
-        return "Scene life · manager (full)"
-    return "Background · presence reaction"
+    if level in ("ambient", "full"):
+        return step_label(f"{_BG_KEY}.{level}")
+    return step_label(_BG_KEY)
 
 
 def _mapping_must_precede_perception(ctx):
@@ -675,11 +801,8 @@ def _mapping_must_precede_perception(ctx):
         scene = get_scene(ctx.chat.id, ctx.chat)
         if target not in (scene.get("rooms") or {}):
             return True
-    request = str((interp.get("flow") or {}).get("mapping_request") or "").casefold()
-    return any(
-        phrase in request
-        for phrase in ("new room", "generate room", "scene graph", "new location")
-    )
+    return mapping_request_stages_a_room(
+        (interp.get("flow") or {}).get("mapping_request"))
 
 
 def _chat_has_extra_players(chat_id, frame_id=None):
@@ -695,14 +818,23 @@ def _chat_has_extra_players(chat_id, frame_id=None):
         (chat_id, frame_id, chat_id), one=True,
     ))
 
-def establishment_plan():
-    return [
-        ("mapping_stage", "Mapping · route books & lore"),
-        ("director_establish", "Director · establish scene"),
-        ("perception_establish", "Perception · opening player view"),
-        ("narrator", "Narrator · opening"),
-        ("commit", "Mapping & memory · commit-up"),
+def establishment_plan(chat_id=None):
+    plan = [
+        ("mapping_stage", step_label("mapping_stage")),
+        ("director_establish", step_label("director_establish")),
+        ("perception_establish", step_label("perception_establish")),
+        ("narrator", step_label("narrator.establish")),
+        ("commit", step_label("commit")),
     ]
+    # Spliced for the same reason build_plan's return is, and it was not:
+    # `mapping_stage`, `narrator` and `commit` all RUN on turn 0, so an
+    # extension anchored `after:mapping_stage` or `before:narrator` was
+    # silently unplanned there. EXTENSIONS.md's contract says an anchor is
+    # skipped when the turn does not run that step; here the step ran and the
+    # splice still did not happen, which is the opposite of what the document
+    # predicts. `api.provision_story` exists to make turn zero arrive whole,
+    # and the plan half of that was missing.
+    return _extension_splices(plan, chat_id)
 
 def _rehydrate_loop_results(ctx, key, content):
     """Rebuild the per-character result maps a loop step populated in the
@@ -745,6 +877,54 @@ def _rehydrate_loop_results(ctx, key, content):
             continue
         if isinstance(result, dict):
             target.setdefault(cid, result)
+
+
+def _rehydrate_side_channels(ctx, key, content):
+    """Rebuild everything a stage left on `ctx` that its step content does NOT
+    carry, after the pre-turn checkpoint has been restored.
+
+    `ctx[key] = content` restores a stage's OUTPUT. Four cross-stage values are
+    not part of any output: the two loop result maps (above), the two loop
+    micro-view maps, and `outcome_scene`. All five were written by direct
+    assignment, so every resume and every single-step reroll silently ran the
+    remaining stages against a different context than the uninterrupted turn.
+
+    `outcome_scene` is the costly one. The narrator reads it for its spatial
+    frame, its position deltas, its portal states and its sensory manifest,
+    with `get_scene()` as the fallback -- and `perception_outcome`'s own
+    comment says why that fallback is wrong: the committed scene describes the
+    space with LAST beat's facing on movement beats, because commit runs after
+    the narrator. So a narrator reroll restored the pre-turn checkpoint and
+    then re-rendered against it with the beat's own movement missing.
+    Measured: 450 of 451 multi-variant narrator steps in the live corpus sit
+    on turns that also carry a commit step.
+
+    Perception is deterministic and makes no provider call, so the stage is
+    simply re-run for its side effects rather than having its merge duplicated
+    here -- the merge is a pure function of (restored scene, director_resolve)
+    and duplicating it is how the two copies drift. The stored content stays
+    authoritative: only what the stage left on `ctx` is taken. Best-effort,
+    because a side channel must never be the reason a reroll fails.
+    """
+    _rehydrate_loop_results(ctx, key, content)
+    if key in ("interaction_loop", "reaction_loop"):
+        rehydrate_loop_views(ctx, key, content)
+        return
+    if key != "perception_outcome":
+        return
+    if "outcome_scene" in ctx._extra or not ctx.get("director_resolve"):
+        return
+    handler = STEP_HANDLERS.get("perception_outcome")
+    if handler is None:
+        return
+    token = current_step_key.set("perception_outcome")
+    try:
+        handler(ctx, 0)
+    except Exception:
+        _step_logger.exception("outcome_scene rebuild failed on resume")
+    finally:
+        current_step_key.reset(token)
+        ctx["perception_outcome"] = content
 
 # Presentational tail stages: they render the committed turn for the reader and
 # nothing downstream except commit consumes them, so rerolling one may flow
@@ -796,11 +976,12 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     has_existing_steps = bool(q("SELECT 1 FROM steps WHERE turn_id=? LIMIT 1", (turn_id,), one=True))
 
     if only_key:
+        hydrated = []
         for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (turn_id,)):
             c = active_content(turn_id, s["key"])
             if c is not None:
                 ctx[s["key"]] = c
-                _rehydrate_loop_results(ctx, s["key"], c)
+                hydrated.append((s["key"], c))
         s = q("SELECT * FROM steps WHERE turn_id=? AND key=?", (turn_id, only_key), one=True)
         if not s:
             raise RuntimeError(f"step '{only_key}' not found on this turn")
@@ -838,6 +1019,11 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # leaving the turn in an explicit needs-resume state rather than a
             # half-committed one.
             _restore_and_refresh()
+        # AFTER the restore, never before: a side channel rebuilt from the
+        # live world would be rebuilt from the OUTCOME this branch just rolled
+        # back, which is the leak the restore exists to prevent.
+        for _key, _content in hydrated:
+            _rehydrate_side_channels(ctx, _key, _content)
         # Marked stale BEFORE computing (not after) so a crash/abort mid-step
         # leaves accurate breadcrumbs instead of the pre-existing downstream
         # content silently continuing to look fresh.
@@ -876,7 +1062,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         _restore_and_refresh()
 
     if establishment:
-        plan = establishment_plan()
+        plan = establishment_plan(chat_id)
         keys = [key for key, _ in plan]
 
         if from_key is None:
@@ -967,7 +1153,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
 
     if start_key is None:
         yield from _step_stream(bus, turn_id, "director_interpret",
-            "Director · interpret & flow plan", 0, ctx,
+            step_label("director_interpret"), 0, ctx,
             variant_count(turn_id, "director_interpret"))
 
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
@@ -1007,7 +1193,7 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                     "rerun before continuing from a later stage"
                 )
             ctx[key] = c
-            _rehydrate_loop_results(ctx, key, c)
+            _rehydrate_side_channels(ctx, key, c)
             i += 1
             continue
         if key.startswith("character:"):

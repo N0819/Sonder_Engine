@@ -52,11 +52,21 @@ class StepTaggedWarnings(list):
     `ctx.warnings.append(...)` and `ctx.add_warning(...)`, and a dozen tests
     build a stand-in context whose `warnings` is a bare list. Tagging at the
     call sites would have meant editing all of them and would still have
-    missed the next one. Tagging here catches every spelling, including the
-    ones not written yet, and a fake context with a plain list keeps working
-    untagged.
+    missed the next one. Tagging here catches every spelling that ADDS a
+    warning, including the ones not written yet, and a fake context with a
+    plain list keeps working untagged.
 
-    `notes` is parallel to the list itself, one entry per append.
+    All four of them, because the docstring's argument is future spellings and
+    two of the four are C-level: `list.__iadd__` and `list.insert` do not route
+    through a Python `extend`/`append` override, so `ctx.warnings += [...]`
+    added an entry that was in the list, absent from `notes`, and therefore
+    invisible to `for_step` -- the step it belonged to showed no engine note at
+    all. Slice assignment (`w[1:2] = [...]`) is deliberately not covered: it
+    REPLACES rather than adds, and rewriting a warning somebody already raised
+    is not a spelling this channel has.
+
+    `notes` is parallel to the list itself, one entry per warning, at the same
+    index.
     """
 
     def __init__(self, *args):
@@ -64,13 +74,27 @@ class StepTaggedWarnings(list):
         self.notes: list[dict] = [
             {"step": None, "text": str(item)} for item in self]
 
+    def _note(self, item):
+        return {"step": current_step_key.get(), "text": str(item)}
+
     def append(self, item):
         super().append(item)
-        self.notes.append({"step": current_step_key.get(), "text": str(item)})
+        self.notes.append(self._note(item))
 
     def extend(self, items):
         for item in items:
             self.append(item)
+
+    def __iadd__(self, items):
+        self.extend(items)
+        return self
+
+    def insert(self, index, item):
+        # Clamped the way list.insert clamps, so `notes` stays index-parallel
+        # for an out-of-range or negative position too.
+        at = min(max(index if index >= 0 else len(self) + index, 0), len(self))
+        super().insert(index, item)
+        self.notes.insert(at, self._note(item))
 
     def for_step(self, key) -> list[str]:
         """Every warning raised while `key` was the running step.
@@ -150,10 +174,21 @@ class PipelineContext:
     perception_establish: Optional[dict] = None
     perception_act: Optional[dict] = None
     director_resolve: Optional[dict] = None
+    # Declared, not left to `_extra`, for the reason agents/README.md step 5
+    # gives: five modules read this stage's output (narration, perception and
+    # three commit domains). The storage choice is not cosmetic -- `__contains__`
+    # answers `getattr(...) is not None` for a declared field but `key in
+    # _extra` for anything else, so an undeclared stage whose handler returned
+    # None passed `_assert_plan_materialized` and a declared one does not.
+    background_react: Optional[dict] = None
     perception_outcome: Optional[dict] = None
     narrator: Optional[dict] = None
     interaction_loop: Optional[dict] = None
     reaction_loop: Optional[dict] = None
+    # Nothing downstream reads it -- commit is the last stage -- but it is a
+    # planned step, and the materialization check must be able to tell a
+    # commit that returned nothing from one that never ran.
+    commit: Optional[dict] = None
 
     character_results: dict[int, dict] = field(default_factory=dict)
     reaction_results: dict[int, dict] = field(default_factory=dict)
@@ -168,8 +203,6 @@ class PipelineContext:
     _player_room: Optional[str] = None
     _books: Optional[list[int]] = None
     _persona: Optional[dict] = None
-    _fiction_model: Optional[dict] = None
-    _simulation_clock: Optional[dict] = None
 
     # What the deterministic layer had to REPAIR in this beat's model output,
     # tagged with the step that raised each message (see StepTaggedWarnings)
@@ -213,8 +246,6 @@ class PipelineContext:
             val = getattr(self, key)
             if val is not None:
                 return val
-            if key.startswith("_") and key in self._extra:
-                return self._extra[key]
             return default
         if key.startswith("character:"):
             cid = int(key.split(":")[1])

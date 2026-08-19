@@ -10,6 +10,8 @@ def test_agent_roles_live_in_focused_modules():
     assert agents.character_step.__module__ == "agents.character"
     assert agents.interaction_loop.__module__ == "agents.loops"
     assert agents.narrator.__module__ == "agents.narration"
+    assert agents.narrator_extra.__module__ == "agents.narration"
+    assert agents.background_react.__module__ == "agents.background"
     assert agents.run_pipeline.__module__ == "agents.runtime"
 
 
@@ -29,6 +31,18 @@ def test_legacy_facade_exports_application_entry_points():
         "is_player_speaker",
     }
     assert required <= set(dir(agents))
+
+
+def test_every_in_package_stage_is_reachable_through_the_facade():
+    # Derived from STEP_HANDLERS rather than hand-listed, because a
+    # hand-written subset is structurally incapable of noticing the name the
+    # facade DROPPED -- which is how `narrator_extra` and `background_react`
+    # went missing while `narrator` beside them did not.
+    missing = sorted(
+        key for key, handler in agents.STEP_HANDLERS.items()
+        if getattr(handler, "__module__", "").startswith("agents.")
+        and getattr(agents, key, None) is not handler)
+    assert missing == []
 
 
 def test_runtime_registry_supports_extension_steps():
