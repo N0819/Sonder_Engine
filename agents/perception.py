@@ -36,6 +36,7 @@ from story.scene import (
     is_player_speaker,
     persona_of,
     senses_of,
+    scent_of,
     sheet_state,
 )
 import os
@@ -3758,9 +3759,150 @@ def _gated_ambient_percepts(gate, sensory_events, room):
     return composer.ambient_percepts(gated, room)
 
 
+#: Substance placements whose matter has open air around it. `interior` is
+#: matter with a body between it and the room and `contained` is matter in a
+#: vessel, so neither reaches a nose across the room. This is the one
+#: subtraction the barrier table cannot make for scent -- there is no edge
+#: between two rooms to consult -- and the ledger already records which case
+#: it is, so it is read rather than guessed.
+_SCENT_CARRYING_PLACEMENTS = frozenset({"surface", "room"})
+
+
+def _body_scents(ctx):
+    """{name: standing card scent} for the player and every cast body.
+
+    Read from the cards once per stage rather than threaded through the five
+    places a body record is built, so the standing smell has one spelling and
+    cannot be present in one stage's view and absent from the next -- which
+    is how `entity_state` came to fire on the opening turn only.
+    """
+    out = {}
+    pers = persona_of(ctx.chat)
+    if isinstance(pers, dict):
+        name = pers.get("name") or persona_name(pers)
+        scent = scent_of(pers)
+        if name and scent:
+            out[str(name)] = scent
+    for c in ctx.cast or []:
+        sh, _, _ = sheet_state(c)
+        name = character_name(sh)
+        scent = scent_of(sh)
+        if name and scent:
+            out[name] = scent
+    return out
+
+
+def _scent_sources_for(sc, observer, observer_room, others, display_map,
+                       senses, body_scents=None):
+    """Every smell reaching one observer, graded and labelled.
+
+    THREE LEDGERS, ONE SHAPE. A body's standing smell comes from its card, an
+    object's from the scene entity, and deposited matter's from the substance
+    record -- and each is graded by exactly the relation its own channel
+    already uses, so nothing here restates the barrier table.
+
+    ATTRIBUTION IS A SECOND CHANNEL'S WORK, and it is the whole of the
+    firewall answer (see `composer.scent_percepts`). A smell is attached to a
+    body only when this observer can also SEE that body, under the label the
+    observer already earned -- so a disguise that conceals identity yields the
+    stranger's descriptor here exactly as it does for presence and pose, and a
+    body in the dark or beyond a door delivers its smell and not its name.
+
+    An ENTITY's smell is never attributed at all, and that is deliberate
+    rather than cautious: the composer admits no percept for the objects
+    standing in a room, so naming the oven on the smell channel would be this
+    channel delivering a fact about the room's contents that no channel
+    gated. A SUBSTANCE is attributed to what it is ON, never to the body it
+    came FROM -- the standing form of the cause-blindness
+    `substance_event_clause` already keeps for the beat's own delta.
+
+    An observer's OWN card scent is not minted: `others` excludes them, and a
+    standing fact true of every beat of a life is noise in a context window
+    rather than a percept.
+    """
+    body_scents = body_scents or {}
+    sources = []
+
+    def graded(rel):
+        return composer._sense_graded(scent_level(rel), "scent", senses)
+
+    def sees(subject):
+        return (composer._sense_graded(
+            visual_level_between(sc, observer, subject), "sight", senses)
+            == "full" and entity_arc(sc, observer, subject) != "rear")
+
+    def rel_to(subject, room=None):
+        return spatial_rel_between(sc, observer, subject,
+                                   observer_room=observer_room,
+                                   target_room=room)
+
+    known_bodies = [str(observer)]
+    for body in others or []:
+        name = str(body.get("name") or "")
+        if not name:
+            continue
+        known_bodies.append(name)
+        scent = str(body_scents.get(name) or "").strip()
+        if not scent:
+            continue
+        label = str(display_map.get(name) or "")
+        sources.append({
+            "key": composer.body_key(name), "scent": scent,
+            "level": graded(rel_to(name, body.get("room"))),
+            "label": label,
+            "attributed": bool(label) and sees(name),
+        })
+
+    for entity_id, entity in ((sc or {}).get("entities") or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        scent = str(entity.get("scent") or "").strip()
+        if not scent:
+            continue
+        if any(same_subject(sc, entity_id, body)
+               or same_subject(sc, entity.get("name"), body)
+               for body in known_bodies):
+            continue        # a registered body's smell is its card's to state
+        sources.append({
+            "key": composer.body_key(entity_id), "scent": scent,
+            "level": graded(rel_to(entity_id, room_of(sc, entity_id))),
+            "label": "", "attributed": False,
+        })
+
+    rooms = (sc or {}).get("rooms") or {}
+    for record in ((sc or {}).get("substances") or []):
+        if not isinstance(record, dict):
+            continue
+        scent = str(record.get("scent") or "").strip()
+        target = str(record.get("target") or "")
+        placement = str(record.get("placement") or "")
+        if not scent or not target \
+                or placement not in _SCENT_CARRYING_PLACEMENTS:
+            continue
+        if same_subject(sc, target, observer):
+            # Matter on your own body is in your own air, whatever the room
+            # around you is doing.
+            level = composer._sense_graded("full", "scent", senses)
+            label = ""
+        elif target in rooms:
+            level = graded(spatial_rel(sc, observer_room, target))
+            label = ""
+        else:
+            level = graded(rel_to(target, room_of(sc, target)))
+            label = str(display_map.get(target) or "")
+        sources.append({
+            "key": str(record.get("substance_id") or "")
+                   or composer.body_key(target + scent),
+            "scent": scent, "level": level, "label": label,
+            "attributed": bool(label) and sees(target),
+        })
+    return sources
+
+
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
-                                gate=None, extra_parts=None):
+                                gate=None, extra_parts=None,
+                                body_scents=None):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -3861,6 +4003,9 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         for row in rows or [] if isinstance(row, dict)
         for part in (row.get("part_data") or [])
     ]))
+    percepts.extend(composer.scent_percepts(_scent_sources_for(
+        sc, name, room, others, display_map, senses,
+        body_scents=body_scents)))
     return percepts
 
 
@@ -3942,6 +4087,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
     roster = _identity_roster(p_name, p_appearance, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
+    body_scents = _body_scents(ctx)
     clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -3960,7 +4106,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
                 or (entity_states or {}).get(name),
-                gate=gate, extra_parts=cast_parts)
+                gate=gate, extra_parts=cast_parts,
+                body_scents=body_scents)
             percepts.extend(
                 _gated_ambient_percepts(gate, sensory_events, p.get("room")))
             company[pid] = _composer_company(others, display_map, percepts)
@@ -4004,6 +4151,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     roster = _identity_roster(p_name, p_visible, ctx.cast)
     identity_space = _composer_identity_space(ctx, p_name, p_visible)
     cast_parts = _composer_extra_parts(ctx, p_name)
+    body_scents = _body_scents(ctx)
     prev_ledger = _composer_prev_ledger(ctx)
     actor_body = {
         "name": p_name, "room": ctx.get("_player_room"),
@@ -4042,7 +4190,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 or _own_body_state(sc, name),
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
-                extra_parts=cast_parts)
+                extra_parts=cast_parts, body_scents=body_scents)
             self_forms = _composer_self_forms(
                 name, self_forms_by_name.get(name),
                 bodies_by_name.get(name), joint_labels, display_map)
@@ -4308,6 +4456,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     # The stage roster is who ACTED this beat; the identity space is who
     # this chat could name. Authored prose is gated against the second.
     cast_parts = _composer_extra_parts(ctx, p_name)
+    body_scents = _body_scents(ctx)
     identity_space = list(ident_roster)
     _space_seen = {str(r["name"]).casefold() for r in identity_space}
     for s in _composer_identity_space(ctx, p_name, appearances.get(p_name)):
@@ -4379,7 +4528,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 appearance_changed=appearance_changed,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
-                extra_parts=cast_parts)
+                extra_parts=cast_parts, body_scents=body_scents)
             self_forms = _composer_self_forms(
                 name, self_forms_by_name.get(name),
                 bodies_by_name.get(name), joint_labels, display_map)
