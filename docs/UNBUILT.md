@@ -2199,15 +2199,48 @@ going stale whenever the bar changed width after first paint. That fixes the
 staleness. It does not fix the floor, which is this entry.
 
 
-### 1.45 `_inject_visible_actor` is imported everywhere and called nowhere
+### 1.45 Seven perception helpers with passing tests and no production caller
 
-`agents/common._inject_visible_actor` has **zero production call sites**. Its
-three siblings in the same file are all wired (`_inject_dialogue` 3,
-`_compose_residue_view` 2, `_inject_action` 1); this one is imported by
-`agents/perception.py` and re-exported from `agents/__init__.py`, and only
-`tests/test_perception_appearance.py` and `tests/test_perception_identity_gate.py`
-ever call it. So it has passing tests and no effect, which is the worst
-combination available: it reads as a live floor.
+`agents/common._inject_visible_actor` has **zero production call sites**. It is
+imported by `agents/perception.py` and re-exported from `agents/__init__.py`,
+and only `tests/test_perception_appearance.py` and
+`tests/test_perception_identity_gate.py` ever call it. So it has passing tests
+and no effect, which is the worst combination available: it reads as a live
+floor.
+
+**Re-verified 2026-08-18, and it is not one helper but seven.** The original
+entry said `_inject_action` had one live call site; that call site is inside
+`agents/perception._inject_onset_sequence`, which itself has no production
+caller, so the whole cluster is dead code calling dead code:
+
+| Symbol | Where | Only caller |
+|---|---|---|
+| `common._inject_visible_actor` | `common.py:4570` | tests |
+| `common._inject_action` | `common.py:4515` | dead `_inject_onset_sequence` |
+| `perception._inject_onset_sequence` | `perception.py:1343` | nothing |
+| `perception._inject_onset_speech` | `perception.py:1134` | dead `_inject_onset_sequence` |
+| `perception._strip_onset_rendering` | `perception.py:1240` | nothing |
+| `perception._self_cannot_see_own_surface` | `perception.py:1311` | dead `_inject_onset_sequence` |
+| `perception._deliver_foreground_body_details` | `perception.py:679` | tests |
+
+`_inject_dialogue` and `_compose_residue_view` are the two siblings that ARE
+live, both through `agents/composer.py` (and `_compose_residue_view` also
+through `language_adapters/japanese.py`).
+
+Every one of them was a repair over MODEL PROSE, and perception no longer
+produces any: chronology is `Percept.order_key`, concealment is a per-percept
+gate, and a rendered view is realised from percepts alone. So this is not seven
+oversights, it is one retirement that took its own callers with it and left the
+helpers standing.
+
+**The one that mattered has already cost a guard.** `tests/test_self_surface_when_enclosed.py`
+carried two tests that asserted the STATEMENT ORDER inside `_inject_onset_sequence`
+via `inspect.getsource` — one of them saying in its own docstring "or it is a
+well-tested function nothing calls", which is exactly what it was. They are
+gone (`6d843e2`); the property they guarded is enforced instead by the composer,
+which never gives an actor their own act surface at all. `Design.md`'s
+conformance rows for both this and the sealed-actor case have been corrected to
+name the mechanism that actually runs.
 
 Both of its jobs appear to be superseded by the composer IR rather than
 missing. The appearance half is done by `composer.appearance_percept` →
@@ -2516,7 +2549,7 @@ tree and the tree is exactly where a retired key is absent. Anything that
 enforces this has to compare a list of live keys against a database, which
 means the list has to exist first.
 
-### 1.52 The monolith-split audit: 43 findings, 20 repaired, 23 open
+### 1.52 The monolith-split audit: 43 findings, and the rows still open
 
 The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and `agents/director.py`
 required somebody to read all 24,783 lines once. Nothing else in this project
@@ -2534,6 +2567,17 @@ Repair began 2026-08-18 under
 per finding, failing test first where the finding is live, `make check` green
 between. **A line below is deleted in the commit that lands it** — this list is
 the register, so it must shrink.
+
+The heading used to carry a repaired/open COUNT and no longer does, because the
+count could not be reconciled against the rows: 43 findings against 21 landed
+and 16 still-open rows leaves six unaccounted, and those six are findings the
+split ITSELF closed (a doc block relocated by the move, a symbol that ended up
+beside the machinery it configures, `tools/project_check.py`'s deep-import head
+match, the monkeypatch repoints) which were recorded in the audit documents and
+never opened here. A number that has to be recomputed from three files to be
+checked is not a register. The ROWS are the register; count them if you need a
+count. Reconciled against source 2026-08-18: every row below was re-verified,
+and the only one that had landed was DIRECTOR D4.
 
 **Live behaviour, still open.**
 
@@ -2583,13 +2627,11 @@ the register, so it must shrink.
 
 **Tests that pass for the wrong reason.**
 
-- **DIRECTOR D4** — three Director cue constants are dead at runtime (every
-  real path goes through `_ling(...)` under a story-language context) and their
-  tests assert against the eagerly-bound ENGLISH copies. **The tests must be
-  rewritten to `english_linguistic("agents.director", ...)` BEFORE the
-  constants can go** — `tests/test_language_packs.py` shows the form.
 - **DIRECTOR D11** — `tests/test_style_guide.py` asserts on `director.py`'s
-  SOURCE LAYOUT by def-name marker.
+  SOURCE LAYOUT by def-name marker. Still open at `tests/test_style_guide.py:143`
+  (`open("agents/director.py").read()`, sliced between `"def director_interpret"`
+  and `"def _reconcile_interpretation"`), and the audit's warning that the suite
+  would hold more of the class was right: `391bf14` fixed two others.
 - **COMMIT** — `_NAME_TITLE_PREFIXES` and `_BACKGROUND_NAME_TITLE_WORDS` carry
   a correctness-critical comment about why they must stay separate, and no test
   asserts they are.
@@ -2637,6 +2679,13 @@ the register, so it must shrink.
 - DIRECTOR D7 — the `if True:` vestige of the removed orchestration flag.
 - DIRECTOR D12/D13 — §2.18 rewritten to hold only what has NOT landed, and
   design note 19's "Experiment, not a landing" header corrected.
+- DIRECTOR D4 (`21dcdf8`) — the three eagerly-bound English cue constants
+  (`_UNCONSCIOUSNESS_CUE`, `_SLEEP_CUE`, `_STAY_UNDER_CUE`) are gone from
+  `director_lingua.py`; every reader goes through `_ling(...)` under the story's
+  own language context, and `tests/test_awareness.py` /
+  `tests/test_awareness_waking.py` now reach the English objects through
+  `english_linguistic("agents.director", ...)` as the finding required. Verified
+  2026-08-18: no module-level definition of any of the three survives.
 
 **Landed from the Phase 2 whole-codebase audit** (not one of the 43, recorded
 here because it is the most serious thing either audit found):
@@ -2656,6 +2705,155 @@ functions that made these files unreadable did not get smaller:
 does not split functions, and those three are most of what made the originals
 hard to audit.
 
+
+### 1.53 The ambient perception surfaces are built, and no view renders them
+
+`agents/perception.py` assembles three per-observer ambient views into every
+perceiver record, on every pass, for every observer:
+
+- `crowds_for_room` — the crowd blob in the room, its band, and (own-room only)
+  what its murmur is about;
+- `couriers_for_room` — the rider crossing the room, which door he makes for,
+  whether he is waiting, with the `courier_id` the interception ops need;
+- `artifacts_for_room` — the notice hanging on the wall, and what kind of thing
+  it looks like.
+
+**Nothing reads any of the three keys.** Grepped 2026-08-18: `crowds`,
+`couriers` and `notices` are written at `perception.py:2410-2412`, `2438-2440`,
+`2689-2691`, `3133-3135`, `3159-3161`, `3189-3191` and appear in no reader;
+`agents/composer.py` contains the strings `crowd`, `courier` and `notice`
+exactly zero times, so no percept builder admits one and `render_view` cannot
+realise one. The only consumers of the functions are `agents/director*.py`
+(which uses its own `_couriers_view`, not this one) and their unit tests.
+
+This is residue of the retired per-observer model call: the payload used to be
+handed to a model that wrote the view, and when the composer replaced it the
+three keys kept being computed and stopped being delivered. The composer is
+right to refuse them — it may not read the world, and these come from `wget`
+against world keys — so the fix is a percept builder per surface, fed the
+already-described dicts as data, exactly as `_with_comm_channel` feeds the
+comms channel.
+
+What this costs, stated plainly, because three documents were claiming
+otherwise: **a dispatched courier cannot be seen.** He can be dispatched, moved
+on the simulation clock, questioned, silenced and made to arrive — and no mind
+in any room he crosses receives a single word about him, so the design's own
+verbs (intercept, follow, question, outrun) have no perceptual event to begin
+from. Same for a posted bill, which can be read only by a mind that was never
+told it was there. `docs/design/OFFSCREEN_WORLD_COMPLETION.md` §2 tags the
+crowd item **BUILT** on the strength of step 1 being "a stationary crowd blob
+visible to ordinary perception"; that step is not built, and neither is step 2
+(persistent location fixtures — no barkeep/vendor/regular subsystem exists in
+the tree at all). Two of that item's five ordered steps are absent. Its own §2
+already contains the warning, written about the world key nothing wrote: "The
+module shipped pure and correct and could not occur … Worth remembering when
+reading any other 'built' line in this document." It applies to itself.
+
+### 1.54 Scent is a permission system with nothing to permit
+
+Everything that decides WHETHER a smell crosses is built and good:
+`spatial_barriers._SCENT_BARRIER_LEVELS` is a table rather than a set because
+scent is the one channel with degrees, `spatial_senses.scent_level` is its only
+reader, the three enclosure directions grade it, card-authored scent acuity runs
+through the same `composer._sense_graded` gate as every other sense, and
+`agents/perception.py` computes `scent_channel_to_sources` /
+`scent_channel_to_actor` for every observer every beat.
+
+**Nothing has a smell.** There is no scent field on a character card, on a
+persona, on an entity, on a room, or in any `StateDiff` channel. No percept
+builder emits `channel="smell"` — `"smell"` is a member of `composer.CHANNELS`
+and appears in no `Percept` the codebase constructs — so the computed verdict
+is read only by `tests/test_masked_floor_leaks.py`. `agents/narration.py`
+already says so in code, reporting the channel to the narrator as "open air;
+nothing ledgered rides this channel".
+
+Registered rather than deleted because the halves are worth keeping apart: the
+gate is finished work, and building content would mean deciding where a smell
+lives (a card field is stable body odour; an entity field is a thing that
+smells; a `StateDiff` channel is a smell a beat produced) and how it decays.
+The gate is the hard half and it is done. `Design.md` carries the matching row.
+
+### 1.55 `psychology.self_model.protected_beliefs` is authored and read by nothing
+
+Normalized by `story/character_schema.py` (`_profile_str_list`, three default
+sites), editable in `static/js/editors.js` (a "Protected beliefs" line list,
+read back on save), carried in archives with the rest of the sheet, and
+consulted by **no prompt, no runtime and no commit path** — `grep -rn -w
+protected_beliefs` finds only those two files, the demo card that has one, and
+`docs/experiments/AUDIT_MIND.md`, which found it first.
+
+Distinguish it from the thing that IS live, because `Design.md` credited them
+as one feature: the per-belief `protected` FLAG on a `self_model.beliefs` entry
+is read by `mind/psychology_runtime.py:439`, which halves the weakening step
+(0.05 against 0.15) for a belief carrying it. A flag on a belief the mind holds
+works. The parallel free-string list does not, and an author filling it in gets
+a character who behaves as though they had not — the silent-empty-field failure
+class CLAUDE.md warns about, arriving from the other direction: a field that is
+filled and inert.
+
+Either wire it (the obvious reading is that these are beliefs the mind defends
+rather than revises, which is what the flag already does — in which case the
+list should MINT flagged beliefs at sheet load) or delete it from the schema
+and the editor. Leaving it is the one option that keeps costing authors.
+
+### 1.56 The project tier's occasion now arrives, and is declined
+
+v4 made the review beat reachable (`Design.md`'s project row has the diagnosis:
+one condition written twice, so the only moment a first project could be
+adopted was conditional on already having one). Re-measured read-only against
+the live `engine.db` on 2026-08-18, **329 turns after that fix landed**:
+
+| | |
+|---|---|
+| `chat_chars` rows | 100 |
+| banks carrying `interior.projects` / `former_projects` at all | 32 |
+| banks carrying a `project_review` | **6** |
+| banks holding a project | **0** |
+| banks holding a former project | **0** |
+
+So the fix worked and the tier still has never been used. The failure has
+MOVED, not closed: it was "the occasion cannot occur", and it is now "the
+occasion occurs and the character does not take it". Those want different
+evidence. The candidates, none of them measured yet:
+
+- the adoption deliberation refuses everything — it is built to refuse a task
+  wearing the word, and may be refusing legitimate candidates too;
+- the review beat's payload reaches the model but loses to a drive-serving want
+  in the same beat, which is the exact mechanism that made the shrine lose nine
+  beats running at intention weight 0.8 against 1.0;
+- `project_review` fires on beats where nothing is a plausible life's work.
+
+Do not change a gate on this until one of the three is measured. The v4 lesson
+is that the previous gate change was correct and did not produce an adoption,
+and a second blind change would make the two indistinguishable.
+
+### 1.57 Two per-item tags in `OFFSCREEN_WORLD_COMPLETION.md` overstate what is built
+
+`docs/design/OFFSCREEN_WORLD_COMPLETION.md` is a design note and its per-item
+tags are one of the four rival status surfaces `docs/README.md` names. Checked
+against source 2026-08-18; recorded here because `UNBUILT.md` is the register
+and the note is argument.
+
+- **§2 "Build crowds and persistent fixtures — BUILT (2026-08-10)"** claims all
+  five ordered steps are in the tree. Two are not. Step 1 ("a stationary crowd
+  blob visible to ordinary perception") is not built — `crowds_for_room` is
+  computed per observer and consumed by nothing (§1.53). Step 2 ("persistent
+  location fixtures": barkeeps, vendors, guards, attendants, regulars belonging
+  to a LOCATION and re-meetable) has no implementation anywhere; background
+  presences are scene-scoped and are a different thing. Steps 3–5 (density as
+  terrain, movement/splitting, one-way emergence) are real:
+  `world/crowds.py`'s `density`/`terrain`/`drift`, `advance_crowds`/`split_band`,
+  and `emerge`.
+- **§5's "`offscreen_log` has exactly one reader, `gaps.interim_for`"** is
+  wrong: there are three read sites — `world/gaps.py:268` (the consumer),
+  `world/offscreen.py:464` (`append_offscreen_log`'s own read-modify-write) and
+  `world/spatial_frames.py:906`/`1053` (frame fork and merge copying the key).
+  The claim it supports — that no diagnostic surface exists to spoiler-gate —
+  survives, since only one of the three is a reader in the sense meant. The
+  sentence is what is wrong, not the conclusion.
+
+
+## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in
