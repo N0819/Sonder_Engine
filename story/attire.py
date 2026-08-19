@@ -51,6 +51,47 @@ import re
 # no single region can be right.
 REGIONS = ("head", "torso", "arms", "hands", "waist", "groin", "legs", "feet")
 
+# Things a story hands to a wearing list that are not worn. A garment ledger
+# fed the furniture somebody is sitting on, or the cup in their hand, reports
+# them CLOTHED in it forever -- the ledger has no other channel to lose it
+# through, because nothing takes off a chair.
+#
+# Canonical here, in the leaf module, because three separate callers need it
+# and each one used to carry its own copy: the Director sanitises what a
+# specialist proposed, `persist/commit_attire` sanitises what is about to be
+# written, and `story/scene` sanitises an authored outfit at seed time. A
+# per-file duplicate check cannot see three copies in three files, so nothing
+# would ever have reported them drifting apart (audit STORY-F11).
+_NON_ATTIRE_TERMS = {
+    "chair", "cushion", "seat", "table", "cup", "mug", "glass",
+    "bottle", "book", "weapon", "tool",
+}
+
+
+def sanitize_attire_items(items):
+    """A wearing list with the non-garments and the repeats taken out.
+
+    Whole-word matching against the phrase, so "glasses" and "tablecloth"
+    survive while "a bottle of wine" and "bottle green coat" both go -- a
+    garment named after an object it is not is the accepted cost of never
+    letting the object itself in. Order is preserved: a wearing list is
+    outermost-first by convention everywhere else in this module, and
+    sorting it would silently relayer somebody.
+    """
+    result = []
+    for item in items or []:
+        text = str(item).strip()
+        lowered = text.casefold()
+        if not text:
+            continue
+        if any(re.search(rf"\b{re.escape(term)}\b", lowered)
+               for term in _NON_ATTIRE_TERMS):
+            continue
+        if text not in result:
+            result.append(text)
+    return result
+
+
 # A coarse region may have a small, closed set of independently coverable
 # surfaces where play actually needs the distinction.  This is deliberately
 # not a second anatomy: contacts, injury, position and facing continue to use
