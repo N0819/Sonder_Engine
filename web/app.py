@@ -769,39 +769,6 @@ def _build_world_id_remap(blob, protected_ids=None):
 
     return remap
 
-def _apply_world_id_remap(blob, remap):
-    """Apply ID remapping to all world-state data in a checkpoint blob."""
-    if not remap:
-        return blob
-
-    def deep_remap(obj):
-        if isinstance(obj, str):
-            return remap.get(obj, obj)
-        if isinstance(obj, dict):
-            new = {}
-            for k, v in obj.items():
-                nk = remap.get(k, k) if isinstance(k, str) else k
-                new[nk] = deep_remap(v)
-            return new
-        if isinstance(obj, list):
-            return [deep_remap(item) for item in obj]
-        return obj
-
-    for key in ("world_entities", "world_placements", "world_conditions",
-                "scheduled_events", "world_events", "room_registry",
-                "fiction_worlds", "fiction_locations"):
-        if blob.get(key):
-            blob[key] = deep_remap(blob[key])
-            _remap_row_json_fields(blob[key], remap)
-
-    if isinstance(blob.get("world"), dict):
-        new_world = {}
-        for k, v in blob["world"].items():
-            new_world[k] = deep_remap(v)
-        blob["world"] = new_world
-
-    return blob
-    
 def _deep_remap_ids(obj, remap):
     """Recursively remap exact string matches and dict keys."""
     if not remap:
