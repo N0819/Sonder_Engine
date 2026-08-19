@@ -127,7 +127,7 @@ def check_duplicate_python_symbols(errors: list[str]) -> None:
     for path in sorted(engine_python_paths()
                        + list((ROOT / "tests").glob("test_*.py"))):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        rel = path.relative_to(ROOT)
+        rel = path.relative_to(ROOT).as_posix()
         for name, lines in _redefinitions(tree.body).items():
             errors.append(
                 f"{rel} defines top-level symbol {name!r} "
@@ -310,7 +310,15 @@ def check_install_root_derivations(errors: list[str]) -> None:
     an engine that quietly does less.
     """
     for path in sorted(engine_python_paths()):
-        rel = str(path.relative_to(ROOT))
+        # `.as_posix()`, not `str()`. `INSTALL_ROOT_OWNER` is written with a
+        # forward slash because every constant in this file is, and on Windows
+        # `str(Path)` yields `core\paths.py` -- so the one file PERMITTED to
+        # derive a root audited itself as a violation and no maintainer on
+        # Windows could get a green structural check. Reported by the
+        # Directive team against alpha 9.6.1, reproduced in their 3.12 venv.
+        # Every other comparison site in this file already did this; this one
+        # was the outlier, which is why it was invisible.
+        rel = path.relative_to(ROOT).as_posix()
         if rel == INSTALL_ROOT_OWNER:
             continue
         text = path.read_text(encoding="utf-8")
@@ -350,7 +358,7 @@ def check_empty_tests(errors: list[str]) -> None:
     """
     for path in sorted((ROOT / "tests").glob("test_*.py")):
         text = path.read_text(encoding="utf-8")
-        rel = path.relative_to(ROOT)
+        rel = path.relative_to(ROOT).as_posix()
         if not text.strip():
             errors.append(f"{rel} is empty")
             continue
