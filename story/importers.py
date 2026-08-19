@@ -1028,6 +1028,31 @@ def generate_persona(brief, language="en"):
     )
     return pid, sheet
 
+#: Exactly what `guess_category` below can return -- a six-way guess over an
+#: entry's text, and NOT `memory.LORE_CATEGORIES`, which is the twelve-value
+#: vocabulary an entry's own authored `category` field uses. Confusing the two
+#: is how `guess_book_type`'s map came to carry rows for `character` and
+#: `knowledge`, which nothing feeding it can produce, while `myth` and `other`
+#: -- which it produces constantly -- had no row at all.
+GUESSABLE_CATEGORIES = ("layout", "mechanic", "myth", "event", "location",
+                        "other")
+
+#: The book type a guessed category implies. Its domain is exactly
+#: `GUESSABLE_CATEGORIES`, bound by a test, because a reader adding a branch
+#: to the guess has no other signal that this is the thing that must change.
+_BOOK_TYPE_BY_CATEGORY = {
+    "location": "location",
+    "layout": "location",
+    "mechanic": "system",
+    "event": "events",
+    # A book of legends, prophecy and religion is world lore. It fell to
+    # "general" before, along with everything genuinely unclassifiable, which
+    # made the two indistinguishable to every later reader.
+    "myth": "world",
+    "other": "general",
+}
+
+
 def guess_category(keys, content):
     t = ((keys or "") + " " + (content or "")).lower()
 
@@ -1064,14 +1089,7 @@ def guess_book_type(entries):
     if counts[top] < max(2, len(entries) * 0.5):
         return "general"
 
-    return {
-        "location": "location",
-        "layout": "location",
-        "mechanic": "system",
-        "event": "events",
-        "character": "characters",
-        "knowledge": "knowledge",
-    }.get(top, "general")
+    return _BOOK_TYPE_BY_CATEGORY.get(top, "general")
 
 def _batch_entries_by_chars(entries, max_batch_chars):
     batches, current, current_chars = [], [], 0
