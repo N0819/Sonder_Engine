@@ -182,3 +182,53 @@ class TestCanonCanBeChangedAfterTheStoryStarts:
         assert canon_ids() == [lid]
         app.detach_lore(cid)
         assert canon_ids() == []
+
+
+class TestAnAttachedLorebookCanBeSilenced:
+    """FRONTEND-9. `chat_lorebooks.enabled` was declared, INSERTed as 1 by
+    five writers, honoured by four readers, and UPDATEd by nothing -- so the
+    column had one reachable value and the read path around it was dead."""
+
+    def test_the_panel_calls_the_route(self):
+        assert '"PUT",\n                      `/api/chats/${chatId}/lorebooks/${lb.id}`' \
+            in SETTINGS_JS
+
+    def test_disabling_drops_the_book_out_of_retrieval(self, temp_db):
+        import time
+
+        from mind.memory import chat_lorebook_ids
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        lid = temp_db.qi("INSERT INTO lorebooks(name,chat_id) VALUES(?,?)",
+                         ("Attached", None))
+        attached = app.attach_lore(cid, {"lorebook_id": lid})["lorebook_id"]
+
+        assert attached in chat_lorebook_ids(cid)
+
+        assert app.set_book_enabled(cid, attached, {"enabled": False}) == {
+            "lorebook_id": attached, "enabled": False}
+        assert attached not in chat_lorebook_ids(cid)
+        # Still attached, and every entry still there -- that is what makes it
+        # a different act from detaching.
+        assert attached in chat_lorebook_ids(cid, enabled_only=False)
+
+        app.set_book_enabled(cid, attached, {"enabled": True})
+        assert attached in chat_lorebook_ids(cid)
+
+    def test_a_book_that_is_not_attached_is_a_404(self, temp_db):
+        import time
+
+        import pytest
+        from fastapi import HTTPException
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Test", "", time.time()))
+        lid = temp_db.qi("INSERT INTO lorebooks(name,chat_id) VALUES(?,?)",
+                         ("Loose", None))
+
+        with pytest.raises(HTTPException) as caught:
+            app.set_book_enabled(cid, lid, {"enabled": False})
+        assert caught.value.status_code == 404
