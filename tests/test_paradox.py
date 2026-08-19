@@ -159,6 +159,50 @@ class TestTriggering:
         assert state is not None
         assert state["epicenter_room"] == "road"
 
+    def test_an_unplaced_anchor_falls_back_to_the_player_not_to_dict_order(
+            self, temp_db):
+        """The comment said "fall back to wherever the player is"; the code
+        took `next(iter(positions.values()))` -- whichever body the dict
+        happened to yield first. A wound is opened where the violation
+        happened, so guessing it from insertion order puts the epicenter in a
+        room nobody was in."""
+        chat_id = _make_chat(temp_db)
+        persona_id = temp_db.qi("INSERT INTO personas(name,sheet) VALUES(?,?)",
+                                ("Rose", "{}"))
+        temp_db.qi("UPDATE chats SET persona_id=? WHERE id=?",
+                   (persona_id, chat_id))
+        wset(chat_id, "scene", {
+            "rooms": {"church": {"name": "Church", "adjacent": []},
+                      "road": {"name": "Road", "adjacent": []}},
+            # The unrelated body is FIRST; the player is not.
+            "positions": {"bystander": "church", "Rose": "road"},
+            "entities": {}})
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                required_exists=False, label="x")
+        _make_entity(chat_id, "pete")  # never placed in `positions`
+        paradox.check_and_apply_paradox(_make_ctx(chat_id), 0)
+        assert paradox.get_paradox(chat_id, None)["epicenter_room"] == "road"
+
+    def test_a_warden_is_never_placed_in_a_room_that_is_not_one(self, temp_db):
+        """`positions` values name ROOMS. Writing None there is the category
+        error AGENTS.md names: every spatial query answers `unknown`, which is
+        indistinguishable from distance, so a warden nothing can see or reach
+        stands in the ledger forever."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "scene", {"rooms": {}, "positions": {}, "entities": {}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        paradox.set_policy(chat_id, mode="warden")
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                required_exists=False, label="x")
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+        wset(chat_id, "simulation_clock",
+             {"elapsed_seconds": paradox.ESCALATION_SECONDS * 0.5})
+        paradox.check_and_apply_paradox(ctx, 0)
+        positions = (wget(chat_id, "scene") or {}).get("positions") or {}
+        assert all(room for room in positions.values()), positions
+
     def test_second_commit_while_active_advances_not_retriggers(self, temp_db):
         chat_id = _make_chat(temp_db)
         wset(chat_id, "scene", {"rooms": {"road": {"name": "Road", "adjacent": []}},
