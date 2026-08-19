@@ -211,3 +211,49 @@ def test_cloning_a_book_for_a_chat_keeps_the_stamp(temp_db, monkeypatch):
         "WHERE lorebook_id=?", (mapping[root],), one=True)
     assert cloned["embedding_model"] == "test:embedder:256"
     assert cloned["embedding_dim"] == 256
+
+
+def _book(temp_db, name, chat_id=None):
+    return temp_db.qi(
+        "INSERT INTO lorebooks(name,chat_id,book_type,summary,resource_uid) "
+        "VALUES(?,?,?,?,?)", (name, chat_id, "general", "", "book_" + name))
+
+
+def test_link_restore_reports_what_it_could_not_put_back(temp_db, monkeypatch):
+    """A restore that drops half the graph and returns None reads as success.
+
+    Every failure mode here was silent: a link whose book is missing from the
+    id map, a link whose books now sit in different chats, and -- under a bare
+    `except Exception: pass` -- an insert that raised. The chat comes back
+    with fewer lorebook links than it had and nothing anywhere says so.
+    """
+    import memory
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("C", "", 0.0))
+    a = _book(temp_db, "a", chat_id)
+    b = _book(temp_db, "b", chat_id)
+    c = _book(temp_db, "c", chat_id)
+
+    report = memory.restore_lorebook_links(chat_id, {1: a, 2: b, 3: c}, [
+        {"source_book_id": 1, "target_book_id": 2, "relation_type": "related"},
+        # ...a book the id map never learned about.
+        {"source_book_id": 1, "target_book_id": 99, "relation_type": "related"},
+    ])
+
+    assert report["restored"] == 1
+    assert report["dropped"] == 1
+
+    boom = memory.add_lorebook_link
+
+    def explode(source, target, *a, **kw):
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(memory, "add_lorebook_link", explode)
+    failed = memory.restore_lorebook_links(chat_id, {1: a, 3: c}, [
+        {"source_book_id": 1, "target_book_id": 3, "relation_type": "related"},
+    ])
+    assert failed["restored"] == 0
+    assert failed["dropped"] == 1
+    assert boom is not explode
