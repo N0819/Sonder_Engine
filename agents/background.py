@@ -74,7 +74,7 @@ from world.background_claims import (
 
 from story.scene import persona_of
 
-from .common import _agent_json, _unknown_actor_label
+from .common import _agent_json, _unknown_actor_label, character_room
 
 _log = logging.getLogger(__name__)
 
@@ -283,7 +283,9 @@ def background_react(ctx, nonce):
     for name in names:
         # Per presence, not once for the batch: each one gets the cast under
         # its OWN recognition (see _present_others).
-        present_others = _present_others(ctx, _presence_recognizes(ctx, name))
+        present_others = _present_others(
+            ctx, sc, _presence_room(sc, name, presences.get(name) or {}),
+            _presence_recognizes(ctx, name))
         entry = _react_one(ctx, dr, name, present_others, roster, sc,
                            presences.get(name) or {}, nonce)
         if entry:
@@ -564,7 +566,9 @@ def scene_life(ctx, nonce, level, cfg):
             "player_declaration": _filtered_player_declaration(ctx),
             "events": events,
             "present_characters": [
-                p for p in _present_others(ctx, _presence_recognizes(ctx, *names))
+                p for p in _present_others(
+                    ctx, sc, [room for _t, _n, _r, room in managed],
+                    _presence_recognizes(ctx, *names))
                 if p not in names],
         },
         "cast": cast,
@@ -661,7 +665,7 @@ def _known_world_names(ctx, sc, managed_names):
     # presence refers to strangers by. Those are descriptions of people
     # already in the room, not invented lore, and must not be scored as
     # claims.
-    for p in _present_others(ctx):
+    for p in _all_body_labels(ctx):
         known.add(p)
     try:
         from core.db import wget as _wget
@@ -853,9 +857,45 @@ def _presence_recognizes(ctx, *presence_names):
     return set.intersection(*sets) if sets else set()
 
 
-def _present_others(ctx, recognized=None):
+def _all_body_labels(ctx):
+    """Every body's label as an unacquainted presence would render it.
+
+    An ENGINE-SIDE roster, not a payload: `_known_world_names` subtracts these
+    from the novel-proper-noun scan so a presence describing a stranger in the
+    room is not scored as having invented a person. Nothing here is delivered
+    to a mind, so it carries no location gate -- which is exactly why it is a
+    separate function from `_present_others`, whose whole job is the gate.
+    """
+    pers = persona_of(ctx.chat)
+    out = [_unknown_actor_label(persona_name(pers), persona_appearance(pers))]
+    for row in ctx.cast:
+        sh = json.loads(row["sheet"])
+        out.append(_unknown_actor_label(
+            character_name(sh), character_appearance(sh)))
+    return out
+
+
+def _present_others(ctx, sc, here, recognized=None):
     """Co-located character names for a background presence's payload, gated
-    by what THAT presence recognizes.
+    by what THAT presence recognizes AND by where it is standing.
+
+    `here` is the room the presence stands in, or the rooms of every presence
+    a shared payload speaks for. It used to take no such argument and looped
+    `ctx.cast` whole -- the frame's entire active cast, never room-scoped --
+    so a presence at its post was told, in `beat.present_others`, about every
+    attached character in the story: the one in the next room, the one across
+    the city, the one it has never been within a mile of. The recognition gate
+    was intact, which is what made it read as safe, but a label asserts a body
+    is HERE just as a name does: "a tall woman in a red travelling coat" about
+    somebody three rooms away is the same claim about presence, made about a
+    stranger. Every other gate in this file is per-presence and spatial; this
+    one field skipped all of them while its own first line said "co-located".
+
+    Rooms, not earshot: `present_others` is who is standing here, which is the
+    presence channel. Unknown rooms fail closed, and a shared payload (the
+    scene manager voices several presences at once) names a body only where
+    all of them stand in its room -- annotation cannot substitute for
+    non-admission in one context read by every voice in it (§3.11 layer 1).
 
     This used to gate on the PLAYER's `known` map, which answers the wrong
     question: a background presence is a separate mind, and every other gate
@@ -883,17 +923,34 @@ def _present_others(ctx, recognized=None):
     appearance summary (those summaries routinely lead with the name) and
     trims on a word boundary.
     """
+    observers = ([here] if here is None or isinstance(here, str)
+                 else list(here))
+    if not observers or any(not str(r or "").strip() for r in observers):
+        return []
+    rooms = {str(r).strip() for r in observers}
+    if len(rooms) != 1:
+        return []
+    room = rooms.pop()
     recognized = set(recognized or ())
+    sc = sc or {}
     pers = persona_of(ctx.chat)
     p_name = persona_name(pers)
+    present_others = []
     # The player is subject to the same gate: a presence that has never been
     # introduced has no more claim on the protagonist's name than on anyone
     # else's.
-    present_others = [p_name if p_name in recognized
-                      else _unknown_actor_label(p_name, persona_appearance(pers))]
+    if p_name and _room_of(sc, p_name) == room:
+        present_others.append(
+            p_name if p_name in recognized
+            else _unknown_actor_label(p_name, persona_appearance(pers)))
     for row in ctx.cast:
         sh = json.loads(row["sheet"])
         cname = character_name(sh)
+        # The uid/alias-tolerant resolver, because a position stored under
+        # identity.uid otherwise reads as no room at all -- which here would
+        # silently drop a body that IS standing in front of the presence.
+        if character_room(sc, sh) != room:
+            continue
         present_others.append(
             cname if cname in recognized
             else _unknown_actor_label(cname, character_appearance(sh)))
