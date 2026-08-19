@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import time
 import types
@@ -151,15 +150,79 @@ def test_private_projection_is_bounded_and_has_no_hidden_payload():
     assert all("secret" not in row for row in projected)
 
 
-def test_carrier_floor_has_no_model_or_provider_call():
-    from story import carriers
-    import agents.character as character
+def _crowd_telling_world(db):
+    """A crowd in the square holding the bell, and Mora standing in it."""
+    cid, chars, scene, ctx = _world(db)
+    crowd = crowds.new_crowd(cid, "square", band="a throng",
+                             composition="market traders", since_turn=1)
+    crowd = crowds.add_hearsay(crowd, {
+        "world_event_id": "world_bell", "source_event_id": "",
+        "claim": "the warning bell rang twice", "kind": "consequence",
+        "occurred_at": 50.0, "retellings": 0})
+    db.wset(cid, "crowds", [crowd])
+    scene["positions"]["Mora"] = "square"
+    ctx.director_resolve = {"dialogue_log": []}
+    ctx.director_establish = None
+    return cid, chars, scene, ctx, crowd["uid"]
 
-    source = inspect.getsource(carriers)
-    assert "chat_complete" not in source and "providers" not in source
-    character_source = inspect.getsource(character.character_step)
-    assert 'payload["carried_reports"]' in character_source
-    assert "reports_for_state(stored_state)" in character_source
+
+def test_carrier_floor_has_no_model_or_provider_call(temp_db, monkeypatch):
+    """THE PROVIDER SEAM, NOT THE SPELLING OF IT.
+
+    This asserted that the strings "chat_complete" and "providers" do not
+    appear in the module's source -- which passes for any spelling that avoids
+    those two substrings: an aliased import, a call through
+    `llm.llm_quality.complete_validated_json`, or a provider reached through
+    one of the modules `carriers.py` already imports (`world.degradation`,
+    `world.living_world`, `story.scene`). The property is "this floor makes no
+    model call"; the assertion was about text.
+
+    So the doors refuse instead, and the whole carrier path is driven across
+    them: acquisition, movement, and a telling.
+    """
+    from story.carriers import advance_carriers, apply_tellings
+
+    def refuse(*a, **kw):
+        raise AssertionError("the carrier floor made a model call")
+
+    import llm.llm_quality as llm_quality
+    import llm.providers as providers
+    monkeypatch.setattr(providers, "chat_complete", refuse)
+    monkeypatch.setattr(providers, "chat_stream", refuse, raising=False)
+    monkeypatch.setattr(llm_quality, "complete_validated_json", refuse)
+
+    cid, chars, scene, ctx = _world(temp_db)
+    advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+    scene["positions"]["Mora"] = "road"
+    advance_carriers(ctx, scene, {"events": []})
+    scene["positions"]["Mora"] = "road"
+    scene["positions"]["Tavi"] = "road"
+    ctx.director_resolve = {"dialogue_log": [
+        {"speaker": "Mora", "text": "The bell rang twice."}]}
+    ctx.director_establish = None
+    applied, _rejected = apply_tellings(
+        ctx, scene, [{"speaker": "Mora", "listener": "Tavi",
+                      "world_event_id": "world_bell"}])
+    assert applied == 1
+
+
+def test_what_a_mind_is_handed_is_the_bounded_projection_of_its_own_state(
+        temp_db):
+    """The other half of the deleted assertion, which read
+    `agents/character.py`'s source for two literal expressions. What matters
+    is that the payload is `reports_for_state` of THAT character's stored
+    state -- bounded, and holding nothing of anybody else's."""
+    from story.carriers import advance_carriers, reports_for_state
+
+    cid, chars, scene, ctx = _world(temp_db)
+    advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+
+    mora = reports_for_state(_state(temp_db, cid, chars[0][0]))
+    tavi = reports_for_state(_state(temp_db, cid, chars[1][0]))
+    assert [r["claim"] for r in mora] == ["the warning bell rang twice"]
+    assert tavi == []
+    # The event's private half never leaves the ledger it was written in.
+    assert "hidden mechanism" not in json.dumps(mora)
 
 
 # ---- crowds as anonymous carriers --------------------------------------
@@ -210,24 +273,47 @@ class TestACrowdCarriesTalk:
                 crowd, {"world_event_id": "e%d" % i, "claim": "story %d" % i})
         assert len(crowds.crowd_hearsay(crowd)) == crowds.CROWD_REPORT_CAP
 
-    def test_a_crowd_is_exempt_from_the_dialogue_check_and_nothing_else(self):
+    def test_a_crowd_is_exempt_from_the_dialogue_check_and_nothing_else(
+            self, temp_db):
         """A crowd murmurs continuously — that IS its speech, so there is no
         line in `dialogue_log` to point at. Every other refusal still applies,
         because catching a rumor in a market has to stay knowledge by a beat
-        that said so rather than knowledge by proximity."""
-        import inspect
+        that said so rather than knowledge by proximity.
 
-        from story import carriers
-        body = inspect.getsource(carriers.apply_tellings)
-        gate = body[body.index("said nothing this beat")]
-        assert 'speaker.get("crowd") is None and speaker_key not in spoke' \
-            in body
-        # The co-location, holding and fan-out guards are not conditioned on
-        # being a person.
-        for guard in ("not in the same room", "cannot pass it on",
-                      "has told %d people"):
-            after = body[body.index("said nothing this beat"):]
-            assert guard in after
+        Driven rather than read. This asserted four literal source spellings,
+        one of them through `body[body.index("said nothing this beat")]` --
+        which indexes a string with an int, so the `gate` it bound was a
+        single character and was never read again. Extracting the condition
+        into a named predicate failed that test; deleting the runtime effect
+        and leaving the string passed it.
+        """
+        from story.carriers import apply_tellings
+
+        cid, _chars, scene, ctx, throng = _crowd_telling_world(temp_db)
+        assert ctx.director_resolve["dialogue_log"] == []   # nobody spoke
+
+        applied, rejected = apply_tellings(
+            ctx, scene, [{"speaker": throng, "listener": "Mora",
+                          "world_event_id": "world_bell"}])
+        assert (applied, rejected) == (1, [])
+
+        # ... and nothing else is waived. A crowd in another room is not in
+        # the room.
+        cid, _chars, scene, ctx, throng = _crowd_telling_world(temp_db)
+        scene["positions"]["Mora"] = "road"
+        applied, rejected = apply_tellings(
+            ctx, scene, [{"speaker": throng, "listener": "Mora",
+                          "world_event_id": "world_bell"}])
+        assert applied == 0
+        assert any("same room" in r for r in rejected)
+
+        # ... and a crowd cannot pass on what it does not hold.
+        cid, _chars, scene, ctx, throng = _crowd_telling_world(temp_db)
+        applied, rejected = apply_tellings(
+            ctx, scene, [{"speaker": throng, "listener": "Mora",
+                          "world_event_id": "never_happened"}])
+        assert applied == 0
+        assert any("cannot pass it on" in r for r in rejected)
 
 
 class TestALieTravelsLikeTheTruth:
@@ -239,47 +325,104 @@ class TestALieTravelsLikeTheTruth:
     perception, memory and belief in separate layers.
     """
 
-    def test_an_invented_claim_never_reaches_objective_history(self):
+    def test_an_invented_claim_never_reaches_objective_history(self, temp_db):
         """`world_events` is the ledger of what happened. It must not acquire
         rows for things that did not, so an invented claim is keyed `claim:`
-        and lives only in the minds that hold it."""
-        import inspect
+        and lives only in the minds that hold it.
+
+        Counted rather than grepped: the old version asserted that the string
+        "INSERT INTO world_events" is absent from one function's source, which
+        says nothing about the helpers it calls.
+        """
         import types
 
         from story import carriers
+
         ctx = types.SimpleNamespace(chat=types.SimpleNamespace(id=1),
                                     turn=types.SimpleNamespace(idx=3))
         made_up = carriers._invented_claim("the duke is dead", ctx,
                                            {"name": "Rem", "room": "hall"})
         assert made_up["world_event_id"].startswith("claim:")
         assert made_up["kind"] == "claim"
-        # Nothing on the telling path writes objective history.
-        assert "INSERT INTO world_events" not in \
-            inspect.getsource(carriers.apply_tellings)
 
-    def test_the_liar_knows_and_the_listener_cannot(self):
+        cid, _chars, scene, ctx = _world(temp_db)
+        scene["positions"]["Tavi"] = "square"
+        ctx.director_resolve = {"dialogue_log": [
+            {"speaker": "Mora", "text": "The duke is dead."}]}
+        ctx.director_establish = None
+        before = temp_db.q("SELECT COUNT(*) AS n FROM world_events "
+                           "WHERE chat_id=?", (cid,), one=True)["n"]
+        applied, _rejected = carriers.apply_tellings(
+            ctx, scene, [{"speaker": "Mora", "listener": "Tavi",
+                          "claim": "the duke is dead"}])
+        after = temp_db.q("SELECT COUNT(*) AS n FROM world_events "
+                          "WHERE chat_id=?", (cid,), one=True)["n"]
+        assert applied == 1 and after == before
+
+    def test_the_liar_knows_and_the_listener_cannot(self, temp_db):
         """The asymmetry exists at the source ONLY. The speaker's own row says
         `invented`; the copy handed on is shaped exactly like a copy of the
         truth, because a difference a listener could inspect would be a
-        deception the fiction cannot support."""
-        import inspect
+        deception the fiction cannot support.
 
-        from story import carriers
-        source = inspect.getsource(carriers.apply_tellings)
-        # The copy handed to a listener is built in exactly one place, and it
-        # is the same dict whether the claim is true or invented.
-        assert source.count('"provenance": "told"') == 1
-        assert '"provenance": "invented"' not in source
+        Compared rather than counted: this asserted that the literal
+        `"provenance": "told"` appears exactly once in the function's source,
+        which is a fact about how the dict is written and not about what a
+        listener receives.
+        """
+        from story.carriers import advance_carriers, apply_tellings
 
-    def test_a_crowd_does_not_start_things(self):
+        # A lie.
+        cid, chars, scene, ctx = _world(temp_db)
+        scene["positions"]["Tavi"] = "square"
+        ctx.director_resolve = {"dialogue_log": [
+            {"speaker": "Mora", "text": "The duke is dead."}]}
+        ctx.director_establish = None
+        apply_tellings(ctx, scene, [{"speaker": "Mora", "listener": "Tavi",
+                                     "claim": "the duke is dead"}])
+        liar = _state(temp_db, cid, chars[0][0])["carried_reports"][-1]
+        lie_heard = _state(temp_db, cid, chars[1][0])["carried_reports"][-1]
+
+        # The truth, told the same way.
+        cid, chars, scene, ctx = _world(temp_db)
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        scene["positions"]["Tavi"] = "square"
+        ctx.director_resolve = {"dialogue_log": [
+            {"speaker": "Mora", "text": "The bell rang twice."}]}
+        ctx.director_establish = None
+        apply_tellings(ctx, scene, [{"speaker": "Mora", "listener": "Tavi",
+                                     "world_event_id": "world_bell"}])
+        truth_heard = _state(temp_db, cid, chars[1][0])["carried_reports"][-1]
+
+        # The speaker knows what they did.
+        assert liar["provenance"] == "invented"
+        # The listener holds the same SHAPE either way, and nothing in it
+        # says which one this was.
+        assert set(lie_heard) == set(truth_heard)
+        assert lie_heard["provenance"] == truth_heard["provenance"] == "told"
+        assert "invent" not in json.dumps(lie_heard)
+
+    def test_a_crowd_does_not_start_things(self, temp_db):
         """A crowd repeats what reaches it. Letting one ORIGINATE a claim
         would make anonymous talk a source of new facts with nobody behind
-        it — an assertion no mind can be held to and no player can chase."""
-        import inspect
+        it — an assertion no mind can be held to and no player can chase.
 
-        from story import carriers
-        assert "a crowd repeats what it heard; it does not start things" \
-            in inspect.getsource(carriers.apply_tellings)
+        Refused in the running code, not asserted as a comment present in the
+        source: the previous version passed on the strength of the sentence
+        alone, and would have gone on passing with the `continue` deleted.
+        """
+        from story.carriers import apply_tellings
+
+        cid, chars, scene, ctx, throng = _crowd_telling_world(temp_db)
+        applied, rejected = apply_tellings(
+            ctx, scene, [{"speaker": throng, "listener": "Mora",
+                          "claim": "the duke is dead"}])
+
+        assert applied == 0
+        assert any("does not start things" in r for r in rejected)
+        assert _state(temp_db, cid, chars[0][0]).get("carried_reports") is None
+        held = crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0])
+        assert [r["claim"] for r in held] == ["the warning bell rang twice"]
 
     def test_an_invented_claim_can_be_referred_to_later(self):
         """Its id is minted from the text and the speaker, so it can be passed
@@ -315,13 +458,24 @@ class TestAftermathIsMetOnArrival:
     someone next stands where they landed".
     """
 
-    def test_a_body_reads_what_is_still_standing_in_the_room(self):
-        import inspect
+    def test_a_body_reads_what_is_still_standing_in_the_room(self, temp_db):
+        """Driven, not read. The old version asserted two identifiers appear
+        in the function's source, which stays true if the rows they gather
+        are never offered to anybody."""
+        from story.carriers import advance_carriers
 
-        from story import carriers
-        body = inspect.getsource(carriers.advance_carriers)
-        assert "standing_rows" in body
-        assert "event_rows + here" in body
+        cid, chars, scene, ctx = _world(temp_db)
+        scene["positions"]["Mora"] = "road"
+        # The bell rings in the square while Mora is elsewhere.
+        assert advance_carriers(
+            ctx, scene, {"events": [{"event_id": "world_bell"}]})["acquired"] == 0
+        # She walks in on a later beat that emits nothing of its own.
+        scene["positions"]["Mora"] = "square"
+        result = advance_carriers(ctx, scene, {"events": []})
+
+        assert result["public_surfaces"] == 0 and result["acquired"] == 1
+        held = _state(temp_db, cid, chars[0][0])["carried_reports"]
+        assert [r["claim"] for r in held] == ["the warning bell rang twice"]
 
     def test_it_is_arrival_and_not_archaeology(self):
         """Walking in and seeing the barred gate, not inheriting every event
@@ -330,15 +484,27 @@ class TestAftermathIsMetOnArrival:
 
         assert carriers.ARRIVAL_SURFACES <= 3
 
-    def test_only_a_public_surface_is_readable(self):
+    def test_only_a_public_surface_is_readable(self, temp_db):
         """A concealed act emits no witnessed surface, so arriving later must
-        teach nothing — the firewall is structural, not instructed."""
-        import inspect
+        teach nothing — the firewall is structural, not instructed.
 
-        from story import carriers
-        body = inspect.getsource(carriers.advance_carriers)
-        gathered = body[body.index("standing_rows = []"):body.index("public_surfaces =")]
-        assert "if witnessed:" in gathered
+        The event's private half is what the old assertion could not see: it
+        checked that `if witnessed:` appears inside a slice of the function's
+        text, which says nothing about what the arriver ends up holding.
+        """
+        from story.carriers import advance_carriers
+
+        cid, chars, scene, ctx = _world(temp_db)
+        temp_db.qi("UPDATE world_events SET payload=? WHERE chat_id=?",
+                   (json.dumps({"what": "the hidden mechanism failed",
+                                "witnessed": ""}), cid))
+        scene["positions"]["Mora"] = "road"
+        advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+        scene["positions"]["Mora"] = "square"
+        result = advance_carriers(ctx, scene, {"events": []})
+
+        assert result["acquired"] == 0
+        assert _state(temp_db, cid, chars[0][0]).get("carried_reports") is None
 
 
 class TestTimeDoesNotRunBackwards:
@@ -357,25 +523,29 @@ class TestTimeDoesNotRunBackwards:
     """
 
     def test_the_clock_never_moves_backward(self):
-        import inspect
+        """Answered by the function, not by its text. Both halves of this
+        used to be substring searches over source -- one of them over a
+        DIFFERENT function's source, so it went on passing while the guard it
+        named moved packages twice.
+        """
+        from persist.commit import _monotonic_elapsed
 
-        from persist import commit
-        # Function sources, not the module's: the split moved the guard into
-        # commit_common and the warning's caller into commit_scene_state, and
-        # the facade re-exports the same function objects either way.
-        assert "if claimed < was:" in inspect.getsource(commit._monotonic_elapsed)
-        assert "ran backwards" in inspect.getsource(commit.prepare_scene_commit)
+        elapsed, backwards = _monotonic_elapsed(
+            {"elapsed_seconds": 5400.0},
+            {"start_seconds": 0, "duration_seconds": 0, "end_seconds": 30})
+        assert elapsed >= 5400.0
+        assert backwards == (30.0, 5400.0)   # and the caller is told
 
     def test_a_backward_beat_still_gets_its_duration(self):
         """The elapsed time is the part the fiction actually asserted. A beat
         that took an hour advances the clock by an hour, rather than being
         discarded for disagreeing about where it started."""
-        import inspect
+        from persist.commit import _monotonic_elapsed
 
-        from persist import commit
-        body = inspect.getsource(commit._monotonic_elapsed)
-        guard = body[body.index("if claimed < was:"):]
-        assert "duration_seconds" in guard.split("clock[")[0]
+        elapsed, _backwards = _monotonic_elapsed(
+            {"elapsed_seconds": 5400.0},
+            {"start_seconds": 0, "duration_seconds": 3600, "end_seconds": 3600})
+        assert elapsed == 9000.0
 
 
 class TestACrowdWitnessesItsOwnRoom:
@@ -551,7 +721,14 @@ class TestEveryClockReaderSharesTheMonotonicRule:
 
     def test_the_memory_seam_reads_through_the_same_helper(self):
         """One rule, one spelling: a second reader with its own arithmetic is
-        how the two disagreed in the first place."""
+        how the two disagreed in the first place.
+
+        STILL A SOURCE ASSERTION, and the last one in this file. Every other
+        one here has been driven instead; this one needs a seam
+        `prepare_memory_commit` does not offer -- there is no way to observe
+        which clock it stamped without running a commit -- and inventing one
+        belongs to whoever owns `persist/`.
+        """
         import inspect
 
         from persist import commit
@@ -717,3 +894,43 @@ class TestThePlayerStandsWhereItLands:
         # mouth; the eyewitness row stays verbatim in the player's own hands.
         assert rider["report"]["provenance"] == "told"
         assert self._held(temp_db, cid)[0]["provenance"] == "witnessed_surface"
+
+
+# --- the crowd roster belongs to an era too ---------------------------------
+#
+# `_crowd_index(cid, scene, frame_id)` read neither `scene` nor `frame_id`.
+# Its body was one `wget`, which is frame-scoped only INCIDENTALLY -- `crowds`
+# is in `db.FRAME_SCOPED_WORLD_KEYS`, so the read redirects on the ambient
+# `active_frame_id` contextvar that a pipeline run happens to have set. Any
+# caller outside a pipeline run, or one whose turn belongs to a different
+# frame than the ambient one, got the wrong era's crowds while passing the
+# right frame in.
+
+class TestCrowdIndexIsFrameScoped:
+    def test_the_frame_passed_in_is_the_frame_read(self, temp_db):
+        from core.db import wset_for_frame
+        from story import carriers
+        from web import app
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Crowds", "", time.time()))
+        past = app.frames_create(cid, {"label": "Past", "ordinal": -10, "kind": "past"})
+        future = app.frames_create(cid, {"label": "Future", "ordinal": 10, "kind": "future"})
+        wset_for_frame(cid, crowds.CROWDS_WORLD_KEY,
+                       [{"uid": "market_throng", "room_uid": "square"}], past["id"])
+        wset_for_frame(cid, crowds.CROWDS_WORLD_KEY,
+                       [{"uid": "funeral_crowd", "room_uid": "square"}], future["id"])
+
+        assert set(carriers._crowd_index(cid, past["id"])) == {"market_throng"}
+        assert set(carriers._crowd_index(cid, future["id"])) == {"funeral_crowd"}
+
+    def test_no_frame_still_reads_the_present(self, temp_db):
+        from core.db import wset
+        from story import carriers
+
+        cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                         ("Crowds", "", time.time()))
+        wset(cid, crowds.CROWDS_WORLD_KEY,
+             [{"uid": "market_throng", "room_uid": "square"}])
+
+        assert set(carriers._crowd_index(cid, None)) == {"market_throng"}

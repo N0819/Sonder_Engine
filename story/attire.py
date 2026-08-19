@@ -175,11 +175,59 @@ _ATTACH_CUES = (
 )
 
 
+#: Where a garment name stops describing the garment and starts describing
+#: where it sits. Not `of`, which is part of the noun phrase ("a ring of
+#: keys", "a length of cord").
+_PLACEMENT_PHRASE = re.compile(
+    r"\b(?:on|at|over|under|underneath|beneath|around|across|through|from"
+    r"|with|in|against)\b")
+
+
+def _last_cue_at(text, cues):
+    """Where the LAST of these cues starts in `text`, or None for no match.
+
+    The same rule `region_of` runs on: English puts the noun at the end, so
+    the cue furthest into the phrase is the one naming the garment.
+    """
+    best = None
+    for cue in cues:
+        for match in re.finditer(r"\b%ss?\b" % re.escape(cue), text):
+            if best is None or match.start() > best:
+                best = match.start()
+    return best
+
+
 def attaches_only(garment):
-    """Is this worn AT a region rather than over it? Never fails."""
+    """Is this worn AT a region rather than over it? Never fails.
+
+    THE HEAD NOUN DECIDES, not any ornament word anywhere in the phrase. A
+    cord belt is a belt: `cord` sits in the attach table and in the waist cue
+    list, and asking whether an attach cue appears ANYWHERE made one
+    describing word turn a garment into something that covers nothing --
+    which is invisible, because the garment is still worn, still listed,
+    still at the right region, and merely conceals it not at all.
+
+    A tie stays attaching, since a word in both tables (`necklace`, `ring`,
+    `anklet`) is the same word matching itself: only a covering cue STRICTLY
+    later in the phrase -- a noun the ornament word was describing -- turns
+    the verdict over.
+
+    And only in the phrase naming the GARMENT. "A key ring on a belt" ends in
+    a covering noun that is not what the thing is; the preposition is the
+    boundary between what it is and where it hangs. `region_of` deliberately
+    keeps reading the whole phrase, because where it hangs is exactly the
+    question it answers -- the two functions ask different things about the
+    same words.
+    """
     text = str(garment or "").casefold()
-    return any(re.search(r"\b%ss?\b" % re.escape(cue), text)
-               for cue in _ATTACH_CUES)
+    head = _PLACEMENT_PHRASE.split(text, 1)[0]
+    attach_at = _last_cue_at(head, _ATTACH_CUES)
+    if attach_at is None:
+        return False
+    covering_at = _last_cue_at(
+        head, [cue for _region, cues in _REGION_CUES for cue in cues
+               if cue not in _ATTACH_CUES])
+    return covering_at is None or covering_at <= attach_at
 
 
 def regions_covered(garment):
@@ -204,7 +252,7 @@ def region_of(garment):
     text = str(garment or "").casefold()
     if not text.strip():
         return DEFAULT_REGION
-    best, best_at = DEFAULT_REGION, None
+    best, best_at, best_len = DEFAULT_REGION, None, 0
     for region, cues in _REGION_CUES:
         for cue in cues:
             match = re.search(r"\b%ss?\b" % re.escape(cue), text)
@@ -213,8 +261,17 @@ def region_of(garment):
             # The LAST cue in the phrase wins: English puts the noun at the end,
             # so "leather riding boots" is boots and "boot-black apron" is an
             # apron.
-            if best_at is None or match.start() > best_at:
-                best, best_at = region, match.start()
+            #
+            # AND ON A TIE, THE LONGER CUE. Two cues can match one string at
+            # one offset only when one is a longer spelling of the other, and
+            # the longer one is then the more specific description of the same
+            # garment -- `girdle-cloth` against `girdle`. Resolving that by
+            # table order instead made the specific entry unreachable from the
+            # moment it was written, with nothing to notice: the table has an
+            # entry for the garment, and the garment lands somewhere else.
+            length = match.end() - match.start()
+            if best_at is None or (match.start(), length) > (best_at, best_len):
+                best, best_at, best_len = region, match.start(), length
     return best
 
 
@@ -249,12 +306,20 @@ def span_is_a_guess(garment):
 def guessed_spans(regions):
     """Garments in this ledger whose coverage nothing actually knew.
 
-    Returns the garment names, once each. For the commit seam to hand to the
-    Director, which CAN say what a garment covers and is the only stage with
-    the fiction in front of it. Authored coverage is never re-guessed and so
-    never reported: setting it by hand is the escape hatch, and nagging about
-    a choice somebody already made is how a warning teaches people to stop
-    reading warnings.
+    Returns the garment names, once each. UNWIRED -- no production caller,
+    only tests, and `docs/UNBUILT.md` §2.14 is the register entry. The seam it
+    was written for is the commit path handing these to the Director, which
+    CAN say what a garment covers and is the only stage with the fiction in
+    front of it; that hand-off does not exist, and this docstring described it
+    in the present tense, so a reader met a closed feedback loop that is open.
+    Measured while it was open: 110 of 560 live worn garment records carry a
+    span the cue tables guessed, twenty of them a nagajuban -- a full-length
+    under-kimono -- sitting on the torso alone, so those bodies report legs
+    and groin bare while wearing one.
+
+    Authored coverage is never re-guessed and so never reported: setting it by
+    hand is the escape hatch, and nagging about a choice somebody already made
+    is how a warning teaches people to stop reading warnings.
     """
     out, seen = [], set()
     for region in REGIONS:
@@ -1211,6 +1276,14 @@ _NO_CHANGE_NOTES = frozenset({
     "none", "unaffected", "untouched", "still on", "as is",
 })
 
+#: Every attire-diff key `coerce_diff_shape` HANDLES, as opposed to files as
+#: a garment note. A hand-maintained mirror of that function's dispatch chain
+#: with nothing to keep the two in step -- and the drift is silent in the
+#: worst direction: a key the chain learns to handle but this list forgets
+#: reads as unknown to any caller consulting the list, while a key this list
+#: claims and the chain drops becomes a note about a garment named
+#: "coverage". Bound by
+#: `test_every_known_diff_key_is_handled_rather_than_filed_as_a_note`.
 _DIFF_KNOWN_KEYS = ("wearing", "add", "remove", "replace", "state",
                     "conditions", "coverage", "regions", "notes", "placement")
 
@@ -1410,14 +1483,23 @@ def decisive_targets(player_text, other_texts, wardrobe, player_name=None):
 
     Scoped PER BODY, because one flag for the whole beat meant the player
     yanking their own coat off undressing everyone standing near them.
-    Attribution, in order, because the ACTOR is not the target -- "Corin tears
-    the sash from her waist" is Mira being undressed:
+    Attribution runs the ladder in `_attributed_targets`, which both readings
+    of a beat share, because the ACTOR is not the target -- "Corin tears the
+    sash from her waist" is Mira being undressed. In its real order, which
+    this docstring used to give as three tiers in a different arrangement:
 
-      1. the garment. Whoever is wearing what the sentence names, by full
-         phrase, or by its head noun when exactly one body is wearing one.
-      2. first person, but only in the player's own input, where "I" is a
+      1. the garment, by FULL PHRASE. Whoever is wearing what the sentence
+         names outright.
+      2. the genitive owner -- "<Name>'s tank top" -- which says whose even
+         where the phrase is abbreviated past recognition and a second cast
+         name shares the sentence.
+      3. the garment by HEAD NOUN, when exactly one body is wearing one.
+      4. first person, but only in the player's own input, where "I" is a
          subject the sentence never spells out.
-      3. a name, when the sentence names exactly one body and no garment.
+      5. a name, when the sentence names exactly one body. A non-reflexive
+         third-person possessive re-attributes away from that body -- it acts
+         on somebody ELSE -- to the only other dressed body, or to nobody.
+      6. the player, for their own ambiguous prose and no one else's.
 
     Sentence matching is a heuristic, deliberately. It decides how FAST an
     undressing the fiction already asked for happens, never who may know what,
@@ -2416,23 +2498,50 @@ def _safe(text):
 
 
 def _compact_garment_piece(garment, look, look_said):
-    """One compact-line garment value, including its first unsaid look."""
+    """One compact-line garment value, including its first unsaid look.
+
+    EVERY REGION COMES THROUGH HERE. The zoned branch called this helper and
+    every other region ran a byte-equivalent copy inline -- same `_safe`, same
+    first-clause split, same word-boundary truncation, same `look_said`
+    dedupe, same final join -- so a change to the look rule could land on what
+    the Director is told about a torso and not about a skirt.
+    """
     name = _safe(garment.get("name")) or "?"
     state = garment.get("state") or "worn"
     condition = garment.get("condition") or ""
     notes = [_safe(n) for n in
              (state if state != "worn" else "", condition) if n]
+    # A GARMENT'S LOOK REACHES PROSE ONLY THROUGH THIS PAYLOAD. The Director
+    # is the sole path by which what a thing looks like gets into the
+    # narration, so stripping descriptions outright would quietly cost the
+    # story its clothing detail -- a change nothing errors on and nobody
+    # notices for fifty beats. `look` keeps the FIRST CLAUSE, which is where a
+    # garment's appearance lives, and drops the provenance after it: "a small
+    # spring-clip holding a single feather" survives, "souvenir from some
+    # distant region, pinned into her copper-gold hair near the left fox ear"
+    # does not.
     described = ""
     key = name.casefold()
     if look and key not in look_said:
+        # Sentence boundaries only. Splitting on the COMMA as well turned
+        # "A snug, ribbed tank top in charcoal" into "A snug" -- a bare
+        # adjective, which is worse than no description at all. A comma
+        # separates adjectives here far more often than clauses.
         clause = re.split(r"[;—.]", str(garment.get("description") or ""), 1)[0]
         clause = " ".join(clause.split())
         if len(clause) > int(look):
+            # On a word boundary. A look cut mid-word ("A snug") reads as a
+            # corrupted field rather than a short description.
             clause = clause[:int(look)].rsplit(" ", 1)[0]
         clause = clause.strip(" ,;-")
         if clause and clause.casefold() != key:
             described = _safe(clause)
             look_said.add(key)
+    # NAME(state;condition)=look, in that order. The look goes LAST because it
+    # is the only free-text field: it runs to the next `+` or `|`, neither of
+    # which it can contain, so a reader always knows where it ends. With the
+    # look in the middle, "...in charcoal(open)" read as though the
+    # parenthesis belonged to the description.
     piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
     return "%s=%s" % (piece, described) if described else piece
 
@@ -2554,46 +2663,8 @@ def compact_line(regions, beneath_visible=False, look=0):
             parts.append("%s:%s%s" % (region, _safe(beneath) or BARE,
                                        _attached_text(attached)))
             continue
-        pieces = []
-        for garment in worn:
-            name = _safe(garment.get("name")) or "?"
-            state = garment.get("state") or "worn"
-            condition = garment.get("condition") or ""
-            notes = [_safe(n) for n in
-                     (state if state != "worn" else "", condition) if n]
-            # A GARMENT'S LOOK REACHES PROSE ONLY THROUGH THIS PAYLOAD. The
-            # Director is the sole path by which what a thing looks like gets
-            # into the narration, so stripping descriptions outright would
-            # quietly cost the story its clothing detail -- a change nothing
-            # errors on and nobody notices for fifty beats. `look` keeps the
-            # FIRST CLAUSE, which is where a garment's appearance lives, and
-            # drops the provenance after it: "a small spring-clip holding a
-            # single feather" survives, "souvenir from some distant region,
-            # pinned into her copper-gold hair near the left fox ear" does not.
-            described = ""
-            key = name.casefold()
-            if look and key not in look_said:
-                # Sentence boundaries only. Splitting on the COMMA as well
-                # turned "A snug, ribbed tank top in charcoal" into "A snug" --
-                # a bare adjective, which is worse than no description at all.
-                # A comma separates adjectives here far more often than clauses.
-                clause = re.split(r"[;\u2014.]", str(garment.get("description") or ""), 1)[0]
-                clause = " ".join(clause.split())
-                if len(clause) > int(look):
-                    # On a word boundary. A look cut mid-word ("A snug") reads
-                    # as a corrupted field rather than a short description.
-                    clause = clause[:int(look)].rsplit(" ", 1)[0]
-                clause = clause.strip(" ,;-")
-                if clause and clause.casefold() != key:
-                    described = _safe(clause)
-                    look_said.add(key)
-            # NAME(state;condition)=look, in that order. The look goes LAST
-            # because it is the only free-text field: it runs to the next `+`
-            # or `|`, neither of which it can contain, so a reader always knows
-            # where it ends. With the look in the middle, "…in charcoal(open)"
-            # read as though the parenthesis belonged to the description.
-            piece = "%s(%s)" % (name, ";".join(notes)) if notes else name
-            pieces.append("%s=%s" % (piece, described) if described else piece)
+        pieces = [_compact_garment_piece(garment, look, look_said)
+                  for garment in worn]
         parts.append("%s:%s%s%s" % (region, "+".join(pieces),
                                     _displaced_text(displaced_here),
                                     _attached_text(attached)))

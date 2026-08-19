@@ -69,7 +69,6 @@ def _install(monkeypatch, calls_log, asks_player_ids):
         "max_character_calls": 6,
         "stop_on_question_to_player": True,
         "allow_npc_to_npc_dialogue": True,
-        "max_speakers_per_round": 1,
     })
     monkeypatch.setattr(loops, "get_scene", lambda *a, **kw: {})
     monkeypatch.setattr(loops, "normalize_character_refs",

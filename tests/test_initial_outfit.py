@@ -317,3 +317,37 @@ def test_director_establishment_respects_initial_outfit_separation():
     text = DEFAULT_PROMPTS["director_establish"]
     assert "initial_outfit is authoritative" in text
     assert "Never infer clothing" in text
+
+
+# --- one list of garments, read by one helper -------------------------------
+#
+# `_outfit_items` was defined twice in this package with different semantics,
+# and BOTH ran on the same import: `heuristic_character_sheet` builds the
+# outfit with the `importers` copy, then `normalize_character_data` re-reads
+# it with the `character_schema` copy. The importers copy unwrapped a dict
+# (`{"wearing": [...]}`) and did not dedupe; the schema copy deduped and did
+# not unwrap. So which rule applied to a card was decided by which same-named
+# helper ran last, and each copy failed at exactly what the other did.
+
+class TestOneOutfitReader:
+    def test_both_modules_read_the_outfit_with_the_same_helper(self):
+        from story import character_schema, importers
+        assert importers._outfit_items is character_schema._outfit_items
+
+    def test_a_wrapped_outfit_is_unwrapped_wherever_it_arrives(self):
+        """An older card, an import and a generator all write the outfit as
+        `{"wearing": [...]}`. Read as a scalar, that becomes ONE garment
+        whose name is a Python dict."""
+        from story.character_schema import _outfit_items
+        assert _outfit_items({"wearing": ["a kimono", "tabi"]}) == ["a kimono", "tabi"]
+        assert _outfit_items({"items": ["a kimono"]}) == ["a kimono"]
+
+    def test_a_garment_named_twice_is_one_garment_wherever_it_arrives(self):
+        from story.importers import _outfit_items
+        assert _outfit_items(["a kimono", "a kimono", "tabi"]) == ["a kimono", "tabi"]
+
+    def test_the_shared_reader_keeps_both_modules_other_habits(self):
+        from story.character_schema import _outfit_items
+        assert _outfit_items("a kimono; tabi\nzori") == ["a kimono", "tabi", "zori"]
+        assert _outfit_items(None) == []
+        assert _outfit_items({}) == []

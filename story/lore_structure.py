@@ -192,8 +192,14 @@ def _matches(text, words):
 # better evidence than a keyword guess over the same text.
 
 
-def derive_knowledge(record, category=None):
+def derive_knowledge(record):
     """`(knowledge_tag, knowledge_range, knowledge_locations)` for one record.
+
+    NO `category` PARAMETER, and there used to be one that the body never
+    mentioned. The comment above is a long argument that the entry's category
+    is the wrong second signal and measurably makes this worse; leaving it in
+    the signature meant a reader could supply it and get the rejected
+    behaviour -- which is to say nothing at all, silently.
 
     `(None, None, None)` for authoring scaffolding -- a "Writing Style" entry
     is an instruction to the engine and must never reach a character as

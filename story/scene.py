@@ -144,20 +144,44 @@ def extant_cast(chat_id, frame_id=None):
     """Everyone this chat's world still contains, present or not.
 
     NOT the cast to animate and NOT the cast to place in a room -- that is
-    `active_cast`, which is deliberately untouched. This answers only "is this
-    a person the story knows about", which is what name resolution, the
-    recognition map and the anti-furniture guard actually need.
+    `active_cast`. This answers only "is this a person the story knows
+    about", which is what name resolution, the recognition map and the
+    anti-furniture guard actually need.
+
+    Frame-scoped for the same reason `active_cast` is, and by the same
+    means: a frame is an ERA, and existence is one of the things that
+    genuinely differs between them -- somebody written out of the era being
+    played is not someone that era knows about, however alive the base row
+    says they are. `frame_id=None` (present) reads `chat_chars` directly; a
+    real frame LEFT JOINs `chat_char_frames` and prefers its override, so an
+    era nobody has touched still starts from the character's ordinary
+    baseline. The status and the state must come from the SAME row, or a
+    caller gets one era's roster carrying another era's private state.
     """
     placeholders = ",".join("?" * len(DEPARTED_STATUSES))
+    if frame_id is None:
+        return q(
+            "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
+            "ch.source,ch.created,ch.resource_uid,"
+            "cc.state AS cstate,cc.status "
+            "FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id "
+            f"WHERE cc.chat_id=? AND cc.status NOT IN ({placeholders}) "
+            "ORDER BY ch.id",
+            (chat_id, *DEPARTED_STATUSES),
+        )
     return q(
         "SELECT ch.id,ch.name,COALESCE(cc.sheet,ch.sheet) AS sheet,"
         "ch.source,ch.created,ch.resource_uid,"
-        "cc.state AS cstate,cc.status "
+        "COALESCE(ccf.state, cc.state) AS cstate, "
+        "COALESCE(ccf.status, cc.status) AS status "
         "FROM chat_chars cc "
         "JOIN characters ch ON ch.id=cc.char_id "
-        f"WHERE cc.chat_id=? AND cc.status NOT IN ({placeholders}) "
+        "LEFT JOIN chat_char_frames ccf "
+        "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id AND ccf.frame_id=? "
+        f"WHERE cc.chat_id=? AND COALESCE(ccf.status, cc.status) NOT IN ({placeholders}) "
         "ORDER BY ch.id",
-        (chat_id, *DEPARTED_STATUSES),
+        (frame_id, chat_id, *DEPARTED_STATUSES),
     )
 
 
@@ -428,6 +452,20 @@ def _condition_state(condition):
     state = condition.get("state") if isinstance(condition, dict) else None
     return state if isinstance(state, dict) else {}
 
+
+#: HOW A BODY'S STANDING CONDITION ROWS ARE WALKED, for every reader that
+#: collapses `world_conditions` to one answer per subject. Rows accumulate --
+#: the Director mints a fresh condition_id per reroll, a branch copies rows
+#: wholesale, a restore rewrites them -- so several are routinely active on
+#: one body, and whichever the scan reaches last decides what everyone sees.
+#: The order must therefore be the STORY's, not the table's: `rowid` is
+#: insertion order, which a branch copy and a re-emission both scramble.
+#: Stated once because two readers of one table with two tie-breaks is a
+#: guarantee they will one day disagree about the same person -- which they
+#: did: `active_disguises` ordered by the clock and `awareness_conditions` by
+#: rowid.
+_CONDITION_ORDER = "ORDER BY started_at ASC, rowid ASC"
+
 def active_disguises(chat_id):
     """Active physical_disguise conditions for `chat_id`, keyed by casefolded
     subject name. Each value: {subject, description, presented_appearance,
@@ -450,7 +488,7 @@ def active_disguises(chat_id):
     for row in q(
         "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
         "AND kind='physical_disguise' AND active=1 "
-        "ORDER BY started_at ASC, rowid ASC", (chat_id,),
+        f"{_CONDITION_ORDER}", (chat_id,),
     ):
         try:
             payload = json.loads(row["payload"])
@@ -962,8 +1000,18 @@ NON_AWAKE_GATED = frozenset({"asleep", "sedated", "unconscious"})
 
 
 def _normalize_awareness_level(raw):
-    """Casefold a level string to the enum. Unknown/garbage degrades to the
-    MILDEST gate ('dazed') rather than vanishing; empty/awake -> 'awake'."""
+    """Casefold a level string to the enum. Unknown/garbage degrades to
+    'dazed' rather than vanishing; empty/awake -> 'awake'.
+
+    'dazed' IS NOT A GATE, and this said "the mildest gate", which is the one
+    reading that makes the fall-through look conservative. `NON_AWAKE_GATED`
+    is asleep/sedated/unconscious; a level this enum cannot read therefore
+    produces a mind that perceives normally and runs a full character step.
+    That is the right direction -- a gated mind runs no character step at all,
+    so a word nobody recognises must not be able to silence somebody -- but it
+    is fail-OPEN, and stating it as a gate is how a later reader "restores"
+    one that never existed.
+    """
     level = str(raw or "").strip().casefold()
     if level == "" or level == "awake":
         return "awake"
@@ -987,7 +1035,7 @@ def awareness_conditions(chat_id):
     rows = []
     for row in q(
         "SELECT condition_id, subject_id, payload, started_at FROM world_conditions "
-        "WHERE chat_id=? AND kind='awareness' AND active=1 ORDER BY rowid",
+        f"WHERE chat_id=? AND kind='awareness' AND active=1 {_CONDITION_ORDER}",
         (chat_id,),
     ):
         try:
@@ -1018,18 +1066,49 @@ def awareness_conditions(chat_id):
             "started_at_seconds": started,
             "payload": payload,
         })
+    # ORDERED BY THE CLOCK THE RECORDS THEMSELVES PUBLISH. A payload's
+    # `started_at_seconds` is the simulation clock and the column is the wall
+    # clock they were written at; they disagree in live data (chat 23 holds
+    # 180 against 130 on one row), so sorting on one while reporting the other
+    # is two answers to when this started. Stable, so the SQL clause above
+    # still breaks a tie.
+    rows.sort(key=lambda r: r["started_at_seconds"])
     return rows
+
+
+def _awareness_depth(level):
+    """How far under a level is, on `AWARENESS_LEVELS`' own ordering."""
+    try:
+        return AWARENESS_LEVELS.index(level)
+    except ValueError:
+        return AWARENESS_LEVELS.index("dazed")
 
 
 def awareness_map(chat_id):
     """Active `awareness` conditions for chat_id, keyed by casefolded subject
     name -> {subject, level, cause, rousable_by, condition_id}. Mirrors
     active_disguises. Only non-awake subjects appear; everyone else is awake by
-    absence. Several rows may name one subject; the last wins, unchanged --
-    `awareness_conditions` is the un-collapsed view."""
+    absence. `awareness_conditions` is the un-collapsed view, and the ending
+    floor needs it: waking somebody deactivates every row, not this one.
+
+    SEVERAL ROWS, ONE BODY, AND THE STORY'S ORDER DECIDES. The newest wins,
+    because coming round is a real transition and the row that records it is
+    the later one. Where two rows share a clock reading -- which is how a
+    branch copy delivers them, the same shape `active_disguises` documents --
+    nothing in the data says which came after, and the two answers are not
+    equivalent: the deeper level gates the mind and the milder one hands it
+    full perception, since `dazed` is not in `NON_AWAKE_GATED`. So a tie falls
+    to the deeper level rather than to a rowid, and a body the story put under
+    is never read as present by an accident of insertion order."""
     out = {}
+    rank = {}
     for record in awareness_conditions(chat_id):
-        out[record["subject"].casefold()] = {
+        key = record["subject"].casefold()
+        order = (record["started_at_seconds"], _awareness_depth(record["level"]))
+        if key in out and order <= rank[key]:
+            continue
+        rank[key] = order
+        out[key] = {
             "subject": record["subject"],
             "level": record["level"],
             "cause": record["cause"],
@@ -1062,7 +1141,14 @@ def apply_awareness_diff(amap, diff):
                 continue
             out[key] = {"subject": subj, "level": level,
                         "cause": str(state.get("cause") or "").strip(),
-                        "rousable_by": str(state.get("rousable_by") or "").strip()}
+                        "rousable_by": str(state.get("rousable_by") or "").strip(),
+                        # THE SAME SHAPE `awareness_map` PRODUCES, including
+                        # the id an ending must re-emit: commit UPDATEs on
+                        # `condition_id`, and a fresh one opens a second row
+                        # instead of closing the first. A caller cannot be
+                        # expected to know which of the two producers built
+                        # the record it is holding.
+                        "condition_id": str(cond.get("condition_id") or _cid)}
     return out
 
 
@@ -1084,14 +1170,103 @@ RESTRAINT_LEVELS = ("held", "bound", "pinned", "encased")
 IMMOBILIZING_RESTRAINTS = frozenset(RESTRAINT_LEVELS)
 
 
+#: The words a model writes when it means one of the four rungs. No prompt
+#: publishes `RESTRAINT_LEVELS` -- the body specialist is handed a
+#: parenthetical of examples, not a `level in {...}` clause of the kind
+#: awareness gets one paragraph later -- and two of those very examples
+#: ("grappled", "held hostage") were unreadable, so both landed on the
+#: mildest rung. AGENTS.md states the rule for this shape in the weather
+#: vocabulary: extend the synonyms rather than widen the enum, because a
+#: silent fall to the default inverts the meaning of the beat.
+#:
+#: The distinction each rung names, so a new word can be placed without
+#: guessing: `held` is a body holding a body, `bound` is a binding that
+#: holds without anyone attending it, `pinned` is a body or a mass holding
+#: another against something, `encased` is being closed inside.
+_RESTRAINT_SYNONYMS = (
+    ("encased", ("encased", "encase", "entombed", "entomb", "sealed", "seal",
+                 "cocooned", "cocoon", "engulfed", "engulf", "swallowed",
+                 "swallow", "buried", "bury", "enclosed", "walled")),
+    ("pinned", ("pinned", "pin", "grappled", "grapple", "straddled",
+                "straddle", "immobilised", "immobilized", "immobile",
+                "trapped", "trap", "crushed", "crush", "wedged", "stuck",
+                "weighed down", "held down")),
+    ("bound", ("bound", "bind", "tied", "tie", "roped", "rope", "shackled",
+               "shackle", "manacled", "manacle", "handcuffed", "cuffed",
+               "cuff", "chained", "chain", "fettered", "fetter", "trussed",
+               "truss", "strapped", "restrained", "restraint", "leashed",
+               "netted")),
+    ("held", ("held", "hold", "grabbed", "grab", "grasped", "grasp",
+              "gripped", "grip", "clutched", "clutch", "clamped", "clamp",
+              "hostage", "carried")),
+)
+
+
+#: The kinds a beat actually files a restraint under. `world_conditions.kind`
+#: is free model text -- no prompt publishes a vocabulary for it, and what the
+#: body specialist is told is the phrase "physical restraint (bound, held
+#: hostage, grappled, pinned)", from which `physical_restraint` is the obvious
+#: token and the one that matches the engine's own `physical_disguise` /
+#: `physical_transformation` besides. This reader asked for `restraint`, which
+#: across the whole live corpus no beat has ever written: 21 active rows say
+#: `physical_restraint` and 3 say `restrained`, over fifteen chats, and the
+#: floor that stops a bound body walking out has therefore never once fired.
+#:
+#: A FAMILY OF SPELLINGS, NOT ANYTHING WITH A BODY IN IT: containment and
+#: contact are their own systems with their own consequences, and reading one
+#: as a restraint would immobilise a body nothing is holding.
+_RESTRAINT_KIND_WORDS = frozenset({
+    "restraint", "restraints", "restrained", "restraining", "bound",
+    "binding", "bindings",
+})
+
+
+def _is_restraint_kind(kind):
+    """Is this condition kind one of the ways a restraint gets recorded?"""
+    words = _re.split(r"[^a-z0-9]+", str(kind or "").casefold())
+    return any(word in _RESTRAINT_KIND_WORDS for word in words)
+
+
+#: Where the rung is written. `level` is what the schema asks for and what no
+#: live row carries; `restraint_type` ("metal_cuffs", "chair_restraints") and
+#: `type` ("grip", "held_in_embrace") are what beats actually use.
+_RESTRAINT_LEVEL_FIELDS = ("level", "restraint_type", "type")
+
+
+def _restraint_level_of(state, payload=None):
+    for field in _RESTRAINT_LEVEL_FIELDS:
+        raw = state.get(field) if isinstance(state, dict) else None
+        if raw is None and isinstance(payload, dict):
+            raw = payload.get(field)
+        if str(raw or "").strip():
+            return _normalize_restraint_level(raw)
+    return _normalize_restraint_level("")
+
+
 def _normalize_restraint_level(raw):
+    """One of `RESTRAINT_LEVELS`, from whatever the model actually wrote.
+
+    Read DEEPEST-FIRST, because these arrive as phrases as often as tokens
+    ("bound hand and foot", "held down against the flagstones") and a phrase
+    naming two rungs means the stronger one: someone held down and bound is
+    bound. Unknown wording still restrains -- the story said this body cannot
+    move itself -- and only the RUNG is guessed, at `held`, which claims
+    least.
+    """
     level = str(raw or "").strip().casefold()
     if not level:
         return "bound"
     if level in RESTRAINT_LEVELS:
         return level
-    # Unknown wording degrades to the MILDEST real restraint rather than
-    # vanishing, matching how awareness treats an unrecognized level.
+    # `wrist_and_ankle_restraints_on_metal_chair` is a sentence a model wrote
+    # in the only punctuation a token field invites. An underscore is a WORD
+    # character to a regex, so word-boundary cues read the whole thing as one
+    # unknown word unless the separators become separators.
+    level = _re.sub(r"[^a-z0-9]+", " ", level).strip()
+    for rung, cues in _RESTRAINT_SYNONYMS:
+        for cue in cues:
+            if _re.search(r"\b%ss?\b" % _re.escape(cue), level):
+                return rung
     return "held"
 
 
@@ -1103,9 +1278,11 @@ def restraint_map(chat_id):
     """
     out = {}
     for row in q(
-        "SELECT subject_id, payload FROM world_conditions WHERE chat_id=? "
-        "AND kind='restraint' AND active=1", (chat_id,),
+        "SELECT subject_id, kind, payload FROM world_conditions WHERE chat_id=? "
+        f"AND active=1 {_CONDITION_ORDER}", (chat_id,),
     ):
+        if not _is_restraint_kind(row["kind"]):
+            continue
         try:
             payload = json.loads(row["payload"])
         except (TypeError, ValueError):
@@ -1116,7 +1293,7 @@ def restraint_map(chat_id):
             continue
         out[subject.casefold()] = {
             "subject": subject,
-            "level": _normalize_restraint_level(state.get("level")),
+            "level": _restraint_level_of(state, payload),
             "by": str(state.get("by") or "").strip(),
             "means": str(state.get("means") or "").strip(),
             "escapable_by": str(state.get("escapable_by") or "").strip(),
@@ -1132,7 +1309,7 @@ def apply_restraint_diff(rmap, diff):
         if not isinstance(cond_list, list):
             cond_list = [cond_list]
         for cond in cond_list:
-            if not isinstance(cond, dict) or cond.get("kind") != "restraint":
+            if not isinstance(cond, dict) or not _is_restraint_kind(cond.get("kind")):
                 continue
             subject = str(cond.get("subject_id") or "").strip()
             if not subject:
@@ -1144,7 +1321,7 @@ def apply_restraint_diff(rmap, diff):
                 continue
             out[key] = {
                 "subject": subject,
-                "level": _normalize_restraint_level(state.get("level")),
+                "level": _restraint_level_of(state, cond),
                 "by": str(state.get("by") or "").strip(),
                 "means": str(state.get("means") or "").strip(),
                 "escapable_by": str(state.get("escapable_by") or "").strip(),
@@ -1179,11 +1356,6 @@ def name_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return character_name(sheet)
     return persona_name(sheet)
-
-def base_appearance_of(sheet):
-    if "psychology" in sheet or "core" in sheet:
-        return character_appearance(sheet)
-    return persona_appearance(sheet)
 
 def abilities_of(sheet):
     if "psychology" in sheet or "core" in sheet:
@@ -1364,15 +1536,6 @@ def director_context(chat_id, n=5, frame_id=_UNSET, *, entitled=True):
             "resolved": resolved,
         })
     return out
-
-def salience_of(text):
-    s = 0.45 + min(len(text or ""), 400) / 1600.0
-    for w in ("attack", "blood", "secret", "betray", "kiss", "dead",
-              "weapon", "threat", "love", "steal", "scream", "knife",
-              "confess", "liar", "promise"):
-        if w in (text or "").lower():
-            s += 0.08
-    return round(min(s, 0.95), 3)
 
 def _ability_mod(actor, ability, ctx):
     levels = {"novice": 0, "competent": 2, "expert": 4, "master": 6}
@@ -1566,7 +1729,6 @@ DEFAULT_INTERACTION_CONFIG = {
     "autonomy": 50,
     "max_micro_rounds": 4,
     "max_character_calls": 6,
-    "max_speakers_per_round": 1,
     # How many characters open the beat in one blind instant. ONE, so causality
     # builds as the loop runs: each character after the first decides in a room
     # where the previous one has already acted. Raise it for a beat aimed at

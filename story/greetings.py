@@ -28,8 +28,19 @@ from mind.memory import add_memories_batch, duplicate_lorebook_for_chat
 from agents.runtime import _run_pipeline
 from agents.storage import active_content
 
+#: What produced an extraction, so a stored one can be refused. Raise this
+#: whenever `extract_greeting`'s prompt, schema or post-processing changes in
+#: a way that makes an older extraction wrong -- the salience cap below is the
+#: worked example of exactly such a change, and it shipped while nothing
+#: stamped or checked this, so every stored extraction ever written is of
+#: unknown provenance and re-extracts.
 EXTRACTOR_VERSION = 1
-PLAYER_TOKEN = "{{PLAYER}}"
+
+#: The player's slot in imported prose. ONE definition, in the module that
+#: mints it: `importers._substitute_macros` writes this token into every
+#: imported card, and a second literal here could drift from the one actually
+#: written without a single test noticing.
+from story.importers import PLAYER_TOKEN
 
 # Every way the player's slot arrives in seed prose. The token is what the
 # prompt asks for; the bare words are what models write instead, and they are
@@ -119,7 +130,31 @@ def extract_greeting(sheet: dict, greeting_prose: str) -> dict:
     for seed in out.get("knowledge_seeds") or []:
         if PLAYER_TOKEN in str(seed.get("content", "")):
             seed["revealed_in_prose"] = True
+    # STAMPED WHERE IT IS MINTED, not where it is filed. The greeting record
+    # has a sibling `extractor_version` field, and a writer that copies the
+    # extraction without it -- an archive, an editor, a hand-written card --
+    # would leave scaffolding that can never say what made it.
+    out["extractor_version"] = EXTRACTOR_VERSION
     return out
+
+
+def _usable_stored_extraction(record):
+    """A stored extraction is replayable only if THIS extractor made it.
+
+    `start_story` replays `record["extraction"]` instead of paying for a
+    model call, and that stored blob is the one path into the turn-0 seeding
+    code that never passes through today's schema -- the salience cap above
+    exists because of what came through it. An extraction of unknown
+    provenance is therefore not trusted: unstamped means older than the
+    stamp, which is every extraction written before this check.
+    """
+    stored = (record or {}).get("extraction")
+    if not stored:
+        return None
+    version = (record or {}).get("extractor_version")
+    if version is None and isinstance(stored, dict):
+        version = stored.get("extractor_version")
+    return stored if version == EXTRACTOR_VERSION else None
 
 
 def _greeting_record(sheet: dict, index: int):
@@ -215,7 +250,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # Scoped here rather than after the chat row exists: this is a model call,
     # and it runs before there is a chat whose story language could be read.
     with language_scope(language or DEFAULT_LANGUAGE):
-        extraction = rec.get("extraction") or extract_greeting(sheet, prose_tok)
+        extraction = (_usable_stored_extraction(rec)
+                      or extract_greeting(sheet, prose_tok))
 
     def sub(s):  # deterministic {{PLAYER}} -> persona name
         return str(s or "").replace(PLAYER_TOKEN, p_name)
@@ -385,7 +421,6 @@ def generate_greeting(char_id: int, brief: str = "",
     # substitution downstream (start_story resolves it).
     prose = _substitute_macros(prose, name).strip()
 
-    import hashlib
     return {
         "greeting_id": "greet_" + hashlib.sha1(prose.encode("utf-8")).hexdigest()[:16],
         "prose": prose,
@@ -394,20 +429,36 @@ def generate_greeting(char_id: int, brief: str = "",
     }
 
 
+#: Every quote character that can wrap a whole greeting, opening or closing.
+_QUOTE_MARKS = "\"“”"
+
+
 def _strip_greeting_wrapping(raw: str) -> str:
-    """A utility model sometimes wraps prose in a code fence, a leading label,
-    or whole-string quotes despite the prompt. Peel those without touching the
-    prose itself."""
+    """A utility model sometimes wraps prose in a code fence or in whole-string
+    quotes despite the prompt. Peel those without touching the prose itself.
+
+    A LEADING LABEL IS DELIBERATELY NOT PEELED, and this docstring used to
+    claim it was. A short prefix before a colon cannot be told from a speaker
+    attribution, and an attribution is CONTENT -- dropping it loses who is
+    talking, which is worse than leaving a stray "Greeting:" where an author
+    can see and delete it.
+    """
     text = str(raw or "").strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[-1]
         if text.rstrip().endswith("```"):
             text = text.rstrip()[:-3]
     text = text.strip()
-    # A single pair of wrapping quotes around the ENTIRE greeting (not internal
-    # dialogue) -- only strip when both ends are quotes and there's no earlier
-    # closing quote that would make this real dialogue.
-    if len(text) >= 2 and text[0] in "\"“" and text[-1] in "\"”" \
-            and text.count('"') + text.count("“") == 1 + text.count("”"):
-        pass  # ambiguous -- leave dialogue-opening greetings intact
+    # ONE PAIR AROUND THE WHOLE THING, AND NOTHING INSIDE IT. A greeting may
+    # legitimately open and close on dialogue, so the two ends prove nothing;
+    # what distinguishes wrapping from speech is that wrapping is the only
+    # quote in the string. Anything else is somebody talking, and peeling it
+    # would take one mark off a line and leave its partner standing.
+    #
+    # The condition this replaces counted straight quotes against curly ones
+    # (`count('"') + count(open) == 1 + count(close)`) and its body was
+    # `pass`, so neither half of the peel this function documents ran.
+    if (len(text) >= 2 and text[0] in _QUOTE_MARKS and text[-1] in _QUOTE_MARKS
+            and not any(ch in _QUOTE_MARKS for ch in text[1:-1])):
+        text = text[1:-1]
     return text.strip()

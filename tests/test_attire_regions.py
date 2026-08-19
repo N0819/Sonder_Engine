@@ -1107,3 +1107,126 @@ def test_covered_and_its_attribution_are_one_predicate():
     assert "head" not in cover
     assert "feet" not in cover
     assert attire.exposed_regions(regions) == ["head", "feet"]
+
+
+# --- a cue table that cannot reach its own entries --------------------------
+#
+# Two cue-table rules decide which region a garment name lands in, and both
+# resolved a phrase by something other than what the phrase says.
+#
+# `region_of` prefers the cue that matches LATEST, because English puts the
+# noun at the end. On a TIE it kept the first region in table order, so a cue
+# that is a longer, more specific spelling of an earlier one could never win:
+# `girdle-cloth` is listed under groin and `girdle` under waist, they match
+# the same string at the same offset, and waist is declared first. The groin
+# entry was unreachable from the moment it was added -- the module header is
+# emphatic that waist and groin must stay separate, and this is that failure
+# from the other side, a body in nothing but a girdle-cloth reporting its
+# groin bare.
+#
+# `attaches_only` asked whether ANY ornament word appears ANYWHERE in the
+# phrase, so one describing word turned the garment into a thing that covers
+# nothing: `cord` is both a waist cue and an attach cue, and a leather cord
+# belt was worn at the waist and concealed it not at all.
+
+def test_a_longer_cue_at_the_same_place_is_the_more_specific_garment():
+    """The tie-break is specificity, not the order the table was written in.
+    Any cue that is a longer spelling of another is otherwise dead on
+    arrival, and nothing says so."""
+    assert attire.region_of("girdle-cloth") == "groin"
+    assert attire.region_of("a silk girdle-cloth") == "groin"
+    assert attire.region_of("a plain girdle") == "waist"
+
+
+def test_the_noun_at_the_end_still_beats_a_longer_cue_earlier():
+    assert attire.region_of("girdle-cloth and a pair of boots") == "feet"
+
+
+def test_an_ornament_word_describes_a_garment_it_does_not_replace_it():
+    """`attaches_only` decides whether a garment COVERS its region. The head
+    noun decides that -- a cord belt is a belt."""
+    assert attire.attaches_only("a leather cord belt") is False
+    assert attire.region_of("a leather cord belt") == "waist"
+    assert "waist" in attire.regions_covered("a leather cord belt")
+
+
+def test_a_thing_that_really_is_worn_at_a_place_still_attaches():
+    assert attire.attaches_only("a silk hair ribbon") is True
+    assert attire.attaches_only("a gold necklace") is True
+    assert attire.attaches_only("a braided cord") is True
+    assert attire.attaches_only("a signet ring") is True
+
+
+def test_a_covering_garment_named_after_an_ornament_still_covers():
+    """The general shape: an attach cue early in the phrase, a covering noun
+    after it."""
+    assert attire.attaches_only("a chain mail shirt") is False
+    assert attire.attaches_only("a ribbon-trimmed dress") is False
+
+
+def test_a_garment_that_merely_carries_an_ornament_still_covers():
+    """Live, and the only verdict this change moves across all 192 garment
+    names in the corpus: `worn flight jacket with patched insignia` read as
+    an ornament, so the jacket covered nothing."""
+    assert attire.attaches_only("worn flight jacket with patched insignia") is False
+    assert attire.region_of("worn flight jacket with patched insignia") == "torso"
+
+
+def test_where_a_thing_hangs_does_not_decide_whether_it_covers():
+    """Two questions about one phrase. `region_of` reads the placement --
+    a key ring on a belt is at the waist -- while `attaches_only` reads what
+    the thing IS, and a key ring covers nothing whatever it hangs from."""
+    assert attire.region_of("heavy key ring on belt") == "waist"
+    assert attire.attaches_only("heavy key ring on belt") is True
+
+
+def test_a_zoned_region_and_a_plain_one_render_a_garment_the_same_way():
+    """`compact_line` had TWO copies of the NAME(state;condition)=look rule:
+    `_compact_garment_piece`, serving the zoned (torso) branch, and 39 inline
+    lines serving every other region. Same `_safe`, same first-clause split,
+    same word-boundary truncation, same look dedupe, same join -- so a change
+    to what the Director is told about a torso need not have reached what it
+    is told about a skirt.
+
+    Nothing misbehaved when this was written; the copies agreed. The test is
+    the binding, and it fails the day they stop agreeing.
+    """
+    garment = {"name": "kimono", "state": "loosened", "condition": "wine-stained",
+               "description": "A heavy silk kimono, dyed indigo; a wedding gift."}
+
+    zoned = attire.compact_line({
+        "torso": {"garments": [dict(garment)],
+                  "covered_zones": {"chest": ["kimono"]}},
+    }, look=40)
+    plain = attire.compact_line({
+        "legs": {"garments": [dict(garment)]},
+    }, look=40)
+
+    zoned_piece = zoned.split("torso:", 1)[1].split("|", 1)[0]
+    zoned_piece = zoned_piece.split(">", 1)[-1]
+    plain_piece = plain.split("legs:", 1)[1].split("|", 1)[0]
+    assert zoned_piece == plain_piece
+    assert plain_piece.startswith("kimono(loosened;wine-stained)=")
+
+
+def test_every_known_diff_key_is_handled_rather_than_filed_as_a_note():
+    """`_DIFF_KNOWN_KEYS` is a second copy of `coerce_diff_shape`'s dispatch
+    chain, and had no consumer and no test -- so the two were free to drift,
+    in a direction nothing errors on. A key the chain does not handle falls
+    through to `notes`, where commit resolves it as a GARMENT HANDLE: the
+    change it described is not lost, it is misfiled onto a garment named
+    after the field.
+
+    Passes today, because the two agree today. It is the binding, not a
+    reproduction.
+    """
+    for key in attire._DIFF_KNOWN_KEYS:
+        out = attire.coerce_diff_shape({key: {"a kimono": "loosened"}})
+        assert key not in (out.get("notes") or {}), key
+
+
+def test_a_key_the_chain_does_not_know_is_still_read():
+    """The other half of the same rule, and the reason the fall-through
+    exists: an unrecognised key is kept as a note rather than dropped."""
+    out = attire.coerce_diff_shape({"shift": "hem rucked up"})
+    assert out["notes"] == {"shift": "hem rucked up"}
