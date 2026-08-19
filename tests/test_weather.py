@@ -555,6 +555,42 @@ class TestGroundState:
         for other in ("seasonal", "harsh", "catastrophic"):
             assert severity_intensity_cap(other) == "heavy"
 
+    def test_a_calm_story_never_drifts_into_a_downpour(self):
+        """The cap the setting names, applied where the sky is drifted.
+
+        Without it `weather_severity: calm` bought a story nothing at all in
+        the drift: `_SKY_FALL["storm"]` rolls `heavy` two times in four, and
+        an unattended calm sky reached it as often as a seasonal one.
+        """
+        from world.weather import advance_weather
+        sky = {"sky": "storm", "precipitation": "rain", "intensity": "heavy"}
+        seen = set()
+        for step in range(40):
+            after = advance_weather(sky, 3600 * (step + 1), seed="calm:%d" % step,
+                                    severity="calm")
+            seen.add(after["intensity"])
+        assert seen and seen <= {"none", "light"}, seen
+
+    def test_a_seasonal_story_still_gets_the_weather_it_rolled(self):
+        from world.weather import advance_weather
+        sky = {"sky": "storm", "precipitation": "rain", "intensity": "heavy"}
+        seen = set()
+        for step in range(40):
+            for severity in ("seasonal", "harsh", "catastrophic"):
+                seen.add(advance_weather(sky, 3600 * (step + 1),
+                                         seed="s:%d" % step,
+                                         severity=severity)["intensity"])
+        assert "heavy" in seen
+
+    def test_an_unspecified_severity_caps_nothing(self):
+        """The drift is called from one place today; a caller that does not
+        know the story's severity must not silently get the calm ceiling."""
+        from world.weather import advance_weather
+        sky = {"sky": "storm", "precipitation": "rain", "intensity": "heavy"}
+        seen = {advance_weather(sky, 3600 * (n + 1), seed="u:%d" % n)["intensity"]
+                for n in range(40)}
+        assert "heavy" in seen
+
 
 class TestABlizzardIsNotAThunderstorm:
     """Live failure, story "The Blizzard": the sky was

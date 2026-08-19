@@ -658,13 +658,18 @@ def _roll(seed, step, salt):
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:8], 16)
 
 
-def advance_weather(weather, elapsed_seconds, seed, cold=False):
+def advance_weather(weather, elapsed_seconds, seed, cold=False, severity=None):
     """The sky after `elapsed_seconds`, drifted deterministically.
 
     `cold` swaps rain for snow, which is the one place temperature actually
     changes what falls rather than merely how it feels. Returns the input
     unchanged inside one drift window, so an ordinary conversational beat does
     not move the weather at all.
+
+    `severity` is the story's authored ceiling (see `severity_intensity_cap`).
+    A caller that does not know it passes nothing and gets an uncapped drift,
+    because the calm ceiling is a choice a story made and not a default to
+    fall back to.
     """
     weather = normalize_weather(weather) or dict(_DEFAULT)
     try:
@@ -678,6 +683,7 @@ def advance_weather(weather, elapsed_seconds, seed, cold=False):
     sky = skies[_roll(seed, step, "sky") % len(skies)]
     falls = _SKY_FALL.get(sky, _SKY_FALL["fair"])
     precipitation, intensity = falls[_roll(seed, step, "fall") % len(falls)]
+    intensity = _capped_intensity(intensity, severity)
     if cold or weather["temperature"] == "freezing":
         precipitation = {"rain": "snow", "drizzle": "snow",
                          "hail": "sleet"}.get(precipitation, precipitation)
@@ -809,5 +815,26 @@ def severity_intensity_cap(severity):
     Only `calm` caps anything: the difference between seasonal, harsh and
     catastrophic is what the weather is permitted to DO, not how hard it comes
     down, and that permission belongs to the Director rather than to a table.
+    The three upper values are therefore identical HERE and not identical in
+    the story: the whole style guide, `weather_severity` included, is handed
+    to the Director (`agents/director.py:293`) and to mapping, which is the
+    surface that reads a permission.
+
+    Read by `advance_weather`, which is the only thing that drifts a sky
+    unattended; a declared beat is the Director's and is not capped.
     """
     return "light" if severity == "calm" else "heavy"
+
+
+def _capped_intensity(intensity, severity):
+    """`intensity`, lowered to the story's ceiling. Ordered by INTENSITIES, so
+    a new rung between two existing ones needs no change here."""
+    if not severity:
+        return intensity
+    cap = severity_intensity_cap(severity)
+    try:
+        if INTENSITIES.index(intensity) <= INTENSITIES.index(cap):
+            return intensity
+    except ValueError:
+        return intensity
+    return cap
