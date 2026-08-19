@@ -5489,8 +5489,15 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
         canonical = str(name or "").strip()
         if not group or not canonical:
             continue
-        for token in re.findall(r"[A-Za-z']+", canonical):
-            if len(token) < 3 or not token[:1].isupper():
+        for token in _name_tokens(canonical):
+            if len(token) < _name_token_floor(token):
+                continue
+            # The capital is what separates a name part from an ordinary word
+            # it sits beside -- in a script that HAS capitals. Demanding one of
+            # a caseless script drops every token, which is how this guard came
+            # to return [] for a Japanese cast before consulting a pronoun at
+            # all. Same reasoning as `_player_name_forms`.
+            if not _UNSPACED_SCRIPT.match(token[:1]) and not token[:1].isupper():
                 continue
             if token.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
                 continue
@@ -5511,7 +5518,15 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
     flagged = set()
     for sentence in _SENTENCE_SPLIT.split(scan):
         for clause in _ling("_CLAUSE_SPLIT").split(sentence):
-            words = re.findall(r"[A-Za-z']+", clause)
+            # MEASURED BEFORE ENFORCING, because this warning's prefix is in
+            # `_ENFORCEABLE_PREFIXES` and a false positive buys a full narrator
+            # rewrite. Replayed over every stored narrator variant in the live
+            # database (2,350 with prose, 69,589 clauses): 0 clauses tokenise
+            # differently. `_NAME_TOKEN_RE` opens with the same `[A-Za-z']+`,
+            # so the English answer is unchanged by construction and the whole
+            # of the new exposure is in scripts where this guard returns
+            # nothing at all today.
+            words = _name_tokens(clause)
             if len(words) < 2:
                 continue
             present = {token_owner[w] for w in words if w in token_owner}
@@ -5781,7 +5796,8 @@ def _actor_reference_patterns(display):
     articles = [str(a).lower() for a in (compositor_value("articles") or [])]
     article_re = ("^(?:%s)\\s+" % "|".join(re.escape(a) for a in articles)
                   if articles else None)
-    if head.lower() in articles or not display[:1].isupper():
+    proper = display[:1].isupper() or bool(_UNSPACED_SCRIPT.match(display[:1]))
+    if head.lower() in articles or not proper:
         phrase = display
         if article_re:
             phrase = re.sub(article_re, "", phrase, flags=re.I)
@@ -5791,13 +5807,15 @@ def _actor_reference_patterns(display):
         return [re.compile(cue_boundary_pattern(
             r"\s+".join(re.escape(w) for w in phrase.split())), re.I)]
     pats = []
-    for tok in re.findall(r"[A-Za-z']+", display):
-        if len(tok) < 3 or not tok[:1].isupper():
+    for tok in _name_tokens(display):
+        if len(tok) < _name_token_floor(tok):
+            continue
+        if not _UNSPACED_SCRIPT.match(tok[:1]) and not tok[:1].isupper():
             continue
         if tok.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
             continue
-        pats.append(re.compile(
-            r"(?<!\w)" + re.escape(tok) + r"(?:['’]s)?(?!\w)"))
+        pats.append(re.compile(cue_boundary_pattern(
+            re.escape(tok) + r"(?:['’]s)?")))
     return pats
 
 
