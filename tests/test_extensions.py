@@ -714,8 +714,34 @@ class TestCharacterTargeting:
 
 
 class TestHostSurface:
+    def test_a_disabled_extension_serves_no_assets(self, temp_db, ext_root):
+        """The same rule the two sibling servers apply: an extension the host
+        has switched off, or one that safe mode has switched off for them,
+        serves nothing. Without it `/asset/extension.py` returns the Python
+        source of an extension that is supposed to be inert."""
+        _write_extension(ext_root, "quiet", {
+            "id": "quiet", "version": "1", "ext_api": 1,
+            "capabilities": {"python": "extension.py"}},
+            files={"extension.py": "def register(api):\n    pass\n"})
+        _enable("quiet")
+        assert extension_runtime.asset_path("quiet", "manifest.json").is_file()
+
+        extension_runtime.disable_extension("quiet")
+        with pytest.raises(ExtensionError, match="not enabled"):
+            extension_runtime.asset_path("quiet", "extension.py")
+
+    def test_safe_mode_serves_no_assets_either(self, temp_db, ext_root,
+                                               monkeypatch):
+        _write_extension(ext_root, "quiet", {
+            "id": "quiet", "version": "1", "ext_api": 1})
+        _enable("quiet")
+        monkeypatch.setenv(extension_runtime.SAFE_MODE_ENV, "1")
+        with pytest.raises(ExtensionError, match="not enabled"):
+            extension_runtime.asset_path("quiet", "manifest.json")
+
     def test_asset_paths_cannot_escape_the_extension_directory(
-            self, real_ext_root):
+            self, temp_db, real_ext_root):
+        _enable(DEMO)   # asset_path serves an ENABLED extension; see above
         assert extension_runtime.asset_path(DEMO, "manifest.json").is_file()
         for bad in ("../../db.py", "/etc/passwd", "", "ui/../../../db.py"):
             with pytest.raises(ExtensionError):

@@ -1452,10 +1452,17 @@ def asset_path(ext_id: str, relative: str) -> Path:
 
     Containment is checked on the RESOLVED path, so a symlink pointing out of
     the tree is refused the same way `../` is.
+
+    Enabled as well as installed, which is the same rule `extension_script`
+    and `extension_styles` apply: switching an extension off has to reach
+    everything it serves, or `/asset/extension.py` hands back the source of
+    an extension the host believes is inert. Safe mode counts as off.
     """
     ext = installed_extensions().get(str(ext_id or ""))
     if ext is None:
         raise ExtensionError(f"no installed extension {ext_id!r}")
+    if not is_enabled(ext.id):
+        raise ExtensionError(f"extension {ext.id!r} is not enabled")
     candidate = Path(str(relative or ""))
     if not str(relative or "").strip() or candidate.is_absolute():
         raise ExtensionError("asset path must be relative")
