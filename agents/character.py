@@ -543,9 +543,14 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0):
         return {}
     if not player:
         return {}
-    positions = (sc or {}).get("positions") or {}
-    here = positions.get(character_name(sh))
-    if not here or positions.get(player) != here:
+    # The identity-tolerant resolvers, for BOTH bodies. A `positions` key may
+    # be the display name, `identity.uid`, an alias, another case or a
+    # non-Latin fold -- which is why `room_of` and `character_room` exist at
+    # all -- and a raw dict hit read a body standing right there as unplaced.
+    # The note then vanished with no warning, and an absent note is what a
+    # beat with nothing to report looks like.
+    here = character_room(sc, sh)
+    if not here or room_of(sc, player) != here:
         return {}
     note = {"player_said_nothing": True, "player_name": player}
     if quiet_beats > 1:
