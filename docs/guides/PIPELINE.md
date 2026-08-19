@@ -162,8 +162,18 @@ Two conditions the diagram cannot show:
   the same list back. The hook is total: any failure leaves the plan exactly as
   the engine built it, so a broken extension cannot cost a turn. See
   [`EXTENSIONS.md`](EXTENSIONS.md) for `register_step` and the splice manifest.
-  `establishment_plan()` takes no splices — the opening turn is a fixed
-  five-step list.
+  **`establishment_plan()` splices too**, and did not until recently: three of
+  its five steps (`mapping_stage`, `narrator`, `commit`) also run on a normal
+  turn, so an extension anchored `after:mapping_stage` or `before:narrator` was
+  silently unplanned on turn zero — the step ran and the splice did not, which
+  is the opposite of what the extension contract predicts.
+
+A spliced step's key is `ext:<extension-id>:<step-name>`, and it is a plan step
+like any other: one `steps`/`variants` row pair, one active variant, reroll,
+rerun-from-stage and the pipeline drawer, with no schema entry required. That
+namespace is why **a core step id is a published name** — extensions anchor on
+them from outside the tree, so renaming one breaks every extension anchored on
+it in a way nothing in this repository will catch.
 
 ### `director_interpret`
 
