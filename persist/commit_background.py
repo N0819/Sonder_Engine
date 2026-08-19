@@ -916,7 +916,13 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # them. The signal for the first already existed and was used only as a
     # same-beat liveness bit; nothing accumulated it.
     addressed_refs = _flow_addressed_refs(ctx)
-    player_input = str(getattr(ctx.turn, "player_input", "") or "")
+    # NOT `ctx.turn.player_input`, which is the raw text the player typed.
+    # See `overt_declaration`: the pre-commit gate was routed through it and
+    # this writer -- one function over, on the same beat, from the same
+    # declaration -- was not. A concealed line naming a presence therefore
+    # accrued them a DURABLE addressed debt for words nobody delivered, which
+    # outlives the beat and is the counter that earns a passer-by a sheet.
+    player_input = overt_declaration_text(ctx)
     sc = wget(cid, "scene", {}) or {}
     for name, record in presences.items():
         addressed = (_presence_in_addressed_refs(name, addressed_refs)
