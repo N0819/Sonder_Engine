@@ -1261,8 +1261,15 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                     match, best_sim = intent, sim
             if match is not None and best_sim >= _INTENT_SIMILARITY:
                 # Rephrasing is not a way around a spent goal: the restatement
-                # revives it only if it had somewhere left to go.
-                if _advance_intent(match, turn_idx, warnings):
+                # revives it only if it had somewhere left to go -- and not
+                # around a BARREN one either. A character repeating itself
+                # usually restates the goal rather than emitting `progress`
+                # on it, so leaving the flag off here left the rung it exists
+                # to close open to exactly the traffic that most needs it:
+                # same beat, same repetition, opposite outcome decided by
+                # which op the model happened to choose.
+                if _advance_intent(match, turn_idx, warnings,
+                                   barren_beat=barren_beat):
                     _revive_intent(match)
                 continue
             active = sum(1 for i in result if i.get("status") == "active")
