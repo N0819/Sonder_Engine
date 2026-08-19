@@ -2,7 +2,7 @@
 
 import base64
 import hashlib
-import json, os, re, threading, time, math
+import json, re, threading, time
 import numpy as np
 from collections import defaultdict
 from core.db import q, qi, wget, wset, transaction
@@ -3924,8 +3924,13 @@ def dump_lorebook(lb_id):
             "scope": r["scope"], "relations": r["relations"],
             "source_notes": r["source_notes"],
             # Stored vector travels with the dump so restore/import can
-            # reuse it verbatim instead of re-embedding every entry.
+            # reuse it verbatim instead of re-embedding every entry -- and
+            # with the stamp that says what produced it, because a vector
+            # whose provenance was dropped in transit is one every later
+            # reader has to judge on width alone.
             "embedding": _blob_to_b64(r["embedding"]),
+            "embedding_model": r["embedding_model"],
+            "embedding_dim": r["embedding_dim"],
         }
         for r in q("SELECT * FROM lore_entries WHERE lorebook_id=? ORDER BY id", (lb_id,))
     ]
@@ -3946,23 +3951,43 @@ def dump_lorebook_links(book_ids):
 
 
 def restore_lorebook_links(chat_id, old_to_new, links):
+    """Put a chat's lorebook link graph back, and SAY what did not go back.
+
+    Every way this can fail was silent. Four `continue`s drop a link whose
+    books the id map never learned, whose endpoints collapsed onto one book, or
+    whose endpoints now sit outside this chat; a bare `except Exception: pass`
+    swallowed the insert itself. A restore that puts back half the graph and
+    returns None is indistinguishable from one that put back all of it -- and
+    the loss is not visible in the chat either, because a missing link is a
+    retrieval edge that stops being followed, not an error anybody sees.
+
+    Returns `{"restored": int, "dropped": int, "reasons": {...}}` and warns
+    when anything was dropped. Restoration itself is unchanged: a link that
+    cannot be put back is still skipped rather than allowed to take the rest
+    of the graph down with it.
+    """
+    restored = 0
+    reasons = defaultdict(int)
+
     for link in links or []:
         source = old_to_new.get(link.get("source_book_id"))
         target = old_to_new.get(link.get("target_book_id"))
 
         if source is None or target is None:
+            reasons["book_not_in_id_map"] += 1
             continue
         if source == target:
+            reasons["endpoints_merged"] += 1
             continue
 
         source_row = q("SELECT chat_id FROM lorebooks WHERE id=?", (source,), one=True)
         target_row = q("SELECT chat_id FROM lorebooks WHERE id=?", (target,), one=True)
 
         if not source_row or not target_row:
+            reasons["book_missing"] += 1
             continue
-        if source_row["chat_id"] != chat_id:
-            continue
-        if target_row["chat_id"] != chat_id:
+        if source_row["chat_id"] != chat_id or target_row["chat_id"] != chat_id:
+            reasons["book_outside_this_chat"] += 1
             continue
 
         try:
@@ -3975,8 +4000,22 @@ def restore_lorebook_links(chat_id, old_to_new, links):
                 weight=link.get("weight", 0.75),
                 sort_order=link.get("sort_order", 0),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            reasons["insert_failed"] += 1
+            logger.warning(
+                "memory: lorebook link %s->%s not restored for chat %s: %s",
+                source, target, chat_id, exc)
+            continue
+        restored += 1
+
+    dropped = sum(reasons.values())
+    if dropped:
+        logger.warning(
+            "memory: restored %d of %d lorebook links for chat %s (%s)",
+            restored, restored + dropped, chat_id,
+            ", ".join(f"{name}={count}"
+                      for name, count in sorted(reasons.items())))
+    return {"restored": restored, "dropped": dropped, "reasons": dict(reasons)}
 
 def restore_lorebook(lb_id, entries):
     import hashlib, uuid
@@ -3999,6 +4038,7 @@ def restore_lorebook(lb_id, entries):
     # are re-embedded, in a single batch so no per-entry provider call
     # ever runs between writes.
     entry_vecs = {}
+    entry_stamps = {}
     legacy_entries = []
     for entry in incoming:
         raw = entry.get("embedding")
@@ -4010,10 +4050,21 @@ def restore_lorebook(lb_id, entries):
         if vec is None:
             legacy_entries.append(entry)
         entry_vecs[id(entry)] = vec
+        # The stamp belongs to the vector that arrived, so a snapshot old
+        # enough to carry bytes without one stays unstamped, and an entry
+        # re-embedded below is stamped by the embedder rather than by the
+        # snapshot it came from.
+        entry_stamps[id(entry)] = (
+            entry.get("embedding_model") if vec is not None else None)
     if legacy_entries:
         texts = [(e.get("keys") or "") + " " + (e.get("content") or "") for e in legacy_entries]
         for e, vec in zip(legacy_entries, embed_texts(texts)):
             entry_vecs[id(e)] = vec
+            # NOT stamped with the live model key: `embed_texts` returns bare
+            # vectors and degrades to the crc32 fallback on any provider
+            # error, so the name would be a guess. Unstamped is the true
+            # answer, and what the backfill exists to settle.
+            entry_stamps[id(e)] = None
 
     for entry in incoming:
         uid = entry.get("entry_uid") or legacy_entry_uid(entry)
@@ -4030,7 +4081,9 @@ def restore_lorebook(lb_id, entries):
                         scope=entry.get("scope", {}),
                         relations=entry.get("relations", {}),
                         source_notes=entry.get("source_notes", ""),
-                        embedding=entry_vecs.get(id(entry)))
+                        embedding=entry_vecs.get(id(entry)),
+                        embedding_model=entry_stamps.get(id(entry)),
+                        embedding_dim=entry.get("embedding_dim"))
             qi("UPDATE lore_entries SET canon_locked=?, turn_added=? WHERE id=?",
                (int(bool(entry.get("locked", 0))), entry.get("turn_added"), existing["id"]))
             continue
@@ -4052,7 +4105,9 @@ def restore_lorebook(lb_id, entries):
                  scope=entry.get("scope", {}),
                  relations=entry.get("relations", {}),
                  source_notes=entry.get("source_notes", ""),
-                 embedding=entry_vecs.get(id(entry)))
+                 embedding=entry_vecs.get(id(entry)),
+                 embedding_model=entry_stamps.get(id(entry)),
+                 embedding_dim=entry.get("embedding_dim"))
 
     for row in q("SELECT id,entry_uid FROM lore_entries WHERE lorebook_id=?", (lb_id,)):
         if row["entry_uid"] not in incoming_uids:
@@ -4108,11 +4163,40 @@ def _embed_lore_document(keys, content):
     return got.vectors[0], got.model_key, got.dimensions
 
 
+def _carried_stamp(vec, embedding_model, embedding_dim):
+    """What a caller-supplied lore vector may claim about its own provenance.
+
+    A vector arriving from a restore, an import or a branch is reused verbatim
+    rather than recomputed, so the stamp has to travel with it or be lost. It
+    used to be lost: the dump carried only the bytes, and this returned a NULL
+    model for every restored entry -- which was the RIGHT answer to the
+    question it was being asked, since inventing a model name from bytes would
+    be a guess written down as a measurement. The fix is upstream, in what the
+    dump carries; here the rule is only that a claim is honoured when one was
+    made and never manufactured when it was not.
+
+    The WIDTH still comes from the bytes when they disagree with a claimed
+    dimension: the vector is the artefact, the number is a description of it.
+    """
+    try:
+        dims = len(vec)
+    except TypeError:
+        dims = None
+    if dims is None:
+        try:
+            dims = int(embedding_dim)
+        except (TypeError, ValueError):
+            dims = None
+    model_key = str(embedding_model).strip() if embedding_model else None
+    return (model_key or None), dims
+
+
 def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="other",
              title=None, knowledge_tag=None, knowledge_range=None,
              knowledge_locations=None, entry_uid=None,
              importance=0.5, aliases=None, scope=None, relations=None,
-             source_notes="", embedding=None):
+             source_notes="", embedding=None, embedding_model=None,
+             embedding_dim=None):
     import uuid
     entry_uid = entry_uid or f"entry_{uuid.uuid4().hex}"
     vec = embedding
@@ -4120,15 +4204,7 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
     if vec is None:
         vec, model_key, dims = _embed_lore_document(keys, content)
     else:
-        # A caller-supplied vector arrives from a restore or an import, which
-        # carries the bytes but not the stamp. Its WIDTH is all that is
-        # knowable here, and claiming a model name from it would be a guess
-        # recorded as a fact -- so the model stays NULL and the backfill,
-        # which can hash the text, decides.
-        try:
-            dims = len(vec)
-        except TypeError:
-            dims = None
+        model_key, dims = _carried_stamp(vec, embedding_model, embedding_dim)
     return qi("""INSERT INTO lore_entries(
             lorebook_id, keys, content, category, canon_locked, turn_added,
             embedding, title, knowledge_tag, knowledge_range,
@@ -4148,17 +4224,14 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
 def update_lore(entry_id, keys, content, category=None, title=None,
                 knowledge_tag=None, knowledge_range=None, knowledge_locations=None,
                 importance=None, aliases=None, scope=None, relations=None,
-                source_notes=None, embedding=None):
+                source_notes=None, embedding=None, embedding_model=None,
+                embedding_dim=None):
     vec = embedding
     model_key, dims = None, None
     if vec is None:
         vec, model_key, dims = _embed_lore_document(keys, content)
     else:
-        # Restore/import hands us the bytes without the stamp -- see add_lore.
-        try:
-            dims = len(vec)
-        except TypeError:
-            dims = None
+        model_key, dims = _carried_stamp(vec, embedding_model, embedding_dim)
     fields = ["keys=?", "content=?", "embedding=?", "title=?",
               "knowledge_tag=?", "knowledge_range=?", "knowledge_locations=?",
               "embedding_model=?", "embedding_dim=?"]
@@ -4227,8 +4300,12 @@ def duplicate_lorebook_tree_for_chat(root_id, chat_id, include_links=True):
                      # source row's, so its stored vector is reused
                      # verbatim instead of re-embedding every entry
                      # (falls back to embedding only if the source row
-                     # never had a vector).
-                     embedding=_vec(e["embedding"]))
+                     # never had a vector). Same row, same bytes, so the
+                     # same stamp -- dropping it here turned every cloned
+                     # book into one judged on width alone.
+                     embedding=_vec(e["embedding"]),
+                     embedding_model=e["embedding_model"],
+                     embedding_dim=e["embedding_dim"])
     
     # Pass 2: Remap parent IDs
     for old_id, new_id in old_to_new.items():
@@ -4681,8 +4758,32 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
     save_relationships(chat_id, char_id, graph)
     return graph
 
-def update_relationships_from_inference(chat_id, char_id, turn_idx, inference_updates, existing=None):
+def update_relationships_from_inference(chat_id, char_id, turn_idx,
+                                        inference_updates, existing=None,
+                                        frame_id=_UNSET):
+    """Move a stance from what the character CONCLUDED about someone.
+
+    The second of the two paths that move the scalar graph, and the one that
+    left no trace. `apply_relationship_updates` writes a `relationship_events`
+    row per axis that moved -- a ledger that is never updated and never deleted,
+    because the graph holds one `salient_event` string and overwrites it
+    whenever the character feels anything at all. This path moved the same
+    scalar, on the same graph, saved by the same call, and recorded nothing. A
+    whole class of trust movement was missing from the record of why trust is
+    where it is, and the gap does not surface as a wrong row: it surfaces as a
+    stance whose history cannot explain it.
+
+    The reason is stamped `inference` rather than `character`, because
+    concluding somebody is dangerous and being told so are different
+    provenances and the ledger already exists to keep that difference.
+
+    NOTE, still open: the word list below decides trust movement in English
+    only. It is the class registered as MIND-F4 -- routing it through
+    `language_runtime` needs a `mind.*` linguistics key that no pack has yet.
+    """
     graph = existing or get_relationships(chat_id, char_id)
+    resolved_frame_id = (
+        _active_frame_id.get() if frame_id is _UNSET else frame_id)
     for u in inference_updates:
         about = u.get("about", "")
         if not about:
@@ -4697,6 +4798,14 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx, inference_up
             trust_delta = -0.15 * confidence
         if trust_delta != 0:
             graph.adjust_trust(about, trust_delta, conclusion[:200])
+            # The conclusion IS the reason, so it is the note. No trigger ids:
+            # an inference cites the events it was drawn from upstream, and
+            # inventing one here would put a fabricated citation in a ledger
+            # that is never corrected.
+            record_relationship_event(
+                chat_id, char_id, about, "trust", trust_delta,
+                note=conclusion, provenance="inference",
+                turn_idx=turn_idx, frame_id=resolved_frame_id)
         graph.update(about,
             familiarity=min(1.0, (graph.get(about).familiarity + 0.05) if graph.get(about) else 0.05),
             last_interaction_turn=turn_idx)

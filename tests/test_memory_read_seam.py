@@ -23,6 +23,7 @@ This file is the enforcement:
 """
 from __future__ import annotations
 
+import ast
 import inspect
 import re
 import time
@@ -235,40 +236,81 @@ def test_contrast_memory_holds_the_same_three_rules(temp_db, bank):
 
 # --- the host-scope exception stays an exception ---------------------------
 
-def test_no_unlisted_cross_character_reader(temp_db):
+# Functions that read the memory tables without scoping to one character and
+# are NOT mind-facing. Every name is a decision somebody made once, which is
+# the point: the previous version of this guard exempted whole name PREFIXES
+# (`dump_`, `apply_`, `delete_`, and every `_private` helper), so a new reader
+# joined the exemption by being spelled a certain way rather than by anyone
+# looking at it.
+MAINTENANCE_READERS = frozenset({
+    # Round-trip and lifecycle: the whole bank by definition, never a view.
+    "delete_turn_memories", "delete_memory", "update_memory",
+    "dump_chat_memories", "apply_chat_memory_restore",
+    "dump_memory_summaries", "apply_memory_summary_restore",
+    # Embedding infrastructure: rows are selected by vector staleness, and
+    # what comes back is written straight into the embedding columns.
+    "repair_pending_embeddings", "queue_fallback_rows_for_repair",
+    "rebuild_checkpoint_embeddings", "_stamped_live_dimensions",
+    "embedding_bank_status", "_kw_scores",
+    # Re-weights one character's own inference rows in place; the scope is the
+    # (chat_id, char_id) it is called with, spelled char_id=? in its own query.
+    "reconcile_inference_confidence",
+})
+
+_TABLE_READ = re.compile(
+    # The literal table, or an f-string interpolating the table name -- the
+    # embedding paths are written `FROM {table}`, which a literal search for
+    # "FROM memories" cannot see, so half the module was invisible to this
+    # guard while it read as exhaustive.
+    r"FROM\s+(?:memories\b|memory_summaries\b|\{[a-z_]+\})",
+    re.IGNORECASE)
+_CHAR_SCOPED = re.compile(r"char_id\s*=\s*\?")
+
+
+def _top_level_functions():
+    """(name, source) for every function defined at module level in memory."""
+    src = inspect.getsource(memory)
+    tree = ast.parse(src)
+    starts = [0]
+    for line in src.splitlines(keepends=True):
+        starts.append(starts[-1] + len(line))
+    return [(node.name, src[starts[node.lineno - 1]:starts[node.end_lineno]])
+            for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
+
+
+def test_no_unlisted_cross_character_reader():
     """Cross-character reads answer a question ABOUT the cast, never one a
     character asks itself, so they must never feed a mind's context. This
     fails when a new one appears without being named, which is the moment to
-    decide whether it is really host-facing."""
-    src = inspect.getsource(memory)
-    offenders = []
-    for match in re.finditer(r"\ndef (\w+)\(", src):
-        name = match.group(1)
-        body = src[match.end():]
-        nxt = re.search(r"\ndef \w+\(", body)
-        body = body[:nxt.start()] if nxt else body
-        if "FROM memories" not in body:
-            continue
-        if "char_id=?" in body or "char_id = ?" in body:
-            continue
-        if "m.char_id" in body or "WHERE id=?" in body:
-            pass
-        offenders.append(name)
+    decide whether it is really host-facing.
+
+    Bodies come from the AST rather than from slicing source between `\ndef`
+    matches: the old slice ended at the next TOP-LEVEL def, so a function
+    holding a nested one carried its neighbour's queries, and one holding none
+    could end early. And the old carve-out for row-scoped reads was written
+    `if ...: pass` -- a condition with an empty body, followed by an
+    unconditional append -- so it decided nothing at all.
+    """
     unlisted = [
-        n for n in offenders
-        if n not in HOST_SCOPE_READERS
-        # Maintenance and round-trip paths are chat- or row-scoped by
-        # definition: dumps, deletes, the embedding rebuilds. They never
-        # reach a character's context.
-        and not n.startswith(("dump_", "restore_", "prepare_", "apply_",
-                              "rebuild_", "delete_", "import_", "_"))
-        and n not in ("update_memory", "reconcile_inference_confidence",
-                      "embedding_bank_status")
+        name for name, body in _top_level_functions()
+        if _TABLE_READ.search(body)
+        and not _CHAR_SCOPED.search(body)
+        and name not in HOST_SCOPE_READERS
+        and name not in MAINTENANCE_READERS
     ]
     assert not unlisted, (
         "new cross-character memory reader(s) %s -- add to "
-        "memory.HOST_SCOPE_READERS if genuinely host-facing, or scope to "
+        "memory.HOST_SCOPE_READERS if genuinely host-facing, to "
+        "MAINTENANCE_READERS if it never reaches a mind, or scope it to "
         "char_id via visible_memory_rows" % unlisted)
+
+
+def test_the_named_exemptions_still_exist():
+    """An exemption for a function that has been renamed or deleted is a hole
+    that reads as a decision."""
+    for name in MAINTENANCE_READERS:
+        assert callable(getattr(memory, name, None)), name
 
 
 def test_the_listed_host_readers_still_exist():

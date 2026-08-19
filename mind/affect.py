@@ -670,9 +670,12 @@ def blend_affect(old_va, target_va, arousal, shock=False):
 def decay_affect(va, baseline_va, turns, half_life=_SURFACE_HALF_LIFE):
     """Exponential decay of (va - baseline) back toward baseline.
 
-    Same 2**(-turns/half_life) form as theory_of_mind.decayed_confidence:
-    unreinforced mood halves its distance from the character's baseline
-    every `half_life` turns instead of persisting at peak forever.
+    Same 0.5**(t/half_life) form as theory_of_mind.decayed_confidence, but
+    NOT the same t: unreinforced mood halves its distance from the
+    character's baseline every `half_life` TURNS -- the caller counts beats
+    -- while a belief's half-life is measured in minutes of simulation time
+    whenever the story has a clock. The shared shape is the arithmetic, not
+    the unit.
     """
     v, a = _va_pair(va)
     base_v, base_a = _va_pair(baseline_va)
@@ -1000,7 +1003,9 @@ def normalize_wants(wants, valid_intention_ids, *, want_cap=None):
     omitted it is the `ordinary` rung, which is the constant this has always
     used, so every existing caller and story is unchanged.
 
-    Caps to 3, merges near-duplicates (claim_similarity >= 0.4, higher
+    Caps to `want_cap` -- 1 at the `narrow` rung through 5 at `wide`, and 3
+    at `ordinary`, which is the default and the number this used to hardcode
+    -- merges near-duplicates (claim_similarity >= 0.4, higher
     urgency wins), rewrites unknown `serves` (neither "drive" nor a known
     intention/project id -- the caller passes the union) to "situational",
     and lets at most one situational want
@@ -1225,7 +1230,9 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
     `capacity_caps`); omitted it is the `ordinary` rung, which is the constant
     this has always used, so every existing caller and story is unchanged.
 
-    Enforced floors: at most 4 active intentions; an `add` that is
+    Enforced floors: at most `intent_cap` active intentions -- 2 at the
+    `narrow` rung through 6 at `wide`, and 4 at `ordinary`, which is the
+    default and the number this used to hardcode; an `add` that is
     near-duplicate (claim_similarity >= 0.4) of an existing intent becomes
     a `progress` on it; `satisfy`/`abandon` within 3 turns of formation
     require `evidence_ok(op)` (goals should not evaporate the beat after
@@ -1261,8 +1268,15 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                     match, best_sim = intent, sim
             if match is not None and best_sim >= _INTENT_SIMILARITY:
                 # Rephrasing is not a way around a spent goal: the restatement
-                # revives it only if it had somewhere left to go.
-                if _advance_intent(match, turn_idx, warnings):
+                # revives it only if it had somewhere left to go -- and not
+                # around a BARREN one either. A character repeating itself
+                # usually restates the goal rather than emitting `progress`
+                # on it, so leaving the flag off here left the rung it exists
+                # to close open to exactly the traffic that most needs it:
+                # same beat, same repetition, opposite outcome decided by
+                # which op the model happened to choose.
+                if _advance_intent(match, turn_idx, warnings,
+                                   barren_beat=barren_beat):
                     _revive_intent(match)
                 continue
             active = sum(1 for i in result if i.get("status") == "active")
@@ -1854,9 +1868,15 @@ def update_drive_strain(strain, strain_log, appraisal_out, enacted_serves,
     Strain is the deterministic ledger behind drive rupture. The previous
     value first decays toward 0 (half-life _STRAIN_HALF_LIFE over
     `turns_since` — the same 0.5**(t/hl) idiom as decay_affect), then
-    moves by at most one delta from the appraisal's *dominant* impact,
-    and only when that impact serves the drive and is confirmed
-    (certainty >= _CERTAINTY_THRESHOLD):
+    moves by at most one delta from the impact that serves the DRIVE this
+    beat (`_drive_serving_impact`: `appraise`'s dedicated `drive_impact`,
+    falling back to `dominant` only when the dominant one serves the drive
+    — a drive wound out-ranked by an intention wound still registers), and
+    only when that impact is confirmed at certainty >=
+    _STRAIN_CERTAINTY_MIN (0.5, NOT the mood-appraisal
+    _CERTAINTY_THRESHOLD of 0.8 — see the constant's own note: a
+    pre-rupture signal is inherently uncertain, and demanding certainty
+    about the self-doubt discarded the most authentic version of it):
 
     - contradiction (impact < 0): +_STRAIN_CONTRADICTION_GAIN * |impact|
       * certainty, x_STRAIN_SELF_MULT when self-caused — UNLESS its
@@ -1929,10 +1949,11 @@ def detect_drive_rupture(strain, appraisal_out, turn_idx, last_shift_turn):
     """Decide whether this beat opens a drive-rupture window.
 
     Fires only when BOTH keys turn: accumulated strain >=
-    _RUPTURE_STRAIN_MIN AND this beat's dominant impact is a confirmed
-    drive-scale event — event_score = |impact| * certainty
-    (x_RUPTURE_SELF_MULT when self-caused), valid only when it serves
-    the drive at certainty >= _CERTAINTY_THRESHOLD, else 0. High strain
+    _RUPTURE_STRAIN_MIN AND this beat's drive-serving impact
+    (`_drive_serving_impact`, the same one strain accrues from) is a
+    confirmed drive-scale event — event_score = |impact| * certainty
+    (x_RUPTURE_SELF_MULT when self-caused), valid only at certainty >=
+    _STRAIN_CERTAINTY_MIN (0.5), else 0. High strain
     alone smolders without igniting; one catastrophic beat from a cold
     start bounces off. A shift within the last _RUPTURE_COOLDOWN turns
     closes the window entirely.

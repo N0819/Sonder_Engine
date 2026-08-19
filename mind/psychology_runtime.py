@@ -324,6 +324,51 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
     }
 
 
+# Which way an update's evidence points. `weaken` and `contradict` are
+# unambiguous: the beat argued AGAINST the belief text as written. `revise`
+# is not -- a revision may arrive spelling the OLD belief (then it is a
+# weakening) or the NEW one (then it is an assertion) -- so it moves a HELD
+# belief down, where there is an old confidence to move, and mints as an
+# ordinary assertion where there is nothing to revise.
+_WEAKENING_OPS = ("weaken", "contradict", "revise")
+_DENYING_OPS = ("weaken", "contradict")
+
+
+# How many entries a live belief/association ledger may carry.
+_LEDGER_CAP = 20
+
+
+def _within_cap(items, re_seeded):
+    """Bound a ledger by dropping the least LIVE entry, not the oldest one.
+
+    This was `result[-20:]`, which drops from the FRONT -- and the front is
+    where the seeding pass puts whatever the card authored. So the entry
+    evicted was an authored one, and evicting an authored entry frees nothing:
+    the next turn finds it missing, re-seeds it from the sheet at card
+    confidence with `last_updated_turn: 0` -- discarding every revision the
+    story earned on it -- and pushes a learned entry out to make room for the
+    resurrection. The ledger thrashed between the two classes instead of
+    settling on twenty things.
+
+    `re_seeded(item)` is true for an entry the sheet will put back. Those are
+    kept ahead of learned ones for that reason, not because authored beliefs
+    matter more. Within a class the most recently touched survives, because
+    "oldest" and "least live" are not the same thing once a belief can be
+    reinforced for fifty beats without ever moving in the list.
+    """
+    if len(items) <= _LEDGER_CAP:
+        return items
+    ranked = sorted(
+        range(len(items)),
+        key=lambda i: (
+            0 if re_seeded(items[i]) else 1,
+            -_float(items[i].get("last_updated_turn")),
+            i,
+        ),
+    )
+    return [items[i] for i in sorted(ranked[:_LEDGER_CAP])]
+
+
 def _authored_beliefs(psychology):
     self_model = (psychology or {}).get("self_model") or {}
     return [
@@ -339,8 +384,11 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
         if isinstance(item, dict) and str(item.get("belief") or "").strip()
     ]
     by_text = {str(item["belief"]).strip().casefold(): item for item in result}
+    authored_keys = set()
     for authored in _authored_beliefs(psychology):
         key = str(authored.get("belief") or "").strip().casefold()
+        if key:
+            authored_keys.add(key)
         if key and key not in by_text:
             item = {
                 **authored,
@@ -363,9 +411,22 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
         operation = str(update.get("operation") or "reinforce").casefold()
         confidence = _clamp(update.get("confidence"), default=0.5)
         if item is None:
+            # A belief nobody holds has no old confidence to move, so the mint
+            # branch read the update's number and nothing else -- including
+            # not reading `operation`. "contradict: the north stair is safe,
+            # 0.9" therefore WROTE that belief at 0.9, and the character
+            # finished the beat believing exactly what the beat disproved.
+            #
+            # Skipping would be the cautious repair and the wrong one: the
+            # character did just acquire something -- they have now considered
+            # this and do not credit it -- and a ledger that stores only what
+            # a mind affirms cannot represent a settled disbelief at all. The
+            # complement keeps the evidence and points it the right way.
+            minted = (_clamp(1.0 - confidence)
+                      if operation in _DENYING_OPS else confidence)
             item = {
                 "belief": text,
-                "confidence": confidence,
+                "confidence": minted,
                 "protected": False,
                 "emotional_charge": _clamp(
                     update.get("emotional_charge"), -1.0, 1.0),
@@ -374,7 +435,7 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
             by_text[key] = item
         else:
             old = _clamp(item.get("confidence"), default=0.5)
-            if operation in ("weaken", "contradict", "revise"):
+            if operation in _WEAKENING_OPS:
                 step = 0.05 if item.get("protected") else 0.15
                 item["confidence"] = max(0.0, old - step * confidence)
             else:
@@ -388,7 +449,8 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
         item["last_evidence"] = [
             dict(ev) for ev in evidence if isinstance(ev, dict)
         ][-3:]
-    return result[-20:]
+    return _within_cap(result, lambda item: str(
+        item.get("belief") or "").strip().casefold() in authored_keys)
 
 
 def apply_association_updates(existing, psychology, updates, turn_idx,
@@ -396,6 +458,10 @@ def apply_association_updates(existing, psychology, updates, turn_idx,
     """Reinforce or extinguish bounded cue-response associations."""
     authored = (((psychology or {}).get("learning") or {}).get("associations")
                 or [])
+    authored_cues = {
+        str(item.get("cue") or "").strip().casefold()
+        for item in authored if isinstance(item, dict)
+    } - {""}
     result = [
         dict(item) for item in [*(authored or []), *(existing or [])]
         if isinstance(item, dict) and str(item.get("cue") or "").strip()
@@ -434,7 +500,8 @@ def apply_association_updates(existing, psychology, updates, turn_idx,
             item["response_tendency"] = str(update["response_tendency"])
         item["last_updated_turn"] = int(turn_idx)
         item["last_updated_seconds"] = _float(clock_seconds)
-    return result[-20:]
+    return _within_cap(result, lambda item: str(
+        item.get("cue") or "").strip().casefold() in authored_cues)
 
 
 # Convex, not concave. A body tolerates mild sensation with its mind more or
