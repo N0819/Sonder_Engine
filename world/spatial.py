@@ -50,7 +50,8 @@ from world.spatial_orientation import (
 
 
 from world.spatial_identity import (
-    _ci_get, _entity_named, _live_subject_spellings, _position_of,
+    _ci_get, _entities_named, _entity_named, _live_subject_spellings,
+    _unique_entity_keyed,
     _SUBJECT_KEYED, canonical_subject, canonical_subject_map,
     is_derived_room_name, normalize_room_id, normalize_scene_subjects,
     room_of, same_subject,
@@ -151,6 +152,8 @@ from world.spatial_light import (
 from world.spatial_routing import (
     _CORRIDOR_NAMED, _CORRIDOR_VAGUENESS, _DISTANCE_ALIASES,
     _DISTANCE_UNIT_METERS, _is_carried_interior, _onward_exits, _ROOM_COST, CORRIDOR_SIGHT_LIMIT, corridor_sightlines, DISTANCE_TIERS,
+    contradictory_sight_edges, mutual_one_way_window, sight_direction,
+    stamp_sight_direction,
     nearby_rooms, normalize_edge_distance, passable_neighbors, passable_path,
     passable_route_exists, passable_route_next_step, rooms_adjacent,
     spatial_rel, SPRINT_BUDGET, sprint_reach, visible_adjacent_rooms,

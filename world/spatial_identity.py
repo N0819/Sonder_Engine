@@ -7,8 +7,11 @@ from collections import defaultdict
 from typing import Optional
 
 
-def room_of(scene: dict, name: str) -> Optional[str]:
-    positions = scene.get("positions") or {}
+def _positions_lookup(positions: dict, name: str):
+    """Where `positions` puts this exact SPELLING, tolerating case, spacing and
+    script. Never resolves one name into another -- that is `room_of`'s job,
+    and keeping the two apart is what stops the identity pass from recursing
+    through itself."""
     if name in positions:
         return positions[name]
     lname = (name or "").lower().strip()
@@ -24,6 +27,85 @@ def room_of(scene: dict, name: str) -> Optional[str]:
         for k, v in positions.items():
             if fold_identity_key(k) == norm:
                 return v
+    return None
+
+
+def room_of(scene: dict, name: str, *,
+            identity: bool = True) -> Optional[str]:
+    """Which room this being is in, resolved through entity identity rather
+    than spelling. None when the scene does not place them.
+
+    `positions` is keyed by whatever the writer used -- a cast member's display
+    name, an entity id, an alias -- and the same being routinely appears under
+    two of them at once: a character present as cast AND as a scene entity with
+    its own id. Case and script folding is not enough for that; a different
+    NAME for the same thing needs the entity record to join them.
+
+    THIS IS THE ENGINE'S "WHERE IS X", and everything spatial is downstream of
+    it: `visual_level_between`, `proximity_rel`, `entity_arc`, `entity_side`
+    and `spatial_rel` all begin by asking it for two rooms. A miss is therefore
+    not a small wrong answer -- it is `None` standing where a room belongs, and
+    every one of those functions then fails CLOSED, which reads exactly like
+    distance or a wall. Two measured consequences, both from one live scene
+    (chat 82, "Sarah Moon -- Hinami attempt 2"):
+
+    - a cast character whose scene entity carried her display name as an ALIAS
+      ("Dr. Sarah Moon" entity, "Sarah Moon" sheet) had no room from her own
+      name, so `visual_level_between` answered "none" for every body in the
+      story and her perception view contained no one -- no presence, no pose,
+      no appearance, no attire, and an empty `company` record. She was sitting
+      at a window watching the person she could not see;
+    - the same miss made every region of that person "concealed by vantage",
+      which is how the attire ledger went unrendered while being perfectly
+      correct.
+
+    And one older, which is why the private `_position_of` this replaces
+    existed at all: a body enclosed inside another was left at the literal
+    string `"elyndra_succubus"` as its room -- an entity id sitting where a
+    room id belongs, matching no room in the scene. `derive_contained_positions`
+    could not resolve the carrier, so it did what it does when it cannot: it
+    skipped, silently, and the body stayed nowhere for the rest of the story.
+    That resolver was reachable only from containment; every other caller kept
+    the narrow answer, which is the shape of gap this merge closes.
+
+    `character_room` (agents.common) already walked a cast sheet's keys to
+    dodge this for the ROOM alone; nothing dodged it for the relations, and the
+    relations are what perception is made of. Resolving here fixes the class at
+    the one function they all share instead of at each of them.
+
+    AMBIGUITY RESOLVES TO NOTHING, the same rule `canonical_subject_map`
+    states: two entities answering to one spelling are two beings, and picking
+    whichever the dict happened to yield first would put one being's body in
+    the other's room. Names beat aliases for the same reason a nickname must
+    never outrank somebody's real name.
+
+    `identity=False` asks the narrower question -- where does the scene put
+    THIS SPELLING -- and exists for the callers that hold a better authority
+    than the entity table. A registered cast member's own sheet is one: it
+    lists every key that character legitimately answers to, and a stray entity
+    row claiming the same display name must not outrank it. Those callers
+    (`common.character_room`, `common.cast_room`) run every spelling they own
+    through the narrow form FIRST and only then let identity resolution
+    answer, so widening this function could not reorder them.
+    """
+    positions = scene.get("positions") or {}
+    found = _positions_lookup(positions, name)
+    if found is not None:
+        return found
+    if not identity:
+        return None
+    eid, entity = _unique_entity_keyed(scene, name)
+    if not entity:
+        return None
+    # The id first: `positions` keys objects, fixtures and unregistered
+    # presences by entity id as a matter of course, and that key is the one
+    # a name-only walk could never reach.
+    for label in (eid, entity.get("name"), *(entity.get("aliases") or [])):
+        if not label:
+            continue
+        found = _positions_lookup(positions, str(label))
+        if found is not None:
+            return found
     return None
 
 
@@ -72,56 +154,66 @@ def same_subject(scene: dict, a: str, b: str) -> bool:
     return False
 
 
-def _position_of(scene: dict, name: str):
-    """Where `name` is, resolved through entity identity rather than spelling.
+def _entities_named(scene: dict, name: str):
+    """([(id, entity)] matched by id-or-name, [(id, entity)] matched by alias).
 
-    `positions` is keyed by whatever the writer used -- a cast member's display
-    name, an entity id, an alias -- and the same being routinely appears under
-    two of them at once: a character present as cast AND as a scene entity with
-    its own id. `room_of` tolerates case and punctuation but not a different
-    NAME for the same thing, so a containment record naming the entity id found
-    nothing in a positions map keyed by the display name.
-
-    Measured live: a body enclosed inside another was left at the literal
-    string `"elyndra_succubus"` as its room -- an entity id sitting where a room
-    id belongs, matching no room in the scene. `derive_contained_positions`
-    could not resolve the carrier, so it did what it does when it cannot: it
-    skipped, silently, and the body stayed nowhere for the rest of the story.
-    Every spatial query then answered "unknown", which is the safe-closed
-    default, so the failure looked exactly like distance.
+    Two lists rather than one because the two answers are not equally strong:
+    an entity's id and its name are what it IS, an alias is what it also
+    answers to, and a reader that must not guess needs to know which kind of
+    match it got.
     """
-    direct = room_of(scene, name)
-    if direct is not None:
-        return direct
-    entity = _entity_named(scene, name)
-    if not entity:
-        return None
-    for label in (entity.get("name"), *(entity.get("aliases") or [])):
-        if not label:
-            continue
-        found = room_of(scene, str(label))
-        if found is not None:
-            return found
-    return None
-
-
-def _entity_named(scene: dict, name: str) -> dict:
-    """The entity record `name` refers to by id, name or alias. {} on a miss."""
     target = str(name or "").strip().casefold()
+    primary, aliased = [], []
+    if not target:
+        return primary, aliased
     for eid, entity in (scene.get("entities") or {}).items():
         if not isinstance(entity, dict):
             continue
-        labels = [eid, entity.get("name"), *(entity.get("aliases") or [])]
-        if any(str(label or "").strip().casefold() == target for label in labels):
-            return entity
+        if str(eid or "").strip().casefold() == target \
+                or str(entity.get("name") or "").strip().casefold() == target:
+            primary.append((eid, entity))
+        elif any(str(alias or "").strip().casefold() == target
+                 for alias in entity.get("aliases") or []):
+            aliased.append((eid, entity))
+    return primary, aliased
+
+
+def _entity_named(scene: dict, name: str) -> dict:
+    """The entity record `name` refers to by id, name or alias. {} on a miss.
+    First match wins; see `_unique_entity_keyed` for the strict form."""
+    primary, aliased = _entities_named(scene, name)
+    for _eid, entity in (*primary, *aliased):
+        return entity
     return {}
+
+
+def _unique_entity_keyed(scene: dict, name: str):
+    """(id, entity) for the being `name` UNAMBIGUOUSLY refers to, else
+    (None, {}).
+
+    Names beat aliases, and a tie in either tier is a miss: folding two beings
+    into one is strictly worse than leaving two spellings of one.
+    """
+    primary, aliased = _entities_named(scene, name)
+    if len(primary) == 1:
+        return primary[0]
+    if not primary and len(aliased) == 1:
+        return aliased[0]
+    return None, {}
 
 
 # Every scene ledger keyed by WHO rather than by what. `stations[x]["at"]` is
 # deliberately absent: it names an anchor, which is a place in a room, not a
 # subject. `positions` VALUES are rooms for the same reason.
 _SUBJECT_KEYED = ("positions", "scales", "attire", "stations", "poses",
-                  "contained", "following")
+                  "contained", "following",
+                  # Keyed by WHO like its six siblings, and missed by this
+                  # tuple until 2026-08-19 -- so a body folded to one spelling
+                  # everywhere else kept a second one here, and `entity_arc`
+                  # and `entity_side` (which read it through `_ci_get`, case
+                  # tolerant and nothing more) answered None for the observer
+                  # under their own sheet name.
+                  "orientation")
 
 
 def _live_subject_spellings(scene: dict) -> set:
@@ -232,10 +324,31 @@ def canonical_subject_map(scene: dict) -> dict:
         if name.casefold() not in live:
             continue
         out[str(eid).strip().casefold()] = name
+    # THE ALIAS FOLD IS NOT THE ID FOLD, and nesting it inside made it
+    # unreachable for the commonest shape there is. The guard above exists so
+    # an entity whose id differs from its name only by case ("tardis" for
+    # "TARDIS") does not fold its own key away -- a question about the ID. An
+    # entity keyed by its own name hits that guard too, and took its ALIASES
+    # down with it, so a body answering to two live spellings kept both. Chat
+    # 82 held one woman as `attire["Sarah Moon"]` beside
+    # `positions["Dr. Sarah Moon"]` for the whole scene because of this.
+    #
+    # Hoisted, with its own guards rather than the id one's: the alias must be
+    # claimed by exactly one entity, must not be any entity's own NAME (a real
+    # name outranks somebody else's nickname for it), and the canonical name
+    # must still be live under some other spelling -- G3 intact, because this
+    # folds spellings ONTO an id-key and never off one.
+    for folded, hits in by_name.items():
+        if len(hits) != 1:
+            continue
+        eid, name = hits[0]
+        if name.casefold() not in live:
+            continue
         for alias_folded, alias_hits in by_alias.items():
             if len(alias_hits) == 1 and alias_hits[0][0] == eid \
-                    and alias_folded not in by_name:
-                out[alias_folded] = name
+                    and alias_folded not in by_name \
+                    and alias_folded != name.casefold():
+                out.setdefault(alias_folded, name)
     # Never rewrite one being's name into another's.
     return {k: v for k, v in out.items()
             if k not in by_name or by_name[k][0][1] == v}

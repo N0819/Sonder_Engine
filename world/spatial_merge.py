@@ -26,10 +26,11 @@ from world.spatial_containment import (
 )
 from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               normalize_scene_poses, normalize_scene_stations)
-from world.spatial_identity import (_ci_get, _entity_named, _position_of,
+from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               is_derived_room_name, normalize_scene_subjects)
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
 from world.spatial_substance import apply_substance_ops
+from world.spatial_routing import stamp_sight_direction
 from world.spatial_transit import apply_transit_dock_edges, infer_body_enclosures
 
 
@@ -71,7 +72,7 @@ def repair_entity_positions(scene: dict) -> list:
         entity = _entity_named(scene, key)
         if not entity:
             continue
-        room = _position_of(scene, key)
+        room = room_of(scene, key)
         if room is None or room == key:
             continue
         positions[name] = room
@@ -950,6 +951,10 @@ def merge_scene_with_diff(
     # another ledger. A containment record naming an entity id and a positions
     # map keyed by the display name are the same fact written twice, and every
     # lookup between them fails silently until they agree.
+    # A one-way window's direction is written DOWN while it is still
+    # knowable, so the next beat's ordinary both-sides redeclaration agrees
+    # with it instead of cancelling it (`stamp_sight_direction`).
+    stamp_sight_direction(merged)
     normalize_scene_subjects(merged)
     normalize_scene_containment(merged)
     # Derived LAST among position writes: whatever else this beat did to

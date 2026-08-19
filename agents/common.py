@@ -2547,6 +2547,46 @@ def scrub_names_deep(value, scrub):
     return value
 
 
+#: Characters a generated label may never carry. A label is SPLICED INTO
+#: PROSE that later passes parse structurally, and the identity scrub
+#: (`_scrub_unknown_identities`) decides what it may rewrite by splitting on
+#: `_QUOTED_SPAN_RE` and treating even segments as outside-quotes. So one
+#: quote character inside a label does not merely look wrong -- it shifts
+#: every span boundary after it and INVERTS the guard.
+#:
+#: Measured live, chat 82 t1: an appearance summary reading `Young
+#: Korean-American woman, 5'7", with a lithe...` produced the label `the young
+#: korean-american woman 5'7"`. Spliced into the speaker attribution, its
+#: stray `"` made the attribution parse as quoted (protected) and the
+#: character's actual spoken line parse as unquoted (scrubbed) -- so the
+#: engine rewrote a name INSIDE delivered dialogue, which is the one thing
+#: this whole area is built not to do. A speaker saying their own name is an
+#: introduction, and an introduction is the channel by which a name is
+#: legitimately learned; editing it does not close a leak, it destroys the
+#: channel. The rendered quote broke too, and the fidelity tripwire fired on
+#: the damage rather than the cause.
+#: Double quotes only. A single quote BETWEEN word characters is a possessive
+#: or a contraction -- "the young smith's apprentice" -- and cannot open a
+#: span either, because `_QUOTED_SPAN_RE`'s single-quote alternative refuses an
+#: opener preceded by a word character. Stripping those too turned every
+#: possessive label into "the young smith s apprentice".
+_LABEL_STRUCTURAL_CHARS = "\"\u201c\u201d"
+
+#: A single quote that is NOT holding a word together, which is the only kind
+#: that can act as a delimiter downstream.
+_LABEL_LOOSE_QUOTE_RE = re.compile(r"(?<![^\W_])['\u2018\u2019]|['\u2018\u2019](?![^\W_])")
+
+
+def _label_safe(text):
+    """A label with the prose STRUCTURE stripped out of it -- see
+    `_LABEL_STRUCTURAL_CHARS`. Whitespace is re-collapsed because removing a
+    character can leave a double space where a word used to be."""
+    cleaned = "".join(
+        " " if ch in _LABEL_STRUCTURAL_CHARS else ch for ch in str(text or ""))
+    cleaned = _LABEL_LOOSE_QUOTE_RE.sub(" ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
@@ -2593,6 +2633,9 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
             if _i and re.sub(r"[^\w]", "", _w).casefold() in linking_participles:
                 words = words[:_i]
                 break
+        # The first word the cap DROPS, which is the evidence for whether it
+        # cut between phrases or inside one (see the convergence loop below).
+        overflow = words[5] if len(words) > 5 else ""
         truncated = len(words) > 5
         words = words[:5]
         # The cap can still slice mid-phrase and leave a dangling function
@@ -2621,22 +2664,46 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None):
         # from them: "the broad man in", "the old porter in". Each rule ran
         # once and neither looked at what the other uncovered. The leading
         # article strip above already knew this and used a `while`.
+        # A CAP-CUT LABEL ENDS ON A WHOLE PHRASE, and the question is whether
+        # the cap fell BETWEEN phrases or INSIDE one. The window that used to
+        # decide it was one word wide -- an approximation tuned on a case
+        # where the amputated tail happened to be short -- and it misses the
+        # same shape one word longer: "a young woman with golden fox ears and
+        # six golden tails" caps to "young woman with golden fox", a noun
+        # phrase with its head noun cut off, kept because two words followed
+        # the preposition instead of one.
+        #
+        # The evidence is the first word the cap DROPPED. A conjunction there
+        # means the phrase we kept finished and a new one was starting, so the
+        # label is whole -- "old woman with silver hair" | "and sharp eyes".
+        # Anything else means the phrase runs on into the words we cut, and
+        # what we kept is a fragment -- "young woman with golden fox" |
+        # "ears", "lean courier in a rain-darkened" | "canvas". Then cut back
+        # to the word that opened the phrase, however much of it we were
+        # holding. "the figure in mourning" is untouched: nothing truncated.
+        cut_inside_a_phrase = bool(truncated) and (
+            re.sub(r"[^\w]", "", overflow).casefold()
+            not in _ling("_BREATH_CONJUNCTIONS"))
         while True:
             before = len(words)
             while words and words[-1].lower() in dangling:
                 words = words[:-1]
-            if truncated:
+            if cut_inside_a_phrase:
                 for _i in range(len(words) - 1, 0, -1):
                     if words[_i].lower() in dangling:
-                        if len(words) - 1 - _i <= 1:
-                            words = words[:_i]
+                        words = words[:_i]
                         break
             if len(words) == before:
                 break
-        if words:
-            return _text(
-                "unknown_actor",
-                description=" ".join(words).rstrip(".;:").lower())
+        # ...and it ends on a WORD. Stripping a quote out of "5'7\"" leaves
+        # "5 7", which distinguishes nobody and reads as debris; a bare
+        # measurement is not what a stranger is recognised by at a glance.
+        while words and not re.search(r"[^\W\d_]", words[-1]):
+            words = words[:-1]
+        description = _label_safe(
+            " ".join(words).rstrip(".;:").lower()).rstrip(".;:").strip()
+        if description:
+            return _text("unknown_actor", description=description)
     return _text("unknown_actor_fallback")
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,
@@ -2938,8 +3005,22 @@ def character_room(sc, sheet):
     key the entity by identity.uid or an alias rather than the display name.
     Perception was previously blind to a character whose position was stored
     under its uid (e.g. `tenth_doctor` for "The Doctor"), placing them in "an
-    unspecified area" and leaking a false empty view."""
-    for key in character_scene_keys(sheet):
+    unspecified area" and leaking a false empty view.
+
+    TWO PASSES, and the order is the point. `room_of` now resolves a spelling
+    through the scene's entity table as well, which is what a reader holding
+    only a name needs -- but this reader holds a SHEET, and a sheet is the
+    better authority: it enumerates every key this character answers to, where
+    the entity table may hold a stray row claiming the same display name. So
+    every one of the sheet's own keys is tried against the literal ledger
+    first, and identity resolution only answers for keys that found nothing.
+    """
+    keys = character_scene_keys(sheet)
+    for key in keys:
+        room = room_of(sc, key, identity=False)
+        if room:
+            return room
+    for key in keys:
         room = room_of(sc, key)
         if room:
             return room
@@ -2948,8 +3029,12 @@ def character_room(sc, sheet):
 def cast_room(sc, name, cast):
     """Room of a named speaker/actor, mapping the bare name through the cast so
     a character stored under its uid/alias still resolves (the name-string
-    counterpart to character_room)."""
-    room = room_of(sc, name)
+    counterpart to character_room).
+
+    Same ordering as `character_room` and for the same reason: the literal
+    ledger, then the cast, then identity -- a registered character outranks an
+    entity row wearing their name."""
+    room = room_of(sc, name, identity=False)
     if room:
         return room
     target = str(name or "").strip().lower()
@@ -2962,7 +3047,7 @@ def cast_room(sc, name, cast):
             continue
         if target in {key.lower() for key in character_scene_keys(sheet)}:
             return character_room(sc, sheet)
-    return entity_room_by_name(sc, target)
+    return entity_room_by_name(sc, target) or room_of(sc, name)
 
 
 def entity_room_by_name(sc, name):
@@ -3023,14 +3108,221 @@ def entity_room_by_name(sc, name):
         room = ent.get("room")
     return room or None
 
+def cast_spelling_policy(cast, player_name=None, *, aliases=True):
+    """Which spelling each registered cast body answers to, and what it is.
+
+    ONE POLICY, because the two hand-rolled copies of it disagreed and the
+    disagreement is a live defect. `canonicalize_positions` matched a sheet
+    name and uid and deliberately refused aliases; `_heal_attire_identity_keys`
+    matched aliases too. So in chat 82 ("Sarah Moon -- Hinami attempt 2") the
+    same body came out spelled two ways at once: `attire` folded
+    "Dr. Sarah Moon" onto the sheet's "Sarah Moon" and `positions` did not,
+    leaving one woman keyed two ways across the ledgers that describe her.
+
+    `aliases` is the one setting, and the two callers genuinely differ on it.
+    Attire is keyed by BODIES only, so an alias there can name nothing else
+    and matching it heals a real split. `positions` keys objects, fixtures and
+    unregistered presences beside people, where a generic alias ("The Oncoming
+    Storm") could collide with a separate entity and move an object into a
+    person -- so that caller passes `aliases=False`. The difference used to be
+    two hand-rolled tables that disagreed by accident; it is now one table with
+    the disagreement written down.
+
+    Returns (canonical, forms) --
+      `canonical(spelling)`: the sheet name this spelling belongs to, or the
+        spelling unchanged when it belongs to nobody registered. Objects,
+        fixtures and unregistered background presences are never touched:
+        they are not cast, and rewriting them is what broke carried lights
+        and destruction cascades the first time somebody folded on identity
+        alone.
+      `forms`: {casefolded spelling -> sheet name} for callers that need the
+        table rather than the function.
+
+    THE AUTHORITY IS THE SHEET, per `DESIGN_SUBJECT_SPELLING_AUTHORITY.md`.
+    A sheet is authored, durable, and locked against rekeying; a scene entity
+    record is minted by a model on turn 0 and is provisional until commit
+    validates it. Letting a model's incidental honorific become a being's
+    canonical name inverts the source-of-truth order.
+
+    Two guards, both paid for:
+
+    - A NAME OUTRANKS SOMEBODY ELSE'S ALIAS FOR IT. One character's alias is
+      another's name often enough in fiction -- a nickname, a family name, a
+      title. Measured: with a character named Yuki and a second whose aliases
+      include "Yuki", folding on the alias collapsed Yuki's wardrobe onto the
+      other woman, who was wearing nothing and acquired a yukata; Yuki's own
+      record disappeared.
+    - AMBIGUITY RESOLVES TO NOTHING. A spelling two cast members answer to is
+      registered for neither. Folding two beings into one is strictly worse
+      than leaving two spellings of one.
+    """
+    own_names, claims = set(), {}
+    rows = []
+    for row in cast or []:
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        ident = normalize_character_data(sheet).get("identity", {})
+        name = str(ident.get("name") or character_name(sheet) or "").strip()
+        if not name:
+            continue
+        try:
+            rid = row["id"]
+        except Exception:
+            rid = None
+        # The uid is an IDENTIFIER, not a name somebody else could also go by,
+        # so it rides regardless of `aliases` -- reading it out of identity
+        # rather than off `character_scene_keys`'s index 1, which is the uid
+        # only when the sheet has one and the first alias when it does not.
+        rows.append((name, str(ident.get("uid") or "").strip(),
+                     [str(a or "").strip()
+                      for a in (ident.get("aliases") or []) if str(a or "").strip()],
+                     rid))
+        own_names.add(name.casefold())
+
+    def _claim(spelling, canon):
+        text = str(spelling or "").strip()
+        if not text:
+            return
+        folded = text.casefold()
+        if claims.get(folded, canon) != canon:
+            claims[folded] = None          # two beings: registered for neither
+        else:
+            claims[folded] = canon
+
+    for canon, uid, alias_list, rid in rows:
+        _claim(canon, canon)
+        if uid:
+            _claim(uid, canon)
+        if rid is not None:
+            _claim(f"character:{rid}", canon)
+        for alias in (alias_list if aliases else []):
+            if alias.casefold() in own_names \
+                    and alias.casefold() != canon.casefold():
+                continue               # a real name outranks an alias for it
+            _claim(alias, canon)
+    if player_name:
+        _claim(player_name, player_name)
+        _claim("character:player", player_name)
+
+    forms = {k: v for k, v in claims.items() if v}
+    # The alphanumeric fold `canonicalize_positions` has always applied, so
+    # "Dr. Moon" still answers to a key written "drmoon". Second, so a literal
+    # spelling always wins over a squashed one.
+    squashed = {}
+    for spelling, canon in forms.items():
+        norm = re.sub(r"[^a-z0-9]", "", spelling)
+        if norm and norm not in forms:
+            squashed.setdefault(norm, canon)
+
+    def canonical(name):
+        text = str(name or "").strip()
+        if not text:
+            return name
+        folded = text.casefold()
+        return (forms.get(folded)
+                or squashed.get(re.sub(r"[^a-z0-9]", "", folded))
+                or name)
+
+    return canonical, forms
+
+
+def reconcile_cast_entity_names(scene, cast, player_name=None):
+    """Make `canonical_subject_map`'s assumption TRUE for cast-mirrored bodies.
+
+    That function folds every spelling of a being onto the ENTITY's own
+    `name`, on the stated ground that "for a mirrored cast member [it] IS the
+    display name every reader already expects". Live in chat 82 it was not:
+    the sheet said "Sarah Moon" and the Director minted the entity as
+    "Dr. Sarah Moon", one of her aliases -- so the scene's idea of her
+    canonical name pointed away from the one perception, character, narration
+    and psychology all address her by.
+
+    The fix is not a different fold direction. It is to reconcile the record
+    the fold reads, at the seams that already hold the cast: an entity that
+    unambiguously answers to exactly one registered character is renamed to
+    that character's sheet name, and the spelling it loses is demoted to an
+    ALIAS so prose and lookups written the old way still resolve.
+
+    THE ENTITY KEY IS NEVER TOUCHED. Carried lights, derived stations and
+    destruction cascades resolve by entity id, and renaming id-keyed rows is
+    exactly what cost eleven tests the first time identity folding was tried
+    (`spatial_identity.canonical_subject_map`'s G3 comment). Only `name` and
+    `aliases` move.
+
+    Idempotent, and it must stay so: it runs on the standing scene at every
+    commit, which is what heals a save written before this rule existed, and
+    a checkpoint restore replays it.
+
+    Returns [(entity_id, old_name, new_name)] for warnings; empty when
+    nothing needed saying, which is the common case.
+    """
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict):
+        return []
+    canonical, forms = cast_spelling_policy(cast, player_name)
+    if not forms:
+        return []
+    # Two entities answering to one cast member are two records for one being
+    # -- a real defect, but a MERGE one (`_dedup_duplicate_entity_keys`), and
+    # renaming both here would mint the duplicate key it exists to collapse.
+    registered = {str(v).casefold() for v in forms.values()}
+
+    def _belongs_to(entity, eid):
+        """The cast member this entity IS, or None. Asked of a spelling it
+        already answers to correctly as well as one it does not: an entity
+        named right can still carry an alias that is somebody else's name."""
+        for spelling in (eid, entity.get("name"),
+                         *(entity.get("aliases") or [])):
+            found = canonical(spelling)
+            if str(found or "").strip().casefold() in registered:
+                return found
+        return None
+
+    claimed = {}
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        canon = _belongs_to(entity, eid)
+        if canon:
+            claimed.setdefault(canon, []).append(eid)
+    renamed = []
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        canon = _belongs_to(entity, eid)
+        if not canon or len(claimed.get(canon) or []) != 1:
+            continue
+        old = str(entity.get("name") or "").strip()
+        aliases = [str(a).strip() for a in (entity.get("aliases") or [])
+                   if str(a or "").strip()]
+        # An alias that belongs to ANOTHER cast member is not this body's to
+        # answer to -- the Yuki guard, applied to the record rather than only
+        # to the lookup, because the merge fold reads the record and has no
+        # cast to consult. An alias nobody registered is left alone: it names
+        # no other body, so it cannot steal one.
+        aliases = [a for a in aliases
+                   if forms.get(a.casefold(), canon) == canon]
+        if old and old.casefold() != canon.casefold() \
+                and old.casefold() not in {a.casefold() for a in aliases}:
+            aliases.append(old)
+        aliases = [a for a in aliases if a.casefold() != canon.casefold()]
+        if entity.get("name") == canon and aliases == (entity.get("aliases")
+                                                       or []):
+            continue                                    # already reconciled
+        entity["name"] = canon
+        entity["aliases"] = aliases
+        if old and old != canon:
+            renamed.append((str(eid), old, canon))
+    return renamed
+
+
 def canonicalize_positions(positions, cast, player_name=None):
     """Rewrite any positions key that identifies a registered cast character
     (or the player) to that person's display name -- the positions-key
-    convention every reader (perception, commit, spatial) expects. Recognized
-    key forms per person: identity.uid, display name (exact or alphanumeric-
-    normalized), AND the director's `character:<id>` scheme (from the cast
-    payload's integer ids). Non-person keys (objects, unregistered background
-    presences) are left untouched. Deliberately does NOT match on aliases.
+    convention every reader (perception, commit, spatial) expects. Non-person
+    keys (objects, unregistered background presences) are left untouched.
 
     Recognizing `character:<id>` and the player is load-bearing: the director
     model keys the SAME person by different schemes across a turn (Data as
@@ -3039,47 +3331,28 @@ def canonicalize_positions(positions, cast, player_name=None):
     conflicting rooms -- observed live, Data was simultaneously on the bridge
     (`character:29`) and in a corridor (`Lt. Commander Data`), so name-lookup
     resolved him to the corridor and perception rendered his bridge station as
-    empty. Collapsing to a single key makes a later move update the one entry."""
+    empty. Collapsing to a single key makes a later move update the one entry.
+
+    ALIASES ARE STILL REFUSED HERE, and that is now a stated setting rather
+    than a second table. `positions` keys objects and unregistered presences
+    beside people, so a generic alias could name a genuinely separate entity
+    and folding it would move an object into a person. `commit`'s attire heal
+    accepts aliases because attire keys only bodies -- and the two disagreeing
+    by accident is what left chat 82's Sarah Moon spelled "Sarah Moon" in
+    `attire` and "Dr. Sarah Moon" in `positions` at the same time. The cure for
+    that is `reconcile_cast_entity_names`, which fixes the ENTITY record so the
+    merge fold spells every ledger the same way, not a wider match here.
+    """
     if not isinstance(positions, dict):
         return {}
     if not cast and not player_name:
         return positions
-    keymap = {}
-
-    def _register(forms, canon):
-        for key in forms:
-            text = str(key or "").strip()
-            if not text:
-                continue
-            keymap.setdefault(text.lower(), canon)
-            norm = re.sub(r"[^a-z0-9]", "", text.lower())
-            if norm:
-                keymap.setdefault(norm, canon)
-
-    for row in (cast or []):
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
-            continue
-        ident = normalize_character_data(sheet).get("identity", {})
-        name = ident.get("name") or character_name(sheet)
-        forms = [ident.get("uid"), name]
-        try:
-            rid = row["id"]
-        except Exception:
-            rid = None
-        if rid is not None:
-            forms.append(f"character:{rid}")
-        _register(forms, name)
-    if player_name:
-        _register([player_name, "character:player"], player_name)
-
+    canonical, forms = cast_spelling_policy(cast, player_name, aliases=False)
+    if not forms:
+        return positions
     result = {}
     for key, room in positions.items():
-        text = str(key or "").strip()
-        canon = keymap.get(text.lower()) \
-            or keymap.get(re.sub(r"[^a-z0-9]", "", text.lower()))
-        result[canon or key] = room
+        result[canonical(key)] = room
     return result
 
 def _append_micro_view(base_view, additions):
@@ -3259,9 +3532,20 @@ def _subject_opener(form):
     whose forms were "A Dalek" and "Dalek" and neither of which opens that
     sentence.
 
-    ONLY the three articles. A TITLE is frequently the only thing telling two
-    bodies apart ("the guard" is not "the captain"), so `_NAME_LEADERS` stays
-    out of this deliberately -- the same line §1.17 draws.
+    Articles, and a TITLE STANDING IMMEDIATELY BEFORE THE NAME. The two are
+    not the same admission and the line between them is where §1.17 draws it:
+    a title used INSTEAD of a name is frequently the only thing telling two
+    bodies apart ("the guard" is not "the captain"), and that is still
+    refused -- `_NAME_LEADERS` cannot open a sentence on its own here. A title
+    used BEFORE a name adds nothing to identify and cannot confuse anybody,
+    because the name still has to match right behind it.
+
+    Found by the abbreviation repair (`split_sentences`). Before it, "Dr.
+    Watson watches the door" reached this function already broken in half, so
+    the second piece opened with the bare name and the guard fired by
+    accident -- leaving a dangling "Dr." where the cut had been. Repairing the
+    split correctly would otherwise have handed the sentence back whole and
+    lost the catch, turning one visible defect into a silent one.
 
     The name itself keeps its case sensitivity: a capitalised form matches
     case-sensitively as before, so an ordinary noun that happens to spell a
@@ -3277,10 +3561,69 @@ def _subject_opener(form):
     # the pattern does apply still refuses a Latin name inside a longer
     # word ("Hinamis"), and the leading article stays this function's own
     # rule.
+    titles = sorted((t for t in _ling("_NAME_LEADERS")
+                     if t.strip(".").casefold() in _ling("_NAME_TITLE_TOKENS")
+                     and t.strip(".").casefold() not in ("a", "an", "the")),
+                    key=len, reverse=True)
+    # Inline-insensitive: the name itself keeps this function's case rule, and
+    # a title never carries identity, so "Dr." and "dr." are the same word.
+    lead = "|".join(re.escape(t) for t in titles)
     return re.compile(
-        rf"^(?:[Tt]he\s+|[Aa]n?\s+)?{name_boundary_pattern(form)}"
-        rf"(?:['’]s)?",
+        rf"^(?:(?i:{lead})\s+)?(?:[Tt]he\s+|[Aa]n?\s+)?"
+        rf"{name_boundary_pattern(form)}(?:['’]s)?",
         re.I if form[:1].islower() else 0)
+
+
+def _ends_with_abbreviation(piece, abbreviations):
+    """Does this fragment end in an abbreviation's full stop rather than a
+    sentence's? The last whitespace-delimited token, minus any closing
+    punctuation around it, stripped of its trailing period."""
+    token = str(piece or "").strip().split()[-1:] or [""]
+    word = token[0].strip("\"'“”‘’()[]")
+    if not word.endswith("."):
+        return False
+    return word[:-1].casefold() in abbreviations
+
+
+def split_sentences(text, split=None):
+    """Sentences, with an abbreviation's period not mistaken for a full stop.
+
+    Every splitter in this tree breaks on `.` followed by whitespace, and a
+    title is a period followed by whitespace. So "occupied by Dr. Sarah Moon."
+    is TWO sentences: one ending "...by Dr.", and a fragment that is nothing
+    but a name.
+
+    That is not cosmetic where a sentence is the unit a guard decides about.
+    `_strip_self_narration` drops whole sentences whose subject is the
+    perceiver, and the fragment IS the perceiver -- so it was dropped and the
+    honorific left dangling. Live, chat 82: Sarah Moon's own view of her own
+    room read "The observation chair is occupied by Dr." The identical note
+    written without the title is untouched, because then her name sits inside
+    a real sentence and no whole sentence is only her.
+
+    The token set is language pack data (`_SENTENCE_ABBREVIATIONS`), because
+    "a period may end an abbreviation" is a fact about a WRITING SYSTEM, not
+    about a story -- Japanese ends its sentences with `。` and has nothing here
+    to protect.
+
+    Deliberately NOT every abbreviation: "etc." and "Ph.D." genuinely end
+    sentences, and rejoining there would weld two real ones together. What is
+    in the set is the class that essentially never ends a sentence -- titles
+    and name particles, which are also the class that appears immediately
+    before a NAME, which is what makes the split damaging in the first place.
+    """
+    pattern = split if split is not None else _SENTENCE_SPLIT
+    abbreviations = _ling("_SENTENCE_ABBREVIATIONS")
+    out = []
+    for piece in pattern.split(str(text or "")):
+        if piece is None:
+            continue
+        if out and out[-1].strip() and _ends_with_abbreviation(
+                out[-1], abbreviations):
+            out[-1] = f"{out[-1].rstrip()} {piece.lstrip()}"
+        else:
+            out.append(piece)
+    return out
 
 
 def _sentence_subjects(prose, names, split=None):
@@ -3308,8 +3651,9 @@ def _sentence_subjects(prose, names, split=None):
     passage one "sentence" again.
     """
     current = None
-    pieces = (split.split(prose or "") if split is not None
-              else re.split(r"(?<=[.!?])\s+", prose or ""))
+    pieces = split_sentences(
+        prose or "",
+        split if split is not None else re.compile(r"(?<=[.!?])\s+"))
     for sentence in pieces:
         stripped = sentence.strip()
         if not stripped:
@@ -5530,7 +5874,7 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
 
     warnings = []
     flagged = set()
-    for sentence in _SENTENCE_SPLIT.split(scan):
+    for sentence in split_sentences(scan, _SENTENCE_SPLIT):
         for clause in _ling("_CLAUSE_SPLIT").split(sentence):
             # MEASURED BEFORE ENFORCING, because this warning's prefix is in
             # `_ENFORCEABLE_PREFIXES` and a false positive buys a full narrator
@@ -5968,7 +6312,7 @@ def _check_position_fidelity(prose, position_facts, room_names):
         if not name or not own_room or not pats:
             continue
         own_name = str(usable_rooms.get(own_room) or "").lower()
-        for sentence in _SENTENCE_SPLIT.split(prose):
+        for sentence in split_sentences(prose, _SENTENCE_SPLIT):
             # Quoted speech is a speaker's claim, not narration.
             scan = _ling("_NARRATION_QUOTE_RE").sub(" ", sentence)
             best = max((mm.start() for p in pats for mm in p.finditer(scan)),

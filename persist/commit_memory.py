@@ -1048,6 +1048,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                     (character_psychology(sh) or {}).get("stress_profile") or {},
                     new_hedonic, elapsed_units,
                     proposed_mode=proposed_stress.get("coping_mode"),
+                    # Explicit, because this is the argument whose absence
+                    # held 55% of the strain weight at zero for the life of
+                    # the feature: `appraise` returns the normalised list as
+                    # `impacts`, and `resolve_stress` was reading
+                    # `goal_impacts`, a key nothing writes.
+                    goal_impacts=appraisal_out.get("impacts") or [],
                 )
 
                 # Leak tripwire: this character's OWN speech must not state a

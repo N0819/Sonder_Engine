@@ -115,6 +115,7 @@ from .common import (
     authored_other_subject,
     bind_sequence_targets,
     canonicalize_positions,
+    reconcile_cast_entity_names,
     character_room,
     character_scene_keys,
     lore_for,
@@ -373,6 +374,15 @@ def director_establish(ctx, nonce):
     # seated/lying/standing after turn zero. An explicit structured pose wins.
     opening_poses = _opening_pose_snapshots(out)
 
+    # A cast body's canonical spelling is its SHEET's, not whatever the model
+    # reached for when it minted the entity -- so an entity answering to one
+    # registered character is renamed to that character's sheet name here, at
+    # the earliest stage the data exists, and the honorific it loses is kept
+    # as an alias. Without it the merge fold (which is cast-free by design and
+    # folds onto the entity's own name) makes the scene agree on the WRONG
+    # spelling, and every cast-side reader addresses the body by the other
+    # one. See `docs/design/DESIGN_SUBJECT_SPELLING_AUTHORITY.md`.
+    reconcile_cast_entity_names(out, ctx.cast, player_name=player_name)
     out["state_diff"] = {
         "rooms": out.get("rooms") if isinstance(out.get("rooms"), dict) else {},
         "entities": out.get("entities") if isinstance(out.get("entities"), dict) else {},
@@ -3008,6 +3018,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     # position key for a cast member onto the registered name before it reaches
     # perception's mid-turn merge or the commit boundary.
     sd["positions"] = canonicalize_positions(sd["positions"], ctx.cast, player_name=p_name)
+    # ...and the same reconciliation establish does, for an entity this beat
+    # minted or renamed (a promotion writes one).
+    reconcile_cast_entity_names(sd, ctx.cast, player_name=p_name)
     # Following is actor-owned. Never trust director_resolve to invent or end
     # it: project only the player's interpreted decision and each NPC's own
     # character result into the objective diff.

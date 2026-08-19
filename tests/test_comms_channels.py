@@ -500,14 +500,46 @@ class TestOneWayWindow:
             "the back of a one-way mirror is a wall"
         assert sp.visible_adjacent_rooms(scene, "cell") == []
 
-    def test_declared_from_both_sides_it_is_an_ordinary_window(self):
-        """Two one-way windows back to back ARE a window, and that is the only
-        reading available without an arbitrary tie-break -- nothing in the pair
-        says which of them the author meant. The prompts therefore ask for
-        `wall` on the blind side rather than a second one of these."""
+    def test_declared_from_both_sides_neither_room_sees(self):
+        """Nothing in the pair says which direction the author meant, and the
+        two ways of guessing are not equally wrong.
+
+        Admitting was tried first. Live, chat 82: the annex declared it toward
+        the cell and the cell declared it back, so a restrained subject watched
+        her interviewer through a mirror her own room note called opaque, and
+        her view said both things two sentences apart. A barrier whose entire
+        meaning is asymmetry, written symmetrically by a writer who had
+        `window` available and did not use it, is not evidence that everyone
+        should see.
+
+        Subtracting costs the watching side too, and that cost is real and
+        accepted: the interviewer loses the body she is there to watch until
+        somebody names the blind side. A gap plays wrong obviously and the
+        engine notice says exactly what to fix; a leak is not noticed until it
+        has been true for fifty beats.
+        """
         scene = self._mirror(both_sides=True)
+        assert sp.mutual_one_way_window(scene, "obs", "cell")
+        assert sp.sight_level(sp.spatial_rel(scene, "obs", "cell")) == "none"
+        assert sp.sight_level(sp.spatial_rel(scene, "cell", "obs")) == "none"
+        assert sp.spatial_rel(scene, "obs", "cell")["barrier"] == "wall"
+        assert sp.visible_adjacent_rooms(scene, "obs") == []
+        assert sp.visible_adjacent_rooms(scene, "cell") == []
+
+    def test_the_contradiction_is_reported_once_not_every_beat(self):
+        scene = self._mirror(both_sides=True)
+        rows = sp.contradictory_sight_edges(scene)
+        assert [r["rooms"] for r in rows] == [("cell", "obs")]
+        assert sp.contradictory_sight_edges(scene, scene) == [], \
+            "a standing condition reported every beat is one readers skip"
+
+    def test_a_one_sided_declaration_is_not_a_contradiction(self):
+        """The detector narrows to the mistake and never to the feature."""
+        scene = self._mirror()
+        assert not sp.mutual_one_way_window(scene, "obs", "cell")
+        assert sp.contradictory_sight_edges(scene) == []
         assert sp.sight_level(sp.spatial_rel(scene, "obs", "cell")) == "full"
-        assert sp.sight_level(sp.spatial_rel(scene, "cell", "obs")) == "full"
+        assert sp.sight_level(sp.spatial_rel(scene, "cell", "obs")) == "none"
 
     def test_it_is_glass_so_it_stops_a_voice_and_a_body(self):
         scene = self._mirror()
