@@ -152,6 +152,64 @@ applies these without asking again.
    `UNBUILT.md` with its `DATABASE.md` checklist written out, for a dedicated
    pass with its own testing and its own release.
 
+## Phase 4 — the A/B playthrough, after the repairs land
+
+Requested by the owner: ten turns on the repaired tree and ten on alpha 9.5,
+run IN PARALLEL, stressing as many features as possible. Designed here so the
+repairs cannot quietly invalidate it.
+
+**What it actually tests.** Not "is 9.5 good" — 9.5 is pre-tree-move, so the
+three defects fixed on 2026-08-18 (the orphaned asset roots, dead self-update)
+cannot exist there, and several audit findings are younger than the tag. The
+question is the other one: **did ~300 repairs break anything that used to
+work.** 9.5 is the control, and the only honest verdict is a regression
+verdict.
+
+**Two installs, neither touching `engine.db`.**
+
+| | A — repaired | B — control |
+|---|---|---|
+| tree | working tree at HEAD | git worktree at tag `alpha9.5` (`418ab5b`) |
+| database | `$CLAUDE_JOB_DIR/tmp/ab_head.db` | `$CLAUDE_JOB_DIR/tmp/ab_95.db` |
+| launch | `ENGINE_DB=... uvicorn web.app:app --port 8009` | `ENGINE_DB=... uvicorn app:app --port 8010` (flat layout, pre-move) |
+
+`providers` rows and the `agent_models` setting are copied READ-ONLY out of
+`engine.db` into both test databases, so the two runs differ in engine code
+and in nothing else. The owner's live database is never opened for writing and
+never pointed at by `ENGINE_DB`.
+
+**Identical inputs, scripted in advance.** Same scenario, same cast sheets,
+same ten player-input strings, same seed. Improvised input would make the
+comparison meaningless — a different sentence produces a different beat and
+proves nothing about either build.
+
+**Compare STRUCTURE, not prose.** Sampling differs between two runs of the
+same model, so the prose will differ and that is not evidence. Per turn,
+compare what the engine did:
+
+- turn completed, or the commit rolled back
+- warnings and engine notes raised, by text
+- firewall tripwires fired
+- which `state_diff` channels carried content
+- `tools/scene_lint.py` clean after every beat
+- reroll and specialist-repair counts
+- wall clock per stage
+
+A difference in any of these is a finding. A difference in wording is not.
+
+**Feature coverage, packed 2–3 per beat**: room movement; a vehicle interior
+in transit (dock edges, hatch); attire change; contact ops; an
+identity-concealing disguise (the leak repaired today — the observer must not
+receive the name in EITHER the act view or the outcome view); a background
+presence that speaks and is then promoted (the `auto_dialogue` gate repaired
+today); a departure recorded through `cast_changes` (the status vocabulary
+repaired today); a destruction with a stranded-occupant check; weather and a
+time advance; a memory written and recalled several beats later; a false
+belief held by one mind and not another; a scale change; a comms channel.
+
+**Cost.** Real provider calls on the owner's keys: roughly twenty turns at
+eight to twelve model calls each. Worth stating before starting, not after.
+
 ## Standing constraints
 
 - `engine.db` is the owner's live database. Never write to it; reads must be
