@@ -313,10 +313,15 @@ def extension(ext_id: str) -> Extension | None:
 # ------------------------------------------------------------------ enabling
 
 
-def enabled_ids() -> list[str]:
-    """The host's enabled set, filtered to what is actually installed."""
-    if safe_mode():
-        return []
+def _stored_enabled_ids() -> list[str]:
+    """The DURABLE enabled set, exactly as the host last chose it.
+
+    Unfiltered on purpose. Safe mode and a broken manifest are reasons not to
+    RUN an extension; neither is the host changing their mind about it, and a
+    toggle that rewrote this from the filtered view would make them the same
+    thing -- boot safe, disable the culprit, and the recovery workflow is what
+    destroys every other extension's enablement.
+    """
     try:
         from core.db import get_setting
         raw = get_setting(ENABLED_SETTING)
@@ -328,8 +333,18 @@ def enabled_ids() -> list[str]:
         return []
     if not isinstance(stored, list):
         return []
+    return sorted({str(item) for item in stored})
+
+
+def enabled_ids() -> list[str]:
+    """What may run right now: the stored set, filtered to what will load.
+
+    A READ. Never the input to a write -- see `_stored_enabled_ids`.
+    """
+    if safe_mode():
+        return []
     installed = installed_extensions()
-    return sorted({str(item) for item in stored if str(item) in installed})
+    return [item for item in _stored_enabled_ids() if item in installed]
 
 
 def is_enabled(ext_id: str) -> bool:
@@ -347,7 +362,7 @@ def enable_extension(ext_id: str) -> dict:
     ext_id = str(ext_id or "")
     if ext_id not in installed_extensions():
         raise ExtensionError(f"no installed extension {ext_id!r}")
-    _write_enabled(enabled_ids() + [ext_id])
+    _write_enabled(_stored_enabled_ids() + [ext_id])
     activate(refresh=True)
     with _lock:
         record = _registered.get(ext_id)
@@ -357,7 +372,8 @@ def enable_extension(ext_id: str) -> dict:
 
 def disable_extension(ext_id: str) -> dict:
     ext_id = str(ext_id or "")
-    _write_enabled([item for item in enabled_ids() if item != ext_id])
+    _write_enabled([item for item in _stored_enabled_ids()
+                    if item != ext_id])
     activate(refresh=True)
     return {"id": ext_id, "enabled": False, "error": None}
 
