@@ -91,6 +91,30 @@ def test_blanking_an_act_to_imperceptible_says_so():
     assert any("perceive" in w or "interior" in w for w in warnings), warnings
 
 
+def test_half_a_ponder_is_dropped_out_loud():
+    """The same failure shape one branch over. A ponder is by design not in the
+    public sequence, so nothing downstream can notice it went missing -- there
+    is no view, no percept and no prose it would have shown up in. Dropping one
+    for want of a `why` was silent."""
+    warnings = []
+    out = norm_sequence(
+        {"sequence": [{"type": "ponder",
+                       "query": "did she recognise the sigil"}]},
+        warn=warnings.append)
+    assert "ponder" not in out
+    assert any("ponder" in w for w in warnings), warnings
+
+
+def test_a_complete_ponder_is_kept_quietly():
+    warnings = []
+    out = norm_sequence(
+        {"sequence": [{"type": "ponder", "query": "who sent the letter",
+                       "why": "the seal was not the one she uses"}]},
+        warn=warnings.append)
+    assert out["ponder"]["query"] == "who sent the letter"
+    assert not warnings
+
+
 def test_a_director_authored_surface_is_never_second_guessed():
     warnings = []
     out = norm_sequence(
