@@ -3044,18 +3044,28 @@ class GreetingKnowledgeSeed(LenientModel):
     )
 
 class GreetingInterpret(LenientModel):
-    location: str = ""
+    """Two fields, because two are read.
+
+    This model used to declare eleven: a whole scene graph (`rooms`,
+    `positions`, `entities`, `attire`, `player_room`), plus `location`,
+    `scene_description`, `character_state` and `notes`. `story.greetings`
+    reads `time` and `knowledge_seeds` and nothing else, and the scene half
+    was never a gap waiting to be wired -- `start_story` stores the greeting
+    prose itself as the chat's scenario, so `director_establish` builds the
+    scene graph from the SAME passage one turn later, with the engine's full
+    payload behind it. Asking a second, weaker pass for the same graph and
+    discarding the answer cost a large prompt and most of the tokens of every
+    card-ingest call.
+
+    Extra keys are ignored rather than refused, as everywhere else here, so a
+    stored extraction written by an older extractor still reads.
+    """
+
+    #: Seeds the chat's `simulation_clock.display` at launch.
     time: str = "now"
-    scene_description: str = ""
-    # freeform dicts (kept tolerant, consumed defensively by the launch merge)
-    rooms: dict = Field(default_factory=dict)
-    positions: dict = Field(default_factory=dict)
-    entities: dict = Field(default_factory=dict)
-    attire: dict = Field(default_factory=dict)
-    character_state: dict = Field(default_factory=dict)
+    #: The point of the call: what the greeting implies the CHARACTER knows,
+    #: routed to that character's private memory.
     knowledge_seeds: list[GreetingKnowledgeSeed] = Field(default_factory=list)
-    player_room: str = ""           # room id {{PLAYER}} occupies, if present
-    notes: str = ""
 
 # ---- Validation ----
 
@@ -4645,22 +4655,12 @@ OUTPUT_EXAMPLES = {
         ],
     },
     "greeting_interpret": {
-        "location": "a dim tavern",
         "time": "night",
-        "scene_description": "A low-ceilinged tavern, rain against the shutters.",
-        "rooms": {"tavern": {"name": "The Tavern", "desc": "Low-ceilinged, smoke-hazed.",
-                              "adjacent": []}},
-        "positions": {"Kara": "tavern", "{{PLAYER}}": "tavern"},
-        "entities": {},
-        "attire": {"Kara": {"summary": "a travel-worn cloak"}},
-        "character_state": {"mood": "wary", "goal": "size up the newcomer"},
         "knowledge_seeds": [
             {"content": "I have been waiting here for three nights for a courier.",
              "about_entity": "self", "kind": "recent_event", "salience": 0.7,
              "revealed_in_prose": False},
         ],
-        "player_room": "tavern",
-        "notes": "",
     },
     "resolve_reconcile": {
         "omissions": [
