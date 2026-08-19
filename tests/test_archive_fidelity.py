@@ -12,6 +12,7 @@ from story import importers
 from story.character_schema import default_character_data
 from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 from core.frames import create_frame
+from tests.helpers import patch_embedding_seam
 
 
 def _chat(db, name="Archive"):
@@ -412,7 +413,7 @@ def test_chat_import_keeps_every_column_the_memory_dump_carried(
             dimensions=8,
         )
 
-    monkeypatch.setattr(memory_mod, "embed_texts_meta", fake_meta)
+    patch_embedding_seam(monkeypatch, "embed_texts_meta", fake_meta)
     monkeypatch.setattr(
         memory_mod, "embed_texts", lambda texts: fake_meta(texts).vectors
     )

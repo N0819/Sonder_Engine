@@ -13,6 +13,7 @@ import pytest
 from story import importers
 from story.character_schema import normalize_character_data
 from story.greetings import _greeting_record
+from tests.helpers import patch_embedding_seam
 
 
 @pytest.fixture(autouse=True)
@@ -347,7 +348,7 @@ class TestKnowledgeSeedRouting:
         from mind import memory
         calls = []
         real = memory.embed_texts_meta
-        monkeypatch.setattr(memory, "embed_texts_meta",
+        patch_embedding_seam(monkeypatch, "embed_texts_meta",
                             lambda texts, **kw: (calls.append(list(texts)),
                                                  real(texts, **kw))[1])
         chat_id, _tid = self._launch(monkeypatch, [

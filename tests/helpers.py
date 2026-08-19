@@ -173,3 +173,58 @@ def forbid_model_calls(monkeypatch=None, *,
                 set_attr(module, attr, _boom)
                 patched.append((name, attr))
     return patched
+
+
+def patch_seam(monkeypatch, module_name, attr, replacement):
+    """Rebind one imported seam wherever the ORIGINAL is bound, not only where
+    it is defined.
+
+    The same defect `forbid_model_calls` was written for, in a different
+    package and found the same way. `mind/memory.py` is now a facade over
+    twelve `mind/memory_*` modules, and `embed_texts_meta` is imported by NAME
+    into eight of them -- so `monkeypatch.setattr(memory, "embed_texts_meta",
+    fake)` rebinds a name no code in the facade reads, and all eight readers
+    go on calling the provider. Twelve tests failed loudly the moment those
+    readers moved. The ones that would NOT have failed are why this exists
+    instead of eight enumerated module names, which go stale on the next move
+    and go stale silently.
+
+    Returns the `(module, attr)` bindings it replaced, and raises when that
+    list is empty: a seam matching nothing is a typo or a rename, and patching
+    nothing quietly is the whole failure being fixed.
+
+    For a test making a claim about ONE reader -- that a particular module
+    calls a particular thing -- patch that module by name and say so. This is
+    for the commoner case of a test that only means "no real call happens
+    here".
+    """
+    import importlib
+    import sys
+
+    origin = importlib.import_module(module_name)
+    original = getattr(origin, attr)
+    patched = []
+    monkeypatch.setattr(origin, attr, replacement)
+    patched.append((module_name, attr))
+    for module in list(sys.modules.values()):
+        name = getattr(module, "__name__", "")
+        if not name.startswith(_SEAM_PACKAGES) or name == module_name:
+            continue
+        if getattr(module, attr, None) is original:
+            monkeypatch.setattr(module, attr, replacement)
+            patched.append((name, attr))
+    if not patched:  # pragma: no cover - defended, never reached
+        raise AssertionError(
+            "patch_seam(%r, %r) matched no binding" % (module_name, attr))
+    return patched
+
+
+def patch_embedding_seam(monkeypatch, attr, replacement):
+    """`patch_seam` for the four `llm.providers` names the memory family reads.
+
+    `embed_texts`, `embed_texts_meta`, `embedding_model_key` and
+    `chat_complete` are each imported into several `mind/memory_*` modules,
+    and which ones depends on the path under test. A test that does not care
+    calls this; a test that does care names its module.
+    """
+    return patch_seam(monkeypatch, "llm.providers", attr, replacement)
