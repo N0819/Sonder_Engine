@@ -194,12 +194,164 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
     return unsupported
 
 
+# The same direction again, for the OTHER minds the engine runs. Observed
+# live (owner's scripted run, 2026-08-17, turn 13): the player wrote "The
+# hooded figure sags against the gate and slides down it, out cold. I kneel
+# and check whether they are breathing", and the resolve returned TWO gated
+# awareness rows with the same cause "collapse against gate" -- one on the
+# hooded figure, who did collapse, and one on Halden, the lift operator
+# standing beside them, whom nothing in the beat put under. Both committed
+# active. The player floor above could not see it (it guards only the
+# player), and `_awareness_support_in_beat` could not either: it is
+# deliberately beat-wide, so a beat that genuinely contains a collapse
+# licenses gating anybody in it.
+#
+# Scope is minds the engine RUNS -- the attached cast. For them a gated level
+# is not a description but a switch: agents/character.py's consciousness gate
+# runs no decision for that mind, and for 'unconscious'/'sedated' the
+# deterministic exits below never fire (a rouse ends only 'asleep', so does
+# the clock). So the cost is not "one beat of silence" -- it is a mind removed
+# from play until the Director volunteers an ending, which across the
+# author's corpus it has never once done. A body with no run mind (a
+# background presence, an unnamed figure) gets no floor: a condition on it is
+# descriptive state whose label has no canonical spelling to attribute prose
+# against, and a wrong drop there would leave a knocked-out body walking.
+#
+# Support is per-subject but read GENEROUSLY: a sleep/knockout cue sharing an
+# unbroken sentence with the subject's name, anywhere in the beat's texts.
+# Deliberately looser than the omission scan's nearest-name clause
+# attribution -- a bystander co-mentioned with the fallen one ("Halden kneels
+# beside the unconscious figure") stays the Director's call -- and strictly
+# looser is the invariant that keeps the floors from fighting: any subject
+# the omission scan can flag (cue in-clause within the gap) necessarily
+# shares the cue's sentence, so a condition on them is always kept here.
+
+
+def _sentence_cooccurrent_names(text_units, cue_re, subject_names):
+    """Names sharing an unbroken sentence with a `cue_re` match, any distance.
+
+    The KEEP-side counterpart of `_clause_attributed_subjects`: no token gap,
+    no nearest-name competition, only `_sentence_break_positions` as a
+    barrier -- because this decides whether to keep the Director's judgement,
+    and ambiguity must err toward keeping. Names are matched with
+    `name_boundary_pattern`, not `\\b`, for the same kana reason as every
+    neighbouring scan."""
+    name_res = [(name, re.compile(
+                    name_boundary_pattern(name.casefold()) + "(?:'s|’s)?"))
+                for name in subject_names if name]
+    if not name_res:
+        return set()
+    supported = set()
+    for text in text_units:
+        low = str(text or "").casefold()
+        if not low:
+            continue
+        cue_hits = [(m.start(), m.end()) for m in cue_re.finditer(low)]
+        if not cue_hits:
+            continue
+        breaks = _sentence_break_positions(low)
+        for name, rx in name_res:
+            if name in supported:
+                continue
+            for nm in rx.finditer(low):
+                ns, ne = nm.start(), nm.end()
+                for cs, ce in cue_hits:
+                    if ne <= cs:
+                        lo, hi = ne, cs
+                    elif ns >= ce:
+                        lo, hi = ce, ns
+                    else:
+                        lo, hi = ns, ns  # overlapping spans share a sentence
+                    if not any(lo <= p < hi for p in breaks):
+                        supported.add(name)
+                        break
+                if name in supported:
+                    break
+    return supported
+
+
+def _norm_subject(value):
+    """A subject_id and a cast name, made comparable: casefolded, with
+    punctuation, spacing and underscores removed. `\\W`-based rather than
+    `[^a-z0-9]` so a kana name survives its own normalization instead of
+    vanishing into an empty string."""
+    return re.sub(r"[\W_]+", "", str(value or "").casefold())
+
+
+def _unsupported_character_awareness(conditions, cast_names, player_name,
+                                     player_input, resolved_event,
+                                     dialogue_log, live_condition_ids=()):
+    """Condition keys that gate a CAST mind on no basis attributed to it.
+
+    Returns [(key, cast_name, level)] for awareness conditions that are
+    ACTIVE, newly gate a cast member (the player has its own, stronger floor
+    above), sit at a gated level, and whose subject shares no sentence with
+    any going-under language in the beat. An ending (active:0) is never
+    touched, and neither is a re-assertion of a condition already live --
+    a mind already under says nothing about going under this beat, and that
+    silence is normal; only a NEW gate needs the beat to own it."""
+    player_norm = _norm_subject(player_name)
+    names = {}
+    for name in cast_names:
+        norm = _norm_subject(name)
+        if norm and norm != player_norm and norm not in names:
+            names[norm] = name
+    if not names:
+        return []
+
+    live = {str(cid) for cid in (live_condition_ids or ())}
+    texts = [str(player_input or ""), str(resolved_event or "")]
+    for entry in (dialogue_log or []):
+        if isinstance(entry, dict) and entry.get("exact_quote"):
+            texts.append(str(entry["exact_quote"]))
+
+    supported = None  # computed once, only if a candidate condition exists
+    unsupported = []
+    for key, cond_value in (conditions or {}).items():
+        cond_list = cond_value if isinstance(cond_value, list) else [cond_value]
+        for cond in cond_list:
+            if not isinstance(cond, dict):
+                continue
+            level = awareness_cond_level(cond)
+            if level is None or level not in NON_AWAKE_GATED:
+                continue
+            try:
+                if not int(cond.get("active", 1)):
+                    continue  # waking -- always allowed
+            except (TypeError, ValueError):
+                pass
+            if (str(key) in live
+                    or str(cond.get("condition_id") or "") in live):
+                continue  # already under; a re-assertion is not an onset
+            display = names.get(_norm_subject(cond.get("subject_id")))
+            if display is None:
+                continue  # no run mind behind this subject; Director's call
+            if supported is None:
+                # BOTH cue vocabularies, because the non-fighting invariant
+                # demands it: the omission scan attributes with
+                # `_UNCONSCIOUSNESS_CUE`, and `_SLEEP_CUE` does not contain
+                # all of it ("goes limp", "slumps unconscious") -- support
+                # read from `_SLEEP_CUE` alone could drop the very condition
+                # the scan below would then re-demand.
+                supported = _sentence_cooccurrent_names(
+                    texts, _ling("_SLEEP_CUE"), list(names.values()))
+                supported |= _sentence_cooccurrent_names(
+                    texts, _ling("_UNCONSCIOUSNESS_CUE"),
+                    list(names.values()))
+            if display in supported:
+                continue
+            unsupported.append((key, display, level))
+            break
+
+    return unsupported
+
+
 # ---------------------------------------------------------------------------
 # WAKING (awareness Phase 1, exit side).
 #
-# The two floors above police the ONSET of a non-awake state -- one catches a
-# knockout the diff forgot, the other catches a mind the diff took away on
-# nothing. Neither of them can end one, and until this block nothing else could
+# The floors above police the ONSET of a non-awake state -- one catches a
+# knockout the diff forgot, the others catch a mind the diff took away on
+# nothing. None of them can end one, and until this block nothing else could
 # either except the Director choosing to.
 #
 # Measured against the author's live corpus (engine.db, 1483 director
