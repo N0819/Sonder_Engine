@@ -111,59 +111,89 @@ def test_chat_archive_preserves_lorebook_hierarchy_and_scope(temp_db):
     assert restored["parent_id"] == books["World"]["id"]
 
 
-def test_checkpoint_cross_install_ids_are_remapped_fail_closed():
-    blob = {
-        "memories": [
-            {"char_id": 10, "turn_id": 20, "frame_id": 30, "content": "kept"},
-            {"char_id": 11, "turn_id": 20, "frame_id": 30, "content": "drop"},
-        ],
-        "memory_summaries": [
-            {"char_id": 10, "summary": "kept"},
-            {"char_id": 11, "summary": "drop"},
-        ],
-        "chars": {"10": {"state": {}}, "11": {"state": {}}},
-        "char_frames": [
-            {"char_id": 10, "frame_id": 30},
-            {"char_id": 11, "frame_id": 30},
-        ],
-        "frames": [
-            {
-                "id": 30,
-                "parent_frame_id": None,
-                "travelers": "[10, 11]",
-                "nonexistent_cast": "[11]",
-            }
-        ],
-        "chat_personas": [
-            {"persona_id": 40, "frame_id": 30},
-            {"persona_id": 41, "frame_id": 30},
-        ],
-    }
+def _crossable_chat(db):
+    """A chat holding one row of every id-bearing kind the remap must answer
+    for, and two characters -- one that will map to the target install and one
+    that will not.
+
+    Built and then SNAPSHOTTED rather than hand-written. The blob this test
+    used to declare was a six-key literal that never called `snapshot_state`:
+    it could not notice a new table joining the checkpoint, and it had not --
+    `relationship_events` shipped with checkpoint, archive and delete support
+    and was absent here, so the fail-closed rule that DROPS a stance whose
+    character does not map was asserted by nothing.
+    """
+    chat_id = _chat(db, "Crossing")
+    kept = _character(db, "Kept", "uid_kept")
+    dropped = _character(db, "Dropped", "uid_dropped")
+    for char_id in (kept, dropped):
+        db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
+              "VALUES(?,?,?,?)", (chat_id, char_id, "active", "{}"))
+    frame_id = create_frame(chat_id, label="Past", ordinal=-10, kind="past")
+    db.qi("UPDATE frames SET travelers=?, nonexistent_cast=? WHERE id=?",
+          (json.dumps([kept, dropped]), json.dumps([dropped]), frame_id))
+    turn_id = db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+        "VALUES(?,?,?,?,?)", (chat_id, 0, "", time.time(), frame_id))
+    persona_id = db.qi(
+        "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+        ("Player", "{}", "{}"))
+    db.qi("INSERT INTO chat_personas(chat_id,persona_id,status,frame_id) "
+          "VALUES(?,?,?,?)", (chat_id, persona_id, "active", frame_id))
+    for char_id, content in ((kept, "kept"), (dropped, "drop")):
+        db.qi("INSERT INTO memories(chat_id,char_id,turn_id,turn_idx,content,"
+              "frame_id) VALUES(?,?,?,?,?,?)",
+              (chat_id, char_id, turn_id, 0, content, frame_id))
+        db.qi("INSERT INTO memory_summaries(chat_id,char_id,scope,summary,"
+              "updated) VALUES(?,?,?,?,?)",
+              (chat_id, char_id, "autobiographical", content, time.time()))
+        db.qi("INSERT INTO chat_char_frames(chat_id,char_id,frame_id,state) "
+              "VALUES(?,?,?,?)", (chat_id, char_id, frame_id, "{}"))
+        db.qi("INSERT INTO relationship_events(chat_id,frame_id,char_id,target,"
+              "axis,delta,turn_idx,created) VALUES(?,?,?,?,?,?,?,?)",
+              (chat_id, frame_id, char_id, "Someone", "trust", -0.2, 0,
+               time.time()))
+    return chat_id, kept, dropped, frame_id, turn_id, persona_id
+
+
+def test_checkpoint_cross_install_ids_are_remapped_fail_closed(temp_db):
+    from persist.checkpoints import snapshot_state
+
+    chat_id, kept, dropped, frame_id, turn_id, persona_id = _crossable_chat(
+        temp_db)
+    blob = snapshot_state(chat_id)
+
+    # Every id-bearing collection this remap is responsible for is present
+    # because the snapshot produced it, not because this test typed it.
+    for key in ("memories", "memory_summaries", "chars", "char_frames",
+                "frames", "chat_personas", "relationship_events"):
+        assert blob.get(key), f"{key} missing from the snapshot"
 
     app._remap_cp_blob(
         blob,
-        {20: 200},
+        {turn_id: 200},
         {},
         None,
-        char_idmap={10: 100},
-        persona_idmap={40: 400},
-        frame_idmap={30: 300},
+        char_idmap={kept: 100},
+        persona_idmap={persona_id: 400},
+        frame_idmap={frame_id: 300},
     )
 
-    assert blob["memories"] == [
-        {
-            "char_id": 100,
-            "turn_id": 200,
-            "frame_id": 300,
-            "content": "kept",
-        }
-    ]
-    assert blob["memory_summaries"] == [{"char_id": 100, "summary": "kept"}]
+    assert [(m["char_id"], m["turn_id"], m["frame_id"], m["content"])
+            for m in blob["memories"]] == [(100, 200, 300, "kept")]
+    assert [(s["char_id"], s["summary"]) for s in blob["memory_summaries"]] \
+        == [(100, "kept")]
     assert list(blob["chars"]) == ["100"]
-    assert blob["char_frames"] == [{"char_id": 100, "frame_id": 300}]
+    assert [(cf["char_id"], cf["frame_id"]) for cf in blob["char_frames"]] \
+        == [(100, 300)]
     assert json.loads(blob["frames"][0]["travelers"]) == [100]
     assert json.loads(blob["frames"][0]["nonexistent_cast"]) == []
-    assert blob["chat_personas"] == [{"persona_id": 400, "frame_id": 300}]
+    assert [(p["persona_id"], p["frame_id"]) for p in blob["chat_personas"]] \
+        == [(400, 300)]
+    # The stance whose character did not cross is gone rather than reattached
+    # to whoever inherited the number.
+    assert [(r["char_id"], r["frame_id"]) for r in blob["relationship_events"]] \
+        == [(100, 300)]
 
 
 def test_live_frame_membership_uses_remapped_character_ids(temp_db):
@@ -426,3 +456,55 @@ def test_chat_import_keeps_every_column_the_memory_dump_carried(
     assert after["embedding_dim"] == before["embedding_dim"]
     assert after["encoding_valence"] == before["encoding_valence"]
     assert after["encoding_arousal"] == before["encoding_arousal"]
+
+
+class TestASecretDoesNotRideAnArchive:
+    """WEB-19. The presence-id namespace is a per-install secret.
+
+    Anonymous presence ids are a hash of canonical data a `story_view` caller
+    can read for itself, salted with a random namespace; the salt is the whole
+    reason a guessed identity cannot be confirmed by enumeration. An archive
+    is a file a host hands to somebody else, so a namespace inside one hands
+    over the ability to invert every anonymous body in that story.
+
+    It rode out TWICE, which is why the guard is asserted in both places: once
+    as a plain `world` row (the export is `SELECT *`), and again inside every
+    checkpoint blob, which is `snapshot_state`'s copy of the same table.
+    """
+
+    def _exported(self, db, chat_id):
+        from web.story_view import PRESENCE_NAMESPACE_KEY
+
+        db.wset(chat_id, PRESENCE_NAMESPACE_KEY, "deadbeef" * 4)
+        ensure_checkpoint(chat_id, 0)
+        return json.loads(json.dumps(app.chat_export(chat_id)))
+
+    def test_the_namespace_is_not_a_world_row_in_the_archive(self, temp_db):
+        from web.story_view import PRESENCE_NAMESPACE_KEY
+
+        chat_id = _chat(temp_db)
+        export = self._exported(temp_db, chat_id)
+        assert PRESENCE_NAMESPACE_KEY not in (export["world"] or {})
+
+    def test_the_namespace_is_not_inside_a_carried_checkpoint(self, temp_db):
+        chat_id = _chat(temp_db)
+        export = self._exported(temp_db, chat_id)
+        assert export["checkpoints"], "the checkpoint half needs a checkpoint"
+        for row in export["checkpoints"]:
+            assert "deadbeef" not in row["blob"]
+
+    def test_the_stripped_key_is_the_one_story_view_mints(self):
+        """The two modules must not drift: `persist` cannot import `web`, so
+        the name is spelled twice and this is what keeps the copies honest."""
+        from persist.chat_archive import UNEXPORTED_WORLD_KEYS
+        from web.story_view import PRESENCE_NAMESPACE_KEY
+
+        assert PRESENCE_NAMESPACE_KEY in UNEXPORTED_WORLD_KEYS
+
+    def test_the_story_itself_still_exports(self, temp_db):
+        """Stripping one key is not a licence to drop the world."""
+        chat_id = _chat(temp_db)
+        temp_db.wset(chat_id, "simulation_clock", {"elapsed_seconds": 12.0})
+        export = self._exported(temp_db, chat_id)
+        assert export["world"]["simulation_clock"] == {"elapsed_seconds": 12.0}
+        assert "simulation_clock" in export["checkpoints"][0]["blob"]
