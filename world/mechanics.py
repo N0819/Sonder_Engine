@@ -269,7 +269,9 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
                     conditions=(), prev_scene=None, chat_id=None,
                     turn_id=None, turn_idx=None, cast_names=(),
                     cast_changes=(), player_room=None):
-    """Run the ordered passes (a)-(e). Returns (scene, event_ops, notices).
+    """Run the ordered passes (a)-(e).
+
+    Returns (scene, event_ops, notices, counts).
 
     scene is mutated in place and also returned; event_ops is the list of
     durable operations for the caller to apply inside its transaction:
@@ -278,6 +280,14 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
         ("expire_condition", condition_id) -- world_conditions deactivate
     notices is the engine_notices list for this beat (overwritten every
     sweep, so notices self-expire after one beat).
+
+    counts is what pass (a) fired, by kind: `fired` (transit arrivals),
+    `news_fired`, `consequences_fired`. Returned rather than kept private
+    because the commit domain reports these numbers, and a caller that has to
+    rebuild them from `event_ops` is writing a second implementation of a
+    count this function already has -- which is what it did until WORLD-F3.
+    `scheduled` and `expired` are NOT here: those are counts of ops the
+    caller applies, and belong to whoever applies them.
     """
     elapsed = float((clock or {}).get("elapsed_seconds") or 0.0)
 
@@ -307,4 +317,4 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
         infer_companion_carry(chat_id, frame_id, prev_scene, scene,
                               list(cast_names), list(cast_changes or []))
 
-    return scene, event_ops, notices
+    return scene, event_ops, notices, counts
