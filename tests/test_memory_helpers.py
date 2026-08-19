@@ -1,5 +1,6 @@
 """Tests for pure memory helper functions."""
 
+from tests.helpers import patch_seam
 from mind.memory import (
     _default_category,
     _extract_entities,
@@ -91,7 +92,13 @@ class TestStrandedEmbeddingsAreAnnounced:
 
         handler = _H()
         memory.logger.addHandler(handler)
-        monkeypatch.setattr(memory, "_STRANDED_REPORTED", set())
+        # Not the facade: `_warn_stranded_embeddings` resolves the set in
+        # `memory_retrieval`'s globals, and `memory_vectors` clears the same
+        # object after a rebuild. One global before the split, two bindings
+        # after it -- `patch_seam` rebinds both, which is what the single
+        # global used to mean.
+        patch_seam(monkeypatch, "mind.memory_retrieval",
+                   "_STRANDED_REPORTED", set())
         return memory, seen, handler
 
     def test_a_mismatched_bank_is_reported(self, monkeypatch):

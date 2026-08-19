@@ -54,6 +54,7 @@ MODULE_PURPOSES = {
     "mind.memory_lorebooks": "The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights.",
     "mind.memory_write": "How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread.",
     "mind.memory_read": "The one seam a mind reads its own memory through, and the host reads that deliberately cross characters.",
+    "mind.memory_retrieval": "Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall.",
     "core.pipeline_context": "Typed mutable context passed through a turn pipeline.",
     "persist.pipeline_trace": "Privacy-conscious export, validation, and offline replay of persisted pipeline history.",
     "llm.prompt_cache": "Provider-specific prompt-cache helpers.",
