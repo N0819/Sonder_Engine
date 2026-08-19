@@ -961,6 +961,47 @@ def _subject_spellings(sc, subject):
     return forms
 
 
+def _enclosure_of(sc, subject):
+    """The nearest enclosure around this being, under any name it is keyed by.
+
+    The first spelling the scene knows an enclosure for wins. A spelling the
+    scene does not key answers "nothing around it" -- which is the ignorant
+    answer, indistinguishable from a body standing in the open -- and the
+    informed answer must outrank it.
+    """
+    for form in _subject_spellings(sc, subject):
+        holders = hiding_holders_of(sc, form)
+        if holders:
+            return str(holders[0]).strip()
+    return ""
+
+
+def _enclosure_conceals(sc, observer, target):
+    """`spatial.containment_conceals`, asked under every live spelling.
+
+    Sight and sound need both parties on the same side of every closed thing,
+    which `containment_conceals` decides by comparing their nearest
+    enclosures -- resolving each from the ONE string it was handed. One being
+    routinely answers to two (a cast display name and a scene entity id), each
+    ledger is keyed by whichever its writer had, and
+    `spatial_identity.canonical_subject_map` deliberately declines to fold a
+    lone entity-id key, so the pair stays live on purpose. Handed the spelling
+    a scene does not key, the primitive reports a being with nothing shut
+    around it, and every caller reads that as "in the open".
+
+    So both parties are resolved across their spellings first, and the two
+    enclosures are compared through `same_subject`, because the holder carries
+    the pair too. Nothing is concealed from itself under either of its names.
+    """
+    if same_subject(sc, observer, target):
+        return False
+    around_observer = _enclosure_of(sc, observer)
+    around_target = _enclosure_of(sc, target)
+    if around_observer == around_target:
+        return False
+    return not same_subject(sc, around_observer, around_target)
+
+
 def _perceptible_entities(sc, perceiver_names=None):
     """The entities dict to serialize into a PERCEPTION payload.
 
@@ -1004,20 +1045,12 @@ def _perceptible_entities(sc, perceiver_names=None):
     when nothing else does. Omitted (the default) keeps the whole table, which
     is right for callers that have no perceiver set to gate against.
 
-    BOTH PARTIES ARE ASKED UNDER EVERY SPELLING THEY ARE KEYED BY. `contained`
-    and `positions` key one being by whichever handle the writer used -- an
-    entity id for an object, fixture or unregistered presence, a display name
-    for a body already live as a subject elsewhere -- and
-    `spatial_identity.canonical_subject_map` deliberately declines to fold a
-    lone entity-id key, so the pair stays live. A gate that resolves one
-    spelling gets an answer about a being with no enclosure whenever it picks
-    the other one, which is indistinguishable from an answer about a body
-    standing in the open: it fails OPEN for an id-keyed enclosed entity (its
+    Concealment goes through `_enclosure_conceals`, which asks both parties
+    under every spelling they are keyed by: the record's `name` and its dict
+    key are routinely two live handles for one being, and a gate that resolves
+    only one of them failed OPEN here for an id-keyed enclosed entity (its
     act-naming `state` shipped to every perceiver) and CLOSED for an id-keyed
-    co-occupant (denied what the body beside it is doing). Hence
-    `_enclosure_of`, which resolves an enclosure from the first spelling the
-    scene actually knows and compares the two through `same_subject` -- the
-    holder carries the same pair.
+    co-occupant (denied what the body beside it was doing).
     """
     entities = (sc or {}).get("entities") or {}
     if not isinstance(entities, dict):
@@ -1029,40 +1062,16 @@ def _perceptible_entities(sc, perceiver_names=None):
         if holder
     }
 
-    def _enclosure_of(spellings):
-        """The nearest enclosure around this being, under any of its names.
-
-        The first spelling the scene knows an enclosure for wins: a spelling
-        the scene does not key answers "nothing around it", which is the
-        ignorant answer, and the informed one must outrank it.
-        """
-        for form in spellings:
-            holders = hiding_holders_of(sc, form)
-            if holders:
-                return str(holders[0]).strip()
-        return ""
-
-    observer_spellings = {
-        observer: _subject_spellings(sc, observer) for observer in names
-    }
-
     def _state_reaches_anyone(*ent_spellings):
         spellings = [s for s in (str(f or "").strip() for f in ent_spellings)
                      if s]
         if not names or not spellings:
             return True
-        forms = []
-        for form in spellings:
-            forms.extend(_subject_spellings(sc, form))
-        enclosure = _enclosure_of(forms)
-        for observer in names:
-            if any(same_subject(sc, observer, form) for form in forms):
-                return True          # nothing is concealed from itself
-            around_observer = _enclosure_of(observer_spellings[observer])
-            if around_observer == enclosure or same_subject(
-                    sc, around_observer, enclosure):
-                return True          # same side of every closed thing
-        return False
+        return any(
+            all(not _enclosure_conceals(sc, observer, form)
+                for form in spellings)
+            for observer in names
+        )
 
     by_name = {}
     for eid, ent in entities.items():
@@ -2487,7 +2496,12 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     # itself included, once the self-exemption has failed to recognise it.
     if same_subject(scene, observer_name, source_name):
         return True
-    if containment_conceals(scene, observer_name, source_name):
+    # `_enclosure_conceals`, not the bare primitive, for the same reason the
+    # line above is not `==`: containment is resolved from the strings this
+    # caller happened to use, and a body keyed by entity id read as a body
+    # standing in the open -- so a sealed body was delivered, on every
+    # channel, to everyone around whatever held it.
+    if _enclosure_conceals(scene, observer_name, source_name):
         return False
 
     if channel == "hearing":
