@@ -702,18 +702,32 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             if not any(same_subject(scene, name, body.get("name"))
                        for body in co_present or []):
                 continue
-            # A POSE IS NEVER MORE REACHABLE THAN A PRESENCE. Caught by a
-            # pose-bearing drive scenario, not by the corpus: Kai stood in
-            # the yard, Reya knelt in the forge behind a closed door, and
-            # his view read "Reya is kneeling on the anvil block". Presence
-            # had already declined to mention her -- `proximity_rel`
-            # answers None across rooms -- while this gate checked only
-            # sight and arc, so a body he was not even told was there
-            # arrived with her posture, her support and her breathing.
+            # A POSE NEEDS A WITHIN-ROOM TIER. Caught by a pose-bearing
+            # drive scenario, not by the corpus: Kai stood in the yard, Reya
+            # knelt in the forge behind a closed door, and his view read
+            # "Reya is kneeling on the anvil block". Presence had already
+            # declined to mention her -- `proximity_rel` answers None across
+            # rooms -- while this gate checked only sight and arc, so a body
+            # he was not even told was there arrived with her posture, her
+            # support and her breathing.
             #
-            # Same rule as `presence_percepts`, and for the same reason: how
-            # a body is held is finer-grained than the fact of it, so it
-            # cannot outrun it.
+            # It was written as "a pose is never more reachable than a
+            # presence", borrowing `presence_percepts`' gate. That is no
+            # longer what either function does. Presence has since grown a
+            # cross-room branch: where `proximity_rel` is None it does not
+            # decline, it falls back to `tier="beyond"` plus the room label,
+            # so an interviewer watching through observation glass is told
+            # about the woman in the cell. Pose still declines there, and so
+            # presence now outruns pose rather than the other way round.
+            #
+            # The subtraction is defensible on its own terms, which is why it
+            # stays: a pose is rendered AGAINST the furniture and the bodies
+            # around it ("kneeling on the anvil block", "leaning against
+            # her"), and those referents belong to a room the observer is
+            # not in. Seeing that someone across a barrier is kneeling is
+            # not seeing what they are kneeling on. State it that way rather
+            # than as a rule about presence, so the next body percept added
+            # here inherits the reason and not a comparison that has flipped.
             if proximity_rel(scene, observer_name, name) is None:
                 continue
             level = _sense_graded(
