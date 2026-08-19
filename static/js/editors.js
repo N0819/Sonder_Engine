@@ -853,7 +853,7 @@ function importModal(kind) {
           backgroundTask(`Importing ${kind}`, () => api("POST", endpoint, payload),
             { onSuccess: async r => {
               await boot();
-              if (kind === "lorebook" && r?.id) await loreModal(r.id);
+              if (kind === "lorebook" && r?.id) await openLoreWorkspace(r.id);
               // A card with no drive imports cleanly and then reads as a dull
               // character rather than an unfilled field. Say so.
               for (const warning of (r?.warnings || [])) toast(warning, "warn");
@@ -892,85 +892,11 @@ function generateLoreModal(lid, isChat) {
         el("button", { class: "primary", onclick: () => {
           backgroundTask("Generating lorebook entries",
             () => api("POST", `/api/lorebooks/${lid}/generate`, { prompt: ta.value.trim() }),
-            { onSuccess: async r => { await boot(); if (r?.added) await loreModal(lid) },
+            { onSuccess: async r => { await boot(); if (r?.added) await openLoreWorkspace(lid) },
              successMessage: r => `Generated ${r?.added || 0} entries.`,
              errorPrefix: "Lore generation failed" });
         } }, "Generate entries")));
   });
-}
-
-// ---- Lorebooks ----
-async function loreModal(lid) {
-  modal("Lorebook", b => { b.append(loadingBlock("Loading lorebook…")) }, { wide: true });
-  let d;
-  try { d = await api("GET", "/api/lorebooks/" + lid) }
-  catch (e) { $("#modalbody").innerHTML = ""; $("#modalbody").append(emptyState("Could not load lorebook: " + e.message)); return }
-  const cats = S.boot.lore_categories, types = S.boot.lorebook_types;
-  modal(`Lorebook — ${d.book.name}`, b => {
-    const typeSel = fSelect("Type", types, d.book.book_type || "general");
-    const sumIn = fArea("Summary for the mapping agent", d.book.summary || "", 2);
-    b.append(el("div", { class: "row" },
-      el("button", { onclick: async () => {
-        const n = await promptModal("Rename:", d.book.name); if (n == null) return;
-        await api("PUT", "/api/lorebooks/" + lid, { name: n });
-        closeModal(); boot();
-      } }, "Rename"),
-      el("button", { onclick: async () => { await exportLorebook(lid) } }, "⤓ Export"),
-      el("button", { onclick: () => {
-        backgroundTask(`Reinterpreting ${d.book.name}`,
-          () => api("POST", `/api/lorebooks/${lid}/reinterpret`),
-          { onSuccess: async () => { await boot(); await loreModal(lid) },
-           successMessage: r => `Reinterpreted ${r?.reinterpreted || 0} entries.`,
-           errorPrefix: "Reinterpretation failed" });
-      } }, "✨ Reinterpret / categorize"),
-      el("button", { onclick: () => generateLoreModal(lid, false) }, "✨ Generate entries"),
-      el("button", { onclick: async () => {
-        await api("POST", `/api/lorebooks/${lid}/entries`, { keys: "", content: "New entry", category: "other" });
-        closeModal(); loreModal(lid);
-      } }, "+ Entry")));
-    b.append(typeSel.node, sumIn.node,
-      el("div", { class: "row", style: "margin:6px 0" },
-        el("button", { onclick: async () => {
-          await api("PUT", "/api/lorebooks/" + lid, { book_type: typeSel.read(), summary: sumIn.read() });
-          closeModal(); boot();
-        } }, "Save book meta")));
-    let lastCat = "";
-    for (const e of d.entries) {
-      const cat = e.category || "other";
-      if (cat !== lastCat) { b.append(el("div", { style: "margin:10px 0 2px;font-weight:600;color:var(--dim);text-transform:uppercase;font-size:11px" }, cat)); lastCat = cat }
-      const k = el("input", { style: "flex:1", value: e.keys || "", placeholder: "keys (comma-separated)" });
-      const titleIn = el("input", { style: "flex:1", value: e.title || "", placeholder: "title" });
-      const catSel = el("select", {}, cats.map(c => el("option", { value: c, ...(c === cat ? { selected: "" } : {}) }, c)));
-      const c = el("textarea", { style: "width:100%", rows: "3" }, e.content || "");
-      const tagSel = el("select", {}, ["common", "scholarly", "esoteric"].map(t => el("option", { value: t, ...(t === (e.knowledge_tag || "common") ? { selected: "" } : {}) }, t)));
-      const rangeSel = el("select", {}, ["global", "local"].map(r => el("option", { value: r, ...(r === (e.knowledge_range || "global") ? { selected: "" } : {}) }, r)));
-      let locsVal = ""; try { locsVal = (JSON.parse(e.knowledge_locations || "[]") || []).join(", ") } catch (err) { }
-      const locsIn = el("input", { style: "flex:1", value: locsVal, placeholder: "room IDs (comma-separated)" });
-      const knowledgeFields = el("div", { class: "row small", style: catSel.value === "knowledge" ? "" : "display:none" }, titleIn, tagSel, rangeSel, locsIn);
-      catSel.onchange = () => { knowledgeFields.style.display = catSel.value === "knowledge" ? "" : "none" };
-      b.append(el("div", { class: "card" },
-        el("div", { class: "row" }, k, catSel,
-          e.canon_locked ? el("span", { class: "badge" }, "🔒 locked") : null,
-          el("button", { onclick: async () => {
-            let kloc = null;
-            if (catSel.value === "knowledge" && rangeSel.value === "local")
-              kloc = JSON.stringify(locsIn.value.split(",").map(s => s.trim()).filter(Boolean));
-            await api("PUT", "/api/lore_entries/" + e.id,
-              { keys: k.value, content: c.value, category: catSel.value, title: titleIn.value,
-               knowledge_tag: catSel.value === "knowledge" ? tagSel.value : null,
-               knowledge_range: catSel.value === "knowledge" ? rangeSel.value : null,
-               knowledge_locations: kloc });
-            closeModal(); loreModal(lid);
-          } }, "Save"),
-          el("button", { onclick: async () => {
-            if (!await confirmModal("Delete this entry?", { danger: true, confirmLabel: "Delete" })) return;
-            await api("DELETE", "/api/lore_entries/" + e.id);
-            closeModal(); loreModal(lid);
-          } }, "✕")),
-        knowledgeFields, c));
-    }
-    if (!d.entries.length) b.append(el("div", { class: "dim" }, "No entries yet. Click + Entry to add one."));
-  }, { wide: true });
 }
 
 // ---- Export ----

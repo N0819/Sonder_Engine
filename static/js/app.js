@@ -707,7 +707,7 @@ function renderLegacyLoreSidebar(list, actions) {
       "div",
       {
         class: "item",
-        onclick: () => loreModal(book.id)
+        onclick: () => openLoreWorkspace(book.id)
       },
       el(
         "span",
@@ -734,7 +734,7 @@ function renderLegacyLoreSidebar(list, actions) {
           });
 
           await boot();
-          await loreModal(result.id);
+          await openLoreWorkspace(result.id);
         }
       },
       "+ Lorebook"

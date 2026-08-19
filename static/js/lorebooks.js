@@ -633,7 +633,6 @@ async function openLoreWorkspace(selectedId) {
   await renderLoreWorkspaceBody(selectedId);
 }
 
-window.loreModal = openLoreWorkspace;
 
 function renderLoreInspector(state, container) {
   container.innerHTML = "";

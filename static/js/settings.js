@@ -1235,7 +1235,7 @@ function renderLorebooksTab(d, b, chatId) {
               title: "Open in workspace",
               onclick: () => {
                 closeModal();
-                loreModal(lb.id);
+                openLoreWorkspace(lb.id);
               }
             }, "open"),
             el("button", {
