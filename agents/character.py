@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import time
 from collections import deque
 
 from mind import affect
@@ -43,7 +42,7 @@ from mind.memory import (
     provenance_context_label,
     relationships_for_payload,
 )
-from llm.prompts import character_prompt, get_prompt
+from llm.prompts import character_prompt
 from story.scene import (
     NON_AWAKE_GATED,
     active_transformations,
@@ -79,7 +78,6 @@ from .common import (
     _normalize_character_output,
     _word_shingles,
     assign_event_ids,
-    attire_view,
     compact_attire,
     extra_parts_lines,
     cap_mind_model_updates,
