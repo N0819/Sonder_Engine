@@ -4747,6 +4747,19 @@ OUTPUT_EXAMPLES = {
         "contact_ops": [],
         "material_effects": [],
         "active_state": {},
+        # The psychology tier. The sheet asks for all five and the example
+        # named none of them, and an absent key in the object a repair is told
+        # to imitate reads as "not part of the answer" -- which is how a whole
+        # tier can be asked for on every call and arrive on none of them.
+        # Shown at their nothing-this-beat values, like every other key here:
+        # what the fields ARE is the sheet's to say, and an example that
+        # decided a project or a following change for the character would be
+        # the example making the decision.
+        "intent_ops": [],
+        "project_ops": [],
+        "follow_op": None,
+        "drive_shift": None,
+        "manifest": {"surface_demeanor": "", "tells": []},
         "belief_updates": [],
         "association_updates": [],
         "mind_model_updates": [],
