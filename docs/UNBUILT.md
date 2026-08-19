@@ -2815,37 +2815,6 @@ accident**, so every read site has to be re-examined for whether it wants
   there. Listed again here because the repair is the same kind of thing: a
   migration that deletes rows from live stories at next launch.
 
-### 1.59 Three questions the paradox subsystem cannot answer for itself
-
-`world/paradox.py` is complete enough to run and has three decisions inside it
-that are the owner's, not an engineer's. They are grouped because one
-measurement bounds all three, and it is the reason none of them is urgent:
-**no paradox has ever opened on a live story.** Measured read-only on the
-owner's install 2026-08-18 — two `paradox*` rows in the whole `world` table,
-one an empty `{}` and one a `paradox_policy` on chat 20 (`mode: hazard`,
-`escalation_rate: 1`, `toll_in_radius: true`). So the code has never run
-against a real story, every claim about its behaviour is derived from reading
-it, and the cost of getting one of these wrong today is zero.
-
-- **WORLD-F7 — four rungs or five?** `STAGE_THRESHOLDS` has five
-  (`0.0, 0.25, 0.5, 0.75, 1.0`); `_apply_hazard_stage`'s handlers stop at
-  three; and stage 4's consequence fires on the same tick that force-restores
-  and clears the paradox, so the top rung's effect and its resolution are one
-  beat. Either the ladder is four rungs and the fifth IS the resolution, or
-  stage 4 needs a beat of its own before the restore.
-- **WORLD-F24 — should `mode == "hazard"` also apply the traveler
-  memory-confidence toll?** Chat 20 is the one live chat sitting on this
-  config, and it has never opened a paradox, so nothing is riding on the
-  answer yet.
-- **WORLD-F33 — what does "force restore" mean when the projection is
-  derived?** `_force_restore_anchor` (`world/paradox.py:474`) writes
-  `world_entities` directly, and that table is a derived projection of the
-  scene commit (`Design.md` § Physical-world authority), so a direct write is
-  authority flowing the wrong way. The `# NOTE, unrepaired:` comment at `:475`
-  is honest about it and still needs an answer: restore the SCENE and let the
-  projection follow, or accept that a paradox is the one thing allowed to write
-  the projection.
-
 ### 1.60 `generalization_tags` promises a mechanism that does not exist
 
 `AssociationProfile.generalization_tags` (`story/character_schema.py:225`) is
@@ -3030,6 +2999,44 @@ stamped without running a commit, and inventing that seam belongs to whoever
 owns `persist/`. That is the right shape for a residual: named, reasoned, and
 pointing at the change that would remove it.
 
+
+### 1.65 A condition subject written as a scene uid names nobody
+
+Found while landing restraint and awareness exits
+([`DESIGN_RESTRAINT_AND_AWARENESS_EXITS.md`](design/DESIGN_RESTRAINT_AND_AWARENESS_EXITS.md)
+§ Residuals). `world_conditions` rows in chats 24 and 25 carry a **subject
+written as a scene-entity uid**, which matches no perceiver's display name —
+so those rows are inert under any selector, including the widened ones, and
+the gate they describe has never fired for the body they describe.
+
+This is not created by the kind widening and is not fixed by widening
+further: chat 26 holds a canonically-spelled `awareness` row with the same
+uid-subject shape and is equally inert. The two faults look alike from the
+symptom (a condition that does nothing) and are unrelated at the cause — one
+was a vocabulary the reader did not recognise, this one is an IDENTITY the
+reader cannot resolve.
+
+The fix is identity folding — `same_subject` / `normalize_scene_subjects`
+territory — applied to condition subjects, so a uid and the display name it
+belongs to are one subject. It is its own change with its own tests because
+folding `world_conditions` subjects touches the commit path, the restore
+path, and branch/clone ID remapping, which is the checklist in
+[`guides/DATABASE.md`](guides/DATABASE.md) rather than a predicate edit.
+
+Three smaller residuals from the same note, deliberately not landed with it:
+
+- **One metaphorical `_RELEASE_CUE` false positive** ("breaks free of her
+  paralysing fear") and its mirror class (a possessive object like "pulls
+  Hinami's file free", unreachable today only because the apostrophe breaks
+  the cue's lookahead chain). Both need noun semantics a regex does not
+  have; the cost is a warned, recoverable ending, and prose saying a
+  physically-restrained body "breaks free" is nearly always literal.
+- **Restraint synonym and holder-field tables are English** — the same
+  standing gap `_RESTRAINT_SYNONYMS` had before that work. Owner decision 2
+  (route recognizers through the packs) covers the class.
+- **`consciousness` rows stay unread forever** by design: the word does not
+  say which way the body is crossing. If a model starts writing them at
+  volume the fix is the prompt, not the predicate.
 
 ## 2. Roadmap
 
@@ -4464,11 +4471,24 @@ presence has no stable id until promotion makes one.
 
 About 60% shipped in alpha 1.4, under a materially different architecture — the
 narrator **does** run on turn 0 and its prose is overridden afterwards, rather
-than the design's pre-baked variants plus resume. Still unbuilt and still wanted:
+than the design's pre-baked variants plus resume. **The extraction's scope has
+since outgrown this note**: what a greeting may put inside a MIND — beliefs,
+stances, opening affect, for every person present rather than the card's owner
+alone — moved to
+[`DESIGN_GREETING_MINDS.md`](design/DESIGN_GREETING_MINDS.md) and is built
+(extractor v2). Still unbuilt and still wanted:
 
-- **Ingest-time extraction caching.** `story/importers.py` always writes
-  `"extraction": None`; extraction runs lazily at launch and is discarded, not
-  persisted. No `extractor_version` stamping.
+- **Ingest-time extraction caching — the WRITE half only.** The read half
+  landed with extractor v2: `story/greetings.py` stamps
+  `extractor_version = EXTRACTOR_VERSION` where the extraction is MINTED
+  (not where it is filed, so a copy made by an archive, an editor or a hand
+  written card cannot claim a provenance it does not have), and
+  `_usable_stored_extraction` replays a stored blob only if this extractor
+  made it — unstamped means older than the stamp, and the stored blob is the
+  one path into turn-0 seeding that never passes through today's schema.
+  What is still missing is anything to replay: `story/importers.py` and the
+  first-message fallback both write `"extraction": None`, so extraction runs
+  lazily at launch and is discarded every time.
 - **The `private_history` write.** Seeds route to character memory only.
   Idempotency itself is closed and by a better key than the design named: each
   seed carries `greeting_seed:<sha1(content)[:16]>` and the batch upserts on
@@ -4481,8 +4501,12 @@ than the design's pre-baked variants plus resume. Still unbuilt and still wanted
 - **`player_slot` and escalation.** `GreetingInterpret` has only a flat
   `player_room`; no `hard_attributes`, no `pronoun_tokens`, no conflict detection.
 - **Turn-0 greeting swipe** (`greeting_swipe`, `refresh_checkpoint(cid, 0)`).
-- **Two named invariant tests** — verbatim preservation and knowledge boundary —
-  do not exist.
+- **The verbatim-preservation invariant test.** The knowledge-boundary half of
+  this pair now exists and is stronger than the design asked for —
+  `tests/test_greeting_minds.py` pins the player-naming forced reveal in
+  every mind, the identity floor on a stranger start, and the refusal of
+  player affect/stances with the refusal made visible — but nothing asserts
+  that imported greeting prose reaches the page byte-for-byte.
 
 ### 6.4 Place purpose — [`DESIGN_PLACE_PURPOSE.md`](design/DESIGN_PLACE_PURPOSE.md)
 
@@ -4713,6 +4737,36 @@ window), which is right for a person's own skin and arguably wrong for blood
 somebody has just been drenched in — though that case is a substance and IS
 delivered.
 
+### 6.13 Paradox consequences — [`DESIGN_PARADOX_CONSEQUENCES.md`](design/DESIGN_PARADOX_CONSEQUENCES.md)
+
+All three decisions in that note are built (§1.59 deleted with them: the
+ceiling is terminal rather than a rung, the toll is a chosen mode rather than
+a rider on the default, and force restore rewrites the SCENE through
+`merge_scene_with_diff` and keeps the projection in step, which was audit
+WORLD-F7/F24/F33). Its §5 lists three things left open ON PURPOSE, recorded
+here so the register holds them rather than the note alone:
+
+- **A warden outlives the wound it guards.** `state["consumed"]["entities"]`
+  is written by nothing, so a hunter spawned at stage 1 remains after the
+  anchor is re-satisfied. Deliberate: the warden is an ordinary scene entity
+  and what becomes of a hunter whose wound closed is a Director/story
+  question, answerable with a plain `remove_entities`. If play shows a
+  lingering warden is always wrong, the fix is to record spawned entities in
+  `consumed.entities` and extend `_restore_consumed`.
+- **Cross-frame scenes.** `world_entities` has no frame partitioning, so a
+  force restore edits the operative frame's scene and the chat-wide
+  projection; another frame's blob holding the same entity is not edited.
+  The same Stage-3 boundary the whole subsystem lives inside.
+- **The toll has no restore path, on purpose.** Resolution stops further
+  decay; it does not refund confidence. A witness who faded while reality was
+  tearing does not un-fade because the tear closed — that irreversibility is
+  the mode's dramatic weight, and is exactly why the toll is opt-in.
+
+Still true, and the reason none of the above is urgent: **no live story has
+ever opened a paradox.** Re-measured read-only 2026-08-18 — one chat holds an
+empty `paradoxes` dict, one holds a `paradox_policy` byte-for-byte identical
+to the default triple, two hold fixed points, and zero wound markers exist
+anywhere in the `world` table.
 ## 7. Experiments not yet run
 
 Measurements the design notes name as the thing that would settle a question. An
