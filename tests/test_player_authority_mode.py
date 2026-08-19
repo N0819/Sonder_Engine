@@ -509,6 +509,29 @@ class TestTheHostControl:
         assert "/player_authority`)" in settings
         assert "authorityState.modes" in settings
 
+    def test_the_enforcer_reads_the_ladder_through_its_one_normalizer(self):
+        """`apply_player_authority` had its own second copy of the rule --
+        `str(mode or "world_author")` and a dict `.get` with the top rung as
+        the fallback -- so a stored mode in any other case or with stray
+        whitespace missed the table and silently granted the WHOLE ladder.
+
+        `normalize_player_authority` (story/scene.py) owns this vocabulary;
+        it is what `player_authority` runs on the stored mode and on every
+        history entry. One home, so tightening a story cannot be undone by a
+        spelling.
+        """
+        for spelling in ("Actor_Only", "ACTOR_ONLY", "  actor_only  "):
+            beat = _beat(own_effect=True)
+            records = apply_player_authority(beat, spelling, PLAYER)
+            assert [r["kind"] for r in records] == ["own_effect"], spelling
+
+    def test_an_unreadable_mode_still_falls_to_the_default(self):
+        """The fallback itself is unchanged and deliberate: an unreadable
+        level falls to the DEFAULT, never to the floor."""
+        beat = _beat(world=True)
+        assert apply_player_authority(beat, "hard mode", PLAYER) == []
+        assert apply_player_authority(_beat(world=True), None, PLAYER) == []
+
     def test_every_rung_has_a_label_in_the_menu(self):
         """A rung the engine serves and the menu cannot name renders as its raw
         storage key in a dropdown a player is meant to choose from."""
