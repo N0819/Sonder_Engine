@@ -87,14 +87,14 @@
 | `web/guest_access.py` | 355 |  | `core.db` |
 | `web/story_view.py` | 670 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
-| `world/background_claims.py` | 466 |  | `core.db` |
+| `world/background_claims.py` | 598 |  | `core.db` |
 | `world/comfort.py` | 306 |  | `world.spatial` |
 | `world/crowds.py` | 609 |  | `world.spatial_geometry` |
 | `world/degradation.py` | 171 |  | — |
-| `world/gaps.py` | 542 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
+| `world/gaps.py` | 454 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 608 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 310 |  | `world.spatial`, `world.spatial_frames` |
-| `world/offscreen.py` | 2125 |  | `core.logging_utils`, `llm.prompts` |
+| `world/offscreen.py` | 2139 |  | `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 489 |  | `core.db`, `core.frames`, `story.character_schema` |
 | `world/place_purpose.py` | 532 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/routines.py` | 200 |  | — |
@@ -114,7 +114,7 @@
 | `world/spatial_senses.py` | 1278 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_substance.py` | 602 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 421 |  | `world.spatial_barriers`, `world.spatial_identity` |
-| `world/subjects.py` | 449 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
+| `world/subjects.py` | 496 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 320 |  | `core.db` |
 | `world/weather.py` | 808 |  | `world.spatial` |
 
@@ -971,14 +971,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `settle_claims()` | 404 | 45 lines |
-| `_verdicts()` | 359 | 43 lines |
-| `novel_proper_nouns()` | 169 | 39 lines |
-| `_mint()` | 210 | 27 lines |
-| `prepare_canon()` | 332 | 25 lines |
-| `write_canon()` | 306 | 24 lines |
-| `canon_entry()` | 282 | 22 lines |
-| `_known_variants()` | 144 | 17 lines |
+| `_verdicts()` | 475 | 58 lines |
+| `settle_claims()` | 535 | 46 lines |
+| `canon_entry()` | 346 | 41 lines |
+| `novel_proper_nouns()` | 180 | 39 lines |
+| `prepare_canon()` | 415 | 32 lines |
+| `_mint()` | 221 | 29 lines |
+| `write_canon()` | 389 | 24 lines |
+| `_named_in_record()` | 449 | 24 lines |
 
 ### `world/comfort.py`
 
@@ -1020,14 +1020,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_skeleton()` | 147 | 175 lines |
-| `last_seen_update()` | 438 | 70 lines |
-| `gap_for()` | 378 | 54 lines |
-| `_medium_overlay()` | 328 | 48 lines |
-| `interim_for()` | 510 | 33 lines |
-| `_record()` | 79 | 22 lines |
-| `_derived_resolution()` | 109 | 22 lines |
-| `_subject_room()` | 133 | 12 lines |
+| `_skeleton()` | 128 | 175 lines |
+| `last_seen_update()` | 349 | 70 lines |
+| `gap_for()` | 305 | 38 lines |
+| `interim_for()` | 421 | 34 lines |
+| `_record()` | 86 | 20 lines |
+| `_subject_room()` | 114 | 12 lines |
+| `_read_key()` | 73 | 4 lines |
+| `_unavailable()` | 108 | 4 lines |
 
 ### `world/living_world.py`
 
@@ -1058,14 +1058,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `land_agent_tick()` | 1819 | 187 lines |
-| `schedule_agent_ticks()` | 2008 | 118 lines |
-| `schedule_profile_ticks()` | 1358 | 113 lines |
+| `land_agent_tick()` | 1833 | 187 lines |
+| `schedule_agent_ticks()` | 2022 | 118 lines |
+| `schedule_profile_ticks()` | 1357 | 113 lines |
 | `apply_plan_ops()` | 682 | 110 lines |
 | `advance_epoch()` | 927 | 98 lines |
-| `profile_summary_record()` | 1108 | 86 lines |
 | `advance_reactive_plans()` | 840 | 85 lines |
-| `agent_adjudication()` | 1724 | 70 lines |
+| `profile_summary_record()` | 1108 | 85 lines |
+| `agent_context()` | 1538 | 71 lines |
 
 ### `world/paradox.py`
 
@@ -1291,14 +1291,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_resolve_room()` | 248 | 47 lines |
-| `resolve_subject()` | 405 | 45 lines |
-| `_resolve_character()` | 166 | 32 lines |
-| `_lore_matches()` | 301 | 29 lines |
-| `_resolve_from_lore()` | 332 | 29 lines |
-| `_registry_room_matches()` | 221 | 25 lines |
-| `_cast_matches()` | 97 | 22 lines |
-| `_presence_reason()` | 142 | 22 lines |
+| `_resolve_room()` | 272 | 47 lines |
+| `resolve_subject()` | 429 | 45 lines |
+| `_resolve_character()` | 190 | 32 lines |
+| `_lore_matches()` | 325 | 29 lines |
+| `_resolve_from_lore()` | 356 | 29 lines |
+| `_registry_room_matches()` | 245 | 25 lines |
+| `_cast_matches()` | 121 | 22 lines |
+| `_presence_reason()` | 166 | 22 lines |
 
 ### `world/survival.py`
 
