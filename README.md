@@ -103,7 +103,7 @@ pip install -c constraints.txt -r requirements-dev.txt
 
 make check       # compile + regenerate the map + structure + full tests — run before calling a change done
 make check-fast  # the same, but only checks the map on disk is current instead of rewriting it
-make test-full   # every Python regression test (6329 tests, ~74s)
+make test-full   # every Python regression test (8217 tests, ~3m40s)
 make test-lf     # last-failed first, then the rest — the fix-verify loop
 make structure   # duplicate symbols, patch debris, stale map
 make map         # regenerate docs/CODE_MAP.md
@@ -115,33 +115,36 @@ make serve       # start the server with no watcher — for playing
 or leftover patch-debris markers as hard failures. Real-browser tests are
 optional (`make test-browser`); see [`docs/guides/TESTING.md`](docs/guides/TESTING.md).
 
-Run everything from the repository root — the app uses top-level imports such
-as `from db import q` and is not an installed package.
+Run everything from the repository root — the app uses absolute package
+imports such as `from core.db import q` and is not an installed package.
 
 ## Layout
 
 ```text
 agents/          pipeline stages (director, perception, character, narration,
                  background) plus runtime, plan building, and shared helpers
-app.py           FastAPI assembly, routes, streaming
-commit.py        the sole persistence boundary; validates before anything sticks
-db.py            SQLite schema, migrations, transactions
-schemas.py       model-output contracts       prompts.py    system prompts
-providers.py     LLM providers, streaming, retries, embeddings
 
-world            scene.py · spatial.py · spatial_frames.py ·
-                 spatial_orientation.py · mechanics.py · survival.py · comfort.py
-minds            character_schema.py · psychology_runtime.py (stress, pain and
-                 pleasure, absorption) · affect.py (mood, wants, intentions,
-                 projects) · theory_of_mind.py (belief) · memory.py (memory,
-                 lore, retrieval)
-services         auth_routes.py · guest_access.py · chat_archive.py ·
-                 checkpoints.py · pipeline_trace.py · importers.py
+core/            db, settings, jobs, pipeline context, install paths
+llm/             providers, streaming, retries, embeddings; model-output
+                 contracts (schemas.py) and system prompts (prompts.py)
+world/           scene, spatial (a facade over fourteen siblings), mechanics,
+                 survival, comfort, weather, offscreen life, paradox
+mind/            memory and retrieval, affect (mood, wants, intentions,
+                 projects), psychology_runtime (stress, pain, pleasure),
+                 theory_of_mind (belief)
+story/           character and persona schemas, attire, greetings, importers,
+                 crowds, couriers, artifacts
+dressing/        backdrops and ambience
+persist/         the sole persistence boundary — commit.py plus thirteen
+                 commit_* domains, checkpoints, chat archive, pipeline trace
+web/             FastAPI assembly, routes, streaming, auth
 
 static/          browser UI — browser globals, not ES modules; load order matters
-tests/           invariant and regression tests
+tests/           invariant and regression tests (505 files)
 docs/            architecture documentation
 tools/           maintenance scripts and experiment harnesses
+language_packs/  per-language prompts, linguistics and compositor tables
+extensions/      host-installed extensions; extension_runtime/ is their API
 ```
 
 ## Providers and data

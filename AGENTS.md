@@ -314,6 +314,25 @@ for the extension registry, not for this boundary.
 - A character deciding turn N never retrieves memories stamped turn N or later; `search_memories` hard-filters on `current_turn_idx` before ranking. Author-facing search routes deliberately omit it.
 - Dialogue memories store appearance labels for unrecognized speakers, not canonical names.
 
+
+**Gaps that are DELIBERATE, and each pinned by a test asserting the current
+behaviour.** Recorded here rather than in `docs/UNBUILT.md` (moved out of its
+§3.6 and §3.4 X9 on 2026-08-19) because a keep-list is an invariant, not
+unfinished work — nobody should "fix" one of these by accident.
+
+- **B1 (sound half) — opaque is not soundproof.** Containment gates sight and
+  scent, deliberately not sound.
+- **B2 — the comm/shape floor delivers across any barrier on
+  `intended_target`.** The residual risk lives in Director tagging, not here.
+- **F5 — `observable` falls back to the raw `attempt`.**
+- **X5 — the scene-manager `full`-mode `audience[name]="none"` annotation** is
+  an annotation on a shared context rather than structure. `ambient` correctly
+  refuses divergence.
+- **X9 — the host reads co-players' private thoughts.** Full step content
+  streams to the initiator (always the host) and is embedded in archives. Not a
+  code bug — the host is the trust root — but a PRODUCT boundary, stated so it
+  stays a decision rather than an accident.
+
 ### Authority boundaries
 
 - The player owns the declaration of player speech, thought, and attempted action.

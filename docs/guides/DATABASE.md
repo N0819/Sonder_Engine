@@ -179,3 +179,30 @@ rerolled.
 ## Runtime database selection
 
 `DB` defaults to `engine.db` and can be overridden with `ENGINE_DB` before importing `core/db.py`. Tests use `db.configure(path)` to switch connections safely.
+
+## A retired setting's row outlives its feature
+
+*(Moved out of `docs/UNBUILT.md` §1.51b on 2026-08-19. The entry's own verdict
+was "this is tidiness, not a defect"; what is worth keeping is the CLASS.)*
+
+Nothing prunes `settings` when a feature is deleted, so a retired key stays
+forever, and the only symptom is that a later reader greps the tree, finds
+nothing, greps the database, and finds a row. Measured on the owner's live
+install 2026-08-18, read-only: **four of 29 keys have no reader anywhere in the
+engine** — `director_orchestration` (the flag the orchestrated Director shipped
+behind), `character_reflection` (a feature built and then decided against; the
+work is intact on branch `character-cognition`), and `host_secret` /
+`host_secret_hash` (the auth scheme that preceded `host_pw_hash` /
+`host_pw_salt`). Checked because two of them are credentials: nothing sensitive
+is at rest — `host_secret` is empty and `host_secret_hash` is a 64-character
+digest, so `tests/test_host_secret_hashing.py`'s standing claim holds.
+
+**The class: a settings key is the one kind of configuration the engine cannot
+check.** `tools/project_check.py` reads the tree, and the tree is exactly where
+a retired key is absent. Anything that enforces this has to compare a list of
+live keys against a database, which means **the list has to exist first** — so
+adding a key means adding it to that list too, or the check can never be built.
+
+The repair is not free either: a migration deleting retired keys runs on the
+owner's database at next launch, which is their call to make, not a
+housekeeping commit's.

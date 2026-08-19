@@ -223,3 +223,21 @@ A town-scale fixture: 20 named rooms, 3 affordance sites (tavern, well, bed).
 Measure **beats from hunger onset to reaching food**, with and without
 `recalled_places`. The mechanism works if the number falls and the *route*
 still reads like a person walking rather than a solver.
+
+## `basis: "told"` has no PLACE-GRAPH writer, deliberately
+
+*(Moved from `docs/UNBUILT.md` §6.5 on 2026-08-19. Recorded because someone
+reading the node shape will otherwise assume hearsay EDGES exist.)*
+
+The distinction matters, because the affordance ledger one layer over does
+write `told`: `place_purpose` mirrors `stated_fact` hypotheses onto nodes
+resolved `by_name` as `{basis: "told", sureness, about, claim}`. Testimony can
+say what a place you already know is FOR; it cannot mint the place.
+
+The approved design derived hearsay EDGES from `stated_fact` place claims, and
+implementing it revealed that deriving *connectivity* from free text means
+text-mining it — the non-deterministic derivation this engine refuses
+everywhere else. `told` remains an accepted value on a graph node with no code
+path behind it. **A future testimony writer needs a structured claim field
+naming the two places and the direction, not a parser over prose.** This was
+the design document being wrong, not the implementation.

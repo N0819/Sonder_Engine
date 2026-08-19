@@ -239,8 +239,8 @@ no upwind/downwind, no scent trail left in a room a body has walked out of.
 Barriers grade reach and that is all: a smell is where its source is, at full
 strength or muffled through one edge. A trail — the tracking case, which is a
 genuinely good mechanic — needs a per-room decaying residue ledger and is a
-larger feature than this one; it is registered in `docs/UNBUILT.md` rather than
-half-implemented here.
+larger feature than this one; it is recorded here rather than half-implemented,
+and `docs/UNBUILT.md` §6.12 points at this list.
 
 **Multi-hop reach.** Hearing has `sound_walk_level` and a hop budget that the
 card's `range` extends. Scent does not walk: it is graded across ONE edge and
@@ -274,3 +274,12 @@ Tests: `tests/test_scent_ledgers.py` (the three carriers and their traps),
 `tests/test_scent_percept.py` (the percept and both renderers),
 `tests/test_scent_delivery.py` (grading, attribution, and both firewall
 questions), `tests/test_ambient_channel_scope.py` (the prompt/reader fold).
+
+**Undecided, and cheap to settle from the corpus once stories have smells in
+them:** whether a body should receive its OWN card scent. Currently it does not
+— habituation, and a standing fact true of every beat is noise in a context
+window — which is right for a person's own skin and arguably wrong for blood
+somebody has just been drenched in, though that case is a substance and IS
+delivered. *(Moved from `docs/UNBUILT.md` §6.12 on 2026-08-19; the other four
+open items in that entry were already this note's §6, so they were deleted
+rather than duplicated.)*

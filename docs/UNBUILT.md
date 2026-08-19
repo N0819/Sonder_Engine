@@ -57,6 +57,13 @@ Rules that keep it honest:
 Live bugs and unfinished corrections — places the engine is currently wrong,
 not places it is merely thin.
 
+**Rule 3 is overdue here, and this note is the debt.** §1.2, §1.3, §1.5, §1.13,
+§1.17, §1.19 and both surviving §1.24 bullets were all found at alpha 6.0–6.9;
+the tree is at alpha 9.6, so each has sat through ten-plus releases untouched.
+Rule 3 gives two answers and neither is "leave it here": promote it, or admit it
+is parked and move it to §8. Next reader to open this section owes one of those
+for each of the eight.
+
 ### 1.1a Conduct authority: what the guards still do not reach
 
 **Found:** landing the character-authority guards (chat 56 t1391). The defect
@@ -75,27 +82,20 @@ they fix is closed; these are the edges they deliberately do not cover.
   Blast radius is bounded the same way — one retry, kept only if it lowers the
   count — so a spurious flag costs a call and cannot corrupt the beat.
 
-- **Perception has no player-ACTION scrub, and its player-SPEECH scrub no
-  longer runs either.** Chat 56 t10's fabricated lever grip reached the
+- **Perception has no player-ACTION scrub, and the SPEECH scrub this entry
+  used to name is dead code.** Chat 56 t10's fabricated lever grip reached the
   player's view as "I grip the console edge" with nothing between the Director
   and the narrator, and the Director-side guard is still the only thing
-  standing there, so a fabrication that survives its one retry propagates.
-  What has changed is the shape of the gap, not its size. The scrub this entry
-  used to name as the mouth's protection,
-  `agents.common._scrub_undeclared_player_speech`, has **no production caller**
-  — it is imported by `agents/perception.py` and called nowhere, kept alive
-  only by tests and `tools/perception_quality.py`. Perception stopped needing
-  it when it stopped asking a model to write views: `_per_observer_model_views`
-  is gone (`tests/test_perception_has_no_model.py` pins its absence), the view
-  is realised from percepts, and undeclared player speech has no seam to enter
-  through. What survives is `_scrub_invented_dialogue` inside
-  `_composer_tripwires`, deliberately **warn-only** and correctly so — a line
-  in a composed view that does not match the delivered-line ground truth is an
-  ENGINE defect, and scrubbing it would hide the bug rather than the leak. So
-  the second independent floor this bullet used to ask for cannot be built the
-  way it described; a player-action check would have to sit where the
-  tripwires do, on the composed view, and it would be a defect detector rather
-  than a scrubber.
+  standing there. `common._scrub_undeclared_player_speech` has **no production
+  caller** (verified 2026-08-19: `agents/perception.py` imports it and calls it
+  nowhere; only tests and `tools/perception_quality.py` reach it), because
+  perception stopped asking a model to write views —
+  `tests/test_perception_has_no_model.py` pins that. So the second independent
+  floor this bullet used to ask for cannot be built the way it described: a
+  player-action check would sit where `_composer_tripwires` does, on the
+  composed view, and it would be a defect DETECTOR rather than a scrubber —
+  which is the right shape, since a fabricated act in a composed view is an
+  engine defect and scrubbing it would hide the bug instead of the leak.
 
 - **A character who declared a non-locomotive act is guarded only against
   MOVEMENT.** Handing something over, drawing a weapon, striking — additions
@@ -113,19 +113,8 @@ they fix is closed; these are the edges they deliberately do not cover.
   survive; the speech check catches them only if an attribution verb is
   present.
 
-- **The locomotion verb list is unproven in live play.** It was tuned against
-  one live resolved_event and the existing suite, and it includes posture
-  verbs that double as ordinary elaboration — "leans in", "settles". A
-  character who declared a non-locomotive act and is then written as leaning
-  toward someone will fire a correction retry. That is the intended reading
-  (leaning in IS a distance change, and distance is the character's to
-  declare), but it is a judgement call made on one example, and the honest
-  status is that the false-positive rate is unmeasured. The blast radius is
-  bounded — one retry, kept only if it lowers the violation count, so a
-  spurious flag costs a call and cannot corrupt the beat — but if it proves
-  noisy the fix is to drop the posture verbs, not to widen the window.
-
 - **All of it is prose matching**, with everything §3.1 says about that.
+
 
 ### 1.2 Nothing validates the geometry of an asserted doorway
 
@@ -161,14 +150,22 @@ not currently computable. Fix the source and the better rule becomes available.
 ### 1.5 A character cannot revise a bearing they learned wrong
 
 `disproven` fires when a doorway fails to exist. Nothing fires when a doorway
-exists but the character remembers the wrong heading for it. After a bearing
-corruption was fixed in the world, one character kept oscillating in exactly the
-pockets whose bearings had been wrong while he learned them — the world was
-corrected, his map of it was not.
+exists but the character remembers the wrong HEADING for it. After a bearing
+corruption was fixed in the world, one character kept oscillating in exactly
+the pockets whose bearings had been wrong while he learned them.
 
-Related to the broader gap: a character can revise a belief about the world and
-has almost no mechanism for revising a belief about themselves. Project
-displacement is currently the only one.
+**Narrowed 2026-08-19, and it is a smaller entry than it read.** The place
+graph is not the store holding the stale heading: `_confirm` overwrites
+`rec["bearing"]` on every re-standing (`persist/commit_place_graph.py`), so a
+walked doorway self-corrects at the next visit. What has no retraction path is
+the LEARNED ASSOCIATION — `mind/psychology_runtime.py` weakens a belief only
+when something disputes it, and nothing ever disputes a heading. Fix it there
+or nowhere.
+
+Related, and wider: a character can revise a belief about the world and has
+almost no mechanism for revising a belief about themselves. Project
+displacement is the only one.
+
 
 ### 1.6 See-through barriers mint walkable edges
 
@@ -212,51 +209,27 @@ simply re-enter through the merge.
 
 ### 1.7 JSON validation stalls cost beats
 
-Six-plus across one experiment arm: `mind_model_updates` missing required
-fields, `sequence` emitted as a non-list, occasionally prose instead of JSON.
-Model-side, and the harness skips the beat and continues — but each one is a lost
-turn, and in a story it would be a character who simply did nothing.
+A model answering with a shape the schema does not admit costs the whole beat:
+in a story it is a character who simply did nothing. Six-plus across one
+experiment arm, then twice in eleven live turns on 2026-07-30.
 
-The character step already has a bounded decision-continuity review combining
-verbatim repetition, potential semantic-move repetition, and spent-intention
-use (`agents/character.py`); it is still not the schema-failure repair path.
-Worth deciding whether another bounded retry belongs there too.
+**Every shape measured has been closed** — a `sequence` of bare sentences
+(`_sequence_event_from_prose` reads such an entry as an ACTION unless the whole
+string is a quotation, the safe reading rather than the likely one: typing
+prose as speech would author an utterance AND transmit it to everyone in
+earshot), the whole answer wrapped in one key of the model's own
+(`_unwrap_envelope`), a staged lore `content` that was an object, and a
+condition written as its own description. `_name_what_was_discarded` names what
+was dropped for whatever still cannot be read, and the character step does have
+a bounded schema-repair path (`agents/character.py` → `agents/common.py` →
+`llm/llm_quality.complete_validated_json`).
 
-Measured again on a three-turn live run, 2026-07-30, and closed for the shape
-that caused it: `preprocess_llm_output` dropped any `sequence` element that
-was not a dict, so a model answering with a list of *sentences* — `["Kess
-turns to the customs clerk and asks him to witness the sale."]` — arrived at
-validation with an empty sequence and failed "sequence is empty despite
-nonempty player input". Repair and every fallback ran against that message,
-which was false, and the turn died. Twice in eleven live turns, on two
-different scenarios, identically on both Pydantic majors.
+**What remains open is the mixed sentence.** `Says, "Nobody leaves this room."`
+keeps every word in its attempt text and is typed as an act, so a character in
+the room may not receive it through the dialogue channel. Pinned as intended at
+`tests/test_schema_leniency.py`. Deciding it needs the hearing path looked at,
+not a better regex.
 
-`_sequence_event_from_prose` now reads such an entry as an ACTION unless the
-whole string is a quotation, and `_name_what_was_discarded` names what was
-dropped for whatever still cannot be read. The action default is the safe
-reading rather than the likely one: typing prose as speech would author an
-utterance AND transmit it to everyone in earshot, while typing speech as an
-action under-informs the room. **What remains open is the mixed sentence** —
-`Says, "Nobody leaves this room."` keeps every word in its attempt text but
-is typed as an act, so a character in the room may not receive it through
-the dialogue channel. Deciding that needs the hearing path looked at, not a
-better regex.
-
-A fourth shape cost a turn the same way and is closed the same way: the whole
-answer wrapped in one key of the model's own (`{"the_director_outputs":
-{...}}`), every declared field present and correct one level too deep. The
-step failed as "rooms is empty; positions is empty" — a model that answered
-nothing, when it had answered everything — and the repair prompt inherited
-that false complaint. `_unwrap_envelope` opens it only when the single key is
-not itself a field and what is inside is recognised.
-
-Two other shapes cost turns on the same run and are also closed, both
-non-divergent across majors and both the same mistake one layer down: a
-staged lore entry whose `content` was an object (`_room_notes_from_lore` did
-`content[:600]` on a dict and killed the turn), and a condition written as
-its own description, `{"generator_fuel": ["The generator is running low..."]}`
-against `dict[str, list[dict]]`. Neither is exotic; both are what a model
-does when the field name reads like an invitation to prose.
 
 ### 1.8 Promotion seeds are minted from the objective event (P5)
 
@@ -269,337 +242,85 @@ holding entitled information tagged as though they had seen it.
 The widest surviving instance of "the omniscient record re-enters a later
 context".
 
-### 1.10 Entity `state` staleness is instrumented, not fixed (S3-A8)
+### 1.10 An entity's free-text `state` never ages, and a mind reads its own stale copy (S3-A8)
+
+*(Absorbs §1.24's byte-identical bullet and §3.9's ageing bullet, 2026-08-19.
+It was one defect written three times in three sections, which is most of why
+it read as three small things.)*
 
 Nothing reconciles an entity's free-text `state` / `description` against the
-beat's resolution. An earlier "skip the update" fix was **reverted** as durable
-corruption; `persist/commit.py` now only emits a `"possible stale clause (S3-A8)"`
-warning and commits the blob anyway. `tests/test_pipeline_audit_leak_gaps.py`
-pins this deliberately as *a signal, not a fix*. Root cause — free-text state
-blobs with omission-only reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
+beat's resolution, and nothing retires a key the beat did not touch. A body's
+`posture` / `activity` / `held_items` blob is overwritten only when a model
+happens to rewrite it; `"breath": "caught"` and
+`"voice_quality": "held_breath_steadying"` persist verbatim until it does.
+`contacts` was the worst case and was fixed at the source — this is the rest of
+the same disease.
+
+**It is a READ-BACK LOOP, which is what makes it the worst thing on this list.**
+`agents/perception.py` composes `composer.body_state_percept(entity_state)`
+(`posture`, `activity`, `held_items`, channel `interoception`, source "you"), so
+a stale blob is not merely bad prose: it is what the mind believes about its own
+body, and it feeds the next declaration and the memory of the beat. A mind that
+lowered its wrench still reads *"raised to chest level, aimed forward into the
+dark"* as what it is doing now.
+
+**Measured 2026-08-19.** The engine's own detector fires on **62 of 306
+instrumented commits (20.3%), 122 instances** — subjects overwhelmingly the cast
+mirrored as scene entities (Hinami 44, Tamamo 32, The Doctor 25). Of 599
+`world_entities` rows, 408 (68.1%) carry a non-empty `state` dict; walking every
+checkpoint in `chat_id, turn_idx` order and hashing each entity's `state` gives
+**2,074 unchanged runs across 425 (chat, entity) pairs — median 1 turn, p90 14,
+max 138, and 172 pairs hold a run of ≥15 turns byte-identical.**
+
+An earlier "skip the update" fix was **reverted** as durable corruption;
+`persist/commit_entities.py` now warns `"possible stale clause (S3-A8)"` and
+commits the blob anyway, pinned deliberately by
+`tests/test_pipeline_audit_leak_gaps.py` as *a signal, not a fix*. **The
+reverted fix is the record of what not to do.** What this wants is an
+ageing/reconciliation rule for free-text state keys, not another guard. No
+schema change. Root cause — free-text state blobs with omission-only
+reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
+
 
 ### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 
-**Mostly landed, alpha 6.9.** Every warning is now tagged with the step that
-raised it (`pipeline_context.StepTaggedWarnings`, keyed off a contextvar set in
-`compute_step`) and persisted onto that step's saved content under
-`_engine_notes`, which the pipeline drawer renders above the step. The
-tagging lives in the list rather than at the ~40 call sites so that both
-spellings — `ctx.warnings.append` and `ctx.add_warning` — are caught, including
-ones not written yet.
+**Landed, alpha 6.9**, except for an aggregate reader. Every warning is tagged
+with the step that raised it (`pipeline_context.StepTaggedWarnings`, keyed off a
+contextvar set in `compute_step`), persisted onto that step's saved content
+under `_engine_notes`, and rendered above the step in the pipeline drawer
+(`static/js/chat.js`). The tagging lives in the list rather than at the ~40 call
+sites, so both spellings are caught including ones not written yet.
 
-What made this worth landing is on the record: perception dropped both sight
-sentences out of a character's view of an embrace happening six feet in front
-of him (chat 38, turn idx 140), warned about it twice, and the warnings went
-nowhere. What survived into his memory of that beat was a sound.
+Why it was worth landing, on the record: perception dropped both sight sentences
+out of a character's view of an embrace happening six feet in front of him (chat
+38, turn idx 140), warned about it twice, and the warnings went nowhere. What
+survived into his memory of that beat was a sound.
 
-What remains: the channel is still developer-facing, visible only to somebody
-who opens the drawer on a specific turn. There is no aggregate view — no way to
-ask "which turns in this story had a view repaired", which is the question that
-would have caught the above six turns earlier than it was caught. A warning
-during a run also still passes silently; only the persisted record shows it.
-
-### 1.11a `flow.reactors` answers two different questions
-
-`perception_act`'s perceiver list **is** `flow.reactors`: pass 1 iterates the
-cast and `continue`s on anyone not in it, with no spatial or sensory reasoning
-of its own. So one field decides both *who legitimately perceived the act* — a
-perception question, answerable from the scene — and *who may respond to it* — a
-pacing question that is the Director's to judge. Every other layer of this
-engine keeps those apart.
-
-The consequence is that a present, awake, watching character omitted from
-`reactors` perceives the onset never. Their entire account of the beat is
-`perception_outcome`, and they take no part in it. Rerolling perception cannot
-change this; only `director_interpret` can.
-
-Measured on the stored corpus, using the engine's own answer for who was
-present (who received an outcome view): **435 of 551 beats with two or more
-character witnesses had at least one witness missing from `reactors`** — 79%.
-Live in chat 38: t121–t127 ran seven consecutive beats with two witnesses and
-neither in `reactors`; at t140 the Doctor stood at the genkan watching an
-embrace the resolved event says he watched with bright interest, was not a
-reactor, and did nothing. Two independent rerolls of `director_interpret`
-produced the same set both times, so it is not sampling noise.
-
-Alpha 6.9 sharpened the prompt clause — it now says reactors is permission
-to respond rather than a requirement, explicitly not "who was addressed", and
-cites the 79%. Confirmed in conduct on the beat that prompted it: chat 38 t140
-re-interpreted to `reactors: [35, 41]` and `perception_act` built views for
-both. Still only one beat; re-measure the query above before believing the
-rate moved.
-
-**Widening `reactors` immediately exposed a second, larger defect downstream**
-— being a reactor did not mean getting a character step. See §1.11b.
-
-The structural fix is to separate the two fields — an onset audience derived
-from the scene, and a reactor set the Director chooses from it — which is not
-done. Cost is the reason to think before doing it: every added reactor is a
-character-step LLM call, and widening it wholesale would make crowded scenes
-both expensive and chattier than anyone asked for.
-
-### 1.11b Reactors stranded by another character's touch — FIXED, alpha 6.9
-
-Kept as a record because the shape recurs. The interaction loop's early exits
-end the BEAT, and the commonest of them (`_requires_director_resolution`) fires
-on any declared act carrying a target — a hug returned, a hand on a shoulder, a
-glance answered. The addressed character is deliberately queued first, so the
-ordinary shape was: the addressed character touches somebody, the loop breaks,
-every other reactor is never called.
-
-Measured before the fix: **153 of 196 beats with two or more reactors left at
-least one reactor never called at all**; 106 of those stopped on that one exit.
-
-A character who never ran has no appraisal, hence no `goal_impacts`, hence no
-drive strain from a beat aimed at them; no psychology commit; and no memory of
-having chosen to stay quiet — while the narrator, seeing nothing, is free to
-render the absence as a deliberate silence nobody chose. `_defer_to_focus`
-already patched exactly this for `tom_triggers` characters; this was the
-general case it had been a special case of.
-
-Fixed by reading `initial_parallel_reactors`, which had been sitting in
-`DEFAULT_INTERACTION_CONFIG` unread: the first wave of reactors is simultaneous
-IN THE FICTION — everyone is answering the player's already-fixed declaration
-and none has seen another's response, because none exists yet — so the wave
-declares blind and micro-perception is delivered only once every member is
-done. Exits are evaluated for the wave as a whole. After the wave, one speaker
-at a time, unchanged, because a character replying to another character really
-is responding to something they just heard. Parallel in the fiction, not in
-execution: `character_step` writes through `ctx`, so threading it would race.
-
-The residual is §1.11a above: the two questions are still one field.
-
-### 1.11c Lore names people it has no business naming — FIXED, alpha 6.9
-
-`knowledge_for_character` gates WHICH lore entries reach a mind, by knowledge
-tag and range. Nothing gated who those entries were allowed to NAME, and the
-mapping stage writes lore during play using canonical names — so an entry
-written from a beat one character stood in arrives, at another character, fully
-identified.
-
-Live (chat 38, t140). Tamamo had met the Doctor one beat earlier and her
-`known` ledger was empty. Every prose surface agreed on what she could call
-him — her view, `ahead_entity`, her micro-perception deliveries all said "the
-lean energetic man" — and `world_knowledge` handed her an entry opening "As The
-Doctor and Hinami walk deeper into the Deck 14 corridor". A starship corridor,
-delivered into a Kyoto shrine. She addressed him as "Doctor" in the same beat
-and wrote "the lean energetic man now identified as Doctor" into her own
-active concerns, where it persisted.
-
-Corpus: 65 lore entries across 22 chats name a cast member; 16 written during
-play.
-
-Fixed with the identity floor that already existed one field away.
-`agents/common.observer_name_scrub` is `observer_label_fn` for a paragraph
-rather than a single name — same `known` map, same `_unknown_actor_label` — and
-`scrub_names_deep` walks the payload so `content`, `title` and `keys` are all
-covered. The player is gated like any other body, since play-written lore names
-them more than anyone. Whole-word and alias-aware, longest form first. Quoted
-spans are deliberately NOT exempt the way perception exempts them: a lore entry
-is not a transcript, and prose quoting somebody naming a person still tells the
-reader who they are.
-
-**The shape, not the instance, is the finding.** Perception scrubs prose per
-observer; every OTHER payload that hands a mind somebody else's words is a
-place this can recur. `ahead_entity` was the first (alpha 6.7), this is the
-second. Nothing systematically enumerates the rest.
-
-### 1.11d A heard line could be delivered and then scrubbed away — FIXED, alpha 6.9
-
-`perception_outcome` injects each audible line into a view, and THEN runs four
-passes that remove text: the identity floor, the player-speech scrub, the
-invented-dialogue scrub, and a sentence dedupe. Each is right on its own; none
-knows a line the hearing gate already granted might be inside what it takes,
-and nothing re-checked afterwards.
-
-Live (chat 38, t137): the Doctor walked beside the player and spoke four times
-— `normal` volume, same room, open barrier, nothing concealed. Her view ends
-`"...as we scan the mist-shrouded surroundings together. Yeah, I bet I will.\""`
-— an orphaned tail with a closing quote and no opening, which is the signature
-of a partial quoted span removed from the middle of a delivered line. The other
-three lines are absent entirely.
-
-Measured against each turn's own checkpoint positions, so earshot is not
-guesswork: **30 of 1549 lines spoken by somebody standing in the player's own
-room never reached the player's view** (1.9%), across seven chats.
-
-Nothing downstream could catch it: the narrator's dialogue-fidelity check
-compares the PROSE against the VIEW, so a line already lost from the view is
-one the check agrees is not missing. A guard built for this exact failure one
-stage later was no help at all.
-
-Fixed with a floor at the end of the per-perceiver loop — every line the gate
-delivered at `full` clarity is re-checked after the scrub chain and re-injected
-if gone, reporting each restoration. Re-injection is safe by construction: the
-bodies come from the Director's `dialogue_log` and passed that perceiver's own
-hearing gate, which is what the scrubs exist to distinguish from.
-
-**Residual: the floor compensates, it does not diagnose.** Which of the four
-passes ate the line is still unidentified — the warning now says a restoration
-happened, not who caused it, and the pre-scrub view is not persisted. The
-orphaned-quote signature suggests a quoted-span scrub taking a partial span,
-but that is inference from the wreckage rather than a traced cause.
-
-A separate, smaller finding from the same sweep: **17 lines that DID reach the
-player's view were never rendered into prose**, all in July turns, none since
-the narrator's dialogue-fidelity check landed (0 in 241 August lines). The drop
-rate scaled with how many people spoke in the beat — 0.5% at one speaker, 3.0%
-at two, 10.3% at three — which is the shape to re-measure if it returns.
-
-### 1.11e Two speakers welded into one quoted span — FIXED, alpha 6.9
-
-DIALOGUE FIDELITY asks whether each line SURVIVED into the prose. It cannot ask
-whether the line ended up in the right person's mouth, and both questions have
-the same answer when two speakers' lines are merged into one quoted span: every
-body is present verbatim, so the check passes while the reader is told the
-wrong character said half of it.
-
-Live (chat 38, t140). The view had them properly separated, one attributed
-clause each — `... says: "Be at ease, both of you."` then `The Doctor says:
-"Tamamo. A pleasure."` — and the prose rendered `"Be at ease, both of you.
-Tamamo. A pleasure." The Doctor's voice carries clean across the clearing`.
-Also t39 of the same chat, where the whole of Guinan's line was absorbed into
-the Doctor's.
-
-Swept across the corpus: 5 stored instances (t39 recurs in four branch
-descendants of one beat), 2 distinct beats, out of 1082 multi-speaker beats.
-Rare — but the exposure is rising, because the interaction loop's first wave
-(§1.11b) makes two-speaker beats far more common than they were.
-
-Fixed by a new fidelity check reading `event_order`, which is already gated to
-lines that reached the player's view, so prose that rightly omits an unheard
-line cannot be accused of merging it. Bodies under 15 characters are ignored:
-a short line can sit inside a longer one by coincidence and a false positive
-costs a rewrite. Added to `_ENFORCEABLE_PREFIXES`, so the existing repair loop
-rewrites rather than merely warning. Zero false positives across the 1082
-beats.
-
-### 1.11f A nod ended the beat — FIXED, alpha 6.9.1
-
-`_requires_director_resolution` ends the BEAT in `interaction_loop`, so its bar
-should be "nobody can sensibly respond until the world says what happened". It
-was instead "this act involves another person": any action with a non-empty
-`targets` list.
-
-In a conversation every piece of ordinary body language is aimed at whoever you
-are talking to. Live, chat 38 t144–t147 — the player deliberately stayed silent
-for four consecutive turns to let two characters talk — and all four ended after
-a single exchange, on "offering a small nod of acknowledgment to Tamamo",
-"pivots one golden ear toward the Doctor", "shifts gaze fully to the Doctor",
-"remains motionless with steady gaze on Tamamo". Nobody can contest a nod.
-
-Corpus-wide: **1002 of 1439 character-declared actions were asserted, immediate
-and targeted** — 70% of everything a character does was ending the beat. Every
-character action in the corpus carries `stage: "immediate"` and no effects, so
-those fields cannot discriminate; `commitment` can, and it is the Director's own
-answer to this exact question. Only 82 of the 1439 are `contestable`, and they
-read like it: "Tightens grip on the caught prey's shoulder, wrenching upward",
-"Closes the 1.5-meter gap in two quick steps".
-
-Now gated on `commitment == "contestable"`, with the conflict-verb list kept as
-a backstop under a mislabelled commitment — it also covers movement
-(`leave`/`enter`), which needs resolution however confidently it is declared.
-Re-classified against the stored corpus: 858 declarations no longer end the
-beat, 177 still do, and 8 newly do (six are movement, correctly).
-
-**This is a large pacing change and it is unverified in play.** The measurement
-says which declarations change class; it cannot say whether the resulting
-conversations are better. Watch for the opposite failure — beats that run on
-past their natural end — and note that `max_micro_rounds` (4 at autonomy 50) is
-now the thing actually bounding an exchange rather than the first targeted
-gesture.
-
-### 1.11g Nobody knew they had been asked something — FIXED, alpha 6.9.1
-
-`interaction.expects_response` is written on every character result and was
-consumed in exactly one place: `_recent_self_moves`, as `expected_answer`,
-which tells a character *I* asked something. Nothing told a character that
-somebody had asked *them*.
-
-Live, chat 38 t144–t147 — the player stayed silent for four turns so two
-characters could talk. Tamamo put a direct request to the Doctor on three
-consecutive beats; on the last two he said nothing at all. Nothing about his
-reasoning is broken: he KNEW about the question (it is in his
-`observations_used`, recalled from memory), weighed answering, and rejected it
-at inhibition 0.4 against "shrine etiquette favors waiting rather than filling
-silence", selecting "remain silent and observant to give Tamamo room to
-respond". Both were waiting for the other, and she filled the gap with more
-questions and by turning back to the player who had deliberately stepped out.
-
-Three fixes, all from records the engine already had:
-
-- `decision.awaiting_your_answer` {from, asked, turns_ago} when a character was
-  addressed with `expects_response` and has not spoken since — and when the
-  PLAYER asked them, which is the larger half and the one a character-result
-  path can never see, since the player has no `interaction` block. That case
-  reads `flow.addressed_to` (where "who did the player mean" is already
-  decided) and does use the question mark, because there is no
-  `expects_response` on a player declaration and inventing one would mean
-  guessing at intent the Director never recorded. 809 beats in the corpus carry
-  player speech aimed at a named character; 363 contain a question. Deliberately not
-  keyed on a question mark: every ask in the live case was an imperative
-  ("describe its dimensional nature in your own terms", "Name one way its
-  dimensions interface with established boundaries") and punctuation would have
-  missed all of them. Reaches back three beats only; an ask nobody has picked
-  up in longer has been dropped by the scene. The prompt is explicit that
-  refusing, deflecting or declining are answers — what is not permitted is
-  failing to notice.
-- `decision.player_quiet_for_beats` once the player's silence has lasted more
-  than one beat, because one is not the same event as four. One quiet beat is
-  something they just did mid-exchange; several is somebody who has stepped
-  back to watch, and reading it afresh each beat is what produced "Hinami, you
-  have gone quiet after such proud words" and "Hinami, your presence here is a
-  quiet joy".
-- Whoever owes an answer is queued FIRST in `interaction_loop`, ahead even of
-  direct address. Order had fallen back to cast-registration once the player
-  went quiet, so the Doctor opened every beat — speaking before Tamamo asked,
-  so his line could never be the answer.
-
-The ordering is derived rather than declared. A Director field stating "A asked
-B" was considered and rejected: the Director cannot see this better than the
-record can, since `expects_response` and `addresses` are already written by the
-character who asked, and a second spelling of one fact drifts and then
-disagrees.
-
-**Unverified in play**, like §1.11f which it sits beside. The mechanism is
-measured against the stored turns — the two ignored requests are surfaced
-correctly, and the ordering flips — but whether the resulting conversation
-reads better has not been observed.
-
-### 1.11h The person being answered was inside the blind wave — FIXED, alpha 6.9.1
-
-The first wave (§1.11b) rests on a claim: its members are answering the same
-thing and none has seen another's response, because none exists yet. That holds
-when everyone is reacting to the PLAYER. It is false when one member is
-answering another — the answer is FOR the asker, who is the addressee rather
-than a bystander, and the question they are owed an answer to already exists
-from the previous beat.
-
-Live, chat 59 t146, one beat after §1.11g shipped. The Doctor owed Tamamo an
-answer and was correctly queued first, but she was in the same blind instant.
-Her present evidence was "dim light... gravel... Hinami stands perfectly still"
-— his answer nowhere in it — and she selected "rephrase the dimensional
-question freshly to the Doctor". Given a second round she then heard him and
-acknowledged by restating his own terms back. On the page: an answer, then the
-question it had just answered, then the answer read back to the person who gave
+**Residual, and it is a roadmap wish rather than a defect:** there is no
+aggregate view — no way to ask "which turns in this story had a view repaired",
+which is the question that would have caught those six turns earlier. A warning
+during a live run also still passes silently; only the persisted record shows
 it.
 
-Neither mind misbehaved. Both acted correctly on the information they had, and
-the information was wrong by construction.
 
-The asker now steps out of the first wave and speaks in the next round, having
-actually heard the answer. They keep their place at the front of the queue, so
-nobody loses a turn — the order changes. Mutual debt (each owing the other)
-would defer everyone and stall the beat, so the queue order breaks that tie.
+### 1.11a Pacing still decides who may ANSWER, and that half is unmeasured
 
-One thing this exposed: `_next_speaker_candidates` looks for somebody NEW to
-bring in, and "no eligible respondent" ended the beat without checking whether
-the queue still held anyone. That would have dropped the deferred asker
-entirely — the same stranding the wave exists to prevent, one round later.
+**The perception half landed 2026-08-19.** `perception_act` builds a perceiver
+for every cast body the scene places somewhere (`_present_cast_bodies`), not
+only for `flow.reactors`. Being in the room is what decides whether you saw it.
+Free: perception makes no model call, and `agents/loops.py` reads
+`flow.reactors` for itself, so who speaks and what the beat costs are unchanged.
+Measured before: a witness was missing from `reactors` in 757 of 975
+multi-witness beats (77.6%), and 1,639 of 4,292 character-presences (38.2%) got
+no act view at all.
 
-**Still unverified in play**, like §1.11f and §1.11g. The wave shipped hours
-before this was found, so chat 59 is very nearly the entire corpus for it: this
-is one clear case reasoned from mechanism, not a rate.
+What stays open is the half the Director legitimately owns. `flow.reactors` is
+a pacing judgement — who speaks this beat — and its quality is still unmeasured:
+nothing checks that the people it picks are the people a reader would expect to
+answer, and the prompt sharpening in alpha 6.9 moved the perception number
+without anyone establishing what the pacing number should be. A beat where the
+addressed party is left out is now a pacing defect only, which is the right
+shape for it, and it is the one worth measuring next.
 
 ### 1.11i The engine spoke for a silent player — FIXED, alpha 6.9.2
 
@@ -664,11 +385,15 @@ Not defects yet. Each is a measured shape that will become one silently.
   sustained or as stuck.
 - **`circling` fires on routine movement in familiar space.** Honest for a maze;
   likely wrong for a resident crossing their own home several times in a scene.
-- **Nine payload keys is an attention budget.** `projects`, `en_route`,
+- **Nine payload markers is an attention budget.** `projects`, `en_route`,
   `adrift`, `ends_in`, `ground_fully_known`, `goal_reached`/`goal_held`,
   `fading`, `project_review`. Each is something a model must notice and act on,
-  and attention is finite — at some point adding the tenth marker makes the ninth
-  less likely to be read.
+  and attention is finite — at some point adding the tenth marker makes the
+  ninth less likely to be read. Re-checked 2026-08-19: the LIST has not grown,
+  but the markers have grown sub-keys (`closer_than_last_room` /
+  `further_than_last_room` inside `en_route`, `beats_since_new_ground` beside
+  `ground_fully_known`), so the budget is being spent without the count
+  changing. Count what a model must READ, not what the payload is keyed by.
 - **The place graph's distinct contribution is narrower than proposed.** With
   pruning gone, unpruned `known_exits` + `known_dead_ends` carry most of the
   routing information by themselves; the graph's remaining unique contributions
@@ -678,43 +403,29 @@ Not defects yet. Each is a measured shape that will become one silently.
   exist — but two representations of one fact is the shape that produced
   `rekey_place_claims` and `reconcile_inference_confidence`. **If a third
   consumer appears, collapse them** — and one has arrived to be judged:
-  `world/place_purpose.py` reads `state["place_graph"]` directly, for the `affords`
-  ledger rather than for routing. Whether an affordance reader counts is the
-  judgement this bullet exists to force; it is a second MODULE on the graph
-  either way, which is the condition, not the intent.
-- **The observation text repeats the view and cannot be trimmed away.** Each
-  atom's `observed.text` is a span of the same scrubbed prose the character
-  already has in `perception.view` — measured on chat 72, 737 B of atom text
-  against a 757 B view, 97% byte-identical. Shortening it to an opening-words
-  locator was built, measured and **reverted**: a rendered atom is front-loaded
-  with its attribution, so an eight-word window spends itself on
-  `Hinami says in a nostalgic voice:` and cuts the clause that carried the beat
-  (`"He never saw my ears or tails."` arrived as `"He never ..."`). The
-  duplication is the price of the atom being *addressable* — `present_evidence_used`
-  cites it, and the model paraphrases it into `fact`. Any future attempt must
-  keep the content and drop the frame, not the reverse, and must be measured
-  against `tools/benchmark_memory_temporal.py --case anomaly_now --case boundary`
-  before it ships. ~464 B per character per beat; the smallest item in the
-  payload and the only one with a proven mechanism of harm.
-- **A gist reads like a conclusion — the fidelity ladder is BUILT, MEASURED and
-  NOT SHIPPED.** Delivering the far half of the recall slate as its gist alone
-  is psychologically right and costs nothing in content: gists of the target
-  memories carry 100% of the scored term groups the details do, and the
-  benchmark's content checks were 20/20 in both arms. It still regressed, and
-  not where anyone was watching. With half the slate condensed, the character
-  stopped consulting the PRESENT: asked "the anomaly is flaring right now,
-  isn't it?", the arm with the ladder cited a present observation 14/30 against
-  25/30 without it (Fisher p≈0.006), answering a question about now entirely
-  from memory. The mechanism is that a full episode is discursive and obviously
-  past, while a one-line gist is answer-shaped — so condensed memory
-  out-competes a prose view for a question the view should have owned. Worth
-  ~3.3 KB per character per beat (−11% of the memory context). Any retry must
-  restore the present lane's weight FIRST and prove it on `--case anomaly_now
-  --repeats 20`; keying the ladder better will not help, because the ladder's
-  key is not what fails. Two keys were tested and both are unusable anyway:
-  retrieval rank puts the row a question actually needed at rank ≥10 a third of
-  the time (88 scored retrievals), and `importance` does not separate at all
-  (median 0.69 on needed rows against 0.68 on the rest of the bank).
+  `world/place_purpose.py` reads `state["place_graph"]` directly, for the
+  `affords` ledger rather than for routing. **The condition has now FIRED and
+  this is a decision that is due, not a watch item**: verified 2026-08-19, the
+  graph has three module-level readers outside its own writer —
+  `agents/character.py`, `world/place_purpose.py` and `persist/commit_memory.py`.
+  Collapse them or state why three is the stable number.
+- **The locomotion verb list is unproven in live play.** It was tuned against
+  one live `resolved_event` and the existing suite, and it includes posture
+  verbs that double as ordinary elaboration — "leans in", "settles". A character
+  who declared a non-locomotive act and is then written as leaning toward
+  someone fires a correction retry. That is the intended reading (leaning in IS
+  a distance change, and distance is the character's to declare), but it is a
+  judgement call made on one example and the false-positive rate is
+  **unmeasured**. Blast radius is bounded — one retry, kept only if it lowers
+  the violation count, so a spurious flag costs a call and cannot corrupt the
+  beat. If it proves noisy the fix is to drop the posture verbs, not to widen
+  the window. *(Moved from §1.1a, 2026-08-19.)*
+
+*(Two further bullets — observation-text duplication and the gist ladder — were
+recorded negative results with retry protocols rather than watch items, and
+moved to [`experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md)
+§5 on 2026-08-19. Neither may be retried without the protocol stated there.)*
+
 
 ### 1.13 `ActionStage` is classified and the resolve path never reads it
 
@@ -747,118 +458,6 @@ Two things follow, neither done:
   "not landed" will be wrong most of the time. What is missing is the
   distinction between an act that continues and an act that has not yet
   completed, and the schema does not carry it.
-
-### 1.14 A resolve-asserted position has no authority check
-
-`director_resolve`'s passable-route backstop guards `state_diff.positions` only
-when interpret DECLARED a movement (`if isinstance(mv, dict) and
-mv.get("to_room")`). When it declares none, the resolve's own position
-assertion reaches commit with no route check, no adjacency check and no
-authority check — it can put the player anywhere in the graph. Live corpus: 13
-beats where the resolve moved the player with no declared movement, of which
-several are legitimate (being carried, an asserted crossing the interpret did
-not model) and several are not.
-
-The honest rule is not obvious, which is why this is a register entry rather
-than a guard: a resolve legitimately moves a player who is carried, dragged,
-falling or riding, and each of those declares no movement either. The
-containment check in `_guard_approach_is_not_arrival` is the start of the
-answer, not the whole of it.
-
-The wider point: `movement` is the channel through which the player says where
-they are going, and a stage that can relocate the player without it is
-authoring player conduct — the same boundary `_check_player_act_authority`
-defends for speech and action, unguarded for position.
-
-### 1.16 A greeting's knowledge seeds outrank everything the story then lives
-
-**Found 2026-08-01**, investigating chat 53 ("Run!"). Separate from the
-establishment-sequence defect that investigation started from, which is fixed;
-these are the parts of the same launch that were left alone.
-
-`greetings.start_story` routes `greeting_interpret`'s `knowledge_seeds` into
-character memory. The four seeds it wrote for that launch:
-
-```
-sal 1.00  The Doctor knows that Daleks are among the most dangerous creatures
-          in the universe, and their presence on Earth is a serious threat.
-sal 1.00  The Doctor is aware that Hinami has six tail fox ears ...
-sal 1.00  The Doctor has a deep-seated fear of Daleks, but he masks it with
-          bravado and excitement.
-sal 1.00  The Doctor is always on the lookout for new companions, and Hinami's
-          ... make them a candidate.
-```
-
-The one memory the actual pipeline minted that turn: salience 0.78, first
-person, about what happened.
-
-Five distinct problems, none of them covered by a test —
-`tests/test_greetings.py` has 30 tests and none touches seed routing:
-
-1. ~~**Salience is the model's unbounded self-report, and it says 1.00.**~~
-   **Fixed in alpha 6.6.** Capped at 0.7, just under the 0.72 consolidation
-   floor, so a seed decays like anything the character went on to actually
-   live. The cap is at the WRITE (`greetings._seed_salience`), not only in
-   `GreetingKnowledgeSeed`: `start_story` reads `rec["extraction"]`, a stored
-   extraction persisted on the character card at import time, so cards written
-   before the cap — or edited by hand — reach the routing site without ever
-   passing through the schema. Both are capped; the write is the boundary that
-   matters. Covered by `TestKnowledgeSeedRouting`.
-2. **Third person, about the character.** The schema's own example is first
-   person (`"I have been waiting here for three nights for a courier."`); the
-   prompt never states the voice, and the model wrote what reads as a wiki
-   summary of him into his own memory.
-3. **Invented psychology.** Two of the four are dispositions, not knowledge.
-   `director_interpret`'s prompt says flatly "You never author psychology";
-   `greeting_interpret`'s asks for what the character "knows, remembers, feels,
-   or intends", which invites it. His card already carried the real, better
-   version (a Time War `private_history` entry, a `drive.taboo`), served
-   through `private_knowledge_for` — so the seed is a flattened knockoff of
-   authored material, competing with it.
-4. **Outside canon, which the same launch's establishment correctly refused.**
-   The prose says "EXTERMINATE", "the thing", "a blue box" — never "Dalek",
-   never "Earth". `director_establish` respected that and named the creature
-   "The Metal Hunter" with `dalek` demoted to an alias. `greeting_interpret`
-   went full canon in the same launch, against its own prompt rule ("Names are
-   opaque labels; import no outside canon"). The character's private memory and
-   the objective world now disagree about what the enemy is and what planet
-   they are on.
-5. ~~**`already_known=False` does not reach the seeds.**~~ **Fixed** —
-   `greetings.player_handle_for` + `_substitute_player_slot`. See `Design.md`,
-   "A character calls the player what they may legitimately call them".
-   One residual: the fiction may justify knowledge the engine cannot account
-   for — The Doctor could know she was running because the TARDIS has a
-   scanner — but there is no scanner in the scene: no anchor, no entity, no
-   `world_fact`. The seed asserts a conclusion whose channel does not exist.
-   That is a smaller and more general problem than the name leak was, and it
-   belongs with §3.1 rather than here.
-
-**Items 2, 3 and 4 are now prompt rules** (`greeting_interpret`): write the
-seed first person as the character holds it, never third person about
-themselves; author no psychology, because dispositions are on the card already
-and a flattened seed copy competes with the authored version; and the
-no-outside-canon rule restated inside the seed instruction, which is where it
-was being broken. Treat all three as **unproven until observed in conduct** —
-two separate correct sheet edits have already failed to change behaviour
-(`CLAUDE.md`), and a prompt rule is the same kind of claim. Nothing tests them,
-because nothing offline can.
-
-~~seeds carry no `event_key`, so a re-launch or greeting swipe duplicates
-them~~ — **half wrong, and now moot.** Seeds carry an `event_key` as of alpha
-6.6 (`greeting_seed:<sha1 of content>`), so routing one twice updates a single
-row. But there was never a duplication bug to fix: `start_story` creates a
-fresh chat every time and is the only site that routes seeds, so a re-launch is
-a different story with its own copy, which is correct. The `event_key` buys
-identity and a safely repeatable launch, not deduplication.
-
-**Also unbuilt from that design, and cheap:** `start_story` uses exactly two
-fields of the extraction (`time`, `knowledge_seeds`). The `rooms`, `positions`,
-`entities`, `attire`, `character_state`, `player_room`, `location` and
-`scene_description` it spent most of the prompt producing are discarded, and
-`director_establish` re-derives the world independently from the raw prose.
-That is why the two disagree about the creature: two interpretations of one
-passage, and the discarded one is the only one that read it as a greeting.
-
 
 ### 1.17 A generic name cannot count
 
@@ -904,63 +503,46 @@ with several of the same thing needs several names.** The engine cannot count
 
 **Found 2026-08-01**, investigating whether embeddings could make the engine's
 word tables "fire and catch" more often. Shelved deliberately after the
-measurements pointed somewhere else. Recorded so nobody re-derives it.
+measurements pointed somewhere else. The attire half of this entry merged into
+§2.14 on 2026-08-19; what is below is the EXPOSURE half, which is the one with
+no owner.
 
-The engine carries **196 hand-maintained word tables** (30 in `world/spatial.py`, 29
-in `agents/common.py`, 19 in `world/weather.py`). Two of them decide physical facts
-and were measured against the live database:
+**`weather.room_exposure` consults `_ENCLOSED_WORDS` only when `room.exposure`
+is unset** — and `RoomDef.exposure` exists in the schema, the prompt says "give
+every room an `exposure`", and it is set on **62 of 455 live rooms (13.6%,
+re-measured read-only 2026-08-19; it was 8 of 289 when this was written)**. The
+36-word list is deciding the other 393.
 
-| table | matches |
-|---|---|
-| `weather._ENCLOSED_WORDS` (36 entries) | 42.6% of 155 distinct live room names |
-| `attire._REGION_CUES` (154 entries) | 53.3% of 152 distinct live garment names |
-
-**Embeddings are not the fix, measured.** With the real provider
-(`perplexity/pplx-embed-v1-4b`, 2560d):
-
-* Region classification: nearest-exemplar 52%, sentence-prototype 47.5%,
-  leave-one-out on the cue table itself 52.7% — all LOSING to the dumb
-  `DEFAULT_REGION="torso"` fallback at 72.5%, because the unknown tail is
-  "…uniform", "…suit", "casual clothing", whose right answer is torso.
-* Binary membership is easier and still unsafe: on 20 hand-labelled real room
-  names the table scores 10/20 and the best embedding threshold 15/20, but the
-  distributions OVERLAP — "back alley" (0.413) outranks "cargo bay 3" (0.305),
-  "command deck" (0.332) and "cozy inn" (0.378). No threshold separates them.
-* The precision gates are immune by construction: "she lifts her hand toward
-  his face" vs "she lowers her hand toward his face" cosine **0.943**;
-  "faint"/"faints" 0.784; "puts on"/"takes off" 0.612. Direction, polarity and
-  part of speech are invisible to cosine, and those are exactly what
-  `_inverted_motion_check` and `_UNCONSCIOUSNESS_CUE` turn on.
-* Latency 262 ms for one text against `core/db.py`'s 0.02 ms commit budget, so
-  nothing of this shape may enter the write path regardless.
-
-**What the numbers actually pointed at.** `weather.room_exposure` consults
-`_ENCLOSED_WORDS` only when `room.exposure` is unset — and `RoomDef.exposure`
-exists in the schema, the prompt says "give every room an `exposure`", and it
-is set on **8 of 289 rooms (2.8%)**. The 36-word list is deciding 281 of them.
-`scene.attire[].regions` is authored on **13 of 135 entries (9.6%)**, so the
-cue table decides the rest.
-
-So the tables are not the mechanism; they are the fallback that became the
-mechanism because the authoritative field is never populated. Worse,
-`room_exposure` recomputes the guess from the room NAME on every read and
-never stores it, so a wrong guess cannot be corrected by a user and changing
-the word list silently rewrites the past.
+So the table is not the mechanism; it is the fallback that BECAME the mechanism
+because the authoritative field is never populated. Worse, `room_exposure`
+recomputes the guess from the room NAME on every read and never stores it, so a
+wrong guess cannot be corrected by a host and changing the word list silently
+rewrites the past.
 
 **The proportionate fix, when it is wanted:** seed `exposure` once at commit
-from the existing guess and STORE it, so downstream reads a stored fact that
-can be edited; and emit a reconciliation signal when a room is created without
-one, the same shape as `restraint_scan` and `unconsciousness_scan` already
-use. Then the word list serves ~3% of rooms instead of 97% and its gaps stop
-mattering. Same question first for any other table: **is there an
-authoritative field this is standing in for?** Where there is not
-(`_SPEECH_VERBS` parsing model prose, `_BARRIER_ALIASES`), the table really is
-the mechanism and coverage work is legitimate.
+from the existing guess and STORE it, so downstream reads a stored fact that can
+be edited; and emit a reconciliation signal when a room is created without one,
+the same shape as `restraint_scan` and `unconsciousness_scan` already use. Then
+the word list serves ~14% of rooms instead of 86% and its gaps stop mattering.
 
-**Rejected outright:** embeddings in any precision gate; embedding region
-classification; embedding identity matching for presences (an over-merge welds
-two characters); `cheap_embed` for anything semantic (29.5% on the region
-task); any provider call inside the write lock.
+**Ask the same question of any other table first: is there an authoritative
+field this is standing in for?** Where there is not (`_SPEECH_VERBS` parsing
+model prose, `_BARRIER_ALIASES`), the table really is the mechanism and coverage
+work is legitimate. The census that used to head this entry is stale and was
+deleted: `world/spatial.py` is now a facade holding **0** constants.
+
+**Rejected outright, measured with the real provider
+(`perplexity/pplx-embed-v1-4b`, 2560d):** embeddings in any precision gate
+("lifts her hand toward his face" vs "lowers her hand toward his face" cosine
+**0.943**; "faint"/"faints" 0.784; "puts on"/"takes off" 0.612 — direction,
+polarity and part of speech are invisible to cosine, and those are exactly what
+`_inverted_motion_check` and `_UNCONSCIOUSNESS_CUE` turn on); embedding region
+classification (nearest-exemplar 52% against the dumb `DEFAULT_REGION="torso"`
+fallback at 72.5%); embedding identity matching for presences (an over-merge
+welds two characters); `cheap_embed` for anything semantic (29.5%); and any
+provider call inside the write lock (262 ms for one text against `core/db.py`'s
+0.02 ms commit budget).
+
 
 ### 1.19 An unregistered presence has no name to be called by
 
@@ -1073,25 +655,27 @@ of the repair-over-prose layer), and `_subject_opener` (a leading article
 belongs to the prose, not the name, so a body registered "A Dalek" is caught
 when the prose writes "The Dalek's"). See `Design.md`.
 
-### 1.21 A character's origin cannot be reached by similarity, and 53 banks have none to reach
+**Absorbs §1.14 (2026-08-19)**, which said the same thing one body narrower —
+`docs/archive/PROPOSAL_2026-08-06.md` already recorded them as one defect written
+twice. §1.14's half: `director_resolve`'s passable-route backstop guards
+`state_diff.positions` only when interpret DECLARED a movement, so a resolve
+asserting a position on a beat with no declared movement reached commit with no
+route, adjacency or authority check. Two-thirds of that headline is now paid by
+`_unreachable_position_writes` (`agents/director_movement.py`, wired at
+`agents/director.py`). What survives is the same unwritten rule as above, plus
+the framing worth keeping: `movement` is the channel through which the player
+says where they are going, and a stage that can relocate the player without it
+is **authoring player conduct** — the boundary `_check_player_act_authority`
+defends for speech and action, unguarded for position. The containment check in
+`_guard_approach_is_not_arrival` is the start of the answer, not the whole of
+it.
 
-**Found 2026-08-02**, implementing summary windows. **Mostly landed 2026-08-02**
-— the payload half is built (`earlier_in_my_life`, see `Design.md`). **The
-origin-era ranking question is now landed** — `build_character_memory_context`
-surfaces the earliest first-hand summary window under `where_i_came_from` when
-a drift signal fires (goal held 12+ beats, a project adrift 8+ beats, or a
-mood sign-flip from baseline). See `Design.md`, "Origin-era retrieval on drift".
+**Measured reach, 2026-08-19:** on turns played on or after 2026-08-01, a body's
+room changed with no `movement.to_room` and no locomotion verb anywhere in the
+declaration on **12.2%** of beats (91 of 745). That classifier deliberately
+over-credits warrants — any locomotion word anywhere counts — so 91 is a FLOOR
+and the true figure is higher by an unknown margin.
 
-The old hole is repairable and the host exposes it: the memory UI calls
-`backfill_memory_summary_windows`. Reconstructed windows are also propagated
-into every eligible pre-turn checkpoint (`end_turn_idx < checkpoint.turn_idx`),
-so a later reroll cannot silently restore the legacy singleton and erase the
-repair. Chat 38 was repaired from its pre-change backup on 2026-08-02: 41
-summary windows are live again and 109 eligible checkpoints carry them.
-
-**Still unmeasured:** conduct. Everything above measures payload composition.
-Whether a character behaves differently for having their earlier chapters is a
-maze-arm question, not a one-turn read.
 
 ### 1.22 One window answers most beats, because every view describes the same person
 
@@ -1142,251 +726,11 @@ same historical replay before it lands.
 
 ---
 
-### 1.23 Memory, psychology and capacity — landed 2026-08-03
-
-Raised in review, planned, measured, then built. **The measurements changed
-the plan more than any argument did**: two shelf items were cancelled, one was
-inverted outright, and the harness written to make the plan honest found three
-dead mechanisms nobody had gone looking for. What follows is the record; the
-work itself is in `Design.md` and the tests named below.
-
-#### The through-line: fire rate before enrichment
-
-Every mechanism examined fell into one of three states, and the state was
-never obvious from reading the code.
-
-| mechanism | fires | note |
-|---|---|---|
-| aspect rankings | **constantly** — top-16 membership in 39/40 | argued dead, is the most active thing in retrieval |
-| `unbidden_probe` / `manifest` / `mind_model_updates` | 98-100% | |
-| `relationship_updates` / `memory_effects` | 88-89% | |
-| `remember_lines` | 78% of eligible beats | |
-| `intent_ops` | 79% | |
-| salience | always, **compressed** — p10-p90 spread 0.27, 70% of rows in 0.6-0.8 | |
-| `encoding_valence` | 20.7% overall; 2 of 37 banks ever record a non-zero one | `NOT NULL DEFAULT 0.0` hides the rest |
-| importance revision | **0.14%** (9 of 6,480) | read one field; the field that answers it fires 89% |
-| disputes | **0.00%** (0 of 181 eligible beats) | reachable, never occasioned |
-| **projects** | **0 of 14 banks have ever held one** | the tier was unreachable from empty |
-| `initial_parallel_reactors` | never, until 6.9.1 | |
-| `BehaviorController` | never, until 6.9 | |
-| `ActionStage` (§1.13) | never | |
-
-**No mechanism should be enriched before its fire rate is known.** Three of
-these were assumed live and were not; one was argued dead and is load-bearing;
-one was an entire tier of psychology, with the longest single block in the
-character prompt behind it, that had never once run.
-
-#### What was built
-
-**Phase 0 — `tools/fire_rates.py`.** Per-mechanism fire rates over the corpus,
-`--last N` per chat, `--chat`, `--json`. Read-only; opens the database
-`mode=ro` so it is safe against a live `engine.db`.
-
-Its whole discipline is the DENOMINATOR. `memory_disputes` measured against
-every memory row reads 0 of 6,480 — a number that sounds catastrophic and
-means nothing, because the field did not exist for most of that corpus.
-Measured against the beats that could have carried one it reads 0 of 181,
-beside a sibling introduced in the same commit, on the same 181 results,
-firing 78%. That second pair is a diagnosis. A mechanism with no opportunities
-reports `no chances`, never 0%. Tests: `tests/test_fire_rates.py`.
-
-It found the dead project tier on its first run.
-
-**Phase 1 — salience respacing, and the fix that was nearly a weight
-increase.** `tools/salience_replay.py` replays real recall against the real
-bank with the term live, deleted, and spread. It needs no embedding provider:
-a probe's own stored vector is the query and the turn cutoff is the beat it
-formed on, so each probe is an honest "what did this mind have to hand", and
-it copies the database first. (That copy was originally needed because
-`search_memories` bumped `access_count` for every caller. It no longer does:
-recording is opted INTO by the caller that is a mind recalling, via
-`record_access`, so the author's Memories tab and the replay tools no longer
-alter the number they are reading. The copy is now belt-and-braces rather than
-load-bearing.)
-
-270 probes, top-16 membership moved:
-
-| arm | moved |
-|---|---|
-| the term deleted entirely | 35.2% |
-| percentile-normalised to [0,1] | 59.6% |
-| stretched 3x about the mean | 47.0% |
-| respaced inside the bank's own range | **15.2%** |
-
-The term was never silent, and **both planned fixes moved retrieval more than
-deleting the term did** — values occupy a 0.27-wide band, so mapping them onto
-[0,1] multiplies this term's influence by ~3.7 while reordering nothing. A
-weight change wearing the word "normalisation". What shipped is
-`memory._rank_normalized_importance`: rank-normalise inside the visible rows'
-own p10-p90, so ordering and influence budget both hold and only spacing
-moves. The defect it fixes is that discrimination currently depends on how the
-minting model happened to spread its numbers that day. Tests:
-`tests/test_salience_respacing.py`.
-
-**Phase 2a — disputes are reachable; they were never asked for properly.**
-`tests/test_dispute_reachability.py` builds the occasion the corpus never
-produced — a stranger remembered as kind, seen this beat picking a pocket —
-and walks a model-shaped dispute through schema coercion, citation grounding,
-the commit collector, `record_dispute`, and the projection that hands the
-re-reading back next beat. Every stage holds, including the three refusals: it
-cannot reach another mind's memory, cannot locate one never delivered, and
-never edits what it re-reads.
-
-So 0/181 is an absence of occasions, and the prompt was the other half. The
-instruction was two prohibitions and one abstract permission, next to
-`memory_effects` — which fires 89% and names four concrete occasions. CLAUDE.md
-records the same shape twice from the maze arms: bare prohibitions invert. It
-now names five occasions (a disguise, a staged kindness, a lie, the wrong
-person, an arranged scene) and keeps both constraints.
-
-**Phase 2b — importance was reading the rarest field a character emits.**
-Measured over the 83 results that could supply any candidate signal:
-
-| signal | fires |
-|---|---|
-| `mind_model_updates` evidence citing a stored memory | 6 of 83 |
-| `belief_updates` evidence citing a stored memory | 1 of 83 |
-| `memory_effects`, disposition `integrated` | **74 of 83** |
-
-`_cited_memory_ids` read only the first. It now reads all three;
-`resisted`/`dismissed` still do not count, and `only_unrevised=True` still
-holds each memory to one lift for its whole life, so this widens the
-population that can be lifted once, never the amount. Tests:
-`tests/test_importance_signal.py`.
-
-**Phase 2c — the project tier could not be entered from empty.** One condition
-written twice: `affect.project_boundary` opened `if not projects: return None`,
-and the payload guarded `if isinstance(_preview, dict) and
-_self.get("projects")`. The prompt names the review beat as the occasion to
-emit `project_ops` — and the review beat required a project. The
-payload-affordance rule (`Design.md` § Structural debt #1) from a new
-direction: there the payload made the asked-for thing harder to reach, here
-it withholds the occasion entirely, and no prompt argues with a key that is
-never present. Arrival still needs a project to arrive at; a task closing and
-the scene or frame changing no longer do. Tests:
-`tests/test_project_tier_reachable.py`.
-
-**Phase 3 — capacity as an authored spectrum.** `psychology.capacity`, one of
-`narrow / focused / ordinary / broad / wide`, scaling the want and intention
-caps (1/2 through 5/6) and narrowed one further by cognitive absorption. The
-want cap binds 79.6% of live banks at mean 2.65 — not a safety valve, the shape
-of every character's attention, authored once by whoever picked 3. Precedent:
-`theory_of_mind.sheet_capacity`.
-
-Projects stay off the ladder deliberately: `PROJECT_CAP` is a DRAMATIC limit,
-and a character allowed six projects has lost the displacement rule that makes
-one mean anything.
-
-`ordinary` is exactly the pair that shipped, and unset is stored as `""` rather
-than backfilled — the first version backfilled `ordinary`, which made "the
-author chose the middle" and "nobody has seen this field" the same value and
-silently killed the import warning written to prevent exactly that. The
-character is told its own ceiling (`self.attention`) rather than having wants
-culled without being told the decision existed. Editor control included. Tests:
-`tests/test_attentional_capacity.py`.
-
-**Phase 4a — `remember_lines` measured, and NOT gated.**
-`tools/remember_lines.py`, over 1,633 turns and 146 marks:
-
-| | |
-|---|---|
-| landed as a memory row | 125/146 (85.6%) |
-| the fixed phrase list had it too | **0/125 (0.0%)** |
-| only this character's judgement kept it | 125/125 |
-| retrieved later, kept by judgement | 38/125 (30.4%) |
-| retrieved later, every non-dialogue row | 587/6,326 (9.3%) |
-
-Zero overlap with the phrase list and 3.3x the baseline retrieval rate. A
-budget or novelty gate would throttle the highest-yield rows in the bank, so
-neither was built. Two things the measurement could not answer are recorded
-rather than guessed: `why` is present on 146 of 146 marks and so predicts
-nothing, and 21 marks matched no row. The discriminator needs no schema change
-— the phrase list is a pure function of the quote, so a kept line the list
-would have rejected is one only this character preserved. Tests:
-`tests/test_remember_lines_telemetry.py`.
-
-**Phase 4b — summary support sets.** `memory_summaries.support` (schema v25),
-one entry per clause: `{claim, support_refs, epistemic_origin}`. Derived
-host-side by content-word overlap against the window's own memories at
-consolidation — no model call, because an audit trail produced by the same kind
-of process it audits is not one — and scoped to the summary's own epistemic
-class, so a first-hand clause cannot be supported by hearsay. Refs are
-`event_key`s, so checkpoint rollback and branching need no remapping. An empty
-support set is the finding: the clause generalises, compresses, or was
-invented, and it is now countable. Tests: `tests/test_summary_support.py`.
-
-**Phase 5 — time travel, and the traveller who came back.**
-`tests/test_time_travel_memory.py` covers the five flagged shapes. One was
-broken: `is_memory_visible` granted a traveller continuity by checking the
-travellers list of the frame they are STANDING IN, and the present is the
-implicit frame with no row, synthesised by `get_frame(None)` with an empty
-travellers list. So the clause could never fire in the present — a character
-who visited the year 5000 and walked home could not recall one moment of it.
-Everything while standing there, nothing once back where they live.
-
-Fixed by also honouring the travellers list of the frame the memory was FORMED
-in. Safe because every caller arrives through `visible_memory_rows`, which has
-already filtered `char_id=?`: the only question this rule ever answers is
-whether a mind may reach its OWN experience. A native of the present is not a
-traveller of the future frame and still sees nothing.
-
-#### Cancelled by measurement
-
-**Importance saturation.** The predicted failure was a permanently-elevated
-tier accumulating over a long life. Importance is revised on 9 of 6,480
-memories; the monotonic ramp is not a risk because it does not run. The
-three-way split is not needed. What the measurement found instead became
-Phases 1 and 2b.
-
-**Spreading salience.** See Phase 1 — the planned fix moved retrieval more than
-deleting the term.
-
-**A budget or novelty gate on `remember_lines`.** See Phase 4a.
-
-**Dispute histories** stay deferred. The prompt fix is landed and unmeasured;
-the fire-rate harness is what will say whether disputes now happen at all, and
-a history is worth building when there is something to have a history of.
-
-#### Still open
-
-- `encoding_valence` is `NOT NULL DEFAULT 0.0`, so "recorded neutral" and
-  "never recorded" are the same stored value. A fire rate given up at schema
-  time. Only 2 of 37 banks have ever written a non-zero one.
-- Mood congruence blends encoded tone with incoming mood 75/25
-  (`memory._congruence_valence`). **Principled but unmeasurable**: 738 memories
-  carry both values, exactly 2 disagree in sign, and neither field has ever
-  gone below -0.05 in the banks that have the column. These stories are warm;
-  the "opposite feeling pushes down" half has never fired. Revisit with a story
-  that goes dark.
-- `character:<id>` parallel steps fire on 3 of 1,633 turns. Either the gate is
-  wrong or the branch is vestigial; nobody has asked which.
-- Whether the project tier now fires. Re-run `tools/fire_rates.py` after a
-  story or two and read `has ever held a project`.
-
 ### 1.24 What the enclosure investigation found and did not fix
 
 From the same live story as the enclosure fixes (`Design.md`, "A body sealed
 inside another body"). These were observed in the same sweep, are real, and
 were left alone deliberately — each needs a decision rather than a repair.
-
-**One being, two names — now folded at merge.** *(landed)* The enabling
-condition behind five of the six defects fixed in that pass: a character can be
-registered cast AND present as a scene entity with its own id, with nothing
-joining the two records. `normalize_scene_subjects` now folds every
-subject-keyed ledger onto one spelling per being before anything resolves one
-ledger against another, so `==` is correct again because there is nothing left
-for it to be wrong about. `same_subject` stays as the floor for raw model
-output that never went through a merge.
-
-The scope was the hard part and getting it wrong was worse than the defect:
-the first version folded on identity alone and broke eleven tests, because
-`positions` legitimately keys objects, fixtures and unregistered presences by
-entity id and readers resolve them that way. Two rules keep it narrow — fold
-only when the canonical name is ALREADY live as a subject spelling elsewhere in
-the scene (the defect is two records for one being, not "ids ought to be
-names"), and an id differing from its name only by case is its own evidence and
-does not count. Ambiguity still folds nothing: two entities named "A Dalek" are
-two Daleks.
 
 **Body scale is not a perception input.** `hear_level` takes a volume, a
 barrier, a proximity and a vouched flag; it does not take a size. A body at
@@ -1404,12 +748,6 @@ perceive or reach is not stalled, it is suspended, and forcing it to advance
 puts a beat's weight on something the scene cannot honour. The reachability
 test now exists (`enclosed_from_source`); nothing consumes it here yet.
 
-**An entity's state can go byte-identical while the prose names it.** Warned
-three times in this story: "this beat's prose names it, but its
-posture/description came through byte-identical". The warning is right and
-nothing acts on it. Whether that should be a repair, a re-ask, or left as
-telemetry is undecided.
-
 **A derived observation carries one channel for a compound sentence.** The
 re-derivation assigns a single `channel` per atom, so a sentence carrying both
 a sound and a scent ("breath comes in short gasps, the air thick with...") is
@@ -1417,131 +755,11 @@ filed under one of them and the other becomes unattributed. Minor, and the fix
 is either sentence splitting before classification or a multi-channel atom;
 both are more invasive than the defect.
 
+*(Two bullets left this entry on 2026-08-19: "one being, two names" is landed
+(`world/spatial_identity.normalize_scene_subjects`; `CHANGELOG.md`), and the
+byte-identical-state bullet merged into §1.10, which is where the same finding
+was already written twice more.)*
 
-### 1.25 Every character call re-ingests 12,400 cacheable tokens, because a name sits at byte 32
-
-Measured 2026-08-03 while benchmarking nano-gpt subscription models. Not fixed:
-the fix is one line, and the evidence that it is WORTH making is incomplete in
-a specific way described below.
-
-**The defect.** `prompts.DEFAULT_PROMPTS["character"]` opens
-
-    "You are the decision process of {name}, not a narrator..."
-
-with `{name}` at **byte 32 of a 55,558-character prompt**. A provider caches a
-PREFIX — the hit runs from the start of the message to the first byte that
-differs — so two characters in the same beat share only the ~8 tokens before
-the name, and the other ~13,880 tokens of byte-identical contract are
-re-ingested cold, per character, per turn. Every other system prompt in the
-engine has zero template variables and is already maximally cacheable
-(`director_resolve` 13,794 tok, `perception` 5,885, `narrator` 5,488,
-`director_interpret` 4,205, `mapping_stage` 3,122). `variant_seed` is already
-last in every payload, so the nonce is not implicated.
-
-**Measured across 14 subscription models** (`tools/cache_probe.py`, two calls
-per arm: the same prompt as `Elyndra` then as `Hinami`, which is what a real
-multi-cast beat does). `relocated` moves the name clause to the end of the
-prompt; `split` leaves the wording untouched and sends the contract as its own
-message:
-
-| model | as-is | relocated | split |
-|---|---|---|---|
-| `zai-org/glm-4.7` | 1% | **99%** | **99%** |
-| `mistralai/mistral-large-3-675b` | 0% | **99%** | **99%** |
-| `google/gemma-4-26b-a4b-it` | 43% | **98%** | 0% |
-| `moonshotai/kimi-k2.5` | 0% | **98%** | 1% |
-| `moonshotai/kimi-k2.6` | 0% | 0% | **98%** |
-| `inclusionai/ling-3.0-flash` | 0% | 64% | 64% |
-| nemotron 550b / super-120b, `Qwen3-Next-80B`, `glm-5.2`, `qwen3.5-397b`, `deepseek-v4-flash` | 0% | 0% | 0% |
-
-**`as-is` is 0% on every model that caches at all.** Four recover 98–99% when
-the name moves. Live confirmation from a 10-turn run: overall cache hit rate
-**18.9%** (46,784 of 247,374 prompt tokens), with `character`, `director` and
-`narrator` calls all at **0** while `perception` — which fires 7x in seconds
-and stays warm — hit 5,440–5,696 per call.
-
-**Why it is not fixed.**
-
-1. **A cache hit is not a speed win, and may be a loss.** On
-   `gemma-4-26b-a4b-it` relocation took a call from **33.1s to 4.0s**. On
-   `kimi-k2.6` the 98%-cached arm ran **5.3s → 34.6s**, 6.5x SLOWER. `glm-4.7`
-   improved modestly (10.6s → 7.3s); `ling-3.0` got slower. Cache support,
-   cache benefit and raw latency are three independent properties, and only
-   the first has been measured properly. `tools/cache_latency.py` (cold call 1
-   vs warm calls 2-5, fixed output length) exists to settle it and has not been
-   run to completion.
-2. **There is no universal layout.** `kimi-k2.5` wants `relocated` and gets 1%
-   from `split`; `kimi-k2.6` is the exact inverse; `gemma` wants `relocated`
-   and gets 0% from `split`. Any fix has to be verified per model rather than
-   adopted as a general improvement.
-3. **Byte 32 of a system prompt is high-salience real estate.** "You are
-   {name}" opening the contract may be doing real work for character
-   adherence, and moving it is exactly the class of change CLAUDE.md warns
-   about: nothing errors, and a character reads subtly wrong fifty beats later.
-   `split` avoids this — same tokens, same order, only the message boundary
-   moves — which is why it is the preferred shape where it works.
-
-**What to do when this is picked up.** Run `tools/cache_latency.py` first. If
-warm calls are not reliably faster on the models actually in use, this entry
-closes as "measured, not worth it" and the prompt is left alone. If they are,
-prefer `split` over `relocated` (no wording change), verify per model, and
-A/B on a long story with `tools/stability_run.py` — a character-adherence
-regression will not show up in a test suite.
-
-**Related, unfixed:** caching is a property of the MODEL and the layout jointly,
-and nothing in the model-selection process accounts for it. `Qwen/Qwen3.6-35B-A3B`
-cached 0 of 188 live calls; `nex-agi/nex-n2-pro` cached 63 of 79. On a pipeline
-this prefill-dominated (27k-token director payloads), that may outweigh every
-latency difference measured in `docs/experiments/bench-2026-08-03/RESULTS.md`.
-
-**Update 2026-08-08 — the switch this entry needed now exists, and the wrong
-file was nearly used to settle it.** Prompt caching is a per-provider checkbox
-in ⚙ API (`prompt_cache_enabled_for`, `PUT /api/providers/{pid}/prompt_cache`),
-so arm 1 above — "is a cache hit actually faster on the models in use" — can now
-be A/B'd on a real story rather than only in `tools/cache_latency.py`.
-
-Two traps found while building it, both worth writing down because both produce
-a confident wrong answer:
-
-- **`docs/experiments/bench-2026-08-03/*.log` cannot answer this question.** All 62 cache
-  reads across its 267 timed calls come from ONE model, `nex-agi/nex-n2-pro`,
-  and none of the logged models is a Claude. The engine's breakpoint is gated on
-  `_model_is_anthropic`, so it never marked any of them — those `cached_tokens`
-  are the provider's own implicit caching. Splitting that file cached-vs-uncached
-  compares one model against all the others, and duly produces a spurious 2x
-  "caching penalty" at 1200+ response tokens (83.70s vs 42.36s, n=8). The real
-  measurement is the `tools/cache_probe.py` table above, which controls for
-  model by construction.
-- **The live config caches nothing.** As of 2026-08-08 no configured role runs a
-  Claude model (`minimax/minimax-m3`, `moonshotai/kimi-k2.6`, `x-ai/grok-4.20`,
-  `inception/mercury-2`), so the engine's marking is inert on this install and
-  the new checkbox changes nothing until a role points at a Claude. Note that
-  `kimi-k2.6` — currently `default` and `character_mid` — is the model whose
-  98%-cached arm ran **6.5x slower** in the table above.
-
-### 1.26 Speech-channel smuggling — landed 2026-08-04
-
-Found in chat 62 (12 turns, character roles on `moonshotai/kimi-k2.6`
-non-thinking, Director on `x-ai/grok-4.20`). A character wrote stage directions
-into the `text` of its speech elements, so body movements were delivered as
-SOUND: lost to a listener who could not hear, ground into fragments by
-muffling, and — the one that matters — narrated by ear to a listener who could
-hear but not see. Flow, not knowledge; the person touched would have felt it.
-
-`agents.common.split_stage_directions` excises the span in `norm_sequence` and
-re-files it as the action element it should have been, before the speech it was
-buried in, inheriting that line's concealment. Full record in `CHANGELOG.md`
-§ alpha 7.0; tests in `tests/test_speech_channel_smuggling.py`. It also closed
-a second symptom that looked unrelated: the Director re-rendering the stage
-direction as prose, which no longer matched the declaration, so the
-verbatim-speech guard dropped the line as invented on 7 of 12 turns against 7
-of 1,715 corpus-wide.
-
-**Not measured yet:** whether the promoted actions change how often the
-Director ends a beat. Every one arrives with `commitment` classified from its
-own text, and `_requires_director_resolution` reads that field (see alpha
-6.9.1). A stage direction reading as contestable would end beats that used to
-continue. Re-run `tools/fire_rates.py` after a story or two.
 
 ### 1.27 Residuals from the speech-channel investigation
 
@@ -1550,23 +768,17 @@ rebuilds `state` from `attire.flat_state` unconditionally and keeps only notes
 `attire.is_derived_state_note` says were authored; `tests/
 test_attire_commit_stored_shape.py`). The rest are open.
 
-- `manner` on a `contacts` row is free text with no engine semantics, so a
-  contact describing one body partly inside another does not populate
-  `contained` and none of the §1.24 enclosure-direction work fires on it.
-  Whether it should is a design question — partial containment is not the same
-  as being sealed inside something — but the two are currently unrelated code
-  paths that describe overlapping physical situations.
 - Two `remember_lines` were dropped whole across 12 turns because the character
   cited event ids that do not exist. The guard is right to drop an ungrounded
   citation; the cost is that the line the character chose to keep is discarded
   rather than salvaged with its citation stripped. Given Phase 4a measured
   these as the highest-yield rows in the bank (3.3x baseline retrieval), losing
   one to a malformed reference is expensive.
-- `intent 'ia2'/'ia3': already at full progress, nothing gained` repeated on
-  three consecutive turns, escalating to `stalled ... satisfy, abandon or
-  re-route it`. The intention ledger has no way to retire an intent the
-  character keeps re-serving at ceiling, so the warning fires forever and the
-  character keeps spending declarations on it.
+
+*(Two bullets left this entry on 2026-08-19: the `manner`/`contained` bullet was
+verbatim §1.28's second, and the intent-stall bullet is built —
+`mind/affect.py`'s `_INTENT_STALL_AFTER = 2` sets `status="dormant"` once a goal
+sits barren at its ceiling.)*
 
 
 ### 1.28 Residuals from the contact-sensation work
@@ -1577,15 +789,6 @@ contact is a continuous percept, tests in
 `tests/test_continuous_contact_sensation.py`). These are what the same
 investigation found and did not close.
 
-- **`contacts` accepts a part slot that does not name a body.** A live ledger
-  holds `actor_part: "physical reaction"` against `target_part: "laughter"`.
-  Nothing rejects it at the Director, so it is carried, aged and re-asserted
-  like a real contact. `spatial._is_anatomical_part` is a FLOOR at the renderer
-  — it declines to describe a sensation nobody could have — and the record is
-  still wrong where it is written. The right fix validates the slot on the way
-  into the scene commit. A permissive check is the only kind available: anatomy
-  is open-ended and every story invents some, so the test can only reject what
-  is affirmatively not a part.
 - **Partial interior contact still does not populate full containment.**
   Contact sensation no longer asks free-text `manner` to carry two axes:
   `relation: surface|interior` and `motion: settled|moving` now independently
@@ -1619,6 +822,26 @@ investigation found and did not close.
   `mixed` observations — secondary to the 83.4% that matched no cue at all, but
   it means a beat arriving through MORE senses loses more channel information
   than a simple one.
+- **A hover is not a contact, and there is nowhere else for it.** A measured
+  "two inches of visible space" between two mouths is real fiction with real
+  tension, and `contacts` can only say touching or nothing. It lives in entity
+  `state`, where nothing ages it (§1.10): `_drop_contradicted_state` retires
+  such a key only where a standing contact already speaks for that part, so a
+  genuine hover with no contact survives unaged. A near-contact tier — or a
+  `manner` that means "not quite" — would cover it. *(Moved from §3.9,
+  2026-08-19.)*
+- **An orphaned relational value is dropped rather than folded.** When
+  `thumb_touch: "feather_light_at_ear_base"` is retired by a standing thumb
+  contact, its qualifier is discarded instead of merged into that contact's
+  `detail`. Folding it was rejected for now: matching the right contact by part
+  name is the same guesswork the whole change exists to remove, and a wrong
+  `detail` is a sentence the narrator will repeat. *(Moved from §3.9,
+  2026-08-19.)*
+
+*(Bullet 1 — "`contacts` accepts a part slot that does not name a body" — was
+struck 2026-08-19: `world/spatial_contacts.py` now refuses a non-anatomical
+actor_part or target_part at the commit seam, in the one place every contact
+passes through.)*
 
 
 ### 1.29 Parallel reaction chains, and the isolated wave that is shelved for them
@@ -1809,72 +1032,24 @@ this measurement rather than porting it. Removal here needs a migration and
 should confirm the rowcount is not load-bearing for anything outside the repo
 first.
 
-### 1.36 The suite's database redirect runs after collection — CLOSED in 9.0.1
+### 1.37 The aversive half of the stress model is live and unobserved
 
-**Fixed.** `tests/conftest.py` now redirects `db.DB` at conftest *import*
-(`_redirect_default_database`), which pytest guarantees precedes every test
-module; the session fixture kept only the teardown it is actually for.
+**Landed 2026-08-19.** `resolve_stress` weights `threat` at 0.55 and derived it
+from `appraisal["goal_impacts"]`; `affect.appraise` returns the normalised list
+under `"impacts"` and writes no key by that name, so the loop never ran and
+threat was 0.0 on every beat of every story. Measured before: 33 characters
+carried a resolved stress block, `overloaded` had fired ZERO times ever, and
+strain never reached half its threshold. The channel is now an explicit
+keyword-only argument (`goal_impacts=`), so the next omission is a TypeError
+rather than a zero.
 
-Kept as a record because the prediction came true exactly as written. It had
-been filed as *latent* — "no current test module appears to do it" — and alpha
-9.0's language machinery made it fire: `importers.REINT_CHAR_SYS` resolves
-through the PEP-562 `__getattr__` added for lazy prompts, into `get_prompt()`
-→ `active_preset()` → `get_setting()` → `db.q()`, at module import. On a fresh
-checkout with no `engine.db` that killed collection outright
-(`test_character_import_drives.py`, `test_extra_parts_authoring.py`,
-`test_initial_outfit.py`, 3 errors, 0 tests run). On a developer's machine it
-did the quieter and worse thing: opened the live database, which is the one
-outcome the redirect exists to prevent.
-
-The lesson worth keeping is about the filing, not the fix. "Latent" was
-measured against the test modules that existed at the time, and a lazy-import
-mechanism added elsewhere for an unrelated reason turned every one of them into
-a module-level query. A hole whose closure depends on nobody writing an
-ordinary thing is not latent; it is open and unvisited.
-
-
-### 1.37 The aversive half of the stress model has never run
-
-`psychology_runtime.resolve_stress` reads `threat` off
-`appraisal["goal_impacts"]` and weights it **0.55** — more than every other
-aversive term combined. Its only production caller (`persist/commit.py`, the
-`new_stress = psychology_runtime.resolve_stress(...)` site) passes
-`affect.appraise`'s **return value**, which is exactly:
-
-    ['dA', 'dV', 'dominant', 'drive_impact', 'emotions']
-
-There is no `goal_impacts` key in it and there never has been. `.get()` returns
-`[]`, so **`threat` has always been 0.0.**
-
-The corpus signature is unmistakable — 78 banks, 27 with a resolved stress
-block:
-
-    strain      min 0.0197   median 0.0454   max 0.3608
-    load        min 0.0000   median 0.0041   max 0.5949
-    activation  min 0.0680   median 0.5222   max 0.7984
-    overloaded fired                          0 of 27
-
-Strain never reaches half its own threshold, `overloaded` has never once
-fired, and the activation median is almost entirely the non-aversive DRIVE
-term — which is the half that does work. Characters can be excited. They
-cannot be threatened.
-
-The fix is to pass the impacts, not the appraisal: the caller has
-`goal_impacts` in hand at that line. Take the parameter separately rather than
-reaching into a dict, so there is no shape a caller can pass that silently
-omits it — Nullo's port did that and it is the fold-on-the-way-in answer
-rather than a guard someone must remember.
-
-**Not fixed here, and it wants a decision.** The one-line version changes the
-emotional trajectory of every existing character in the corpus: bodies that
-have never felt threat would start accruing strain and crossing thresholds
-that have never been crossed. That is a behavioural change to a live product,
-not a silent correction, and the fire-rate row to watch afterwards is
-`overloaded` moving off zero.
-
-Found while porting the module into Nullo Engine, by an agent reading each
-function's arguments after having first dismissed all three by their module
-name.
+**It is a behavioural change and nobody has watched it yet.** Every character
+in every story can now accumulate strain, and `overloaded` — strain-only, and
+never once fired — can fire. The watched rows are `overloaded` and `load`: if
+they now fire constantly the weights are wrong in the other direction, and the
+0.55 was set against a term that was always zero, so it has never actually been
+calibrated against anything. Re-measure after a run of real beats before
+trusting the number.
 
 ### 1.38 A line addressed by epithet is addressed to nobody
 
@@ -1924,159 +1099,29 @@ gates either — the residual already noted in
 One fix covers both: emit percepts.
 
 
-### 1.40 The slow turn was model-call multiplicity, and the harness plays too few beats to see it
+### 1.40 A restore racing a mid-flight consolidation call
 
-Measured 2026-08-12, on chat 71 turn 10 (played live 07:01:32–07:05:09,
-216s from `interaction_loop` to `commit` against harness predictions of
-roughly a third of that). Diagnosed from the persisted `steps`/`variants`
-timestamps, the turn's own stored stage outputs, and an offline reproduction
-against a copy of the database — not from the harness. Three findings, one
-per anomalous stage, and none of them is corpus size:
+All that remains of the 216-second turn investigation (chat 71 turn 10). The
+diagnosis, the three per-stage findings, what landed against them, and the
+correction to the "empty specialists" misreading are in
+[`experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md) §3 —
+they are method and measurement, not a defect.
 
-- **`commit` 45.8s (harness 4–8s): ~29.5s of it is the first
-  autobiographical consolidation, reproduced and timed.** Turn 10 is the
-  first beat where `memory.maybe_consolidate_character_memory` fires
-  (`current_turn_idx - last_turn >= 10` with `last_turn=0`), and
-  `_write_consolidated_window` runs on the **`utility`** role — which is
-  configured nowhere and is not in `providers.ROLE_FALLBACKS`, so it falls
-  through to `default` (NanoGPT `zai-org/glm-latest`). Reproduction against
-  a copy of the live database, real providers: consolidation of the
-  34-memory window took **29.47s, 27.38s of it the one LLM call**
-  (`llm_call role=utility … duration=27.38s`). The rest of the commit window
-  is a handful of paced embedding calls (measured: 2.69s for a 4-text batch
-  that ate one 429 penalty; 0.93s single) plus sub-second deterministic
-  work. Mapping was `{"skipped": "nothing new to commit"}` — no mapping LLM
-  call, no lore embeddings, so the chat's lore volume (7 entries) and the
-  2,152-entry database total are both irrelevant. The consolidation runs
-  synchronously inside the commit stage's wall clock even though it is
-  post-transaction and reconstructible; every other post-transaction spend
-  (offscreen ticks, artifact wording, promotion) already went out-of-band.
-- **`director_resolve` 105.5s (harness 22–50s): the 8.2 code, not a stale
-  build.** The stored resolve output carries `orchestration.prose_scope`
-  (granted/gated_out), which exists only at `ab3daad` — `40755ee` has no
-  `_prose_author_scope` — so the 06:58 process was running the merged 8.2
-  tree (merge landed 06:51:40) and the delegation-leak/lean-core fixes
-  explain **none** of the gap. What the record shows instead: an intimate,
-  physically busy beat dispatched **5 of 6 specialists** (`"ran": true` for
-  body, social, contact, objects, spatial), the reconciliation self-repair
-  fired an extra sequential core call (`"repaired": true`) — and it bought
-  nothing (`state_diff still does not encode it after self-repair` warnings,
-  `channels_replaced: []` on every specialist). The harness's 22–50s band
-  was earned on beats with narrow dispatch and no repair pass.
-- **`narrator` 29.5s (harness 6–15s): payload is windowed (LIMIT 4 prose
-  turns, scene-scoped fields — nothing O(corpus)); the multiplier is the
-  bounded rewrite ladder** (`_generate_narration` fidelity-correction and
-  craft passes: up to 3 calls). Inference from code structure, not
-  measurement — the live per-call log lines died with the process, before the
-  per-call ledger landed.
+**The one open defect.** The cancel in `restore_checkpoint` is COOPERATIVE
+(between characters), so a restore arriving while one character's consolidation
+LLM call is in flight can still land a summary computed from pre-restore rows,
+and the cursor on that summary row then skips the window. Seconds-wide, needs a
+reroll to coincide with the ~10-turn consolidation cadence, and the summary
+layer is reconstructible (`backfill_memory_summary_windows` can rebuild) — but
+it is a window the old synchronous design did not have, opened by moving
+consolidation out of band (`schedule_memory_consolidation` → `core/jobs.py`).
+Recorded rather than closed.
 
-**Nothing on the turn path scales with corpus.** Measured on the 2.1 GB
-copy: a full-corpus `memories_fts` MATCH is 2.3ms, the chat-scoped vector
-fetch 0.5ms; the resolve/narrator payloads are scene-scoped and windowed;
-mapping skips when nothing is staged. The 2.1 GB database and the DB-wide
-lore/memory totals are red herrings for turn latency.
-
-**Why the harness is blind, and what answers it.** A fresh run of ≤10 turns
-(idx 0–9) can never reach the consolidation cadence, rarely trips wide
-specialist dispatch or a repair/rewrite retry, and, at the time this was
-measured, nothing on the live path persisted how long a stage took, so a slow
-live turn left only stage-total timestamps behind. `tools/stability_run.py` exists for
-exactly this: it drives real turns against the longest stories on a copy
-and parses per-role `llm_call` durations. Run it against long chats either
-side of any latency-relevant change.
-
-**What landed against this (2026-08-12):**
-
-- **Consolidation is out-of-band** (`commit.schedule_memory_consolidation` →
-  `core/jobs.py`, beside the offscreen ticks): deduped per chat, abandonable
-  between characters, silent-per-character on failure, cancelled
-  cooperatively by `restore_checkpoint`. The ~29.5s leaves the commit
-  stage's wall clock entirely. `tests/test_consolidation_out_of_band.py`.
-- **`utility` inherits `mapping`** in `providers.ROLE_FALLBACKS` before
-  falling to `default` — the settings guidance has always paired
-  "mapping/utility" as the cheap mechanical lane, so an unset utility now
-  lands on the fast model the host already picked instead of their most
-  expensive one. The settings-panel role notes say so.
-  **Reverted 2026-08-13** (`providers.ROLE_FALLBACKS` is now empty; every
-  unset role follows `default`). It fixed the cost by means of an
-  inheritance no host could see, and the same mechanism was lying to hosts
-  on the six Director specialists. The defect this bullet was answering —
-  the call sitting inside the commit window — is fixed by the out-of-band
-  scheduling above and stays fixed; an unset `utility` on a slow default
-  now costs money and background time, not the player's wall clock. If a
-  background lane returns to the turn's critical path it needs its own role
-  **set**, not a fallback re-added under it.
-- **Reconciliation repair goes to the CHANNEL'S OWNER on the orchestrated
-  path** (`agents/director.py` `_route_repair_omissions` /
-  `_specialist_repairs`): an omission in a delegated channel is re-asked of
-  its owning specialist — one scoped ~1s call, same beat view, same
-  entitlement slice, additive merge — and only player claims and
-  undelegated categories still buy the full-core `resolve_repair` call.
-  Detection unchanged; monolithic path byte-identical. Found and fixed
-  beside it: `_CATEGORY_CHANNELS` was keyed on raw category spellings while
-  every reader looks up `_normalize_omission_category` output, so contact/
-  substance/pose manifest entries could never reach the scope backstop; and
-  a repair delta's `stations` were silently dropped by
-  `_merge_repair_into_diff`.
-- **The per-call ledger** — `_engine_notes.llm_calls` on each saved variant,
-  `{step_key, role, requested, served, in, out, cached, duration, kind}` per
-  call, offered by `providers._log_usage` and attributed by contextvar so the
-  specialist fan-out and the parallel groups land on the right step — is what
-  turns the narrator question below from an inference into a lookup.
-
-**Correction (2026-08-12, live variants v26625/v26634/v26643, turn 2354):
-the "empty specialists" reading of these rerolls was wrong.** Two separate
-investigations read `channels_replaced: []` as "the specialists assembled
-nothing" — but that field counts AUTHOR content that lost to ownership, and
-a compliant lean author leaves delegated channels empty, so `[]` is the
-healthy state. The merged diffs on all three rerolls carry the specialists'
-encodings (`attire.Hinami.remove` the jacket, `contact_ops`
-remove(stomach)+add(waist), the entity shed, an inventory drop, a station);
-a granted channel's post-assembly content can only be the specialist's,
-because assembly assigns `container[key] = owned` unconditionally. What
-actually broke was the deterministic EVIDENCE CHECKER
-(`_evidence_present`): each class gated on the manifest's free-text
-`subject` naming one particular kind of thing (the wearer for attire, a
-participant for contacts, a `positions` key for a placement) while the
-model words subjects freely ("lightweight travel jacket", "contact_end",
-"prior hand-to-stomach contact") — so coverage flickered reroll to reroll
-with the wording, 5 of 11 live manifest items read as omissions against
-diffs that encoded them, the Tier-2 repair fired on the false positives,
-answered "already_encoded", lost that verdict to an exact-subject
-disposition match, and false "objective state may be stale" warnings
-shipped. Fixed: attire also checks garment handles inside wearer entries;
-structured manifest endpoints bypass the contacts subject gate (they ARE
-the subject); a `cross` op covers its ended endpoint via
-`crossed_target_part`; a within-room drop filed under `positions` is
-covered by its station; disposition matching carries the same substring
-tolerance as every other subject comparison in the seam; and each
-specialist's dispatch record now carries `channels_filled` so the next
-investigation can see assembly working. Replayed against the live diffs:
-9/11 covered (was 6/11) — the two residuals are genuine part-noun
-disagreements between the model's own manifest and its encoding
-(waist/hip, fingers/hand), correctly detected and deliberately not folded
-by a synonym table (`_same_appendage` is structural by design).
-`tests/test_resolve_reconciliation.py` (live-shape fixtures),
-`tests/test_director_orchestration.py`
-(`test_a_specialist_encoded_beat_buys_no_repair_and_no_warning`).
-
-**Residuals, recorded:**
-
-- **`narrator` 29.5s remains an inference** (the fidelity/craft rewrite
-  ladder, up to 3 calls). The ledger now stamps every narrator call on the
-  stored variant, so the next slow narrator beat answers this directly —
-  including whether the orchestrated path makes a rewrite MORE likely,
-  which nothing in `_generate_narration` reads orchestration state to
-  suggest, but which only the ledger on a real beat can rule out.
-- **A restore racing a mid-flight consolidation call**: the cancel in
-  `restore_checkpoint` is cooperative (between characters), so a restore
-  arriving while one character's consolidation LLM call is in flight can
-  still land a summary computed from pre-restore rows, and the cursor on
-  that summary row then skips the window. Seconds-wide, needs a reroll to
-  coincide with the ~10-turn cadence, and the summary layer is
-  reconstructible (`backfill_memory_summary_windows` can rebuild) — but it
-  is a window the synchronous design did not have, recorded rather than
-  closed.
+**Also unclosed, and it is now a lookup rather than an inference:** `narrator`
+at 29.5s was attributed to the bounded rewrite ladder from code structure alone.
+The per-call ledger (`_engine_notes.llm_calls`) stamps every narrator call on
+the stored variant, so the next slow narrator beat answers this directly —
+including whether the orchestrated path makes a rewrite MORE likely.
 
 
 ### 1.41 Surface-affect habituation ships default-off; flipping it is a decision this entry exists to force
@@ -2160,78 +1205,39 @@ observer who is not in `known_to` should have concealed terms removed, and a
 description that is *only* the concealed feature should fall back to the
 garment name.
 
-### 1.42 The story column's clearance for the ambience cluster cannot be honoured
-
-**Found:** rebuilding the `lcars` theme (2026-08-14), by an automated geometry
-check rather than by eye — the overlap is small enough to read as a design
-choice.
-
-`settings.js:syncVitalsGutterNow` computes a `reserve` explicitly meant to keep
-the centred story column clear of the two things floating over it: the
-condition tracker on the left, the ambience cluster on the right. For the
-cluster it reserves `ambWidth + 20`. Then:
-
-```js
-const storyWidth = Math.round(Math.min(
-  STORY_MAX_WIDTH,                                       // 1080
-  Math.max(STORY_MIN_WIDTH, shellWidth - reserve * 2),   // 720 floor
-));
-```
-
-**The 720px floor silently outranks the reserve.** When the shell is narrower
-than `720 + 2 * (ambWidth + 20)`, the column keeps its 720 and the clearance is
-simply not taken. At a 1440px window with the stock 286px sidebar the shell is
-1154 and the cluster measures 212, so the requirement is 1184 — 30px short. The
-send button therefore ends 7px past the cluster's left edge and sits under the
-mute control.
-
-`[measured]` at 1440x900, one browser: `send right 1223 | ambience left 1216 |
-gap -7px`. Identical in `sonder`, `tavern`, `stone`, `ink` and `lcars`, because
-the arithmetic is shared — this is not a themed defect. It worsens in either
-direction the layout can move: a theme that widens the sidebar takes it
-straight off the shell (a 24px spine took the gap to -19px, which is how it was
-found), and the cluster grows again whenever a track is playing.
-
-Two honest resolutions, neither taken here because both change shared layout
-and this was found inside a theme change:
-
-1. **Let the column shrink.** Lower `STORY_MIN_WIDTH` when the alternative is
-   an overlap. Costs reading measure at narrow widths, which is exactly what
-   the floor was defending.
-2. **Un-float the cluster earlier.** `styles.css` already un-floats it at
-   `@container composer (max-width:900px)`; the threshold should be the
-   computed `720 + 2 * (ambWidth + 20)` rather than a guessed 900. This is the
-   better fix — it preserves the measure and gives up only the float, which is
-   the cheaper of the two things.
-
-Related and already landed: a `ResizeObserver` on `#ambience-bar`
-(`settings.js`), because the cluster is absolutely positioned and so cannot
-report its own growth by resizing `#composer` — the reserve was *additionally*
-going stale whenever the bar changed width after first paint. That fixes the
-staleness. It does not fix the floor, which is this entry.
-
-
-### 1.45 Three helpers with passing tests and no production caller
+### 1.45 A dead helper family with passing tests and no production caller
 
 **Reduced 2026-08-18.** The original entry named seven; the composer repair
 closed four of them (`perception._inject_onset_sequence`,
 `_inject_onset_speech`, `_strip_onset_rendering`, `_self_cannot_see_own_surface`
 are gone, and `tests/test_self_surface_when_enclosed.py`'s two
 `inspect.getsource` assertions on statement order inside the first went with
-them in `6d843e2`). Three survive, and they survive because they live in files
-the perception slice did not own:
+them in `6d843e2`). **Widened 2026-08-19: it is a FAMILY of seven, not three.** Re-verified by
+grepping every non-test module — each of these has no production caller, only
+the `agents/__init__.py` facade re-export and tests:
 
-| Symbol | Where | Only caller |
-|---|---|---|
-| `common._inject_visible_actor` | `agents/common.py:4647` | tests |
-| `common._inject_action` | `agents/common.py:4592` | tests |
-| `perception._deliver_foreground_body_details` | `agents/perception.py:536` | tests |
+| Symbol | Where |
+|---|---|
+| `common._inject_visible_actor` | `agents/common.py` |
+| `common._inject_action` | `agents/common.py` |
+| `common._normalise_views` | `agents/common.py` |
+| `common._ensure_environment` | `agents/common.py` |
+| `common._fallback_perception_views` | `agents/common.py` |
+| `common._perceptible_entities` | `agents/common.py` |
+| `perception._deliver_foreground_body_details` | `agents/perception.py` |
 
-All three are re-exported from `agents/__init__.py`. So each has passing tests
-and no effect, which is the worst combination available: it reads as a live
-floor. Four test files pin them — `test_perception_appearance.py`,
-`test_perception_identity_gate.py`, `test_enclosed_act_leak.py`,
-`test_player_person_discipline.py`, `test_observable_injection.py`.
+So each has passing tests and no effect, which is the worst combination
+available: it reads as a live floor. Six test files pin them —
+`test_perception_appearance.py`, `test_perception_identity_gate.py`,
+`test_enclosed_act_leak.py`, `test_player_person_discipline.py`,
+`test_observable_injection.py`, `test_scene_identity_hygiene.py`.
+
+**Three other register entries were describing behaviour inside this family and
+were struck on the same reading**: §3.2 C3 (`_normalise_views` writes through an
+unmatched view key) and §3.2 B4 (`_ensure_environment` does not check darkness)
+are both dead paths, not live gates. `knows_identity` is the same shape one
+layer over — set at six sites in `agents/perception.py` and READ NOWHERE — which
+is what made §3.1 E1 unreachable.
 
 `_inject_dialogue` and `_compose_residue_view` are the two siblings that ARE
 live, both through `agents/composer.py` (and `_compose_residue_view` also
@@ -2252,8 +1258,8 @@ contradiction-stripping half looks for phrases ("no clear figure visible",
 corpus contain any of them**, because the model-authored perception path that
 produced them is gone.
 
-So the likely correct change is deletion, of all three and of the tests that
-keep them looking alive. It is filed rather than done because it is a
+So the likely correct change is deletion — of the whole family and of the tests
+that keep it looking alive, in one commit. It is filed rather than done because it is a
 judgement about design intent — whether these were meant to be deterministic
 floors that were never wired — and because `agents/__init__.py` is a
 compatibility facade that replay may depend on.
@@ -2283,20 +1289,6 @@ the closed menus look like at the authoring surface; the specialist prompt
 should say the same thing, and then the read-path repair becomes a floor
 rather than a working part.
 
-### 1.47 `contract_bench`'s specialist payloads are the flaw the shootout exists to document
-
-`tools/director_shootout.py` was written because `contract_bench` sent a
-927-character payload and reported a model at 3.95s that took 47.4s in a live
-turn — the bench was sending about 4,400 system tokens against a real
-director's 27,000, and mis-ranked the most expensive role in the pipeline.
-
-The six specialist payloads added in alpha 8.4.4 are synthetic two-character
-scenes and have exactly that flaw at smaller magnitude. They make the
-specialists benchable at all, which they were not; they should be rebuilt from
-a real chat the way `director_shootout` builds its own before anyone ranks a
-model for a tiering decision on them.
-
-
 ### 1.48 Language packs: what is not finished
 
 The pack machinery is built and English is byte-identical to before the
@@ -2316,9 +1308,10 @@ is right for fiction. Until it is read by someone who speaks it, treat
 renders admitted percepts through the pack, but several producers build reader-
 facing clauses themselves and hand them over as data:
 
-- `world/spatial.py` contact and substance clauses (`contact_sensation`,
-  `substance_event_clause`) — these reach the view AND the memory episode, so
-  they are written permanently into a non-English character's memory bank;
+- contact and substance clauses (`spatial_prose.contact_sensation`,
+  `spatial_substance.substance_event_clause`) — these reach the view AND the
+  memory episode, so they are written permanently into a non-English
+  character's memory bank;
 - `scene.appearance_of`'s glue (`"; wearing: "`, `"; clothing state: "`), whose
   separators are also parsed back by `story/attire.py` and `agents/perception.py`,
   so translating them breaks the readers unless all three move together;
@@ -2351,12 +1344,17 @@ Declared-and-ignored is the same invisible-failure shape as
 `capabilities.ui.css` was, and that one shipped unnoticed for a release.
 
 **A story does not record which pack version wrote it.** Chats stamp
-`story_language` and not the pack's `version`, so when a pack's wording or
-recognition tables change under an existing story there is nothing to
-reconstruct the old linguistic behaviour from — a memory minted under
-`ja 0.2.0-beta` is indistinguishable from one minted under a later revision.
-Cheap to add (one more key beside `story_language`), and only useful if added
-before the packs start moving.
+`story_language` and nothing else — not the pack's `version`, adapter or
+translation status. So when a pack's wording or recognition tables change under
+an existing story there is nothing to reconstruct the old linguistic behaviour
+from: a memory minted under `ja 0.2.0-beta` is indistinguishable from one minted
+under a later revision, and a story played across a pack upgrade has beats
+produced under different linguistic rules with nothing on disk saying so.
+Acceptable while old pack versions are not retained, but a
+`story_language_pack_version` stamp beside `story_language` is one key and would
+at least make a behaviour change explicable afterwards — and it is only useful
+if added BEFORE the packs start moving. *(This was written twice in this entry;
+folded 2026-08-19.)*
 
 **Japanese still has open items from its first native review.** The review
 (the pack's first) fixed the sentence architecture, but three things were
@@ -2382,47 +1380,11 @@ identified and not done:
 **"句点 inside 「」" is not normalised.** Standard Japanese practice omits the
 closing 句点 inside quotation marks; the engine emits whatever the model wrote.
 
-**RTL is accepted and unimplemented.** `manifest.direction: "rtl"` validates,
-reaches `document.documentElement.dir`, and nothing else: there are no
-`[dir=...]` rules in `static/`, and the stylesheets use physical `left`/`right`
-properties throughout. Both shipped packs are `ltr`, so no RTL pack has ever
-been rendered. A pack declaring `rtl` today gets a mirrored text direction over
-an unmirrored layout.
+*(Two bullets left this entry on 2026-08-19 — RTL acceptance and the
+deliberately broad UI catalog scanner. Both are facts a pack AUTHOR needs before
+starting rather than defects in a story, and are now in
+[`guides/LANGUAGE_PACKS.md`](guides/LANGUAGE_PACKS.md).)*
 
-**The UI catalog scanner is deliberately broad.** `tools/extract_ui_catalog.py`
-harvests string literals, so roughly 4% of the 2006 English messages are code
-fragments, selectors and markup that never render. They are carried as
-`translation_exceptions.json` entries rather than filtered, which keeps the
-parity check honest but hands translators strings they must not touch.
-
-**Provenance is not recorded per story.** A chat stores `story_language` and
-nothing else — not the pack version, adapter, or translation status it was
-played under. A story played across a pack upgrade has beats produced under
-different linguistic rules with nothing on disk saying so. Judged acceptable
-while old pack versions are not retained, but a `story_language_pack_version`
-stamp would at least make a behaviour change explicable afterwards.
-
-### 1.49 Chats 69–80 have no self-memories, and never will
-
-Between d290ca4 (2026-08-10) and the repair, no character anywhere formed a
-`category: self` memory of their own speech or acts: d290ca4 suppressed the
-row whenever a perception view existed, and 3a82657 (one day later) made
-views both universal and — correctly, per the firewall — free of the mind's
-own conduct, so the suppression fired every beat. Measured: chat 67 holds 20
-self rows over 51 turns; chats 69–80 hold 0 over 240 turns.
-
-The minting is repaired (`commit.prepare_memory_commit`,
-`tests/test_own_conduct_memory.py`); the eight days of already-played story
-are **deliberately not backfilled**. A self row is the character's own
-remembered decision (`provenance: remembered`), and the declarations that
-would source a reconstruction sit in step variants a character never
-experienced remembering — inventing a memory a mind never formed is a worse
-falsification than the absence, which at least behaves like ordinary
-forgetting. Characters in those chats permanently do not remember what they
-said and did during that window; consolidation summaries written over it are
-built from heard/witnessed rows only. If a future need arises, the honest
-shape is an authored-memory import a host chooses per character, not an
-automatic reconstruction.
 
 ### 1.50 Residuals from the speaking-device repair (chat 80)
 
@@ -2485,213 +1447,44 @@ hardening items are closed.
   cast member's survives. A presence that matters enough to be renamed
   probably matters enough to promote.
 
-### 1.51b A retired setting's row outlives its feature
+### 1.52 The monolith-split audit: what is still open
 
-Found 2026-08-18 while checking the owner's live database for something else.
-Nothing prunes `settings` when a feature is deleted, so a retired key stays
-forever and the only symptom is that a later reader greps the tree, finds
-nothing, greps the database, and finds a row. Four of 29 keys on the live
-install have no reader anywhere in the engine:
+The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and
+`agents/director.py` required somebody to read all 24,783 lines once. Nothing
+else in this project does. Everything that reading turned up was written down
+and NOT repaired — a fix inside a move commit destroys the property that made
+the move reviewable, which is that `git diff -M` reads as pure renames. Full
+detail, each finding carrying `file:line` as of `418ab5b`:
+[`experiments/AUDIT_SPATIAL.md`](experiments/AUDIT_SPATIAL.md) (F1–F16),
+[`experiments/AUDIT_COMMIT.md`](experiments/AUDIT_COMMIT.md) (14),
+[`experiments/AUDIT_DIRECTOR.md`](experiments/AUDIT_DIRECTOR.md) (D1–D13); repair
+plan in [`design/AUDIT_REPAIR_PLAN.md`](design/AUDIT_REPAIR_PLAN.md). Each landed
+row was deleted in the commit that landed it, which is why the shipped list is
+in `CHANGELOG.md` and not here.
 
-- `director_orchestration` — the flag the orchestrated Director shipped
-  behind, deleted when the monolith went (§2.18). Empty.
-- `character_reflection` — empty, and the last trace on `main` of a feature
-  that was built and then decided against. See below.
-- `host_secret`, `host_secret_hash` — the auth scheme that preceded the
-  PBKDF2 host account (`host_pw_hash`/`host_pw_salt`, both live).
-
-**Checked, because two of them are credentials: there is nothing sensitive at
-rest.** `host_secret` is empty, `host_secret_hash` is a 64-character digest
-and not a plaintext token, so `tests/test_host_secret_hashing.py`'s standing
-claim — that a readable `engine.db` never yields a working host credential —
-still holds. Inspected read-only, values never printed.
-
-**`character_reflection` deserves its own line, because the commit that
-removed it reads as more open than the decision was.** It toggled splitting
-the character step in two: CONDUCT stays pre-resolve, and a new REFLECTION
-step after `perception_outcome` lets each mind write its memory of a beat
-from what actually HAPPENED rather than from what it intended. The problem it
-addressed is real and is still here — the character loops run before
-`director_resolve`, so `remember_lines`, belief updates, mind-model updates
-and relationship updates are all authored from intent, and salience, the
-number retrieval searches on forever, tracks what a character meant to do
-rather than what landed. It also carried an engine-computed prediction-error
-gap, `choice_review`, and `held_beliefs` (a contradiction SEEN and not
-revised, recorded as an act).
-
-It landed 2026-08-12 behind a default-OFF flag and was reverted the same day
-(`415e208`), whose message says the work is intact on branch
-`character-cognition` "so nothing is lost and it can be argued again on its
-own terms later".
-
-**The owner's answer, 2026-08-18: minds already reflect — it happens on the
-next turn.** And checking that against the code turns up the stronger
-version, which is worth stating because the reflection split's premise does
-not survive it.
-
-There are TWO numbers on a memory, deliberately. `salience` is how much it
-mattered WHEN IT WAS FORMED — intent-shaped by definition, because intent is
-what the mind knew then. `importance` is the revisable one, and
-`effective_importance` falls back to salience until something revises it.
-**Retrieval ranks on `effective_importance`**, so a later correction reaches
-the ordering the split was worried about. `raise_importance` states the
-division outright: *"Never lowers, and never touches `salience` -- how much
-it mattered when it was FORMED is a different fact."* The dispute path goes
-further and moves importance UP when a memory turns out to have been wrong,
-on the grounds that "a memory whose meaning changed is more central to this
-mind, not less."
-
-So intent-shaped salience is not a defect to be fixed at write time. It is a
-true record of what a mind understood then, and the correction is a separate
-fact that arrives when the consequence does — one beat later, through a
-channel that already exists. Re-proposing the split needs an argument against
-THAT, not a rerun of the old one.
-
-So this is tidiness, not a defect, and it is registered rather than repaired
-because the repair writes to live stories: a migration deleting retired keys
-runs on the owner's database at next launch, and that is their call to make.
-What makes it worth writing down is the CLASS. A settings key is the one kind
-of configuration the engine cannot check — `tools/project_check.py` reads the
-tree and the tree is exactly where a retired key is absent. Anything that
-enforces this has to compare a list of live keys against a database, which
-means the list has to exist first.
-
-### 1.52 The monolith-split audit: 43 findings, and the rows still open
-
-The 2026-08-18 split of `world/spatial.py`, `persist/commit.py` and `agents/director.py`
-required somebody to read all 24,783 lines once. Nothing else in this project
-does. Everything that read turned up was written down and NOT repaired: a fix
-inside a move commit destroys the property that made the move reviewable, which
-is that `git diff -M` reads as pure renames. Full detail, each finding carrying
-`file:line` as of `418ab5b` plus the commit that moved the code:
-
-- [`docs/experiments/AUDIT_SPATIAL.md`](experiments/AUDIT_SPATIAL.md) — 16 (F1–F16)
-- [`docs/experiments/AUDIT_COMMIT.md`](experiments/AUDIT_COMMIT.md) — 14
-- [`docs/experiments/AUDIT_DIRECTOR.md`](experiments/AUDIT_DIRECTOR.md) — 13 (D1–D13)
-
-Repair began 2026-08-18 under
-[`docs/design/AUDIT_REPAIR_PLAN.md`](design/AUDIT_REPAIR_PLAN.md): one commit
-per finding, failing test first where the finding is live, `make check` green
-between. **A line below is deleted in the commit that lands it** — this list is
-the register, so it must shrink.
-
-The heading used to carry a repaired/open COUNT and no longer does, because the
-count could not be reconciled against the rows: 43 findings against 21 landed
-and 16 still-open rows leaves six unaccounted, and those six are findings the
-split ITSELF closed (a doc block relocated by the move, a symbol that ended up
-beside the machinery it configures, `tools/project_check.py`'s deep-import head
-match, the monkeypatch repoints) which were recorded in the audit documents and
-never opened here. A number that has to be recomputed from three files to be
-checked is not a register. The ROWS are the register; count them if you need a
-count. Reconciled against source twice on 2026-08-18: once before the repair
-wave, when the only row that had landed was DIRECTOR D4, and again after it,
-when all sixteen SPATIAL and DIRECTOR rows and every COMMIT row but two had
-landed. What survives below is what survived that second reading.
-
-**Dead code, and guards that cannot fire.**
+**One row is open, re-verified 2026-08-19.**
 
 - **COMMIT-10** — `prepare_mapping_commit`'s `proposed_specifics` is a
-  permanently empty payload field that teaches every mapping call about an
-  input that cannot occur (`persist/commit_mapping.py`; no pack card mentions
-  it, so this is a code-only change). **Blocked on an owner decision**:
-  removing it changes what every mapping call is taught it may be handed, and
-  a field a model is told it can fill is a different instruction from one it
-  is not.
+  permanently empty payload field that teaches every mapping call about an input
+  that cannot occur. `persist/commit_mapping.py` sets `specifics = []`, never
+  mutates it, and sends it. No pack card mentions it, so this is a code-only
+  change. **Blocked on an owner decision**: removing it changes what every
+  mapping call is taught it may be handed, and a field a model is told it can
+  fill is a different instruction from one it is not.
 
-**Tests that pass for the wrong reason.**
-
-- **DIRECTOR D11** — `tests/test_style_guide.py` asserts on `director.py`'s
-  SOURCE LAYOUT by def-name marker. Still open at `tests/test_style_guide.py:143`
-  (`open("agents/director.py").read()`, sliced between `"def director_interpret"`
-  and `"def _reconcile_interpretation"`), and the audit's warning that the suite
-  would hold more of the class was right: `391bf14` fixed two others.
-
-**Landed 2026-08-18**, each in its own commit with a test:
-
-- DIRECTOR D1/D2/D9 — the three channel registries, two of them frozen against
-  the extension seam, now rebuilt together; list shape derived from
-  `StateDiff` for engine channels and declared by `register_specialist(
-  list_channels=...)` for an extension's.
-- COMMIT — the `auto_dialogue` promotion threshold, which had a route, an
-  editor, a test and no reader.
-- SPATIAL F7 — `_BARRIER_ALIASES`' duplicate `one_way_mirror` key, plus
-  `check_duplicate_dict_keys` in `tools/project_check.py` so the class cannot
-  recur.
-- COMMIT — `world_entities.retired_turn_id`, filtered on and written by
-  nothing. Resolved as vestigial-by-design (a projection keeps no history);
-  `core/db.py`'s claim that `lorebooks` mirrors it was the false half.
-- COMMIT — `commit_cast_changes` silently dropping every status but
-  `active`/`dormant`, and the vocabulary nobody had ever stated. Found on the
-  way: three OTHER readers of `cast_changes` built their "who left" set from
-  the entries that exist and never read the status at all, so an arrival was
-  read as a departure by all three.
-- SPATIAL F1 — `_SCENT_BARRIERS`, a declared vocabulary its own function
-  ignored, now the graded table `scent_level` actually reads.
-- SPATIAL F5 — `_phrase_table`'s blanket `except Exception: return {}`, which
-  degraded a broken pack to English-shaped silence. Its other half is REFUTED
-  rather than repaired: `installed_language_packs` caches, so there was never
-  a per-call pack resolution to memoize.
-- SPATIAL F12 — an authored room `size` outside the vocabulary, and the second
-  copy of the vocabulary that let it happen (`crowds.py` held the list the
-  grader graded against). `scene_lint` now reports the authored word.
-- SPATIAL F13 — the hand-mirrored `6.7` inverse of `fits_in_other_hand`'s
-  `0.15`, now one `_HAND_HELD_RATIO` shared by all three statements of it.
-- SPATIAL F15 — the one unguarded room write in `apply_transit_dock_edges`.
-- SPATIAL F9/F14, DIRECTOR D6/D8, COMMIT's `# ---- Mapping commit ----` marker
-  — the comment-only defects, batched.
-- DIRECTOR D7 — the `if True:` vestige of the removed orchestration flag.
-- DIRECTOR D12/D13 — §2.18 rewritten to hold only what has NOT landed, and
-  design note 19's "Experiment, not a landing" header corrected.
-- DIRECTOR D4 (`21dcdf8`) — the three eagerly-bound English cue constants
-  (`_UNCONSCIOUSNESS_CUE`, `_SLEEP_CUE`, `_STAY_UNDER_CUE`) are gone from
-  `director_lingua.py`; every reader goes through `_ling(...)` under the story's
-  own language context, and `tests/test_awareness.py` /
-  `tests/test_awareness_waking.py` now reach the English objects through
-  `english_linguistic("agents.director", ...)` as the finding required. Verified
-  2026-08-18: no module-level definition of any of the three survives.
-
-**Landed from the Phase 2 whole-codebase audit** (not one of the 43, recorded
-here because it is the most serious thing either audit found):
-
-- A live information-firewall leak. `_composer_outcome` built body records
-  without `disguise_conceals_identity` -- computed and dropped on the same
-  line -- and an absent flag reads as "does not conceal". An
-  identity-concealing disguise worked in the act view and stopped working in
-  the outcome view of the same beat, handing the canonical name to every
-  observer who had ever met the wearer. `disguise_breaks_recognition` now
-  fails CLOSED on a half-built record.
+*(DIRECTOR D11 — a test asserting on `director.py`'s source layout — was struck
+2026-08-19: `tests/test_style_guide.py` contains no `open(` at all; it reads
+payloads through `_payloads_sent`. The class it warned about survives and is
+now stated in [`guides/TESTING.md`](guides/TESTING.md) § Assertions that read
+source instead of running it.)*
 
 **Not a defect, but the honest ceiling on what the split bought.** The three
-functions that made these files unreadable did not get smaller:
-`director_resolve` is 1,474 lines, `prepare_memory_commit` 1,264,
-`merge_scene_with_diff` 318 while reaching into nine modules. Splitting files
-does not split functions, and those three are most of what made the originals
-hard to audit.
+functions that made these files unreadable did not get smaller — re-measured
+2026-08-19: `director_resolve` **1,482** lines, `prepare_memory_commit`
+**1,270**, `merge_scene_with_diff` **322** while reaching into nine modules.
+Splitting files does not split functions, and those three are most of what made
+the originals hard to audit.
 
-
-### 1.54 Scent is a permission system with nothing to permit
-
-Everything that decides WHETHER a smell crosses is built and good:
-`spatial_barriers._SCENT_BARRIER_LEVELS` is a table rather than a set because
-scent is the one channel with degrees, `spatial_senses.scent_level` is its only
-reader, the three enclosure directions grade it, card-authored scent acuity runs
-through the same `composer._sense_graded` gate as every other sense, and
-`agents/perception.py` computes `scent_channel_to_sources` /
-`scent_channel_to_actor` for every observer every beat.
-
-**Nothing has a smell.** There is no scent field on a character card, on a
-persona, on an entity, on a room, or in any `StateDiff` channel. No percept
-builder emits `channel="smell"` — `"smell"` is a member of `composer.CHANNELS`
-and appears in no `Percept` the codebase constructs — so the computed verdict
-is read only by `tests/test_masked_floor_leaks.py`. `agents/narration.py`
-already says so in code, reporting the channel to the narrator as "open air;
-nothing ledgered rides this channel".
-
-Registered rather than deleted because the halves are worth keeping apart: the
-gate is finished work, and building content would mean deciding where a smell
-lives (a card field is stable body odour; an entity field is a thing that
-smells; a `StateDiff` channel is a smell a beat produced) and how it decays.
-The gate is the hard half and it is done. `Design.md` carries the matching row.
 
 ### 1.56 The project tier's occasion now arrives, and is declined
 
@@ -2723,6 +1516,18 @@ evidence. The candidates, none of them measured yet:
 Do not change a gate on this until one of the three is measured. The v4 lesson
 is that the previous gate change was correct and did not produce an adoption,
 and a second blind change would make the two indistinguishable.
+
+**Absorbs §1.23(d) and §7's "why 3 of 31" bullet (2026-08-19) — one zero written
+three times.** Do not confuse the two denominators: `tools/fire_rates.py` reports
+`has ever held a project 9.68% (3/31)` across characters with any project
+history, while the table above counts LIVE banks and gets 0. Both say the tier
+is essentially unentered; only the second is the recent engine. The measurement
+that would separate the three candidates is filed at
+[`experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md) §1 —
+it is the smallest number in the corpus with the largest documented effect
+(`CLAUDE.md` records projects as what made NPCs pass the maze without altering
+their drives), so measure it before enriching anything in the world layer.
+
 
 ### 1.57 Two per-item tags in `OFFSCREEN_WORLD_COMPLETION.md` overstate what is built
 
@@ -2775,8 +1580,10 @@ accident**, so every read site has to be re-examined for whether it wants
 - **PERSISTENCE-F17 — three world keys are not frame-scoped while seventeen
   siblings are.** `world_pressures` (`persist/commit_ledgers.py:150,227,299`),
   `background_claims` (`world/background_claims.py`, six sites) and
-  `engine_notices` (`agents/director.py:532,2550`,
-  `persist/commit_mechanics.py:184`, `persist/commit_destruction.py:403,411`)
+  `engine_notices` (re-verified 2026-08-19: `agents/director.py` reads it at two
+  sites, and the WRITERS are `persist/commit_mechanics.py`,
+  `persist/commit_destruction.py` and `persist/commit_scene_state.py` — the
+  last was missing from this row)
   are plain `wget`/`wset`. So a pressure raised in one era, a claim ratified in
   one era and a notice raised in one era are all visible from every other era,
   and a rewind does not retract them. Adding a key to
@@ -2814,6 +1621,7 @@ accident**, so every read site has to be re-examined for whether it wants
 - **The four dead settings keys** — §1.51b, kept there because the diagnosis is
   there. Listed again here because the repair is the same kind of thing: a
   migration that deletes rows from live stories at next launch.
+
 
 ### 1.60 `generalization_tags` promises a mechanism that does not exist
 
@@ -2881,125 +1689,6 @@ views, so the narrator half is waiting for a key nothing writes, which is why
 this reads as built until you go looking for the producer. Audit RUNTIME-4.
 
 
-### 1.63 Six dropdowns show the reader the engine's stored enum values
-
-Not a translation gap. `Design.md` § Story and interface language packs states
-the rule and it is right: **the stored protocol stays canonical English —
-schema keys, enum values, step ids and ledger vocabulary are never translated**,
-which is what lets one deterministic engine read objects written by any
-language. `tools/project_check.py`'s `canonical_language_tokens` enforces it,
-and `extract_ui_catalog._message` implements it by refusing a bare lowercase
-token.
-
-The defect is one layer up, and it is in ENGLISH too. Six module-level tables
-in `static/js` are rendered straight into dropdowns and checkbox labels, and
-each element is both the `value` sent to the server and the text shown to the
-reader:
-
-| Table | Where | What a reader sees |
-|---|---|---|
-| `MEM_CATS_FALLBACK` | `utils.js:194` | `episode`, `semantic`, `self` |
-| `MEM_PROV_FALLBACK` | `utils.js:195` | `witnessed`, `inferred` |
-| `ATTIRE_REGIONS` | `components.js:445` | `torso`, `groin` |
-| `EXTRA_PART_ASPECTS` | `components.js:793` | `underside`, `sides` |
-| `LORE_INHERITANCE_MODES` | `lorebooks.js:3` | `reference_only` |
-| `DEFAULT_LORE_LINK_TYPES` | `lorebooks.js:15` | `alternate_version`, `currently_within`, `depends_on` |
-
-`alternate_version` is not a label in any language. The repair is the shape the
-attire coverage presets already use (`ATTIRE_COVERAGE` pairs an authored phrase
-with its region list): give each enum an authored LABEL beside its value, put
-the label in the catalog and the value on the `option`. `components.el()`
-already translates every text child and never touches a `value` attribute, so
-the mechanism is there and only the pairing is missing.
-
-Found while checking audit FRONTEND-23, which read the same symptom
-("`episode` appears zero times in `en/ui.json`") as an extractor bug. It is
-not: measured 2026-08-18, 688 distinct strings in `static/js` are rejected by
-that filter and 683 are CSS custom properties, MIME types, event names, class
-names and route fragments. Translating the other five is what the protocol rule
-forbids. **Refuted rather than repaired**, and recorded here so the next reader
-does not re-derive the same wrong fix — the entry that is actionable is this
-one.
-
-
-### 1.64 Thirty-four assertions that read Python source instead of running it
-
-**Census 2026-08-18**, by parsing the suite rather than grepping it: **34
-negative source-substring assertions against PYTHON source, across 18 test
-files**, plus 128 `inspect.getsource` calls of which 18 pass a whole MODULE.
-Separately, 19 negative assertions in 10 files read a non-Python asset — a
-`.js`, `.html`, `.css` or `.sh` file — and those are a different thing, treated
-below.
-
-Three faults, and only the first is the one usually noticed.
-
-1. **It passes for code that does the wrong thing.** "This path makes no model
-   call" written as `"chat_complete" not in source` holds for an aliased
-   import, for a call through `llm_quality.complete_validated_json`, and for a
-   provider reached through a module the file already imports. It is also
-   false-POSITIVE on the word appearing in a comment, which is how a correct
-   file gets a red test and somebody deletes the prose instead of the import.
-2. **It fails a refactor that changed nothing.** Extracting a condition into a
-   named predicate — the ordinary tidy-up — breaks an assertion on the
-   condition's literal spelling.
-3. **It is NON-DETERMINISTIC, which is the fault that makes this a defect
-   rather than a preference.** `inspect.getsource` resolves the source through
-   `linecache`, reading the file from disk AT ASSERT TIME, while the module
-   object was imported earlier. Anything editing that file concurrently — a
-   second agent, an editor writing on save, a `git checkout` in another
-   worktree — yields a mismatch: the test fails once and passes on re-run. Two
-   agents hit this independently during the 2026-08-18 repair wave, in
-   different files, and both first read it as a real failure.
-
-**Two instruments now exist, and the row is what remains after using them.**
-
-- `tests/model_seams.py` seals every provider door (`chat_complete`,
-  `embed_texts`, `embed_texts_meta`, `complete_validated_json`, `_agent_json`)
-  including the aliases callers bound at import time, and raises from inside
-  the call naming which door opened. A "makes no model call" claim is now
-  DRIVEN. `tests/test_model_seams.py` proves each door is really shut by
-  opening it, because a sealer that silently misses one turns a weak assertion
-  into a false one.
-- Where the property genuinely is about the module rather than about a run,
-  the assertion goes against the PARSED TREE — imported names including the
-  original behind an `as`, called names, string constants, attribute access —
-  which answers the question the substring was approximating and is immune to
-  comments, spelling and formatting.
-
-**Converted so far**: `test_style_guide.py` (three assertions, driven through
-the payload), `test_offscreen_reactive.py`, `test_offscreen_resolution.py`'s
-seeded draw (both sealed and driven), `test_perception_has_no_model.py`,
-`test_story_view.py`'s layering rule and
-`test_offscreen_agent_context.py`'s fail-closed allowlist (all four to AST).
-
-**Left, and left honestly.** A source assertion that is the only available
-instrument is a different thing from one that was merely easier, and both
-kinds remain:
-
-- **The only instrument.** The 19 assertions against `.js`, `.html`, `.css`
-  and `.sh` files (`test_ui_themes.py`, the three `test_frontend_*` files,
-  `test_guest_page.py`, `test_provider_fallbacks.py`,
-  `test_launcher_python_range.py`). A Python suite cannot execute a stylesheet
-  or a shell installer, so reading it IS the test; there is also no imported
-  module for the read to disagree with, so fault 3 does not apply to them at
-  all. These should be left alone.
-- **Merely easier**, and still open: the 34 Python ones, chiefly
-  `test_crowds.py` (5), `test_offscreen_resolution.py` (6),
-  `test_offscreen_life.py` (3), `test_launcher_python_range.py` (3),
-  `test_body_position.py` (2), `test_pipeline_audit_leak_gaps.py` (2),
-  `test_living_world.py` (2). Each needs its own judgement about what the
-  property IS, which is why this is a row rather than a sweep — and a sweep is
-  what would produce 34 tests that pass and mean nothing.
-
-**No new one should be written.** Both instruments are in `tests/`, and a
-third option exists that beats either: give the code the seam the test wants.
-`tests/test_carriers.py` keeps one source assertion and says so in its own
-docstring — `prepare_memory_commit` offers no way to observe which clock it
-stamped without running a commit, and inventing that seam belongs to whoever
-owns `persist/`. That is the right shape for a residual: named, reasoned, and
-pointing at the change that would remove it.
-
-
 ### 1.65 A condition subject written as a scene uid names nobody
 
 Found while landing restraint and awareness exits
@@ -3042,33 +1731,206 @@ Three smaller residuals from the same note, deliberately not landed with it:
 
 `syncVitalsGutter` (`static/js/settings.js`) computes `--story-width` as
 `clamp(STORY_MIN_WIDTH, shellWidth - 2*reserve, STORY_MAX_WIDTH)`, where
-`reserve` is the widest float that has to sit beside the column — the vitals
-tracker on the left, the ambience cluster on the right. The reservation is
-correct and the clamp silently defeats it: when
-`shellWidth - 2*reserve < STORY_MIN_WIDTH`, the column is pushed back up to
-720 and the float it was making room for lands ON it.
+`reserve` is the widest float that has to sit beside the column. The
+reservation is correct and the clamp silently defeats it: when
+`shellWidth - 2*reserve < STORY_MIN_WIDTH` the column is pushed back up to 720
+and the float it was making room for lands ON it.
 
-Found by the browser suite on 2026-08-19, the first run after the CI job
-stopped being skipped. At a 1400px window the composer is 1114px wide, the
-ambience cluster was 212px with its volume slider, the reservation asked for
-a 650px column, the floor forced 720, and the controls sat **27px inside the
-input box** — over the right-hand end of the field being typed into.
+Found by the browser suite 2026-08-19, the first run after the CI job stopped
+being skipped: at a 1400px window the reservation asked for a 650px column, the
+floor forced 720, and the ambience controls sat **27px inside the input box** —
+over the right-hand end of the field being typed into.
 
-**The instance is fixed and the class is not.** The CSS container queries that
-shed the slider and then stop floating are now derived from the cluster's
-measured widths rather than guessed (`static/styles.css`, `@container
-composer`), so the cluster gets narrow before the margin runs out. The same
-hole is still open on the LEFT: `VITALS_MIN_GUTTER + 12` is 198, so a shell
-narrower than `720 + 396 = 1116` with the tracker visible reserves room the
-clamp then refuses to give, and nothing reports it.
+**The instance is fixed and the class is not.** The container queries that shed
+the slider and then stop floating are now derived from the cluster's measured
+widths (`static/styles.css`, `@container composer`). The same hole is open on
+the LEFT: `VITALS_MIN_GUTTER + 12` is 198, so a shell narrower than
+`720 + 396 = 1116` with the tracker visible reserves room the clamp then
+refuses to give, **and nothing reports it**.
 
-Two shapes of real fix, neither taken here: let the column go below
+Two shapes of real fix, neither taken: let the column go below
 `STORY_MIN_WIDTH` when a float genuinely needs the room (readability loses to
 not-overlapping), or make the floats' own container queries the single
 mechanism and drop the JS reservation (one mechanism instead of two that can
 disagree). The second is closer to how the ambience cluster already behaves.
-Whichever wins, `browser_tests/test_ui_smoke.py` holds the invariant and
-should gain a tracker-side case.
+Whichever wins, `browser_tests/test_ui_smoke.py` holds the invariant and should
+gain a tracker-side case.
+
+
+### 1.67 Subject spellings outside the scene blob are not folded
+
+**Landed 2026-08-19**, to
+[`DESIGN_SUBJECT_SPELLING_AUTHORITY.md`](design/DESIGN_SUBJECT_SPELLING_AUTHORITY.md):
+a registered cast character's canonical spelling is the SHEET's
+`identity.name`; every other being keeps the scene entity's own `name`.
+Enforced by `common.reconcile_cast_entity_names` at both Director stage bodies
+and on both sides of the merge at commit, so the cast-free merge fold reads an
+entity record that is already right. `common.cast_spelling_policy` is the one
+table both hand-rolled copies now call, the alias fold is reachable for a
+name-keyed entity, and `orientation` joined `_SUBJECT_KEYED`. Measured on the
+live corpus: 4 entity records renamed (chats 27, 65, 81, 82), 8 scenes healed,
+21 ledger keys folded, 62 of 70 scenes byte-identical.
+
+What is NOT folded is every durable store OUTSIDE the scene blob that holds a
+subject spelling — `world_conditions` (§1.65, the same gap with its own commit,
+restore and branch/clone exposure), `subject_last_seen`, and the
+background-presence recognition ledgers. Each is a read-side consumer that
+already resolves through identity or must learn to; rewriting them is per-store
+work with its own `DATABASE.md` checklist, deliberately out of scope of the
+scene fold. Close §1.65 next, citing that note for direction.
+
+Two smaller residuals from the same landing:
+
+- **`canonicalize_positions` still refuses aliases**, and correctly:
+  `positions` keys objects and unregistered presences beside people, so a
+  generic alias ("The Oncoming Storm") could name a genuinely separate entity
+  and folding it would move an object into a person. It is now a stated
+  `aliases=False` on the shared policy rather than a second table, but the
+  underlying question — how to tell a person's alias from an object's name
+  without the scene in scope — is unanswered, and it is why the entity
+  reconciliation exists.
+- **Two entity records for one character are left alone** by the
+  reconciliation, because renaming both would mint the duplicate key
+  `_dedup_duplicate_entity_keys` exists to collapse. That is a merge defect
+  with its own owner; the pass declines rather than racing it.
+
+### 1.68 A barrier's appearance, and knowing how it works, are both in the room note
+
+**Landed 2026-08-19:** a `one_way_window` declared from both sides is a
+contradiction, so sight subtracts in both directions and the pair is reported
+once per chat — to the developer as a warning and to the Director as an engine
+notice naming the blind side it must declare. `sight_contradictions_told` makes
+a scene that was ALREADY contradictory before the check existed get told once
+rather than never.
+
+The subtraction is a holding position with a known cost: the watching side
+loses a view it should have had until somebody names the direction. It is
+accepted because a gap plays wrong obviously and the notice says what to fix,
+where the leak it replaces — chat 82's restrained subject watching her
+interviewer through a mirror her own room note called opaque — is not noticed
+until it has been true for fifty beats.
+
+**The open half is that one physical object is described in three registers and
+the engine only has one place to put them.** Owner's statement of it, 2026-08-19:
+
+> Sarah should know that the glass is one way... but not by looking at it, yes
+> she can see through it on her side... but she only knows it's one way from
+> prior info.
+
+Three different questions, three different homes, and today all three live in
+`rooms[x].notes`, which is authored once and served to everyone standing in the
+room:
+
+| question | where it belongs | today |
+|---|---|---|
+| who can see through it | the edge barrier, directional | the mutual declaration cancels it |
+| what it LOOKS like from each side | edge-scoped prose, delivered per side | one note per room, so both sides get both |
+| *knowing* it is one-way | the character's knowledge — a briefing, a memory | the note, so the subject is told too |
+
+Chat 82 shows all three failing at once. The cell's note reads "The mirrored
+side of the two-way glass offers no visibility to the annex" — a statement
+about the FAR side's optics, handed to the woman restrained in the cell, who
+has no channel to it. Standing beside a mirror is not a channel to how the
+mirror works. Two sentences later the same view says she sees the annex and
+everyone in it, because the geometry disagreed with the prose.
+
+The fix is to move barrier prose onto the edge, where it can be rendered per
+side, and to leave "it is one-way" out of the scene entirely — it is prior
+knowledge, and the engine already has knowledge records. That is a schema
+change (owner policy 4, §1.58) plus a migration for every scene whose barrier
+prose currently sits in a room note, which is why only the deterministic half
+landed. Until then a room note may still tell an occupant something the room
+does not show, and no guard reads prose well enough to catch it.
+
+### 1.69 Three other sentence splitters still have no abbreviations
+
+**Landed on 2026-08-19 for the three splitters in `agents/`.**
+`common.split_sentences` rejoins a fragment whose predecessor ends in a
+`_SENTENCE_ABBREVIATIONS` token (language-pack data, because "a period may end
+an abbreviation" is a fact about a writing system), and `_sentence_subjects`,
+the perception redactor and the two narration fidelity checks all route through
+it. `_subject_opener` gained the matching admission: a title standing
+immediately before a name opens that name's sentence.
+
+**Still splitting on a bare period, and there are THREE, not four** (title
+corrected 2026-08-19; the body always said three): `common._VIEW_SENTENCE_SPLIT_RE`
+(the view deduper — a different contract, its split keeps the separators
+interleaved), `dressing/backdrops.py` and `tools/perception_retrieval.py`. **None
+of them decides what a mind receives**, so none can produce the chat 82 failure;
+they can only mis-count a sentence. Watch item, not a defect.
+
+The token set is deliberately not every abbreviation — "etc." and "Ph.D."
+genuinely end sentences, and rejoining there welds two real ones together. It
+holds the class that essentially never ends a sentence and does routinely
+precede a NAME, which is the shape that made the split damaging.
+
+
+### 1.71 `nature` is the designed answer and it is almost never asked
+
+`BlurbMintEntry.nature` (`llm/schemas.py`, `PRESENCE_NATURES = person | thing |
+voice`) exists precisely so the engine stops deriving animacy from a noun the
+model chose in passing. Its own docstring calls that "an enumeration
+treadmill": `_INERT_ENTITY_KINDS` reached 50 entries and
+`_ANIMATE_ENTITY_KINDS` 35, "and a kind string still cannot separate a
+suppression device from a dalek war machine."
+
+**It is only answered on the `scene_life` path.** `background._mint_blurbs`
+runs over MANAGED presences, which exist under `scene_life: ambient|full`; at
+the default level no presence is ever asked what it is. Measured over the live
+corpus: **not one tracked presence carries a `nature`**, so every consumer
+falls through to the graded guesses, and 16 of them land in `undecided` — 14
+machines and 2 Daleks, exactly the pair the docstring says a noun cannot
+separate.
+
+Two gates now read that verdict, and they read it with opposite conservatism
+because they ask different questions — may this thing act (silence is cheap)
+versus is this name protected (a wrongly-protected name renders a machine as
+"the unfamiliar person" in the room's own description). The identity floor
+settles `undecided` on CONDUCT, which separates the live corpus perfectly and
+is honest about what it cannot see: a genuine person who has never spoken and
+whose kind is neither animate nor inert.
+
+The fix is to ask the question. Either widen the blurb pass to every newly
+tracked presence — it is one batched call per room, and the answer is frozen
+once — or ask the Director for it at entity creation, which is a schema change
+(owner policy 4, §1.58). Until then the answer is inferred, and the inference
+is documented rather than reliable.
+
+### 1.72 `placement` and `add[].covers` are documented, passed, and inert
+
+Found wiring §2.14's guessed-span report (2026-08-19). Both prompts tell the
+Director where to say a garment is worn when the name does not imply it —
+`add:[{name:'linen shirt',covers:['legs','groin']}]` and
+`placement:{'<garment>':['<region>',...]}`, with the reasoning spelled out
+("underwear on the head, a belt across the chest, a shirt worn as trousers…
+the variations have no end and no word list reaches them"). Neither works
+through the commit path.
+
+`story.attire.apply_flat_change` honours `placement` perfectly — called
+directly with `({}, ["nagajuban"], placement={"nagajuban": [...]})` it returns
+`torso, legs, groin`, each garment stamped `placed: True`. `commit_attire`
+passes the same argument at the same call (`persist/commit_attire.py:845`,
+`placement=d.get("placement")`), and the stored result is **torso alone**.
+
+The cause is ORDER, not plumbing. The `add` loop puts the garment into
+`cur["wearing"]` first; `_before = attire_model.normalize_regions(cur)` then
+DERIVES its span from the cue tables before `placement` is ever consulted; and
+`apply_flat_change` finds the garment already placed and leaves it where the
+tables put it. The authored answer arrives after the guess has been made and
+loses to it.
+
+No test covers the surface end to end — searching `tests/` for `placement`
+finds only `displacement`, an unrelated feature whose name contains it, which
+is how a documented authoring channel stayed inert without a single red run.
+
+Not fixed here because the fix is a reorder inside a function with a long
+measured history (the decisive-removal rule, the steal guard, the shed-object
+minting and the region derivation all read `_before`), and it wants its own
+pass with the ordering stated as an invariant: an AUTHORED span is not a guess
+to be improved, so it must be applied before anything derives one. Until then,
+`guessed_spans` reports these garments — which is the right report, since
+nothing did in fact know where they go.
+
 
 ## 2. Roadmap
 
@@ -3090,7 +1952,11 @@ change log, only the current value plus a `salient_event` string. There is no wa
 to answer "why does she distrust him?" from the record. The founding design
 specifies ~0.05 per ordinary interaction; the schema clamps at ±0.2.
 
-Verified absent: no `relationship_events` table exists.
+(Corrected 2026-08-19: this entry previously read "Verified absent: no
+`relationship_events` table exists". It does — `core/db.py:663`, with a
+writer, a reader, archive, checkpoint and branch-remap support, its own test
+file, and **341 live rows**. A register that states the opposite of the
+schema is worse than one that says nothing.)
 
 ### 2.3 Teach the heuristic import to read `description`
 
@@ -3106,33 +1972,6 @@ value of a better deterministic first pass.
 (`8ddcc1e`), so a heuristic import that lands sparse is reported wherever it
 was made; what is still missing is the populated-field THRESHOLD that would
 make "sparse" a warning of its own.
-
-### 2.4 A `$note` key on typed pack values
-
-The language-pack extraction moved roughly forty deterministic word lists and
-regexes out of `agents/common.py` and its siblings into
-`language_packs/*/cards/linguistics.json`. The comments explaining WHY each
-list is drawn where it is could not go with them, because the pack format has
-nowhere to put prose: only `_YOU_AGREEMENT` and `_PRONOUN_GROUPS` carry any
-extra key at all. `a5c9ef4` re-sited twenty of those rationales onto the
-`_ling(...)` call that reads each value, which is the best Python allows — but
-the data a TRANSLATOR edits still has none of them, and a translator is
-precisely the reader who most needs to know that an English verb table anchors
-`^...s?$` because it is matched against a single declared token while a
-script with no spaces has no token to anchor.
-
-The structural answer is a `$note` key alongside `$type`, which the decoder
-would ignore for free: `_decode_linguistic` reads `pattern`/`flags` for a
-regex and `items` for a tuple/frozenset/set and passes over anything else, and
-`_leaf_paths` already treats a `$type` value as a leaf, so a note on one would
-not become a required path a Japanese pack has to supply. What is missing is
-the CONVENTION and the one place it is stated — `language_runtime/__init__.py`,
-`docs/guides/LANGUAGE_PACKS.md`, and a `project_check` rule that a note is
-never load-bearing. Untyped values (a plain dict of strings) would need a
-decision of their own, since there `$note` would land in the dict.
-
-Cheap, and it is what stops the next extraction stranding its rationale the
-same way.
 
 ### 2.5 Complete automatic canon lock
 
@@ -3155,44 +1994,35 @@ The largest unbuilt subsystem, and the one that makes a large cast feel alive
 rather than merely stored. Argument:
 [`OFFSCREEN_LIFE_DESIGN.md`](design/OFFSCREEN_LIFE_DESIGN.md).
 
-It decomposes: gap-history plus delta-summary is the valuable 80% and is the same
-generator as §2.8; the negotiation protocol is the hard, novel half and can trail
-behind it. Mapping proposes the gap; the character may refuse on integrity
+It decomposes: gap-history plus delta-summary is the valuable 80% and is the
+same generator as §2.8; the negotiation protocol is the hard, novel half and can
+trail behind it. Mapping proposes the gap; the character may refuse on integrity
 grounds only; refusals are capped and tagged (identity-violation counts half,
 preference counts full); on exhaustion the last proposal becomes canon.
 *Conservative defaults, costly exceptions.*
 
-Build order, first three landed (bg-life work, 2026-08):
+**Steps 1–5 of the build order landed** (bg-life work, 2026-08): `gaps.gap_for`
+plus the `subject_last_seen` ledger, the chat-level `offscreen_life` ceiling,
+`offscreen.stochastic_ticks`, typed `reactive` plan stages, and
+`offscreen.schedule_agent_ticks`. Step 2's per-character half landed as an
+IMPORTANCE override (`simulation.offscreen_importance`, read by
+`offscreen.importance_for`) rather than a per-character RUNG — deliberately: the
+ladder answers what a character MAY do, importance answers how much they matter,
+and one vocabulary answering both is the `flow.reactors` defect re-minted. The
+rung opt-in that step 4 wanted now exists as `simulation.offscreen_agent`
+(`world/offscreen.py`), so that residual is closed too.
 
-1. ~~**The gap generator**~~ — landed as `gaps.gap_for` plus the
-   `subject_last_seen` ledger and the `agents/character.py` reader
-   (`while_you_were_offscreen`). Subject-agnostic; ids via
-   `subjects.resolve_subject`.
-2. **Wire `BehaviorController` per character — superseded in part.** The
-   chat-level ceiling landed in alpha 6.9; the per-character half landed as an
-   IMPORTANCE override (`simulation.offscreen_importance` on the sheet, read by
-   `offscreen.importance_for`) rather than a per-character rung, deliberately:
-   the ladder answers what a character MAY do, importance answers how much they
-   matter, and one vocabulary answering both questions is the `flow.reactors`
-   defect re-minted. A per-character RUNG opt-in remains the right shape for
-   step 4's villain ticks and is still open.
-3. ~~**`stochastic` at scene boundaries.**~~ — landed as
-   `offscreen.stochastic_ticks`: a real seeded draw against standing
-   intentions, no model call, written through `offscreen.append_offscreen_log`.
-4. ~~**Typed `reactive` plan stages.**~~ Grounded same-beat declarations,
-   frame-scoped stages, typed time/event triggers, and pre-adjudicated effects
-   now execute without a model call.
-5. ~~**`character_agent` ticks** — villain, count cap, knowledge firewall.~~ — landed as `offscreen.schedule_agent_ticks`: one
-   reduced Director-adjudicated turn per opted-in candidate on the
-   world epoch, capped by `max_offscreen_actors`, contexted only by
-   the fail-closed `agent_context`, landing atomically under
-   epoch/base-turn/per-subject guards.
-6. **Reactivation proposal.**
-7. **Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
+**Steps 6 and 7 are what is left, and they are absent entirely.** Verified
+2026-08-19: `reactivation`, `negotiat` and `refusal_budget` return **zero** hits
+across every non-test module.
+
+- **6. Reactivation proposal.**
+- **7. Negotiation** — refusal budgets, tagging, stalemate-eats-canon.
 
 Precedent that did not exist when the note was written: `world/background_claims.py`
 is exactly the "commit invention as claims, not facts" mechanism its decision 3
 asks for, built for background presences.
+
 
 ### 2.8 Richer off-screen life
 
@@ -3202,97 +2032,25 @@ generated at re-contact, so cost stays `O(re-contact)`. The exception is the
 character advancing a plan whose consequences the player meets *before* meeting
 them: you cannot lose a race that was never run.
 
-**Step 2 of `OFFSCREEN_LIFE_DESIGN.md`'s build order landed in alpha 6.9.**
-`BehaviorController`'s ladder is now the `offscreen_life` setting on
-`dialogue_config` — a chat-level ceiling, settable in the NPC dialogue panel,
-gated twice (the dormant cast is withheld from the mapping payload below
-`stochastic`, and the commit-side write is gated again). `max_offscreen_actors`
-bounds it. Two corrections that fell out of wiring it:
+**Almost all of it has landed** and the record is in `CHANGELOG.md` and
+`Design.md`: the `offscreen_life` ladder as a chat-level ceiling, a model-free
+seeded `stochastic` rung, out-of-band profile ticks on a frame-scoped
+`offscreen_epoch`, `world_events` as the objective spine (schema v27, with
+checkpoint/archive/branch/migration), carrier delivery and couriers, caravans
+and artifact carriers, and typed `reactive` plans that require a same-beat
+declared basis. `character_agent` is marked built in the UI.
 
-- The engine was **already running an ungated off-screen simulation**. The
-  mapping-commit prompt asked for ticks on every scene change and commit logged
-  whatever came back, with no dial, no bound, and no reader.
-- `MappingCommitOut.offscreen_events` is typed `list[dict]` with no inner
-  model, and the model duly invented a shape per call: `{actor, tick}`,
-  `{event}`, `{who, event}` and `{description}` all appear in the same field
-  across eight live chats. `commit.normalize_offscreen_events` now coerces
-  them to `{actor, tick}` on the way in. The stored history is still mixed —
-  nothing reads it yet, so nothing has had to care.
+**One bullet is open, and it verifies.**
 
-Landed since (bg-life work, 2026-08): `offscreen_log` has a reader —
-`gaps._skeleton` windows it into every gap and `gaps.interim_for` delivers it
-at re-contact as `while_you_were_offscreen`. The `stochastic` rung is now the
-specified one — a seeded, replayable, model-free draw
-(`offscreen.stochastic_ticks`); the model is no longer asked for ticks at any
-level and a volunteered `offscreen_events` is refused on the write path.
-Resolution above the free rung is importance × distance
-(`offscreen.resolution_for`), recomputed per tick, with the medium
-(profile-summary) rung produced OUT OF BAND on the shared world epoch
-(`offscreen.schedule_profile_ticks` → `jobs.submit`, base_turn-stamped,
-rollback- and epoch-guarded at landing, never cancelled by a turn starting) and every
-tick stored as a validated provisional record (`canon_provenance`).
+- **The stored `offscreen_log` history is still mixed** across four legacy
+  shapes (`{actor, tick}`, `{event}`, `{who, event}`, `{description}` all appear
+  in the same field across eight live chats) plus the new record shape.
+  `commit_mapping.normalize_offscreen_events` coerces on the WRITE path only
+  (`persist/commit_mapping.py`, called once at the mapping commit); nothing
+  migrates what is already stored, and every reader coerces for itself. Cheap
+  while nothing computes over the history, and a trap for the first thing that
+  does.
 
-The earlier “scene boundary” wiring was not a boundary: it tested
-`director_establish`, which normally exists only on turn 0, inside mapping's
-skip-prone commit path. Unreleased development moves it into its own atomic
-commit domain and records a frame-scoped `offscreen_epoch` on opening,
-top-level location change, crossed in-world hour, or due event. The epoch and
-log ride the existing whole-world checkpoint, and completed background work
-must still match the restored epoch before landing. `tools/fire_rates.py` now
-measures epoch opportunities, seeded fires, candidate selection, and scheduled
-profile jobs against their actual denominators.
-
-The fired-event substrate is no longer open. Schema v27 activates
-`world_events` as a frame-scoped, chat-partitioned objective spine; the transit
-domain promotes only events mechanics actually fired. It landed with
-checkpoint restore, portable archive, branch id/payload/FK remapping, deletion,
-legacy migration, and fidelity tests. `gaps` reads it first and falls back to
-legacy fired scheduled rows without double-delivering a promoted event.
-
-The first carrier delivery slice is now built: a non-empty public witnessed
-surface is acquired only by a registered character physically at the event,
-stored in that holder's frame-specific state, moved with their actual position,
-and exposed only to their private character agent. Co-location never broadcasts
-it. Crowd carriers, explicit copy events, subtractive degradation at copies,
-bounded fan-out, and couriers/letters (`story/couriers.py`: position on a
-`passable_path` route, clock-driven movement, perception surface, and
-question/silence interception — a silenced rider's message never arrives)
-have since landed, and the last two C legs landed in unreleased
-development: caravans (a `stops` list on the courier object — dwelling
-charged on the clock, two-way news exchange with the standing crowd,
-surfaces and notices at each stop) and artifact carriers (`story/artifacts.py`:
-a claim posted where the poster stands, acquired only by reading,
-stopped by tearing down, with the authored-wording ceiling minted out of
-band and landed only while the bill still stands). C is closed.
-
-Landed next in unreleased development: **`reactive` is now behavior, not merely
-permission.** A Director resolve may encode `offscreen_plan_ops`, but commit
-requires the named registered character to have declared its basis on that
-same beat. Plans are bounded frame-scoped state; typed time/event triggers can
-fire only an effect adjudicated when the plan opened. There is no model call,
-adaptation, or new invention at firing. Crossing a plan deadline itself creates
-an epoch, and checkpoint restore rewinds the plan stage/history with the world.
-
-Still open:
-
-The full `character_agent` rung has now landed
-(`offscreen.schedule_agent_ticks`, scheduled from the commit tail beside the
-profile producer). Cards expose an explicit `simulation.offscreen_agent`
-opt-in (default false); deterministic `full_agent_candidates` selects only
-dormant opted-in minds with their own active authored plan or carried evidence
-newer than their last paid tick, capped by `max_offscreen_actors`. Each
-candidate gets one reduced turn out of band: the fail-closed `agent_context`
-(allowlist; no scene parameter to forget to leave out), ONE character call
-proposing a bounded attempt or plan abandonment, ONE Director adjudication
-that alone may declare a consequence — validated by `mint_consequences` into
-`scheduled_events` under a stable id and promoted to `world_events` by the
-ordinary spine when it fires — and one atomic landing (own-trail movement,
-plan advance, provisional log record, event-keyed autobiographical memory)
-guarded inside a single transaction by the current epoch, the base turn, and
-a per-subject `last_epoch_id` stamp, so a reroll or restore replays rather
-than double-lands. `character_agent` is now marked built in the UI.
-- **The stored `offscreen_log` history is still mixed** across the four legacy
-  shapes plus the new record shape; readers coerce, nothing migrates.
 
 ### 2.9 Predictive staging
 
@@ -3377,126 +2135,56 @@ cannot do:
 
 ---
 
-### 2.14 Clothing regions: what is still rough
+### 2.14 Clothing regions: the guess is reported, the authored answer is inert
 
-The model, the authoring surface, the generator and the visibility switch are
-all built (`Design.md`, "Clothing by body region"). What remains:
+**The report landed 2026-08-19.** `attire.guessed_spans` had no production
+caller — its own docstring described the hand-off in the present tense while
+the loop stayed open. It now runs at the attire commit seam and tells the
+Director, which is the only stage with the fiction in front of it and can
+answer with `coverage`. Told rather than repaired, because the cue tables are
+the thing that does not know, so a second deterministic guess would be the same
+guess. Measured while it was open: 110 of 560 live worn garment records carry a
+span the tables guessed, twenty of them a nagajuban sitting on the torso alone,
+so those bodies report legs and groin bare while wearing a full-length
+under-kimono.
 
-- **`attire.region_of` and `_SPANNING_CUES` are keyword tables.** Qipao, sari,
-  thawb, abaya, kimono, toga and their spans are now in them, but the tables are
-  still English word lists: a garment they do not know lands on the torso alone,
-  which reads as "naked from the waist down" the moment it comes off. The
-  coverage picker is the escape hatch — a garment whose coverage is set by hand
-  is never re-guessed — and the DETECTOR now exists too: `attire.span_is_a_guess`
-  and `guessed_spans` name every garment whose span came from a cue table rather
-  than from an author, with `placed` marking hand-set coverage so it is never
-  re-flagged. It is **unwired** — no production caller, only tests — and its own
-  docstring says where it belongs: the commit seam, handed to the Director. So
-  the wrong span is still only discovered when something undresses oddly, but
-  the remaining work is one call, not a mechanism. A garment
-  that is only SOMETIMES full-length (a tunic, a sleeved vs. sleeveless shirt)
-  is deliberately left single-region.
-- **`beneath` is authored per region, but the body's fallback is one string.**
-  `describe()` fills an unauthored region from `embodiment.visible.summary`,
-  which describes a whole person — so an unauthored region says the same thing
-  as every other unauthored region. Acceptable while the alternative is making
-  authors fill seven fields, but it reads flatly when several regions are bare
-  at once.
-- **`fStrList` fragments any list entry containing a comma.** It joins with
-  ", " and reads back by splitting on ",", so a generated
-  `"Nine golden tails from the lower back, shifting with mood"` was saved back
-  as two features and `"vermillion, white, and gold"` as three. Found on a
-  generated card, where it matters most: the generator writes prose entries,
-  and the mangling happens the moment an author keeps them.
-  **Eight of the ten call sites have since moved to `fLineList`** — Protected
-  beliefs, Pride triggers, Shame triggers, Recovery supports, Characteristic
-  stress signs, Voice markers, Excluded knowledge titles and Active concerns,
-  beside `embodiment.visible.distinctive_features` — leaving exactly the two
-  the entry always argued should stay: Aliases, at the character and persona
-  editors, which is the one field that is comma-natured by nature. `fStrList`
-  itself still splits on commas, so it remains a trap for any future caller
-  handed a clause; the fix if one appears is `fLineList`, not a smarter split.
-- **the reader has no view of it.** Regions exist in the card editor and in
-  every prompt, but the story panel still shows the flat `wearing` list, so a
-  reader cannot see that a robe is open, or that a shirt is stained, without
-  inferring it from prose.
-- **`decisive_targets` is sentence matching.** It reads a beat's prose to decide
-  whose clothes came off at once, attributing by garment, then first person in
-  the player's own input, then a sole name. It gets the actor-vs-target case
-  right and the ambiguous cases wrong-but-slow (nobody hurries), and it decides
-  only SPEED, never who may know what — but it is prose matching, and §3.1
-  applies to it as much as anywhere. A structured "this act was decisive"
-  signal on the declaration would retire it.
-- **the process clamp is scoped per body, not per garment.** `process_targets`
-  answers "whose undressing is still in progress" in BODIES, so "she begins on
-  the sash" holds a jacket the same beat resolved off the same body. Making
-  the shared attribution ladder answer in garments is a real redesign of
-  `attire._attributed_targets` and of `advance`'s `process` flag; the
-  conjunction needed to hit it (one garment mid-act, another resolved off, same
-  body, same beat) has not been seen live. Design note 17 §"third incident".
-
----
+The open half moved to **§1.72**: the authoring surface the Director is being
+pointed at does not work. `placement` and `add[].covers` are documented in both
+prompts, passed correctly at the call site, and lost to an ordering bug before
+they are applied. Until that lands, the report asks for something the engine
+cannot yet accept — which is worth knowing when reading the warnings.
 
 ### 2.15 Movement is an arrival, never a crossing
 
 **Raised 2026-08-02**, after "step outside" landed correctly and still read
-wrong.
+wrong. A turn that moved a body rendered the destination and nothing else, so a
+plaza crossing or an elevator ride read as a cut.
 
-**Half landed 2026-08-14; needs (2) below and nothing else.** A journey is
-now a standing thing rather than a single hop: a declared walk survives a
-beat that says nothing about it and advances one edge per beat
-(`agents/director._travel_continues`, `scene.approach`), a long edge takes
-two beats (`_LONG_EDGE_DISTANCES`), and the leg is computed BEFORE the prose
-is written and handed to the author as `travel_in_flight`, so the scenery
-changes on the page in the same breath as everything else. Need (1) is
-therefore decided, and decided against the Narrator: the ENGINE owns the
-crossing, the Director may only stop it (`travel_interrupted`), and no stage
-is asked to infer a passage from a `moved` flag. Need (3) is met by the
-distance tier rather than a new gate.
+**Two-thirds landed 2026-08-14, verified 2026-08-19.** A journey is now a
+standing thing: a declared walk survives a beat that says nothing about it and
+advances one edge per beat (`director_movement._travel_continues`,
+`scene.approach`), a long edge takes two (`_LONG_EDGE_DISTANCES`), and the leg
+is computed BEFORE the prose is written and handed to the author as
+`travel_in_flight`, so the scenery changes on the page in the same breath as
+everything else. That decided need (1) against the Narrator — the ENGINE owns
+the crossing and the Director may only stop it (`travel_interrupted`) — and need
+(3) is met by the `adjacent`/`near`/`far`/`remote` tier the edges already carry,
+so a doorway step is unaffected.
 
-What is still missing is need (2), and it is the perception question the
-entry always said was the hard one — see the paragraph that names it below.
+**Need (2) is open, and it was always the hard one: what a body PERCEIVES
+mid-crossing.** The honest answer is "both rooms, briefly" — the same union
+`_source_channels` computes across a beat, and possibly the same mechanism.
+Today a mid-walk body is simply IN the room the leg put it in, so a corridor
+crossed over two beats is perceived as two rooms in sequence rather than as a
+passage between them. Truthful, and thin, which is what this entry was raised
+about.
 
-The original statement, kept because the craft argument still holds for the
-half that has not landed:
+**Related, from the alpha 6.3 physical-ledger work (moved from §3.9,
+2026-08-19):** nothing derives a station from within-room movement INTENT ("she
+crosses to the hearth"), because there is no within-room approach concept for it
+to read — room-level `scene.approach` is the only staged-movement memory there
+is.
 
-A turn that moves a body renders the destination and nothing else. The engine
-has no representation of the crossing itself, so `positions` changes, the new
-room's view is composed, and the beat reads as a cut: the body was there, now it
-is here. For a step through a doorway that is fine. For anything with distance
-in it — crossing a plaza, walking a corridor, riding an elevator between floors
-— it flattens the part of the movement the player was interested in.
-
-The player's own framing, which is the design: **narrate the movement, then the
-arrival, then what the surroundings turn out to be.** Three beats of one action
-rather than one snapshot of its result.
-
-This is craft, not a defect, and it is recorded here so it stays separable from
-the two things it kept getting confused with:
-
-- `northern_plaza` reading empty was **not** distance. That room was an island
-  — no edge reached it in either direction — so "looking around" correctly
-  reported the only neighbour the map admitted. Fixed by
-  `connect_orphan_new_rooms`; see `Design.md`.
-- A view built only from the END state was a separate defect again, fixed by
-  `_source_channels(prev_sc=…)`.
-
-Neither of those would have been fixed by travel narration, and travel
-narration would not have fixed either of them. What it WOULD change is a beat
-that is currently correct and thin.
-
-**What it needs.** (1) DONE — the engine owns the crossing: it computes the
-leg deterministically before the prose exists and the Director may only
-interrupt it. (3) DONE — gated on the `adjacent`/`near`/`far`/`remote` tier
-the edges already carry, so a doorway step is unaffected.
-
-(2) STILL OPEN, and it is the one that was always hardest: what a body
-PERCEIVES mid-crossing. The honest answer is "both rooms, briefly" — the
-same union `_source_channels` computes across a beat, and possibly the same
-mechanism. Today a mid-walk body is simply IN the room the leg put it in, so
-a corridor crossed over two beats is perceived as two rooms in sequence
-rather than as a passage between them. That is a truthful account and a thin
-one, which is exactly what this entry was raised about.
 
 ### 2.16 A summary window should be an INDEX over raw memory, not more prose
 
@@ -3522,6 +2210,11 @@ over eras; the raw rows stay the episodic evidence. A character then recalls the
 way recall works -- find the period, then the moments in it -- instead of one
 flat similarity sweep over everything they have ever known.
 
+**Correction, 2026-08-19: the turn range is not missing.**
+`memory_summaries.start_turn_idx` and `end_turn_idx` exist in `core/db.py` and
+have since the table shipped. What is missing is the RETRIEVAL SHAPE above and
+the prompt contract below, not the column.
+
 **What it needs first.** The turn-range semantics are *emergent, not
 contractual*. `memory_consolidate` says "merge the new batch into an updated
 summary"; nothing in it promises a window describes its own range. It happens to
@@ -3537,48 +2230,21 @@ nothing convincing -- but "nothing convincing" needs an absolute confidence
 signal, and the cosine band is 0.45-0.55 wide for everything, which is exactly
 the floor that does not exist.
 
+
 ### 2.17 Memory reliability after temporal separation
 
-**Shelved 2026-08-02**, updated after the controlled chat-38 embedding and
-character-question benchmark. Seven isolated questions per arm used the same
-prompt and payload schema. After correcting one deterministic phrase scorer
-miss (“never stated” vs “never said”), semantic answers passed **7/7** versus
-lexical-only **5/7**, and both grounded 100% of citations. Relevant evidence
-reached the payload in **5/5** historical cases vs **2/5**, and relevant
-earlier windows in **5/5 vs 0/5**. Raw-memory MRR was lower for semantic
-(0.207 vs 0.400) because lexical put its two exact-word successes at rank 1
-and missed the other three entirely, while semantic reached all five, often
-through the summary-window layer. These are the next measurements and
-mechanisms that would make reliable retrieval become reliable conduct.
-
-**Integration pass landed 2026-08-02.** The character contract now has
-separate present and past evidence lanes; current state is absent from the
-memory branch; micro-round observations have unique ids; raw memory projection
-contains no database/retrieval internals; summary prose cannot independently
-reinforce durable state. Psychology now receives bounded, grounded
-`memory_modulation`, absorption narrows deliberative recall without deleting
-the automatic-recognition lane, dialogue keep-reasons survive minting, disputes
-use exact stable refs plus present cause, and `memory_effects` distinguishes
-retrieval from influence. Schema v24 records before-event and post-appraisal
-affect. These close the implementation half of items 5 and 10 and most of 9;
-item 4 has bounded effect telemetry but not the author-facing retrieval-event
-ledger described below.
-
-The modulation lane now also admits a mild memory-evoked body/threat response
-without collapsing time: `somatic_echo` and `threat_bias` require exact past
-evidence, are capped to 0.2, and are carried for one beat under
-`active_state.memory_echo` with `temporal_source: remembered_past`. They
-cannot write current somatic pain/pleasure, injury, goal impact, or a claim that
-the remembered danger is present.
-
-Deliberate query-setting is built as the private `ponder` sequence action. One
-bounded query with a concrete reason is committed to the character's own state,
-retrieved in an explicitly labelled `deliberate_recall` lane on top of normal
-recall next character turn, then consumed. Ponder is absent from the default
-output shape and requires a concrete reason. A useful result may raise a new
-query immediately; receiving results alone is explicitly not a reason to do
-so. What remains unbuilt is behavioural measurement of when characters choose
-it well, not the mechanism.
+**Shelved 2026-08-02.** The benchmark that produced this list — the controlled
+chat-38 embedding and character-question comparison, seven isolated questions
+per arm — is measurement, and moved to
+[`experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md) on
+2026-08-19 along with the integration-pass landing record. Its headline, kept
+because every priority below is ranked against it: semantic answers passed
+**7/7** against lexical-only **5/7**, relevant evidence reached the payload in
+**5/5** historical cases against **2/5**, and relevant earlier windows **5/5 vs
+0/5** — while raw-memory MRR was LOWER for semantic (0.207 vs 0.400), because
+lexical put its two exact-word successes at rank 1 and missed the other three
+entirely. Reliable retrieval is not yet reliable conduct, and that is what this
+list is for.
 
 **Remaining priority order:**
 
@@ -3625,12 +2291,6 @@ it well, not the mechanism.
    chat 38 semantic retrieval greatly improved total relevance while the
    lexical fallback sometimes found the first exact hit sooner; both signals
    are useful in different proportions.
-8. **Audit summaries against their source rows.** Consolidation can silently
-   promote inference or hearsay into unqualified prose. Every summary claim
-   should be traceable to source memory ids and retain the strongest applicable
-   provenance/credence constraint. This naturally converges with §2.16's
-   stronger design: summaries as indexes over evidence rather than substitute
-   evidence.
 9. **Retry semantically unsupported present-evidence use before accepting conduct.** In
    one final semantic trial the Doctor correctly denied that the anomaly was
    active, but supported the denial only with the memory of closing it and did
@@ -3646,6 +2306,11 @@ it well, not the mechanism.
     The prose was right and the typed provenance was wrong because the field
     can be read as "how I know" or "what kind of memory this is." A future
     contract should name those two axes separately rather than prompt harder.
+
+*(Item 8 — "audit summaries against their source rows" — was struck 2026-08-19:
+per-clause `support` with `support_refs` + `epistemic_origin` is in `core/db.py`'s
+`memory_summaries` and written by `mind/memory.py` at consolidation, derived
+host-side so it costs no model call. Its convergence with §2.16 stands.)*
 
 **Measured non-solutions — do not retry without new evidence:**
 
@@ -3663,6 +2328,7 @@ The reusable instrument is `tools/benchmark_memory_temporal.py`; extend it
 rather than creating another one-off question script.
 
 ---
+
 
 ### 2.18 The orchestrated Director: what is left after it landed
 
@@ -3684,7 +2350,7 @@ unbuilt:
   was carved (14 duty chunks, `_PROSE_DUTY_GATES`); the payload was not. The
   next real token win.
 - **`director_interpret`'s own sheet is not chunked.** The delegated channels
-  are suppressed at the source (`INTERPRET_DELEGATION_NOTE`), but the blocks
+  are suppressed at the source (`llm/prompts.interpret_delegation_note`, called from `agents/director.py`; the constant `INTERPRET_DELEGATION_NOTE` this entry used to name does not exist — corrected 2026-08-19), but the blocks
   teaching them still load on every call.
 - **The specialist chunks have never been rewritten for leanness.** Permitted
   — they exist only on the orchestrated path, so there is no monolith to keep
@@ -3779,47 +2445,46 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
   not match the delivered-line ground truth is an ENGINE defect, and scrubbing
   it would hide the bug instead of the leak. The loose whitelist therefore
   costs a missed WARNING now rather than a missed scrub.
-- **C2 — short and common-word names escape the identity floor.** Forms under
-  three characters and single-token are never scrubbed. `_COMMON_WORD_NAMES` is a
-  separate, exact-case mitigation, not a fix for this.
+- **C2 / E2 — the identity floor is TOKEN-BASED, which is one finding and was
+  written as two** *(merged 2026-08-19)*. Forms under three characters and
+  single-token are never scrubbed, and `_unknown_actor_label` strips only name
+  and alias tokens — so a short or common-word name escapes the floor at one
+  end, and a unique identity-bearing EPITHET in the appearance survives into the
+  label at the other. `_COMMON_WORD_NAMES` is a separate, exact-case mitigation,
+  not a fix. Both are the same channel and want the same answer: identity
+  carried structurally on the event rather than matched out of prose (§4.2).
 - **D1 residual — a paraphrase with a fresh explicit subject still escapes**
   `_redact_concealed_from_event`. The function's own docstring names this
   residual and names the structural answer: carry identity on the event.
-- **E1 — `knows_identity` uses strict membership** where `_scrub_view_for` uses
-  the title-tolerant `_recognizes`. Inconsistent; over-anonymizes.
-- **E2 — `_unknown_actor_label` strips only name and alias tokens**, so a unique
-  identity-bearing epithet in the appearance survives into the label. By design,
-  but it is the same channel.
+
+*(E1 was struck 2026-08-19: `knows_identity` is WRITE-ONLY — set at six sites in
+`agents/perception.py` and read nowhere — so the inconsistency it named with the
+title-tolerant `_recognizes` (`agents/common.py`) cannot be reached. See §1.45.)*
+
 
 ### 3.2 Concealment gates not applied everywhere
 
-- **A8 residual — `_disguise_leak_check` is warn-only.** The channel itself is
-  closed: `_act_payload` is gone with the model-authored views, `_composer_act`
-  is never handed `p_disguise`, and `concealed_truth` is minted only in
-  `_subject_disguise_context`, which now reaches no payload in either pass. The
-  dead half went with the model-authored views — the `action_onset` builder
-  that set `subject_disguise` and was read by nothing no longer exists, and
-  `_subject_disguise_context` is live at seven call sites. What remains is only
-  that the tripwire warns and does not scrub, which is deliberate: the fix
-  belongs upstream in what perception is handed, and rewriting a view on a
-  regex would be a worse authority than the model it is policing.
-- **B4 residual — `_ensure_environment` does not check darkness** on the "is here
-  with you" branch. Containment is now gated; light is not. *No dedicated test.*
-- **C3 — stray view keys survive normalization**, and the exposure went with
-  the composer rewrite rather than being fixed. `_normalise_views` still writes
-  through any unmatched key, so a view keyed by a non-awake character's name is
-  neither folded nor overwritten by the residue — but it has no production
-  caller left; only `tests/test_pipeline_audit.py` reaches it. *Dead path, not
-  a live gate.*
 - **X3 — `conceal_from` without `visibility: "concealed"` bypasses the
   background declaration filter**, which consults `visibility` only. Every other
   guard in `agents/background.py` fail-closes on `conceal_from` independently,
   precisely because models half-comply. *Latent, no test.*
-- **X7 — gate salience reads raw input.** `persist/commit.py` counts `resolved_event`
-  mentions with no concealment gate, so a concealed declaration naming a presence
-  still raises its pick priority.
+- **X7 — half closed.** The player-input half is fixed: `pick_background_reactors`
+  now qualifies a presence from `overt_declaration_text(ctx)` rather than
+  `ctx.input`, with the reason at the call site (*"a whispered name used to
+  qualify its own presence"*). What survives is the other reader in the same
+  function — `resolved_event` is counted as a raw string with no concealment
+  gate, so a concealed act the Director wrote into the beat's event text still
+  raises a presence's pick priority (`persist/commit_background.py`).
 - **X19 — `_llm_resolve_player_room` receives the private thought**, for a call
   whose only output is a position key.
+
+*(Three bullets were struck 2026-08-19. **A8 residual** is deliberate, not open:
+the channel is closed — `_p_disguise` is discarded at the `_composer_act` call —
+and what remains is a tripwire whose own docstring says *"A WARNING, never a
+scrubber."* **B4** (`_ensure_environment` does not check darkness) and **C3**
+(stray view keys survive `_normalise_views`) both describe helpers with no
+production caller; see §1.45's dead family.)*
+
 
 ### 3.3 Sense and awareness gaps
 
@@ -3829,6 +2494,14 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
   `sense_adjusted`. Speech is graded there; an action is still a yes/no gate
   followed by a whole sentence, so a half-seen act arrives entire or not at
   all, where a half-heard line arrives as a fragment.
+- **Perception prose is not bound by the audibility layer.** Live data shows a
+  view narrating "difficult to parse from this distance" while the deterministic
+  layer had already ruled the speech fully audible. The deterministic layer is
+  right; the prose should be CONSTRAINED by it rather than free to contradict
+  it — same family as F4, and the same answer (the delivery verdict decides the
+  sentence, not the other way round). *(Promoted out of §8 on 2026-08-19: it
+  cites live data showing prose contradicting the deterministic verdict, which
+  makes it a defect rather than an idea.)*
 - **F6 / S3-A5 residual — `spatial.spatial_digest` is still ungated** and
   renders every edge's authored room name, including rooms never visited. The
   perception payload was fixed (unseen edges keep their barrier, lose
@@ -3837,9 +2510,11 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
   `agents/character.py` keys off `set(relationships) | set(mind_models)`, which
   is the unvalidated set.
 
+
 ### 3.4 Multiplayer
 
-All multiplayer-only, which is why they survived.
+All multiplayer-only — but **not** unreached, which is how this preamble used to
+read: 135 `narrator_extra` steps across 3 chats (measured 2026-08-19).
 
 - **S3-A6 — `narrator_extra` lacks the consciousness gate and fidelity facts.**
   It ships `spatial_frame` unconditionally and its payload has no
@@ -3848,17 +2523,16 @@ All multiplayer-only, which is why they survived.
   covers the primary persona only.
 - **S3-B4 — the interpret-stage split is unchecked for extras.**
   `_reconcile_interpretation` coverage-checks only the primary input.
-- **X11 — extra-player concealed speech has only one defence.** Perception's
-  concealment list gets extras' concealed *actions* but not their concealed
-  *speech*, and the dialogue-fidelity floor whitelists all extras' speech
-  including concealed — so a leaked co-player whisper would not be scrubbed.
-  *Plausible.*
 - **X12 — the onset pass is primary-player-only**, so the reaction-gate and
   `targets` guarantees never run for extras' sequences at onset. *Degradation.*
-- **X9 — the host reads co-players' private thoughts.** Full step content streams
-  to the initiator (always the host) and is embedded in archives. Not a code bug
-  — the host is the trust root — but an unstated product boundary, recorded so it
-  stays a decision.
+
+*(X11 was struck 2026-08-19: it could not be verified against source, and
+`perception_act` handles no extras at all — which changes the shape of the claim
+rather than confirming it. If it is real it is a face of X12; re-raise it there
+with evidence. X9 — the host reads co-players' private thoughts — is not a code
+bug but a product boundary, and moved to `AGENTS.md` § Information boundaries
+with the other deliberate keeps.)*
+
 
 ### 3.5 Persistence
 
@@ -3887,27 +2561,22 @@ All multiplayer-only, which is why they survived.
 
 ### 3.6 Deliberately kept
 
-Recorded so nobody "fixes" them by accident. Each is pinned by a test asserting
-the current behaviour.
+Moved to [`AGENTS.md`](../AGENTS.md) § Information boundaries on 2026-08-19. It
+is a keep-list by construction — each item pinned by a test asserting the
+current behaviour — which makes it an INVARIANT rather than unfinished work, and
+an invariant belongs where somebody about to change the code will read it. A7
+and E3 were dropped in the move as overtaken: per-observer payloads mean the
+perceiver set in `_state_reaches_anyone` is one name, and outcome extras'
+hardcoded `knows_identity` is advisory against a field nothing reads (§1.45).
 
-- **B1 (sound half) — opaque is not soundproof.** Containment gates sight and
-  scent, deliberately not sound.
-- **B2 — the comm/shape floor delivers across any barrier on `intended_target`.**
-  The residual risk lives in director tagging, not here.
-- **F5 — `observable` falls back to the raw `attempt`.**
-- **A7 — the one-reaching-perceiver rule** in `_state_reaches_anyone`. Now moot
-  in the live path: per-observer payloads mean the perceiver set is one name.
-- **X5 — the scene-manager `full`-mode `audience[name]="none"` annotation** is an
-  annotation on a shared context rather than structure. `ambient` correctly
-  refuses divergence.
-- **E3 — outcome extra players get `knows_identity: True` hardcoded.** Advisory
-  only.
 
 ### 3.7 Test gaps
 
 `tests/test_pipeline_audit_leak_gaps.py` covers D1, D2, B3, B5, X14, F1, F2/P1,
-S3-A4, S3-A5, S3-A8, X18 and X4. **A1 and B4 still have no dedicated test**, and
-A1 is a confirmed leak class.
+S3-A4, S3-A5, S3-A8, X18 and X4. **A1 still has no dedicated test**, and it is a
+confirmed leak class. B4 was listed beside it until 2026-08-19 and is struck: it
+names `_ensure_environment`, which has no production caller (§1.45's dead
+family), so a test there would pin a dead path.
 
 ### 3.8 A structural risk, not a finding
 
@@ -3918,41 +2587,19 @@ can drift apart. Consolidating them is the cheap insurance.
 
 ### 3.9 Residuals of the alpha 6.3 physical-ledger work
 
-Four things the ledgers still cannot say, all deliberately left rather than
-guessed at.
+Dissolved 2026-08-19 — every bullet had a better home and two of them were being
+written twice:
 
-**A hover is not a contact, and there is nowhere else for it.** A measured
-"two inches of visible space" between two mouths is real fiction with real
-tension, and `contacts` can only say touching or nothing. It currently lives
-(or lived) in entity `state`, where nothing ages it. `_drop_contradicted_state`
-retires such a key only where a standing contact already speaks for that part;
-a genuine hover with no contact survives, unaged, exactly as before. A
-near-contact tier — or a `manner` that means "not quite" — would cover it.
+- entity `state` has no ageing of any kind → **§1.10**, which is the same finding
+  and now carries the measurement;
+- a hover is not a contact, and an orphaned relational value is dropped rather
+  than folded → **§1.28**, beside the rest of the contact-sensation residuals;
+- a garment moving between bodies keeps no identity →
+  [`design_notes/17-garment-displacement.md`](../design_notes/17-garment-displacement.md)
+  § Left open;
+- nothing derives a station from within-room movement INTENT → **§2.15**, which
+  is where the within-room approach concept would have to come from.
 
-**Entity `state` still has no ageing of any kind.** Nothing retires
-`"breath": "caught"` or `"voice_quality": "held_breath_steadying"` either; they
-persist verbatim until the model happens to overwrite them. Contact was the
-worst case because perception reads it as present truth, and that one is fixed
-at the source — but the disease is wider than the part that was treated.
-
-**An orphaned relational value is dropped rather than folded.** When
-`thumb_touch: "feather_light_at_ear_base"` is retired by a standing thumb
-contact, its qualifier is discarded instead of merged into that contact's
-`detail`. Folding it was rejected for now: matching the right contact by part
-name is the same guesswork the whole change exists to remove, and a wrong
-`detail` is a sentence the narrator will repeat.
-
-**A garment moving between bodies keeps no identity.** `_mint_shed_garments`
-carries a garment's condition onto the floor and back, but "the coat she lent
-him" is a different coat record from "her coat" the moment it lands on him.
-`resolve_garment` is per-body by construction.
-
-Also unbuilt, from the same work: nothing derives a station from within-room
-movement INTENT ("she crosses to the hearth"), because there is no within-room
-approach concept for it to read — room-level `scene.approach` is the only
-staged-movement memory there is.
-
----
 
 ## 4. Architecture gaps
 
@@ -4062,54 +2709,13 @@ beyond a trusted local environment.
 
 ---
 
-### 4.7 Matter has no volume, so nothing can wash anything away
+### 4.7 Does the engine grow a material model at all?
 
-The substance ledger accumulates. Coalescing landed (`9a6bc3c`) — same material,
-same source, same region, same body is one pool a later release re-describes —
-and conservation landed, so swallowing empties the mouth. What is missing is
-DISPLACEMENT: a more abundant fluid arriving on a region carrying away what was
-already there.
-
-It was deliberately not built, twice, for reasons that still hold:
-
-- **The amount vocabulary is not a magnitude.** Of 39 stored terms, `trace`,
-  `moderate`, `small` and `copious` order as English, but `coating` is a
-  distribution, `oozing` a rate, `remainder` purely relative with no magnitude
-  at all, `dustpan full` container-relative, and `hot, viscous torrent` buries
-  its magnitude among temperature and viscosity.
-- **The precedent makes it a no-op on the reported case.** Following
-  `affect.CAPACITY_LADDER`, an unreadable term takes the mildest rung — and the
-  reported case is spelled `coating` versus `light coating`, so neither would
-  ever displace the other. Making it fire requires ruling that a distributed
-  film outranks a droplet, which is a physical model of fluids, not a reading
-  of a word.
-- **The reported case is cross-substance** (one fluid washing away a different
-  one). `_same_pool` deliberately keeps different substances apart, and
-  deciding that A dilutes B needs a miscibility model the engine has no
-  representation for and § Genre boundary forbids hard-coding.
-
-Separately and much cheaper: **wiping already works and is almost never used.**
-`op: remove` / `op: clear` exist and the Director can emit them. Measured
-corpus-wide: 38 adds and deposits against 5 removes, and zero removes after
-turn 38 of the reference story. That is prompt efficacy, not a missing
-mechanism, and it is worth trying before any material model is designed.
-
-**Open question this section exists to force: does the engine grow a material
-model at all?** Everything above is blocked on that answer rather than on
-difficulty.
-
-### 4.8 Two regions on one body, spelled differently, are two regions
-
-`mouth` and `oral cavity` mint separate substance rows on the same body.
-`AGENTS.md` forbids a body-part synonym table with a measured reason
-(`tail_spade` is a nameable place on a tail, not `tail` blurred), and that pair
-shares no word, so no structural rule reaches it.
-
-`spatial.canonical_region` is now the single fold point for every region
-comparison in the ledger, so if the substance ledger is judged to warrant an
-exception the contact ledger does not, there is exactly one place to add it.
-Explicitly NOT made moot by `owned_region`: qualifying which body owns a region
-is orthogonal to folding two spellings of one region on one body.
+Moved to [`DESIGN_MATERIAL_MODEL.md`](design/DESIGN_MATERIAL_MODEL.md) on
+2026-08-19. Displacement with no magnitude to order it (was §4.7) and two
+spellings of one region on one body (was §4.8) are one undecided question about
+MATTER, not two defects; the note holds both and the argument for keeping them
+together.
 
 
 ## 5. Deferred backlog
@@ -4210,25 +2816,15 @@ character in the adjacent room is not in the occupant's co-present set.
 
 ### 5.5 P7 remainder — promotion-turn identity binding
 
-*Low severity, cosmetic.*
-
-**Symptom.** On the turn a background presence promotes to cast, the player's view
-can render it "the unfamiliar person" for one turn.
-
-**Root cause.** Autonomous promotion runs at commit, *after* that turn's
-perception, so the promoted character's canonical name is not yet in the
-observer's `known` set during that turn — compounded by a name-variant mismatch
-(seeded "Data" vs promoted "Lt. Commander Data").
-
-**What shipped.** The alias/variant fallback (`_recognizes`), and
-`promote_background_character` now seeds a full mutual roster.
-
-**What remains.** It registers only the canonical `character_name(sheet)` with no
-aliases or variants, and the **attach** path in `web/app.py` seeds only
-player↔character, never cast↔cast.
-
-**Test.** Promote a presence the player addressed by name; assert the observer's
-view of it that turn is not anonymized.
+*Low severity, cosmetic.* On the turn a background presence promotes to cast,
+the player's view can render it "the unfamiliar person" for one turn: promotion
+runs at commit, after that turn's perception, so the canonical name is not yet
+in the observer's `known` set. The alias/variant fallback (`_recognizes`) and a
+full mutual roster in `promote_background_character` shipped; what remains is
+that the roster registers only the canonical `character_name(sheet)` with no
+aliases or variants, and that the **attach** path in `web/app.py` seeds only
+player↔character, never cast↔cast. Test: promote a presence the player
+addressed by name, assert that turn's view of it is not anonymized.
 
 ---
 
@@ -4271,157 +2867,31 @@ Most of §3 shipped in alpha 4.0. What did not:
 
 ### 6.2 Extensions — [`EXTENSIONS_DESIGN.md`](design/EXTENSIONS_DESIGN.md)
 
-**Built in 9.0.** The `extensions/` loader with per-item isolation and computed
-trust classes, `enabled_extensions`, the `SonderExtensionAPI` facade, the
-plan-splice registry at named anchors, `on_step`/`on_turn_committed`, the four
-`ext:<id>` state homes with the committed-turn write gate, character reads
-including settled psychology, `window.Sonder` with sidebar tabs / step renderers
-/ stream events / three-strikes retirement, the `/api/extensions` routes,
-install from directory or URL with zip-slip and symlink refusal and atomic
-`os.replace`, enable/disable/remove in the 🧩 menu, and the `cohesion-demo`
-reference extension. Developer documentation:
-[`docs/guides/EXTENSIONS.md`](guides/EXTENSIONS.md).
-
-The tier ladder (Tier 0–3, story packs as rung 1) was **abandoned**, not
-deferred — design note §2 records why. Do not treat its absence as debt.
-
-A FOURTH batch closed the five gaps Directive's author named after building
-against 9.2 (`docs/design/DIRECTIVE_HOST_SURFACE.md` §8, from
-`DIRECTIVE_GAP_REPORT.md`). Four were extension surfaces and the fifth was a
-Sonder feature the report arrived at from outside — hard mode, §2.4 of this file
-until it landed:
-
-- **Director context injection** — `api.director_context(chat_id)` per phase
-  (`establish`/`interpret`/`resolve`) and `api.on_director_payload`. The
-  narration seam colours a verdict already reached; this shapes the decision,
-  which is the one of the three routing seams that propagates into state,
-  perception and memory. Once per beat, so the resolve's own retries answer the
-  same context. `tests/test_extension_director_context.py`.
-- **A read-only canonical story facade** — `web/story_view.py`, reached as
-  `api.story_view` and `GET /api/chats/{id}/story_view`. Versioned, plain
-  values, no engine import and no database handle.
-- **The player-safe projection of it** — `api.player_view`, built entirely from
-  what the engine ALREADY DELIVERED to that viewer, so there is no second
-  implementation of the firewall to drift from the first. Omits rather than
-  defaults. `tests/test_story_view.py`.
-- **Atomic campaign provisioning** — `api.provision_story` over the existing
-  chat-archive importer, seeding the extension's namespaced state inside the
-  same transaction and recording package provenance.
-  `tests/test_extension_provisioning.py`.
-
-Deliberately NOT built from that report: a second scenario-package format (the
-chat archive is already atomic, validated, id-remapping and exercised by branch
-and restore), and a prompt clause telling the Director to obey extension
-context — the block arrives attributed, alongside every other extension's, and
-the report's own safeguard list asks that an extension not be able to
-impersonate an engine-owned instruction.
-
-The report's own acceptance step — a reference campaign — is built as
-`extensions/campaign-demo/`, and building it found a SIXTH gap nobody had
-named: **an extension could not split its Python across files.** `_import_entry`
-loaded the entry as a lone module with its directory on no search path, so a
-sibling import raised `ModuleNotFoundError`. Same shape as the ES-module
-blocker, and the same cause — nobody hits it until an extension is built as a
-graph rather than a file, and a Directive port would have hit it immediately.
-Fixed by registering the extension directory as a package (relative imports,
-`sonder_ext_<id>.<module>`) rather than by putting it on `sys.path`, where a
-sibling `core/db.py` would shadow the engine's and two extensions' `helper.py` would
-collide. `tests/test_campaign_slice.py` covers the fix and the slice together.
-
-A FIFTH batch answers `docs/design/DIRECTIVE_REMAINING_GAPS.md`, written
-against 9.3 after the four surfaces above were built and used:
-
-- **An extension can refuse a Director result** — `api.on_director_result` +
-  `api.correction`. `director_context` is model input and guides a decision
-  without guaranteeing one; a commit domain can only lose the beat afterwards.
-  A validator judges the MERGED result after every deterministic floor and buys
-  exactly one re-resolution, which re-enters the whole stage so the corrected
-  answer crosses every floor and every validator again. Deterministic code, no
-  model handle, deep-copied result, stable order, `warn` by default and `fail`
-  only for a campaign that would rather lose a turn than be wrong.
-  `tests/test_director_result_validation.py`.
-- **Turn zero arrives whole** — `provision_story` takes `frame_state`,
-  `director_context`, `narration_context` and `documents`, all validated before
-  the archive is touched and applied inside its transaction. The reference
-  campaign provisioned and THEN installed its rules; a failure between the two
-  left a playable story missing the rule that made its sealed wing mean
-  anything. Data rather than a callback, so nothing arbitrary runs inside a
-  database transaction. `tests/test_provision_initialization.py`.
-
-Three more from the same review landed alongside it, each of which was a thing
-an extension could already do by reaching past the facade — working, and one
-refactor from breaking somebody else's build:
-
-- **The chat lifecycle is a declared contract** — `Sonder.chats` and
-  `api.chats`. Two things the declaration had to SAY rather than provide, both
-  in [`EXTENSIONS.md`](guides/EXTENSIONS.md) §6a: a reroll is a **rollback**,
-  not a re-render, so an adapter porting a "replies are drafts until you send
-  the next message" swipe model onto Sonder's variants will corrupt state; and
-  there is **no way to post prose**, deliberately and permanently, because
-  narration is produced by the pipeline from committed state and a seam for
-  injected text would make `persist/commit.py`'s boundary advisory.
-- **Per-era extension state** — `api.frame_state(chat_id)` writes `extf:<id>`,
-  which is in `FRAME_SCOPED_WORLD_PREFIXES`. `api.state` stays chat-global, so
-  no story migrates. Two homes rather than one flag because the key is what
-  does the scoping — and because it is a real distinction: what an installation
-  IS spans eras, what has HAPPENED does not. `CommitView` carries both. No
-  archive/checkpoint/branch work was needed; the frame remap parses a key
-  generically rather than against a list.
-- **A settings-section mount point** — `Sonder.registerSettingsSection`, which
-  renders inside the extension's OWN card in the 🧩 menu rather than in the
-  host's API settings: what belongs there is install-scoped configuration
-  (`api.settings`), and that card is the one place a reader is already looking
-  at this extension. Collapsed, drawn on first open (a section that fetched on
-  render would cost a round trip per installed extension every time somebody
-  glanced at the list), and absent for a disabled extension, whose
-  registrations are cleared and whose panel would otherwise be configuring code
-  that is not running.
-- **A notification surface** — `Sonder.notify`/`dismissNotice`/`notices`: a
-  standing column, bounded, cleared by `_unregister`, actions charged to their
-  owner. A toast acknowledges what the reader just did and leaves in four
-  seconds, which is the wrong shape for "your objective changed while you were
-  reading".
-
-A third batch closed what a TOTAL-CONVERSION extension needs, measured against
-Directive (`docs/design/DIRECTIVE_HOST_SURFACE.md`): ES module entries
-(`capabilities.ui.module`, dynamic-`import()` loading with an id-bound facade,
-so an extension built as a module graph can be loaded at all), the narration
-seam (`api.on_narration_payload`, `api.narration_context`), and three host-owned
-UI mount points beyond the sidebar — `registerTopBarButton`, `registerView` (a
-full-window surface over the transcript) and `registerComposerControl`, each
-cleared by `_unregister` so a disable takes the whole interface back down. `extensions/overlay-demo/` is the reference for all three.
-
-A second batch closed the surfaces the first release left open: `ui.css` is
-served (as its own document, linked after the host's sheets), enable/disable
-hot-load in the browser through `Sonder._load`/`_unload`, extensions serve their
-own routes under `/api/extensions/<id>/x/`, `api.add_commit_domain` runs inside
-the turn's transaction, `api.on_character_payload` is the attributed routing
-seam, `api.llm_json`/`llm_text` give a model call on any configured role,
-`api.add_director_specialist` adds a seventh Director family, and
-`check_extension_manifests`/`check_extension_imports` lint the tree.
+**What shipped across five batches (9.0–9.6) is not listed here** — it was a
+changelog inside a register. Disposition: `Design.md`'s **Third-party
+extensions** row; developer surface:
+[`docs/guides/EXTENSIONS.md`](guides/EXTENSIONS.md). Two things a reader of this
+entry needs and would not find there: the Tier 0–3 ladder (story packs as rung
+1) was **abandoned**, not deferred — design note §2 says why, so it is not debt
+— and every refusal from the Directive review's hardening list carries its
+argument in
+[`DESIGN_FRAME_COHERENT_READS.md`](design/DESIGN_FRAME_COHERENT_READS.md)'s
+"Refused" section. *(Collapsed 2026-08-19.)*
 
 Still missing:
 
 - **A model lane cannot be declared without Python.** `api.add_model_lane` is
-  built (lanes are namespaced `ext:<id>:<name>`, rendered in the host's model
-  settings, inherit `default` when blank, and log spend under their own role
-  string), but declaring one happens in `register(api)`, so a data-only
-  extension cannot have one. A manifest-declared lane rides the same residual
-  as declarative advisor stages below — a lane is also the smaller half of
-  that item. Nor can a lane ship a SUGGESTED model: the host configures it or
-  it inherits `default`, because a manifest choosing a model is an install
+  built, but declaring one happens in `register(api)`, so a data-only extension
+  cannot have one — the smaller half of declarative advisor stages below. Nor
+  can a lane ship a SUGGESTED model: a manifest choosing a model is an install
   choosing spend.
-- **No BINARY/blob storage.** `api.documents` (built; JSON documents at
-  logical paths with `list`, `delete`, `verify` and host routes —
-  `tests/test_extension_documents.py`) closed the document-storage gap, but it
-  stores JSON values only and refuses above 128 KiB, because a story document
-  is a `world` row and rides every checkpoint of the story. A large binary
-  asset — an image pack, an audio file, a campaign export measured in
-  megabytes — still has no home that survives an extension update
-  (`data_path` is replaced by re-clone). Deliberately left until an extension
-  actually wants one, because the right shape (content-addressed like
-  `memory_vectors`, or plain files outside story history) depends on whether
-  the asset needs to ride checkpoints at all.
+- **No BINARY/blob storage.** `api.documents` stores JSON only and refuses
+  above 128 KiB, because a story document is a `world` row that rides every
+  checkpoint. A large asset — image pack, audio, a multi-megabyte export — has
+  no home surviving an extension update (`data_path` is replaced by re-clone).
+  Deliberately left: the right shape (content-addressed like `memory_vectors`,
+  or plain files outside story history) depends on whether the asset needs to
+  ride checkpoints at all.
 - **Declarative advisor stages** — a stage as data (role, prompt, input-scope
   whitelist, anchor) for authors who write no code. Genuinely useful; no longer a
   prerequisite for anything.
@@ -4429,31 +2899,23 @@ Still missing:
   designed alongside `on_character_payload` but not built: `on_admission` and
   `on_view`, which would let an extension alter what perception ADMITS rather
   than only what the assembled payload carries.
-- **An extension still cannot reach the Director's PROSE AUTHOR**, though it
-  can now reach the narrator. `api.on_narration_payload` and
-  `api.narration_context` (built; `tests/test_extension_narration.py`) put an
-  extension's standing context in front of the narrator on every beat, which is
-  what makes a reader-visible extension layer possible at all. The prose
-  author is the remaining half: `PROSE_AUTHOR_SHEET` and
-  `test_every_delegated_block_has_exactly_one_owner` are in-tree, so a
-  registered specialist family writes its channel to the merged `state_diff`
-  and nothing narrates it *from there*. Closing it means a prose-chunk registry
-  with the one-owner test extended across the boundary. Deliberately left: the
-  narrator seam delivers the reader-visible result without touching a
-  one-owner invariant, so this is no longer blocking anything.
-- **`tools/project_check.py --extension <path>`** — the author-facing self-check
-  that runs the same two lints against an unbundled extension before shipping.
-  The checks exist; the CLI entry point does not. The AUDIT half now has a
-  Python entry point (`extension_runtime.audit_extension_source(path)`, which
-  runs the install's own manifest and the same ceilings and writes nothing);
-  the lints are what still have no way in from outside.
+- **An extension still cannot reach the Director's PROSE AUTHOR**, though the
+  narrator seam is built. A registered specialist family writes its channel to
+  the merged `state_diff` and nothing narrates it *from there*; closing it means
+  a prose-chunk registry with
+  `test_every_delegated_block_has_exactly_one_owner` extended across the
+  boundary. Deliberately left — the narrator seam already delivers the
+  reader-visible result without touching a one-owner invariant.
+- **`tools/project_check.py --extension <path>`** — the author-facing
+  self-check. The checks exist and the AUDIT half has a Python entry point
+  (`extension_runtime.audit_extension_source`); the lints have no way in from
+  outside.
 - **Phase 2: the reviewed registry.** Every field it needs (id, version,
   `sha256`, `provenance`, and now `source_url`/`source_ref`/`commit`) is
   already written at install time, so this is an addition rather than a
   migration.
 - **A zip or folder install cannot be checked for updates.** Only a repository
-  source has something to ask. A zip would have to be re-downloaded in full to
-  compare — an `ETag`/`Last-Modified` probe would be cheap and is not
+  source has something to ask; an `ETag`/`Last-Modified` probe is cheap and not
   universally honoured, so it was left out rather than shipped as a check that
   is right most of the time. Reported as `checkable: false` with the reason.
 - **Update checks are manual.** There is no periodic sweep and no notification
@@ -4470,69 +2932,36 @@ Still missing:
   store, and nothing has wanted one yet.
 - **`extension_runtime/` is outside the UI catalog's reach.**
   `tools/extract_ui_catalog.py` scans root `*.py` and `agents/*.py`, so the
-  dozen-odd extension registration errors that surface in the Extensions menu's
-  error field are never harvested and never translated — while the four that
-  happen to live in `agents/director.py` are. Recorded as verbatim exceptions
-  rather than translated, because four of sixteen would make one list half
-  Japanese. Fix is to add the package to the scanner and translate the set.
+  dozen-odd registration errors surfacing in the Extensions menu are never
+  harvested and never translated — while the four living in `agents/director.py`
+  are, which would make one list four-sixteenths Japanese. Fix: add the package
+  to the scanner and translate the set.
 - **`Sonder._unload` cannot undo side effects**, only registrations and the two
   injected elements. A monkeypatched global, a timer or a `document`-level
   listener survives a disable. Inherent to the no-sandbox posture; stated in the
   guide so an author can compensate.
-
-Directive's author reviewed how the fourth batch COMPOSES and named three
-residual contracts
-([`docs/design/DIRECTIVE_REMAINING_GAPS.md`](design/DIRECTIVE_REMAINING_GAPS.md),
-against alpha 9.3). All three are now built — §1 as `api.on_director_result`
-(one attributed, bounded correction attempt before commit), §2 as
-`player_view["people"]` (schema 2; re-keyed in schema 3 onto immutable
-identity per the follow-up hardening report,
-[`docs/design/DIRECTIVE_HARDENING_REPORT.md`](design/DIRECTIVE_HARDENING_REPORT.md)
-§1, whose residuals are §1.51), §3 as `api.provision_story` — full
-disposition in `Design.md`'s Third-party extensions row;
-`tests/test_story_view.py::TestPeople`/`::TestImmutableIdentity` and the
-write-side proof in `tests/test_composer_pipeline.py`. The hardening
-report's §2, the executable full-pipeline correction proof, is §1.51's
-third bullet.
-
-And two residuals of the people projection itself, both "absent means absent"
-edges rather than defects: a fact can only carry `authored_public` provenance
-today — nothing mines memories to affirm a `what_i_was_told` role, so
-experience-sourced facts stay absent rather than deduced — and a ledger name
-that resolves to no cast member or persona is omitted, because an unregistered
-presence has no stable id until promotion makes one.
-
-
-- **The archive does not DECLARE its extension schema.** Portable export/import
-  carries an extension's `ext:<id>`/`extf:<id>` state, its char state and its
-  documents, and round-trips them — but it carries them without a version or an
-  enumeration, so an importer cannot tell a complete carriage from a partial
-  one, and a future home added for extension data has no place to announce
-  itself. Raised by the Directive review's hardening list. Deliberately left
-  until a second home actually exists, because a version number with one member
-  is a version number nobody has to read.
-
+- **Two "absent means absent" edges in `player_view["people"]`.** A fact can
+  only carry `authored_public` provenance today — nothing mines memories to
+  affirm a `what_i_was_told` role, so experience-sourced facts stay absent
+  rather than deduced — and a ledger name that resolves to no cast member or
+  persona is omitted, because an unregistered presence has no stable id until
+  promotion makes one.
+- **The archive does not DECLARE its extension schema.** Export/import
+  round-trips `ext:<id>`/`extf:<id>` state, char state and documents without a
+  version or an enumeration, so an importer cannot tell a complete carriage from
+  a partial one. Raised by the Directive hardening list; left until a second
+  home exists, because a version number with one member is one nobody reads.
 - **No read-snapshot token.** The same review asks for a read transaction so a
   DTO combining several domains cannot straddle a concurrent write. Not built,
   and deliberately not folded into the frame-coherence work, because it is a
   different axis: `at_frame` chooses an ERA, a snapshot would fix a MOMENT.
   `tests/test_extensions.py::test_no_capability_is_declared_for_work_that_is_not_built`
   names it as today's example of a capability that must not be declared.
-
 - **The host's own `story_view`/`player_view` HTTP routes take no `frame`
   parameter.** The extension API was the reviewed surface and gained the
   selection; `web/app.py`'s two routes did not, because the host UI has no
   consumer for it yet. Add the parameter when one appears — the underlying
   functions already accept it.
-
-Deliberately NOT built from the Directive review's hardening list, each with
-its argument in [`design/DESIGN_FRAME_COHERENT_READS.md`](design/DESIGN_FRAME_COHERENT_READS.md)'s
-"Refused" section: frame-scoped `events` (a frame is an epistemic cursor, not a
-partition of objective truth), and ambient frame-binding of extension route
-dispatch (it would repair routes by the exact contextvar-spanning mechanism the
-facade exists to avoid). A `frame_coherent_reads` capability flag WAS refused
-while the work was in flight and is now declared, which is the discipline
-working rather than an exception to it.
 
 ### 6.3 Greeting-seeded openings — [`GREETING_IMPORT_DESIGN.md`](design/GREETING_IMPORT_DESIGN.md)
 
@@ -4577,32 +3006,20 @@ alone — moved to
 
 ### 6.4 Place purpose — [`DESIGN_PLACE_PURPOSE.md`](design/DESIGN_PLACE_PURPOSE.md)
 
-v1 is built. Deliberately not built, each for a stated reason: witnessed
-drink/water/warmth (no thirst or cold vital, so no deterministic signal),
-told-basis node MINTING (told-basis affordances on a node the mind already
-holds are built — `place_purpose` mirrors them from reconciled `stated_fact`
-hypotheses; what testimony may not do is bring a place into existence),
-negative entries, and the `repair`/`social` affordances
-(no consumer — dead weight becomes a to-do list). The own-memory-row heuristic
-(signal 2) is deferred as the doc allows.
+v1 is built. What was deliberately not built, each with its stated reason, is
+that note's own "Not built, plainly" line plus the deferred own-memory-row
+heuristic (signal 2). *(Restated here until 2026-08-19.)*
+
 
 ### 6.5 Place graph
 
 The walkable-edge defect is §1.6; the redundancy watch is §1.12.
 
-- **`basis: "told"` has no PLACE-GRAPH writer**, deliberately — and the
-  distinction matters, because the affordance ledger one layer over does write
-  it: `place_purpose` mirrors `stated_fact` hypotheses onto nodes resolved
-  `by_name` as `{basis: "told", sureness, about, claim}`. Testimony can say
-  what a place you already know is FOR; it cannot mint the place. The approved design derived
-  hearsay edges from `stated_fact` place claims, and implementing it revealed
-  that deriving *connectivity* from free text means text-mining it — the
-  non-deterministic derivation this engine refuses everywhere else. `told`
-  remains an accepted value with no code path. **A future testimony writer needs
-  a structured claim field naming the two places and the direction, not a parser
-  over prose.** Recorded because someone reading the node shape will otherwise
-  assume hearsay edges exist. This was the design document being wrong, not the
-  implementation.
+- **`basis: "told"` has no PLACE-GRAPH writer**, deliberately. Moved to
+  [`DESIGN_PLACE_PURPOSE.md`](design/DESIGN_PLACE_PURPOSE.md) on 2026-08-19 —
+  testimony can say what a place you already know is FOR; it cannot mint the
+  place, and a future testimony writer needs a structured claim field, not a
+  parser over prose.
 - **Do not remove the three-valued frontier semantics.** `_frontier_hops` returns
   `None` (spent), `0` (live but unmeasurable), or `N`. The middle value exists for
   saves written before the graph — a walked room with no recorded exits can
@@ -4614,29 +3031,21 @@ The walkable-edge defect is §1.6; the redundancy watch is §1.12.
 
 ### 6.6 Psychology as pressure — [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)
 
-(a) and (b) shipped; (e) declined by design. Open:
+(a) and (b) shipped; (e) declined by design. Open: (c) deterministic inclination
+beside the raw sheet, and (d) a trait as a disposition rather than a switch —
+both argued at length in that note under their own letters, including the
+constraint that (c) must RELOCATE salience rather than add it. *(Restated here
+until 2026-08-19.)*
 
-- **(c) Deterministic inclination beside the raw sheet.** Deferred, not
-  rejected — landing it alongside (a)/(b) would confound the measurement that
-  decides whether it is needed. It must **relocate** salience, not add it: the raw
-  sheet has to be demoted in the same change that introduces the derived view, or
-  the character gets two heavy citable blocks instead of one.
-- **(d) A trait as a disposition, not a switch.** Whether this needs explicit
-  representation or emerges once (b) and (c) land is the open question.
 
 ### 6.7 Long-term goals — [`DESIGN_LONG_TERM_GOALS.md`](design/DESIGN_LONG_TERM_GOALS.md)
 
-v1–v3 are built, including goal-slot currency. Undecided:
+v1–v3 are built, including goal-slot currency. The three undecided questions —
+whether a renewed intention should cost something, whether displacement should
+feed the drive-strain ledger, and whether drive and project both weighing 1.0
+needs revisiting — are that note's "Not yet decided" list. *(Restated here until
+2026-08-19.)*
 
-- Whether a renewed intention should **cost** something, so renewal is a decision
-  rather than a reflex. Without a cost, "renew" is always the cheapest answer and
-  nothing is ever given up.
-- Whether **displacement should feed the drive-strain ledger** — giving up a
-  drive-serving project is plausibly a strain event.
-- Whether drive and project both weighing 1.0 needs revisiting. Current position:
-  no. Revisit only if a measured run shows a project-serving want being *emitted
-  and then losing* to a drive want, which is a different failure from the one
-  observed.
 
 ### 6.8 Living world — [`DESIGN_LIVING_WORLD.md`](design/DESIGN_LIVING_WORLD.md)
 
@@ -4728,208 +3137,60 @@ still open:
 
 ### 6.10 Extra body parts — [`../design_notes/11-extra-body-parts.md`](../design_notes/11-extra-body-parts.md)
 
-The card field (`embodiment.extra_parts`, closed attachment/aspect menus),
-the region_visibility-gated perception delivery, the Director payloads and
-the editor menus are built. Deliberately not built:
+The card field, the `region_visibility`-gated delivery, the Director payloads
+and the editor menus are built; what was deliberately not built is that note's
+"Residuals" list. *(Restated here until 2026-08-19.)*
 
-- **Director-driven transformation** — growing or losing a part as a beat
-  outcome. Needs a scene-level override ledger with commit/archive/checkpoint/
-  branch work; the per-story card edit covers the authored case today.
-- **Garments that cover a part itself** (a tail sock, a wing binder) — needs
-  part-keyed coverage, i.e. the attire model learning slots outside its
-  closed `REGIONS`. `through_clothing: false` covers the tucked case.
-- **An import warning for a part described twice** — a declared `kind` whose
-  word also lives in `visible.summary` prose double-describes the body.
-  `importers.character_import_warnings` is part-aware in the OTHER direction
-  only: it fires when body prose names a part the sheet does not declare
-  (`_prose_names_a_part` against `_PART_WORDS`, and only when
-  `embodiment.extra_parts` is empty), which is the failure that costs a
-  kitsune nine invisible tails. The double-describe case is the mirror and is
-  cheaper to be wrong about, so it is unflagged.
 
 ### 6.11 Garment displacement — [`../design_notes/17-garment-displacement.md`](../design_notes/17-garment-displacement.md)
 
-Region-grain displacement (the third clothing axis) is built; deliberately
-left open:
+Region-grain displacement is built; what is left open — left/right asymmetry,
+transparency, and retro-repair of stale displacement prose — is that note's
+"Left open" list, with each item's argument above it. *(Restated here until
+2026-08-19.)*
 
-- **Left/right asymmetry** — "one shoulder down, the other up" has no
-  structural home: `REGIONS` carries no lateral axis anywhere (contacts and
-  injury share the same coarseness). Condition prose carries the asymmetry;
-  coverage stays conservative (covered until fully off the region). Adding
-  laterality would be a whole-body vocabulary change, not an attire one.
-- **Transparency** — the authored "sheer black silk robe" covers without
-  concealing, and the ledger has no axis for it: a covered region is a
-  concealed region to `region_visibility`. Today sheerness lives in the
-  garment's name/description prose only. A `conceals: full|sheer|net` axis
-  on the garment would be the shape, but it is a perception-grading change
-  and needs its own design pass.
-- **Retro-repair of stale displacement prose** — the corpus holds condition
-  strings that encode state from before the axis existed. Deliberately not
-  retro-executed (prose is not state); they heal when a beat next touches
-  the garment (the detectors fire and feed the Director the channel) or by
-  hand in the region editor, which now expresses displacement directly.
----
 
 ### 6.12 Scent — [`DESIGN_SCENT.md`](design/DESIGN_SCENT.md)
 
-v1 is built: a body's standing smell (`embodiment.scent`), an object's
-(`SceneEntityDef.scent`), deposited matter's (the substance record's `scent`),
-graded through `scent_level` and delivered as a `scent` percept on the `smell`
-channel. Four things are deliberately NOT built, and each is an argument rather
-than an omission — see the note's §6 before building any of them.
+v1 is built; the five things deliberately not built — decay, travel and drift,
+multi-hop reach, an entity's smell never attributed, and whether a body receives
+its OWN card scent — are all in that note (§5, §6, and §7's closing paragraph),
+each with the argument for leaving it out. *(Restated here until 2026-08-19.)*
 
-- **A smell does not fade.** Blood stays `wet iron` until the Director
-  re-describes the deposit or removes it. `amount` is free text and nothing can
-  order "a small spill" against "the remainder" (the same limit
-  `_stock_consumed_by` records), so decay needs an explicit age on the record,
-  not a heuristic over prose. The authoring surface already carries the
-  intended answer: a re-described deposit updates its smell.
-- **A smell does not travel or linger where its source has been.** No wind, no
-  upwind/downwind, no trail in a room a body has walked out of. The tracking
-  case is a good mechanic and needs a per-room decaying residue ledger, which
-  is a larger feature than the one that landed.
-- **Scent does not walk multiple rooms.** Hearing has `sound_walk_level` and a
-  hop budget the card's `range` extends; scent is graded across ONE edge and
-  stops, so `sense_range_class` has no consumer on this channel. A real
-  asymmetry with hearing, left as one until a story wants it.
-- **An entity's smell is never attributed to the entity.** Correct today,
-  because the composer admits no percept for the objects standing in a room —
-  but if an entity-presence percept is ever built, this is the reader that
-  should start naming its source, and it will not find itself.
-
-Undecided, and cheap to settle from the corpus once stories have smells in
-them: whether a body should receive its OWN card scent. Currently it does not
-(habituation, and a standing fact true of every beat is noise in a context
-window), which is right for a person's own skin and arguably wrong for blood
-somebody has just been drenched in — though that case is a substance and IS
-delivered.
 
 ### 6.13 Paradox consequences — [`DESIGN_PARADOX_CONSEQUENCES.md`](design/DESIGN_PARADOX_CONSEQUENCES.md)
 
-All three decisions in that note are built (§1.59 deleted with them: the
-ceiling is terminal rather than a rung, the toll is a chosen mode rather than
-a rider on the default, and force restore rewrites the SCENE through
-`merge_scene_with_diff` and keeps the projection in step, which was audit
-WORLD-F7/F24/F33). Its §5 lists three things left open ON PURPOSE, recorded
-here so the register holds them rather than the note alone:
+All three decisions in that note are built; its three deliberately-open edges (a
+warden outliving the wound it guards, cross-frame scenes, a toll with no restore
+path) live in the note's §5, not here. None is urgent for the reason the note
+records: no live story has ever opened a paradox. *(Restated here until
+2026-08-19.)*
 
-- **A warden outlives the wound it guards.** `state["consumed"]["entities"]`
-  is written by nothing, so a hunter spawned at stage 1 remains after the
-  anchor is re-satisfied. Deliberate: the warden is an ordinary scene entity
-  and what becomes of a hunter whose wound closed is a Director/story
-  question, answerable with a plain `remove_entities`. If play shows a
-  lingering warden is always wrong, the fix is to record spawned entities in
-  `consumed.entities` and extend `_restore_consumed`.
-- **Cross-frame scenes.** `world_entities` has no frame partitioning, so a
-  force restore edits the operative frame's scene and the chat-wide
-  projection; another frame's blob holding the same entity is not edited.
-  The same Stage-3 boundary the whole subsystem lives inside.
-- **The toll has no restore path, on purpose.** Resolution stops further
-  decay; it does not refund confidence. A witness who faded while reality was
-  tearing does not un-fade because the tear closed — that irreversibility is
-  the mode's dramatic weight, and is exactly why the toll is opt-in.
 
-Still true, and the reason none of the above is urgent: **no live story has
-ever opened a paradox.** Re-measured read-only 2026-08-18 — one chat holds an
-empty `paradoxes` dict, one holds a `paradox_policy` byte-for-byte identical
-to the default triple, two hold fixed points, and zero wound markers exist
-anywhere in the `world` table.
 ## 7. Experiments not yet run
 
-Measurements the design notes name as the thing that would settle a question. An
-unrun experiment is unfinished work, not a broken thing.
+Moved to
+[`docs/experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md)
+§1 on 2026-08-19. An unrun experiment is unfinished work, not a broken thing —
+which is the argument for keeping it with the evidence rather than in a defect
+register.
 
-- **The gods expand the maze** —
-  [`DESIGN_MAZE_EXPANSION.md`](experiments/DESIGN_MAZE_EXPANSION.md). Designed, not built;
-  depends on nothing not already in the engine. Needs a second SVG whose western
-  7×7 is byte-identical to `maze7x7-a11.svg`, an explicit `--expand` flag so
-  `--resume`'s fingerprint guard is overridden rather than weakened, a
-  deterministic seam check, and an interlude variant carrying the announcement.
-  The question is the one never asked: **can a mind revise a map it already
-  trusts?** Two arms from one snapshot, one announced and one silent.
-- **A14 — one configuration end to end without intervention.** The A11–A13 rows
-  cannot support a clean before/after performance claim because the configuration
-  changed underneath them. The only thing missing from that table.
-- **The psychology-as-pressure re-measure** — the same maze arm with (a) and (b)
-  only, re-counting *"Given his X"* per beat, *"torn between"* per beat, and
-  violations of a stated value. Gates §6.6's proposal (c).
-- **A village-scale run** — several characters, thirty turns, ordinary places. A
-  different instrument from the maze, which is saturated and stopped producing
-  new findings after A13. §1.2, §1.3 and the `circling` watch item are the ones
-  most likely to bite it.
-- **A town-scale place-purpose fixture** — 20 named rooms, 3 affordance sites.
-  Measure beats from hunger onset to reaching food, with and without
-  `recalled_places`. It works if the number falls and the route still reads like a
-  person walking rather than a solver.
-- **The running ablation** — a map with a genuine long corridor and a `large`
-  hall, run twice by one character, once with `sprint_reach` ablated. It works if
-  beats-to-goal falls while **moves**-to-goal does not.
-- **The surface-comfort property test** — a body parked on a bed for 30 beats ends
-  with stamina up, `charge` unchanged, absorption below 0.25, and at least one
-  departure-capable want intact. If any of the four fails, the anti-attractor
-  design is wrong and no amount of constant-tweaking fixes it.
-- **Prompt efficacy for crowds, tellings and projects.** The first playthrough
-  with the model side unauthored (`tools/model_playthrough.py`; artefacts in
-  `demos/vale-model-played-14-*`) handed every 8.0 mechanism an explicit
-  occasion across 11 Director resolves, on two independent models. Reached for
-  and correctly encoded: `courier_ops` (both), `artifact_ops` (one) — and those
-  were refused for a structural reason since fixed, not a bad encoding, so
-  those two prompts land. Never declared once, by either model, on any
-  occasion: `crowd_ops` (a packed market square, then listening to it),
-  `tell_ops` (telling a named character what the player saw), `project_ops` (a
-  stated multi-stage intention). The gap is now isolated — the same commit path
-  drove all three to 100% acceptance under `demos/ashen-quest-51-*`, where a
-  human wrote the ops. When rewriting those clauses: a bare prohibition
-  inverts, and naming a concrete occasion is what works. Re-run the harness
-  afterwards and compare; the artefacts are checked in.
-- **`make test-browser` for the early-narration render** (`126009c`).
-  Playwright is not installed on the machine it was written on, so it was
-  checked with `node --check` and a stub DOM instead.
-- **Full narrator token streaming.** Only the conservative half landed —
-  render on the narrator `step` event. Streaming the tokens themselves would
-  put the first word at ~75% of a turn instead of 100%, but the narrator
-  re-runs on a fidelity or craft rewrite on roughly a quarter of turns, so it
-  needs a re-stream or a visible "revising" state first.
-
-### From the alpha 8.4.4 measurements
-
-All four are named by
-[`WORLD_METABOLISM_FIRE_RATES.md`](experiments/WORLD_METABOLISM_FIRE_RATES.md)
-or by the work that shipped in that release. Ordered by expected value.
-
-- **Why 3 of 31 characters have ever formed a PROJECT.** `tools/fire_rates.py`
-  reports `has ever held a project 9.68% (3/31)`, mean 0.03 against a cap of 2,
-  and the row's own note says the tier is unreachable if that is zero.
-  `CLAUDE.md` records projects as what made NPCs pass the maze without altering
-  their drives, and as the tier carrying "go home, take the injured one to a
-  doctor" — an NPC walking somewhere for a durable reason is the oldest
-  spontaneous-event engine there is. Whether the gap is the adoption
-  deliberation refusing, probation lapsing, or the prompt never reaching is
-  unmeasured. **Smallest number in the corpus with the largest documented
-  effect; measure this before enriching anything in the world layer.**
-- **Why the Director never declares a crowd, courier or caravan.** Every
-  off-screen row reads `no chances` — the precondition never arose. The ops
-  exist and are contracted. Unreachable, unread, or never applicable to the
-  stories played so far? Those have entirely different fixes, and the answer
-  decides whether a pre-planning sidecar is the right shape or a second inert
-  layer on top of the first.
-- **Whether `sensory_channels` changes the prose.** It is wired, tested and
-  firewall-argued, and payload-to-behaviour coupling is model-mediated. Same
-  beat, same model, before and after, is the only thing that settles it.
-- **Whether touch/smell scarcity is delivery starvation or story mix.** A
-  checkpoint replay counting beats where the scene held standing player
-  contacts or substances while `observations["player"]` carried no touch span.
-  Gates the substrate half of any further sensory work.
 
 ## 8. Parked
 
 Not scheduled, not committed to a phase. Kept so they are not lost and not
-accidentally built.
+accidentally built. Four feature WISHES that were here — salience-driven
+personal lore, per-character retrieval depth, belief-revision salience and an
+optional minimap — moved to [`docs/design/IDEAS.md`](design/IDEAS.md) on
+2026-08-19; a wish is not a defect, and one earns its way back here only by
+someone measuring a live story where its absence makes the engine wrong.
 
-- **`providers.chat_complete_async` is dead.** Defined, imported by `web/app.py`,
-  and called from nowhere but its own retry loop. The threading model works and
-  the `contextvars` discipline is built around it, so the recommendation is to
-  delete the import rather than build on it.
+- **`providers.chat_complete_async` is dead.** Defined and called from nowhere
+  but its own retry loop — `web/app.py` no longer imports it either, so the
+  only three references in the tree are its own definition, its recursive call
+  and `_chat_complete_async_once` (`llm/providers.py`). The threading model
+  works and the `contextvars` discipline is built around it, so the
+  recommendation is to delete the function rather than build on it.
 - **`llm/prompt_cache.py` is dead** — no importer anywhere — and its
   `estimate_cacheable_tokens` heuristic is wrong by 5x to 262x on every stage.
   `AGENTS.md` still names it as the watch-file for cacheability.
@@ -4946,27 +3207,10 @@ accidentally built.
   world record and assert it never surfaces in that character's output across N
   turns. The firewall is the engine's central claim and is currently protected by
   construction plus targeted tests.
-- **Salience-driven personal lore.** *"This reminds you of a festival you walked,
-  long ago"* — fired on genuine resonance, silent otherwise. Fired every beat it
-  is a tic; fired rarely and on-key it reads as soul.
-- **Per-character retrieval depth** as an explicit dial beside tier and
-  temperature — spend deep retrieval only on pivotal beats. Today the only depth
-  control is the absorption-driven `_recall_cap`.
-- **Belief-revision salience.** Provenance makes revision *possible*; making the
-  moment of revision itself high-salience is what lets a betrayal recontextualise
-  forty turns and land as betrayal rather than confusion.
 - **Perception prose bound by the audibility layer.** Live data shows perception
   narrating "difficult to parse from this distance" while the deterministic layer
   had already ruled the speech fully audible. The deterministic layer is right;
   the prose should be constrained by it rather than free to contradict it.
-- **An optional minimap.** A read of the ledger the spatial architecture already
-  maintains — nodes are rooms, edges are adjacency with barrier state, plus a
-  containment breadcrumb. **The one non-negotiable constraint: it must be an
-  epistemic view, not an omniscient one** — the character's own mental map, i.e.
-  fog-of-war. A minimap drawn from objective truth would be a spatial information
-  leak, the exact failure the perception firewall exists to prevent, rendered
-  visually. Topological, not geometric; opt-in; degrades to nothing when the space
-  is not well-structured. Doubles as a coherence/debug view.
 - **Remove the deprecated macro schema.** `fiction_worlds`, `fiction_locations`
   and `transit_edges` are dead — nothing in the runtime reads or writes them — but
   they are still created, snapshotted, restored and exported. Removal is planned

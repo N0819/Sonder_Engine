@@ -1,5 +1,128 @@
 # Changelog
 
+## alpha 9.6.1 — A guard is only as true as the text it is handed
+
+A point release, and a narrow one: one live scene was read stage by stage and
+every defect it exposed was fixed at its class rather than in that chat. The
+scene was an interview through observation glass, and it turned out to be
+holding nine separate faults at once — which is the argument for reading a whole
+turn rather than the stage a symptom appeared in.
+
+The suite is 8,217 tests, green on both dependency resolutions.
+
+- **A body the scene keyed by one of its own aliases was invisible to
+  everything spatial.** `room_of` folded case and script but not a different
+  NAME for the same being, so a character whose sheet said "Sarah Moon" while
+  the scene said "Dr. Sarah Moon" had no room from her own name — and `None`
+  where a room belongs makes `visual_level_between`, `proximity_rel`,
+  `entity_arc` and `region_visibility` all fail closed, which reads exactly
+  like a wall. Her view of the person she was watching contained no presence,
+  no pose, no appearance and no attire, while the ledger describing those
+  clothes was correct the whole time. It now resolves through the scene's
+  entity table, ambiguity-safe. Measured over the corpus: eight active cast
+  characters across six chats had no resolvable room and now do.
+
+- **The cast sheet decides how a cast body is spelled.** Two cast-aware folds
+  disagreed about whether aliases count — attire matched them, positions
+  refused — so one woman was `attire["Sarah Moon"]` and
+  `positions["Dr. Sarah Moon"]` at the same time. There is now one policy
+  function, and a scene entity that mirrors a registered character is renamed
+  to the sheet's name at the seams that hold the cast, with the displaced
+  spelling kept as an alias and the entity key never touched. Four entity
+  records and eight scenes heal on their next committed turn; no migration.
+
+- **A one-way mirror now says which way it looks.** `one_way_window` was the
+  only barrier whose meaning depended on which side declared it, and writing
+  adjacency from both rooms is the habit every other barrier rewards — so the
+  habit silently cancelled it, and two "sight passes this way" declarations
+  named no direction at all. The direction is a field on the edge now
+  (`sight_from`), so declaring it twice agrees instead of contradicting, and
+  the merge stamps it on any unambiguous edge while it is still knowable. A
+  pair that still names nothing walls both ways and reports itself once per
+  chat, to the developer and to the Director, rather than quietly admitting
+  everyone.
+
+- **The identity floor stopped rewriting speech.** A generated label carried a
+  quote character out of an appearance summary ("5'7\""), and the scrub decides
+  what it may touch by splitting on quote parity — so one stray character
+  inverted every span boundary after it, protecting the speaker attribution and
+  rewriting the line inside the quotes. A character's spoken self-introduction
+  came out with her own name replaced by a descriptor, which destroys the one
+  channel by which a name is legitimately learned. Labels are now free of the
+  punctuation later passes read as structure.
+
+- **A wall-mounted machine is not a person whose name must be hidden.**
+  `background_presences` answers "might this thing act?" and is deliberately
+  generous, so a sentient robot tagged `device` is never dropped. The identity
+  floor was reading that same list to answer "whose name is theirs to give",
+  and rendered a reality-anchor array as "the unfamiliar person" in the room's
+  own description — sharing a label with the guard who actually spoke. Where
+  the noun cannot decide, conduct does: 23 objects left the identity space and
+  both Daleks kept their names.
+
+- **A garment condition describes the garment.** When one beat files the same
+  string to `overlays` and to `attire.conditions`, the garment copy is dropped
+  — a body detail otherwise renders as part of the garment's name to everyone
+  who sees them, and stays in the ledger.
+
+- **Clothing state stopped reading as one more garment.** The English pack
+  rewrote "; clothing state:" to a bare comma, so a displacement note joined
+  the wearing list as its sixth item. Japanese never had this; English was the
+  outlier.
+
+- **A title no longer decapitates a sentence.** Every splitter breaks on a
+  period followed by whitespace, and a title is a period followed by
+  whitespace — so "occupied by Dr. Sarah Moon." was two sentences, and the
+  self-narration guard correctly dropped a fragment that was nothing but the
+  perceiver's name, leaving the honorific dangling. Abbreviations are language
+  pack data now, because "a period may end an abbreviation" is a fact about a
+  writing system.
+
+- **Being in the room is what decides whether you saw it.** The onset
+  perception pass built a view only for characters in the Director's
+  `flow.reactors` — a PACING list — so a present, awake, watching character
+  perceived the onset never and answered the aftermath. Measured: a witness was
+  missing from `reactors` in 757 of 975 multi-witness beats, and 1,639 of 4,292
+  character-presences got no act view. It costs nothing: perception makes no
+  model call, and the loops read the Director's list for themselves, so who
+  speaks and what the beat costs are unchanged.
+
+- **The aversive half of the stress model had never run.** `threat` is 55% of
+  strain and was derived from a key nothing writes, so it was 0.0 on every beat
+  of every story: 33 characters carried a resolved stress block and `overloaded`
+  had fired zero times ever. Characters could be excited and could not be
+  threatened. The channel is an explicit argument now, so the next omission is
+  an error rather than a zero — and the weight has never been calibrated
+  against anything but zero, so it is worth watching.
+
+- **A garment whose coverage nothing knew now says so.** The detector existed,
+  was tested, and had no caller; its own docstring described the hand-off in
+  the present tense while the loop stayed open. 110 of 560 live worn garment
+  records carry a guessed span, twenty of them a full-length under-kimono
+  sitting on the torso alone.
+
+- **Documentation that was describing a different engine.** `README.md` still
+  named `from db import q` and a flat module root that eighty-one files left
+  in 9.6; the test count read 6,329 against a measured 8,217, and `~74s`
+  against 217s. `pyproject.toml` had carried a placeholder `0.1.0` through nine
+  releases and no upper Python bound, though the pinned `pydantic-core` has no
+  wheel above 3.13 and both launchers already enforce it.
+
+- **Three fixes that landed after the 9.6 tag and ride here.** CI jobs had no
+  timeout, so a hung Chromium install held a run for fifty minutes and reported
+  nothing; the browser tier was skipped whenever a sibling job failed, and
+  switching it on found two real failures and one flake; and the ambience
+  controls sat 27px inside the composer at a 1400px window, because the story
+  column's minimum width silently overrode the room it had just reserved.
+
+- **`docs/UNBUILT.md` is 38% shorter and now true.** 5,164 lines and 129
+  entries down to 3,217 and 104: entries already built, overtaken, duplicated
+  in this file, refuted by their own conclusion, or unmeasurable were deleted;
+  measurements and design arguments moved to `docs/experiments/` and the design
+  notes. One entry had claimed "Verified absent: no `relationship_events` table
+  exists" — it exists, with a writer, reader, archive, checkpoint and
+  branch-remap support, and 341 rows.
+
 ## alpha 9.6 — Nothing works only on paper, and nothing is lost in silence
 
 A housekeeping release, and it should read like one: 489 commits across 724
