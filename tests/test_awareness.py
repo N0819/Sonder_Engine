@@ -248,6 +248,31 @@ def test_character_step_noop_for_unconscious(temp_db):
     res = character_step(ctx, moon_id, nonce=0)
     assert res.get("_awareness_gated") is True
     assert res["sequence"] == [] and not res.get("speech")
+    # The one result shape that differed from every other: commit, the
+    # ledgers and `_unanswered_question_note`'s speaker match all read a
+    # stored result back by name.
+    assert res["name"] == "Dr. Moon"
+    assert res["char_id"] == moon_id
+
+
+def test_a_gated_mind_says_in_the_drawer_that_it_was_gated(temp_db):
+    """A gated mind runs no step, generates no pressure, and reads exactly
+    like a quiet one. The marker that says otherwise had a single reader in
+    the whole tree -- the test above -- so nothing downstream, and nothing in
+    the pipeline drawer, could tell "asleep" from "declared nothing"."""
+    from agents.character import character_step
+    ctx, chat_id, moon_id, _ = _make_ctx(temp_db, unconscious_player=False)
+    temp_db.qi(
+        "INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,"
+        "started_at,expires_at,next_tick,payload,active) VALUES(?,?,?,?,?,?,?,?,?)",
+        ("c_moon2", chat_id, "Dr. Moon", "awareness", 0.0, None, None,
+         json.dumps({"subject_id": "Dr. Moon", "kind": "awareness",
+                     "state": {"level": "asleep"}}), 1))
+
+    character_step(ctx, moon_id, nonce=0)
+
+    assert any("Dr. Moon" in w and "asleep" in w for w in ctx.warnings), \
+        ctx.warnings
 
 
 def test_director_floor_flags_untracked_knockout():
