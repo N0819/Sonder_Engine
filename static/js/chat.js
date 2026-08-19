@@ -1678,6 +1678,23 @@ async function openPipeline(tid) {
 
   D.append(headerRow);
 
+  // The server computes `blocked_by_other_frame` separately from `editable`
+  // for exactly this: "so the UI can explain WHY a frame-latest turn is still
+  // blocked, instead of just refusing". Nothing read it, so the drawer opened
+  // with Resume, reroll, use and edit simply absent and no reason given -- the
+  // refusal without the explanation, which is the shape the field exists to
+  // prevent. Wording is the server's own 409 detail, verbatim, so the reader
+  // sees the same sentence whether the drawer explains it up front or the
+  // route refuses the attempt (`tests/test_frontend_state_guards.py` holds the
+  // two equal).
+  if (p.blocked_by_other_frame) {
+    D.append(el("div", { class: "engine-warning" },
+      "Another frame has advanced since this turn. Recompute here would "
+      + "silently roll back that frame's progress too -- shared state "
+      + "(memories, cast, world entities) isn't sliced per frame in this "
+      + "version."));
+  }
+
   for (const s of p.steps) {
     const variants = s.variants || [];
     const activeIndex = variants.findIndex(
