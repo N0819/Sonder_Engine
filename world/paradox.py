@@ -61,6 +61,7 @@ import time as _time
 from story.character_schema import character_name
 from core.db import active_frame_id, q, qi, transaction, wget, wset
 from core.frames import get_frame
+from world.spatial import room_of
 
 MODES = ("dread", "hazard", "toll", "warden", "bureau")
 DEFAULT_MODE = "hazard"
@@ -335,12 +336,20 @@ def _apply_warden_stage(chat_id, state, stage):
     sc = wget(chat_id, "scene", None)
     if not isinstance(sc, dict):
         return
+    # A `positions` value names a ROOM. Writing None there is the category
+    # error every spatial query answers as `unknown`, which is
+    # indistinguishable from distance -- so a warden nobody can see, reach or
+    # flee would stand in the ledger for the rest of the story. A wound with
+    # no place has nowhere to put a hunter; it escalates without one.
+    epicenter = state.get("epicenter_room")
+    if not epicenter or epicenter not in (sc.get("rooms") or {}):
+        return
     entities = sc.setdefault("entities", {})
     positions = sc.setdefault("positions", {})
     warden_id = state.get("warden_entity_name") or f"the {state.get('label', 'paradox')} warden"
     state["warden_entity_name"] = warden_id
     entities.setdefault(warden_id, {"kind": "creature", "subtype": "paradox_warden", "hostile": True})
-    positions[warden_id] = state.get("epicenter_room")
+    positions[warden_id] = epicenter
     wset(chat_id, "scene", sc)
 
 
@@ -360,6 +369,21 @@ def _apply_stage_consequence(chat_id, state, stage, policy):
         return
 
 
+def _player_room(chat_id, sc):
+    """The room the player's own body stands in, or None.
+
+    Resolved through the chat's persona, which is the name `positions` keys
+    the player by (`agents/common._resolve_player_room` reads the same one).
+    None is a real answer: a scene the player is not placed in has no
+    player room, and inventing one is how a wound acquires a place nobody
+    was standing in.
+    """
+    row = q("SELECT p.name AS name FROM chats c JOIN personas p "
+            "ON p.id = c.persona_id WHERE c.id=?", (chat_id,), one=True)
+    name = str((row["name"] if row else "") or "").strip()
+    return room_of(sc, name) if name else None
+
+
 def _trigger_paradox(chat_id, anchor, frame_id):
     """frame_id here is the OPERATIVE frame -- whichever frame's commit
     actually triggered the violation (ctx.turn.frame_id), NOT
@@ -376,9 +400,12 @@ def _trigger_paradox(chat_id, anchor, frame_id):
     positions = sc.get("positions") or {}
     epicenter = positions.get(anchor["entity_id"])
     if not epicenter:
-        # Fall back to wherever the player is -- there's always a scene
-        # in progress when a commit runs.
-        epicenter = next(iter(positions.values()), None)
+        # Where the PLAYER is -- there is always a scene in progress when a
+        # commit runs, and the player is who committed the violation. This
+        # used to be `next(iter(positions.values()))`, which is whichever
+        # body the dict happened to yield first; a wound is opened where the
+        # violation happened, and insertion order is not that place.
+        epicenter = _player_room(chat_id, sc)
     state = {
         "anchor_id": anchor["anchor_id"], "label": anchor["label"],
         "frame_id": frame_id, "epicenter_room": epicenter,
