@@ -23,6 +23,24 @@ def _degrade(hops):
     return degradation.degrade(CLAIM, hops, names=NAMES, places=PLACES)
 
 
+#: Every root the engine's own Python lives in. `tools/`, `extension_runtime/`
+#: and `language_runtime/` are here because a diagnostic leaks the same way
+#: from any of them, and the list that used to sit inside one test named only
+#: the eight subsystem packages plus `agents`.
+_ENGINE_ROOTS = ("core", "llm", "world", "mind", "story", "dressing",
+                 "persist", "web", "agents", "tools", "extension_runtime",
+                 "language_runtime")
+
+
+def _engine_sources():
+    """Every .py file the engine owns, subpackages included (`rglob`)."""
+    import pathlib
+
+    root = pathlib.Path(degradation.__file__).resolve().parents[1]
+    for pkg in _ENGINE_ROOTS:
+        yield from sorted((root / pkg).rglob("*.py"))
+
+
 class TestSubtractionOnly:
     def test_the_witnessed_surface_travels_intact_at_zero_hops(self):
         """The holder who saw it has not been told anything — they were
@@ -177,16 +195,33 @@ class TestDiagnosticsAreNotDelivered:
         assert degradation.lost_at(2) == ["count", "place"]
         assert degradation.lost_at(3) == ["count", "place", "name"]
 
-    def test_it_is_not_wired_into_any_payload(self):
+    def test_no_imported_module_holds_a_reference_to_it(self):
         """A mind that knew WHICH details had been filed off would know more
-        than a mind that had merely heard a vague story."""
-        import pathlib
+        than a mind that had merely heard a vague story.
 
-        root = pathlib.Path(degradation.__file__).resolve().parents[1]
-        packages = ("core", "llm", "world", "mind", "story",
-                    "dressing", "persist", "web", "agents")
-        for path in [p for pkg in packages for p in (root / pkg).glob("*.py")]:
+        By IDENTITY over what is actually imported, not by the function's
+        NAME: a name grep is vacated by a rename -- the very edit most likely
+        to accompany someone wiring it up -- and this one is the strong half
+        of the pair, because it does not care what the function is called."""
+        import sys
+
+        for name, module in list(sys.modules.items()):
+            if name.split(".")[0] not in _ENGINE_ROOTS or name == "world.degradation":
+                continue
+            for attr, value in list(vars(module).items()):
+                assert value is not degradation.lost_at, \
+                    "%s.%s delivers what was lost" % (name, attr)
+
+    def test_no_engine_source_mentions_it(self):
+        """The complementary half: a module nothing has imported yet is
+        invisible to the identity pass above, so the source is scanned too.
+
+        Every engine root and every subpackage. The list this replaces named
+        nine top-level packages and used `glob`, so it saw neither `tools/`,
+        `extension_runtime/` and `language_runtime/` nor a single file under
+        `agents/`'s own subpackages."""
+        for path in _engine_sources():
             if path.name == "degradation.py":
                 continue
             assert "lost_at" not in path.read_text(encoding="utf-8"), \
-                "%s delivers what was lost" % path.name
+                "%s delivers what was lost" % path

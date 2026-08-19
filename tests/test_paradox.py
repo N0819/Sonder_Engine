@@ -73,6 +73,27 @@ class TestPolicy:
         with pytest.raises(ValueError):
             paradox.set_policy(chat_id, mode="cataclysm")
 
+    def test_an_unreadable_escalation_rate_falls_back_like_its_neighbour(
+            self, temp_db):
+        """`mode` is validated against MODES and falls back; the rate beside
+        it went through a bare `float()`. `get_policy` is called from the
+        commit domain, so a hand-edited or imported world row took the turn
+        down rather than the setting."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "paradox_policy",
+             {"mode": "warden", "escalation_rate": "fast"})
+        policy = paradox.get_policy(chat_id)
+        assert policy["mode"] == "warden"
+        assert policy["escalation_rate"] == 1.0
+
+    def test_a_stored_rate_gets_the_same_floor_the_setter_applies(
+            self, temp_db):
+        """`set_policy` clamps to 0.1; a rate of 0 read back unclamped froze
+        escalation forever, and a negative one ran it backwards."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "paradox_policy", {"escalation_rate": -5})
+        assert paradox.get_policy(chat_id)["escalation_rate"] == 0.1
+
     def test_set_policy_persists(self, temp_db):
         chat_id = _make_chat(temp_db)
         paradox.set_policy(chat_id, mode="dread")
@@ -158,6 +179,50 @@ class TestTriggering:
         state = paradox.get_paradox(chat_id, None)
         assert state is not None
         assert state["epicenter_room"] == "road"
+
+    def test_an_unplaced_anchor_falls_back_to_the_player_not_to_dict_order(
+            self, temp_db):
+        """The comment said "fall back to wherever the player is"; the code
+        took `next(iter(positions.values()))` -- whichever body the dict
+        happened to yield first. A wound is opened where the violation
+        happened, so guessing it from insertion order puts the epicenter in a
+        room nobody was in."""
+        chat_id = _make_chat(temp_db)
+        persona_id = temp_db.qi("INSERT INTO personas(name,sheet) VALUES(?,?)",
+                                ("Rose", "{}"))
+        temp_db.qi("UPDATE chats SET persona_id=? WHERE id=?",
+                   (persona_id, chat_id))
+        wset(chat_id, "scene", {
+            "rooms": {"church": {"name": "Church", "adjacent": []},
+                      "road": {"name": "Road", "adjacent": []}},
+            # The unrelated body is FIRST; the player is not.
+            "positions": {"bystander": "church", "Rose": "road"},
+            "entities": {}})
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                required_exists=False, label="x")
+        _make_entity(chat_id, "pete")  # never placed in `positions`
+        paradox.check_and_apply_paradox(_make_ctx(chat_id), 0)
+        assert paradox.get_paradox(chat_id, None)["epicenter_room"] == "road"
+
+    def test_a_warden_is_never_placed_in_a_room_that_is_not_one(self, temp_db):
+        """`positions` values name ROOMS. Writing None there is the category
+        error AGENTS.md names: every spatial query answers `unknown`, which is
+        indistinguishable from distance, so a warden nothing can see or reach
+        stands in the ledger forever."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "scene", {"rooms": {}, "positions": {}, "entities": {}})
+        wset(chat_id, "simulation_clock", {"elapsed_seconds": 0.0})
+        paradox.set_policy(chat_id, mode="warden")
+        paradox.add_fixed_point(chat_id, entity_id="pete", frame_id=None,
+                                required_exists=False, label="x")
+        _make_entity(chat_id, "pete")
+        ctx = _make_ctx(chat_id)
+        paradox.check_and_apply_paradox(ctx, 0)
+        wset(chat_id, "simulation_clock",
+             {"elapsed_seconds": paradox.ESCALATION_SECONDS * 0.5})
+        paradox.check_and_apply_paradox(ctx, 0)
+        positions = (wget(chat_id, "scene") or {}).get("positions") or {}
+        assert all(room for room in positions.values()), positions
 
     def test_second_commit_while_active_advances_not_retriggers(self, temp_db):
         chat_id = _make_chat(temp_db)

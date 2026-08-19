@@ -770,6 +770,28 @@ class TestSurvivalSurvivesBranchingAndRerolls:
 
         assert once["vitals"]["P"]["stamina"] == twice["vitals"]["P"]["stamina"]
 
+    def test_a_stored_vital_that_is_not_a_number_does_not_take_the_turn_down(
+            self):
+        """The stored table is the same JSON blob a checkpoint restore, an
+        archive import, an extension and the GM's own scene editor all write,
+        so a value read back OUT of it is untrusted exactly as a value read
+        out of a diff is. Both seeding sites trusted it: `tick_vitals` did
+        arithmetic on it and `apply_vitals_diff` rounded it, and either raises
+        TypeError out of `merge_scene_with_diff` -- which fails the whole
+        turn, not the vital."""
+        base = {"rooms": {"a": {"name": "A"}}, "positions": {"P": "a"},
+                "entities": {}, "contacts": [], "scales": {}, "contained": {},
+                "vitals": {"P": {"air": 0.9, "stamina": "low",
+                                 "nourishment": 0.5, "injury": 0.0}}}
+        merged = merge_scene_with_diff(base, {"time": {"duration_seconds": 60},
+                                              "vitals": {"P": {"air": 0.8}}})
+        stamina = merged["vitals"]["P"]["stamina"]
+        assert isinstance(stamina, float)
+        # The unreadable one falls to its default; the readable ones are
+        # untouched by their neighbour's damage.
+        assert merged["vitals"]["P"]["nourishment"] < 0.5
+        assert merged["vitals"]["P"]["air"] > 0.8
+
 
 class TestAuthoringSettingsSurviveARestore:
     """A rewind rolls back the STORY, not the author's standing decisions about

@@ -60,9 +60,13 @@ from core.db import q, wget, wset
 # declined eight consecutive invitations, which is a decision, not a missed
 # window -- and expiry unsays nothing, it only stops re-asking. Nothing here is
 # tuned per subject kind (a place outliving a person, say): this module cannot
-# tell a place from a person without guessing at a bare capitalized phrase, and
-# the mechanism has produced 0 claims across the whole production corpus, so
-# there is no measurement to tune against yet. See the note in
+# tell a place from a person without guessing at a bare capitalized phrase.
+#
+# The corpus is no longer empty, and what it measures is the GATE rather than
+# the TTL: chat 67 holds 7 claims, all 7 ratified, 0 contradicted, 0 expired
+# -- every one of them by the same-beat brush-past `_verdicts` no longer
+# accepts. So the TTL has still never been tested against a claim that had to
+# survive to be taken up; do not tune it from that 7. See the note in
 # docs/design/BACKGROUND_LIFE_DESIGN.md.
 CLAIM_TTL_TURNS = 8
 # Never surface more than this many at once; the Director has a job to do.
@@ -96,6 +100,13 @@ _TITLES = frozenset({
     "number one", "counselor", "counsellor", "helm", "conn", "ops", "tactical",
     "engineering", "bridge", "sickbay",
 })
+
+# The shortest reference an ADOPTION may be inferred from. Explicit
+# ratification has no such floor -- the Director naming a claim is a decision
+# whatever the name's length -- but inference reads a name out of running
+# prose, and a two- or three-character run says nothing about whether the
+# fiction took anything up.
+MIN_INFERRED_REF_CHARS = 4
 
 # A ratification key must be short enough to actually appear in later prose.
 # The Enterprise run had La Forge self-declare a whole sentence as a ref, so
@@ -211,9 +222,11 @@ def _mint(chat_id, turn_idx, claims, stored):
     """{key: record} for the claims of this beat that are not already stored.
 
     Shared by `record_claims` and `prepare_canon` so both see exactly the same
-    set: a claim can be asserted and ratified in the SAME beat (the manager
-    speaks before the Director resolves), so the pre-transaction pass has to
-    know about claims that are not in the blob yet.
+    set: a claim can be asserted and EXPLICITLY settled in the same beat, so
+    the pre-transaction pass has to know about claims that are not in the blob
+    yet. (Inferred adoption cannot land on the claim's own beat -- see
+    `_verdicts` -- because `background_react` runs after `director_resolve`,
+    so that beat's record predates the claim.)
     """
     minted = {}
     for c in claims or []:
@@ -279,7 +292,58 @@ CANON_CATEGORY = "other"
 CANON_SOURCE_PREFIX = "ratified background claim"
 
 
-def canon_entry(rec):
+# Where the engine holds no sayable name for the claimant. Canon has to
+# attribute the line to somebody -- an unattributed quotation is a fact wearing
+# quotation marks -- and "somebody in the room" is the honest attribution.
+ANONYMOUS_CLAIMANT = "a bystander"
+
+# Symmetric pairs a quoted line may already be wrapped in. `canon_entry` quotes
+# the line itself, and a quotation of a quotation is a different sentence.
+_QUOTE_PAIRS = ('""', "''", "“”", "‘’", "«»", "「」")
+
+
+def _unwrap_quotes(text):
+    """One symmetric pair of quotation marks stripped, repeatedly.
+
+    Whether the line arrives quoted is the background lane's business and it
+    varies: a model asked for an `exact_quote` sometimes includes the marks
+    and sometimes does not. Canon supplies its own, so what it receives must
+    be the line rather than a rendering of it.
+    """
+    out = str(text or "").strip()
+    while len(out) >= 2:
+        pair = out[0] + out[-1]
+        if pair not in _QUOTE_PAIRS:
+            break
+        out = out[1:-1].strip()
+    return out
+
+
+def claimant_label(chat_id, claimant, scene=None):
+    """The name canon may attribute a claim to, or "" for none.
+
+    The claimant reaches this module as whatever spelling the background lane
+    keyed the presence by, and that lane keys some presences by scene entity
+    id. `world.subjects.speakable_name` is the seam that knows the difference:
+    it round-trips an id to the display name its ledger holds, passes a plain
+    name through, and answers "" for a handle no ledger owns.
+    """
+    text = str(claimant or "").strip()
+    if not text:
+        return ""
+    from world.subjects import is_opaque_handle, speakable_name
+
+    try:
+        if scene is None:
+            scene = wget(chat_id, "scene", {}) or {}
+        return speakable_name(chat_id, scene, text)
+    except Exception:
+        # Canonicalisation is a courtesy; the floor is that an engine id never
+        # reaches prose, and that holds without a database.
+        return "" if is_opaque_handle(text) else text
+
+
+def canon_entry(rec, speaker=None):
     """The lore row a ratified claim becomes: keys, title, content, provenance.
 
     Attributed, never paraphrased. The claim is a line somebody said, and the
@@ -288,17 +352,36 @@ def canon_entry(rec):
     canon ends up saying. The refs are the entry's `keys` because they already
     are short referring phrases (MAX_REF_WORDS exists for exactly that), which
     is what lore keys are for.
+
+    And the entry says the line was SAID, never that it is TRUE. That is what
+    ratification establishes: the Director let a bystander's line stand as part
+    of the story. What the line itself asserts is a separate question the
+    Director did not answer, and a wrapper that answers it inverts an entire
+    class of ordinary utterance -- a denial, a boast, a mistake, a rumour
+    repeated. Live, chat 67: "Never heard of Lugunica" was stamped "the
+    Director has established this as true."
+
+    `speaker` is the resolved display name (`claimant_label`). Absent one, the
+    stored claimant is used, and an engine handle is refused here too: this is
+    the last place before the text becomes canon, so the floor belongs here
+    rather than only at the callers.
     """
-    claimant = str(rec.get("claimant") or "").strip() or "a bystander"
-    said = " ".join(str(rec.get("text") or "").split())
+    from world.subjects import is_opaque_handle
+
+    named = str(speaker or rec.get("claimant") or "").strip()
+    if not named or is_opaque_handle(named):
+        named = ANONYMOUS_CLAIMANT
+    said = " ".join(_unwrap_quotes(rec.get("text")).split())
     refs = [str(r).strip() for r in (rec.get("refs") or []) if str(r).strip()]
     return {
         "keys": ", ".join(refs),
         "title": refs[0] if refs else "",
-        "content": '%s said: "%s" — the Director has established this as true.'
-                   % (claimant, said),
+        "content": '%s said: "%s" — the Director let this stand as part of the '
+                   'story. What is established is that it was said; the line '
+                   'itself may be true, mistaken, a boast or a denial.'
+                   % (named, said),
         "source_notes": "%s: claimed turn %s by %s, ratified turn %s" % (
-            CANON_SOURCE_PREFIX, rec.get("turn"), claimant,
+            CANON_SOURCE_PREFIX, rec.get("turn"), named,
             rec.get("ratified_turn")),
     }
 
@@ -320,7 +403,7 @@ def write_canon(chat_id, claim_key, rec, embedding=None):
     book_id = ensure_chat_canon_book(chat_id)
     if not book_id:
         return None
-    entry = canon_entry(rec)
+    entry = canon_entry(rec, speaker=claimant_label(chat_id, rec.get("claimant")))
     return add_lore(
         book_id, entry["keys"], entry["content"],
         turn_added=rec.get("ratified_turn"), category=CANON_CATEGORY,
@@ -350,10 +433,43 @@ def prepare_canon(chat_id, turn_idx, new_claims, resolved_text,
         return {}
     from llm.providers import embed_texts
 
-    entries = [canon_entry(stored[k]) for k in ratified]
+    # One scene read for the whole batch: the two passes must agree, and
+    # `write_canon` resolves the same claimant against the same ledger.
+    scene = wget(chat_id, "scene", {}) or {}
+    entries = [
+        canon_entry(stored[k],
+                    speaker=claimant_label(chat_id, stored[k].get("claimant"),
+                                           scene=scene))
+        for k in ratified]
     vectors = embed_texts([
         (e["keys"] + " " + e["content"]).strip() for e in entries])
     return {k: v for k, v in zip(ratified, vectors) if v is not None}
+
+
+def _named_in_record(ref, text_cf):
+    """True when `ref` appears in the objective record AS a reference.
+
+    A substring is not a reference: "Rose" occurs inside "prose", and the
+    branch this feeds writes canon, which is a one-way door. The boundary is
+    required at the name's LEADING edge only, because a name legitimately
+    inflects at its trailing one -- a plural, a possessive, a case ending are
+    the fiction using the name rather than a different word.
+
+    The boundary test asks for a CASED letter rather than any letter. A script
+    that marks words with case also separates them, so a boundary is there to
+    be found; a script that writes no spaces cannot satisfy that rule at all,
+    and holding it to one would make every reference in it unratifiable.
+    """
+    needle = str(ref or "").casefold().strip()
+    if len(needle) < MIN_INFERRED_REF_CHARS:
+        return False
+    start = text_cf.find(needle)
+    while start != -1:
+        prev = text_cf[start - 1] if start else ""
+        if not (prev.isalpha() and prev.lower() != prev.upper()):
+            return True
+        start = text_cf.find(needle, start + 1)
+    return False
 
 
 def _verdicts(stored, turn_idx, resolved_text, ratified_refs, contradicted_refs):
@@ -392,8 +508,23 @@ def _verdicts(stored, turn_idx, resolved_text, ratified_refs, contradicted_refs)
             if named_true:
                 conflicted.append(key)
             continue
-        if named_true or (bool(refs) and any(
-                r.casefold() in text_cf for r in refs if len(r) >= 4)):
+        # Adoption inferred from the record can only be inferred from a LATER
+        # record. `background_react` runs after `director_resolve`
+        # (agents/runtime.py's plan), so the resolved event of the beat a
+        # claim was made in was written before the presence spoke: a reference
+        # standing in it is the presence echoing the Director's own prose,
+        # which is the opposite of the Director taking up the presence's
+        # invention. Ratifying is a deliberate act and canon is a one-way
+        # door, so a brush-past may not open it. Measured, chat 67: 7 claims,
+        # 7 ratified, 0 contradicted, 0 expired -- a three-outcome design
+        # collapsed onto its one irreversible branch, on same-beat text.
+        # An EXPLICIT verdict is exempt: naming a claim is a decision whenever
+        # it arrives, and `_mint` exists so the same-beat spelling of that
+        # decision still finds the record.
+        adopted_later = (
+            turn_idx > int(rec.get("turn") or 0) and bool(refs)
+            and any(_named_in_record(r, text_cf) for r in refs))
+        if named_true or adopted_later:
             ratified.append(key)
             continue
         if turn_idx > int(rec.get("expires_turn") or -1):
@@ -407,8 +538,9 @@ def settle_claims(chat_id, turn_idx, resolved_text, ratified_refs=(),
 
     RATIFIED -- the Director adopted it, either naming it in
     `state_diff.ratified_claims` or writing its distinctive reference into the
-    objective record. The claim is WRITTEN INTO CANON here (`canon_entry`);
-    flipping a status field and stopping was the defect this replaces.
+    objective record of a LATER beat (`_verdicts`). The claim is WRITTEN INTO
+    CANON here (`canon_entry`); flipping a status field and stopping was the
+    defect this replaces.
 
     CONTRADICTED -- the Director named it in `state_diff.contradicted_claims`.
     The record is kept, claimant and all, rather than deleted: that a bystander

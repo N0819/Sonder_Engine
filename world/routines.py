@@ -65,8 +65,16 @@ _WATCHES = 8
 _CURVE = (0, 0, 1, 2, 3, 3, 2, 1)
 
 #: Affordances (from ``place_purpose.assumed_affords`` over the room name)
-#: whose rooms have a social routine worth an occupancy claim. A store
-#: room has no crowd to thin.
+#: whose rooms have a social routine worth an occupancy claim. A store room
+#: has no crowd to thin.
+#:
+#: A hand-picked SUBSET of ``place_purpose.AFFORDANCES``, deliberately, and
+#: tethered by a test rather than derived: which purposes draw people is this
+#: module's judgment and not a property of the affordance vocabulary, so
+#: importing the whole set would make every new affordance social by default.
+#: The tether is what stops the two drifting into a shared word this cannot
+#: read -- an affordance renamed there would silently take its rooms out of
+#: every routine here, and nothing else would notice.
 _SOCIAL_AFFORDANCES = frozenset({"food", "drink", "rest"})
 
 

@@ -65,9 +65,15 @@ def _seen(db, cid, sid=SID, turn=2, room="garden", seconds=100.0):
 
 
 def _no_model(monkeypatch):
+    """The gap generator is deterministic at every tier, so any model call
+    from it is the defect. Patched at the PROVIDER seam rather than on the
+    module: `gaps` no longer imports one, and a lazily-imported route would
+    walk straight past a module attribute."""
+    import llm.providers as providers
+
     def _refuse(*a, **k):
-        raise AssertionError("the low rung made a model call")
-    monkeypatch.setattr(gaps, "chat_complete", _refuse)
+        raise AssertionError("the gap generator made a model call")
+    monkeypatch.setattr(providers, "chat_complete", _refuse)
 
 
 class TestSubjectIdentityOnTheRecord:
@@ -256,84 +262,42 @@ class TestTheDeterministicSkeleton:
         assert rec["deltas"] == {}
 
 
-class TestResolutionIsDerivedNotObeyed:
-    def test_a_caller_cannot_buy_the_expensive_tier_for_a_minor_subject(
-            self, temp_db, monkeypatch):
-        """'A caller that can pick the expensive tier is a caller that will'
-        -- section 1.2's exact words. `resolution` may lower, never raise."""
-        _no_model(monkeypatch)  # raises if medium runs
-        cid = _make_chat(temp_db)
-        _attach_character(temp_db, cid, "Elyndra", uid=SID, tier="bg")
-        _seen(temp_db, cid)
-        rec = gap_for(cid, "character", SID, 2, 6,
-                      resolution="medium", scene=_scene())
-        assert rec["resolution"] == "low"
+class TestTheGapGeneratorIsDeterministic:
+    def test_no_subject_at_any_tier_buys_a_model_call(self, temp_db):
+        """`gap_for` answers from state the engine already has, for every
+        subject. The model-priced rung is
+        `offscreen.profile_summary_record`, which runs OUT OF BAND and whose
+        model half is state fields rather than a sentence -- this module's
+        own first paragraph rules out the prose shape, and section 1.0.2
+        rules out paying for a model on the turn path.
 
-    def test_a_major_subject_derives_medium_and_low_caps_it(
-            self, temp_db, monkeypatch):
-        _no_model(monkeypatch)
+        This module previously carried a second, prose-shaped rung
+        (`_medium_overlay`, `gap_medium`) that both production callers asked
+        it not to run."""
         cid = _make_chat(temp_db)
         _attach_character(temp_db, cid, "Elyndra", uid=SID, tier="major")
         _seen(temp_db, cid)
-        rec = gap_for(cid, "character", SID, 2, 6,
-                      resolution="low", scene=_scene())
-        assert rec["resolution"] == "low"
-        assert rec["basis"] == "deterministic"
-
-
-class TestTheMediumRung:
-    def _major(self, db, cid):
-        _attach_character(db, cid, "Elyndra", uid=SID, tier="major")
-        _seen(db, cid)
-
-    def test_a_failed_call_falls_to_the_rung_below_and_says_so(
-            self, temp_db, monkeypatch):
-        """Section 1.0.3: reject and regenerate once, then fall back -- a
-        deterministic 'she was elsewhere' over a plausible lie. And the
-        record must SAY it fell, or a dead model reads as a quiet world."""
-        cid = _make_chat(temp_db)
-        self._major(temp_db, cid)
-
-        def _down(*a, **k):
-            raise RuntimeError("no provider configured")
-        monkeypatch.setattr(gaps, "chat_complete", _down)
         rec = gap_for(cid, "character", SID, 2, 6, scene=_scene())
         assert rec["basis"] == "deterministic"
         assert rec["resolution"] == "low"
-        assert "fell_back_from" in rec["inputs"]
+        assert "summary" not in rec
+        # A record that attempted a model rung and fell back is still a record
+        # that tried to buy one. The overlay swallowed every exception, so a
+        # `_no_model` guard could not reach a test -- this is what could.
+        assert "fell_back_from" not in rec["inputs"]
 
-    def test_an_invented_room_is_refused_both_times_then_fallen_back(
-            self, temp_db, monkeypatch):
-        """The location gate at this rung's write path: one tick, one
-        invented location is the measured history of the whole offscreen
-        mechanism, and it must be structurally impossible here."""
+    def test_the_tier_ledger_is_not_read_at_all(self, temp_db, monkeypatch):
+        """One rung means no tier question, so the full cast scan (a
+        `json.loads` per sheet, per subject, per turn) that answered it is
+        gone rather than merely discarded."""
         cid = _make_chat(temp_db)
-        self._major(temp_db, cid)
-        calls = []
-
-        def _liar(*a, **k):
-            calls.append(1)
-            return json.dumps({"summary": "She slipped away.",
-                               "rooms": ["a_quiet_office"]})
-        monkeypatch.setattr(gaps, "chat_complete", _liar)
-        rec = gap_for(cid, "character", SID, 2, 6, scene=_scene())
-        assert len(calls) == 2
-        assert rec["basis"] == "deterministic"
-        assert "outside the world" in rec["inputs"]["fell_back_from"]
-
-    def test_a_clean_summary_lands_as_model_basis_over_the_skeleton(
-            self, temp_db, monkeypatch):
-        cid = _make_chat(temp_db)
-        self._major(temp_db, cid)
-
-        def _fine(*a, **k):
-            return json.dumps({"summary": "She kept to the garden, then "
-                               "crossed to the hall.", "rooms": ["garden", "hall"]})
-        monkeypatch.setattr(gaps, "chat_complete", _fine)
-        rec = gap_for(cid, "character", SID, 2, 6, scene=_scene())
-        assert rec["basis"] == "model"
-        assert rec["resolution"] == "medium"
-        assert rec["moves"], "the deterministic trail must survive the overlay"
+        _attach_character(temp_db, cid, "Elyndra", uid=SID, tier="major")
+        _seen(temp_db, cid)
+        called = []
+        monkeypatch.setattr("story.character_schema.character_tier",
+                            lambda *a, **k: called.append(1) or "major")
+        gap_for(cid, "character", SID, 2, 6, scene=_scene())
+        assert called == []
 
 
 class TestTheLastSeenLedger:

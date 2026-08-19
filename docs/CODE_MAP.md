@@ -87,17 +87,17 @@
 | `web/guest_access.py` | 355 |  | `core.db` |
 | `web/story_view.py` | 739 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
-| `world/background_claims.py` | 466 |  | `core.db` |
-| `world/comfort.py` | 306 |  | `world.spatial` |
-| `world/crowds.py` | 609 |  | `world.spatial_geometry` |
+| `world/background_claims.py` | 598 |  | `core.db` |
+| `world/comfort.py` | 349 |  | `world.spatial` |
+| `world/crowds.py` | 673 |  | `world.spatial_geometry` |
 | `world/degradation.py` | 171 |  | — |
-| `world/gaps.py` | 542 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
+| `world/gaps.py` | 454 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 608 |  | `core.logging_utils`, `world.mechanics` |
 | `world/mechanics.py` | 310 |  | `world.spatial`, `world.spatial_frames` |
-| `world/offscreen.py` | 2125 |  | `core.logging_utils`, `llm.prompts` |
-| `world/paradox.py` | 489 |  | `core.db`, `core.frames`, `story.character_schema` |
-| `world/place_purpose.py` | 532 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/routines.py` | 200 |  | — |
+| `world/offscreen.py` | 2187 |  | `core.logging_utils`, `llm.prompts` |
+| `world/paradox.py` | 562 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
+| `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
+| `world/routines.py` | 208 |  | — |
 | `world/spatial.py` | 167 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 433 |  | — |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
@@ -114,9 +114,9 @@
 | `world/spatial_senses.py` | 1278 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_substance.py` | 602 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 421 |  | `world.spatial_barriers`, `world.spatial_identity` |
-| `world/subjects.py` | 449 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
-| `world/survival.py` | 320 |  | `core.db` |
-| `world/weather.py` | 808 |  | `world.spatial` |
+| `world/subjects.py` | 496 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
+| `world/survival.py` | 341 |  | `core.db` |
+| `world/weather.py` | 813 |  | `world.spatial` |
 
 ## Largest top-level functions
 
@@ -971,40 +971,40 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `settle_claims()` | 404 | 45 lines |
-| `_verdicts()` | 359 | 43 lines |
-| `novel_proper_nouns()` | 169 | 39 lines |
-| `_mint()` | 210 | 27 lines |
-| `prepare_canon()` | 332 | 25 lines |
-| `write_canon()` | 306 | 24 lines |
-| `canon_entry()` | 282 | 22 lines |
-| `_known_variants()` | 144 | 17 lines |
+| `_verdicts()` | 475 | 58 lines |
+| `settle_claims()` | 535 | 46 lines |
+| `canon_entry()` | 346 | 41 lines |
+| `novel_proper_nouns()` | 180 | 39 lines |
+| `prepare_canon()` | 415 | 32 lines |
+| `_mint()` | 221 | 29 lines |
+| `write_canon()` | 389 | 24 lines |
+| `_named_in_record()` | 449 | 24 lines |
 
 ### `world/comfort.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_derive()` | 206 | 82 lines |
-| `_posture_of()` | 173 | 31 lines |
-| `_is_body()` | 137 | 21 lines |
-| `_entity_record()` | 123 | 12 lines |
-| `_station_of()` | 160 | 11 lines |
-| `comfort_level()` | 290 | 8 lines |
-| `rest_affording()` | 300 | 7 lines |
-| `_tokens()` | 100 | 6 lines |
+| `_derive()` | 249 | 82 lines |
+| `_posture_of()` | 216 | 31 lines |
+| `_is_body()` | 180 | 21 lines |
+| `_fields()` | 134 | 12 lines |
+| `_entity_record()` | 166 | 12 lines |
+| `_station_of()` | 203 | 11 lines |
+| `_warm()` | 152 | 8 lines |
+| `comfort_level()` | 333 | 8 lines |
 
 ### `world/crowds.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_ops()` | 237 | 158 lines |
-| `emerge()` | 397 | 38 lines |
-| `drift()` | 137 | 35 lines |
-| `advance_crowds()` | 468 | 32 lines |
-| `absorb()` | 437 | 29 lines |
-| `talk_view()` | 568 | 29 lines |
-| `describe()` | 513 | 21 lines |
-| `density()` | 93 | 15 lines |
+| `apply_ops()` | 284 | 160 lines |
+| `talk_view()` | 617 | 44 lines |
+| `emerge()` | 446 | 38 lines |
+| `drift()` | 184 | 35 lines |
+| `advance_crowds()` | 517 | 32 lines |
+| `normalize_band()` | 98 | 29 lines |
+| `absorb()` | 486 | 29 lines |
+| `describe()` | 562 | 21 lines |
 
 ### `world/degradation.py`
 
@@ -1020,14 +1020,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_skeleton()` | 147 | 175 lines |
-| `last_seen_update()` | 438 | 70 lines |
-| `gap_for()` | 378 | 54 lines |
-| `_medium_overlay()` | 328 | 48 lines |
-| `interim_for()` | 510 | 33 lines |
-| `_record()` | 79 | 22 lines |
-| `_derived_resolution()` | 109 | 22 lines |
-| `_subject_room()` | 133 | 12 lines |
+| `_skeleton()` | 128 | 175 lines |
+| `last_seen_update()` | 349 | 70 lines |
+| `gap_for()` | 305 | 38 lines |
+| `interim_for()` | 421 | 34 lines |
+| `_record()` | 86 | 20 lines |
+| `_subject_room()` | 114 | 12 lines |
+| `_read_key()` | 73 | 4 lines |
+| `_unavailable()` | 108 | 4 lines |
 
 ### `world/living_world.py`
 
@@ -1058,50 +1058,50 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `land_agent_tick()` | 1819 | 187 lines |
-| `schedule_agent_ticks()` | 2008 | 118 lines |
-| `schedule_profile_ticks()` | 1358 | 113 lines |
-| `apply_plan_ops()` | 682 | 110 lines |
-| `advance_epoch()` | 927 | 98 lines |
-| `profile_summary_record()` | 1108 | 86 lines |
-| `advance_reactive_plans()` | 840 | 85 lines |
-| `agent_adjudication()` | 1724 | 70 lines |
+| `land_agent_tick()` | 1881 | 187 lines |
+| `schedule_agent_ticks()` | 2070 | 118 lines |
+| `schedule_profile_ticks()` | 1405 | 113 lines |
+| `apply_plan_ops()` | 730 | 110 lines |
+| `advance_epoch()` | 975 | 98 lines |
+| `advance_reactive_plans()` | 888 | 85 lines |
+| `profile_summary_record()` | 1156 | 85 lines |
+| `agent_context()` | 1586 | 71 lines |
 
 ### `world/paradox.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check_and_apply_paradox()` | 440 | 50 lines |
-| `_apply_toll()` | 278 | 48 lines |
-| `_trigger_paradox()` | 363 | 30 lines |
-| `_advance_paradox()` | 395 | 30 lines |
-| `_apply_hazard_stage()` | 248 | 28 lines |
-| `add_fixed_point()` | 123 | 19 lines |
-| `get_all_paradoxes()` | 166 | 17 lines |
-| `_apply_warden_stage()` | 328 | 17 lines |
+| `check_and_apply_paradox()` | 498 | 65 lines |
+| `_apply_toll()` | 299 | 48 lines |
+| `_trigger_paradox()` | 407 | 33 lines |
+| `_advance_paradox()` | 442 | 30 lines |
+| `_apply_hazard_stage()` | 269 | 28 lines |
+| `_apply_warden_stage()` | 349 | 25 lines |
+| `_force_restore_anchor()` | 474 | 22 lines |
+| `add_fixed_point()` | 144 | 19 lines |
 
 ### `world/place_purpose.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `mirror_told_affords()` | 344 | 91 lines |
-| `witness_affords()` | 268 | 68 lines |
-| `here_affords()` | 216 | 45 lines |
-| `place_options()` | 476 | 43 lines |
-| `_walked_hops()` | 454 | 20 lines |
-| `felt_needs()` | 437 | 15 lines |
-| `assumed_affords()` | 202 | 12 lines |
-| `affords_here()` | 521 | 12 lines |
+| `mirror_told_affords()` | 357 | 91 lines |
+| `witness_affords()` | 281 | 68 lines |
+| `here_affords()` | 224 | 50 lines |
+| `place_options()` | 489 | 43 lines |
+| `_walked_hops()` | 467 | 20 lines |
+| `felt_needs()` | 450 | 15 lines |
+| `assumed_affords()` | 210 | 12 lines |
+| `affords_here()` | 534 | 12 lines |
 
 ### `world/routines.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `residue_for()` | 156 | 45 lines |
-| `entropy_facts()` | 128 | 26 lines |
-| `routine_band()` | 84 | 22 lines |
-| `occupancy_fact()` | 108 | 18 lines |
-| `_roll()` | 73 | 9 lines |
+| `residue_for()` | 164 | 45 lines |
+| `entropy_facts()` | 136 | 26 lines |
+| `routine_band()` | 92 | 22 lines |
+| `occupancy_fact()` | 116 | 18 lines |
+| `_roll()` | 81 | 9 lines |
 
 ### `world/spatial_barriers.py`
 
@@ -1291,40 +1291,40 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_resolve_room()` | 248 | 47 lines |
-| `resolve_subject()` | 405 | 45 lines |
-| `_resolve_character()` | 166 | 32 lines |
-| `_lore_matches()` | 301 | 29 lines |
-| `_resolve_from_lore()` | 332 | 29 lines |
-| `_registry_room_matches()` | 221 | 25 lines |
-| `_cast_matches()` | 97 | 22 lines |
-| `_presence_reason()` | 142 | 22 lines |
+| `_resolve_room()` | 272 | 47 lines |
+| `resolve_subject()` | 429 | 45 lines |
+| `_resolve_character()` | 190 | 32 lines |
+| `_lore_matches()` | 325 | 29 lines |
+| `_resolve_from_lore()` | 356 | 29 lines |
+| `_registry_room_matches()` | 245 | 25 lines |
+| `_cast_matches()` | 121 | 22 lines |
+| `_presence_reason()` | 166 | 22 lines |
 
 ### `world/survival.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `tick_vitals()` | 201 | 61 lines |
-| `apply_vitals_diff()` | 264 | 32 lines |
-| `seed_vitals()` | 121 | 23 lines |
-| `is_sealed_in()` | 176 | 23 lines |
-| `vitals_facts()` | 298 | 23 lines |
-| `vital_label()` | 160 | 14 lines |
-| `vitals_of()` | 146 | 12 lines |
-| `_clamp()` | 110 | 5 lines |
+| `tick_vitals()` | 224 | 61 lines |
+| `apply_vitals_diff()` | 287 | 30 lines |
+| `seed_vitals()` | 146 | 23 lines |
+| `is_sealed_in()` | 199 | 23 lines |
+| `vitals_facts()` | 319 | 23 lines |
+| `_stored_vitals()` | 123 | 21 lines |
+| `vital_label()` | 183 | 14 lines |
+| `vitals_of()` | 171 | 10 lines |
 
 ### `world/weather.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `weather_for_room()` | 446 | 71 lines |
-| `normalize_weather()` | 206 | 69 lines |
-| `weather_depth()` | 373 | 57 lines |
-| `weather_words()` | 549 | 54 lines |
-| `advance_weather()` | 656 | 43 lines |
-| `ground_after()` | 753 | 38 lines |
-| `room_exposure()` | 277 | 30 lines |
-| `_resolve()` | 173 | 27 lines |
+| `weather_for_room()` | 454 | 76 lines |
+| `normalize_weather()` | 225 | 69 lines |
+| `weather_depth()` | 381 | 57 lines |
+| `weather_words()` | 554 | 54 lines |
+| `advance_weather()` | 661 | 43 lines |
+| `ground_after()` | 758 | 38 lines |
+| `room_exposure()` | 296 | 30 lines |
+| `_resolve()` | 192 | 27 lines |
 
 ## FastAPI routes
 

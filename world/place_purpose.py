@@ -100,9 +100,10 @@ from __future__ import annotations
 import re
 from collections import deque
 
+from world.comfort import SOFT_SUPPORT_TOKENS, WARMTH_TOKENS
 from world.comfort import _is_body as _body_guard
 from world.comfort import rest_affording
-from world.spatial import effective_light, hiding_holders_of, room_of
+from world.spatial import _LIGHT_SIGHT, effective_light, hiding_holders_of, room_of
 from world.survival import vitals_of
 from mind.theory_of_mind import belief_credence
 
@@ -151,19 +152,15 @@ _NAME_LEXICON = {
 }
 
 # Structural tokens for the live echo: entity/anchor ids, kinds, names and
-# descriptions. Soft-support and warmth sets are in parity with comfort.py's
-# vocabulary (kept separate because comfort's are private and its module
-# must stay free to evolve them for pleasure math without moving perception).
+# descriptions. Rest and warmth are comfort.py's own sets, IMPORTED. They
+# used to be hand-copied under a comment asserting parity, and the copy fell
+# 18 tokens behind: a room furnished entirely in featherbeds, settees,
+# cushions, furs and quilts echoed no rest at all, while comfort scored a
+# body lying on one of them as comfortable. Two readings of one scene that
+# disagree about what a bed is are worse than either reading alone.
 _HERE_LEXICON = {
-    "rest": frozenset({
-        "bed", "beds", "bedroll", "bedrolls", "bunk", "bunks", "cot",
-        "cots", "couch", "couches", "sofa", "sofas", "divan", "divans",
-        "hammock", "hammocks", "mattress", "mattresses",
-    }),
-    "warmth": frozenset({
-        "hearth", "hearths", "fireplace", "fireplaces", "brazier",
-        "braziers", "campfire", "campfires", "stove", "stoves",
-    }),
+    "rest": SOFT_SUPPORT_TOKENS,
+    "warmth": WARMTH_TOKENS,
     "food": frozenset({
         "food", "bread", "stew", "meal", "meals", "cheese", "meat",
         "fruit", "rations", "provisions",
@@ -175,6 +172,17 @@ _HERE_LEXICON = {
         "well", "wells", "fountain", "fountains", "pump", "pumps",
         "cistern", "cisterns", "trough", "troughs",
     }),
+    # `shelter` is the sixth member of AFFORDANCES and has NO KEY HERE, on
+    # purpose: it is a property of the room rather than of anything standing
+    # in it, so no entity or anchor token can answer it. The structural fact
+    # that would -- `weather.room_exposure` -- falls back to a keyword pass
+    # over room prose when unauthored and DEFAULTS TO ENCLOSED, and that
+    # fallback is documented as presentation only, never an authority a mind
+    # may act on. Wiring it here would have every unmapped room in the corpus
+    # promising a roof. So shelter is answerable only as memory (`assumed`,
+    # from the place's name) and as hearsay, not as a live echo. Three lists
+    # carry these purposes -- AFFORDANCES, this one, and `_CLAIM_LEXICON` --
+    # and the next author to add one should find all three named here.
 }
 
 # Claim-text tokens for the told mirror: the nouns hearsay actually uses.
@@ -226,8 +234,13 @@ def here_affords(scene, name):
     rid = room_of(scene, str(name or "").strip())
     if not rid:
         return []
-    light = {"lit": "full", "dim": "partial", "dark": "none"}
-    if light.get(effective_light(scene, rid), "full") != "full":
+    # `_LIGHT_SIGHT` is the engine's one light->sight table (spatial_light,
+    # re-exported through spatial), and the rule `_onward_exits` states: FULL
+    # sight, never merely some. The local three-entry copy this replaces
+    # invented a `partial` rung `SIGHT_LEVELS` does not have, omitted `bright`
+    # altogether, and was right about a bright room only because its
+    # permissive default happened to cover the miss.
+    if _LIGHT_SIGHT.get(effective_light(scene, rid), "none") != "full":
         return []
     found = {}
 
