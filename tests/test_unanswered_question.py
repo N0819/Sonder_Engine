@@ -230,16 +230,16 @@ class TestSustainedSilenceIsADifferentEvent:
 
     def test_one_quiet_beat_counts_as_one(self, temp_db):
         chat_id, ids = _seed(temp_db, [(144, "I was being polite.", {})])
-        assert _player_quiet_beats(chat_id, 145, None, None) == 1
+        assert _player_quiet_beats(chat_id, 145, None) == 1
 
     def test_consecutive_silence_accumulates(self, temp_db):
         chat_id, ids = _seed(temp_db, [(144, "", {}), (145, "", {}), (146, "", {})])
-        assert _player_quiet_beats(chat_id, 147, None, None) == 4
+        assert _player_quiet_beats(chat_id, 147, None) == 4
 
     def test_speech_resets_the_run(self, temp_db):
         chat_id, ids = _seed(temp_db, [(144, "", {}), (145, "Still here.", {}),
                                   (146, "", {})])
-        assert _player_quiet_beats(chat_id, 147, None, None) == 2
+        assert _player_quiet_beats(chat_id, 147, None) == 2
 
     def test_the_note_only_carries_the_count_once_it_means_something(self):
         """A run of one is the ordinary case the existing field already
