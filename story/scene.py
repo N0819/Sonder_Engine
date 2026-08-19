@@ -1729,7 +1729,6 @@ DEFAULT_INTERACTION_CONFIG = {
     "autonomy": 50,
     "max_micro_rounds": 4,
     "max_character_calls": 6,
-    "max_speakers_per_round": 1,
     # How many characters open the beat in one blind instant. ONE, so causality
     # builds as the loop runs: each character after the first decides in a room
     # where the previous one has already acted. Raise it for a beat aimed at
