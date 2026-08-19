@@ -610,22 +610,57 @@ class TestTheRoutes:
             client.__exit__(None, None, None)
 
 
+def _js_function_body(source, header):
+    """One top-level JS function's text, by brace depth rather than by a
+    blank-line convention."""
+    start = source.index(header)
+    # Past the parameter list first: a default value (`options = {}`) puts a
+    # brace before the body's.
+    i, depth = source.index("(", start), 0
+    while True:
+        if source[i] == "(":
+            depth += 1
+        elif source[i] == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    i, depth = source.index("{", i), 0
+    for j in range(i, len(source)):
+        if source[j] == "{":
+            depth += 1
+        elif source[j] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start:j + 1]
+    raise AssertionError("unbalanced braces after %r" % header)
+
+
 def test_both_card_editors_offer_regions_and_the_generator():
-    """A source-text check, in the spirit of the one beside it in
-    `test_initial_outfit.py`: there are two card editors and it is easy to
-    build a field into one of them."""
+    """There are two card editors and it is easy to build a field into one of
+    them. That is the property; the COUNTS were not.
+
+    This asserted exact substring totals across two files
+    (`editors.count("f.outfit_regions = fAttireGarments(") == 2`, `… == 4`),
+    so a third editor surface, or one refactored into a loop, failed a test
+    about attire authoring for reasons that have nothing to do with attire --
+    while two occurrences inside ONE editor and none in the other would have
+    passed it. Asked per editor instead, which is what the sentence above
+    means.
+    """
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     editors = (root / "static/js/editors.js").read_text(encoding="utf-8")
     components = (root / "static/js/components.js").read_text(encoding="utf-8")
 
-    assert editors.count("f.outfit_regions = fAttireGarments(") == 2
-    assert editors.count("f.outfit_regions.node") == 2
-    # Twice per editor: once into the saved sheet, once into the draft the
-    # generator works from.
-    assert editors.count("regions: f.outfit_regions.read()") == 4
-    assert editors.count("appearanceFillButton(") == 3   # one factory, two uses
+    for header in ("function charEditor(", "function personaEditor("):
+        body = _js_function_body(editors, header)
+        assert "fAttireGarments(" in body, header
+        assert "f.outfit_regions.node" in body, header
+        # Into the saved sheet, and into the draft the generator works from.
+        assert body.count("regions: f.outfit_regions.read()") >= 2, header
+        assert "appearanceFillButton(" in body, header
     # The regions come from attire.REGIONS; a rename on one side that never
     # reached the other would silently drop a body part from the editor --
     # and `groin` is the one where that would matter most.
