@@ -91,12 +91,31 @@ _HAZARD_WOUND_NOTE = (
 )
 
 
+DEFAULT_ESCALATION_RATE = 1.0
+#: The setter's floor, applied on READ as well. A rate of 0 freezes escalation
+#: forever and a negative one runs it backwards, and a stored row is not a
+#: setter call: archives, checkpoints and hand edits all write this key.
+MIN_ESCALATION_RATE = 0.1
+
+
+def _escalation_rate(value):
+    """A usable rate, or the default. Validated like its `mode` neighbour --
+    `get_policy` is called from the commit domain, so a bare `float()` over a
+    stored value meant an unreadable row took the TURN down rather than the
+    setting."""
+    try:
+        return max(MIN_ESCALATION_RATE, float(value))
+    except (TypeError, ValueError):
+        return DEFAULT_ESCALATION_RATE
+
+
 def get_policy(chat_id):
     stored = wget(chat_id, "paradox_policy", {}) or {}
     mode = stored.get("mode")
     return {
         "mode": mode if mode in MODES else DEFAULT_MODE,
-        "escalation_rate": float(stored.get("escalation_rate", 1.0)),
+        "escalation_rate": _escalation_rate(
+            stored.get("escalation_rate", DEFAULT_ESCALATION_RATE)),
         "toll_in_radius": bool(stored.get("toll_in_radius", DEFAULT_TOLL_IN_RADIUS)),
     }
 
@@ -108,7 +127,8 @@ def set_policy(chat_id, *, mode=None, escalation_rate=None, toll_in_radius=None)
             raise ValueError(f"mode must be one of {MODES}")
         policy["mode"] = mode
     if escalation_rate is not None:
-        policy["escalation_rate"] = max(0.1, float(escalation_rate))
+        policy["escalation_rate"] = max(MIN_ESCALATION_RATE,
+                                        float(escalation_rate))
     if toll_in_radius is not None:
         policy["toll_in_radius"] = bool(toll_in_radius)
     wset(chat_id, "paradox_policy", policy)

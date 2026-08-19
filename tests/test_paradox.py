@@ -73,6 +73,27 @@ class TestPolicy:
         with pytest.raises(ValueError):
             paradox.set_policy(chat_id, mode="cataclysm")
 
+    def test_an_unreadable_escalation_rate_falls_back_like_its_neighbour(
+            self, temp_db):
+        """`mode` is validated against MODES and falls back; the rate beside
+        it went through a bare `float()`. `get_policy` is called from the
+        commit domain, so a hand-edited or imported world row took the turn
+        down rather than the setting."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "paradox_policy",
+             {"mode": "warden", "escalation_rate": "fast"})
+        policy = paradox.get_policy(chat_id)
+        assert policy["mode"] == "warden"
+        assert policy["escalation_rate"] == 1.0
+
+    def test_a_stored_rate_gets_the_same_floor_the_setter_applies(
+            self, temp_db):
+        """`set_policy` clamps to 0.1; a rate of 0 read back unclamped froze
+        escalation forever, and a negative one ran it backwards."""
+        chat_id = _make_chat(temp_db)
+        wset(chat_id, "paradox_policy", {"escalation_rate": -5})
+        assert paradox.get_policy(chat_id)["escalation_rate"] == 0.1
+
     def test_set_policy_persists(self, temp_db):
         chat_id = _make_chat(temp_db)
         paradox.set_policy(chat_id, mode="dread")
