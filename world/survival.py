@@ -118,6 +118,29 @@ def default_vitals() -> dict:
     return dict(VITALS)
 
 
+def _stored_vitals(record) -> dict:
+    """A body's stored vitals as NUMBERS, defaults where they are not.
+
+    The table is the same JSON blob a checkpoint restore, an archive import,
+    an extension and the GM's own scene editor all write, so a value read back
+    out of it is untrusted exactly as a value read out of a Director diff is.
+    Both readers used to trust it, and a stored `"low"` then reached `-` in
+    `tick_vitals` and `round()` in `apply_vitals_diff`: a TypeError out of
+    `merge_scene_with_diff`, which fails the whole TURN rather than the vital.
+    An unreadable value falls to that vital's default, which is the only
+    numeric answer available, and it never takes its healthy neighbours with
+    it.
+    """
+    out = default_vitals()
+    for key, value in (record or {}).items():
+        if key not in VITALS:
+            continue
+        clamped = _clamp(value)
+        if clamped is not None:
+            out[key] = clamped
+    return out
+
+
 def seed_vitals(scene: dict, names) -> dict:
     """Give every named body a baseline record, creating the table if needed.
 
@@ -151,9 +174,7 @@ def vitals_of(scene: dict, name: str) -> dict:
     target = str(name or "").strip().casefold()
     for key, record in table.items():
         if str(key).strip().casefold() == target and isinstance(record, dict):
-            merged = default_vitals()
-            merged.update({k: v for k, v in record.items() if k in VITALS})
-            return merged
+            return _stored_vitals(record)
     return {}
 
 
@@ -226,8 +247,7 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
             table.pop(name, None)
             continue
         key = str(name).strip().casefold()
-        current = default_vitals()
-        current.update({k: v for k, v in record.items() if k in VITALS})
+        current = _stored_vitals(record)
 
         # Air: a countdown while sealed in, and a fast recovery once out.
         if is_sealed_in(scene, name):
@@ -255,8 +275,10 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
         current["injury"] = _clamp(
             current["injury"] + hours * _PER_HOUR["injury"])
 
-        table[name] = {k: round(v, 4) for k, v in current.items()
-                       if v is not None}
+        # Every value is a number by construction now, so no key is ever
+        # dropped. A dropped key was not a smaller record: `vitals_of` merges
+        # the defaults back, so an omitted `air` read as a full breath.
+        table[name] = {k: round(v, 4) for k, v in current.items()}
 
     return scene
 
@@ -282,9 +304,7 @@ def apply_vitals_diff(scene: dict, incoming) -> dict:
             continue
         if not isinstance(patch, dict):
             continue
-        current = default_vitals()
-        current.update({k: v for k, v in (table.get(label) or {}).items()
-                        if k in VITALS})
+        current = _stored_vitals(table.get(label))
         for vital, value in patch.items():
             if vital not in VITALS:
                 continue
