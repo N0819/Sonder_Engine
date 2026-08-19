@@ -867,6 +867,34 @@ function openAmbiencePanel() {
     };
     query.onkeydown = e => { if (e.key === "Enter") search(); };
 
+    // Every room this story has pinned, not only the one on screen. The list
+    // route has existed as long as the per-room pin and had no caller
+    // anywhere (WEB-9), so a pin set ten rooms ago was invisible and could
+    // only be undone by walking back into that room.
+    const pinnedList = el("div", { style: "margin-top:18px" });
+    api("GET", `/api/chats/${S.chatId}/ambience/pins`).then(({ pins }) => {
+      const rooms = Object.keys(pins || {}).filter(room => room !== AMB.room);
+      if (!rooms.length) return;
+      pinnedList.append(el("h4", {}, "Other pinned rooms"),
+        el("div", { class: "small dim" },
+          "These rooms keep the sound you chose for them, whatever the hour "
+          + "and weather do."));
+      for (const room of rooms.sort()) {
+        pinnedList.append(el("div", { class: "row", style: "margin-top:4px" },
+          el("span", { class: "small" }, room),
+          el("span", { class: "spacer", style: "flex:1" }),
+          el("button", {
+            onclick: async event => {
+              await api("DELETE", `/api/chats/${S.chatId}/ambience/pin?room=`
+                + encodeURIComponent(room));
+              AMB.byTurn.clear(); AMB.wanted = null;
+              event.currentTarget.closest(".row").remove();
+              toast(`“${room}” is back to automatic.`, "ok");
+            },
+          }, "Clear")));
+      }
+    }).catch(() => {});
+
     body.append(
       el("div", { class: "row" },
         el("label", { class: "small" }, onOff, " Play ambience for the room on screen"),
@@ -922,7 +950,8 @@ function openAmbiencePanel() {
             if (AMB.turnId != null) ambienceForTurn(AMB.turnId);
           },
           ...(AMB.pinned ? {} : { disabled: "" }),
-        }, "Clear this room's pin")));
+        }, "Clear this room's pin")),
+      pinnedList);
   }, { wide: true });
 }
 
