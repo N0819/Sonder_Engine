@@ -631,16 +631,3 @@ def containment_facts(scene: dict, observer: str, source_names) -> list:
             facts.append(f"{c} is {record.get('mode') or 'carried'} by {name}.")
     return facts
 
-
-def would_create_containment_cycle(placements: dict, subject_id: str, destination_id: str) -> bool:
-    current = destination_id
-    visited = set()
-    while current:
-        if current == subject_id:
-            return True
-        if current in visited:
-            return True
-        visited.add(current)
-        placement = placements.get(current) or {}
-        current = placement.get("container_id")
-    return False

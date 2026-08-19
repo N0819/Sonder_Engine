@@ -1005,33 +1005,3 @@ def merge_scene_with_diff(
                     if isinstance(r, dict) and r.get("mode") == "asleep"],
         )
     return merged
-
-
-def validate_operations(scene: dict, operations: list) -> list:
-    """Validate world mutation operations before atomic commit."""
-    known_ids = set((scene.get("entities") or {}).keys())
-    known_ids.update((scene.get("rooms") or {}).keys())
-    created_ids = set()
-    errors = []
-
-    for operation in operations:
-        op = operation.get("op")
-        if op == "create_entity":
-            entity = operation.get("entity") or {}
-            entity_id = str(entity.get("entity_id") or "")
-            if not entity_id:
-                errors.append("Created entity has no entity_id")
-            elif entity_id in known_ids or entity_id in created_ids:
-                errors.append(f"Duplicate entity ID: {entity_id}")
-            else:
-                created_ids.add(entity_id)
-        elif op == "move_entity":
-            entity_id = operation.get("entity_id")
-            destination_id = operation.get("destination_id")
-            if entity_id not in known_ids | created_ids:
-                errors.append(f"Unknown moved entity: {entity_id}")
-            if destination_id not in known_ids | created_ids:
-                errors.append(f"Unknown movement destination: {destination_id}")
-            if entity_id == destination_id:
-                errors.append("An entity cannot contain itself")
-    return errors

@@ -60,7 +60,6 @@ from world.spatial_containment import (
     derive_contained_positions, hiding_holders_of,
     normalize_scene_containment, normalize_scene_scales, scale_of,
     scale_ratio, size_facts, size_relation, size_tier,
-    would_create_containment_cycle,
 )
 
 
@@ -163,5 +162,5 @@ from world.spatial_merge import (
     _merge_entity, _merge_room, _position_key, _ROOM_SILENT_WHEN_EMPTY,
     _shield_standing_bearings, _shield_standing_passage, apply_following_ops,
     connect_orphan_new_rooms, merge_scene_with_diff, prune_bodiless_positions,
-    repair_entity_positions, validate_operations,
+    repair_entity_positions,
 )
