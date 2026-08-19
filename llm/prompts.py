@@ -168,6 +168,24 @@ def nsfw_enabled():
     return get_setting("nsfw_enabled") == "1"
 
 
+#: The opening of a `{{fragment:<name>}}` reference. References are a PACK
+#: authoring construct, resolved once at card load
+#: (`language_runtime._resolve_prompt_fragments`); no resolver runs after
+#: that, so any body still carrying the mark would reach a model verbatim.
+FRAGMENT_REFERENCE_MARK = "{{fragment"
+
+
+def unresolvable_fragment_references(prompts_map):
+    """Prompt ids whose body carries a fragment reference nothing will resolve.
+
+    Preset bodies are applied AFTER card load, so this is where a reference a
+    host typed into the editor must be refused -- loudly, at save/import time,
+    not as literal `{{fragment:...}}` text in a sheet every story reads.
+    """
+    return sorted(str(pid) for pid, text in prompts_map.items()
+                  if isinstance(text, str) and FRAGMENT_REFERENCE_MARK in text)
+
+
 def prompt_fragment(name, language=None):
     """Fetch a named authored fragment from one language pack."""
     card = _prompt_card(language)
@@ -279,6 +297,12 @@ def preset_import_document(document, name=None):
     if bad:
         raise ValueError(
             "preset bodies must be text: " + ", ".join(bad[:8]))
+    unresolvable = unresolvable_fragment_references(raw)
+    if unresolvable:
+        raise ValueError(
+            "preset bodies carry {{fragment:...}} references, which only a "
+            "language pack's card can resolve; write the text itself in: "
+            + ", ".join(unresolvable[:8]))
     return selected, {
         "language": language,
         "prompts": {str(pid): str(text) for pid, text in raw.items()},
