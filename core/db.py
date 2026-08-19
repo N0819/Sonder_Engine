@@ -744,7 +744,11 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_events_due ON scheduled_events(chat_id,
 -- anchored book, else the location/canon book); parent_entity is the
 -- enclosing entity for interior rooms. retired_turn_id NULL = live; a
 -- removed/destroyed room keeps its row (retire-not-delete) so "the ship
--- that sank here" stays retrievable identity, mirroring world_entities.
+-- that sank here" stays retrievable identity. This is where retirement is
+-- REAL: world_entities has the same column and no writer for it (see the
+-- VESTIGIAL note above it), because that table is a projection of the live
+-- scene and loses a row with the thing it projects. Existence-over-time is
+-- this table's job precisely because it is not that projection.
 CREATE TABLE IF NOT EXISTS room_registry(
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
     room_uid TEXT NOT NULL,

@@ -29,6 +29,83 @@ def sanitize_attire_items(items):
             result.append(text)
     return result
 
+def _unstated(value):
+    """Nothing said, as opposed to something said that is falsey.
+
+    `attaches: False` and `state: "worn"` are statements about a garment; a
+    missing key, `None` and an empty string/list/dict are not. The difference
+    decides whether a merge may fill a field in.
+    """
+    return value is None or value == "" or value == [] or value == {}
+
+
+def _merge_attire_regions(target, record):
+    """Fold one attire record's `regions` into another's, garment by garment.
+
+    `regions` is the authoring surface: a garment's `state`, `condition`,
+    `covered_zones` and the region it was actually PLACED on live only here,
+    while `wearing` is a list of names. Merging the two flat lists and
+    dropping this left the ledger self-consistent and amnesiac --
+    `attire.rederive_entry` rebuilds `regions` from the merged `wearing`
+    through the cue tables, so a loosened, wine-stained, hand-placed kimono
+    returned as a pristine torso-anchored one. It reads as lossless because
+    the invariant it restores (all three representations agreeing) really is
+    restored.
+
+    Same rule as the flat lists, one level deeper: whichever record holds the
+    fact keeps it. A garment the survivor already carries stays the survivor's
+    -- the fold heals a save, it does not adjudicate between two statements --
+    and only the fields it leaves UNSAID are filled in from the folded copy.
+    Garments are matched with `resolve_garment`, without the head-noun tier: a
+    caller that merges two garments into one has to be stricter than one
+    routing a note, because merging "silk robe" into "cotton robe" destroys a
+    garment.
+    """
+    from story.attire import resolve_garment
+
+    source = record.get("regions")
+    if not isinstance(source, dict):
+        return
+    merged = target.get("regions")
+    if not isinstance(merged, dict):
+        merged = {}
+    for region, entry in source.items():
+        if not isinstance(entry, dict):
+            continue
+        kept = merged.get(region)
+        if not isinstance(kept, dict):
+            # A region only the folded record spoke about.
+            merged[region] = entry
+            continue
+        garments = kept.get("garments")
+        if not isinstance(garments, list):
+            garments = []
+        kept["garments"] = garments
+        worn = [g["name"] for g in garments
+                if isinstance(g, dict) and g.get("name")]
+        for garment in entry.get("garments") or []:
+            if not isinstance(garment, dict) or not garment.get("name"):
+                continue
+            match = resolve_garment(garment["name"], worn,
+                                    allow_head_noun=False)
+            if match is None:
+                garments.append(garment)
+                worn.append(garment["name"])
+                continue
+            survivor = next(
+                g for g in garments
+                if isinstance(g, dict) and g.get("name") == match)
+            for field, value in garment.items():
+                if field != "name" and _unstated(survivor.get(field)):
+                    survivor[field] = value
+        for field in ("beneath", "beneath_zones", "uncovered"):
+            if _unstated(kept.get(field)) and not _unstated(entry.get(field)):
+                kept[field] = entry[field]
+        merged[region] = kept
+    if merged:
+        target["regions"] = merged
+
+
 def _heal_attire_identity_keys(sc, cast):
     """Collapse scene.attire onto one key per character, and return the
     function that canonicalizes an incoming key.
@@ -99,6 +176,7 @@ def _heal_attire_identity_keys(sc, cast):
                     if item not in merged:
                         merged.append(item)
                 target[field] = merged
+            _merge_attire_regions(target, record)
 
     return canonical
 
