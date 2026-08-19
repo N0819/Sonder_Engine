@@ -40,11 +40,11 @@
 | `dressing/ambience.py` | 2090 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1263 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
-| `llm/llm_quality.py` | 655 |  | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 693 |  | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 |  | `llm.providers` |
-| `llm/prompts.py` | 408 |  | `core.db` |
-| `llm/providers.py` | 3158 |  | `core.db`, `core.logging_utils` |
-| `llm/schemas.py` | 5259 |  | — |
+| `llm/prompts.py` | 429 |  | `core.db` |
+| `llm/providers.py` | 3266 |  | `core.db`, `core.logging_utils` |
+| `llm/schemas.py` | 5435 |  | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2207 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 360 |  | — |
@@ -466,14 +466,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 277 | 379 lines |
-| `_targeted_field_patch()` | 188 | 57 lines |
+| `complete_validated_json()` | 304 | 390 lines |
+| `_targeted_field_patch()` | 188 | 63 lines |
 | `output_ran_out_of_room()` | 77 | 47 lines |
 | `_extract_balanced_object()` | 23 | 34 lines |
-| `_step_json_schema()` | 250 | 25 lines |
+| `_step_json_schema()` | 277 | 25 lines |
 | `strict_json_parse()` | 126 | 19 lines |
+| `_accepted()` | 253 | 19 lines |
 | `_strip_fences()` | 59 | 16 lines |
-| `_dig()` | 161 | 12 lines |
 
 ### `llm/prompt_cache.py`
 
@@ -487,40 +487,40 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preset_import_document()` | 208 | 45 lines |
-| `normalize_preset()` | 89 | 26 lines |
-| `_preset_override()` | 155 | 22 lines |
-| `character_prompt()` | 351 | 21 lines |
-| `specialist_prompt()` | 266 | 17 lines |
-| `prose_author_prompt()` | 290 | 17 lines |
-| `get_prompt_body()` | 386 | 17 lines |
-| `preset_export_document()` | 191 | 15 lines |
+| `preset_import_document()` | 241 | 45 lines |
+| `normalize_preset()` | 122 | 26 lines |
+| `_preset_override()` | 188 | 22 lines |
+| `_assembled_sheets()` | 38 | 21 lines |
+| `character_prompt()` | 384 | 21 lines |
+| `specialist_prompt()` | 299 | 17 lines |
+| `prose_author_prompt()` | 323 | 17 lines |
+| `get_prompt_body()` | 407 | 17 lines |
 
 ### `llm/providers.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2060 | 274 lines |
-| `async _chat_complete_async_once()` | 2455 | 103 lines |
-| `chat_complete()` | 1821 | 91 lines |
-| `async chat_complete_async()` | 2364 | 90 lines |
-| `_sse_openai()` | 1693 | 78 lines |
-| `async _sse_openai_async()` | 2559 | 63 lines |
-| `_embed_request()` | 2876 | 58 lines |
-| `resolve_role_candidates()` | 1415 | 54 lines |
+| `_chat_complete_once()` | 2115 | 286 lines |
+| `async _chat_complete_async_once()` | 2522 | 115 lines |
+| `chat_complete()` | 1876 | 91 lines |
+| `async chat_complete_async()` | 2431 | 90 lines |
+| `_sse_openai()` | 1737 | 78 lines |
+| `async _sse_openai_async()` | 2638 | 63 lines |
+| `_sse_anthropic()` | 1816 | 59 lines |
+| `_embed_request()` | 2958 | 58 lines |
 
 ### `llm/schemas.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4100 | 343 lines |
-| `_lenient_coerce()` | 660 | 149 lines |
-| `validate_llm_output_strict()` | 5130 | 130 lines |
-| `semantic_output_errors()` | 4947 | 103 lines |
-| `canonicalize_prose_markup()` | 3905 | 102 lines |
-| `_uncross_concealed_speech()` | 4029 | 69 lines |
-| `_coerce_list_valued_map()` | 93 | 57 lines |
-| `_coerce_evidence_refs()` | 2510 | 51 lines |
+| `preprocess_llm_output()` | 4202 | 344 lines |
+| `_lenient_coerce()` | 695 | 159 lines |
+| `validate_llm_output_strict()` | 5306 | 130 lines |
+| `semantic_output_errors()` | 5108 | 103 lines |
+| `canonicalize_prose_markup()` | 4007 | 102 lines |
+| `_uncross_concealed_speech()` | 4131 | 69 lines |
+| `_coerce_list_valued_map()` | 128 | 57 lines |
+| `_coerce_conditions()` | 3549 | 55 lines |
 
 ### `mind/affect.py`
 

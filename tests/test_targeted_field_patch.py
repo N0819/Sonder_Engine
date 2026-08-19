@@ -38,8 +38,7 @@ def test_it_asks_only_about_the_fields_that_failed(monkeypatch):
                              "poses": {"Hinami": {"posture": "lying back"}}},
     }
     out = llm_quality._targeted_field_patch(
-        "director_interpret", parsed,
-        ["state_assertions.overlays: value is not a valid dict"], {})
+        parsed, ["state_assertions.overlays: value is not a valid dict"])
 
     assert out["state_assertions"]["overlays"] == {
         "Hinami": ["flushed to the ears"]}
@@ -63,8 +62,7 @@ def test_a_patch_naming_an_uncomplained_field_cannot_move_it(monkeypatch):
     parsed = {"summary": "the original",
               "state_assertions": {"overlays": ["flushed"]}}
     out = llm_quality._targeted_field_patch(
-        "director_interpret", parsed,
-        ["state_assertions.overlays: value is not a valid dict"], {})
+        parsed, ["state_assertions.overlays: value is not a valid dict"])
     assert out["summary"] == "the original"
 
 
@@ -74,15 +72,15 @@ def test_it_falls_through_rather_than_guessing(monkeypatch):
     errors = ["state_assertions.overlays: value is not a valid dict"]
 
     _fake_patch(monkeypatch, "not json at all")
-    assert llm_quality._targeted_field_patch("s", parsed, errors, {}) is None
+    assert llm_quality._targeted_field_patch(parsed, errors) is None
 
     _fake_patch(monkeypatch, json.dumps({"something.else": 1}))
-    assert llm_quality._targeted_field_patch("s", parsed, errors, {}) is None
+    assert llm_quality._targeted_field_patch(parsed, errors) is None
 
     _fake_patch(monkeypatch, json.dumps({"a": 1}))
     # A path the validator named but the output does not carry.
     assert llm_quality._targeted_field_patch(
-        "s", parsed, ["nowhere.at.all: bad"], {}) is None
+        parsed, ["nowhere.at.all: bad"]) is None
 
 
 def test_paths_reach_into_lists():
@@ -108,3 +106,19 @@ def test_repair_is_its_own_configurable_role():
 
     assert "repair" in providers.ROLES
     assert providers.ROLE_FALLBACKS == {}
+
+
+def test_the_cheap_rung_is_handed_nothing_but_the_broken_fields():
+    """The signature IS the guarantee. `_targeted_field_patch` took
+    `step_key` and `payload` and read neither -- and `payload` is the beat's
+    own request, exactly the context that would let a cheap model rewrite
+    content nobody complained about. The docstring's whole argument for using
+    a small model here is that it cannot touch the beat; the parameter list
+    now says so too.
+    """
+    import inspect
+
+    from llm import llm_quality
+
+    assert list(inspect.signature(
+        llm_quality._targeted_field_patch).parameters) == ["parsed", "errors"]

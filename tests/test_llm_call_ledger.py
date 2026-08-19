@@ -248,3 +248,68 @@ def test_an_ordinary_reply_still_comes_straight_back():
 
     parsed = {"choices": [{"message": {"content": '{"ok": true}'}}]}
     assert providers._message_content(parsed, "nano", "m") == '{"ok": true}'
+
+
+class TestTheModelThatActuallyAnswered:
+    """`_note_served_model` exists because a router alias is not a model: the
+    engine can be served a materially different backing model per request,
+    and every wall-clock number in the corpus is a mixture over that unrecorded
+    variable. Both Anthropic SSE readers assigned `served = ""` once and never
+    again, so the note could not fire on the transport the pipeline runs on --
+    and the ledger recorded served == requested by fallback, which is
+    indistinguishable from no substitution having happened.
+    """
+
+    class _FakeStream:
+        def __init__(self, lines):
+            self.status_code = 200
+            self._lines = lines
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def iter_lines(self):
+            for line in self._lines:
+                yield line.encode("utf-8")
+
+    def _anthropic_stream(self, monkeypatch, served_model):
+        import json as _json
+
+        lines = [
+            "data: " + _json.dumps({
+                "type": "message_start",
+                "message": {"model": served_model,
+                            "usage": {"input_tokens": 10}}}),
+            "data: " + _json.dumps({
+                "type": "content_block_delta",
+                "delta": {"text": "hello"}}),
+            "data: " + _json.dumps({
+                "type": "message_delta", "usage": {"output_tokens": 3},
+                "delta": {"stop_reason": "end_turn"}}),
+        ]
+
+        class _Session:
+            def post(_self, *a, **k):
+                return TestTheModelThatActuallyAnswered._FakeStream(lines)
+
+        monkeypatch.setattr(providers, "_session", lambda: _Session())
+
+    def test_the_anthropic_stream_records_the_model_that_answered(
+            self, monkeypatch):
+        self._anthropic_stream(monkeypatch, "claude-backing-model")
+        entries = []
+        token = providers.call_ledger_sink.set(entries.append)
+        try:
+            text = providers._sse_anthropic(
+                "https://example.invalid", {}, {}, lambda _chunk: None,
+                role="director", model="router-alias")
+        finally:
+            providers.call_ledger_sink.reset(token)
+
+        assert text == "hello"
+        assert entries and entries[0]["requested"] == "router-alias"
+        assert entries[0]["served"] == "claude-backing-model", (
+            "the substitution is invisible: served fell back to requested")

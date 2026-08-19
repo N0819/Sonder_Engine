@@ -185,7 +185,7 @@ def _place(obj, path, value):
         node[last] = value
 
 
-def _targeted_field_patch(step_key, parsed, errors, payload):
+def _targeted_field_patch(parsed, errors):
     """Fix the named fields with a small call, and splice deterministically.
 
     The repair rung above this one rebuilds the COMPLETE response on the
@@ -200,6 +200,12 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
     answer back at the paths that failed and NOWHERE ELSE. Everything
     outside those paths is byte-identical by construction, which is what
     makes a model this small safe to use here: it cannot touch the beat.
+
+    Takes the parsed object and the errors and NOTHING ELSE. It used to be
+    handed `step_key` and `payload` as well, and read neither -- which is the
+    honest signature for what this is allowed to do. The beat's own request
+    is exactly the context that would let a cheap model rewrite content
+    nobody complained about, and the guarantee above is that it cannot.
 
     Returns the patched object, or None to fall through to the full repair.
     """
@@ -242,6 +248,27 @@ def _targeted_field_patch(step_key, parsed, errors, payload):
             _place(out, path, value)
             touched.append(path)
     return out if touched else None
+
+
+def _accepted(report):
+    """Return an accepted output, saying out loud what it cost to accept it.
+
+    `ValidationReport.warnings` is written on the SUCCESS path. A malformed
+    `state_diff` channel, or a whole malformed specialist channel, is DROPPED
+    by `validate_llm_output_strict` and the report comes back `valid=True`
+    with a warning naming what went -- so the beat commits, correctly, minus
+    a piece of world state the model did adjudicate. Every rung of the ladder
+    below returned `report.output` and read no further, which made that the
+    one repair in the engine that changed a committed beat and announced
+    nothing: not in `ctx.warnings`, not in `_engine_notes`, not in the
+    pipeline drawer.
+
+    A caller with no pipeline step in scope (importers, generators, jobs)
+    still gets its output; `note_step_warning` is a no-op there.
+    """
+    for warning in (report.warnings or []):
+        note_step_warning(f"llm validation: {warning}")
+    return report.output
 
 
 _SCHEMA_CACHE: dict = {}
@@ -310,6 +337,15 @@ def complete_validated_json(
     # gate into a formality, and one that cannot is no worse off (providers
     # falls back to json_object, then to nothing). Best-effort by design --
     # a schema this fails to build must never cost the call.
+    #
+    # Sent on EVERY rung that rebuilds this same object, not only the first.
+    # It was first-call-only, which is backwards: the later rungs are the ones
+    # answering a request that has already failed validation once. The
+    # truncation re-ask gains most -- a constrained model cannot pad, so the
+    # object it writes fits in the budget the unconstrained one overflowed.
+    # `_targeted_field_patch` deliberately does NOT get it: that rung returns
+    # the corrected FIELDS, not the step's object, so the step's grammar would
+    # refuse the only shape it is allowed to send.
     json_schema = _step_json_schema(step_key)
 
     try:
@@ -352,7 +388,7 @@ def complete_validated_json(
         report.errors.insert(0, parse_error)
 
     if report.valid:
-        return report.output
+        return _accepted(report)
 
     previous_raw = raw
     previous_parsed = parsed
@@ -412,6 +448,7 @@ def complete_validated_json(
                     sampler=sampler,
                     candidate_offset=0,
                     token_ceiling=token_ceiling,
+                    json_schema=json_schema,
                 )
             except Aborted:
                 raise
@@ -447,7 +484,7 @@ def complete_validated_json(
                     report.errors.insert(0, parse_error)
 
                 if report.valid:
-                    return report.output
+                    return _accepted(report)
 
                 ran_out_of_room = output_ran_out_of_room(raw)
                 previous_raw = raw
@@ -455,13 +492,12 @@ def complete_validated_json(
 
     # THE CHEAP RUNG FIRST. One malformed field does not need the whole beat
     # re-authored on the stage's own model; the validator already said which
-    # path failed and why. Try a small `utility` call that returns only the
-    # corrected fields, spliced back at exactly those paths. Falls through
+    # path failed and why. Try a small `repair`-role call that returns only
+    # the corrected fields, spliced back at exactly those paths. Falls through
     # untouched to the full rebuild below on any doubt.
     if not provider_errored and repair_attempts > 0:
         _t0 = time.monotonic()
-        _patched = _targeted_field_patch(
-            step_key, previous_parsed, report.errors, payload)
+        _patched = _targeted_field_patch(previous_parsed, report.errors)
         if _patched is not None:
             _patched_report = validate_llm_output_strict(
                 step_key, _patched, source_payload=payload)
@@ -472,7 +508,7 @@ def complete_validated_json(
                     f"{str((report.errors or [''])[0])[:120]!r}); repaired by "
                     f"a targeted field patch on the repair model "
                     f"({time.monotonic() - _t0:.1f}s) -- no rebuild")
-                return _patched_report.output
+                return _accepted(_patched_report)
             previous_parsed = _patched
 
     # Skip same-provider repair when the primary provider itself errored --
@@ -504,6 +540,7 @@ def complete_validated_json(
                 max_tokens=max_tokens,
                 candidate_offset=0,
                 token_ceiling=token_ceiling,
+                json_schema=json_schema,
             )
         except Aborted:
             raise
@@ -540,7 +577,7 @@ def complete_validated_json(
             report.errors.insert(0, parse_error)
 
         if report.valid:
-            return report.output
+            return _accepted(report)
 
     candidate_count = role_candidate_count(role)
 
@@ -569,6 +606,7 @@ def complete_validated_json(
                 sampler=sampler,
                 candidate_offset=candidate_offset,
                 token_ceiling=token_ceiling,
+                json_schema=json_schema,
             )
         except Aborted:
             raise
@@ -599,7 +637,7 @@ def complete_validated_json(
         )
 
         if fallback_report.valid:
-            return fallback_report.output
+            return _accepted(fallback_report)
 
         report = fallback_report
 

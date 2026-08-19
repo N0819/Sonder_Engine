@@ -129,3 +129,146 @@ def test_director_establish_dict_fields_as_empty_lists_are_coerced():
     assert report.output["entities"] == {}
     assert report.output["attire"] == {}
     assert report.output["entity_states"] == {}
+
+
+def test_every_worked_example_validates_against_the_schema_it_illustrates():
+    """An example is instruction, and a wrong one instructs wrongly.
+
+    `OUTPUT_EXAMPLES[step]` is handed to the model verbatim as
+    `required_json_example` on every repair and every fallback candidate -- so
+    a call that just failed validation is answered with an object the same
+    validator also rejects. Two were live when this test was written:
+    `scene_life` omitted the required `speech.speaker` on its first entry, and
+    `director_establish` failed its own semantic check with empty `rooms` and
+    `positions`. Both were teaching a shape that cannot commit.
+
+    This is the second time a wrong example has been found (the first cost a
+    complete 4,000-token resolve, whose repair was handed the same broken
+    example that caused the failure and could not converge), so the guard is
+    the class rather than the two.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES, validate_llm_output_strict
+
+    broken = {}
+    for step_key, example in sorted(OUTPUT_EXAMPLES.items()):
+        report = validate_llm_output_strict(step_key, example)
+        if not report.valid:
+            broken[step_key] = report.errors[:4]
+    assert not broken, (
+        "worked examples that their own validator rejects: "
+        + "; ".join(f"{step}: {errors}" for step, errors in broken.items()))
+
+
+def test_specialist_channel_shapes_match_what_the_models_declare():
+    """The empty-value coercion is chosen from a hand-kept list, and a hand-
+    kept list drifts. `comms_ops` was declared `list[CommsOp]` and classified
+    as a dict channel, so an empty `comms_ops: []` -- the ordinary way a model
+    says "no voice channel changed this beat" -- was rewritten to `{}` on the
+    way in. Inert only because `LenientModel` reversed it on the way out,
+    which is a second mechanism covering for the first rather than a reason
+    the first is right.
+    """
+    from llm import schemas
+
+    wrong = []
+    for step_key, channels in schemas.SPECIALIST_CHANNELS.items():
+        fields = schemas._fields(schemas.SCHEMA_MAP[step_key])
+        for channel in channels:
+            declared = schemas._declared(fields[channel])
+            if declared.is_list:
+                expected = "list"
+            elif declared.expects_object:
+                expected = "dict"
+            else:
+                continue
+            classified = (
+                "dict" if channel in schemas._SPECIALIST_DICT_CHANNELS
+                else "list" if channel in schemas._SPECIALIST_LIST_CHANNELS
+                else "unclassified")
+            if classified != expected:
+                wrong.append(f"{step_key}.{channel}: declared {expected}, "
+                             f"coerced as {classified}")
+    assert not wrong, "; ".join(wrong)
+
+
+def test_observation_defaults_are_the_values_the_compactor_omits():
+    """`Observation`'s own comment says absent means the default, and names
+    `composer.OBSERVATION_DEFAULTS` as the projection that omits them. They
+    disagreed on all three advisory axes -- intensity 0.5 vs 0.35, suddenness
+    0.0 vs 0.1, ambiguity 0.5 vs 0.15 -- so a compacted observation read back
+    through the schema came out saying something the compactor never said.
+    """
+    from agents.composer import OBSERVATION_DEFAULTS
+    from llm.schemas import Observation, _declared, _fields
+
+    fields = _fields(Observation)
+    for name, expected in OBSERVATION_DEFAULTS.items():
+        assert _declared(fields[name]).default == expected, name
+    # `null` and an omitted key are two spellings of "not said" and must land
+    # on the same number: the pre-validator fallback is the other half.
+    for name in ("intensity", "suddenness", "ambiguity"):
+        parsed = Observation(**{"observation_id": "current:x:0", name: None})
+        assert getattr(parsed, name) == OBSERVATION_DEFAULTS[name], name
+
+
+def test_the_prose_authors_example_shows_only_channels_it_still_owns():
+    """`director_resolve` is the step key the PROSE AUTHOR's call runs under.
+    Its example carried 20 `state_diff` channels the six specialists took over
+    and omitted three of the six the author kept, so the object it was told to
+    imitate on every repair was the dead monolith's. Whatever it writes in a
+    delegated channel is replaced by that channel's owner in the same fan-out,
+    so the instruction costs output budget to produce nothing.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES, SPECIALIST_CHANNELS, StateDiff
+    from llm.schemas import _fields
+
+    delegated = {channel for channels in SPECIALIST_CHANNELS.values()
+                 for channel in channels}
+    owned = set(_fields(StateDiff)) - delegated
+    shown = set(OUTPUT_EXAMPLES["director_resolve"]["state_diff"])
+    assert not shown - owned, (
+        "the prose author's example teaches delegated channels: "
+        + ", ".join(sorted(shown - owned)))
+    # `following_ops` is the one owned channel the author must NOT author --
+    # it is projected deterministically from interpretation and character
+    # decisions -- so showing it would be its own instruction to invent one.
+    assert "following_ops" not in shown
+    assert {"time", "weather", "location", "consequences"} <= shown
+
+
+def test_the_character_repair_example_names_the_psychology_tier():
+    """A key absent from the object a repair is told to imitate reads as
+    "not part of the answer". The example named none of `intent_ops`,
+    `project_ops`, `follow_op`, `drive_shift` or `manifest`, all five of
+    which the character sheet asks for on every call -- `project_ops` in
+    particular has never once been emitted in the live corpus.
+
+    Legacy `speech`/`action`/`actions` stay OUT: they are the pre-`sequence`
+    spelling, and showing them would teach the shape the sheet exists to
+    replace.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES
+
+    example = OUTPUT_EXAMPLES["character"]
+    for key in ("intent_ops", "project_ops", "follow_op", "drive_shift",
+                "manifest"):
+        assert key in example, key
+    for key in ("speech", "action", "actions"):
+        assert key not in example, key
+
+
+def test_every_specialist_example_shows_exactly_the_channels_it_owns():
+    """The same rule as the prose author's, one level in. A specialist's
+    example is its `required_json_example` on repair, and a channel missing
+    from it reads as one it does not answer for -- `comms_ops` was absent
+    from the spatial specialist's, the same channel the published spatial
+    sheet had lost. A channel it does NOT own would be an invitation to
+    write into another hand's diff.
+    """
+    from llm.schemas import OUTPUT_EXAMPLES, SPECIALIST_CHANNELS
+
+    for step_key, channels in SPECIALIST_CHANNELS.items():
+        example = OUTPUT_EXAMPLES[step_key]
+        shown = set(example) - {"notes"}
+        assert shown == set(channels), (
+            f"{step_key}: shows {sorted(shown)}, owns {sorted(channels)}")

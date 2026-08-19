@@ -1,5 +1,6 @@
 """Tests for provider model-list badging."""
 
+from llm import providers
 from llm.providers import list_models
 
 def _prov(base_url="https://nano-gpt.com/api/v1", kind="nanogpt"):
@@ -155,3 +156,90 @@ def test_image_models_url_climbs_out_of_the_v1_base():
             == "https://nano-gpt.com/api/models/image")
     assert (image_models_url("https://nano-gpt.com/api/v1/")
             == "https://nano-gpt.com/api/models/image")
+
+
+class TestASettingThatCannotReachTheProvider:
+    """The native Anthropic branch builds its body and RETURNS before
+    `_apply_reasoning_effort` and `_apply_json_mode` run, so both are
+    OpenAI-path only. Neither is a small setting -- reasoning effort is a
+    first-class per-role control in the settings panel, and the JSON grammar
+    is worth a measured narrator 2/5 -> 5/5 valid and character 53.4s/2029
+    tokens -> 15.3s/587 -- and configured against a native Anthropic
+    connection they change nothing, silently. The host reads the panel, sees
+    the value they set, and attributes the difference to the model.
+
+    Sending them is a request-shape decision the owner has not taken.
+    Announcing that a set dial is inert is not.
+    """
+
+    def _anthropic(self, monkeypatch):
+        providers._UNSENT_ON_ANTHROPIC.clear()
+        prov = {"kind": "anthropic", "base_url": "https://example.invalid",
+                "api_key": "k", "name": "claude-direct"}
+        monkeypatch.setattr(
+            providers, "resolve_role", lambda role: (prov, "some-model", {}))
+        monkeypatch.setattr(
+            providers, "_merge_samplers",
+            lambda cfg, sampler, temperature: (0.5, {}))
+        monkeypatch.setattr(providers, "_anthropic_system",
+                            lambda system, prov: system)
+
+        class _Response:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {"content": [{"text": "{}"}], "usage": {}}
+
+        class _Session:
+            def post(self, *a, **k):
+                return _Response()
+
+        monkeypatch.setattr(providers, "_session", lambda: _Session())
+        return prov
+
+    def test_a_configured_effort_that_cannot_be_sent_is_reported(
+            self, monkeypatch, caplog):
+        import logging
+
+        self._anthropic(monkeypatch)
+        monkeypatch.setattr(providers, "reasoning_effort_for",
+                            lambda role: "high")
+        with caplog.at_level(logging.WARNING, logger="fiction_engine"):
+            providers._chat_complete_once(
+                "narrator", "sys", "user", temperature=0.5, json_mode=True,
+                max_tokens=100, sampler=None)
+        said = [r.getMessage() for r in caplog.records
+                if "native Anthropic" in r.getMessage()]
+        assert said, [r.getMessage() for r in caplog.records]
+        assert "reasoning effort" in said[0]
+
+    def test_a_grammar_that_cannot_be_sent_is_reported_once(
+            self, monkeypatch, caplog):
+        import logging
+
+        self._anthropic(monkeypatch)
+        monkeypatch.setattr(providers, "reasoning_effort_for", lambda role: "")
+        with caplog.at_level(logging.WARNING, logger="fiction_engine"):
+            for _ in range(3):
+                providers._chat_complete_once(
+                    "narrator", "sys", "user", temperature=0.5,
+                    json_mode=True, max_tokens=100, sampler=None,
+                    json_schema={"type": "object"})
+        said = [r.getMessage() for r in caplog.records
+                if "native Anthropic" in r.getMessage()]
+        assert len(said) == 1, said
+        assert "JSON grammar" in said[0]
+
+    def test_nothing_is_said_when_nothing_was_configured(
+            self, monkeypatch, caplog):
+        import logging
+
+        self._anthropic(monkeypatch)
+        monkeypatch.setattr(providers, "reasoning_effort_for", lambda role: "")
+        with caplog.at_level(logging.WARNING, logger="fiction_engine"):
+            providers._chat_complete_once(
+                "narrator", "sys", "user", temperature=0.5, json_mode=True,
+                max_tokens=100, sampler=None)
+        assert not [r for r in caplog.records
+                    if "native Anthropic" in r.getMessage()]

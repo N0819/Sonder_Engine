@@ -177,3 +177,56 @@ class TestAPhraseLoop:
                 "profile. ")
         assert len(unit) > 400
         assert _repeating_period(unit * 3) == len(unit)
+
+
+def test_a_retried_stream_is_judged_on_its_own_output(monkeypatch):
+    """One `OutputGuard` per ATTEMPT, not per call.
+
+    `_chat_complete_once` streams up to four times -- two json_schema
+    rejection stages and the placeholder-skeleton re-stream -- and wrapped the
+    player's token sink once, before any of them. The guard accumulates every
+    delta and judges a 4KB tail plus a 40KB loop window, so it was judging the
+    CONCATENATION of two responses: two attempts at the same object are the
+    exact shape of the repetition it exists to catch, which means a retry
+    could abort a healthy second answer because the first one had to be
+    retried at all. `_checked_len` carried over too, so the first stride of
+    the second response went unexamined in the other direction.
+    """
+    from llm import providers
+
+    # Fine on its own -- every clause differs, so there is no period in it --
+    # and a textbook 620-character cycle the moment two copies sit end to end.
+    line = "".join(f"clause {n} of the survey is filed. " for n in range(20))
+    seen = []
+
+    calls = []
+
+    def fake_sse(url, headers, body, sink, role=None, model=None):
+        calls.append(body)
+        sink(line)
+        # First attempt: the all-"..." skeleton, which sends the caller round
+        # again with the same player sink.
+        return ('{"a": "..."}' if len(calls) == 1
+                else '{"a": "a real answer"}')
+
+    monkeypatch.setattr(providers, "_sse_openai", fake_sse)
+    monkeypatch.setattr(providers, "_session", lambda: None)
+    monkeypatch.setattr(providers, "resolve_role", lambda role: (
+        {"kind": "openai", "base_url": "https://example.invalid",
+         "api_key": "k", "name": "fake"},
+        "some-model", {}))
+    monkeypatch.setattr(providers, "_merge_samplers",
+                        lambda cfg, sampler, temperature: (0.5, {}))
+
+    token = providers.token_sink.set(seen.append)
+    try:
+        out = providers._chat_complete_once(
+            "narrator", "sys", "user", temperature=0.5, json_mode=True,
+            max_tokens=100, sampler=None)
+    finally:
+        providers.token_sink.reset(token)
+
+    assert len(calls) == 2, "the placeholder skeleton must buy a second stream"
+    assert out == '{"a": "a real answer"}'
+    # Both attempts reached the player; neither was judged against the other.
+    assert seen == [line, line]

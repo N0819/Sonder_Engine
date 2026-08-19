@@ -583,15 +583,33 @@ class TestARepairPromptMustNameTheRealDisagreement:
     def test_it_says_the_entries_were_discarded_and_what_shape_to_use(self):
         """Sentences are now read as events (see
         `TestASequenceWrittenAsSentences`), so what still reaches this path
-        is an entry carrying neither structure nor prose."""
+        is an entry carrying neither structure nor prose -- and the message
+        has to say THAT. Counting every non-object entry as discarded blamed
+        the model for the one spelling the engine accepts, in the message
+        that exists because a false message cost a turn."""
         from llm.schemas import validate_llm_output_strict
         report = validate_llm_output_strict(
             "director_interpret",
             {"kind": "mixed", "flow": {}, "sequence": [7, 12]},
             source_payload={"player_raw_input": "pick it up and speak"})
         assert not report.valid
-        assert "were not objects and were discarded" in report.errors[0]
+        assert "all 2" in report.errors[0]
+        assert "neither an object nor a sentence" in report.errors[0]
         assert '"type": "speech"' in report.errors[0]
+        assert "a plain sentence is read as an action" in report.errors[0]
+
+    def test_a_list_of_sentences_is_read_rather_than_blamed(self):
+        """The worked case in the function's own docstring, which
+        `_sequence_event_from_prose` closed at the source: it never reaches
+        the semantic check at all now, so it must never be described."""
+        from llm.schemas import validate_llm_output_strict
+        report = validate_llm_output_strict(
+            "director_interpret",
+            {"kind": "mixed", "flow": {},
+             "sequence": ["Picks up the PADD.",
+                          '"Nobody leaves this room."']},
+            source_payload={"player_raw_input": "pick it up and speak"})
+        assert not [e for e in report.errors if "sequence is empty" in e]
 
     def test_a_genuinely_empty_sequence_is_still_reported_as_empty(self):
         from llm.schemas import validate_llm_output_strict
@@ -730,12 +748,17 @@ class TestAValidatorMustNotContradictItsOwnFieldsDefault:
         assert GoalImpact(intentionality=None).intentionality == 0.0
         assert GoalImpact().intentionality == 0.0
 
-    def test_suddenness_answers_its_declared_default_either_way(self):
+    def test_each_observation_axis_answers_its_own_default_either_way(self):
+        # The three numbers are composer.OBSERVATION_DEFAULTS, which is what
+        # the compactor omits; a shared fallback cannot serve three different
+        # resting values, so each axis clamps to its own.
         from llm.schemas import Observation
         req = dict(observation_id="o", perceiver_id="p", source_atom_id="a",
                    channel="sight", fidelity="clear")
-        assert Observation(suddenness=None, **req).suddenness == 0.0
-        assert Observation(**req).suddenness == 0.0
+        for axis, resting in (("intensity", 0.35), ("suddenness", 0.1),
+                              ("ambiguity", 0.15)):
+            assert getattr(Observation(**{axis: None}, **req), axis) == resting
+            assert getattr(Observation(**req), axis) == resting
 
     def test_the_axes_that_do_declare_a_half_still_get_it(self):
         from llm.schemas import CharacterAppraisal

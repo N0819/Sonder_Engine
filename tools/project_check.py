@@ -511,9 +511,25 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
     if english is None:
         errors.append("built-in English language pack is missing")
         return
-    prompt_ids = set(english.card("system_prompts")["prompts"])
+    # The card STORES a body for most prompts and assembles seven of them --
+    # the six specialist sheets and the prose author's -- from
+    # `specialists`/`prose_author_sheet` instead. Storing an assembled sheet
+    # as well is what let the published `director_spatial` drift 1,518
+    # characters short of the one the engine actually sends, so the absence is
+    # deliberate and the registry is still the inventory both must agree on.
+    prompt_ids = (set(english.card("system_prompts")["prompts"])
+                  | set(prompts.ASSEMBLED_SHEET_IDS))
     if prompt_ids != set(prompts.DEFAULT_PROMPTS):
         errors.append("English system-prompt card and runtime registry disagree")
+    stored_assembled = sorted(
+        set(english.card("system_prompts")["prompts"])
+        & set(prompts.ASSEMBLED_SHEET_IDS))
+    if stored_assembled:
+        errors.append(
+            "English pack stores a body for assembled sheet(s) "
+            f"{stored_assembled}; an assembled sheet has no stored body, and "
+            "one that grows a second copy is free to drift from the sheet the "
+            "engine sends")
     for pid, text in prompts.DEFAULT_PROMPTS.items():
         if "LANGUAGE AND SCHEMA CONTRACT" not in text:
             errors.append(f"system prompt {pid!r} lacks the language/schema contract")
