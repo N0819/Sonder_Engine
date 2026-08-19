@@ -317,6 +317,36 @@ class TestNarrationHooks:
         assert "extension_context" not in out
 
 
+    def test_an_extension_that_failed_to_register_colours_nothing(
+            self, temp_db, ext_root):
+        """"A malformed extension lands in `load_errors()` and its siblings
+        load normally" is the module's own promise. A failed register strips
+        every hook and unregisters every stage -- but a standing block is
+        stored per STORY, so it outlives the session in which the extension
+        worked and kept being injected by an extension shown in the menu as
+        broken."""
+        _write_extension(ext_root, "seams", {
+            "id": "seams", "version": "1.0.0", "ext_api": 1,
+            "capabilities": {"python": "extension.py", "chat_state": True},
+        }, {"extension.py": "def register(api):\n    pass\n"})
+        _enable("seams")
+        chat_id = _chat(temp_db)
+        extension_runtime._apis["seams"].narration_context(chat_id).set(
+            "The corridors are dark and cold.")
+
+        (ext_root / "seams" / "extension.py").write_text(
+            "def register(api):\n    raise RuntimeError('boom')\n",
+            encoding="utf-8")
+        extension_runtime.reload()
+        extension_runtime.activate(refresh=True)
+        assert "boom" in extension_runtime.disabled_reasons()["seams"]
+
+        out = extension_runtime.dispatch_narration_payload(
+            _StubCtx(chat_id=chat_id), {})
+
+        assert "extension_context" not in out
+
+
 # ------------------------------------------------------------ the live stage
 
 

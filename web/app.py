@@ -17,15 +17,13 @@ from core.db import (q, qi, qtx, transaction, wget, wset, get_setting, set_setti
 from core.db import _FRAME_KEY_SEP
 from llm import providers
 from llm.providers import (
-    chat_complete, chat_complete_async, token_sink, cancel_event,
-    resolve_role, list_models, list_image_models, image_model, provider, agent_models,
+    list_models, list_image_models, image_model, provider,
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
     max_output_tokens, _coerce_max_output_tokens,
     reasoning_efforts, _coerce_reasoning_effort, REASONING_EFFORTS,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
-    DEFAULT_BASES, ROLES, ROLE_FALLBACKS, SAMPLER_KEYS, DEFAULT_SAMPLERS, Aborted,
+    DEFAULT_BASES, ROLES, ROLE_FALLBACKS, SAMPLER_KEYS, DEFAULT_SAMPLERS,
 )
-from core.pipeline_context import PipelineContext, ChatData, TurnData
 from story.dialogue_colors import normalize_color, resolve_cast_colors
 from persist.checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
                          refresh_checkpoint, insert_world_tables,
@@ -71,11 +69,11 @@ from story.importers import (
     recover_greetings_from_source, character_import_warnings,
     fill_character_psychology, fill_appearance,
 )
-from persist.commit import (commit_all, promotable_background_presences,
+from persist.commit import (promotable_background_presences,
                     promote_background_character,
-                    _known_name_roster, sync_room_registry_with_scene)
+                    sync_room_registry_with_scene)
 from llm.prompts import (
-    presets, active_preset, get_prompt, DEFAULT_PROMPTS, nsfw_enabled,
+    presets, active_preset, DEFAULT_PROMPTS,
     default_prompts_for, preset_export_document, preset_import_document,
     unique_preset_name,
 )
@@ -90,14 +88,13 @@ from mind.memory import (
     LOREBOOK_TYPES, MEMORY_CATEGORIES, MEMORY_PROVENANCE, 
     LOREBOOK_LINK_TYPES, duplicate_lorebook_for_chat,
     list_memories, update_memory, delete_memory, add_memory,
-    add_memories_batch,
     search_memories, build_character_memory_context,
     get_memory_summary, consolidate_character_memory,
     backfill_memory_summary_windows, memory_summary_coverage,
     restore_chat_memories, restore_lorebook, dump_lorebook,
-    dump_chat_memories, dump_memory_summaries, restore_memory_summaries,
+    restore_memory_summaries,
     chat_lorebook_ids, delete_turn_memories,
-    restore_lorebook_links, dump_lorebook_links,
+    restore_lorebook_links,
     relationships_for_payload,
     dramatic_irony_feed, promise_ledger,
     dump_character_memories, import_character_memories,
@@ -769,39 +766,6 @@ def _build_world_id_remap(blob, protected_ids=None):
 
     return remap
 
-def _apply_world_id_remap(blob, remap):
-    """Apply ID remapping to all world-state data in a checkpoint blob."""
-    if not remap:
-        return blob
-
-    def deep_remap(obj):
-        if isinstance(obj, str):
-            return remap.get(obj, obj)
-        if isinstance(obj, dict):
-            new = {}
-            for k, v in obj.items():
-                nk = remap.get(k, k) if isinstance(k, str) else k
-                new[nk] = deep_remap(v)
-            return new
-        if isinstance(obj, list):
-            return [deep_remap(item) for item in obj]
-        return obj
-
-    for key in ("world_entities", "world_placements", "world_conditions",
-                "scheduled_events", "world_events", "room_registry",
-                "fiction_worlds", "fiction_locations"):
-        if blob.get(key):
-            blob[key] = deep_remap(blob[key])
-            _remap_row_json_fields(blob[key], remap)
-
-    if isinstance(blob.get("world"), dict):
-        new_world = {}
-        for k, v in blob["world"].items():
-            new_world[k] = deep_remap(v)
-        blob["world"] = new_world
-
-    return blob
-    
 def _deep_remap_ids(obj, remap):
     """Recursively remap exact string matches and dict keys."""
     if not remap:
@@ -1006,6 +970,23 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         ev["turn_id"] = turn_idmap.get(ev.get("turn_id"))
         ev["frame_id"] = frame_idmap.get(ev.get("frame_id"))
 
+    # A stance's history belongs to a character and happened in a frame, and
+    # both are local integer ids. An unmappable character DROPS the row: the
+    # same integer means a different person in the target chat, and hanging a
+    # grudge on whoever inherited the number is worse than losing it.
+    if "relationship_events" in blob:
+        remapped_relationship_events = []
+        for rev in blob.get("relationship_events") or []:
+            row = dict(rev)
+            if char_idmap is not None:
+                new_char_id = char_idmap.get(row.get("char_id"))
+                if new_char_id is None:
+                    continue
+                row["char_id"] = new_char_id
+            row["frame_id"] = frame_idmap.get(row.get("frame_id"))
+            remapped_relationship_events.append(row)
+        blob["relationship_events"] = remapped_relationship_events
+
     # room_registry rows embed turn FKs (same rule as world_entities) plus
     # the owning book's INTEGER id, which the generic string remap below
     # never touches -- remap it through bookmap (None when the book wasn't
@@ -1020,8 +1001,8 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
 
     if world_id_remap:
         for key in ("world_entities", "world_placements", "world_conditions",
-                    "scheduled_events", "world_events", "room_registry",
-                    "fiction_worlds", "fiction_locations"):
+                    "scheduled_events", "world_events", "relationship_events",
+                    "room_registry", "fiction_worlds", "fiction_locations"):
             if blob.get(key):
                 blob[key] = _deep_remap_ids(blob[key], world_id_remap)
                 _remap_row_json_fields(blob[key], world_id_remap)
@@ -1650,9 +1631,27 @@ def extension_disable(eid: str):
 
 @app.get("/api/extensions/{eid}/state")
 def extension_state(eid: str, chat_id: int):
-    return {"id": _extension_id(eid),
+    """BOTH of an extension's per-story homes, and 404 for a story that is not
+    there.
+
+    An extension has two: `ext:<id>` spans the story's eras and `extf:<id>` is
+    scoped to one, which is what `api.frame_state` recommends for exactly the
+    state a campaign keeps -- "a mission advanced in one era was advanced in
+    every era" is the defect it exists to prevent. This route knew about the
+    first only, so an extension that took that advice read `null` about its
+    own mission from its own panel.
+
+    The chat check is the other half of the same problem: `{"state": null}`
+    for a story that does not exist is indistinguishable from a story that has
+    stored nothing.
+    """
+    ext_id = _extension_id(eid)
+    if not q("SELECT 1 FROM chats WHERE id=?", (chat_id,), one=True):
+        raise HTTPException(404, "Chat not found")
+    return {"id": ext_id,
             "chat_id": chat_id,
-            "state": wget(chat_id, f"ext:{_extension_id(eid)}")}
+            "state": wget(chat_id, f"ext:{ext_id}"),
+            "frame_state": wget(chat_id, f"extf:{ext_id}")}
 
 
 def _extension_documents(eid: str, chat_id):
@@ -1931,8 +1930,7 @@ def maintenance_compact(body: dict = Body(default={})):
 from mind.memory import (
     move_lorebook, reorder_lorebook,
     add_lorebook_link, update_lorebook_link, delete_lorebook_link,
-    get_lorebook_links, restore_lorebook_links,
-    LOREBOOK_LINK_TYPES,
+    get_lorebook_links,
 )
 from world.survival import (survival_enabled, set_survival_enabled, seed_vitals,
                       survival_shows_npcs, set_survival_shows_npcs)
@@ -2989,6 +2987,11 @@ def detach_book(cid: int, lid: int):
 @app.post("/api/chats/{cid}/lorebook")
 def bind_lore(cid: int, body: dict = Body(...)):
     _require_chat_idle(cid)
+    # Present-and-null is the caller SAYING none, which is how a book is
+    # unbound; only ABSENCE is a malformed request. Indexing conflated the
+    # two and turned the second into a 500.
+    if "lorebook_id" not in body:
+        raise HTTPException(400, "lorebook_id required")
     src = body["lorebook_id"]
     if not src:
         qi("UPDATE chats SET lorebook_id=NULL WHERE id=?", (cid,))
@@ -3028,9 +3031,9 @@ def chat_del(cid: int):
             "chat_chars", "chat_lorebooks", "chat_personas",
             "chat_char_frames", "turn_player_inputs", "frames",
             "guest_grants", "scheduled_events", "room_registry",
-            "world_events", "world_entities", "world_placements",
-            "world_conditions", "fiction_worlds", "fiction_locations",
-            "transit_edges",
+            "world_events", "relationship_events", "world_entities",
+            "world_placements", "world_conditions",
+            "fiction_worlds", "fiction_locations", "transit_edges",
         ):
             qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
         # FTS table stores chat_id as text
@@ -3430,7 +3433,9 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
     existing single-persona chats.persona_id (untouched -- this is purely
     additive multiplayer support). Mirrors chat_add_char's pattern.
     """
-    pid = body["persona_id"]
+    pid = body.get("persona_id")
+    if pid is None:
+        raise HTTPException(400, "persona_id required")
     persona_row = q("SELECT sheet FROM personas WHERE id=?", (pid,), one=True)
     if not persona_row:
         raise HTTPException(404, "Persona not found")
@@ -3472,7 +3477,9 @@ def submit_extra_player_input(cid: int, idx: int, body: dict = Body(...)):
     already declared for it. Rejects submissions against an already-run
     turn (has active steps) since the beat has already resolved.
     """
-    pid = body["persona_id"]
+    pid = body.get("persona_id")
+    if pid is None:
+        raise HTTPException(400, "persona_id required")
     text = _player_input(body)
     attached = q(
         "SELECT 1 FROM chat_personas WHERE chat_id=? AND persona_id=? AND status='active'",
@@ -3502,7 +3509,9 @@ def _submit_player_input(cid: int, idx: int, pid: int, text: str):
 
 @app.post("/api/chats/{cid}/guest_invites")
 def create_guest_invite(cid: int, body: dict = Body(...)):
-    pid = body["persona_id"]
+    pid = body.get("persona_id")
+    if pid is None:
+        raise HTTPException(400, "persona_id required")
     attached = q(
         "SELECT 1 FROM chat_personas WHERE chat_id=? AND persona_id=? AND status='active'",
         (cid, pid), one=True,
@@ -4972,8 +4981,8 @@ def turn_branch(tid: int):
         world_tables = json.loads(json.dumps({
             k: (blob.get(k) or [])
             for k in ("world_entities", "world_placements", "world_conditions",
-                      "scheduled_events", "world_events", "room_registry",
-                      "fiction_worlds", "fiction_locations")
+                      "scheduled_events", "world_events", "relationship_events",
+                      "room_registry", "fiction_worlds", "fiction_locations")
         }))
         if world_id_remap:
             for k in world_tables:
@@ -4992,6 +5001,12 @@ def turn_branch(tid: int):
             rr["created_turn_id"] = idmap.get(rr.get("created_turn_id"))
             rr["retired_turn_id"] = idmap.get(rr.get("retired_turn_id"))
             rr["owning_book_id"] = bookmap.get(rr.get("owning_book_id"))
+        # A stance's history is frame-scoped: why somebody stopped trusting
+        # you happened in a particular era. char_id needs no map here (a
+        # branch reuses the source's character rows), but the frame does, or
+        # the branch's ledger points at the source's frames.
+        for rev in world_tables["relationship_events"]:
+            rev["frame_id"] = frame_idmap.get(rev.get("frame_id"))
         _remap_scheduled_event_frames(world_tables["scheduled_events"], frame_idmap)
         insert_world_tables(ncid, world_tables)
 
@@ -5081,11 +5096,19 @@ def edit_prose(tid: int, body: dict = Body(...)):
     # those aren't idempotent, so nothing here should make them
     # reroll/rerun-eligible. A prose edit only changes how an already-true
     # beat reads to the player, same class of operation as fixing a typo.
-    qi("UPDATE variants SET active=0 WHERE step_id=?", (step["id"],))
-    qi(
-        "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
-        (step["id"], json.dumps(content, ensure_ascii=False), time.time()),
-    )
+    #
+    # Deactivate-and-insert is ONE operation. "Exactly one active variant per
+    # materialized step" is a named invariant, and a failure between the two
+    # statements leaves the narrator step with zero -- a beat that renders
+    # blank forever, with nothing anywhere recording why. Both siblings
+    # writing this same pair (`step_edit`, `turn_narration_select`) already
+    # wrap it; this one did not.
+    with transaction():
+        qi("UPDATE variants SET active=0 WHERE step_id=?", (step["id"],))
+        qi(
+            "INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",
+            (step["id"], json.dumps(content, ensure_ascii=False), time.time()),
+        )
     return {"ok": True, "prose": content["prose"]}
 
 # ---- Narration variants: flipping between rerolls of the CURRENT beat ----

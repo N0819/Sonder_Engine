@@ -309,6 +309,111 @@ class TestPlayerView:
             assert player_view(story["chat_id"], entry["id"])["viewer"] == entry
 
 
+class TestOneFrameAtATime:
+    """`story_view` reports the frame of the LATEST TURN, which `latest_turn`
+    picks across every frame. Every world read beside it went through the
+    unset `active_frame_id` contextvar, which is the PRESENT frame -- so a
+    multi-frame story whose latest turn is elsewhere got frame 5's label
+    beside the present frame's rooms, positions, clock and ledger."""
+
+    def _elsewhere(self, temp_db, story):
+        from core.db import active_frame_id, wset
+        from web import app
+
+        future = app.frames_create(story["chat_id"],
+                                   {"label": "Future", "ordinal": 10,
+                                    "kind": "future"})
+        token = active_frame_id.set(future["id"])
+        try:
+            wset(story["chat_id"], "scene", {
+                "location": "the drowned city", "time": "after",
+                "rooms": {"pier": {"name": "The Pier"}},
+                "positions": {"Sam": "pier", "Ilse": "pier"},
+                "entities": {}})
+            wset(story["chat_id"], "simulation_clock",
+                 {"elapsed_seconds": 900.0, "display": "after",
+                  "time_scale": "scene"})
+            wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        finally:
+            active_frame_id.reset(token)
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+            "VALUES(?,?,?,?,?)",
+            (story["chat_id"], 9, "look", time.time(), future["id"]))
+        return future, turn_id
+
+    def test_the_scene_belongs_to_the_frame_the_view_reports(self, temp_db,
+                                                             story):
+        future, _ = self._elsewhere(temp_db, story)
+
+        view = story_view.story_view(story["chat_id"])
+
+        assert view["frame"]["id"] == future["id"]
+        assert view["scene"]["location"] == "the drowned city"
+        assert view["scene"]["positions"] == {"Sam": "pier", "Ilse": "pier"}
+        assert view["clock"]["display"] == "after"
+
+    def test_the_player_view_reads_the_ledger_of_that_frame(self, temp_db,
+                                                            story):
+        """`known` is the recognition ledger and it is frame-scoped: who Sam
+        has met in the present is not who Sam has met in the future."""
+        self._elsewhere(temp_db, story)
+
+        view = player_view(story["chat_id"], "player")
+
+        assert view["knows"] == ["Ilse"]
+        assert view["location"]["room_id"] == "pier"
+
+
+class TestTheViewerIsNamedTheWayTheStoryIsKeyed:
+    """A viewer's `name` is a join key, not a label. `known` and the scene's
+    `positions` are keyed by the SHEET's identity name, so a viewer named from
+    anywhere else silently misses every lookup instead of failing."""
+
+    def test_the_player_is_named_from_the_sheet_not_the_denormalised_column(
+            self, temp_db, story):
+        """`personas.name` is a copy of the sheet made at insert time, free to
+        diverge from it forever after. `_backdrop_player` says so in as many
+        words and uses `persona_of`/`persona_name` instead."""
+        from core.db import wset
+
+        temp_db.qi("UPDATE personas SET sheet=? WHERE id=?",
+                   (json.dumps({"name": "Samantha"}), story["persona_id"]))
+        wset(story["chat_id"], "known", {"Samantha": ["Ilse"]})
+
+        listed = {entry["id"]: entry["name"] for entry in viewers(story["chat_id"])}
+        assert listed["player"] == "Samantha"
+        assert player_view(story["chat_id"], "player")["knows"] == ["Ilse"]
+
+    def test_an_extra_player_is_named_from_their_sheet_too(self, temp_db,
+                                                           story):
+        """The same column, the same divergence, one row further out. The
+        scene seeds an extra persona under `persona_name(sheet)`."""
+        pid = temp_db.qi("INSERT INTO personas(name,sheet) VALUES(?,?)",
+                         ("Old", json.dumps({"name": "Bex"})))
+        temp_db.qi(
+            "INSERT INTO chat_personas(chat_id,persona_id,status) "
+            "VALUES(?,?,'active')", (story["chat_id"], pid))
+
+        listed = {entry["id"]: entry["name"]
+                  for entry in viewers(story["chat_id"])}
+        assert listed[f"extra:{pid}"] == "Bex"
+
+    def test_a_story_with_no_persona_still_has_a_player_to_project(
+            self, temp_db, story):
+        """Every other reader in the engine falls back to `persona_of`'s
+        "The Stranger", which is the name the scene is keyed by. Emitting no
+        `player` entry made the one read sold as "what one person may be
+        shown" the only one that cannot see the default player -- a 404."""
+        temp_db.qi("UPDATE chats SET persona_id=NULL WHERE id=?",
+                   (story["chat_id"],))
+
+        listed = {entry["id"]: entry["name"]
+                  for entry in viewers(story["chat_id"])}
+        assert listed["player"] == "The Stranger"
+        assert player_view(story["chat_id"], "player")["viewer"]["id"] == "player"
+
+
 class TestPeople:
     """`player_view["people"]` -- the structured roster, still deciding
     nothing. Its two admissions are the identity ledger and the perception
