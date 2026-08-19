@@ -59,9 +59,18 @@ def update_place_graph(graph, scene, here_rid, turn_idx, came_from=None,
     * Nothing here reads another character's state, and nothing writes
       anything the character did not walk, see, or step through.
 
-    `basis` is "walked" (stood there) or "seen" (looked into it); "told" is
-    an accepted value for a future testimony-derived writer, but no code path
-    writes it yet -- there is currently no deterministic source for it.
+    `basis` is "walked" (stood there) or "seen" (looked into it). "told" is an
+    accepted value that this writer will not produce, and that is a decision
+    rather than a gap: the approved design derived hearsay edges from
+    `stated_fact` place claims, and implementing it showed that deriving
+    CONNECTIVITY from free text means text-mining it -- the non-deterministic
+    derivation this engine refuses everywhere else. A testimony writer needs a
+    structured claim naming the two places and the direction, not a parser over
+    prose. The affordance ledger one layer over DOES write `told`
+    (`world/place_purpose.py`, mirroring `stated_fact` hypotheses onto nodes
+    resolved by name): testimony can say what a place you already know is FOR;
+    it cannot mint the place. Recorded in `docs/UNBUILT.md` 6.5, not 1.52 --
+    this is a design note residual, not an open defect.
     Mutates and returns the normalized graph.
     """
     graph = graph if isinstance(graph, dict) else {}
