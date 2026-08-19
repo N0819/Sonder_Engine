@@ -19,7 +19,7 @@ from world.spatial_identity import room_of, same_subject
 from world.spatial_light import effective_light
 
 
-def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
+def contact_phrase(contact: dict, *, you=None) -> str:
     """One STANDING contact as a plain clause -- state, never event.
 
     'Bramwell's hand grips Hinami's waist'. Every consumer of this phrase
@@ -33,6 +33,14 @@ def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
     Measured live, before this: a forehead kiss from four beats earlier was
     still rendered in the active present into a perceiver's view, and the
     character answered it as a live advance.
+
+    Clause ORDER is not a caller's choice. A `subject_first=False` option
+    existed and nothing ever passed it; what it rendered -- "{right} is under
+    {left} ({manner})" -- put the recorded manner back into the clause as a
+    bare parenthetical, which is the act-as-standing-state reading the whole
+    function exists to prevent, and skipped the residue verbs and the interior
+    topology besides. A target-first rendering, if one is ever wanted, is a
+    second pass over the same three vocabularies, not a flag.
 
     `you` names the observer this phrase is FOR, when there is one. Their side
     renders in the second person ("your palm presses against her sternum"),
@@ -86,8 +94,6 @@ def contact_phrase(contact: dict, *, subject_first=True, you=None) -> str:
             phrase += f", maintaining contact at {endpoint}"
         detail = str(contact.get("detail") or "").strip()
         return f"{phrase}, {detail}" if detail else phrase
-    if not subject_first:
-        return f"{right} is under {left} ({manner})"
     # "You" always takes the plural verb form ("you are", "you hold"), and a
     # bare name the singular; with a part, the part decides.
     plural = _part_is_plural(actor_part) if actor_part else actor_is_you

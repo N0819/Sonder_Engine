@@ -492,6 +492,21 @@ def normalize_scene_containment(scene: dict) -> dict:
     positions = scene.get("positions") or {}
     entities = scene.get("entities") or {}
 
+    # Who the scene knows about, folded once for the whole pass. This was
+    # three probes per record -- a `_ci_get` over positions, a case-SENSITIVE
+    # `holder not in entities`, and a case-insensitive repeat of that one
+    # built by materialising a fresh `{k: 1 for k in entities}` dict every
+    # time round the loop. The middle probe was subsumed by the third, and the
+    # third's dict was thrown away unused; `_ci_get` itself is a linear scan,
+    # so the per-record cost was O(records x scene).
+    def _fold(key):
+        return str(key).lower().strip()
+
+    known = {_fold(k) for k in entities}
+    # A position of None names no room -- which is not the same as being in
+    # the scene, and `_ci_get(positions, holder) is None` did not count it.
+    known.update(_fold(k) for k, v in positions.items() if v is not None)
+
     cleaned = {}
     for name, raw in contained.items():
         subject = str(name or "").strip()
@@ -500,10 +515,8 @@ def normalize_scene_containment(scene: dict) -> dict:
         record = _clean_containment(raw, subject)
         if record is None:
             continue
-        holder = record["in"]
         # The container must be something the scene actually knows about.
-        if _ci_get(positions, holder) is None and holder not in entities \
-                and not _ci_get({k: 1 for k in entities}, holder):
+        if _fold(record["in"]) not in known:
             continue
         cleaned[subject] = record
 
@@ -569,6 +582,38 @@ def derive_contained_positions(scene: dict) -> dict:
     return scene
 
 
+def scale_changed_names(previous_scales, current_scales) -> set:
+    """Whose size changed enough to break what was true at the old geometry.
+
+    Returns folded names, so a caller compares against
+    `str(x).strip().casefold()`.
+
+    ONE implementation, because this is one rule with two consequences: a
+    contact is released (`contacts_broken_by_scale_change`) and a containment
+    is released (`containment_broken_by_scale_change`), and both must agree on
+    what counts as a change. They were separate near-verbatim loops with
+    cosmetically different zero-guards -- `min(was, current) <= 0` against
+    `was <= 0 or current <= 0` -- which is exactly the arrangement where a
+    later threshold change lands in one of them.
+
+    Lives here rather than in a shared geometry module because
+    `_SCALE_CONTACT_BREAK` and `clamp_scale` do, and `spatial_geometry`
+    imports this module: the dependency only runs one way.
+    """
+    before = previous_scales if isinstance(previous_scales, dict) else {}
+    now = current_scales if isinstance(current_scales, dict) else {}
+
+    changed = set()
+    for name in set(before) | set(now):
+        was = clamp_scale(_ci_get(before, name)) or 1.0
+        current = clamp_scale(_ci_get(now, name)) or 1.0
+        if min(was, current) <= 0:
+            continue
+        if max(was, current) / min(was, current) >= _SCALE_CONTACT_BREAK:
+            changed.add(str(name).strip().casefold())
+    return changed
+
+
 def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
     """Release anyone whose size change makes their container absurd.
 
@@ -581,18 +626,7 @@ def containment_broken_by_scale_change(scene: dict, previous_scales) -> list:
     if not isinstance(contained, dict) or not contained:
         return []
 
-    before = previous_scales if isinstance(previous_scales, dict) else {}
-    now = scene.get("scales") or {}
-
-    changed = set()
-    for name in set(before) | set(now):
-        was = clamp_scale(_ci_get(before, name)) or 1.0
-        current = clamp_scale(_ci_get(now, name)) or 1.0
-        if min(was, current) <= 0:
-            continue
-        if max(was, current) / min(was, current) >= _SCALE_CONTACT_BREAK:
-            changed.add(str(name).strip().casefold())
-
+    changed = scale_changed_names(previous_scales, scene.get("scales") or {})
     if not changed:
         return []
 
@@ -631,16 +665,3 @@ def containment_facts(scene: dict, observer: str, source_names) -> list:
             facts.append(f"{c} is {record.get('mode') or 'carried'} by {name}.")
     return facts
 
-
-def would_create_containment_cycle(placements: dict, subject_id: str, destination_id: str) -> bool:
-    current = destination_id
-    visited = set()
-    while current:
-        if current == subject_id:
-            return True
-        if current in visited:
-            return True
-        visited.add(current)
-        placement = placements.get(current) or {}
-        current = placement.get("container_id")
-    return False

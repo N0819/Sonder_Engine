@@ -80,18 +80,29 @@ def test_a_job_that_raises_leaves_a_record_and_never_reaches_the_caller():
     assert job in jobs.history(2)
 
 
-def test_a_result_computed_before_the_story_moved_is_stale():
-    job = jobs.submit(3, "tick", lambda job: "ok", base_turn=7)
-    assert _wait(lambda: job.state == "done")
-    assert jobs.is_stale(job, 7) is False
-    assert jobs.is_stale(job, 8) is True
+def test_the_story_moving_on_does_not_invalidate_a_result():
+    """PERSISTENCE-F11. `is_stale` refused a result the moment the story took
+    one more turn, which is not what any consumer of `base_turn` wanted: an
+    offscreen tick computed at turn 7 is still true at turn 8, and refusing it
+    there would discard every job that outlived a single beat."""
+    assert jobs.story_rewound_past(7, 7) is False
+    assert jobs.story_rewound_past(7, 8) is False
+    assert jobs.story_rewound_past(7, 900) is False
 
 
-def test_an_unstamped_job_is_not_reported_fresh():
+def test_a_story_rewound_underneath_a_job_refuses_its_result():
+    """The rule the four real consumers each hand-rolled: the turn the work was
+    computed from is a future that has not happened."""
+    assert jobs.story_rewound_past(7, 6) is True
+    assert jobs.story_rewound_past(7, 0) is True
+
+
+def test_an_unstamped_job_is_not_reported_rewound():
     job = jobs.submit(3, "unstamped", lambda job: "ok")
     assert _wait(lambda: job.state == "done")
-    assert jobs.is_stale(job, 99) is False
     assert job.base_turn is None
+    assert jobs.story_rewound_past(job.base_turn, 99) is False
+    assert jobs.story_rewound_past(7, None) is False
 
 
 def test_cancelling_files_the_job_as_cancelled_rather_than_done():

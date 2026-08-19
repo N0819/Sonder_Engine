@@ -100,6 +100,7 @@ import random
 import re
 from llm.prompts import get_prompt
 
+from core import jobs
 from core.logging_utils import logger
 
 # ---------------------------------------------------------------------------
@@ -1413,7 +1414,6 @@ def schedule_profile_ticks(ctx, epoch=None):
     world -- which inverts the feature (amendment 4). Arrival is safe
     because every write is provisional (amendment 5).
     """
-    from core import jobs
     from story.scene import dialogue_config, offscreen_life_allows
     from world.spatial import room_of
 
@@ -1544,7 +1544,7 @@ def land_profile_ticks(cid, base_turn, events, *, epoch_id=None):
     row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,),
             one=True)
     current = row["idx"] if row and row["idx"] is not None else None
-    if current is not None and int(current) < int(base_turn):
+    if jobs.story_rewound_past(base_turn, current):
         logger.info(
             "profile ticks discarded: chat=%s base_turn=%s current=%s "
             "(rolled back)", cid, base_turn, current)
@@ -1922,7 +1922,7 @@ def land_agent_tick(cid, entry, proposal, verdict, *, base_turn, turn_id,
         row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,),
                 one=True)
         current = row["idx"] if row and row["idx"] is not None else None
-        if current is not None and int(current) < int(base_turn):
+        if jobs.story_rewound_past(base_turn, current):
             logger.info(
                 "agent tick discarded: chat=%s subject=%s base_turn=%s "
                 "current=%s (rolled back)", cid, sid, base_turn, current)
@@ -2085,7 +2085,6 @@ def schedule_agent_ticks(ctx, epoch=None):
         capped by `max_offscreen_actors`. A character existing is not a
         reason; an owned active plan or fresh carried evidence is.
     """
-    from core import jobs
     from world.living_world import living_world_allows, living_world_config
     from story.scene import dialogue_config
 
