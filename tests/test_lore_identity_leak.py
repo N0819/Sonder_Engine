@@ -103,6 +103,65 @@ class TestTheLiveFailure:
         assert "Hinami" not in scrub_names_deep(LORE, scrub)[0]["content"]
 
 
+class TestKnowingSomebodyIsNotStringEquality:
+    """The gate's other half: who counts as recognised.
+
+    `_recognizes` is the module's recognition rule and perception asks it at
+    nine sites -- a rank or title variant of a person the observer knows is
+    that person, so an observer who was introduced to "William T. Riker"
+    reads "Commander Riker" and not a stranger descriptor. Both identity
+    floors here tested plain `name in known` instead, while their docstrings
+    claimed to be the same rule as perception's. Direction is over-scrub
+    rather than leak -- a known person renders as "the unfamiliar person" in
+    the prose beside a view that names him -- so the cost is that the mind is
+    told less than it has earned, which the register is explicit is not a way
+    to harden a guard.
+    """
+
+    def test_a_title_variant_of_a_known_person_reads_as_himself(self, temp_db):
+        chat_id = _seed(temp_db, known={"Tamamo": ["William T. Riker"]},
+                        persona=None)
+        lore = [{"title": "Bridge",
+                 "content": "Commander Riker takes the conn.",
+                 "keys": "Commander Riker"}]
+        scrub = observer_name_scrub(_chat(chat_id), "Tamamo",
+                                    _cast("Commander Riker", "Tamamo"))
+        assert scrub_names_deep(lore, scrub) == lore
+
+    def test_the_one_name_gate_agrees_with_the_paragraph_gate(self, temp_db):
+        """`observer_label_fn` gates a field holding ONE name and
+        `observer_name_scrub` a field holding a paragraph. One rule, or a
+        payload's structured half and its prose half disagree about who the
+        observer knows."""
+        from agents.common import observer_label_fn
+
+        chat_id = _seed(temp_db, known={"Tamamo": ["William T. Riker"]},
+                        persona=None)
+        label = observer_label_fn(_chat(chat_id), "Tamamo",
+                                  _cast("Commander Riker", "Tamamo"))
+        assert label("Commander Riker") == "Commander Riker"
+
+    def test_a_same_surname_stranger_is_still_a_stranger(self, temp_db):
+        """The tightness that makes the variant rule safe: sharing a surname
+        is not being the same person."""
+        from agents.common import observer_label_fn
+
+        chat_id = _seed(temp_db, known={"Tamamo": ["William T. Riker"]},
+                        persona=None)
+        label = observer_label_fn(_chat(chat_id), "Tamamo",
+                                  _cast("Thomas Riker", "Tamamo"))
+        assert label("Thomas Riker") != "Thomas Riker"
+
+    def test_a_stranger_sharing_no_token_is_still_a_stranger(self, temp_db):
+        from agents.common import observer_label_fn
+
+        chat_id = _seed(temp_db, known={"Tamamo": ["William T. Riker"]},
+                        persona=None)
+        label = observer_label_fn(_chat(chat_id), "Tamamo",
+                                  _cast("Commander Sato", "Tamamo"))
+        assert label("Commander Sato") != "Commander Sato"
+
+
 class TestTheScrubIsCareful:
     def test_it_matches_whole_words_only(self, temp_db):
         chat_id = _seed(temp_db, persona=None)
