@@ -23,7 +23,7 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn web.app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-full  # every Python regression test (7692 tests, ~2m45s — run this freely)
+make test-full  # every Python regression test (8120 tests, ~2m20s — run this freely)
 make test       # alias for test-full
 make test-lf    # last-failed first, then the rest — the fix-verify loop
 make test-fast  # NOT a tier to check your own work with; deselects 119 of 391 files,
@@ -36,6 +36,26 @@ make compile    # python -m compileall on all source
 make check-fast # compile + structure/map freshness + full suite
 make check      # compile + map + structure + full suite — run this before considering a change done
 ```
+
+**`make check` runs whatever `python` resolves to, which is very unlikely to be
+the stack that ships.** Measured 2026-08-18: the system interpreter carried
+Pydantic 1.10.14 / NumPy 1.26.4 while `.venv` — what both launchers build, what
+every player runs, and what `constraints.txt` pins — carried Pydantic 2.11.7 /
+NumPy 2.2.6. Two defects were live in that gap at once and the suite was green
+through both, including one that silently discarded every list-valued Director
+channel on the shipped major. Before believing a green run means the engine
+works:
+
+```bash
+python3.12 -m venv /tmp/sonder-ci && \
+  /tmp/sonder-ci/bin/pip install -c constraints.txt -r requirements-dev.txt && \
+  /tmp/sonder-ci/bin/python -m pytest -q
+```
+
+CI does this on every push and CI is the authority; the local gate is a fast
+approximation of it, and the approximation is exactly as wide as the difference
+between two dependency resolutions. Details and the two structural guards that
+now hold the class: [`docs/guides/TESTING.md`](docs/guides/TESTING.md).
 
 Single test:
 
