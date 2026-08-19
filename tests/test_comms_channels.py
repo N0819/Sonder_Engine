@@ -542,8 +542,12 @@ class TestOneWayWindow:
         """
         from llm.prompts import get_prompt
 
-        for key in ("director_establish", "resolve_repair",
-                    "greeting_interpret"):
+        # Every prompt that DEFINES rooms. `greeting_interpret` was here and
+        # is not any more: it no longer declares a scene graph at all, having
+        # been shrunk to the two fields `story/greetings.py` reads, so
+        # establishment builds the rooms from the same greeting prose one turn
+        # later. A prompt that cannot write a barrier does not need the menu.
+        for key in ("director_establish", "resolve_repair"):
             text = get_prompt(key)
             for barrier in ("window", "bars", "one_way_window", "membrane"):
                 assert barrier in text, f"{key} never offers {barrier}"
