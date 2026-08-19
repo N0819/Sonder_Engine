@@ -43,6 +43,19 @@ what follows is the part you would have noticed.
   scan, the unconsciousness scan and the release scan were all dead — a body
   could be shaken and never wake.
 
+- **A knockout now gates only the body the beat knocked out.** A beat
+  containing any collapse could gate any cast member the Director named. Found
+  by playing the engine rather than testing it, on the eve of this release:
+  one body went down, two unconscious rows committed sharing one cause, and
+  the second was on the bystander standing beside the fallen one — who then
+  ran no character step and read as a character who had simply gone quiet,
+  which is the exact failure the awareness work exists to prevent. It costs
+  more than a beat: a gated mind runs no decision at all, and nothing but the
+  Director can end an unconscious one. The floor now asks, per cast mind,
+  whether any sentence in the beat ties THEM to going under. Checked against
+  every story on this machine before landing: 0 of 468 conditions would have
+  been touched.
+
 - **A disguise that conceals your identity now conceals it all beat long.**
   The flag saying a disguise hides who you are was computed and discarded on
   the same line while building the after-view of a beat, and an absent flag
