@@ -1,18 +1,5 @@
 // ---- Boot & sidebar ----
 
-const LORE_LINK_TYPES = [
-  "related",
-  "references",
-  "depends_on",
-  "supplements",
-  "overlaps",
-  "supersedes",
-  "contradicts",
-  "alternate_version",
-  "same_setting",
-  "portal"
-];
-
 // A language pack the server could not use is reported once per session.
 // `boot()` reruns on every import, save and NSFW toggle, and a report
 // repeated on each of those is a nag rather than a report.
@@ -34,10 +21,6 @@ async function boot() {
   if (S.boot.language_error && !languagePackErrorReported) {
     languagePackErrorReported = true;
     toast(S.boot.language_error, "warn", 8000);
-  }
-
-  if (!Array.isArray(S.boot.lorebook_link_types)) {
-    S.boot.lorebook_link_types = LORE_LINK_TYPES;
   }
 
   updateNSFWBtn();

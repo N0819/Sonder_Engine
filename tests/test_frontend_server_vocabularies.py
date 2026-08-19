@@ -20,18 +20,26 @@ import json
 import re
 from pathlib import Path
 
-from mind.memory import MEMORY_CATEGORIES, MEMORY_PROVENANCE
+from mind.memory import (
+    LOREBOOK_LINK_TYPES,
+    MEMORY_CATEGORIES,
+    MEMORY_PROVENANCE,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 UTILS = (ROOT / "static/js/utils.js").read_text(encoding="utf-8")
 CHAT = (ROOT / "static/js/chat.js").read_text(encoding="utf-8")
+APP = (ROOT / "static/js/app.js").read_text(encoding="utf-8")
+LOREBOOKS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
 
 
 def _js_array(source: str, name: str) -> list[str]:
+    """The literal a top-level `const NAME = [...]` holds, comments stripped."""
     match = re.search(r"^const %s = (\[[^\]]*\]);" % re.escape(name),
                       source, re.MULTILINE)
     assert match, f"{name} not found as a top-level array"
-    return json.loads(match.group(1))
+    body = re.sub(r"//[^\n]*", "", match.group(1))
+    return json.loads(re.sub(r",(\s*])", r"\1", body))
 
 
 def test_the_browser_reads_the_shipped_memory_vocabularies():
@@ -50,3 +58,18 @@ def test_the_browser_fallbacks_still_agree_with_the_engine():
     dropdown out of terms the engine will overwrite without saying so."""
     assert _js_array(UTILS, "MEM_CATS_FALLBACK") == MEMORY_CATEGORIES
     assert _js_array(UTILS, "MEM_PROV_FALLBACK") == MEMORY_PROVENANCE
+
+
+def test_there_is_exactly_one_browser_copy_of_the_lore_link_types():
+    """Two files carried the same ten strings, and `boot()` installed ITS copy
+    into `S.boot.lorebook_link_types` unconditionally -- so the fallback beside
+    the lore code could never be taken, and the live copy sat in a file with no
+    lore in it. One copy, at the point of use."""
+    assert "LORE_LINK_TYPES" not in APP
+    assert "S.boot.lorebook_link_types =" not in APP
+    assert LOREBOOKS.count("const DEFAULT_LORE_LINK_TYPES = [") == 1
+    assert "S.boot?.lorebook_link_types" in LOREBOOKS
+
+
+def test_the_lore_link_type_fallback_still_agrees_with_the_engine():
+    assert _js_array(LOREBOOKS, "DEFAULT_LORE_LINK_TYPES") == LOREBOOK_LINK_TYPES
