@@ -251,8 +251,7 @@ def tick_vitals(scene: dict, elapsed_seconds, *, asleep=(), exerting=()) -> dict
 
         # Air: a countdown while sealed in, and a fast recovery once out.
         if is_sealed_in(scene, name):
-            current["air"] = _clamp(
-                current["air"] - (seconds / _AIR_SECONDS if _AIR_SECONDS else 0))
+            current["air"] = _clamp(current["air"] - seconds / _AIR_SECONDS)
         else:
             current["air"] = _clamp(current["air"] + seconds / 60.0)
 

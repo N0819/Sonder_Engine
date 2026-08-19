@@ -373,7 +373,6 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms, roster=(), spoken=()):
         if op == OP_EMERGE:
             out, reason = emerge(out, uid, raw.get("who"), roster=roster)
             by_uid = {str(c.get("uid") or ""): c for c in out}
-            target = by_uid.get(uid)
             if reason:
                 rejected.append(reason)
             continue

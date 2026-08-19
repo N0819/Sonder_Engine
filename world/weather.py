@@ -473,12 +473,17 @@ def weather_for_room(scene, room_id):
     audible = falling and layers is not None and layers <= reach
     muffling, gain = "", 1.0
     if audible:
+        # `_REACH`'s ceiling (2) IS `_MUFFLING`'s last limit, and the loop is
+        # only entered when `layers <= reach`, so a rung always matches. The
+        # `for...else` that used to sit here could not fire and therefore
+        # proved nothing. The two tables are one ladder read from opposite
+        # ends -- keep them in step: a new intensity reaching further needs a
+        # new muffling rung, or a sound would arrive through more layers than
+        # there is a word for.
         for limit, label, level in _MUFFLING:
             if layers <= limit:
                 muffling, gain = label, level
                 break
-        else:
-            muffling, gain = "faint", _MUFFLING[-1][2]
         if exposure == "sheltered" and not muffling:
             gain = 0.8
     return dict(weather, **{
