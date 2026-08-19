@@ -350,3 +350,58 @@ class TestStartupHandsTheBankBackToo:
         i = src.index("start_rebuild_if_needed()")
         assert "try:" in src[max(0, i - 400):i]
         assert "except Exception" in src[i:i + 400]
+
+
+class TestTheMaintenanceRepairsHaveAWayIn:
+    """MIND-F7. `rebuild_checkpoint_embeddings` was built, documented in
+    `docs/guides/MEMORY.md`, claimed as shipped in `Design.md` and tested --
+    and had no caller anywhere in the tree. A repair nobody can run is a repair
+    that has not happened: 1,040 checkpoints on the owner's own corpus sat
+    holding a rebuild's worth of retired vectors, one restore away from putting
+    them back.
+
+    A `tools/` script rather than a route, deliberately. It rewrites rollback
+    history and should not be one click away from a story in progress.
+    """
+
+    def _tool(self):
+        import importlib
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        return importlib.import_module("embedding_maintenance")
+
+    def test_the_checkpoint_rebuild_is_reachable_from_a_command(
+            self, bank, capsys):
+        tool = self._tool()
+        _seed(bank, 2)
+        assert tool.main(["checkpoints", "--chat", str(bank["chat"])]) == 0
+        out = capsys.readouterr().out
+        assert "dry_run" in out and "True" in out
+
+    def test_a_dry_run_is_the_default_of_the_command_too(self, bank,
+                                                         monkeypatch):
+        """The function defaults to `dry_run=True`; a command line that
+        silently inverted that would be worse than no command line."""
+        tool = self._tool()
+        seen = {}
+
+        def _fake(chat_id=None, *, dry_run=True, progress=None):
+            seen.update(chat_id=chat_id, dry_run=dry_run)
+            return {"dry_run": dry_run}
+
+        monkeypatch.setattr(tool.memory, "rebuild_checkpoint_embeddings",
+                            _fake)
+        tool.main(["checkpoints"])
+        assert seen == {"chat_id": None, "dry_run": True}
+        tool.main(["checkpoints", "--chat", "7", "--apply"])
+        assert seen == {"chat_id": 7, "dry_run": False}
+
+    def test_status_answers_without_writing(self, bank, temp_db):
+        tool = self._tool()
+        _seed(bank, 2)
+        before = temp_db.q("SELECT COUNT(*) n FROM checkpoints", one=True)["n"]
+        assert tool.main(["status", "--json"]) == 0
+        assert temp_db.q(
+            "SELECT COUNT(*) n FROM checkpoints", one=True)["n"] == before
