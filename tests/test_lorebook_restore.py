@@ -245,12 +245,17 @@ def test_link_restore_reports_what_it_could_not_put_back(temp_db, monkeypatch):
     assert report["restored"] == 1
     assert report["dropped"] == 1
 
-    boom = memory.add_lorebook_link
+    from mind import memory_lorebooks
+
+    boom = memory_lorebooks.add_lorebook_link
 
     def explode(source, target, *a, **kw):
         raise RuntimeError("no")
 
-    monkeypatch.setattr(memory, "add_lorebook_link", explode)
+    # The reader lives in `memory_lorebooks`, so that is where the patch has
+    # to land: `restore_lorebook_links` resolves `add_lorebook_link` in its
+    # OWN module globals, and a patch on the facade's re-export is inert.
+    monkeypatch.setattr(memory_lorebooks, "add_lorebook_link", explode)
     failed = memory.restore_lorebook_links(chat_id, {1: a, 3: c}, [
         {"source_book_id": 1, "target_book_id": 3, "relation_type": "related"},
     ])
