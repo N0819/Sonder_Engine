@@ -4270,6 +4270,40 @@ left open:
   hand in the region editor, which now expresses displacement directly.
 ---
 
+### 6.12 Scent — [`DESIGN_SCENT.md`](design/DESIGN_SCENT.md)
+
+v1 is built: a body's standing smell (`embodiment.scent`), an object's
+(`SceneEntityDef.scent`), deposited matter's (the substance record's `scent`),
+graded through `scent_level` and delivered as a `scent` percept on the `smell`
+channel. Four things are deliberately NOT built, and each is an argument rather
+than an omission — see the note's §6 before building any of them.
+
+- **A smell does not fade.** Blood stays `wet iron` until the Director
+  re-describes the deposit or removes it. `amount` is free text and nothing can
+  order "a small spill" against "the remainder" (the same limit
+  `_stock_consumed_by` records), so decay needs an explicit age on the record,
+  not a heuristic over prose. The authoring surface already carries the
+  intended answer: a re-described deposit updates its smell.
+- **A smell does not travel or linger where its source has been.** No wind, no
+  upwind/downwind, no trail in a room a body has walked out of. The tracking
+  case is a good mechanic and needs a per-room decaying residue ledger, which
+  is a larger feature than the one that landed.
+- **Scent does not walk multiple rooms.** Hearing has `sound_walk_level` and a
+  hop budget the card's `range` extends; scent is graded across ONE edge and
+  stops, so `sense_range_class` has no consumer on this channel. A real
+  asymmetry with hearing, left as one until a story wants it.
+- **An entity's smell is never attributed to the entity.** Correct today,
+  because the composer admits no percept for the objects standing in a room —
+  but if an entity-presence percept is ever built, this is the reader that
+  should start naming its source, and it will not find itself.
+
+Undecided, and cheap to settle from the corpus once stories have smells in
+them: whether a body should receive its OWN card scent. Currently it does not
+(habituation, and a standing fact true of every beat is noise in a context
+window), which is right for a person's own skin and arguably wrong for blood
+somebody has just been drenched in — though that case is a substance and IS
+delivered.
+
 ## 7. Experiments not yet run
 
 Measurements the design notes name as the thing that would settle a question. An
