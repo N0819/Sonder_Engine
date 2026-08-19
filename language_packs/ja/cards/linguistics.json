@@ -1971,6 +1971,19 @@
           ]
         }
       ]
+    },
+    "_VERDICT_TEMPLATE": "{label}——{detail}",
+    "_VERDICT_UNENTERED": {
+      "$type": "tuple",
+      "items": [
+        "未踏",
+        "他に出口はないが、まだ中に入ったことがない。部屋の中に何があるかは、その先に何があるかとは別の問題であり、たどり着く価値のあるものはたいてい通り道ではない"
+      ]
+    },
+    "_VERDICT_DETAILS": {
+      "entered_recently": "直近の十数歩でそこに{count}回入っている",
+      "frontier_adjacent": "。その先の部屋には、まだ通ったことのない扉がある",
+      "frontier_distant": "。まだ通ったことのない最も近い扉は、その方向におよそ{hops}部屋先にある"
     }
   },
   "agents.narration": {

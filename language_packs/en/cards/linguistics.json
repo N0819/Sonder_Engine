@@ -1649,6 +1649,19 @@
           ]
         }
       ]
+    },
+    "_VERDICT_TEMPLATE": "{label} — {detail}",
+    "_VERDICT_UNENTERED": {
+      "$type": "tuple",
+      "items": [
+        "unentered",
+        "it has no other way out, but you have never been inside it -- what is IN a room is a different question from what it leads to, and things worth reaching are usually not thoroughfares"
+      ]
+    },
+    "_VERDICT_DETAILS": {
+      "entered_recently": "you have been in there {count} times in your last dozen paces",
+      "frontier_adjacent": "; the room through it still has a door you have never taken",
+      "frontier_distant": "; the nearest door you have never taken lies about {hops} rooms down that way"
     }
   },
   "agents.narration": {

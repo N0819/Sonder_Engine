@@ -1352,15 +1352,12 @@ def _verdict(entry, frontier_hops=None):
         # arm. Every arrival is a cul-de-sac: you go to the shrine, the
         # bedroom, the vault BECAUSE of what is in it, not to pass through.
         if key == "visibly_no_way_through" and entry.get("untried"):
-            label = "unentered"
-            because = ("it has no other way out, but you have never been "
-                       "inside it -- what is IN a room is a different "
-                       "question from what it leads to, and things worth "
-                       "reaching are usually not thoroughfares")
+            label, because = _ling("_VERDICT_UNENTERED")
         detail = because
+        _details = _ling("_VERDICT_DETAILS")
         if verdict_key == "circling_here" and entry.get("entered_recently"):
-            detail = (f"you have been in there {entry['entered_recently']} "
-                      "times in your last dozen paces")
+            detail = _details["entered_recently"].format(
+                count=entry["entered_recently"])
         # The distance rides ANY verdict that has one, not only `known`.
         # Restricting it to `known` suppressed it exactly where it mattered
         # most: measured in maze arm A11, a character stood with both exits
@@ -1372,12 +1369,12 @@ def _verdict(entry, frontier_hops=None):
         # still be the way out.
         if isinstance(frontier_hops, int) and frontier_hops >= 1:
             if frontier_hops == 1:
-                detail += ("; the room through it still has a door you have "
-                           "never taken")
+                detail += _details["frontier_adjacent"]
             else:
-                detail += ("; the nearest door you have never taken lies "
-                           f"about {frontier_hops} rooms down that way")
-        entry["verdict"] = f"{label} — {detail}"
+                detail += _details["frontier_distant"].format(
+                    hops=frontier_hops)
+        entry["verdict"] = _ling("_VERDICT_TEMPLATE").format(
+            label=label, detail=detail)
         if verdict_key in _DISCOURAGING:
             # These numbers all say the same thing as the verdict, and
             # together they were three times the text of the untried door

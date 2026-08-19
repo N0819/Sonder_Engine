@@ -382,6 +382,23 @@ translations = [
 ]
 for row, text in zip(verdicts, translations):
     row["items"][2] = text
+# `unentered` is the one verdict the code mints rather than reading from the
+# table, so it needs its own row here or a Japanese story receives a Japanese
+# verdict with an English sentence welded on. Same for the clauses that ride on
+# top of any verdict.
+ling["agents.character"]["_VERDICT_TEMPLATE"] = "{label}——{detail}"
+ling["agents.character"]["_VERDICT_UNENTERED"]["items"] = [
+    "未踏",
+    ("他に出口はないが、まだ中に入ったことがない。部屋の中に何があるかは、"
+     "その先に何があるかとは別の問題であり、たどり着く価値のあるものは"
+     "たいてい通り道ではない"),
+]
+ling["agents.character"]["_VERDICT_DETAILS"].update({
+    "entered_recently": "直近の十数歩でそこに{count}回入っている",
+    "frontier_adjacent": "。その先の部屋には、まだ通ったことのない扉がある",
+    "frontier_distant":
+        "。まだ通ったことのない最も近い扉は、その方向におよそ{hops}部屋先にある",
+})
 
 ling["agents.narration"]["_CRAFT_TELLS"].extend([
     {"$type": "tuple", "items": ["小さく息を吐(?:く|いた)", "小さく息を吐く"]},
