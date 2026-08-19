@@ -60,9 +60,13 @@ from core.db import q, wget, wset
 # declined eight consecutive invitations, which is a decision, not a missed
 # window -- and expiry unsays nothing, it only stops re-asking. Nothing here is
 # tuned per subject kind (a place outliving a person, say): this module cannot
-# tell a place from a person without guessing at a bare capitalized phrase, and
-# the mechanism has produced 0 claims across the whole production corpus, so
-# there is no measurement to tune against yet. See the note in
+# tell a place from a person without guessing at a bare capitalized phrase.
+#
+# The corpus is no longer empty, and what it measures is the GATE rather than
+# the TTL: chat 67 holds 7 claims, all 7 ratified, 0 contradicted, 0 expired
+# -- every one of them by the same-beat brush-past `_verdicts` no longer
+# accepts. So the TTL has still never been tested against a claim that had to
+# survive to be taken up; do not tune it from that 7. See the note in
 # docs/design/BACKGROUND_LIFE_DESIGN.md.
 CLAIM_TTL_TURNS = 8
 # Never surface more than this many at once; the Director has a job to do.
@@ -96,6 +100,13 @@ _TITLES = frozenset({
     "number one", "counselor", "counsellor", "helm", "conn", "ops", "tactical",
     "engineering", "bridge", "sickbay",
 })
+
+# The shortest reference an ADOPTION may be inferred from. Explicit
+# ratification has no such floor -- the Director naming a claim is a decision
+# whatever the name's length -- but inference reads a name out of running
+# prose, and a two- or three-character run says nothing about whether the
+# fiction took anything up.
+MIN_INFERRED_REF_CHARS = 4
 
 # A ratification key must be short enough to actually appear in later prose.
 # The Enterprise run had La Forge self-declare a whole sentence as a ref, so
@@ -211,9 +222,11 @@ def _mint(chat_id, turn_idx, claims, stored):
     """{key: record} for the claims of this beat that are not already stored.
 
     Shared by `record_claims` and `prepare_canon` so both see exactly the same
-    set: a claim can be asserted and ratified in the SAME beat (the manager
-    speaks before the Director resolves), so the pre-transaction pass has to
-    know about claims that are not in the blob yet.
+    set: a claim can be asserted and EXPLICITLY settled in the same beat, so
+    the pre-transaction pass has to know about claims that are not in the blob
+    yet. (Inferred adoption cannot land on the claim's own beat -- see
+    `_verdicts` -- because `background_react` runs after `director_resolve`,
+    so that beat's record predates the claim.)
     """
     minted = {}
     for c in claims or []:
@@ -356,6 +369,32 @@ def prepare_canon(chat_id, turn_idx, new_claims, resolved_text,
     return {k: v for k, v in zip(ratified, vectors) if v is not None}
 
 
+def _named_in_record(ref, text_cf):
+    """True when `ref` appears in the objective record AS a reference.
+
+    A substring is not a reference: "Rose" occurs inside "prose", and the
+    branch this feeds writes canon, which is a one-way door. The boundary is
+    required at the name's LEADING edge only, because a name legitimately
+    inflects at its trailing one -- a plural, a possessive, a case ending are
+    the fiction using the name rather than a different word.
+
+    The boundary test asks for a CASED letter rather than any letter. A script
+    that marks words with case also separates them, so a boundary is there to
+    be found; a script that writes no spaces cannot satisfy that rule at all,
+    and holding it to one would make every reference in it unratifiable.
+    """
+    needle = str(ref or "").casefold().strip()
+    if len(needle) < MIN_INFERRED_REF_CHARS:
+        return False
+    start = text_cf.find(needle)
+    while start != -1:
+        prev = text_cf[start - 1] if start else ""
+        if not (prev.isalpha() and prev.lower() != prev.upper()):
+            return True
+        start = text_cf.find(needle, start + 1)
+    return False
+
+
 def _verdicts(stored, turn_idx, resolved_text, ratified_refs, contradicted_refs):
     """(ratified, contradicted, conflicted, expired) claim keys for one sweep.
 
@@ -392,8 +431,23 @@ def _verdicts(stored, turn_idx, resolved_text, ratified_refs, contradicted_refs)
             if named_true:
                 conflicted.append(key)
             continue
-        if named_true or (bool(refs) and any(
-                r.casefold() in text_cf for r in refs if len(r) >= 4)):
+        # Adoption inferred from the record can only be inferred from a LATER
+        # record. `background_react` runs after `director_resolve`
+        # (agents/runtime.py's plan), so the resolved event of the beat a
+        # claim was made in was written before the presence spoke: a reference
+        # standing in it is the presence echoing the Director's own prose,
+        # which is the opposite of the Director taking up the presence's
+        # invention. Ratifying is a deliberate act and canon is a one-way
+        # door, so a brush-past may not open it. Measured, chat 67: 7 claims,
+        # 7 ratified, 0 contradicted, 0 expired -- a three-outcome design
+        # collapsed onto its one irreversible branch, on same-beat text.
+        # An EXPLICIT verdict is exempt: naming a claim is a decision whenever
+        # it arrives, and `_mint` exists so the same-beat spelling of that
+        # decision still finds the record.
+        adopted_later = (
+            turn_idx > int(rec.get("turn") or 0) and bool(refs)
+            and any(_named_in_record(r, text_cf) for r in refs))
+        if named_true or adopted_later:
             ratified.append(key)
             continue
         if turn_idx > int(rec.get("expires_turn") or -1):
@@ -407,8 +461,9 @@ def settle_claims(chat_id, turn_idx, resolved_text, ratified_refs=(),
 
     RATIFIED -- the Director adopted it, either naming it in
     `state_diff.ratified_claims` or writing its distinctive reference into the
-    objective record. The claim is WRITTEN INTO CANON here (`canon_entry`);
-    flipping a status field and stopping was the defect this replaces.
+    objective record of a LATER beat (`_verdicts`). The claim is WRITTEN INTO
+    CANON here (`canon_entry`); flipping a status field and stopping was the
+    defect this replaces.
 
     CONTRADICTED -- the Director named it in `state_diff.contradicted_claims`.
     The record is kept, claimant and all, rather than deleted: that a bystander
