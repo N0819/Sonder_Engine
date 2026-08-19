@@ -119,7 +119,7 @@ def test_dump_and_restore_carry_the_embedding_stamp(temp_db, monkeypatch):
     or a branch converts every entry in the bank into one judged on width
     alone, forever.
     """
-    import memory
+    from mind import memory
 
     monkeypatch.setattr(
         memory, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
@@ -161,7 +161,7 @@ def test_a_legacy_dump_with_no_stamp_still_restores_unstamped(
     """The stamp is a fact about the bytes, never a default: an older snapshot
     carries a vector and no provenance, and guessing one would record a guess
     as a measurement."""
-    import memory
+    from mind import memory
 
     monkeypatch.setattr(
         memory, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
@@ -188,7 +188,7 @@ def test_cloning_a_book_for_a_chat_keeps_the_stamp(temp_db, monkeypatch):
     """Same defect, same file, a different verbatim reuse: the clone copies
     the source row's bytes and used to leave the two provenance columns
     behind."""
-    import memory
+    from mind import memory
 
     monkeypatch.setattr(
         memory, "embed_texts", lambda values: [[0.25] * 256 for _ in values])
@@ -227,7 +227,7 @@ def test_link_restore_reports_what_it_could_not_put_back(temp_db, monkeypatch):
     `except Exception: pass` -- an insert that raised. The chat comes back
     with fewer lorebook links than it had and nothing anywhere says so.
     """
-    import memory
+    from mind import memory
 
     chat_id = temp_db.qi(
         "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",

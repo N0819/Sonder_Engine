@@ -46,11 +46,11 @@
 | `llm/providers.py` | 3158 |  | `core.db`, `core.logging_utils` |
 | `llm/schemas.py` | 5259 |  | — |
 | `mind/__init__.py` | 6 |  | — |
-| `mind/affect.py` | 2186 |  | `mind.theory_of_mind` |
+| `mind/affect.py` | 2207 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 360 |  | — |
-| `mind/memory.py` | 5496 |  | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.theory_of_mind` |
-| `mind/psychology_runtime.py` | 502 |  | — |
-| `mind/theory_of_mind.py` | 703 |  | — |
+| `mind/memory.py` | 5605 |  | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.theory_of_mind` |
+| `mind/psychology_runtime.py` | 569 |  | — |
+| `mind/theory_of_mind.py` | 744 |  | — |
 | `persist/__init__.py` | 6 |  | — |
 | `persist/chat_archive.py` | 1115 |  | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
 | `persist/checkpoints.py` | 1149 |  | `core.db`, `mind.memory` |
@@ -526,14 +526,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `resolve_affect()` | 806 | 184 lines |
-| `apply_project_ops()` | 1399 | 137 lines |
+| `resolve_affect()` | 809 | 184 lines |
+| `apply_intent_ops()` | 1225 | 142 lines |
+| `apply_project_ops()` | 1413 | 137 lines |
 | `appraise()` | 513 | 136 lines |
-| `apply_intent_ops()` | 1220 | 133 lines |
-| `normalize_wants()` | 996 | 87 lines |
-| `validate_drive_shift()` | 1969 | 79 lines |
-| `update_drive_strain()` | 1850 | 77 lines |
-| `_advance_intent()` | 1113 | 74 lines |
+| `normalize_wants()` | 999 | 89 lines |
+| `update_drive_strain()` | 1864 | 83 lines |
+| `validate_drive_shift()` | 1990 | 79 lines |
+| `_advance_intent()` | 1118 | 74 lines |
 
 ### `mind/canon_provenance.py`
 
@@ -554,9 +554,9 @@
 |---|---:|---:|
 | `build_character_memory_context()` | 2900 | 274 lines |
 | `search_memories()` | 1911 | 228 lines |
-| `rebuild_embeddings()` | 4868 | 213 lines |
-| `embedding_bank_status()` | 4718 | 125 lines |
-| `rebuild_checkpoint_embeddings()` | 5120 | 124 lines |
+| `rebuild_embeddings()` | 4977 | 213 lines |
+| `embedding_bank_status()` | 4827 | 125 lines |
+| `rebuild_checkpoint_embeddings()` | 5229 | 124 lines |
 | `contrast_memory()` | 2174 | 117 lines |
 | `_with_reading()` | 2670 | 101 lines |
 | `_origin_on_drift()` | 2801 | 97 lines |
@@ -567,25 +567,25 @@
 |---|---:|---:|
 | `resolve_hedonic()` | 96 | 138 lines |
 | `resolve_stress()` | 236 | 89 lines |
-| `apply_belief_updates()` | 335 | 57 lines |
-| `cognitive_absorption()` | 458 | 45 lines |
-| `apply_association_updates()` | 394 | 44 lines |
+| `apply_belief_updates()` | 380 | 74 lines |
+| `apply_association_updates()` | 456 | 49 lines |
+| `cognitive_absorption()` | 525 | 45 lines |
+| `_within_cap()` | 341 | 29 lines |
 | `elapsed_psych_units()` | 79 | 15 lines |
 | `_float()` | 11 | 6 lines |
-| `_authored_beliefs()` | 327 | 6 lines |
 
 ### `mind/theory_of_mind.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_mind_model_updates()` | 322 | 158 lines |
-| `select_active_hypotheses()` | 611 | 62 lines |
-| `rekey_place_claims()` | 270 | 50 lines |
-| `claim_similarity()` | 213 | 35 lines |
-| `mind_models_for_payload()` | 481 | 33 lines |
-| `belief_credence()` | 516 | 33 lines |
-| `cap_mind_model_updates()` | 99 | 19 lines |
-| `due_for_reappraisal()` | 688 | 16 lines |
+| `apply_mind_model_updates()` | 364 | 153 lines |
+| `select_active_hypotheses()` | 652 | 62 lines |
+| `rekey_place_claims()` | 312 | 50 lines |
+| `belief_credence()` | 553 | 37 lines |
+| `claim_similarity()` | 227 | 35 lines |
+| `mind_models_for_payload()` | 518 | 33 lines |
+| `_same_belief()` | 263 | 26 lines |
+| `cap_mind_model_updates()` | 108 | 19 lines |
 
 ### `persist/chat_archive.py`
 
