@@ -599,6 +599,42 @@ def test_the_conditions_shape_a_prompt_shows_is_the_shape_declared():
         assert plural.search(blob), f"{pack.id} shows no conditions shape"
 
 
+def test_every_level_rung_the_engine_accepts_is_published_in_every_pack():
+    """A condition whose `state.level` the engine reads must publish the whole
+    ladder in the sheet that writes it, in every story pack.
+
+    `awareness` does: the body specialist's chunk carries
+    `level in {unconscious|sedated|asleep|dazed}`. `restraint` did not -- what
+    the specialist was handed was a parenthetical of examples, and `encased`
+    appeared nowhere in either pack. `_normalize_restraint_level` then folded
+    every word it could not read down to `held`, the mildest rung, so a body
+    pinned under a beam and a hand on a wrist were recorded as the same state.
+    An unpublished rung is unreachable in practice and silently wrong in the
+    record, which is why this asserts over the enums rather than over a list
+    of words: the next `level` ladder is caught by adding its constant here.
+    """
+    from story.scene import AWARENESS_LEVELS, RESTRAINT_LEVELS
+
+    ladders = {
+        # `awake` is the absence of the condition, never a value to record.
+        "awareness": tuple(l for l in AWARENESS_LEVELS if l != "awake"),
+        "restraint": RESTRAINT_LEVELS,
+    }
+    for pack in installed_language_packs(refresh=True).values():
+        if not pack.story:
+            continue
+        chunk = pack.card("system_prompts")["specialists"]["body"]["chunks"]["conditions"]
+        for kind, rungs in ladders.items():
+            assert f"kind:'{kind}'" in chunk, (
+                f"{pack.id} never names the {kind} condition to the "
+                "specialist that has to write it")
+            missing = [rung for rung in rungs if rung not in chunk]
+            assert not missing, (
+                f"{pack.id} publishes no {kind} rung {missing}; a level the "
+                "engine accepts and no prompt states is a rung nothing can "
+                "reach")
+
+
 def test_no_english_compat_export_survives_without_a_reader():
     """`llm/prompts.py`'s module constants are eagerly-bound views of the
     ENGLISH pack, kept under the comment "compatibility exports used by the
