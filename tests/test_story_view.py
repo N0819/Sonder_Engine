@@ -309,6 +309,62 @@ class TestPlayerView:
             assert player_view(story["chat_id"], entry["id"])["viewer"] == entry
 
 
+class TestOneFrameAtATime:
+    """`story_view` reports the frame of the LATEST TURN, which `latest_turn`
+    picks across every frame. Every world read beside it went through the
+    unset `active_frame_id` contextvar, which is the PRESENT frame -- so a
+    multi-frame story whose latest turn is elsewhere got frame 5's label
+    beside the present frame's rooms, positions, clock and ledger."""
+
+    def _elsewhere(self, temp_db, story):
+        from core.db import active_frame_id, wset
+        from web import app
+
+        future = app.frames_create(story["chat_id"],
+                                   {"label": "Future", "ordinal": 10,
+                                    "kind": "future"})
+        token = active_frame_id.set(future["id"])
+        try:
+            wset(story["chat_id"], "scene", {
+                "location": "the drowned city", "time": "after",
+                "rooms": {"pier": {"name": "The Pier"}},
+                "positions": {"Sam": "pier", "Ilse": "pier"},
+                "entities": {}})
+            wset(story["chat_id"], "simulation_clock",
+                 {"elapsed_seconds": 900.0, "display": "after",
+                  "time_scale": "scene"})
+            wset(story["chat_id"], "known", {"Sam": ["Ilse"]})
+        finally:
+            active_frame_id.reset(token)
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+            "VALUES(?,?,?,?,?)",
+            (story["chat_id"], 9, "look", time.time(), future["id"]))
+        return future, turn_id
+
+    def test_the_scene_belongs_to_the_frame_the_view_reports(self, temp_db,
+                                                             story):
+        future, _ = self._elsewhere(temp_db, story)
+
+        view = story_view.story_view(story["chat_id"])
+
+        assert view["frame"]["id"] == future["id"]
+        assert view["scene"]["location"] == "the drowned city"
+        assert view["scene"]["positions"] == {"Sam": "pier", "Ilse": "pier"}
+        assert view["clock"]["display"] == "after"
+
+    def test_the_player_view_reads_the_ledger_of_that_frame(self, temp_db,
+                                                            story):
+        """`known` is the recognition ledger and it is frame-scoped: who Sam
+        has met in the present is not who Sam has met in the future."""
+        self._elsewhere(temp_db, story)
+
+        view = player_view(story["chat_id"], "player")
+
+        assert view["knows"] == ["Ilse"]
+        assert view["location"]["room_id"] == "pier"
+
+
 class TestTheViewerIsNamedTheWayTheStoryIsKeyed:
     """A viewer's `name` is a join key, not a label. `known` and the scene's
     `positions` are keyed by the SHEET's identity name, so a viewer named from
