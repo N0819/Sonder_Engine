@@ -113,7 +113,6 @@
   "+ value": "+ 価値",
   ",textarea,input": ",textarea,input",
   ". Saving stores a story-local override.": "。保存すると、この物語だけの上書き設定になります。",
-  ". They'll need this to actually be reachable -- run a tunnel (e.g. cloudflared tunnel --url http://localhost:8008) and swap this page's origin for the tunnel's public URL before sending it.": "。実際に接続できるようにするには、トンネルを実行し（例：cloudflared tunnel --url http://localhost:8008）、送信前にこのページのオリジンをトンネルの公開URLに差し替える必要があります。",
   "0 greetings": "挨拶なし",
   "1024d · best value · 40MB · ~4min rebuild": "1024d · ベストバリュー · 40MB · 約4分で再構築",
   "1024d · common on local Ollama": "1024d · ローカルOllamaで一般的",
@@ -224,7 +223,6 @@
   "Appearance fill failed: ${exc}": "外見の入力に失敗しました：${exc}",
   "Appearance fill returned no usable data. Raw output: ${raw[:800]}": "外見の入力は使用可能なデータを返しませんでした。生の出力：${raw[:800]}",
   "Appearance reset to Sonder defaults.": "外見がSonderのデフォルトにリセットされました。",
-  "Applied lorebook plan: ${": "適用されたロアブックプラン：${",
   "Applies to what the engine": "エンジンが何に適用するか",
   "Apply accepted operations": "承認された操作を適用",
   "Applying update…": "更新を適用中…",
@@ -1954,5 +1952,11 @@
   "Chat archive is version ${typed_data.version}, but this engine reads archives up to version ${ARCHIVE_VERSION}. Importing it would silently drop the newer data; update the engine first.": "チャットアーカイブはバージョン ${typed_data.version} ですが、このエンジンが読み込めるアーカイブはバージョン ${ARCHIVE_VERSION} までです。このままインポートすると新しいデータが黙って失われます。先にエンジンを更新してください。",
   "First-run setup can only be completed from the machine running Sonder.": "初回セットアップは、Sonder を実行しているマシンからのみ完了できます。",
   "memory vector ${vkey}: bytes do not hash to their own address": "メモリベクトル ${vkey}: バイト列が自身のアドレスとハッシュ一致しません",
-  "memory vector ${vkey}: payload is not a well-formed float32 blob": "メモリベクトル ${vkey}: ペイロードが正しい float32 ブロブではありません"
+  "memory vector ${vkey}: payload is not a well-formed float32 blob": "メモリベクトル ${vkey}: ペイロードが正しい float32 ブロブではありません",
+  "${result.result?.books_created || 0} books, ${result.result?.entries_created || 0} entries, ${result.result?.links_created || 0} links.": "ブック ${result.result?.books_created || 0} 件、エントリ ${result.result?.entries_created || 0} 件、リンク ${result.result?.links_created || 0} 件。",
+  "Applied lorebook plan: ${counts}": "ロアブック計画を適用しました: ${counts}",
+  "Operations the engine refused": "エンジンが拒否した操作",
+  "These were in the plan you approved and were not applied. Everything else in the plan landed.": "これらは承認された計画に含まれていましたが、適用されませんでした。計画のそれ以外はすべて反映されています。",
+  ". They'll need this to actually be reachable -- run a tunnel (e.g. cloudflared tunnel --url http://localhost:8008) and swap this page's origin for the tunnel's public URL before sending it. Start the server with SONDER_PUBLIC=1 when you do: without it the session cookies are sent without the Secure flag, so anything that reaches this origin over plain http can read them.": "このリンクは一度だけ有効で、30分で期限切れになり、相手は指定のペルソナとしてのみプレイできます。実際に到達できるようにするにはトンネルを実行し(例: cloudflared tunnel --url http://localhost:8008)、送信前にこのページのオリジンをトンネルの公開URLに置き換えてください。その際はサーバーを SONDER_PUBLIC=1 で起動してください。指定しないとセッションCookieに Secure フラグが付かず、平文httpでこのオリジンに到達できるものから読み取られます。",
+  "Applied lorebook plan: ${counts} Refused: ${skipped.length}.": "ロアブック計画を適用しました: ${counts} 拒否: ${skipped.length}。"
 }

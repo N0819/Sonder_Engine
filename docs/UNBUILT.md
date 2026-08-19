@@ -136,16 +136,22 @@ every route computed over it. The maze has coordinates to check against; a
 general scene may not, so the honest fix may be "require a stated basis for a
 new edge" rather than a geometric test.
 
-### 1.3 `world/survival.py`'s sleep-recovery branch is dead
+**Narrowed 2026-08-19.** Reciprocity landed: a NEW passable edge whose standing
+reciprocal reads `wall` is refused unless the same diff re-declares that side
+passable — the mirror of `_shield_standing_passage`'s two-sided-sealing rule,
+scoped to `wall` only, since a standing `closed_door` is openable from either
+side and `one_way_window` asymmetry is deliberate vocabulary.
 
-`tick_vitals(..., asleep=)` is derived from `scene.contained[x]["mode"] ==
-"asleep"` — a **containment** mode ("carried", "pocket", …), never an awareness
-level. The set is always effectively empty: **nobody has ever recovered stamina
-by sleeping.**
+A room-EXISTENCE check was landed and then removed, which is worth recording so
+nobody reaches for it again: `tests/test_spatial.py` pins a live west-wing
+mapping flow where a corridor's edge is minted BEFORE the room exists, and
+`neighbor_map` tolerates dangling edges by design. An existence rule has to wait
+for room-and-edge minting to become atomic.
 
-Consequence already paid: natural waking had to be keyed on the simulation clock
-(eight hours) rather than on the rest a body actually needed, because "rested" is
-not currently computable. Fix the source and the better rule becomes available.
+What remains is this entry's own conclusion — a stated BASIS for a new
+adjacency between known rooms (`authored|walked|opened|generated_map|asserted`),
+with the orchestrator rather than the model stamping the trusted values. That is
+a schema and prompt change across the mapping and spatial specialists.
 
 ### 1.5 A character cannot revise a bearing they learned wrong
 
@@ -166,46 +172,6 @@ Related, and wider: a character can revise a belief about the world and has
 almost no mechanism for revising a belief about themselves. Project
 displacement is the only one.
 
-
-### 1.6 See-through barriers mint walkable edges
-
-**Real in story play; cannot affect the maze arms** (generated and authored
-mazes have only `open` edges).
-
-`update_place_graph`'s doorway filter (`persist/commit.py`, two sites) excludes only
-`wall`. But `spatial._SIGHT_BARRIERS` is `{"open", "open_door", "window",
-"bars"}`, so a barred window or a pane of glass between two rooms records a
-walkable graph edge. You can see through a barred window; you cannot walk
-through one. Confirmed directly: a `window` between A and B yields
-`edges from A: {'B': {'last_confirmed': 1, 'bearing': 'e', 'basis': 'seen'}}`.
-
-This matters more since `_frontier_hops` replaced `_frontier_beyond`: the old
-answer was a boolean ("is there new ground that way"), and a wrong boolean is
-merely vague. The new one is a distance rendered to the character as *"the
-nearest door you have never taken lies about 3 rooms down that way"*. A wrong
-distance is a specific falsehood about their own remembered ground, and the kind
-a character acts on.
-
-**Not a one-line filter** — it requires deciding what a *route* means to a
-remembering mind, and neither existing set answers that question:
-
-| set | means | wrong here because |
-|---|---|---|
-| `_SIGHT_BARRIERS` | can be seen through | includes glass and bars |
-| `_PASSABLE_BARRIERS` | passable **this beat** | excludes `closed_door`, which a character can simply open |
-
-The set wanted is roughly `_PASSABLE_BARRIERS | {"closed_door"}` — *a way I could
-go through, now or by opening it* — and possibly `locked_door` too, since a
-remembered route past a locked door is still a route if you expect to get a key.
-That is a judgement about the character's model of a route, so it wants deciding
-rather than defaulting.
-
-**Scope note.** The legacy `known_exits` ledger is worse and always has been: it
-records every declared adjacency including solid `wall` edges, and
-`_annotate_known_exits` merges it into the same BFS adjacency. The graph is a
-strict improvement rather than a regression, and this predates it. Any fix must
-also cover the legacy writer in `record_spatial_experience`, or the wall edges
-simply re-enter through the merge.
 
 ### 1.7 JSON validation stalls cost beats
 
@@ -230,17 +196,6 @@ the room may not receive it through the dialogue channel. Pinned as intended at
 `tests/test_schema_leniency.py`. Deciding it needs the hearing path looked at,
 not a better regex.
 
-
-### 1.8 Promotion seeds are minted from the objective event (P5)
-
-`story/importers.py`'s promotion path uses the full `resolved_event` of every turn
-mentioning the name — **including concealed acts, with no perception filter** —
-and `persist/commit.py` writes the result with `provenance: "witnessed"`. The autonomous
-promotion path has no reviewer, so a promoted background character begins life
-holding entitled information tagged as though they had seen it.
-
-The widest surviving instance of "the omniscient record re-enters a later
-context".
 
 ### 1.10 An entity's free-text `state` never ages, and a mind reads its own stale copy (S3-A8)
 
@@ -281,6 +236,21 @@ ageing/reconciliation rule for free-text state keys, not another guard. No
 schema change. Root cause — free-text state blobs with omission-only
 reconciliation and `_PROTECTED_STATE_KEYS` — untouched.
 
+**Narrowed 2026-08-19.** `breath` and `voice_quality` — the two keys measured
+persisting verbatim — now expire on every merge unless the incoming diff
+re-asserts them, across all entities including ones the diff never mentions.
+
+`activity`, the sharpest read-back key, deliberately does NOT expire yet:
+`tests/test_body_position.py` pins it as load-bearing standing state, and a
+first attempt at expiring it broke that test. Which of the two contracts wins is
+a product decision and has to be made before the key moves. `posture` and
+`held_items` stay durable by design — those are the S3-A8 reconciliation
+problem, not an ageing one.
+
+The reviewer's proposed `raise` on an undeclared key was declined: entity
+`state` is deliberately open free text that models write into, and
+`_ENTITY_DEFAULT_FIELDS` establishes the opposite doctrine — an unlisted key is
+copied, silence is never an erasure.
 
 ### 1.11 `ctx.warnings` reaches the pipeline drawer but not the story reader
 
@@ -498,6 +468,21 @@ seriously tries to run a crowd of identical bodies.
 Until then, the practical guidance is the one the failure teaches: **a fiction
 with several of the same thing needs several names.** The engine cannot count
 `a Dalek`.
+
+**The fragmentation half landed 2026-08-19.** Records now carry `entity_id` (a
+stable scene-entity binding, made only when EXACTLY one body answers to the
+identity) and `aka` (former spellings). A presence that acquires a proper name
+mid-story keeps its dialogue turns, `addressed_turns`, sketch, blurb and
+promotion progress across the rename, and promotion cleanup sweeps the
+entity-bound and `aka`-connected spellings so an orphan cannot react alongside
+its own sheet. The ledger's keys stay display-name strings, so the raw readers
+named below need no change and no SQL migration was required —
+`background_presences` is a frame-scoped world key and rides the existing
+whole-`world` carriage.
+
+The collision half above is UNCHANGED and still correct: ambiguity refuses to
+merge, because an over-merge welds two characters into one and a split is the
+recoverable direction.
 
 ### 1.18 The fallback is doing all the work
 
@@ -939,24 +924,6 @@ without having been in the room for it. And re-measure the fire rate after --
 a lane that has never fired gives `no chances`, not 0%, and the first nonzero
 denominator is the first evidence the mechanism exists.
 
-### 1.31 The Director cannot name what the player is carrying
-
-`agents/director._carried_reports_view` walks `active_cast` and reads `cstate`.
-The player's held reports live in `carriers.PERSONA_STATE_KEY` (a persona has
-no `chat_chars` row), so they are invisible to the one stage that has to name a
-`world_event_id` in a `courier_ops` or telling op.
-
-The mechanism underneath works — a scratch drive shows the player acquiring a
-surface, paying a rider, and the claim arriving two retellings fainter. But in
-a real story the Director is asked to encode "I send word east about the thing
-I just watched" while holding an empty list, so it has nothing to name. The
-carrier half landed in `7b81e8a`; this is what stops it reaching production.
-
-Roughly five lines: route that view through `carriers._carriers` rather than
-`active_cast`. Its own docstring already records this exact defect — an id the
-Director was never shown — having been fixed there once before, which is the
-argument for fixing the enumeration rather than the symptom.
-
 ### 1.32 A region assertion has an owner only by slot position
 
 `spatial.owned_region` now makes a region UNAMBIGUOUS: `(who, where)`, so no
@@ -1021,11 +988,21 @@ the metric stops reporting 100% success on a 0% success rate.
 returns nothing. `memory_retrieval_fts`, at 10,696 rows, is the one retrieval
 actually uses.
 
-Worse than unused: its triggers live in a MIGRATION, and `init()` skips every
-migration for a fresh database. So any Sonder database created since that
-change has the table, no triggers, and nothing in it — and nothing has ever
-noticed, in either direction. It is carried through export, import and every
-schema check.
+Its triggers lived in a MIGRATION while `init()` skips every migration for a
+fresh database, so any Sonder database created since that change had the table,
+no triggers and nothing in it.
+
+**That half is fixed, and it was never the dangerous half.** The same drift hit
+`lore_fts`, which is NOT dead — it supplies the 0.35 keyword term of
+`search_lore` — so every install created in that window ranked lore on the
+vector term alone, scoring 0.0 for every entry, silently. All six triggers now
+live in `SCHEMA` as `CREATE TRIGGER IF NOT EXISTS`, v30->v31 rebuilds both
+indexes (required for correctness, not backfill: live triggers over a desynced
+external-content index corrupt it on the next UPDATE), and
+`TestFreshEqualsMigrated` now holds fresh and migrated `sqlite_master` equal so
+the class cannot recur.
+
+What remains here is only the removal of the dead table itself.
 
 Found while extracting the memory model into Nullo Engine, which dropped it on
 this measurement rather than porting it. Removal here needs a migration and

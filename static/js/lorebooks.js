@@ -3445,11 +3445,38 @@ function renderLorePlanPreview(state, container) {
               { plan: accepted, job_id: plan._job?.id }
             );
 
-            toast(`Applied lorebook plan: ${`${result.result?.books_created || 0} books, `
+            // A refused operation used to be silent: the counts were honest
+            // and nobody reads "0 links" as a failure report. An op the host
+            // ACCEPTED and the engine then declined has to say so, or the
+            // plan review screen is asking for approval it does not honour.
+            const skipped = result.result?.skipped || [];
+            const counts = `${result.result?.books_created || 0} books, `
                 + `${result.result?.entries_created || 0} entries, `
-                + `${result.result?.links_created || 0} links.`}`,
-              "ok"
+                + `${result.result?.links_created || 0} links.`;
+            // No plural ternary in the string: a `? "" : "s"` span is a
+            // canonical token every pack must carry verbatim, and English
+            // pluralisation is the one thing a translation cannot honour
+            // without either mangling the token or writing a stray "s" into
+            // a language that has no plural. Count first, noun fixed.
+            toast(
+              skipped.length
+                ? `Applied lorebook plan: ${counts} Refused: ${skipped.length}.`
+                : `Applied lorebook plan: ${counts}`,
+              skipped.length ? "warn" : "ok"
             );
+            if (skipped.length) {
+              modal("Operations the engine refused", b => {
+                b.append(el("div", { class: "small dim", style: "margin-bottom:8px" },
+                  "These were in the plan you approved and were not applied. "
+                  + "Everything else in the plan landed."));
+                const list = el("ul", { translate: "no" });
+                for (const item of skipped) {
+                  list.append(el("li", {}, txt(
+                    typeof item === "string" ? item : JSON.stringify(item))));
+                }
+                b.append(list);
+              });
+            }
 
             await refreshLoreUI(state.selected.id);
           }
