@@ -1,8 +1,12 @@
 # A fiction bank built to ask what a borrowed one cannot
 
-Status: EVIDENCE. Measured 2026-08-20. Three independently generated worlds,
-270 rows each, 71 positive probes and 36 negatives, scored through the
-production `search_memories` seam by `tools/memory_probe_harness.py`.
+Status: EVIDENCE. Measured 2026-08-20. Six independently generated worlds,
+270 rows each -- 144 planted facts, of which 36 are belief revisions and 36
+are provenance cases -- scored through the production `search_memories` seam
+by `tools/memory_probe_harness.py`, with conduct measured separately by
+`tools/benchmark_memory_rationality.py`. Sections 3-5 report the first three
+worlds, which is what existed when they were written; section 6 carries all
+six.
 
 ## 1. Why build one at all, with 470 borrowed probes already in hand
 
@@ -132,16 +136,18 @@ slightly got in the way.
 | 2 | 6 | 0 | 0 | 0 |
 | 3 | 3 | 2 | 0 | 1 |
 | 4 | 1 | 3 | **1** | 1 |
+| 5 | 6 | 0 | 0 | 0 |
 | 6 | 4 | 1 | 0 | 1 |
-| **all** | **20** | **6** | **1** | **3** |
+| **all** | **26** | **6** | **1** | **3** |
 
-**Reasoned from the newer evidence: 26/30 (87%). Named the contradiction
-aloud: 20/30 (67%). Took the superseded belief: 1/30 (3%).**
+**Reasoned from the newer evidence: 32/36 (89%). Named the contradiction
+aloud: 26/36 (72%). Took the superseded belief: 1/36 (3%).**
 
 **The two numbers behave differently, and that is the most useful thing here.**
-Getting it RIGHT converges -- 88% at n=24, 87% at n=30. Saying so ALOUD does
-not: the per-world conflict rate runs 100%, 100%, 50%, 17%, 67%, a six-fold
-spread across worlds built by one tool with identical parameters.
+Getting it RIGHT converges -- 88%, 87%, 89% at n = 24, 30, 36. Saying so ALOUD
+does not: the per-world conflict rate runs 100%, 100%, 50%, 17%, 100%, 67% --
+a six-fold spread across worlds built by one tool with identical parameters,
+and it did not narrow as worlds were added.
 
 So whether a mind reasons past a contradiction looks like a property of the
 engine, and whether it announces the revision looks like a property of the
