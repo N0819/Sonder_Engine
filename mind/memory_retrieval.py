@@ -420,8 +420,33 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     sem_rank = [mid for s, mid in sorted(sem_scores, reverse=True) if s > 0][:60]
     cue_rank = [mid for s, mid in sorted(cue_scores, reverse=True) if s > 0][:60]
     lex_rank = _lexical_memory_ranking(chat_id, char_id, query_text)
-    exact_rank = [mid for mid in sorted(memories, key=lambda x: _exact_cue_score(memories[x], query_text), reverse=True)
-                  if _exact_cue_score(memories[mid], query_text) > 0]
+    # Once per row, not three times (sort key, filter, bonus loop) -- linear
+    # waste flagged by the audit (docs/experiments/AUDIT_MEMORY.md 1.6).
+    exact_scores = {mid: _exact_cue_score(mem, query_text)
+                    for mid, mem in memories.items()}
+    # Capped at 60 like its sibling rankings: this list is the
+    # highest-weighted of the four, and it was the only uncapped one, so on a
+    # bank where the exact signal fires wide (measured 71% of one live bank,
+    # audit 1.3) it alone handed an RRF contribution to every firing row.
+    # Measured on the frozen probe sets: the cap alone flipped two held-out
+    # probes to HIT and regressed nothing (10/14 -> 12/14, tuned 24/26
+    # unchanged).
+    #
+    # Ties are the COMMON case here (the score has three flat tiers), and
+    # they fall to dict insertion order -- the seam's oldest-first SQL. Two
+    # deliberate tie-breaks were tried against the frozen probe sets and BOTH
+    # rejected: importance-first regressed both banks (tuned 24 -> 23,
+    # held-out 10 -> 9; importance concentrates on the same early-era seed
+    # rows whose junk cues fire this signal), and newest-first swung the two
+    # banks in OPPOSITE directions by three probes each (tuned 24 -> 21,
+    # held-out 10 -> 13) -- a lottery, not a rule. While the score has three
+    # flat tiers and junk cue material makes ties bank-wide, every tie order
+    # is arbitrary; the disease is the tie mass, and the cue-material fixes
+    # are what shrink it. Revisit only if a tie-break can be measured as a
+    # win on BOTH banks.
+    exact_rank = [mid for mid in sorted(
+        memories, key=lambda x: exact_scores[x], reverse=True)
+        if exact_scores[mid] > 0][:60]
     fused = defaultdict(float)
     reasons = defaultdict(list)
     _rrf_add(fused, reasons, sem_rank, 1.0, "semantic match")
@@ -475,7 +500,7 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                 reasons[mid].append("belief the character still holds")
             elif mem["confidence"] <= 0.25:
                 reasons[mid].append("belief the character has since revised")
-        fused[mid] += 0.08 * _exact_cue_score(mem, query_text)
+        fused[mid] += 0.08 * exact_scores[mid]
         if mood_axis is not None:
             # Same-signed feeling pulls up, opposite pushes down, scaled by how
             # strongly the memory itself is charged. A neutral memory (valence
