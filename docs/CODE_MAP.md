@@ -49,10 +49,10 @@
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
 | `mind/memory.py` | 124 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
-| `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
+| `mind/memory_common.py` | 214 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 557 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_inference.py` | 154 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
-| `mind/memory_lore_entries.py` | 520 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
+| `mind/memory_lore_entries.py` | 536 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 222 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
@@ -565,11 +565,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_cos()` | 171 | 16 lines |
+| `_kw_scores()` | 162 | 31 lines |
+| `_cos()` | 194 | 16 lines |
 | `_b64_to_blob()` | 131 | 14 lines |
 | `_ling()` | 13 | 10 lines |
 | `_blob_to_b64()` | 120 | 10 lines |
-| `_kw_scores()` | 162 | 8 lines |
 | `_ids()` | 150 | 7 lines |
 | `_storage_json()` | 145 | 4 lines |
 | `summary_scope_for()` | 109 | 3 lines |
@@ -596,13 +596,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `backfill_lore_embedding_stamps()` | 305 | 71 lines |
-| `search_lore()` | 238 | 66 lines |
+| `search_lore()` | 238 | 82 lines |
+| `backfill_lore_embedding_stamps()` | 321 | 71 lines |
 | `duplicate_lorebook_tree_for_chat()` | 168 | 62 lines |
-| `lore_embedding_health()` | 378 | 62 lines |
-| `_stamped_live_dimensions()` | 442 | 42 lines |
+| `lore_embedding_health()` | 394 | 62 lines |
+| `_stamped_live_dimensions()` | 458 | 42 lines |
 | `update_lore()` | 128 | 39 lines |
-| `knowledge_for_character()` | 486 | 34 lines |
+| `knowledge_for_character()` | 502 | 34 lines |
 | `add_lore()` | 98 | 29 lines |
 
 ### `mind/memory_lorebooks.py`

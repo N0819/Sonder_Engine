@@ -160,11 +160,34 @@ def _fts_query(text):
     return " OR ".join(f'"{t}"' for t in toks) if toks else None
 
 def _kw_scores(fts_table, query, limit=50):
+    """Keyword MAGNITUDES: normalized BM25, not a positional decay.
+
+    The old body ordered by rank -- which IS bm25() -- and then threw the
+    score away for `1.0 - i / len(rows)`, so a single weak match scored 1.0,
+    the best match in a field of fifty also scored 1.0, and the slope
+    depended on how MANY rows matched, never on how well. Harmless to an
+    order-only consumer; the one production consumer is `search_lore`'s
+    0.65*cosine + 0.35*keyword blend, which consumes the magnitude, and the
+    counterfactual measured on live books put 59% of queries on large books
+    handing the mapping stage a different top-10 lore set than true keyword
+    relevance would (docs/experiments/AUDIT_MEMORY.md 1.1).
+
+    SQLite's bm25() returns more-negative-is-better, so the magnitude is
+    -bm25, normalized by the best match so the blend's 0.35 weight keeps the
+    scale it was tuned on.
+    """
     fq = _fts_query(query)
     if not fq: return {}
     try:
-        rows = q(f"SELECT rowid FROM {fts_table} WHERE {fts_table} MATCH ? ORDER BY rank LIMIT ?", (fq, limit))
-        return {r["rowid"]: 1.0 - i / max(len(rows), 1) for i, r in enumerate(rows)}
+        rows = q(f"SELECT rowid, bm25({fts_table}) AS s FROM {fts_table} "
+                 f"WHERE {fts_table} MATCH ? ORDER BY rank LIMIT ?",
+                 (fq, limit))
+        if not rows:
+            return {}
+        best = max(-r["s"] for r in rows)
+        if best <= 0:
+            return {r["rowid"]: 1.0 for r in rows}
+        return {r["rowid"]: max(0.0, -r["s"]) / best for r in rows}
     except Exception:
         return {}
 

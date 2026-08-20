@@ -75,12 +75,25 @@ def _entry(db, book_id, title, content, dims, keys=""):
         (book_id, title, keys, content, "layout", vec.tobytes()))
 
 
-def _stub_embedder(monkeypatch, dims):
-    """The configured model, emitting `dims`-wide query vectors."""
+def _stub_embedder(monkeypatch, dims, model_key="test:model:x"):
+    """The configured model, emitting `dims`-wide query vectors.
+
+    `search_lore` reads `embed_texts_meta` (it needs the model key for the
+    model-half of the compatibility rule); `embed_texts` is stubbed too for
+    the module's other readers.
+    """
+    from llm.providers import EmbeddingBatch
+
     def embed_texts(texts):
         v = _unit_vector(dims)
         return [v for _ in texts]
+
+    def embed_texts_meta(texts, **_kw):
+        return EmbeddingBatch(vectors=[_unit_vector(dims) for _ in texts],
+                              model_key=model_key, dimensions=dims,
+                              fallback=False)
     patch_provider_seam(monkeypatch, "embed_texts", embed_texts)
+    patch_provider_seam(monkeypatch, "embed_texts_meta", embed_texts_meta)
 
 
 def test_a_stale_vector_is_counted_rather_than_silently_scoring_zero(
@@ -115,6 +128,64 @@ def test_a_corpus_that_matches_the_model_says_nothing(temp_db, monkeypatch,
         memory.search_lore([book], "the main hall", k=8)
 
     assert "blind" not in caplog.text
+
+
+def test_a_same_width_vector_from_a_different_model_is_blind(
+        temp_db, monkeypatch, caplog):
+    """The armed half of AUDIT_MEMORY.md 1.2: two models sharing a dimension
+    used to be cosine-compared as compatible, producing garbage similarity
+    with no warning, because both the score and the warning keyed on width
+    alone. Compatibility is model key AND width, like search_memories.
+    """
+    book = _book(temp_db)
+    entry = _entry(temp_db, book, "Main Hall", "the shrine's first floor",
+                   2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model='other:model:y', "
+               "embedding_dim=2560 WHERE id=?", (entry,))
+    _stub_embedder(monkeypatch, 2560)
+    _no_keyword_scoring(monkeypatch)
+
+    with caplog.at_level("WARNING"):
+        memory.search_lore([book], "the main hall", k=8)
+
+    assert "scored 1 of 1 entries blind" in caplog.text
+
+
+def test_a_matching_stamp_is_silent(temp_db, monkeypatch, caplog):
+    book = _book(temp_db)
+    entry = _entry(temp_db, book, "Main Hall", "the shrine's first floor",
+                   2560)
+    temp_db.qi("UPDATE lore_entries SET embedding_model='test:model:x', "
+               "embedding_dim=2560 WHERE id=?", (entry,))
+    _stub_embedder(monkeypatch, 2560)
+    _no_keyword_scoring(monkeypatch)
+
+    with caplog.at_level("WARNING"):
+        memory.search_lore([book], "the main hall", k=8)
+
+    assert "blind" not in caplog.text
+
+
+def test_keyword_scores_carry_magnitude_not_position(temp_db, monkeypatch):
+    """AUDIT_MEMORY.md 1.1: `_kw_scores` ordered by bm25 and then threw the
+    score away for a positional decay, so a single weak match scored 1.0 and
+    the best match in a field of fifty also scored 1.0. search_lore consumes
+    the MAGNITUDE (0.35 of its blend), so the magnitude must be BM25's.
+    """
+    book = _book(temp_db)
+    memory.add_lore(book, "shrine gate", "the vermilion torii gate on the "
+                    "mossy path, the gate every visitor passes", title="Gate")
+    memory.add_lore(book, "kitchen", "a small kitchen with an iron kettle",
+                    title="Kitchen")
+
+    scores = memory._kw_scores("lore_fts", "torii gate on the mossy path")
+
+    assert scores, "the keyword scorer matched nothing"
+    values = sorted(scores.values(), reverse=True)
+    assert values[0] == 1.0
+    if len(values) > 1:
+        # The weaker match scores what BM25 gives it, not a position slot.
+        assert 0.0 <= values[1] < 1.0
 
 
 def test_the_stale_entry_still_comes_back_rather_than_being_dropped(

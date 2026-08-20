@@ -256,15 +256,16 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
         rows = [r for r in rows if (r["category"] or "other") not in exclude_categories]
     if not rows:
         return []
-    qv = embed_texts([query or ""])[0]
+    _batch = embed_texts_meta([query or ""])
+    qv = _batch.vectors[0] if _batch.vectors else None
     kw = _kw_scores("lore_fts", query)
     scored = []
-    # HOW MANY ROWS AM I SCORING BLIND? `_cos` returns 0.0 when the dimensions
-    # disagree -- it cannot raise, because it is called in a ranking loop over
-    # rows embedded at different times -- and 0.0 is also the honest score for
-    # a genuinely unrelated entry. So an entry left behind by a retired
-    # embedding model is INDISTINGUISHABLE from one that simply does not match,
-    # and it silently forfeits the 0.65 it can never win back.
+    # HOW MANY ROWS AM I SCORING BLIND? `_cos` returns 0.0 when the vectors
+    # are incomparable -- it cannot raise, because it is called in a ranking
+    # loop over rows embedded at different times -- and 0.0 is also the honest
+    # score for a genuinely unrelated entry. So an entry left behind by a
+    # retired embedding model is INDISTINGUISHABLE from one that simply does
+    # not match, and it silently forfeits the 0.65 it can never win back.
     #
     # Measured on a corpus that had run this way for months: 1,061 of 1,418
     # lore entries carried 256-dimension vectors while the configured model
@@ -273,14 +274,29 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
     # reader kept asking after -- a room nobody could get the agents to
     # describe -- was among them. Nothing anywhere said so.
     #
+    # Compatibility is model key AND length, matching `search_memories`' rule
+    # -- length alone would cosine-compare two different models that happen to
+    # share a dimension and produce garbage similarity with no warning
+    # (docs/experiments/AUDIT_MEMORY.md 1.2). One legacy carve-out, and it is
+    # the SAME one the rebuild machinery holds: a NULL stamp at the live
+    # width predates stamping and is trusted, because the rebuild's stale
+    # predicate deliberately never selects those rows -- blinding them here
+    # would be a hole nothing in the engine ever heals. A WRONG stamp (which
+    # includes the backfill's `unknown:<dims>`) is blind and rebuild-selected,
+    # so the stamped world converges to the strict rule.
+    #
     # Counted, not repaired: re-embedding is a migration and this is a ranking
     # loop. What this owes its caller is the number.
     blind = 0
     for r in rows:
         vec = _vec(r["embedding"])
-        if qv is not None and vec is not None and len(qv) != len(vec):
+        compatible = (qv is not None and vec is not None
+                      and len(qv) == len(vec)
+                      and (r["embedding_model"] == _batch.model_key
+                           or r["embedding_model"] is None))
+        if qv is not None and vec is not None and not compatible:
             blind += 1
-        s = (0.65 * _cos(qv, vec)
+        s = (0.65 * (_cos(qv, vec) if compatible else 0.0)
              + 0.35 * kw.get(r["id"], 0.0)
              + (0.1 if r["canon_locked"] else 0.0)
              + (0.05 * (r["importance"] or 0.5)))
@@ -290,8 +306,8 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
     if blind:
         logger.warning(
             "lore search scored %d of %d entries blind: their embedding "
-            "dimension does not match the configured model, so only the "
-            "keyword term ranked them. Re-embed to restore them.",
+            "model or dimension does not match the configured model, so "
+            "only the keyword term ranked them. Re-embed to restore them.",
             blind, len(rows))
     scored.sort(key=lambda x: -x[0])
     return [
