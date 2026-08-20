@@ -107,6 +107,20 @@ def test_entity_needs_a_content_word():
     assert "Ok" not in entities
 
 
+def test_frequency_phrases_pass_the_same_junk_judge():
+    # The frequency path is stopword-filtered, but block-list words that are
+    # not stopwords ("nothing", "one", "yeah") passed it in lowercase and
+    # were stamped as key phrases -- items the stock repair immediately
+    # strips, i.e. mint and repair had drifted. Found by an adversarial
+    # re-measurement of the junk-rate claim; one judge gates every path now.
+    text = ("Nothing moved in the courtyard. Nothing answered. "
+            "Nothing but the fountain and the ivy on the courtyard wall.")
+    phrases = _extract_key_phrases(text)
+
+    assert "nothing" not in [p.lower() for p in phrases]
+    assert any("courtyard" in p.lower() for p in phrases)
+
+
 def test_key_phrases_do_not_inherit_entity_junk():
     # Entities used to be appended into key phrases wholesale, so entity junk
     # became key-phrase junk and fired the exact-match ranking. Entities are
@@ -121,6 +135,22 @@ def test_quoted_span_without_content_words_is_not_a_phrase():
     phrases = _extract_key_phrases('She said, "Oh." Then she left quietly.')
 
     assert "Oh." not in phrases
+
+
+def test_exact_cue_entity_boundary_works_for_japanese():
+    # The word-boundary guard uses ASCII alphanumerics, not \\w: \\w counts
+    # every CJK character as a word character, so a stored Japanese name
+    # stopped firing inside a query where its particle follows directly
+    # (found by adversarial review). "Mara" must still not fire inside
+    # "marathon".
+    from mind.memory import _exact_cue_score
+
+    mem_ja = {"key_phrases": [], "entities": ["ヒナミ"], "location": ""}
+    assert _exact_cue_score(mem_ja, "ヒナミは扉を開けた") == 0.7
+
+    mem_en = {"key_phrases": [], "entities": ["Mara"], "location": ""}
+    assert _exact_cue_score(mem_en, "she ran the marathon at dawn") == 0.0
+    assert _exact_cue_score(mem_en, "Mara ran at dawn") == 0.7
 
 
 def test_gist_truncation():

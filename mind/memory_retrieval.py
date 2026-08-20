@@ -49,7 +49,10 @@ def _temporal_mode(query_text):
 
 # The exact signal's full tier is reserved for DISTINCTIVE stored phrases --
 # a quoted utterance, a proper multi-word cue -- because that is the signal
-# MEMORY.md 5 documents as strongest and rarest. Key phrases also carry the
+# MEMORY.md 5 documents as strongest and rarest. "Distinctive" is three or
+# more tokens by the pack word regex (stopwords included -- "in the kitchen"
+# qualifies); a stricter content-bearing count is untried and would need its
+# own probe measurement. Key phrases also carry the
 # frequency counter's unigrams and bigrams ("the woman", "told us"), and a
 # bigram literally present in the query is usually a coincidence of common
 # words: measured on the repaired tuning bank, those fires alone put 3-20
@@ -82,11 +85,17 @@ def _exact_cue_score(memory, query_text):
         el = entity.lower().strip()
         # Word-boundary, not bare substring: a stored "Mara" must not fire
         # inside "marathon". Insufficient alone (audit 1.3 measured it), but
-        # correct, and cheap now that the stock is junk-free.
-        if el and re.search(rf"(?<!\w){re.escape(el)}(?!\w)", ql):
+        # correct, and cheap now that the stock is junk-free. The boundary
+        # class is ASCII alphanumerics, NOT \w: substring-inside-a-word is an
+        # alphabetic-script hazard, while \w counts every CJK character as a
+        # word character -- so it silenced this cue for Japanese banks, where
+        # a name is followed directly by its particle (a stored entity
+        # stopped firing inside a query naming it before the particle).
+        # Found by adversarial review of this branch.
+        if el and re.search(rf"(?<![A-Za-z0-9]){re.escape(el)}(?![A-Za-z0-9])", ql):
             score = max(score, 0.7)
     loc = (memory.get("location") or "").lower().strip()
-    if loc and re.search(rf"(?<!\w){re.escape(loc)}(?!\w)", ql):
+    if loc and re.search(rf"(?<![A-Za-z0-9]){re.escape(loc)}(?![A-Za-z0-9])", ql):
         score = max(score, 0.7)
     return score
 
@@ -468,18 +477,24 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     # is arbitrary; the disease is the tie mass, and the cue-material fixes
     # are what shrink it. Revisit only if a tie-break can be measured as a
     # win on BOTH banks.
-    # Only full-tier fires -- a distinctive stored phrase literally present
-    # in the query -- enter the exact LIST. Entity and location fires keep
-    # the small scalar bonus below but not the 1.25-weight rank list: a
-    # production query is the beat's whole view, which contains the cast's
-    # names by construction, so an entity fire is near-bank-wide (the
-    # audit's measured 71%) and rank inside the list falls to tie order.
-    # Generic-tier fires (a frequency bigram coinciding with query words)
-    # stay out for the same reason from the other side: word overlap is the
-    # lexical leg's job, weighed by BM25 instead of flat.
+    # Only phrase-tier fires enter the exact LIST: a distinctive stored
+    # phrase literally present in the query (1.0), or the whole query inside
+    # a stored phrase (0.8 -- a short deliberate query contained in a stored
+    # quote, which only a directed query can produce and only a distinctive
+    # phrase can absorb). Entity and location fires keep the small scalar
+    # bonus below but not the 1.25-weight rank list: a production query is
+    # the beat's whole view, which contains the cast's names by construction,
+    # so an entity fire is near-bank-wide (the audit's measured 71%) and rank
+    # inside the list falls to tie order. Generic-tier fires (a frequency
+    # bigram coinciding with query words) stay out for the same reason from
+    # the other side: word overlap is the lexical leg's job, weighed by BM25
+    # instead of flat. Admitting the 0.8 tier was a stated decision after
+    # adversarial review (an earlier filter silently dropped it); measured as
+    # a no-op on the frozen probe sets, whose queries are too long to fit
+    # inside a stored phrase.
     exact_rank = [mid for mid in sorted(
         memories, key=lambda x: exact_scores[x], reverse=True)
-        if exact_scores[mid] > 0.8][:60]
+        if exact_scores[mid] >= 0.8][:60]
     fused = defaultdict(float)
     reasons = defaultdict(list)
     _rrf_add(fused, reasons, sem_rank, 1.0, "semantic match")
@@ -660,8 +675,12 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
 # The standard IR answer is query-performance prediction (NQC/WIG, Zhou &
 # Croft): read the score DISTRIBUTION -- how far the top-k mean sits above
 # the bank-wide mean, in units of the bank's own standard deviation. That is
-# per-query self-calibrating, and it is free: the engine already scans every
-# row (no ANN), so the bank baseline rides the scan it already pays for.
+# per-query self-calibrating, and cheap for the same reason the engine has no
+# ANN index: a bank is scanned exhaustively anyway. HONESTY NOTE: the current
+# implementation is a SECOND row fetch and 2-cosines-per-row pass per beat,
+# not literally the same scan -- folding it into search_memories' own loop is
+# the free form and remains unbuilt; at measured bank sizes the second pass
+# is milliseconds beside the model call.
 
 # Below this many comparable rows the distribution is not a baseline, and a
 # bank mid-rebuild (low model coverage) must never read as empty -- the same

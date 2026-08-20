@@ -283,7 +283,11 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None):
     # predicate deliberately never selects those rows -- blinding them here
     # would be a hole nothing in the engine ever heals. A WRONG stamp (which
     # includes the backfill's `unknown:<dims>`) is blind and rebuild-selected,
-    # so the stamped world converges to the strict rule.
+    # so the stamped world converges to the strict rule. The residual is
+    # stated: a NULL-stamped row whose vector came from a RETIRED model at
+    # the live width still cosine-compares as garbage, uncounted -- closable
+    # only by running the stamp backfill plus a rebuild, which is a host
+    # decision, not an ambient one.
     #
     # Counted, not repaired: re-embedding is a migration and this is a ranking
     # loop. What this owes its caller is the number.

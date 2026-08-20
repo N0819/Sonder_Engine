@@ -1229,7 +1229,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                         ctx.add_warning(f"{cname}: DRIVE SHIFTED -> {_norm.get('essence')}")
                         pending_memories.append({
                             "chat_id": cid, "char_id": ccid, "turn_id": turn.id, "turn_idx": turn.idx,
-                            "kind": "episode", "category": "self", "provenance": "remembered", "salience": 1.0,
+                            "kind": "episodic", "category": "self", "provenance": "remembered", "salience": 1.0,
                             "content": (f"Something in me broke when {_rw}. What I lived for -- "
                                         f"{cur_drive.get('essence')} -- no longer holds me. Now I live for: "
                                         f"{_norm.get('essence')}."),

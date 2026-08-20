@@ -52,15 +52,15 @@
 | `mind/memory_common.py` | 229 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 557 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_inference.py` | 154 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
-| `mind/memory_lore_entries.py` | 536 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
+| `mind/memory_lore_entries.py` | 540 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 222 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
-| `mind/memory_retrieval.py` | 954 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
+| `mind/memory_retrieval.py` | 977 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
 | `mind/memory_snapshot.py` | 586 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
-| `mind/memory_vectors.py` | 770 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
-| `mind/memory_write.py` | 736 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
+| `mind/memory_vectors.py` | 772 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
+| `mind/memory_write.py` | 748 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
 | `persist/__init__.py` | 6 |  | — |
@@ -596,13 +596,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_lore()` | 238 | 82 lines |
-| `backfill_lore_embedding_stamps()` | 321 | 71 lines |
+| `search_lore()` | 238 | 86 lines |
+| `backfill_lore_embedding_stamps()` | 325 | 71 lines |
 | `duplicate_lorebook_tree_for_chat()` | 168 | 62 lines |
-| `lore_embedding_health()` | 394 | 62 lines |
-| `_stamped_live_dimensions()` | 458 | 42 lines |
+| `lore_embedding_health()` | 398 | 62 lines |
+| `_stamped_live_dimensions()` | 462 | 42 lines |
 | `update_lore()` | 128 | 39 lines |
-| `knowledge_for_character()` | 502 | 34 lines |
+| `knowledge_for_character()` | 506 | 34 lines |
 | `add_lore()` | 98 | 29 lines |
 
 ### `mind/memory_lorebooks.py`
@@ -647,14 +647,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_memories()` | 369 | 278 lines |
-| `contrast_memory()` | 782 | 117 lines |
-| `_rank_normalized_importance()` | 306 | 61 lines |
-| `recall_confidence()` | 688 | 58 lines |
-| `recent_memory_buffer()` | 913 | 41 lines |
-| `_congruence_valence()` | 212 | 29 lines |
-| `_warn_stranded_embeddings()` | 267 | 29 lines |
-| `_exact_cue_score()` | 69 | 23 lines |
+| `search_memories()` | 378 | 284 lines |
+| `contrast_memory()` | 805 | 117 lines |
+| `_rank_normalized_importance()` | 315 | 61 lines |
+| `recall_confidence()` | 711 | 58 lines |
+| `recent_memory_buffer()` | 936 | 41 lines |
+| `_exact_cue_score()` | 72 | 29 lines |
+| `_congruence_valence()` | 221 | 29 lines |
+| `_warn_stranded_embeddings()` | 276 | 29 lines |
 
 ### `mind/memory_snapshot.py`
 
@@ -689,9 +689,9 @@
 | `rebuild_embeddings()` | 178 | 213 lines |
 | `embedding_bank_status()` | 28 | 125 lines |
 | `rebuild_checkpoint_embeddings()` | 430 | 124 lines |
-| `repair_memory_cues()` | 579 | 106 lines |
-| `start_rebuild_if_needed()` | 721 | 48 lines |
-| `_run_rebuild()` | 693 | 26 lines |
+| `repair_memory_cues()` | 579 | 108 lines |
+| `start_rebuild_if_needed()` | 723 | 48 lines |
+| `_run_rebuild()` | 695 | 26 lines |
 | `_vector_key()` | 393 | 22 lines |
 | `_rebuild_book_ids()` | 155 | 21 lines |
 
@@ -700,13 +700,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_extract_entities()` | 109 | 63 lines |
-| `repair_pending_embeddings()` | 484 | 59 lines |
-| `prepare_memory()` | 329 | 51 lines |
-| `_extract_key_phrases()` | 173 | 41 lines |
-| `_upsert_memory()` | 575 | 38 lines |
-| `_row_memory()` | 294 | 34 lines |
-| `queue_fallback_rows_for_repair()` | 545 | 28 lines |
-| `_repair_loop()` | 456 | 26 lines |
+| `repair_pending_embeddings()` | 491 | 59 lines |
+| `prepare_memory()` | 336 | 51 lines |
+| `_extract_key_phrases()` | 173 | 48 lines |
+| `_upsert_memory()` | 582 | 38 lines |
+| `_row_memory()` | 301 | 34 lines |
+| `repair_seed_salience()` | 718 | 30 lines |
+| `queue_fallback_rows_for_repair()` | 552 | 28 lines |
 
 ### `mind/psychology_runtime.py`
 

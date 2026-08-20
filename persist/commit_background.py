@@ -1619,7 +1619,7 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
         add_memories_batch([
             {
                 "chat_id": cid, "char_id": char_id, "turn_id": None,
-                "kind": "episode", "provenance": "witnessed", "salience": 0.6,
+                "kind": "episodic", "provenance": "witnessed", "salience": 0.6,
                 "content": seed, "turn_idx": None,
                 "event_key": f"promotion:{cid}:{char_id}:{i}",
             }
