@@ -25,7 +25,7 @@ target row id in the payload the character would receive — k=16 plus the
 chronological-neighbour padding, which MEMORY.md documents as up to two rows
 but which the brake actually admits up to six of (the `k + 2` check sits
 inside the inner neighbour loop; a pre-existing defect present at baseline,
-found by adversarial verification, recorded in UNBUILT §1.57). Per-probe
+found by adversarial verification, recorded in UNBUILT §1.73). Per-probe
 `neighbor_only` reports a hit that arrived only via padding; measured, that
 count is ZERO on every probe in every state, so no verdict in this file
 rests on it. Query
@@ -307,7 +307,7 @@ a CJK regression test); the 0.8 exact tier had been dropped from the exact
 list without a stated decision (admitted back, measured as a payload no-op
 on all 55 probes in both states); and the neighbour-padding brake's k+2
 bound was found to be k+6 in practice — pre-existing, equal at baseline,
-zero effect on any verdict, now recorded in UNBUILT §1.57 instead of being
+zero effect on any verdict, now recorded in UNBUILT §1.73 instead of being
 quietly fixed under deadline (fixing it shrinks payloads and needs its own
 probe run).
 
