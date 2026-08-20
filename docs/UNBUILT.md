@@ -1497,6 +1497,22 @@ function column above; the file column exists so the next reader does not
 spend an afternoon re-deriving it and conclude it is news.
 
 
+### 1.57 The chronological-padding brake stops the inner loop only
+
+Found 2026-08-20 by adversarial verification of the memory-probe harness.
+`search_memories` pads its selection with chronological neighbours of the top
+3 selected episodes, documented (MEMORY.md §5, and the in-code intent) as "up
+to k+2 total" — but the `len(expanded) >= k + 2` brake sits inside the inner
+neighbour-pair loop and never breaks the outer `selected[:3]` loop, so the
+payload can reach k+6; k+4 was observed live on both measured banks. Present
+since before the 2026-08 retrieval work (equal at the frozen-probe baseline),
+and measured as deciding nothing: zero probe verdicts on any bank in any
+state came via padding rows. Not fixed in the branch that found it because
+shrinking payloads is a retrieval behaviour change that needs its own probe
+run; the fix is moving the brake to the outer loop (or checking it before
+each append) and re-measuring with `tools/memory_probe_harness.py`.
+
+
 ### 1.56 The project tier's occasion now arrives, and is declined
 
 v4 made the review beat reachable (`Design.md`'s project row has the diagnosis:
@@ -2199,8 +2215,30 @@ is.
 
 ### 2.16 A summary window should be an INDEX over raw memory, not more prose
 
-**Raised 2026-08-02**, in review of the summary-window work, and the right
-destination for that layer rather than a defect in what landed.
+**Raised 2026-08-02; verdict recorded 2026-08-19/20.** The strong form below
+— route retrieval through the winning window — was MEASURED AND REFUSED:
+window-first routing scored 6–7/12 against flat retrieval's 10/12 on the live
+corpus ([`experiments/AUDIT_MEMORY.md`](experiments/AUDIT_MEMORY.md) §3.6),
+the compounding P(right window) × P(right row) is real, and RAPTOR's and
+MemTree's own ablations independently agree (audit §4.3). Do not rebuild it
+without evidence that beats all three. What survives of this entry:
+
+- **The "nothing convincing" floor this entry said did not exist now does** —
+  `memory_retrieval.recall_confidence`, a per-query NQC/WIG-shape signal
+  against the bank's own score distribution, calibrated at zero measured
+  false abstention across both corpus states
+  ([`experiments/MEMORY_IMPROVEMENTS.md`](experiments/MEMORY_IMPROVEMENTS.md)
+  §5). It annotates the passive lane (`nothing_comes_back_clearly`); it is
+  deliberately NOT extended to the ponder lane (measured: it would falsely
+  abstain on a diffuse pattern-over-session query whose answer was
+  delivered).
+- **Still live, with the audit's evidence behind them**: windows entering the
+  same RRF fusion as first-class candidates (audit §4.3 item 1), and the
+  window's deterministic `start/end_turn_idx` as a temporal BOOST when the
+  query carries a temporal cue (item 2) — the index shape this entry wanted,
+  without the routing it feared.
+
+The original argument, kept for the record:
 
 Today the earlier windows travel *beside* raw recall: two paragraphs added to a
 payload that separately ranks sixteen raw memories. That is the supplemental
@@ -2237,9 +2275,8 @@ measures it and refuses to steer when it fails.
 **And a fallback for when the index is empty**, which for 53 of 67 live banks it
 is over their opening turns (§1.21). A progressive form answers both -- rank raw
 memories normally, and only reach for a window when the first pass returns
-nothing convincing -- but "nothing convincing" needs an absolute confidence
-signal, and the cosine band is 0.45-0.55 wide for everything, which is exactly
-the floor that does not exist.
+nothing convincing -- and the "nothing convincing" signal that this paragraph
+said did not exist is now `recall_confidence` (see the verdict block above).
 
 
 ### 2.17 Memory reliability after temporal separation
@@ -2336,7 +2373,12 @@ host-side so it costs no model call. Its convergence with §2.16 stands.)*
   exact-match strength. The measured answer is fusion, then query-class tuning.
 
 The reusable instrument is `tools/benchmark_memory_temporal.py`; extend it
-rather than creating another one-off question script.
+rather than creating another one-off question script. It is no longer married
+to chat 38: `--cases-file` loads a case bank
+(`tools/memory_probes/behavioral_chat63_char35.json` is the first), and the
+retrieval-side probe harness is `tools/memory_probe_harness.py` with its
+frozen sets under `tools/memory_probes/`
+([`experiments/MEMORY_IMPROVEMENTS.md`](experiments/MEMORY_IMPROVEMENTS.md)).
 
 ---
 

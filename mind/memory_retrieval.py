@@ -697,7 +697,8 @@ _RECALL_CONFIDENCE_COVERAGE = 0.5
 # property of the signal, stated rather than hidden), so measured
 # false-abstention is 0/37 in both states -- a floor that suppresses real
 # recall is worse than no floor. What the margin buys is deliberately
-# modest: 1-2 of 15 negative probes abstain. The rest are negatives whose
+# modest: 0-1 of 15 negative probes abstain (none at all on the unrepaired
+# stock). The rest are negatives whose
 # TOPIC genuinely resonates in the bank (an event that was discussed but
 # never happened); a score distribution cannot tell topical resonance from
 # answer presence, and no estimator tried (top-1/top-4/top-16 lift, NQC,
