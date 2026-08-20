@@ -2834,6 +2834,54 @@ each way, a lottery, not a rule"
 ([`experiments/MEMORY_IMPROVEMENTS.md`](experiments/MEMORY_IMPROVEMENTS.md) §4).
 A global recency preference trades one arbitrary ordering for another.
 
+**CORRECTED 2026-08-20, and the correction inverts this entry.** The reading
+above treats the ordering as the problem and assumes a mind needs help
+NOTICING. Measured, it does not. `tools/benchmark_memory_rationality.py` hands
+a character the belief and its refutation through the production payload and
+asks the question; a judge that never sees the payload classifies the answer
+against the plan's two facts. Across three independently generated worlds,
+with the character prompt carrying NO instruction to look for conflicts:
+
+| verdict | n=18 |
+|---|---|
+| named the contradiction | **15 (83%)** |
+| stated the corrected fact silently | 2 (11%) |
+| **took the superseded belief** | **0 (0%)** |
+| neither | 1 (6%) |
+
+Zero failures, despite the stale row being ranked HIGHER in the majority of
+cases. The `when` stamp on each row is apparently enough. An arm run WITH a
+clause inviting the character to name disagreements scored LOWER on conflict
+(4/6 against 6/6), so the behaviour is not prompt-induced -- if anything the
+invitation got in the way.
+
+So the ordering defect above is real and cosmetic. What is expensive is not
+that a mind reads the stale row first; it reads both, dates both, and resolves
+them. Fixing the ranking would change a number and not a behaviour.
+
+**What is actually missing is a channel, not a capability.** Characters are
+articulating "I believed X, then I saw Y" in prose, in production, right now --
+and it evaporates, because the only way into `disputed` is a structured
+`memory_disputes` field the model has to volunteer separately from the prose
+it already wrote. That is why the count is 1 in 9,608 while the behaviour runs
+at 83%.
+
+Two pieces, and the first is much cheaper than this entry originally implied:
+
+- **Capture what is already said.** The field exists, the commit path handles
+  it, the payload renders it as `i_now_read_this_differently`. The gap is
+  asking for it in a form the engine can store, on a beat where the mind has
+  just done it anyway.
+- **Create the occasion.** Genuinely open. In this measurement a question was
+  aimed squarely at the contradicted fact; real play does not do that, and a
+  contradiction sitting unremarked among twenty other rows may never surface.
+  This is where deterministic detection belongs -- two rows, one subject,
+  separated in time, both in the payload -- and it stays an OCCASION rather
+  than a conclusion, because nothing outside a mind may decide which of its
+  memories is true.
+
+**The original reading, kept because it was the reasoning at the time:**
+
 **The engine already has the right shape and never reaches it.**
 `record_dispute` is wired end to end -- proposed in the character's output,
 committed by `persist/commit_memory_write.py`, stored on the row, and rendered
