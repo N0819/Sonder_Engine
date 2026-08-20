@@ -132,10 +132,23 @@ slightly got in the way.
 | 2 | 6 | 0 | 0 | 0 |
 | 3 | 3 | 2 | 0 | 1 |
 | 4 | 1 | 3 | **1** | 1 |
-| **all** | **16** | **5** | **1** | **2** |
+| 6 | 4 | 1 | 0 | 1 |
+| **all** | **20** | **6** | **1** | **3** |
 
-**Reasoned from the newer evidence: 21/24 (88%). Took the superseded belief:
-1/24 (4%).**
+**Reasoned from the newer evidence: 26/30 (87%). Named the contradiction
+aloud: 20/30 (67%). Took the superseded belief: 1/30 (3%).**
+
+**The two numbers behave differently, and that is the most useful thing here.**
+Getting it RIGHT converges -- 88% at n=24, 87% at n=30. Saying so ALOUD does
+not: the per-world conflict rate runs 100%, 100%, 50%, 17%, 67%, a six-fold
+spread across worlds built by one tool with identical parameters.
+
+So whether a mind reasons past a contradiction looks like a property of the
+engine, and whether it announces the revision looks like a property of the
+material. That distinction matters because the dispute channel depends on the
+announcement, not on the reasoning -- `record_dispute` can only receive what a
+character volunteers. A capability that varies 17% to 100% with the story is
+not one to build a mechanism on top of without knowing what moves it.
 
 **The per-world spread is the finding, not the total.** Worlds 1 and 2 named
 the contradiction 6 times out of 6; world 4 managed 1 and produced the only
