@@ -28,7 +28,7 @@
 | `agents/runtime.py` | 1302 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 1977 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
+| `core/db.py` | 1995 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
 | `core/jobs.py` | 308 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 45 | Structured timing and observability helpers. | — |
@@ -56,8 +56,8 @@
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 222 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
-| `mind/memory_retrieval.py` | 1061 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
-| `mind/memory_snapshot.py` | 615 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
+| `mind/memory_retrieval.py` | 1083 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
+| `mind/memory_snapshot.py` | 627 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_vectors.py` | 772 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 809 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
@@ -384,13 +384,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1829 | 105 lines |
-| `conn()` | 1621 | 38 lines |
-| `transaction()` | 1661 | 36 lines |
-| `_column_addition_already_applied()` | 1778 | 18 lines |
-| `_backfill_resource_uids()` | 1811 | 17 lines |
-| `qi()` | 1719 | 16 lines |
-| `data_version()` | 1698 | 14 lines |
+| `init()` | 1847 | 105 lines |
+| `conn()` | 1639 | 38 lines |
+| `transaction()` | 1679 | 36 lines |
+| `_column_addition_already_applied()` | 1796 | 18 lines |
+| `_backfill_resource_uids()` | 1829 | 17 lines |
+| `qi()` | 1737 | 16 lines |
+| `data_version()` | 1716 | 14 lines |
 | `parse_scoped_world_key()` | 91 | 13 lines |
 
 ### `core/frames.py`
@@ -647,27 +647,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_memories()` | 444 | 284 lines |
-| `contrast_memory()` | 889 | 117 lines |
-| `_rank_normalized_importance()` | 381 | 61 lines |
-| `recall_confidence()` | 795 | 58 lines |
-| `recent_memory_buffer()` | 1020 | 41 lines |
+| `search_memories()` | 451 | 299 lines |
+| `contrast_memory()` | 911 | 117 lines |
+| `_rank_normalized_importance()` | 388 | 61 lines |
+| `recall_confidence()` | 817 | 58 lines |
+| `recent_memory_buffer()` | 1042 | 41 lines |
 | `_exact_cue_score()` | 96 | 33 lines |
-| `_congruence_valence()` | 287 | 29 lines |
-| `_warn_stranded_embeddings()` | 342 | 29 lines |
+| `_congruence_valence()` | 294 | 29 lines |
+| `_warn_stranded_embeddings()` | 349 | 29 lines |
 
 ### `mind/memory_snapshot.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `restore_lorebook()` | 520 | 95 lines |
-| `prepare_chat_memory_restore()` | 235 | 75 lines |
-| `import_character_memories()` | 374 | 63 lines |
-| `dump_chat_memories()` | 165 | 61 lines |
+| `restore_lorebook()` | 532 | 95 lines |
+| `prepare_chat_memory_restore()` | 241 | 76 lines |
+| `dump_chat_memories()` | 165 | 67 lines |
+| `import_character_memories()` | 386 | 63 lines |
 | `restore_memory_vectors()` | 109 | 54 lines |
+| `apply_chat_memory_restore()` | 318 | 40 lines |
 | `vector_address()` | 26 | 35 lines |
-| `apply_chat_memory_restore()` | 311 | 35 lines |
-| `dump_character_memories()` | 350 | 23 lines |
+| `dump_character_memories()` | 362 | 23 lines |
 
 ### `mind/memory_summaries.py`
 
@@ -1721,7 +1721,7 @@
 | `turns` | `id`, `chat_id`, `idx`, `player_input`, `created`, `frame_id` |
 | `steps` | `id`, `turn_id`, `key`, `label`, `ord`, `stale` |
 | `variants` | `id`, `step_id`, `content`, `created`, `active`, `reasoning` |
-| `memories` | `id`, `chat_id`, `char_id`, `turn_id`, `turn_idx`, `kind`, `category`, `provenance`, `salience`, `content`, `gist`, `key_phrases`, `entities`, `location`, `emotional_context`, `valence`, `arousal`, `--`, `--`, `--`, `encoding_valence`, `encoding_arousal`, `confidence`, `access_count`, `last_accessed`, `embedding`, `cue_embedding`, `embedding_model`, `embedding_dim`, `archived`, `event_key`, `frame_id`, `--`, `--`, `--`, `--`, `importance`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `disputed` |
+| `memories` | `id`, `chat_id`, `char_id`, `turn_id`, `turn_idx`, `kind`, `category`, `provenance`, `salience`, `content`, `gist`, `key_phrases`, `entities`, `location`, `emotional_context`, `valence`, `arousal`, `--`, `--`, `--`, `encoding_valence`, `encoding_arousal`, `confidence`, `access_count`, `last_accessed`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `last_accessed_turn`, `embedding`, `cue_embedding`, `embedding_model`, `embedding_dim`, `archived`, `event_key`, `frame_id`, `--`, `--`, `--`, `--`, `importance`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `disputed` |
 | `memory_vectors` | `vkey`, `embedding`, `cue_embedding`, `embedding_model`, `embedding_dim`, `created` |
 | `memory_summaries` | `id`, `chat_id`, `char_id`, `scope`, `start_turn_idx`, `end_turn_idx`, `summary`, `key_phrases`, `unresolved_threads`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `support`, `embedding`, `embedding_model`, `embedding_dim`, `updated`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--` |
 | `events` | `id`, `chat_id`, `turn_id`, `content` |

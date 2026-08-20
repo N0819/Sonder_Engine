@@ -111,7 +111,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -545,6 +545,14 @@ CREATE TABLE IF NOT EXISTS memories(
     confidence REAL NOT NULL DEFAULT 1.0,
     access_count INTEGER NOT NULL DEFAULT 0,
     last_accessed REAL,
+    -- The TURN a recall reached this row on, not the wall clock. `last_accessed`
+    -- answers "when did somebody's computer touch this" and cannot answer the
+    -- question that decides how much memory is worth delivering: how far BACK a
+    -- mind reached when it reached. Depth is `last_accessed_turn - turn_idx`,
+    -- and without the first term it is unobtainable -- a row retrieved while
+    -- fresh and a row retrieved three hundred beats later look identical
+    -- afterwards. NULL means never reached since this column existed.
+    last_accessed_turn INTEGER,
     embedding BLOB,
     cue_embedding BLOB,
     embedding_model TEXT NOT NULL DEFAULT '',
@@ -1556,6 +1564,16 @@ MIGRATIONS = [
         # rebuilds to the same content it already held.
         "INSERT INTO lore_fts(lore_fts) VALUES('rebuild')",
         "INSERT INTO memories_fts(memories_fts) VALUES('rebuild')",
+    ],
+    # v31 -> v32
+    [
+        # How deep a recall reached, in beats, which nothing recorded before.
+        # Deliberately NOT backfilled from `last_accessed`: that is a wall
+        # clock, there is no sound way to map it onto a turn index, and a
+        # guessed depth would be worse than a missing one -- this column exists
+        # to answer a measurement question, and inventing its first month of
+        # data would poison the answer.
+        "ALTER TABLE memories ADD COLUMN last_accessed_turn INTEGER",
     ],
 ]
 

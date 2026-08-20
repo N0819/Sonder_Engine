@@ -197,11 +197,18 @@ _RRF_SCALE = 12.0
 # BENEFIT, on 470 questions written by people who have never seen this engine
 # (LongMemEval, run at each k rather than derived):
 #
-#     k     4    8   12   16   24
-#     hit 304  359  382  399  413
+#     k        4    8   12   16   24   32   48
+#     hit    304  359  382  399  413  425  437
+#     per row     13.8  5.8  4.3  1.8  1.5  0.75
 #
-# 16 was not where the curve stops -- +14 probes sit between 16 and 24. The
-# earlier reading rested on 16 paraphrase probes; this rests on 470.
+# The curve NEVER PLATEAUS -- it is still climbing at 48, and it cannot do
+# otherwise, since at k = bank size recall is 100% by construction. So "stop
+# where the curve does" was looking for a feature this curve does not have,
+# and no retrieval measurement can choose this number. Only conduct can.
+#
+# 24 is therefore not where recall flattens. It is the largest value with a
+# BEHAVIOURAL arm behind it. 32 and 48 recall more and have never been put in
+# front of a character; moving to them is a measurement, not an edit.
 #
 # COST, the part the old note was protecting and the part that had never been
 # measured behaviourally: the worry is dilution, since rows ranked 17-24 are
@@ -723,7 +730,22 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         now = time.time()
         ids = [m["id"] for m in result]
         ph = ",".join("?" for _ in ids)
-        qi(f"UPDATE memories SET access_count=access_count+1, last_accessed=? WHERE id IN ({ph})", (now, *ids))
+        # `last_accessed_turn` beside the wall clock, because the wall clock
+        # cannot answer the question that decides how much memory is worth
+        # delivering. Depth of reach is `last_accessed_turn - turn_idx`: a row
+        # recalled while it was fresh and one recalled three hundred beats
+        # later are indistinguishable afterwards without it, so "does a
+        # character ever reach past rank 16, or past a hundred beats" has been
+        # unanswerable from ordinary play and had to be bought with synthetic
+        # benchmarks instead.
+        #
+        # NULL when the caller has no turn -- a preview endpoint, a tool -- so
+        # the column means "reached during play at turn N" and never "reached,
+        # turn unknown". A guessed turn would be worse than a missing one here.
+        qi(f"UPDATE memories SET access_count=access_count+1, last_accessed=?, "
+           f"last_accessed_turn=COALESCE(?, last_accessed_turn) "
+           f"WHERE id IN ({ph})",
+           (now, current_turn_idx, *ids))
     return result
 
 # ---- Recall confidence (the "nothing convincing" floor) ----

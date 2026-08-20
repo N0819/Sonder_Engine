@@ -210,6 +210,12 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          # carried on, one line up.
          "access_count": r["access_count"] or 0,
          "last_accessed": r["last_accessed"],
+         # The TURN a recall reached this row on. Travels for the same reason
+         # the two above do: it is the record of the memory being read, not of
+         # it being formed, and it is re-derivable from nothing. Losing it on a
+         # checkpoint rollback would silently reset the one measurement that
+         # says how far back this mind actually reaches.
+         "last_accessed_turn": r["last_accessed_turn"],
          # Stored vectors travel with the dump so restore can put them
          # back byte-identically instead of re-embedding the entire
          # memory bank on every checkpoint restore (expensive, and a
@@ -277,7 +283,8 @@ def prepare_chat_memory_restore(chat_id, mems):
         # Restored after the insert, beside `archived`: `prepare_memory`
         # describes a memory as it was FORMED, and neither of these is part of
         # that -- they are the record of it being read since.
-        history = (int(m.get("access_count") or 0), m.get("last_accessed"))
+        history = (int(m.get("access_count") or 0), m.get("last_accessed"),
+                   m.get("last_accessed_turn"))
         full_blob = _b64_to_blob(m.get("embedding"))
         cue_blob = _b64_to_blob(m.get("cue_embedding"))
         model = m.get("embedding_model") or ""
@@ -339,10 +346,15 @@ def apply_chat_memory_restore(chat_id, plan):
                 li += 1
             if entry["source"].get("archived"):
                 qi("UPDATE memories SET archived=1 WHERE id=?", (mid,))
-            count, last = entry.get("retrieval_history") or (0, None)
-            if count or last is not None:
-                qi("UPDATE memories SET access_count=?, last_accessed=? "
-                   "WHERE id=?", (int(count), last, mid))
+            # Three-tuple since v32; an older checkpoint carries two and its
+            # rows simply have no recorded turn, which is the truthful state
+            # rather than a zero.
+            hist = entry.get("retrieval_history") or (0, None, None)
+            count, last, last_turn = (tuple(hist) + (None, None))[:3]
+            if count or last is not None or last_turn is not None:
+                qi("UPDATE memories SET access_count=?, last_accessed=?, "
+                   "last_accessed_turn=? WHERE id=?",
+                   (int(count or 0), last, last_turn, mid))
 
 def restore_chat_memories(chat_id, mems):
     apply_chat_memory_restore(chat_id, prepare_chat_memory_restore(chat_id, mems))
