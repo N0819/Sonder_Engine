@@ -268,6 +268,12 @@ _IMPORTANCE_CEILING = 0.97
 # something is a bigger fact about it than being cited once.
 _IMPORTANCE_DISPUTE_STEP = 0.2
 _MAX_DISPUTE_READING = 300
+# How many superseded readings travel with a memory. Bounded because this
+# rides every checkpoint and archive of the row, and because a mind that has
+# re-read one moment twelve times is telling you something the twelfth entry
+# does not add to. The LATEST reading is never in here -- it sits at the top
+# level -- so this is purely the trail behind it.
+_MAX_DISPUTE_HISTORY = 8
 
 
 def _dispute_of(raw):

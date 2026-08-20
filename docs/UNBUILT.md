@@ -2880,6 +2880,42 @@ Two pieces, and the first is much cheaper than this entry originally implied:
   than a conclusion, because nothing outside a mind may decide which of its
   memories is true.
 
+**BUILT 2026-08-20, in two parts.** The measurement above located the gap
+precisely, and it was not where this entry first put it.
+
+*The grounding was the barrier.* A dispute's evidence was grounded in the
+`present` namespace, so a re-reading citing the LATER MEMORY that overturned
+the belief -- which is what characters actually cite, 15 times in 18 -- was
+dropped as ungrounded before it ever reached storage. Both the code and the
+prompt said "what this beat showed you", so this was a stated design rather
+than an oversight; it is now widened to admit a memory this mind holds, and
+refused only for the disputed memory itself. Firewall-safe on the invariant's
+own terms: both rows are its own, legitimately acquired, and one re-reading
+another is inference inside a single head. The decisive argument is that
+`ponder` exists for exactly this -- a lane built for a mind to go looking
+through its own memory, whose output the dispute rule was then refusing.
+
+*And a dispute is now an addendum rather than an overwrite.* `record_dispute`
+insists the event stays exactly as it was, but the READING did not get that
+protection: a second re-reading replaced the first and only bumped a counter,
+so the mechanism built to preserve a memory's history destroyed the history of
+how it had been read. Every superseded reading is now kept with the evidence
+that produced it, bounded at 8, with the latest still at the top level so no
+existing reader moves.
+
+*The rumination watch.* Widening the grounding lets a mind revise its past
+from its own memories, round and round, with no new input. That is not
+forbidden -- a mind is allowed to keep thinking -- but it can no longer happen
+invisibly: `tests/test_dispute_addendum.py` pins that four re-readings citing
+one source are distinguishable from three citing three, which a bare counter
+could never separate.
+
+**What is still open:** the occasion. This measurement aimed a question
+squarely at a contradicted fact; ordinary play does not, and a contradiction
+sitting unremarked among twenty rows may never surface. Deterministic
+detection -- two rows, one subject, separated in time, both in the payload --
+remains the unbuilt half, and it stays an OCCASION rather than a conclusion.
+
 **The original reading, kept because it was the reasoning at the time:**
 
 **The engine already has the right shape and never reaches it.**

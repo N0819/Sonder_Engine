@@ -215,11 +215,14 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
         # A mind re-reading one of its own memories. Scoped to that character's
         # own rows inside record_dispute, so this can never reach across the
         # firewall however the model phrased the gist.
-        for chat_id, char_id, _gist, _reading, _tidx, _ref in prepared.get(
-                "memory_disputes") or []:
+        for _entry in prepared.get("memory_disputes") or []:
+            # Six-tuple before the sources trail existed; tolerate both so a
+            # prepared batch built by older code still commits.
+            chat_id, char_id, _gist, _reading, _tidx, _ref = _entry[:6]
+            _sources = _entry[6] if len(_entry) > 6 else ()
             try:
                 record_dispute(chat_id, char_id, _gist, _reading, _tidx,
-                               memory_ref=_ref)
+                               memory_ref=_ref, sources=_sources)
             except Exception as exc:
                 ctx.add_warning(f"memory dispute not recorded: {exc}")
         # Memories that turned out to be load-bearing for a belief. Once each,

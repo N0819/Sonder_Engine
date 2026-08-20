@@ -1174,9 +1174,48 @@ def _ground_observation_citations(out, observations, memory_context,
                     if needle and (needle == " ".join(text.split()).casefold()
                                    or needle in " ".join(text.split()).casefold())]
             ref = hits[0] if len(hits) == 1 else ""
-        dispute["evidence"] = ground_refs(
-            dispute.get("evidence") or [],
-            f"memory_disputes.{index}.evidence", namespace="present")
+        # `either`, not `present`. A revision grounded ONLY in what is
+        # happening now cannot express the commonest way a mind changes its
+        # reading of its own past: a later memory overturning an earlier one.
+        # Measured -- handed a belief and the observation that overturned it,
+        # characters named the contradiction 15 times in 18, unprompted, and
+        # the evidence they cited was the LATER MEMORY (UNBUILT 2.24). Under
+        # `present` every one of those would have been dropped as ungrounded.
+        #
+        # Firewall-safe, and for the reason the invariant is stated as a GAP:
+        # both rows are this mind's own memories, legitimately acquired. One
+        # of its memories re-reading another is inference inside a single
+        # head, which is the product rather than the risk. What stays refused
+        # is a dispute grounded in nothing -- `ground_refs` still drops a ref
+        # this mind does not hold, and a dispute with no surviving evidence is
+        # still discarded below.
+        # `either`, minus the disputed row itself.
+        #
+        # The rule this must keep is stated in the tests: a dispute citing
+        # nothing is a mind revising its past for no reason, and a memory may
+        # not be its own evidence. Both survive below. What the old
+        # `present`-only grounding ALSO excluded was the commonest way a mind
+        # actually changes its reading -- a LATER MEMORY overturning an
+        # earlier one -- and that exclusion was a side effect of the namespace
+        # rather than a decision anyone wrote down.
+        #
+        # Measured: handed a belief and the observation that overturned it,
+        # characters named the contradiction 15 times in 18, unprompted, and
+        # cited the later memory. Under `present` every one would have been
+        # dropped as ungrounded (UNBUILT 2.24).
+        #
+        # Firewall-safe on the invariant's own terms: both rows are this
+        # mind's own memories, legitimately acquired, and one re-reading
+        # another is inference inside a single head -- the product, not the
+        # risk. A ref this mind was never handed is still dropped by
+        # `ground_refs`, and a dispute left with no evidence is still
+        # discarded.
+        _self_ref = str(dispute.get("memory_ref") or "").strip()
+        dispute["evidence"] = [
+            ev for ev in ground_refs(
+                dispute.get("evidence") or [],
+                f"memory_disputes.{index}.evidence", namespace="either")
+            if str(ev.get("event_id") or "").strip() != _self_ref]
         if ref and dispute["evidence"]:
             dispute["memory_ref"] = ref
             kept_disputes.append(dispute)

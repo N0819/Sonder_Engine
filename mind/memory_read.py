@@ -14,7 +14,8 @@ from mind.memory_common import (
 )
 from mind.memory_write import (
     _IMPORTANCE_CEILING, _IMPORTANCE_DISPUTE_STEP, _IMPORTANCE_STEP,
-    _MAX_DISPUTE_READING, _delete_memory_fts, _dispute_of, _embed_memory,
+    _MAX_DISPUTE_HISTORY, _MAX_DISPUTE_READING, _delete_memory_fts,
+    _dispute_of, _embed_memory,
     _replace_memory_fts, _row_memory, effective_importance, prepare_memory,
 )
 
@@ -236,7 +237,7 @@ def update_memory(mid, content=None, salience=None, kind=None, provenance=None, 
     return True
 
 def record_dispute(chat_id, char_id, gist, reading, turn_idx, *,
-                   memory_ref=""):
+                   memory_ref="", sources=()):
     """The character has re-read one of their own memories.
 
     The event stays exactly as it was -- "I saw this" is still true, and the
@@ -274,12 +275,40 @@ def record_dispute(chat_id, char_id, gist, reading, turn_idx, *,
     updated = []
     for row in hits:
         prior = _dispute_of(row["disputed"]) or {}
+        # AN ADDENDUM, NOT AN OVERWRITE.
+        #
+        # This function's own premise is that the event stays exactly as it
+        # was -- being deceived does not unmake what you saw. The READING was
+        # not held to the same rule: a second re-reading replaced the first
+        # and only bumped a counter, so the mechanism built to preserve a
+        # memory's history destroyed the history of how it had been read.
+        #
+        # A mind that read one moment three ways over two hundred beats has a
+        # shape, and that shape is the interesting thing about it. Keeping the
+        # sequence also makes rumination VISIBLE without forbidding it: eight
+        # readings of one row citing the same source is legible as a loop,
+        # where a counter alone cannot tell a loop from genuine instability.
+        #
+        # `reading`, `turn_idx` and `count` stay at the top level as the
+        # LATEST, so every existing reader keeps working unchanged and an old
+        # single-reading blob still parses.
+        history = list(prior.get("history") or [])
+        if prior.get("reading"):
+            already = {(h.get("turn_idx"), h.get("reading")) for h in history}
+            if (prior.get("turn_idx"), prior.get("reading")) not in already:
+                history.append({"turn_idx": prior.get("turn_idx"),
+                                "reading": prior.get("reading"),
+                                "sources": list(prior.get("sources") or [])})
         blob = _storage_json({
             "turn_idx": turn_idx,
             "reading": reading,
+            # What changed the reading, so a repeat off the same evidence is
+            # distinguishable from a mind that genuinely learned something.
+            "sources": [str(s) for s in (sources or []) if str(s or "").strip()],
             # A memory re-read twice has been genuinely unstable, and that is
             # worth being able to see.
             "count": int(prior.get("count") or 0) + 1,
+            "history": history[-_MAX_DISPUTE_HISTORY:],
         })
         # Being wrong about something is a larger fact about it than being
         # cited once, so a dispute moves importance further than an ordinary
