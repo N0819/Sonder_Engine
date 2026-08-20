@@ -59,6 +59,21 @@ KNOWLEDGE_RANGES = ["local", "global"]
 
 LORE_INHERITANCE_MODES = ["inherit", "isolated", "reference_only"]
 
+# The kind vocabulary (docs/guides/MEMORY.md 1). Enforced at prepare_memory:
+# rows HAD escaped it -- 253 `episode` rows and one `belief` row live -- and
+# two consumers test kind by exact string (belief weighting fires on
+# kind == "inference" only, and reconcile_inference_confidence selects
+# kind='inference'), so the stray `belief` row was a belief that could never
+# be revised or demoted (docs/experiments/AUDIT_MEMORY.md 1.5).
+MEMORY_KINDS = [
+    "episodic", "dialogue", "inference", "semantic",
+    "relationship", "promise", "intention",
+]
+
+# Spellings live mint sites actually used, mapped to the vocabulary. These
+# coerce quietly; an unknown kind coerces with a warning.
+MEMORY_KIND_ALIASES = {"episode": "episodic", "belief": "inference"}
+
 MEMORY_CATEGORIES = [
     "episode", "dialogue", "promise", "relationship",
     "person", "place", "semantic", "intention",

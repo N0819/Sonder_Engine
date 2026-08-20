@@ -140,6 +140,58 @@ def test_a_fallback_batch_aborts_instead_of_downgrading(bank, monkeypatch):
     assert after["embedding"] == before["embedding"]
 
 
+def test_mint_coerces_kind_into_the_vocabulary(bank, monkeypatch):
+    # Three live mint sites said "episode" and one row said "belief"; both
+    # spellings are invisible to every kind-equality predicate (belief
+    # weighting, confidence reconciliation). Enforced at the one door every
+    # mint path walks through (AUDIT_MEMORY.md 1.5).
+    patch_provider_seam(monkeypatch, "embed_texts_meta", _fake_embedder())
+    mid = memory.add_memory(bank["chat"], bank["char"], None, "episode",
+                            "remembered", 0.6, "The chapel bells rang.",
+                            turn_idx=1)
+    bid = memory.add_memory(bank["chat"], bank["char"], None, "belief",
+                            "inferred", 0.6, "About the bells: they ring for a death.",
+                            turn_idx=2)
+
+    assert _row(mid)["kind"] == "episodic"
+    row = _row(bid)
+    assert row["kind"] == "inference"
+    assert row["category"] == "inference"
+
+
+def test_stock_kind_repair_folds_strays_back(bank, monkeypatch):
+    patch_provider_seam(monkeypatch, "embed_texts_meta", _fake_embedder())
+    mid = _seed(bank, key_phrases=["stone bridge"], entities=["Mara"])
+    from core.db import qi
+    qi("UPDATE memories SET kind='belief' WHERE id=?", (mid,))
+
+    dry = memory.repair_memory_kinds(bank["chat"], bank["char"], dry_run=True)
+    assert dry["belief"] == 1
+    assert _row(mid)["kind"] == "belief"
+
+    memory.repair_memory_kinds(bank["chat"], bank["char"], dry_run=False)
+    assert _row(mid)["kind"] == "inference"
+
+
+def test_seed_salience_repair_caps_only_opening_seeds(bank, monkeypatch):
+    patch_provider_seam(monkeypatch, "embed_texts_meta", _fake_embedder())
+    seed_row = memory.add_memory(bank["chat"], bank["char"], None, "episodic",
+                                 "remembered", 1.0, "Knows the site well.",
+                                 turn_idx=0)
+    drive_row = memory.add_memory(bank["chat"], bank["char"], None, "episodic",
+                                  "remembered", 1.0, "Everything changed.",
+                                  turn_idx=40)
+
+    report = memory.repair_seed_salience(bank["chat"], bank["char"],
+                                         dry_run=False)
+
+    assert report["reseeded"] == 1
+    assert _row(seed_row)["salience"] == pytest.approx(0.7)
+    # The deliberate 1.0 mint that remains live (a drive shift) carries the
+    # turn it happened on, and is untouched.
+    assert _row(drive_row)["salience"] == pytest.approx(1.0)
+
+
 def test_the_repair_is_idempotent(bank, monkeypatch):
     patch_provider_seam(monkeypatch, "embed_texts_meta", _fake_embedder())
     _seed(bank, key_phrases=["the", "stone bridge"], entities=["She", "Mara"])

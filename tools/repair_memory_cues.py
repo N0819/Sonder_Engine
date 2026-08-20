@@ -32,9 +32,16 @@ def main():
     def progress(count, kind):
         print(f"  repaired {count} {kind}...", flush=True)
 
+    # The two deterministic repairs first (pure SQL, no provider): escaped
+    # `kind` spellings, and pre-clamp opening seeds stuck at salience 1.0.
+    kinds = memory.repair_memory_kinds(
+        args.chat, args.character, dry_run=not args.apply)
+    seeds = memory.repair_seed_salience(
+        args.chat, args.character, dry_run=not args.apply)
     report = memory.repair_memory_cues(
         args.chat, args.character, dry_run=not args.apply, progress=progress)
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps({"kinds": kinds, "seed_salience": seeds,
+                      "cues": report}, ensure_ascii=False, indent=2))
     if report.get("dry_run"):
         print("dry run -- nothing written; pass --apply to repair")
     if report.get("stopped_early"):
