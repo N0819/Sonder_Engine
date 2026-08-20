@@ -119,6 +119,17 @@ def search_memory_summaries(chat_id, char_id, query, k=3, *,
     # in search_memories', which is what makes them shareable.
     if embedded is None or not (getattr(embedded, "vectors", None) or ()):
         embedded = embed_texts_meta([str(query or "")])
+    # A crc32 batch is NOT refused here, unlike `search_memories` and
+    # `contrast_memory`, and the asymmetry is deliberate.
+    #
+    # There the hash competed against BM25 and exact-cue for a fixed number of
+    # payload slots, so its noise displaced better candidates and cost 49
+    # probes of 470. This lane has no second ranker: refusing the hash returns
+    # no windows at all. What the hash costs here is the ORDER of a set of the
+    # character's own summaries, each carrying its own turn range -- arbitrary
+    # selection of real autobiography, rather than real material pushed out by
+    # noise. Losing the lane entirely is the worse trade, so the sketch keeps
+    # this job until something measures the alternative.
     qv = np.asarray(embedded.vectors[0], dtype=np.float32)
     live_model = embedded.model_key
     scored = []

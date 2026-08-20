@@ -10,8 +10,12 @@ venv/
 # A backup taken before an edit to live story data is still live story
 # data, and it is two gigabytes of it. `*.db` does not match
 # `engine.db.backup-...`, so `git add -A` spent its time hashing one.
-*.db.backup*
-*.db.bak
+#
+# Named suffixes were tried first and the class outran them: the next copy
+# was `engine.db.prerepair-2026-08-20`, taken before running
+# `tools/repair_memory_cues.py --apply`, and it matched neither. A file whose
+# name contains `.db.` is a database derivative whatever the word after it is.
+*.db.*
 *.sqlite
 *.sqlite3
 .env

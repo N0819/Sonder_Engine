@@ -464,3 +464,57 @@ if some duplicate-detection problem turns out to need one*. Today none does.
   (657), and the converter's own header says it is a weak test of everything the
   firewall touches. What it measures well is ranking. What it cannot say is
   whether a character recalls well.
+
+---
+
+## 8. The fix, and the third arm nobody had run
+
+Added 2026-08-20, landing UNBUILT 2.21. Same bank, same 470 probes, same
+k=16, same method as section 2 -- chat 79's 10,960 rows rebuilt onto
+`cheap:crc32:256` through the production `rebuild_embeddings` path in 162 s,
+with the `embeddings` and `default` roles blanked so
+`embedding_model_key()` resolves to the hash for real.
+
+| arm | what it does with the sketch | hits / 470 |
+|---|---|---|
+| A -- before | ranks on it AND deduplicates on it | **289** |
+| C -- section 1's no-vector arm | drops it entirely; MMR falls back to Jaccard | **338** |
+| **B -- shipped** | **refuses it as a RANKER, keeps it for MMR** | **346** |
+
+**Arms A and C reproduced section 1's 289 and 338 EXACTLY**, on a bank rebuilt
+three months of commits later. That is what makes arm B a comparison rather
+than a coincidence, and it is the reason to re-run a control you already have
+the number for.
+
+**Arm B is the change, and it beats the arm this file recommended.** Section 1
+established that switching the vector rankings off scored 338 against the
+fallback's 289. What it could not separate was the one confound section 2
+records: in that arm no row had a comparable vector at all, so
+`_memory_similarity` fell back to Jaccard for MMR redundancy. Arm B keeps
+`_vector` populated and refuses only the two query-versus-memory rankings, so
+**the difference between B and C is exactly that confound and nothing else** --
+one variable, eight probes, 338 -> 346.
+
+Arm C is also the slow one, by a wide margin: it ran roughly twice arm B's
+wall clock, because Jaccard re-tokenises two documents per candidate pair
+while cosine reads two arrays that are already in memory. Worth noting only
+because it means the sketch is not being kept at a cost.
+
+So this is section 6's open hypothesis, measured end-to-end at last. That
+section found the sketch worthless as a semantic proxy (r = 0.028) and
+near-exact as a near-duplicate detector (99.1% precise against real cosine
+0.95), named `_memory_similarity` as a place it might therefore earn its keep,
+and then declined to propose it -- "none was measured end-to-end here". It is
+now. Keeping the sketch for the question it can answer, while refusing it the
+question it cannot, is worth more than either using it everywhere or throwing
+it away.
+
+**Scope, unchanged and worth repeating**, because the number is large and the
+population is narrow. This is the arm where the sketch IS the configured
+embedding -- an install that has never set a provider. Where a real provider is
+configured and one call happened to fall back, the row and query keys already
+disagreed, both scores were already 0, and the repair lane already had the
+row. That path was correct before and is untouched; `tests/test_no_provider_retrieval.py`
+pins it so a later simplification cannot widen the refusal into it and call it
+the same fix. The `cheap:crc32:256` stamp is untouched too, for the four
+readers section 7 lists.

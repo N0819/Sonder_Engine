@@ -2702,6 +2702,52 @@ offline/test operation without a provider, and near-duplicate detection --
 measured 99.1% precise against real cosine 0.95, which is a genuinely useful
 tool for finding the forty near-identical descriptions of one room in a bank.
 
+**BUILT 2026-08-20**, and the shipped arm scores higher than the one this
+entry proposed. `search_memories` now contributes no vector ranking on a
+fallback batch -- one flag, `rank_by_vector`, gating the semantic, cue-vector
+and aspect rankings, using the same `embedded.fallback` test
+`recall_confidence` has always made. `contrast_memory` makes the same refusal
+for a sharper reason: that axis REWARDS distance, so a hash there would not
+merely fail to find the true contrast, it would nominate rows for unbidden
+recall by coin flip while reporting a semantic reason. (Its own docstring
+already recorded that the semantic half was deliberately absent until real
+vectors existed; this restores that.)
+
+Measured on the same bank, probes and k
+([`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md) §8):
+**289 -> 346**, against the 338 this entry expected. Both control arms
+reproduced their recorded numbers EXACTLY -- 289 for ranking on the hash, 338
+for dropping the vector channel entirely -- which is what makes the third arm
+a comparison rather than a coincidence.
+
+The extra eight probes are the confound `CRC32_CONTROL.md` §2 could not
+remove, resolved in the sketch's favour. The 338 arm dropped the vectors
+entirely, so MMR redundancy fell back to Jaccard. The shipped change keeps
+`_vector` populated -- the hash is refused as a memory-versus-QUERY relevance
+signal and kept as a memory-versus-MEMORY near-duplicate signal, which is the
+one job §6 measured it to be near-exact at and then declined to propose
+without an end-to-end number. This is that number.
+
+**And `search_memory_summaries` deliberately does NOT make the refusal.**
+There the hash competes against nothing: refusing it returns no windows at
+all, where refusing it in `search_memories` just lets BM25 and exact-cue carry
+the query. What it costs in the window lane is the ORDER of a set of the
+character's own summaries, each carrying its own turn range -- arbitrary
+selection of real autobiography, rather than real material displaced by noise.
+The asymmetry is stated at the call site so it reads as a decision rather than
+an omission.
+
+`tests/test_no_provider_retrieval.py` (8 tests) pins all three boundaries: the
+stamp survives, the sketch keeps the near-duplicate job, and an install with a
+real provider is untouched. Three of them fail if `rank_by_vector` is forced
+back to True.
+
+*Found while landing this*: three tests in `test_embedding_rebuild.py` had been
+asserting that `"semantic match"` fires, on a bank with no embeddings provider
+-- so a rebuild's "restored semantic reach" and an aspect's own rank list were
+both being demonstrated on crc32 noise. The properties are real; they now run
+against a stubbed provider that reports `fallback=False`.
+
 ### 2.22 Exact-cue matching scans the whole bank, and an index is what it wants
 
 Measured 2026-08-20, [`experiments/RETRIEVAL_COST.md`](experiments/RETRIEVAL_COST.md).

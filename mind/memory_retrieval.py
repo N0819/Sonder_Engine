@@ -527,19 +527,55 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     sem_scores, cue_scores = [], []
     stranded = 0
     comparable = {}
+    # A hash vector may not RANK a memory against a query, even when its keys
+    # match the bank's.
+    #
+    # `embedded.fallback` means these vectors came from `cheap_embed` -- a
+    # crc32 character n-gram sketch. It answers "is this the same text"; it was
+    # standing in for "does this mean the same thing", and it correlates with
+    # real similarity at r = 0.028 over 7,998,000 row pairs. Against a bank the
+    # sketch also WROTE, the model keys match, so nothing above excluded it and
+    # it carried 2.15 of the 4.5 RRF weight on pure noise.
+    #
+    # Measured over the 10,960-row LongMemEval bank, 470 probes at k=16
+    # (`docs/experiments/CRC32_CONTROL.md` 8): ranking on the hash scored 289
+    # and this scores **346**. Dropping the vector channel ENTIRELY scores
+    # 338, which is the number that says what is actually wrong: the hash was
+    # 49 probes worse than having no vector signal at all, because its noise
+    # displaced genuine keyword candidates out of a fixed-size payload.
+    # Widening it does not help -- the width curve saturates exactly at the
+    # no-vector line, since there is no signal to sharpen. `_rrf_add` skips an
+    # empty ranking, so BM25 and exact-cue simply carry the query, with no
+    # migration.
+    #
+    # This bites only where the crc32 sketch IS the configured embedding,
+    # which is every install that has never set up a provider. Where a real
+    # provider is configured and one call happened to fall back, the row keys
+    # already disagree, so `compatible` was False and these scores were
+    # already 0 -- that path was correct and is unchanged. Same reasoning and
+    # same idiom as `recall_confidence`, which has always refused a fallback
+    # batch.
+    #
+    # `_vector` deliberately stays populated. It feeds `_memory_similarity`,
+    # which compares two MEMORIES rather than a memory and a query -- the
+    # near-duplicate job the sketch is genuinely good at (99.1% precise
+    # against real cosine 0.95). The sketch is not being distrusted; it is
+    # being kept to the question it can answer.
+    rank_by_vector = not getattr(embedded, "fallback", False)
     for row in rows:
         mem = _row_memory(row)
         fv, cv = _vec(row["embedding"]), _vec(row["cue_embedding"])
         compatible = row["embedding_model"] == embedded.model_key and row["embedding_dim"] == embedded.dimensions
         if not compatible:
             stranded += 1
-        sem = _cos(qv, fv) if compatible and fv is not None else 0.0
-        cue = _cos(qv, cv) if compatible and cv is not None else 0.0
+        usable = compatible and rank_by_vector
+        sem = _cos(qv, fv) if usable and fv is not None else 0.0
+        cue = _cos(qv, cv) if usable and cv is not None else 0.0
         mem["_vector"] = fv if compatible else None
         memories[mem["id"]] = mem
         sem_scores.append((sem, mem["id"]))
         cue_scores.append((cue, mem["id"]))
-        if compatible and aspect_vectors:
+        if usable and aspect_vectors:
             # Kept only while the aspect rankings are built, a few lines down.
             comparable[mem["id"]] = (fv, cv)
     _warn_stranded_embeddings(chat_id, char_id, stranded, len(rows), embedded.model_key)
@@ -982,7 +1018,15 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
     comparable = {}
     try:
         embedded = embed_texts_meta([query_text or "memory"])
-        for r in rows:
+        # And the same refusal `search_memories` makes, for a sharper reason.
+        # A crc32 sketch scores an unrelated pair at arbitrary distance, and
+        # on THIS axis distance is the thing being rewarded -- so the hash
+        # would not merely fail to find what contrasts with the beat, it would
+        # nominate rows for unbidden recall by coin flip while reporting a
+        # semantic reason. Dropping it leaves the structural axis alone, which
+        # is exactly the degradation the paragraph above already accepts.
+        usable = not getattr(embedded, "fallback", False)
+        for r in (rows if usable else ()):
             if (r["embedding"] and r["embedding_model"] == embedded.model_key
                     and r["embedding_dim"] == embedded.dimensions):
                 comparable[r["id"]] = _vec(r["embedding"])

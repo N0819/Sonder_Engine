@@ -72,6 +72,60 @@ def _rebuild_one_checkpoint(temp_db, chat_id, memories, extra=None):
             "memories": stored.get("memories") or []}
 
 
+
+
+# ---- A stubbed REAL provider, for the tests whose subject is the vector ----
+#
+# Most of this file runs with no `embeddings` role configured, which is
+# correct: a rebuild, a strand and a bank status are all about the STAMP on a
+# row, and the stamp does not care what made the vector.
+#
+# Three tests below are about the vector itself -- that a rebuild restores
+# semantic reach, and that an aspect earns its own rank list -- and those ran
+# on crc32 hashes until 2026-08-20, because `search_memories` ranked on them.
+# It no longer does: the hash correlates with real similarity at r = 0.028 and
+# measured 49 probes WORSE than no vector channel at all
+# (`docs/experiments/CRC32_CONTROL.md`, UNBUILT 2.21), so it is refused as a
+# relevance signal. Which means those three tests had been passing on noise
+# that happened to be shaped like an answer.
+#
+# The property each one asserts is real and worth keeping; it just needs a
+# provider to be true. This stub is the smallest thing that IS one: a bag of
+# content words on 64 axes, stamped like a configured model and honestly
+# reporting `fallback=False`. At three-memory scale, lexical overlap and
+# semantic closeness coincide -- which is fine, because what these tests
+# measure is the PLUMBING (does the aspect get its own rank list), not how
+# good an embedding is.
+_STUB_MODEL = "stub:1:test-embed-64"
+_STUB_DIM = 64
+
+
+def _stub_vector(text):
+    # `zlib.crc32`, not `hash()`: str hashing is salted per process unless
+    # PYTHONHASHSEED is pinned, so the axes -- and therefore every cosine in
+    # this file -- would change between runs. A test that ranks must not.
+    import re as _re
+    import zlib as _zlib
+    v = np.zeros(_STUB_DIM, dtype=np.float32)
+    for word in _re.findall(r"[a-z]+", (text or "").lower()):
+        v[_zlib.crc32(word.encode()) % _STUB_DIM] += 1.0
+    n = float(np.linalg.norm(v))
+    return v / n if n > 0 else v
+
+
+def _stub_batch(texts, **_kw):
+    return providers.EmbeddingBatch(
+        vectors=[_stub_vector(t) for t in texts], model_key=_STUB_MODEL,
+        dimensions=_STUB_DIM, fallback=False)
+
+
+@pytest.fixture
+def real_provider(monkeypatch):
+    patch_provider_seam(monkeypatch, "embed_texts_meta", _stub_batch)
+    patch_provider_seam(monkeypatch, "embedding_model_key", lambda: _STUB_MODEL)
+
+
+
 def _strand(model="ancient:model", dim=99):
     from core.db import qi
     qi("UPDATE memories SET embedding_model=?, embedding_dim=?", (model, dim))
@@ -90,7 +144,7 @@ def test_status_reports_the_split(bank):
     assert st["is_fallback"] is True     # no embeddings provider configured
 
 
-def test_a_rebuild_restores_semantic_reach(bank):
+def test_a_rebuild_restores_semantic_reach(bank, real_provider):
     _seed(bank, 6)
     _strand()
     # Stranded: both vector rankings score 0, so nothing has a "semantic match"
@@ -191,7 +245,7 @@ class TestAspectsGetTheirOwnRanking:
             memory.add_memory(bank["chat"], bank["chars"][0], None, "episodic",
                               "witnessed", 0.5, content, turn_idx=i, gist=gist)
 
-    def test_an_aspect_changes_what_comes_back(self, bank):
+    def test_an_aspect_changes_what_comes_back(self, bank, real_provider):
         self._bank(bank)
         view = "The bridge is ahead of her in the failing light. " * 12
         plain = memory.search_memories(bank["chat"], bank["chars"][0], view)
@@ -204,7 +258,8 @@ class TestAspectsGetTheirOwnRanking:
             "how you are feeling" in (m.get("retrieval_reasons") or [])
             for m in withaspect)
 
-    def test_the_aspect_is_named_in_the_retrieval_reasons(self, bank):
+    def test_the_aspect_is_named_in_the_retrieval_reasons(self, bank,
+                                                          real_provider):
         self._bank(bank)
         hits = memory.search_memories(
             bank["chat"], bank["chars"][0], "the bridge at dusk",
