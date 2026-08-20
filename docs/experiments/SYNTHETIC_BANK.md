@@ -113,3 +113,51 @@ how the mind is supposed to say which one it now believes.
 - A larger `superseded` set. Eighteen probes across three worlds is small, and
   is reported with its denominator for that reason.
 - A rerun with questions authored by something that never saw the plan.
+
+---
+
+## 6. What characters DO with a contradiction, measured
+
+Added 2026-08-20. `tools/benchmark_memory_rationality.py` hands a character
+the belief and the observation that overturned it, through the production
+payload, and asks. A judge that never sees the payload classifies the answer
+against the plan's two facts. The character prompt carries NO instruction to
+look for conflicts -- an arm run WITH such a clause scored LOWER on `conflict`
+(4/6 against 6/6), so the behaviour is not prompt-induced and the invitation
+slightly got in the way.
+
+| world | conflict | current | stale | neither |
+|---|---|---|---|---|
+| 1 | 6 | 0 | 0 | 0 |
+| 2 | 6 | 0 | 0 | 0 |
+| 3 | 3 | 2 | 0 | 1 |
+| 4 | 1 | 3 | **1** | 1 |
+| **all** | **16** | **5** | **1** | **2** |
+
+**Reasoned from the newer evidence: 21/24 (88%). Took the superseded belief:
+1/24 (4%).**
+
+**The per-world spread is the finding, not the total.** Worlds 1 and 2 named
+the contradiction 6 times out of 6; world 4 managed 1 and produced the only
+outright failure. Any single world would have supported a confident and wrong
+general claim -- and the first three did, which is why this table exists. The
+rate is a property of the material, not of the engine.
+
+The failure is legible rather than mysterious, which is what a good instrument
+buys: the judge records that the answer *"affirms the earlier belief that the
+canal water level was dangerously low, citing specific memories, and does not
+mention any later change from heavy rains."* A plain case of taking the first
+thing read.
+
+### What this does and does not license
+
+It DOES establish the capability. A mind handed both rows, with the stale one
+usually ranked higher, gets it right 88% of the time and articulates the
+contradiction in two thirds of cases without being asked. Whatever is wrong
+with belief revision here, the reasoning is not it.
+
+It does NOT establish a rate for ordinary play. Every case aims a question
+squarely at the contradicted fact; a beat that merely happens near one does
+not. The gap between those two situations is `2.24`'s remaining open half, and
+the deterministic detector built to close it is measured not to work (same
+entry).

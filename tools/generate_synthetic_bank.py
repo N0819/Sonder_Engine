@@ -124,7 +124,7 @@ def _refuse_fallback_embeddings():
     return batch.model_key, batch.dimensions
 
 
-def _json_call(role, system, user, *, retries=5):
+def _json_call(role, system, user, *, retries=8):
     """One model call that must return JSON, with the fences stripped.
 
     Retries the TRANSPORT as well as the parse. The first version retried only
@@ -144,7 +144,13 @@ def _json_call(role, system, user, *, retries=5):
             last = "%s: %s" % (type(exc).__name__, exc)
             if attempt == retries - 1:
                 break
-            time.sleep(min(30, 2 ** attempt))
+            # Up to ~2 minutes across the ladder rather than ~30 seconds.
+            # Measured twice: three plan calls issued at once make the
+            # provider drop connections for longer than five attempts at
+            # 2**n can wait out, and losing a run to a transient outage is
+            # exactly what the retry exists to prevent. Waiting is free here
+            # -- nobody is watching this.
+            time.sleep(min(60, 2 ** attempt))
             continue
         text = str(raw or "").strip()
         if text.startswith("```"):
