@@ -218,15 +218,33 @@ stale after the next move — silently, which is the failure being fixed.
 
 Two, both found while mapping the file. Recorded so the split stays a move:
 
-1. **`_kw_scores` (memory.py:170) discards BM25.** It orders by `rank` — which
-   *is* bm25() — and then throws the score away for a positional decay,
-   `1.0 - i / max(len(rows), 1)`. A single weak match scores 1.0, the same as
-   the best match in a field of fifty. It is the keyword half of both
-   `search_memories` and `search_lore`.
+1. **`_kw_scores` (now `memory_common.py`) discards BM25.** It orders by
+   `rank` — which *is* bm25() — and then throws the score away for a positional
+   decay, `1.0 - i / max(len(rows), 1)`. A single weak match scores 1.0, the
+   same as the best match in a field of fifty.
 
-2. **Stale-dimension vectors compete on the keyword term alone.** The comment
-   above the 0.65/0.35 blend records the measurement. A vector at the old
-   dimension cannot contribute to `_cos`, so the entry's whole score comes from
-   a keyword term that (per 1) has no magnitude.
+   **Corrected 2026-08-19 by the audit** (`docs/experiments/AUDIT_MEMORY.md`),
+   because the sentence that stood here was wrong in a way worth keeping
+   visible: it called this "the keyword half of both `search_memories` and
+   `search_lore`". It is not. `_kw_scores` has exactly one caller,
+   `search_lore` at `memory_lore_entries.py:260`. `search_memories` ranks
+   lexically through `_lexical_memory_ranking`, which returns an ORDERED LIST
+   of ids into reciprocal-rank fusion — RRF consumes order and nothing else, so
+   discarding magnitude there is the design, not a defect. The damage is
+   confined to `search_lore`, where the value is a weighted term in a linear
+   blend. Measured on the live corpus: top-10 membership churns on 59% of
+   queries against 311-entry books, top-1 on 6-11%.
+
+2. **Stale-dimension vectors compete on the keyword term alone.** ~~The comment
+   above the 0.65/0.35 blend records the measurement.~~ **The premise has since
+   expired**: all 9,608 memories, 422 summaries and 2,311 lore rows are on the
+   live model at dim 2560. The comment describes a corpus that no longer
+   exists. What survives is narrower and latent — `search_lore` checks
+   dimension only and never the model key, so 840 lore rows with NULL model
+   stamps would not be caught by a future model change at the same width.
+
+Both were carried into this document from a read of the code, and both were
+partly wrong. That is the argument for the audit having happened separately
+from the split rather than during it.
 
 Both belong to the audit that follows the split, not to any of the 13 steps.
