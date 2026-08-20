@@ -54,6 +54,7 @@ from mind.memory_write import (  # noqa: F401
     _MAX_DISPUTE_READING, _REPAIR_DELAY, _REPAIR_LOCK, _REPAIR_MAX_DELAY,
     _REPAIR_MAX_PENDING, _REPAIR_MAX_ROUNDS, _REPAIR_PENDING, _REPAIR_THREAD,
     _clamp, _clamp_signed, _default_category, _delete_memory_fts, _dispute_of,
+    _CHARS_PER_TOKEN, _EMBED_REQUEST_TOKENS, _embed_in_request_sized_chunks,
     _embed_memory, _ensure_repair_thread, _extract_entities,
     _extract_key_phrases, _gist, _json_list, _memory_cues, _memory_document,
     _repair_loop, _replace_memory_fts, _row_memory, _turn_idx_for,

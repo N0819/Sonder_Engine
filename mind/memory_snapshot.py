@@ -424,11 +424,15 @@ def import_character_memories(chat_id, char_id, memories):
     embedded = batch.get("embedded")
     if (embedded is not None and embedded.fallback
             and embedding_model_key() != "cheap:crc32:256"):
+        # %-formatted, like the sibling refusal in `rebuild_embeddings`: an
+        # f-string here is collected by `tools/extract_ui_catalog.py` as a
+        # translatable UI string, and this is an engine diagnostic for a host
+        # reading an API error, not screen copy for a player.
         raise ValueError(
             "refusing to import: embeddings fell back to the crc32 hash, so "
             "every imported memory would be reachable by keyword only while "
-            f"{embedding_model_key()} is configured. "
-            f"Provider error: {embedded.error or 'unknown'}")
+            "%s is configured. Provider error: %s"
+            % (embedding_model_key(), embedded.error or "unknown"))
     return len(add_memories_batch(prepared_batch=batch))
 
 def dump_memory_summaries(chat_id):

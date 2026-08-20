@@ -27,8 +27,8 @@ import time
 import numpy as np
 import pytest
 
-from mind import memory_write
-from mind.memory_snapshot import import_character_memories
+from mind import memory
+from mind.memory import import_character_memories
 from tests.helpers import patch_seam
 
 
@@ -66,7 +66,7 @@ class TestChunking:
         calls = []
         patch_seam(monkeypatch, "mind.memory_write", "embed_texts_meta",
                    _recording_embedder(calls))
-        memory_write._embed_in_request_sized_chunks(["short", "texts"])
+        memory._embed_in_request_sized_chunks(["short", "texts"])
         assert len(calls) == 1, "small batches must not pay for chunking"
 
     def test_an_oversized_batch_is_split(self, monkeypatch):
@@ -74,14 +74,14 @@ class TestChunking:
         patch_seam(monkeypatch, "mind.memory_write", "embed_texts_meta",
                    _recording_embedder(calls))
         # Four texts, each ~half the budget in tokens.
-        big = "x" * (memory_write._EMBED_REQUEST_TOKENS
-                     * memory_write._CHARS_PER_TOKEN // 2)
-        memory_write._embed_in_request_sized_chunks([big] * 4)
+        big = "x" * (memory._EMBED_REQUEST_TOKENS
+                     * memory._CHARS_PER_TOKEN // 2)
+        memory._embed_in_request_sized_chunks([big] * 4)
         assert len(calls) > 1, "the whole point is that this is not one request"
         for chunk in calls:
-            est = sum(len(t) for t in chunk) // memory_write._CHARS_PER_TOKEN
+            est = sum(len(t) for t in chunk) // memory._CHARS_PER_TOKEN
             # One text alone may exceed the budget; two must never.
-            assert len(chunk) == 1 or est <= memory_write._EMBED_REQUEST_TOKENS
+            assert len(chunk) == 1 or est <= memory._EMBED_REQUEST_TOKENS
 
     def test_vector_order_survives_the_split(self, monkeypatch):
         """add_memories_batch indexes by position -- row i reads 2i and 2i+1 --
@@ -90,9 +90,9 @@ class TestChunking:
         calls = []
         patch_seam(monkeypatch, "mind.memory_write", "embed_texts_meta",
                    _recording_embedder(calls))
-        unit = memory_write._EMBED_REQUEST_TOKENS * memory_write._CHARS_PER_TOKEN
+        unit = memory._EMBED_REQUEST_TOKENS * memory._CHARS_PER_TOKEN
         texts = ["y" * (unit // 3 + n) for n in range(9)]
-        got = memory_write._embed_in_request_sized_chunks(texts)
+        got = memory._embed_in_request_sized_chunks(texts)
         assert len(calls) > 1
         assert [int(v[0]) for v in got.vectors] == [len(t) for t in texts]
 
@@ -102,8 +102,8 @@ class TestChunking:
         calls = []
         patch_seam(monkeypatch, "mind.memory_write", "embed_texts_meta",
                    _recording_embedder(calls, fallback_on=(1,)))
-        unit = memory_write._EMBED_REQUEST_TOKENS * memory_write._CHARS_PER_TOKEN
-        got = memory_write._embed_in_request_sized_chunks(["z" * unit] * 3)
+        unit = memory._EMBED_REQUEST_TOKENS * memory._CHARS_PER_TOKEN
+        got = memory._embed_in_request_sized_chunks(["z" * unit] * 3)
         assert len(calls) >= 2
         assert got.fallback is True
         assert got.error
@@ -177,7 +177,7 @@ class TestImportRefusesAHashedBank:
         calls = []
         patch_seam(monkeypatch, "mind.memory_write", "embed_texts_meta",
                    _recording_embedder(calls, fallback_on=(0,)))
-        ids = memory_write.add_memories_batch([{
+        ids = memory.add_memories_batch([{
             "chat_id": chat_id, "char_id": char_id, "turn_id": None,
             "kind": "episodic", "provenance": "witnessed", "salience": 0.5,
             "content": "The bell rang twice.", "turn_idx": 3,
