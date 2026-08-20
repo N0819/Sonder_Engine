@@ -47,6 +47,25 @@ def _temporal_mode(query_text):
         return "recent"
     return "neutral"
 
+# The exact signal's full tier is reserved for DISTINCTIVE stored phrases --
+# a quoted utterance, a proper multi-word cue -- because that is the signal
+# MEMORY.md 5 documents as strongest and rarest. Key phrases also carry the
+# frequency counter's unigrams and bigrams ("the woman", "told us"), and a
+# bigram literally present in the query is usually a coincidence of common
+# words: measured on the repaired tuning bank, those fires alone put 3-20
+# arbitrary rows into the highest-weighted RRF list and pushed
+# semantically-best targets out of the payload (tuned probes 24/26 -> 21/26).
+# Word overlap is the LEXICAL leg's job (BM25 weighs it properly); a generic
+# phrase fire is demoted below the entity tier so it can nudge the scalar
+# bonus but never claim the exact list's full rank weight.
+_EXACT_DISTINCTIVE_TOKENS = 3
+_EXACT_GENERIC_TIER = 0.6
+
+
+def _distinctive_phrase(phrase):
+    return len(_ling("_WORD_RE").findall(phrase)) >= _EXACT_DISTINCTIVE_TOKENS
+
+
 def _exact_cue_score(memory, query_text):
     ql = (query_text or "").lower()
     if not ql:
@@ -55,14 +74,19 @@ def _exact_cue_score(memory, query_text):
     for phrase in memory.get("key_phrases") or []:
         pl = phrase.lower().strip()
         if pl and pl in ql:
-            score = max(score, 1.0)
+            score = max(score, 1.0 if _distinctive_phrase(pl)
+                        else _EXACT_GENERIC_TIER)
         elif pl and ql in pl and len(ql) >= 4:
             score = max(score, 0.8)
     for entity in memory.get("entities") or []:
-        if entity.lower() in ql:
+        el = entity.lower().strip()
+        # Word-boundary, not bare substring: a stored "Mara" must not fire
+        # inside "marathon". Insufficient alone (audit 1.3 measured it), but
+        # correct, and cheap now that the stock is junk-free.
+        if el and re.search(rf"(?<!\w){re.escape(el)}(?!\w)", ql):
             score = max(score, 0.7)
-    loc = (memory.get("location") or "").lower()
-    if loc and loc in ql:
+    loc = (memory.get("location") or "").lower().strip()
+    if loc and re.search(rf"(?<!\w){re.escape(loc)}(?!\w)", ql):
         score = max(score, 0.7)
     return score
 
@@ -444,9 +468,18 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     # is arbitrary; the disease is the tie mass, and the cue-material fixes
     # are what shrink it. Revisit only if a tie-break can be measured as a
     # win on BOTH banks.
+    # Only full-tier fires -- a distinctive stored phrase literally present
+    # in the query -- enter the exact LIST. Entity and location fires keep
+    # the small scalar bonus below but not the 1.25-weight rank list: a
+    # production query is the beat's whole view, which contains the cast's
+    # names by construction, so an entity fire is near-bank-wide (the
+    # audit's measured 71%) and rank inside the list falls to tie order.
+    # Generic-tier fires (a frequency bigram coinciding with query words)
+    # stay out for the same reason from the other side: word overlap is the
+    # lexical leg's job, weighed by BM25 instead of flat.
     exact_rank = [mid for mid in sorted(
         memories, key=lambda x: exact_scores[x], reverse=True)
-        if exact_scores[mid] > 0][:60]
+        if exact_scores[mid] > 0.8][:60]
     fused = defaultdict(float)
     reasons = defaultdict(list)
     _rrf_add(fused, reasons, sem_rank, 1.0, "semantic match")
