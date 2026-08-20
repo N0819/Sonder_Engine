@@ -2036,6 +2036,69 @@ budget before the request rather than after the refusal, and refuse to WRITE a
 fallback batch nobody asked for -- the rule `rebuild_embeddings` already
 states in its own docstring, applied to the batch writer that lacks it.
 
+### 1.76 `recall_confidence` measures distribution shape, and absence has the same shape as presence
+
+Measured 2026-08-19 against LongMemEval (MIT), the first retrieval instrument
+whose questions nobody on this project wrote
+([`experiments/AUDIT_MEMORY.md`](experiments/AUDIT_MEMORY.md) asked for one;
+`tools/longmemeval_to_bank.py` builds it). 10,960 rows in one bank, 470
+positive probes and **30 negatives whose answers are absent by construction**
+-- twice the hand-authored negative set that
+[`experiments/MEMORY_IMPROVEMENTS.md`](experiments/MEMORY_IMPROVEMENTS.md) §5
+could offer, and independent of this engine.
+
+Two results, and the second one is the entry.
+
+**The threshold does not survive scale.** Holding the query AND its target rows
+fixed and growing only the distractor mass (so nothing about the question or
+its answer changes):
+
+| rows | hit rate | median lift | min lift on a hit | negative median |
+|---|---|---|---|---|
+| 500 | 100% | 3.708 | 3.098 | 2.654 |
+| 1,000 | 100% | 4.702 | 3.852 | 3.379 |
+| 2,500 | 100% | 5.769 | 4.597 | 4.389 |
+| 5,000 | 100% | 6.204 | 4.943 | 5.127 |
+| 10,960 | 100% | 7.086 | 5.526 | 5.934 |
+
+The same question with the same answer scores nearly twice the lift purely
+because the bank grew. `_RECALL_ABSTAIN_LIFT = 1.7` was calibrated where lifts
+ran 1.724-2.3, on banks of at most 657 rows. At 500 rows on this corpus even
+the NEGATIVES score 2.654. A z-score against the bank's own distribution is
+scale-dependent by construction, so an absolute sigma threshold cannot hold
+across bank sizes -- and a thousand-turn story is the case the signal was
+built for.
+
+**And recalibrating cannot fix it, because the negatives drift at the same
+rate.** Positives climb 1.9x across the sweep, negatives 2.2x. The gap between
+"the answer is in this bank" and "the answer does not exist anywhere" stays at
+roughly ONE SIGMA at every scale and never widens. Over the full 500-probe run
+the two populations overlap almost entirely: positives median 6.197 (min
+3.555), negatives median 5.934 (min 4.249). True abstention on the shipped
+threshold: **0 of 30**. False abstention: 0 of 399, which is only reassuring
+until you notice nothing fires at all.
+
+The reason is structural rather than numerical. A query whose answer is absent
+still retrieves topically related rows and still produces a peaked distribution
+relative to the bank mean. Presence and absence have the SAME SHAPE; only the
+CONTENT of the top rows differs, and a statistic over scores cannot read
+content. MEMORY_IMPROVEMENTS.md §5 reached the edge of this from the other
+side -- "sharper teeth need row-level evidence... not a better threshold" -- and
+this is the measurement that closes it.
+
+What survives: the signal fails open, and it has never falsely suppressed a
+real recall in any measurement. So it is inert rather than harmful, and there
+is no urgency to remove it. What it must not do is be trusted, cited as an
+abstention mechanism, or extended to another lane. The honest replacements are
+row-level (a cross-encoder or an entailment check over the top-k, which reads
+what the rows SAY), and the honest interim is to stop calling this an
+abstention floor.
+
+Related: 2.16 records the floor as the surviving half of that entry and should
+be read with this beside it; 2.20 notes the separate reason the signal cannot
+fire early in a story (`_RECALL_CONFIDENCE_MIN_BANK = 40`, which the median
+bank does not reach until turn 10).
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
