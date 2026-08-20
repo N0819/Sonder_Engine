@@ -65,10 +65,26 @@ def test_quote_initial_interjection_is_not_an_entity():
     assert "Hinami" in entities
 
 
-def test_quote_initial_name_survives_when_it_recurs():
-    text = 'She said, "Hinami, wait for me." Hinami turned at the gate.'
+def test_quote_initial_name_survives_via_a_mid_sentence_occurrence():
+    text = 'She said, "Hinami, wait for me." At the gate Hinami turned.'
 
     assert "Hinami" in _extract_entities(text)
+
+
+def test_blocked_interjections_are_not_names_even_when_they_recur():
+    # Interjections recur, which satisfies the recurrence escape -- at
+    # utterance starts, every time -- so they are vocabulary in the pack's
+    # _ENTITY_BLOCKED. (A positional rule was tried instead and measured
+    # disqualifying: inference contents lead with their subject, so it cost
+    # the name "Hinami" on 396 live rows. The block list cannot name every
+    # interjection -- a recurring "Rice?" still slips through -- but it holds
+    # the class that has no name collisions.)
+    entities = _extract_entities('"Mmm... Nothing. Yeah, fine." '
+                                 '"Mmm. Nothing... Yeah."')
+
+    assert "Mmm" not in entities
+    assert "Nothing" not in entities
+    assert "Yeah" not in entities
 
 
 def test_capitalized_stopword_is_not_an_entity_even_when_it_recurs():
