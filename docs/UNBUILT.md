@@ -1986,6 +1986,56 @@ the argument holds. It is what makes this function the engine's existing,
 unlabelled `inherit` mode for memory, which is why §2.20 begins from it rather
 than from a blank page.
 
+### 1.75 A batch refused for being too large degrades instead of splitting
+
+Found 2026-08-19 while building the LongMemEval converter, which hit it twice
+before it was understood.
+
+`_embed_with_retry` (`llm/providers.py:3236`) sends whatever list it is handed
+and, on any exception, replaces the WHOLE batch with crc32 hashes stamped
+`cheap:crc32:256`. Nothing anywhere chunks by request size. The embeddings
+provider caps a request at 120,000 tokens, and that cap is nowhere in this
+codebase.
+
+The retry makes it worse rather than better. A 400 for oversized input is
+DETERMINISTIC -- it fails identically on every attempt -- so the retry ladder
+spends its budget proving a fact it already had, and then degrades, when the
+remedy was available from the first failure. The distinction the engine is
+missing: **a request refused for being too large is a batching failure, not a
+provider failure, and the answer is to split it, not to hash it.** A rate limit
+or a dropped connection genuinely warrants degrade-after-retry; this does not.
+
+`rebuild_embeddings` is safe by accident and by design: `_REBUILD_BATCH = 32`
+keeps requests small, and it explicitly refuses to write a fallback over a real
+vector. `prepare_memories_batch`/`add_memories_batch` (`mind/memory_write.py`)
+have neither guard -- one `embed_texts_meta` call for the entire list, and the
+write proceeds on whatever comes back.
+
+That puts the exposure on `import_character_memories`, whose list size is
+whatever the host's export file holds. Measured against the live corpus at
+1.5x content length over four characters per token, which is a floor rather
+than an inflation because the cue text is shorter than the document:
+
+| bank | rows | content chars | est. request tokens | over the cap |
+|---|---|---|---|---|
+| 63/35 | 657 | 340,595 | 127,723 | YES |
+| 64/35 | 657 | 340,012 | 127,504 | YES |
+| 59/35 | 654 | 339,843 | 127,441 | YES |
+| 38/35 | 572 | 285,306 | 106,989 | no |
+
+So exporting the largest character in the corpus and importing him into a new
+story returns `{"ok": true}` and produces a bank that is keyword-only --
+`cheap:crc32:256` measures 0% paraphrase recall (MEMORY.md section 4). The
+failure is one WARNING line in a log nobody reads during an import, and the
+symptom arrives later as a character who cannot recall anything unless the
+words match. This is the same function 1.74 is already filed against, and it is
+the path 2.20 would build on.
+
+Two fixes, and the first is not optional if the second lands: split on a token
+budget before the request rather than after the refusal, and refuse to WRITE a
+fallback batch nobody asked for -- the rule `rebuild_embeddings` already
+states in its own docstring, applied to the batch writer that lacks it.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
