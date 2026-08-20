@@ -19,6 +19,15 @@ Discipline the instrument enforces:
 - A fallback (crc32) query embedding ABORTS the run rather than scoring: a
   lexical hash vector would silently measure a different retrieval than the
   one players get (measured 0% paraphrase recall, docs/guides/MEMORY.md §4).
+  `--allow-fallback-queries` turns that refusal into a DECLARED arm rather
+  than removing it. The refusal exists because the substitution is silent,
+  not because the hash is unmeasurable — a null control needs a retriever
+  with no semantic capability, and crc32 is exactly that. So the flag scores,
+  and in exchange every result it produces is stamped: the report carries
+  `allow_fallback_queries` and a per-bank `fallback_queries` count, and the
+  run prints a banner. The distinction UNBUILT §1.75 is about is undeclared
+  substitution versus a chosen mode; this is the second one. The pass rule
+  does not move, and without the flag nothing changes.
 - Probes run with no aspects and no location cues — the standalone-query
   slice of production retrieval. That is deliberately the harder, purer test
   of the four fused rankings; the aspect/bonus machinery is measured
@@ -73,7 +82,14 @@ def _qkey(model_key, text):
         (model_key + "\x00" + text).encode("utf-8")).hexdigest()
 
 
-def _embedded_batch(query, cache, cache_path):
+_FALLBACK_REFUSAL = (
+    "refusing to score with a fallback (lexical hash) query embedding — the "
+    "instrument would measure a different retrieval than production. "
+    "Configure the embeddings provider, or pass --allow-fallback-queries to "
+    "run a DECLARED null-control arm.")
+
+
+def _embedded_batch(query, cache, cache_path, allow_fallback=False):
     """One EmbeddingBatch for one query, disk-cached by (model, text)."""
     import numpy as np
     from llm.providers import EmbeddingBatch, embed_texts_meta, embedding_model_key
@@ -83,23 +99,97 @@ def _embedded_batch(query, cache, cache_path):
     hit = cache.get(key)
     if hit and hit.get("model_key") == model_key:
         vec = np.frombuffer(base64.b64decode(hit["vec"]), dtype=np.float32)
+        # THE CACHE MUST NOT LAUNDER THE FLAG. A cached entry used to be
+        # rebuilt as `fallback=False` unconditionally, which was true of every
+        # entry the old code could write (a fallback aborted before caching)
+        # and stops being true the moment a declared arm caches one. Anything
+        # downstream that branches on `fallback` -- `recall_confidence` does,
+        # mind/memory_retrieval.py:743 -- would then read a hash vector as a
+        # real one on the second run only. Legacy entries have no key and are
+        # correctly False.
         return EmbeddingBatch(vectors=[vec], model_key=model_key,
-                              dimensions=int(hit["dims"]), fallback=False)
+                              dimensions=int(hit["dims"]),
+                              fallback=bool(hit.get("fallback")))
     batch = embed_texts_meta([query])
-    if batch.fallback:
-        raise SystemExit(
-            "refusing to score with a fallback (lexical hash) query "
-            "embedding — the instrument would measure a different retrieval "
-            "than production. Configure the embeddings provider.")
+    if batch.fallback and not allow_fallback:
+        raise SystemExit(_FALLBACK_REFUSAL)
     vec = np.asarray(batch.vectors[0], dtype=np.float32)
     cache[key] = {"model_key": batch.model_key,
                   "dims": batch.dimensions,
+                  "fallback": bool(batch.fallback),
                   "vec": base64.b64encode(vec.tobytes()).decode("ascii")}
     _save_qcache(cache_path, cache)
     return batch
 
 
-def run_probe_file(path, k, cache, cache_path):
+def _prewarm_queries(paths, cache, cache_path, allow_fallback=False):
+    """Embed every uncached probe query up front, in request-sized batches.
+
+    `_embedded_batch` asks for one query at a time, which is right for a
+    hand-authored bank of thirty probes and wrong for a borrowed benchmark of
+    five hundred: each request pays a full round trip plus whatever the
+    adaptive pacer has learned, so the instrument spends an hour doing a
+    minute of work. Measured on the LongMemEval bank: 71 queries in the time
+    the batched form needs for all 500.
+
+    Scoring is untouched. This only fills the same disk cache
+    `_embedded_batch` already reads, keyed identically, so a warmed run and a
+    cold run produce byte-identical verdicts -- which is the property the
+    frozen probe sets depend on.
+
+    Batched by estimated tokens rather than count, for the reason UNBUILT 1.75
+    records: a request refused for being too large is not retried into
+    success, it is silently replaced by hash vectors.
+    """
+    from llm.providers import embed_texts_meta, embedding_model_key
+
+    model_key = embedding_model_key()
+    wanted, seen = [], set()
+    for path in paths:
+        for probe in json.loads(Path(path).read_text(encoding="utf-8"))["probes"]:
+            text = probe["query"]
+            key = _qkey(model_key, text)
+            hit = cache.get(key)
+            if (hit and hit.get("model_key") == model_key) or text in seen:
+                continue
+            seen.add(text)
+            wanted.append(text)
+    if not wanted:
+        return 0
+
+    import numpy as np
+
+    done = 0
+    batch, budget = [], 0
+    def flush(group):
+        nonlocal done
+        if not group:
+            return
+        got = embed_texts_meta(group)
+        if got.fallback and not allow_fallback:
+            raise SystemExit(_FALLBACK_REFUSAL)
+        for text, vec in zip(group, got.vectors):
+            arr = np.asarray(vec, dtype=np.float32)
+            cache[_qkey(got.model_key, text)] = {
+                "model_key": got.model_key, "dims": got.dimensions,
+                "fallback": bool(got.fallback),
+                "vec": base64.b64encode(arr.tobytes()).decode("ascii")}
+            done += 1
+        _save_qcache(cache_path, cache)
+
+    for text in wanted:
+        cost = len(text) // 4
+        if batch and budget + cost > 60_000:
+            flush(batch)
+            batch, budget = [], 0
+        batch.append(text)
+        budget += cost
+    flush(batch)
+    print(f"pre-embedded {done} probe queries")
+    return done
+
+
+def run_probe_file(path, k, cache, cache_path, allow_fallback=False):
     from core.db import q
     from mind import memory
 
@@ -112,9 +202,11 @@ def run_probe_file(path, k, cache, cache_path):
         raise SystemExit(f"bank {chat_id}/{char_id} is empty in this database")
     cutoff = int(row["mt"]) + 1
     results = []
+    fallback_queries = 0
     for probe in spec["probes"]:
         query = probe["query"]
-        batch = _embedded_batch(query, cache, cache_path)
+        batch = _embedded_batch(query, cache, cache_path, allow_fallback)
+        fallback_queries += bool(batch.fallback)
         returned = memory.search_memories(
             chat_id, char_id, query, k=k,
             current_turn_idx=cutoff, viewer_frame_id=None,
@@ -154,6 +246,11 @@ def run_probe_file(path, k, cache, cache_path):
         "bank": bank,
         "probe_file": str(path),
         "k": k,
+        # Provenance, not decoration: a stored report must say on its face
+        # which retriever produced it, or a null-control arm reads later as a
+        # production number.
+        "query_model": _query_model_key(),
+        "fallback_queries": fallback_queries,
         "positives": {"hits": sum(r["hit"] for r in positives),
                       "total": len(positives),
                       "misses": [r["id"] for r in positives if not r["hit"]]},
@@ -163,6 +260,11 @@ def run_probe_file(path, k, cache, cache_path):
     return summary
 
 
+def _query_model_key():
+    from llm.providers import embedding_model_key
+    return embedding_model_key()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--probes", action="append", required=True)
@@ -170,13 +272,26 @@ def main():
     parser.add_argument("--label", default="")
     parser.add_argument("--out")
     parser.add_argument("--qcache", default=_QCACHE_DEFAULT)
+    parser.add_argument(
+        "--allow-fallback-queries", action="store_true",
+        help="score with crc32 hash query vectors instead of refusing. For a "
+             "DECLARED null-control arm only: the result is a lexical floor, "
+             "not a production retrieval number, and is stamped as such.")
     args = parser.parse_args()
     if not os.environ.get("ENGINE_DB"):
         raise SystemExit("set ENGINE_DB to a COPY of the database first")
+    if args.allow_fallback_queries:
+        print("*** --allow-fallback-queries: crc32 hash query vectors are "
+              "permitted. This arm measures a LEXICAL FLOOR, not production "
+              "retrieval. ***")
     cache = _load_qcache(args.qcache)
+    _prewarm_queries(args.probes, cache, args.qcache,
+                     args.allow_fallback_queries)
     report = {"label": args.label,
               "db": os.environ["ENGINE_DB"],
-              "banks": [run_probe_file(p, args.k, cache, args.qcache)
+              "allow_fallback_queries": bool(args.allow_fallback_queries),
+              "banks": [run_probe_file(p, args.k, cache, args.qcache,
+                                       args.allow_fallback_queries)
                         for p in args.probes]}
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if args.out:
@@ -184,7 +299,10 @@ def main():
     for bank in report["banks"]:
         pos = bank["positives"]
         print(f"{bank['bank']['label']}: {pos['hits']}/{pos['total']} "
-              f"positive probes hit at k={bank['k']}"
+              f"positive probes hit at k={bank['k']} "
+              f"[{bank['query_model']}"
+              + (f", {bank['fallback_queries']} fallback queries]"
+                 if bank["fallback_queries"] else "]")
               + (f"; misses: {', '.join(pos['misses'])}" if pos["misses"]
                  else ""))
     if args.out:
