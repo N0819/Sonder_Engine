@@ -1,0 +1,168 @@
+{
+  "bank": {"chat_id": 44, "char_id": 42, "label": "Lilaeve Voss, chat 44 (held-out)"},
+  "authored": "2026-08-19",
+  "note": "Held-out probe bank. Authored blind to the tuned bank and frozen before any ranking/extraction change.",
+  "probes": [
+    {
+      "id": "h01_finding_her",
+      "kind": "positive",
+      "query": "how did I come to choose that particular sleeper's room in the first place - what led me there over the tiles, and what did I do at her sill before slipping inside",
+      "targets": [10438, 10439, 10440],
+      "target_turns": [0, 0],
+      "note": "t0 remembered rows: tracked her by scent from the rooftop, watched her through the window before entering. Name-free; avoids 'scent', 'rooftop', 'tracked'."
+    },
+    {
+      "id": "h02_first_alarm",
+      "kind": "positive",
+      "query": "the very first moments after she realized an uninvited guest was standing in her bedroom - how did she react, and what did she demand to know",
+      "targets": [10446, 10449],
+      "target_turns": [1, 1],
+      "note": "t1: pressed against the headboard in alarm, crying 'Who are you? Why are you in my room?'. Name-free; avoids ears/tails/headboard vocabulary."
+    },
+    {
+      "id": "h03_unwrapping",
+      "kind": "positive",
+      "query": "the thin garment she had been sleeping in - how did it come off her, and what did she nervously say while it was happening",
+      "targets": [10467, 10468, 10480],
+      "target_turns": [6, 9],
+      "note": "t6-9: parting and finally yanking down her yukata; her 'are you going to take off my clothes... I'm rather overdressed'. 'Garment' shifts from 'yukata'/'clothes'."
+    },
+    {
+      "id": "h04_her_turn",
+      "kind": "positive",
+      "query": "the first time she stopped simply receiving and turned her own mouth and hands on me instead - what did she do to my body",
+      "targets": [10536, 10537],
+      "target_turns": [24, 25],
+      "note": "t24-25: role reversal, her mouth sealing on my breast while her fingers worked inside me. Name-free hard paraphrase; avoids the rows' anatomical content words."
+    },
+    {
+      "id": "h05_strange_proposal",
+      "kind": "positive",
+      "query": "when I first voiced my idea of making her little enough to take within me, her whole manner changed - what was that first reaction of hers",
+      "targets": [10540, 10542, 10545, 10546],
+      "target_turns": [28, 29],
+      "note": "t28-29: the shrinking proposal met with flattened ears, a confused 'Huh?', bewilderment tipping into alarm. Avoids the word 'shrink'."
+    },
+    {
+      "id": "h06_breath_worry",
+      "kind": "positive",
+      "query": "one of her worries about the whole idea was oddly practical - a fear about air, about not surviving being inside. what exactly did she ask me",
+      "targets": [10548, 10550, 10551],
+      "target_turns": [30, 30],
+      "note": "t30: her 'wouldn't I drown?' question. Name-free hard paraphrase; deliberately avoids 'drown'."
+    },
+    {
+      "id": "h07_too_fast",
+      "kind": "positive",
+      "query": "the change itself came on quicker than she had braced for - what were her first seconds like once she found herself standing small in my hand",
+      "targets": [10572, 10573, 10574, 10575, 10568],
+      "target_turns": [35, 36],
+      "note": "t35-36: the shrinking lands abruptly - her shout, 'way faster than I was expecting', scrambling backward across my palm, my curled fingers as a wall. Name-free."
+    },
+    {
+      "id": "h08_taken_in",
+      "kind": "positive",
+      "query": "how did I actually ease her tiny body into myself - which end went first, and what of mine steadied her back on the way in",
+      "targets": [10585, 10588, 10589, 10584],
+      "target_turns": [39, 40],
+      "note": "t39-40: guiding her feet-first into me with one fingertip at her back, her experimental kicks. Shares 'tiny' with the rows; medium difficulty."
+    },
+    {
+      "id": "h09_heel_jolt",
+      "kind": "positive",
+      "query": "there was one instant mid-coupling when a small sharp blow from within landed exactly where I am most undone - what happened to us both in that moment",
+      "targets": [10616, 10617, 10618, 10619],
+      "target_turns": [50, 50],
+      "note": "t50: her tiny heel striking my inner ridge, my walls clamping, her own convulsing peak. Name-free hard paraphrase; avoids 'heel', 'strike', 'kick', 'ridge'."
+    },
+    {
+      "id": "h10_her_demands",
+      "kind": "positive",
+      "query": "afterwards she turned imperious and issued me instructions for her care - what two things did she insist I owed her after all I had done",
+      "targets": [10637, 10638, 10640, 10644],
+      "target_turns": [57, 58],
+      "note": "t57-58: her demand to be cleaned up and fed afterwards, and my tongue-bath answer. Name-free hard paraphrase; avoids 'clean' and 'feed'."
+    },
+    {
+      "id": "h11_her_name",
+      "kind": "positive",
+      "query": "she realized, stammering, that she had never actually introduced herself - when did I finally learn what to call her, and how did it come out",
+      "targets": [10649, 10653, 10657],
+      "target_turns": [60, 61],
+      "note": "t60-61: 'An-anyways... My name is Hinami... I don't think I ever told you...' - includes the bank's single dialogue row. Name-free (the name is the answer)."
+    },
+    {
+      "id": "h12_mock_terror",
+      "kind": "positive",
+      "query": "her fear turned into a game somewhere along the way - play-acted wailing about being devoured by the wicked thing in her bed, complete with giggles and grand titles for me",
+      "targets": [10658, 10662, 10660, 10664, 10672],
+      "target_turns": [62, 66],
+      "note": "t62-66: theatrical 'great succubus of the night! Invader of Inns! Please don't eat me!' / 'Oh noooo I'm being consumed!' banter. Shares 'devour' root; medium."
+    },
+    {
+      "id": "h13_carried_to_water",
+      "kind": "positive",
+      "query": "after Hinami murmured she could not manage on her own, I lifted her up and took her somewhere to be washed - how did I carry her and where did I set her down",
+      "targets": [10716, 10717, 10720, 10721],
+      "target_turns": [82, 83],
+      "note": "t82-83: her bath request, cradling her back and knees with my tail coiled around her thigh, lowering her into the warm tub. Uses the proper noun; easier probe."
+    },
+    {
+      "id": "h14_asleep_in_suds",
+      "kind": "positive",
+      "query": "by the very end of the night she had drifted off entirely under my hands, breathing those soft little sounds - where was she resting, and what was I still doing as she slept",
+      "targets": [10764, 10766, 10773, 10775],
+      "target_turns": [94, 95],
+      "note": "t94-95: asleep and softly snoring in the tub, head pillowed on my chest, my fingers still circling the bases of her ears. Name-free; avoids 'snore', 'tub', 'lather'."
+    },
+    {
+      "id": "hn1_interrupted",
+      "kind": "negative",
+      "query": "the night someone else burst in on us - an innkeeper or watchman pounding at the door while we were tangled together. what happened when we were interrupted",
+      "targets": [],
+      "note": "No third person ever appears in the bank. Grepped content+gist for knock/intrud/guard/stranger/footsteps/visitor/'someone else': zero hits. The whole story is two people in a bedroom and a bathroom."
+    },
+    {
+      "id": "hn2_her_past",
+      "kind": "negative",
+      "query": "what she told me about where she came from - the shrine she served or the family she left behind",
+      "targets": [],
+      "note": "No backstory is ever exchanged. Grepped shrine/village/family/mother/father/sister/brother/childhood/homeland: zero hits. The only biographical fact ever shared is her name."
+    },
+    {
+      "id": "hn3_drew_blood",
+      "kind": "negative",
+      "query": "the time she truly fought me off - teeth or claws breaking my skin, the taste of my own blood - and how I subdued her",
+      "targets": [],
+      "note": "No violence or injury anywhere. Grepped blood/bleed/wound/injur/attack/bit me/slap: only a metaphorical 'tension bleeds out' (row 10582) and panicked claw-scrabbling on my palm while shrunk (10572), never an attack or a wound."
+    },
+    {
+      "id": "hn4_shared_meal",
+      "kind": "negative",
+      "query": "the food I finally brought her - what did we actually eat together after everything",
+      "targets": [],
+      "note": "Deliberate near-miss negative: she DEMANDS food (rows 10637-10640 record the demand and my promise), but no meal ever occurs - the bank ends at t95 with her asleep in the tub. Grepped meal/ate/eating/food/bread/tea/dish: only the demand, the 'eat me' banter, and ambient 'overripe fruit' scent from the window."
+    },
+    {
+      "id": "hn5_my_name",
+      "kind": "negative",
+      "query": "when I told her my own name in return - how did she react to learning what I am called",
+      "targets": [],
+      "note": "Lilaeve never introduces herself and Hinami never learns or speaks her name. All 30 'Lilaeve' occurrences are third-person narration or step metadata; grepped 'my name is'/'call me'/'I am Lilaeve' in speech: zero. Symmetric trap for h11."
+    },
+    {
+      "id": "hn6_at_dawn",
+      "kind": "negative",
+      "query": "watching the sun come up together from her window - what we said to each other at first light",
+      "targets": [],
+      "note": "The entire bank is a single night by a dying candle; it ends with her asleep in the bath. Grepped morning/dawn/sunrise/sunlight/daylight: zero hits."
+    },
+    {
+      "id": "hn7_my_wings",
+      "kind": "negative",
+      "query": "the moment I unfurled my wings for her and flew us up to the rooftops - what did she make of them",
+      "targets": [],
+      "note": "Plausible for a succubus, absent from the bank: no wings, no flight, and we never leave her rooms. Grepped wing/flew/flying: the only hit is a 'bird-wing flutter' pulse simile (row 10641). I arrived over rooftops on foot and entered through the window."
+    }
+  ]
+}
