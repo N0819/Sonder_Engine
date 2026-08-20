@@ -293,7 +293,7 @@ class TestHowManyMemoriesReachACharacter:
 
     def test_the_limit_is_the_one_that_was_measured(self):
         from mind import memory
-        assert memory._RECALL_LIMIT == 16
+        assert memory._RECALL_LIMIT == 24
 
     def test_the_default_is_taken_from_the_constant(self):
         """So tuning it is one edit, not a hunt through call sites."""
@@ -303,11 +303,39 @@ class TestHowManyMemoriesReachACharacter:
         sig = inspect.signature(memory.build_character_memory_context)
         assert sig.parameters["recall_limit"].default == memory._RECALL_LIMIT
 
-    def test_it_stops_short_of_where_the_payload_stops_paying(self):
-        """24 recalls more but flattens on relevance while the payload keeps
-        growing; the attention budget is real (docs/UNBUILT.md 1.12)."""
+    def test_it_stops_where_the_curve_and_the_conduct_agree(self):
+        """Raised 16 -> 24 on 2026-08-20. The earlier bound was measured and
+        honest -- 16 paraphrase probes, relevance flattening, payload growth --
+        and it was overturned by more evidence rather than by taste.
+
+        Retrieval, on 470 questions written by people who have never seen this
+        engine, run at each k rather than derived: 304, 359, 382, 399, 413 at
+        k = 4, 8, 12, 16, 24. Fourteen probes sat between 16 and 24, so 16 was
+        not where the curve stopped.
+
+        Conduct, which the earlier decision could not check because the
+        instrument did not exist yet: the behavioural benchmark improved in
+        BOTH retrieval modes on four measures, including the deterministic one
+        (historical retrieval hits 12/16 -> 14/16). The dilution the old bound
+        was protecting against did not occur.
+
+        The upper bound stays, because the curve is still rising and an
+        unbounded payload is not the conclusion. 32 and 48 are measured on
+        retrieval alone and have no conduct arm, which is why they are not
+        here.
+        """
         from mind import memory
-        assert 8 < memory._RECALL_LIMIT <= 16
+        assert 16 < memory._RECALL_LIMIT <= 24
+
+    def test_the_abstention_statistic_does_not_ride_the_payload_size(self):
+        """These answer different questions and were the same number by
+        accident. Coupled, raising the payload to 24 pulled every lift down --
+        a genuinely strong match measured 1.2428 against a 1.7 threshold --
+        so the floor would have started refusing real recall, which is worse
+        than the inert state UNBUILT 1.76 records."""
+        from mind import memory
+        assert memory._RECALL_CONFIDENCE_TOPK == 16
+        assert memory._RECALL_CONFIDENCE_TOPK != memory._RECALL_LIMIT
 
 
 class TestAnAbsenceIsNotAnEpisode:

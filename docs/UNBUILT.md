@@ -2763,17 +2763,39 @@ and **zero `semantic`, `relationship` or `intention`**.
 
 Kind barely reaches ranking today (only `inference` is read, for belief
 weighting), so this is not a retrieval bug on its own. What it means is that a
-stable fact about a person has nowhere to live. A preference is stored as the
-EPISODE of the moment it was mentioned, so its retrieval document carries that
-moment's location, turn and cast -- and a question asking what somebody
-prefers has to compete with all of it.
+stable fact about a person has nowhere to live.
 
-That is a hypothesis about the 15/30, not a finding. The synthetic fiction
-bank (`tools/generate_synthetic_bank.py`) mints everything `episodic` and so
-cannot discriminate; testing it needs an arm that mints preference rows as
-`semantic` with a document that drops the episode's incidentals, measured
-against the same probes. Cheap to build now that the generator plants
-preferences deliberately.
+**The retrieval consequence this entry first claimed is REFUTED, measured
+2026-08-20.** The claim was that a preference stored as the EPISODE of the
+moment it was mentioned drags that moment's location, turn and cast into its
+retrieval document, and that a question about a preference has to compete with
+all of it. Tested directly on the 15 missed preference probes by embedding the
+stored document against the bare content:
+
+    query vs stored DOCUMENT   median cosine 0.4047
+    query vs CONTENT alone     median cosine 0.3994
+
+Dropping every incidental makes it slightly WORSE, and content beats document
+on 9 of 15 -- a coin flip. Metadata dilution is not the mechanism.
+
+**What the measurement found instead** is that misses are simply far from
+their answers in embedding space, and that this is not specific to
+preferences:
+
+    other HIT          median cos 0.5334
+    preference HIT     median cos 0.4817
+    preference MISS    median cos 0.3561
+    other MISS         median cos 0.3311
+
+Hits sit near 0.50 and misses near 0.33-0.36 regardless of class. That is the
+question-versus-statement asymmetry -- "what do I like to do on weekends" and
+"I took the coast path again on Saturday" occupy different regions -- and no
+storage change closes it. Preferences are hardest because a preference is
+stated once, casually, in language furthest from the category a question names.
+
+So the SHAPE of this entry survives and its retrieval argument does not:
+`semantic` is unreachable and stable facts have nowhere to live, which matters
+for 2.20's authored past. It is not the reason preference recall is 15/30.
 
 Related: 2.20 wants exactly this shape for a different reason -- an authored
 past is mostly semantic rather than episodic, and the same missing tier is why
@@ -2835,6 +2857,32 @@ the material to prefer the newer one. Whether it does is a conduct question and
 is unmeasured. Ordering matters because it decides what is read first, not
 whether the answer is present. 18 probes is also a small set, reported with its
 denominator.
+
+### 2.25 Two retrieval ideas measured, one rejected, one parked
+
+Measured 2026-08-20 against the 470-probe LongMemEval bank while looking for
+what else would raise recall. Recorded so neither is retried without new
+evidence.
+
+**HyDE (embed a hypothetical answer, fuse it as an aspect) -- REJECTED.**
+The motivation was sound and is worth keeping: misses sit at 0.33-0.36 cosine
+from their answers while hits sit near 0.50 (2.23), which is the ordinary
+question-versus-statement asymmetry, and writing what the remembered moment
+would have SOUNDED like is the standard answer to it. Measured on 30 probes
+that miss, it rescued 3 (10%). Measured on 40 that hit, it broke 1 (2%). Hits
+outnumber misses six to one, so the extrapolated net is **+7 rescued against
+-10 broken**. Measuring only the rescue rate would have made this look like a
+win; the breakage arm is the whole finding.
+
+**Query decomposition (split the question into clauses, fuse each as an
+aspect) -- PARKED, not rejected.** Deterministic split on relational
+connectives, clauses of three or more words, capped at three. Across all 470:
+399 -> 402, **rescued 3, broken 0**. Strictly non-destructive on this
+instrument and free at runtime, since aspects ride the same embedding call as
+the query. Not shipped because +3 on one bank is inside the noise of a single
+instrument and it has no conduct arm -- the same standard that let the
+`_RECALL_LIMIT` change through. Cheap to revisit: `search_memories` already
+accepts `aspects`, so this is a caller-side change with no plumbing.
 
 ## 3. Information-pipeline leaks still open
 
