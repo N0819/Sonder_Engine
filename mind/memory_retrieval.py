@@ -206,9 +206,29 @@ _RRF_SCALE = 12.0
 # where the curve does" was looking for a feature this curve does not have,
 # and no retrieval measurement can choose this number. Only conduct can.
 #
-# 24 is therefore not where recall flattens. It is the largest value with a
-# BEHAVIOURAL arm behind it. 32 and 48 recall more and have never been put in
-# front of a character; moving to them is a measurement, not an edit.
+# 24 is therefore not where recall flattens. It is where CONDUCT peaks, and
+# that was measured afterwards rather than assumed:
+#
+#      k   accuracy lex/sem   grounded    relevant evidence delivered
+#     16    0.444 / 0.556   0.778/0.944          12/16
+#     24    0.667 / 0.667   0.889/0.889          14/16
+#     48    0.556 / 0.556   0.889/0.889          14/16
+#     96    0.500 / 0.556   0.833/0.833          14/16
+#
+# Accuracy peaks at 24 and falls in both modes after it, and the mechanism is
+# in the last column: the RELEVANT evidence delivered plateaus at 24. Past that
+# the character is not given more of what it needs, only more of what it does
+# not -- retrieval recall keeps climbing (437/470 at k=48) while useful
+# evidence stops arriving, and answers get worse. At 96 the citation rate
+# degrades too: given more to cite from, the mind cites more loosely.
+#
+# So the attention budget UNBUILT 1.12 argues about on principle is real and
+# sits between 24 and 48. This is the first number anyone has put on it.
+#
+# Read with the instrument's own caution -- 18 cases cannot separate an arm
+# from its noise -- but the pattern is four consistent readings: accuracy down
+# in both modes at 48 AND 96, grounding down in both modes at 96, evidence flat
+# throughout.
 #
 # COST, the part the old note was protecting and the part that had never been
 # measured behaviourally: the worry is dilution, since rows ranked 17-24 are
