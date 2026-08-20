@@ -69,6 +69,30 @@ def _distinctive_phrase(phrase):
     return len(_ling("_WORD_RE").findall(phrase)) >= _EXACT_DISTINCTIVE_TOKENS
 
 
+_BOUNDARY_RE_CACHE: dict[str, "re.Pattern"] = {}
+
+
+def _boundary_re(literal):
+    """The word-boundary matcher for one cue, compiled once per literal.
+
+    `re.escape` plus an f-string plus a pattern-cache lookup ran per row per
+    cue per query. Measured over 8 queries on a 10,960-row bank: 87,680 calls
+    to `_exact_cue_score`, 79.9 of the run's 89.9 seconds -- 89% of ALL
+    retrieval time, against roughly 10% for the vector scan. The cues repeat
+    constantly across a bank, so the distinct literals are few and this cache
+    is small.
+    """
+    got = _BOUNDARY_RE_CACHE.get(literal)
+    if got is None:
+        got = re.compile(
+            r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])" % re.escape(literal))
+        # Bounded so a pathological bank cannot grow this without limit; the
+        # cues in one bank are far below it.
+        if len(_BOUNDARY_RE_CACHE) < 20000:
+            _BOUNDARY_RE_CACHE[literal] = got
+    return got
+
+
 def _exact_cue_score(memory, query_text):
     ql = (query_text or "").lower()
     if not ql:
@@ -92,10 +116,14 @@ def _exact_cue_score(memory, query_text):
         # a name is followed directly by its particle (a stored entity
         # stopped firing inside a query naming it before the particle).
         # Found by adversarial review of this branch.
-        if el and re.search(rf"(?<![A-Za-z0-9]){re.escape(el)}(?![A-Za-z0-9])", ql):
+        # `el in ql` is a NECESSARY condition for the boundary regex to
+        # match, and it is a C-speed substring test against a regex search
+        # that dominated the whole retrieval path. Semantics are unchanged:
+        # every match the regex would find still reaches it.
+        if el and el in ql and _boundary_re(el).search(ql):
             score = max(score, 0.7)
     loc = (memory.get("location") or "").lower().strip()
-    if loc and re.search(rf"(?<![A-Za-z0-9]){re.escape(loc)}(?![A-Za-z0-9])", ql):
+    if loc and loc in ql and _boundary_re(loc).search(ql):
         score = max(score, 0.7)
     return score
 
