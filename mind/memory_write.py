@@ -635,6 +635,64 @@ def add_memory(chat_id, char_id, turn_id, kind, provenance, salience, content, *
     full_vec, cue_vec, embedded = _embed_memory(data)
     return _upsert_memory(data, full_vec, cue_vec, embedded)
 
+# The embeddings provider refuses a request above a token ceiling, and a
+# refusal is not a degradation: `_embed_with_retry` replaces the WHOLE batch
+# with crc32 hashes, which measure 0% paraphrase recall. Turn commit never
+# comes near the ceiling -- a beat mints a handful of memories -- but
+# `import_character_memories` passes whatever a host's export file holds, and
+# the three largest banks in the live corpus (657/657/654 rows) each estimate
+# ~127k request tokens against a 120,000 cap. So the one path a host uses to
+# give a character a past is the one that silently produced a keyword-only
+# bank. Split before asking rather than hashing after being refused
+# (UNBUILT 1.75).
+#
+# Deliberately conservative, and deliberately here rather than in the provider
+# seam: the general fix belongs at the request layer and has to reckon with the
+# coalescing machinery around it, while this closes the measured exposure with
+# arithmetic that cannot reorder or drop a vector.
+_EMBED_REQUEST_TOKENS = 60_000
+_CHARS_PER_TOKEN = 4
+
+
+def _embed_in_request_sized_chunks(texts: list[str]):
+    """One EmbeddingBatch for `texts`, asked for in chunks that fit.
+
+    Vector order is preserved exactly, because `add_memories_batch` indexes
+    into the result by position: row *i* reads vectors 2i and 2i+1. The merged
+    batch reports `fallback` if ANY chunk fell back -- a half-real, half-hash
+    batch is not partially trustworthy, and the caller's refusal must fire on
+    it.
+    """
+    from llm.providers import EmbeddingBatch
+
+    chunks, current, budget = [], [], 0
+    for text in texts:
+        cost = len(text) // _CHARS_PER_TOKEN
+        # A single text over budget still goes on its own -- splitting inside
+        # one document would embed something no reader ever sees.
+        if current and budget + cost > _EMBED_REQUEST_TOKENS:
+            chunks.append(current)
+            current, budget = [], 0
+        current.append(text)
+        budget += cost
+    if current:
+        chunks.append(current)
+    if len(chunks) == 1:
+        return embed_texts_meta(texts)
+
+    vectors, model_key, dimensions, fallback, error = [], "", 0, False, ""
+    for chunk in chunks:
+        got = embed_texts_meta(chunk)
+        vectors.extend(got.vectors)
+        model_key = model_key or got.model_key
+        dimensions = dimensions or got.dimensions
+        if got.fallback:
+            fallback, error = True, (error or got.error)
+    return EmbeddingBatch(vectors=vectors, model_key=model_key,
+                          dimensions=dimensions, fallback=fallback,
+                          error=error)
+
+
 def prepare_memories_batch(memories: list[dict]) -> dict:
     """Normalize and embed a memory batch without mutating the database.
 
@@ -642,6 +700,9 @@ def prepare_memories_batch(memories: list[dict]) -> dict:
     remote embedding request can never hold SQLite's write lock.  The result
     is intentionally opaque to callers outside this module; pass it back to
     :func:`add_memories_batch` through ``prepared_batch``.
+
+    Embedding is asked for in request-sized chunks; see
+    :func:`_embed_in_request_sized_chunks`.
     """
     prepared = [prepare_memory(**item) for item in memories]
     if not prepared:
@@ -649,7 +710,7 @@ def prepare_memories_batch(memories: list[dict]) -> dict:
     texts = []
     for data in prepared:
         texts.extend([_memory_document(data), _memory_cues(data) or _memory_document(data)])
-    embedded = embed_texts_meta(texts)
+    embedded = _embed_in_request_sized_chunks(texts)
     return {"prepared": prepared, "embedded": embedded}
 
 
