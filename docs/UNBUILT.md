@@ -2650,6 +2650,58 @@ unlabelled `inherit`, with a live persona leak), and the fact that
 `recall_confidence` cannot fire below 40 rows -- which the median bank does not
 reach until turn 10, precisely the window this entry is about.
 
+### 2.21 An install with no embeddings provider retrieves worse than one with no vectors
+
+Measured 2026-08-19/20, [`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md).
+Roadmap rather than defect: nothing is broken for an install that HAS an
+embeddings provider, and the population this affects is the one that has never
+configured one -- which is every install on its first run.
+
+Six arms over the same 10,960-row LongMemEval bank, 470 independent probes:
+
+| arm | hits / 470 |
+|---|---|
+| real embeddings, 2560d | 399 |
+| crc32 16384 | 337 |
+| **no vector channel at all** (BM25 + exact cue) | **338** |
+| crc32 4096 | 336 |
+| crc32 1024 | 323 |
+| **crc32 256, the shipped fallback** | **289** |
+
+**The fallback scores 49 probes BELOW switching the vector rankings off.** It
+carries 2.15 of the 4.5 RRF weight while correlating with real similarity at
+r = 0.028 over 7,998,000 row pairs, so its noise displaces genuine keyword
+candidates out of the payload. Widening does not rescue it: the width curve
+saturates exactly at the no-vector line, because there is no signal to sharpen.
+A character n-gram sketch is a near-duplicate detector -- it answers "is this
+the same text", and it was standing in for "does this mean the same thing".
+
+**Scope, which is easy to get wrong and was got wrong once already.** When a
+real provider IS configured, a fallback row is already excluded from both
+vector rankings by the compatibility check at `memory_retrieval.py:440`
+(`sem = 0.0`, `cue = 0.0`, counted as stranded), AND queued for the background
+repair thread, AND caught by `rebuild_embeddings` afterwards. That path is
+correct and needs nothing. The harm lands only where crc32 IS the configured
+model, because then the keys match and the hash participates fully.
+
+**The change**: on an unresolvable embeddings role, contribute no vector
+ranking rather than a hash one. `search_memories` already drops empty rank
+lists, so BM25 and exact-cue carry the query at 338 instead of 289, with no
+migration.
+
+**What must NOT be done, and why the obvious version of this is wrong**: do not
+remove the `cheap:crc32:256` stamp. `embedding_bank_status`,
+`_warn_stranded_embeddings`, the repair queue (`note_failed_embedding_write`
+selects on it) and `rebuild_embeddings`' `want_fallback` all key on that stamp
+existing. The stamp is the marker that says "this engine failed a write and
+may finish it later"; deleting it strands exactly the rows the repair thread
+is for. Keep the stamp, change what retrieval does with it.
+
+Keep the sketch itself. It is correct for the two jobs it is actually good at:
+offline/test operation without a provider, and near-duplicate detection --
+measured 99.1% precise against real cosine 0.95, which is a genuinely useful
+tool for finding the forty near-identical descriptions of one room in a bank.
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
