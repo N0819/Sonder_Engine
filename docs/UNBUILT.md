@@ -2910,11 +2910,50 @@ invisibly: `tests/test_dispute_addendum.py` pins that four re-readings citing
 one source are distinguishable from three citing three, which a bare counter
 could never separate.
 
-**What is still open:** the occasion. This measurement aimed a question
-squarely at a contradicted fact; ordinary play does not, and a contradiction
-sitting unremarked among twenty rows may never surface. Deterministic
-detection -- two rows, one subject, separated in time, both in the payload --
-remains the unbuilt half, and it stays an OCCASION rather than a conclusion.
+**What is still open: the occasion -- and the obvious way to build it is
+MEASURED NOT TO WORK.** This entry proposed deterministic detection: two rows
+about one subject, separated in time, both in the payload, surfaced as an
+occasion the mind may act on. It was built, measured against the 18 known
+superseded pairs in the synthetic worlds, and reverted the same afternoon.
+
+Neither available signal separates supersession from coincidence, and one is
+inverted:
+
+| | similarity (median) | share an entity |
+|---|---|---|
+| known superseded pairs | **0.477** (0.353-0.598) | **0.0%** |
+| random pairs from the same bank | 0.235, p95 0.602 | 16.6% |
+
+A real contradiction scores BELOW the 95th percentile of unrelated pairs, so
+no similarity floor catches supersession without firing on roughly a fifth of
+everything -- at 24 recalled rows that is dozens of false occasions per beat.
+And entity overlap runs the wrong way entirely: a belief and its refutation
+name the same people LESS often than two random memories do, because the
+refutation characteristically comes from a different mouth. Elias says the
+chapel is unreachable; JUNE saw his lights there. The different source is what
+makes it a refutation.
+
+The reason is worth stating in the engine's vocabulary, because it generalises:
+**contradiction is a semantic relation, and the signals available here are
+topical ones.** Two rows can be about one subject without disagreeing, and can
+disagree while sharing almost no surface. Nothing short of reading them can
+tell the difference.
+
+So the occasion needs a mind, not a threshold. Three directions, none built:
+
+- **The ponder lane already does it accidentally.** A character asking "what
+  do I know about X" retrieves both rows by construction -- which is exactly
+  the setup every measurement of this used. Making ponder more likely on a
+  subject a character has beliefs about may be the whole fix, and it needs no
+  detector.
+- **A cheap judge over the top-k**, the same row-level reading 1.76 concluded
+  the abstention floor needs. One model call could answer both questions.
+- **At mint rather than at recall**: the beat that forms the refutation is the
+  beat where a mind has both in view, and that is where the occasion is
+  cheapest to notice.
+
+Do not rebuild the threshold version without evidence that beats the table
+above.
 
 **The original reading, kept because it was the reasoning at the time:**
 
