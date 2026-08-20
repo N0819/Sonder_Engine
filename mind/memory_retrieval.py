@@ -669,20 +669,24 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
 _RECALL_CONFIDENCE_MIN_BANK = 40
 _RECALL_CONFIDENCE_COVERAGE = 0.5
 
-# Calibrated on the frozen probe sets (tools/memory_probes/) against the
-# repaired 2026-08-19 corpus: every one of the 37 positive probes that HIT
-# scored a lift above this (minimum 1.831), so the measured false-abstention
-# rate is zero -- a floor that suppresses real recall is worse than no floor.
-# What that margin buys is deliberately modest: 2 of 15 negative probes
-# abstain. The rest are negatives whose TOPIC genuinely resonates in the
-# bank (an event that was discussed but never happened); a score
-# distribution cannot tell topical resonance from answer presence, and no
-# estimator tried (top-1/top-4/top-16 lift, NQC, top-gap) separated them at
-# zero false abstention on both banks. Full table in
-# docs/experiments/MEMORY_IMPROVEMENTS.md; sharper teeth would need
-# row-level evidence (the audit's cross-encoder note), not a better
+# Calibrated on the frozen probe sets (tools/memory_probes/) against BOTH
+# measured corpus states -- the 2026-08-19 stock as-is and the same stock
+# after repair_memory_cues -- because a threshold true of only one of them
+# would flag real recall the day the other is live: at 1.8, one genuine hit
+# on the unrepaired stock abstained (lift 1.724). Below every positive-probe
+# hit ever measured (minimum 1.724, and the thinness of that margin is a
+# property of the signal, stated rather than hidden), so measured
+# false-abstention is 0/37 in both states -- a floor that suppresses real
+# recall is worse than no floor. What the margin buys is deliberately
+# modest: 1-2 of 15 negative probes abstain. The rest are negatives whose
+# TOPIC genuinely resonates in the bank (an event that was discussed but
+# never happened); a score distribution cannot tell topical resonance from
+# answer presence, and no estimator tried (top-1/top-4/top-16 lift, NQC,
+# top-gap) separated them at zero false abstention on both banks. Full
+# table in docs/experiments/MEMORY_IMPROVEMENTS.md; sharper teeth would
+# need row-level evidence (the audit's cross-encoder note), not a better
 # threshold.
-_RECALL_ABSTAIN_LIFT = 1.8
+_RECALL_ABSTAIN_LIFT = 1.7
 
 
 def recall_confidence(chat_id, char_id, query, *, current_turn_idx,
