@@ -2779,6 +2779,63 @@ Related: 2.20 wants exactly this shape for a different reason -- an authored
 past is mostly semantic rather than episodic, and the same missing tier is why
 it has nowhere to go.
 
+### 2.24 A superseded belief is read before its correction
+
+Measured 2026-08-20 across three independently generated fiction worlds,
+[`experiments/SYNTHETIC_BANK.md`](experiments/SYNTHETIC_BANK.md). Roadmap
+rather than defect: retrieval is not failing, ordering is, and the engine
+already contains the mechanism that would settle it.
+
+A `superseded` fact plants a belief and, 60-400 beats later, the observation
+that overturns it. The probe targets the correction and antitargets the belief:
+
+| | |
+|---|---|
+| correction reaches the payload | 16/18 (89%) |
+| correction OUTRANKS the stale belief | **8/18 (44%)** |
+| median rank of the stale row | **2** |
+
+So the mind is handed both versions and shown the outdated one first, more
+often than not.
+
+The mechanism is structural. The four fused rankings -- semantic 1.0,
+cue-vector 1.15, keyword 1.1, exact 1.25 -- contain **no recency term**;
+recency enters only when the QUERY carries a temporal cue
+(`_temporal_mode`). A belief and its correction therefore compete on text
+alone, and a question about a belief matches the STATEMENT of that belief more
+closely than the later observation that overturns it. Nothing prefers the
+newer row because nothing knows which is newer.
+
+**Do not fix this with a recency tie-break.** That arm is already measured and
+rejected: newest-first scored tuned 24->21 and held-out 10->13, "three probes
+each way, a lottery, not a rule"
+([`experiments/MEMORY_IMPROVEMENTS.md`](experiments/MEMORY_IMPROVEMENTS.md) §4).
+A global recency preference trades one arbitrary ordering for another.
+
+**The engine already has the right shape and never reaches it.**
+`record_dispute` is wired end to end -- proposed in the character's output,
+committed by `persist/commit_memory_write.py`, stored on the row, and rendered
+to the mind as `i_now_read_this_differently` -- and it has fired **once in
+9,608 live memories**. The gate is that `memory_disputes` is entirely
+model-initiated: a character must spontaneously volunteer that it now reads a
+memory differently, and nothing detects a contradiction or offers the
+occasion. Compare `ponder`, also model-initiated, also rare (7 uses in 2,328
+turns).
+
+The shape of a fix, in the engine's own vocabulary: a mind handed two rows
+about the same subject, separated in time, is being handed an occasion to
+revise, and the payload can say so without deciding the answer. That is the
+firewall-safe direction -- give the mind the material, never make it conclude
+less. What must NOT be built is a deterministic contradiction detector that
+decides which row is true; nothing outside a mind is entitled to that.
+
+**Not established, and the honest caveat**: both rows usually reach the
+payload, and each carries `when` ("about N beats ago"), so the character HAS
+the material to prefer the newer one. Whether it does is a conduct question and
+is unmeasured. Ordering matters because it decides what is read first, not
+whether the answer is present. 18 probes is also a small set, reported with its
+denominator.
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
