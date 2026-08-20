@@ -645,6 +645,106 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         qi(f"UPDATE memories SET access_count=access_count+1, last_accessed=? WHERE id IN ({ph})", (now, *ids))
     return result
 
+# ---- Recall confidence (the "nothing convincing" floor) ----
+#
+# Retrieval always returns k rows, however weak the best of them is -- so a
+# character asked about something that never happened receives sixteen
+# nearest misses and nothing that says "your memory holds no answer here".
+# For a mind, confabulated recall is a character break; the missing signal is
+# an ABSTENTION floor (docs/experiments/AUDIT_MEMORY.md 4.3 item 3).
+#
+# Not a cosine threshold. Every prose vector scores every bank somewhere in a
+# compressed band whose position depends on the embedding model, so an
+# absolute floor drops everything or nothing the day the model changes
+# (measured for summary windows, MEMORY.md 8, and the reasoning holds here).
+# The standard IR answer is query-performance prediction (NQC/WIG, Zhou &
+# Croft): read the score DISTRIBUTION -- how far the top-k mean sits above
+# the bank-wide mean, in units of the bank's own standard deviation. That is
+# per-query self-calibrating, and it is free: the engine already scans every
+# row (no ANN), so the bank baseline rides the scan it already pays for.
+
+# Below this many comparable rows the distribution is not a baseline, and a
+# bank mid-rebuild (low model coverage) must never read as empty -- the same
+# fail-open posture as the contrast gate's coverage rule.
+_RECALL_CONFIDENCE_MIN_BANK = 40
+_RECALL_CONFIDENCE_COVERAGE = 0.5
+
+# Calibrated on the frozen probe sets (tools/memory_probes/) against the
+# repaired 2026-08-19 corpus: every one of the 37 positive probes that HIT
+# scored a lift above this (minimum 1.831), so the measured false-abstention
+# rate is zero -- a floor that suppresses real recall is worse than no floor.
+# What that margin buys is deliberately modest: 2 of 15 negative probes
+# abstain. The rest are negatives whose TOPIC genuinely resonates in the
+# bank (an event that was discussed but never happened); a score
+# distribution cannot tell topical resonance from answer presence, and no
+# estimator tried (top-1/top-4/top-16 lift, NQC, top-gap) separated them at
+# zero false abstention on both banks. Full table in
+# docs/experiments/MEMORY_IMPROVEMENTS.md; sharper teeth would need
+# row-level evidence (the audit's cross-encoder note), not a better
+# threshold.
+_RECALL_ABSTAIN_LIFT = 1.8
+
+
+def recall_confidence(chat_id, char_id, query, *, current_turn_idx,
+                      viewer_frame_id=_UNSET, k=None, embedded=None,
+                      include_archived=True):
+    """How convinced retrieval is that this bank speaks to this query.
+
+    Deterministic, no model call beyond the query embedding the caller
+    usually already paid for (pass `embedded` to reuse it). Reads the same
+    seam-filtered rows `search_memories` ranks -- same turn cutoff, same
+    frame rule -- and never widens them.
+
+    Returns a dict:
+      available    -- False when the bank is too small, model coverage is
+                      too low, or the distribution is degenerate; callers
+                      must treat that as "no signal", never as emptiness.
+      lift_sigma   -- (mean of top-k best-vector scores - bank mean) / bank
+                      standard deviation.
+      abstain      -- lift_sigma below _RECALL_ABSTAIN_LIFT.
+    """
+    rows = visible_memory_rows(
+        chat_id, char_id,
+        before_turn_idx=current_turn_idx,
+        viewer_frame_id=viewer_frame_id,
+        include_archived=include_archived,
+    )
+    out = {"available": False, "lift_sigma": None, "abstain": False,
+           "bank": len(rows), "comparable": 0}
+    if len(rows) < _RECALL_CONFIDENCE_MIN_BANK:
+        return out
+    query_text = str(query or "").strip()
+    if embedded is None or not getattr(embedded, "vectors", None):
+        embedded = embed_texts_meta([query_text or "memory"])
+    if embedded.fallback:
+        # A hash vector's geometry says nothing about the bank; no signal.
+        return out
+    qv = embedded.vectors[0]
+    best = []
+    for row in rows:
+        if row["embedding_model"] != embedded.model_key \
+                or row["embedding_dim"] != embedded.dimensions:
+            continue
+        sem = _cos(qv, _vec(row["embedding"]))
+        cue = _cos(qv, _vec(row["cue_embedding"]))
+        best.append(max(sem, cue))
+    out["comparable"] = len(best)
+    if len(best) < _RECALL_CONFIDENCE_MIN_BANK \
+            or len(best) < _RECALL_CONFIDENCE_COVERAGE * len(rows):
+        return out
+    import numpy as _np
+    arr = _np.asarray(best, dtype=_np.float64)
+    sigma = float(arr.std())
+    if sigma <= 1e-9:
+        return out
+    top = _np.sort(arr)[-int(k or _RECALL_LIMIT):]
+    lift = (float(top.mean()) - float(arr.mean())) / sigma
+    out["available"] = True
+    out["lift_sigma"] = round(lift, 4)
+    out["abstain"] = lift < _RECALL_ABSTAIN_LIFT
+    return out
+
+
 # ---- Contrast retrieval (unbidden recall) ----
 #
 # Ordinary recall asks "what is most like this beat". A character measurably

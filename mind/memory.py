@@ -68,13 +68,14 @@ from mind.memory_read import (  # noqa: F401
 from mind.memory_retrieval import (  # noqa: F401
     _ASPECT_WEIGHT, _CONTRAST_EXCLUDED_CATEGORIES, _CONTRAST_MIN_BANK,
     _CONTRAST_MIN_SALIENCE, _CONTRAST_SEMANTIC, _CONTRAST_SEMANTIC_COVERAGE,
-    _ENCODED_SHARE, _MOOD_CONGRUENCE, _RECALL_LIMIT, _RRF_SCALE,
+    _ENCODED_SHARE, _MOOD_CONGRUENCE, _RECALL_ABSTAIN_LIFT, _RECALL_LIMIT,
+    _RRF_SCALE,
     _STRANDED_REPORTED, _SUMMARY_RECALL_LIMIT, _congruence_valence,
     _exact_cue_score, _jaccard_text, _lexical_memory_ranking,
     _memory_fts_query, _memory_similarity, _mood_axis,
     _rank_normalized_importance, _rrf_add, _temporal_mode,
     _warn_stranded_embeddings, contrast_memory, provenance_context_label,
-    recent_memory_buffer, search_memories,
+    recall_confidence, recent_memory_buffer, search_memories,
 )
 from mind.memory_summaries import (  # noqa: F401
     _EMPTY_VIEW_MARKERS, _SUPPORT_MAX_REFS, _SUPPORT_MIN_OVERLAP,
