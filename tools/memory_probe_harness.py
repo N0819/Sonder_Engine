@@ -219,12 +219,36 @@ def run_probe_file(path, k, cache, cache_path, allow_fallback=False):
             "chronological neighbor of recalled episode"
             in (by_score[ranks[t] - 1].get("retrieval_reasons") or [])
             for t in found)
+        # ---- additive, and deliberately outside the pass rule ----------
+        # `hit` above is the frozen verdict the committed probe sets were
+        # measured on and must not move. These two answer questions membership
+        # cannot: whether the CURRENT version of a revised fact outranks the
+        # stale one, and whether what came back still knows how it was learned.
+        anti = set(probe.get("antitargets") or [])
+        anti_found = sorted(a for a in anti if a in ranks)
+        best_target = min((ranks[t] for t in found), default=None)
+        best_anti = min((ranks[a] for a in anti_found), default=None)
+        # No antitarget in the payload is the cleanest pass: the stale row was
+        # not offered at all. A target above every stale row is the next best.
+        revision_correct = (None if not anti else
+                            best_target is not None
+                            and (best_anti is None or best_target < best_anti))
+        want_prov = probe.get("expect_provenance")
+        top_prov = None
+        if best_target is not None:
+            top_prov = (by_score[best_target - 1] or {}).get("provenance")
         entry = {
             "id": probe["id"],
             "kind": probe.get("kind", "positive"),
             "hit": bool(found),
             "targets_found": found,
             "target_ranks": {str(t): ranks[t] for t in found},
+            "antitargets_found": anti_found,
+            "antitarget_ranks": {str(a): ranks[a] for a in anti_found},
+            "revision_correct": revision_correct,
+            "expect_provenance": want_prov,
+            "top_target_provenance": top_prov,
+            "provenance_ok": (None if not want_prov else top_prov == want_prov),
             "neighbor_only": neighbor_only,
             "returned_ids": [m["id"] for m in by_score],
             "returned_scores": [round(m["score"], 6) for m in by_score],
@@ -255,6 +279,21 @@ def run_probe_file(path, k, cache, cache_path, allow_fallback=False):
                       "total": len(positives),
                       "misses": [r["id"] for r in positives if not r["hit"]]},
         "negatives": {"total": len(negatives)},
+        # Two sub-scores the frozen pass rule cannot express. `revision` is
+        # only defined for probes carrying antitargets, `provenance` only for
+        # probes carrying `expect_provenance`; both are absent, not zero, on a
+        # probe set that has neither.
+        "revision": {
+            "checked": sum(1 for r in results if r.get("revision_correct") is not None),
+            "correct": sum(1 for r in results if r.get("revision_correct") is True),
+            "stale_outranked_current": [
+                r["id"] for r in results if r.get("revision_correct") is False],
+        },
+        "provenance": {
+            "checked": sum(1 for r in results if r.get("provenance_ok") is not None),
+            "correct": sum(1 for r in results if r.get("provenance_ok") is True),
+            "wrong": [r["id"] for r in results if r.get("provenance_ok") is False],
+        },
         "probes": results,
     }
     return summary
