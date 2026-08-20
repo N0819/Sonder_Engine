@@ -4830,7 +4830,18 @@ def mem_import(cid: int, ch: int, body: dict = Body(...)):
     memories = body.get("memories")
     if not isinstance(memories, list):
         raise HTTPException(400, "Missing memories list")
-    imported = import_character_memories(cid, ch, memories)
+    try:
+        imported = import_character_memories(
+            cid, ch, memories,
+            # The refusal is a firewall guard, so the override has to be an
+            # explicit host act rather than a default: a bank naming another
+            # story's player puts a stranger into this mind as something it
+            # remembers (UNBUILT 1.74). 400 rather than 500 -- the request is
+            # answerable, and the message says what was found and how to
+            # proceed.
+            allow_foreign_personas=bool(body.get("allow_foreign_personas")))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     return {"ok": True, "imported": imported}
 
 @app.get("/api/chats/{cid}/characters/{ch}/memory-context")

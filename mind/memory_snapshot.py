@@ -4,6 +4,7 @@ Vector addressing, the prepare/apply restore split, and the lorebook restore
 that rebuilds a book with its entries and links."""
 
 import hashlib
+import json
 import re
 import time
 from core.db import q, qi, transaction
@@ -383,7 +384,52 @@ def dump_character_memories(chat_id, char_id):
         for r in rows
     ]
 
-def import_character_memories(chat_id, char_id, memories):
+
+def _foreign_persona_names(chat_id):
+    """Persona names this chat's player is NOT.
+
+    A memory carried in from another story names the people that story's
+    events involved -- including ITS player. The receiving mind has no channel
+    to that person: they were never in this story, were never perceived, were
+    never told of. Importing the row as-is puts a stranger's name into a mind
+    as something it remembers, which is the plain shape of a firewall breach
+    (UNBUILT 1.74).
+
+    Every other cross-story read scrubs the previous player through
+    `player_handle_for`. This path is the one that did not.
+    """
+    from story.character_schema import persona_name
+
+    own = q("SELECT persona_id FROM chats WHERE id=?", (chat_id,), one=True)
+    own_id = own["persona_id"] if own else None
+    names = set()
+    for r in q("SELECT id, name, sheet FROM personas") or []:
+        if own_id is not None and r["id"] == own_id:
+            continue
+        for candidate in (r["name"], ):
+            text = str(candidate or "").strip()
+            if len(text) >= 3:
+                names.add(text)
+        try:
+            text = str(persona_name(json.loads(r["sheet"] or "{}")) or "").strip()
+        except Exception:
+            text = ""
+        if len(text) >= 3 and text.casefold() != "player":
+            names.add(text)
+    # A name the receiving story's own player also uses is not foreign.
+    if own_id is not None:
+        mine = q("SELECT name, sheet FROM personas WHERE id=?", (own_id,), one=True)
+        if mine:
+            names.discard(str(mine["name"] or "").strip())
+            try:
+                names.discard(str(persona_name(json.loads(mine["sheet"] or "{}")) or "").strip())
+            except Exception:
+                pass
+    return {n for n in names if n}
+
+
+def import_character_memories(chat_id, char_id, memories,
+                              *, allow_foreign_personas=False):
     """Additive import for one character's memories -- unlike
     restore_chat_memories (which wipes and replaces, only ever used for
     checkpoint restore), this never deletes anything: it's for a user
@@ -415,9 +461,37 @@ def import_character_memories(chat_id, char_id, memories):
             # chat they were formed in.
             "importance": m.get("importance"),
             "disputed": m.get("disputed") or "",
+            # Explicit, not ambient: prepare_memory falls through to the
+            # active_frame_id contextvar, which in a worker thread reads the
+            # thread default rather than the frame being imported into --
+            # the same class as the B5 defect in
+            # tests/test_fable_audit_memory_consolidation.py.
+            "frame_id": None,
         })
     if not prepared:
         return 0
+    # A stranger's name must not enter a mind as something it remembers.
+    # Refuse rather than scrub: rewriting the prose would be authoring, and
+    # this is a HOST action -- one deliberate act, fully retryable, where a
+    # loud failure costs a retry and a silent one costs the firewall. The
+    # override exists because a host may legitimately be moving a character
+    # between two stories that share a player.
+    if not allow_foreign_personas:
+        foreign = _foreign_persona_names(chat_id)
+        if foreign:
+            blob = "\n".join(str(m.get("content") or "") for m in prepared)
+            hits = sorted({
+                name for name in foreign
+                if re.search(r"(?<![A-Za-z0-9])%s(?![A-Za-z0-9])"
+                             % re.escape(name), blob, re.I)})
+            if hits:
+                raise ValueError(
+                    "refusing to import: these memories name %s, who is not "
+                    "this story's player. The receiving mind has no channel "
+                    "to them -- they were never perceived here and never "
+                    "spoken of. Edit the export, or pass "
+                    "allow_foreign_personas=True if both stories share a "
+                    "player." % ", ".join(repr(h) for h in hits[:5]))
     # Refuse a hashed bank rather than storing one (UNBUILT 1.75). The shared
     # writer deliberately does NOT do this: a turn whose provider is briefly
     # down should keep its memory and have it rebuilt later, because losing
@@ -432,6 +506,13 @@ def import_character_memories(chat_id, char_id, memories):
     # Running with no embeddings provider is a supported configuration, and
     # there crc32 is the target rather than a degradation -- refusing it would
     # break import for everyone who has not configured one.
+    # `archived` rides the export and was never read back, so every retired
+    # memory came back alive on import -- a mind re-acquiring rows its own
+    # story had already dropped. Applied after the insert, like the retrieval
+    # history below it, because `prepare_memory` describes a memory as FORMED
+    # and being archived is something that happened to it since.
+    archived_flags = [bool(m.get("archived")) for m in (memories or [])
+                      if str(m.get("content") or "").strip()]
     batch = prepare_memories_batch(prepared)
     embedded = batch.get("embedded")
     if (embedded is not None and embedded.fallback
@@ -445,7 +526,11 @@ def import_character_memories(chat_id, char_id, memories):
             "every imported memory would be reachable by keyword only while "
             "%s is configured. Provider error: %s"
             % (embedding_model_key(), embedded.error or "unknown"))
-    return len(add_memories_batch(prepared_batch=batch))
+    ids = add_memories_batch(prepared_batch=batch)
+    for mid, was_archived in zip(ids, archived_flags):
+        if was_archived:
+            qi("UPDATE memories SET archived=1 WHERE id=?", (mid,))
+    return len(ids)
 
 def dump_memory_summaries(chat_id):
     return [

@@ -1455,7 +1455,14 @@ def prepare_memory_commit(ctx, *, scene=None):
                     memory_disputes.append(
                         (cid, ccid, str(_d.get("gist") or ""),
                          str(_d.get("now_reads") or ""), turn.idx,
-                         str(_d.get("memory_ref") or "")))
+                         str(_d.get("memory_ref") or ""),
+                         # What changed the reading. Carried so a re-reading
+                         # that cites the same source twice is legible as a
+                         # loop rather than as instability -- a count alone
+                         # cannot tell those apart.
+                         [str(_e.get("event_id") or "")
+                          for _e in (_d.get("evidence") or [])
+                          if isinstance(_e, dict)]))
             # Consequence, not popularity: a memory the character cited as
             # EVIDENCE for a belief they formed this beat turned out to be
             # load-bearing. Retrieval alone never moves importance -- that

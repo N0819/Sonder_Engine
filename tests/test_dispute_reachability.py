@@ -51,6 +51,10 @@ SEEN_NOW = ("The man in the grey coat slips two fingers into a merchant's "
             "coat pocket and walks on without breaking stride.")
 
 MEMORY_REF = "event:9f3ac1"
+# A LATER memory this mind also holds -- the one that overturns the first.
+OTHER_MEMORY_REF = "event:b4d720"
+LATER_SEEN = ("June said she saw his ferry lights anchored at the chapel, "
+              "the night he swore the water there was unreachable.")
 CURRENT_ID = "current:Mara:0"
 
 
@@ -60,7 +64,8 @@ def _observations():
 
 def _memory_context():
     return {"recent_episodes": [
-        {"memory_ref": MEMORY_REF, "gist": KIND_STRANGER}]}
+        {"memory_ref": MEMORY_REF, "gist": KIND_STRANGER},
+        {"memory_ref": OTHER_MEMORY_REF, "gist": LATER_SEEN}]}
 
 
 def _result(**overrides):
@@ -154,19 +159,26 @@ class TestGroundingKeepsIt:
         assert out["memory_disputes"] == []
         assert any("memory_disputes" in w for w in warnings)
 
-    def test_a_re_reading_with_no_present_evidence_is_dropped(self):
+    def test_a_re_reading_with_no_evidence_at_all_is_dropped(self):
         """The whole premise is that LATER evidence changed the meaning. A
-        dispute citing nothing from this beat is a mind revising its past for
-        no stated reason, which is the one thing this must not become."""
+        dispute citing NOTHING is a mind revising its past for no stated
+        reason, which is the one thing this must not become.
+
+        Renamed 2026-08-20: the rule is "no evidence", not "no PRESENT
+        evidence". A later memory is a stated reason -- see the test below --
+        and requiring the present beat was a side effect of the grounding
+        namespace rather than a decision anyone wrote down.
+        """
         out = _result(memory_disputes=[{
             "memory_ref": MEMORY_REF, "now_reads": NOW_READS, "evidence": []}])
         _ground_observation_citations(out, _observations(), _memory_context())
         assert out["memory_disputes"] == []
 
     def test_a_memory_ref_cannot_be_used_as_its_own_evidence(self):
-        """Evidence for a re-reading is grounded in the PRESENT namespace, so
-        citing the disputed memory back at itself grounds nothing and the
-        dispute falls with it."""
+        """A memory may not justify re-reading itself. Circular, and the one
+        guard that had to survive widening the namespace -- it is now enforced
+        by name rather than as a side effect of excluding memories wholesale.
+        """
         out = _result(memory_disputes=[{
             "memory_ref": MEMORY_REF, "now_reads": NOW_READS,
             "evidence": [{"event_id": MEMORY_REF, "fact": "I remember it"}]}])
@@ -251,13 +263,21 @@ def test_commit_collects_every_field_record_dispute_needs():
     collector = src[src.index('for _d in own_result.get("memory_disputes")'):]
     collector = collector[:collector.index("# Consequence, not popularity")]
     for field in ('_d.get("gist")', '_d.get("now_reads")',
-                  '_d.get("memory_ref")'):
+                  '_d.get("memory_ref")',
+                  # The evidence trail, added 2026-08-20. Without it a
+                  # re-reading that cites the same source twice is
+                  # indistinguishable from a mind that genuinely learned
+                  # something, which is precisely the rumination failure the
+                  # widened grounding could produce.
+                  '_d.get("evidence")'):
         assert field in collector, field
-    writer = writer_src[
-        writer_src.index('prepared.get(\n                "memory_disputes")'):]
+    writer = writer_src[writer_src.index('prepared.get("memory_disputes")'):]
     writer = writer[:writer.index("# Memories that turned out")]
     assert "record_dispute(chat_id, char_id, _gist, _reading, _tidx," in writer
     assert "memory_ref=_ref" in writer
+    assert "sources=_sources" in writer, (
+        "the sources trail must reach record_dispute, or rumination is "
+        "invisible again")
 
 
 def test_the_prompt_states_an_occasion_and_not_only_prohibitions():
@@ -278,3 +298,37 @@ def test_the_prompt_states_an_occasion_and_not_only_prohibitions():
                 if "READING A MEMORY DIFFERENTLY" in l)
     for occasion in ("disguise", "lied", "staged"):
         assert occasion in line.casefold(), occasion
+
+
+class TestALaterMemoryMayOverturnAnEarlierOne:
+    """The commonest way a mind actually changes its reading, and it was
+    unreachable until 2026-08-20.
+
+    Evidence was grounded in the PRESENT namespace, so a dispute citing the
+    memory that overturned the belief -- rather than something happening in
+    this beat -- was dropped as ungrounded. Measured: handed a belief and the
+    observation overturning it, characters named the contradiction 15 times in
+    18, unprompted, and cited the later memory. Every one of those would have
+    been discarded.
+
+    Firewall-safe on the invariant's own terms: both rows are this mind's own
+    memories, legitimately acquired, and one re-reading another is inference
+    inside a single head.
+    """
+
+    def test_a_later_memory_grounds_a_re_reading(self):
+        out = _result(memory_disputes=[{
+            "memory_ref": MEMORY_REF, "now_reads": NOW_READS,
+            "evidence": [{"event_id": OTHER_MEMORY_REF,
+                          "fact": "I saw the ferry there myself"}]}])
+        _ground_observation_citations(out, _observations(), _memory_context())
+        assert out["memory_disputes"], (
+            "a later memory is a stated reason; this is how a mind revises")
+
+    def test_a_memory_this_mind_never_held_still_grounds_nothing(self):
+        """Widening the namespace must not widen the firewall."""
+        out = _result(memory_disputes=[{
+            "memory_ref": MEMORY_REF, "now_reads": NOW_READS,
+            "evidence": [{"event_id": "event:never-mine", "fact": "hearsay"}]}])
+        _ground_observation_citations(out, _observations(), _memory_context())
+        assert out["memory_disputes"] == []
