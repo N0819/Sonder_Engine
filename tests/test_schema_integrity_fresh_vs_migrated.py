@@ -221,16 +221,25 @@ class TestFreshDatabaseFtsIsLive:
                 (book, "dragon", "A dragon sleeps under the mountain."),
             )
             # Recreate the broken-era state: no triggers, index never
-            # populated, and the version stamped at the pre-repair value
-            # (broken-era databases were stamped at whatever
-            # SCHEMA_VERSION was when the fresh path skipped their
-            # migrations -- one version behind the repair migration).
+            # populated, and the version stamped so the REPAIR MIGRATION runs.
+            #
+            # 30 literally, not `SCHEMA_VERSION - 1`. The repair is the
+            # v30 -> v31 step, and deriving the stamp from whatever is newest
+            # only worked while that step WAS the newest. The first migration
+            # added after it silently stopped this test from running the
+            # repair at all -- and the symptom was not a clear assertion
+            # failure but `database disk image is malformed`, thrown later and
+            # somewhere else, because a live trigger over a deleted
+            # external-content index corrupts it on the next UPDATE. Found
+            # when v31 -> v32 was added.
+            _PRE_REPAIR_VERSION = 30
+            assert db.SCHEMA_VERSION > _PRE_REPAIR_VERSION
             for trig in self.TRIGGERS:
                 db.qi(f"DROP TRIGGER IF EXISTS {trig}")
             db.qi("INSERT INTO lore_fts(lore_fts) VALUES('delete-all')")
             db.qi(
                 "UPDATE schema_meta SET value=? WHERE key='version'",
-                (str(db.SCHEMA_VERSION - 1),),
+                (str(_PRE_REPAIR_VERSION),),
             )
             db.close_connection()
 
