@@ -305,9 +305,18 @@ deliberate_recall:
 ```
 
 Any ponder result already present in normal recall is marked with both
-`normal_recall` and `deliberate_ponder` rather than duplicated. Up to four
-additional episodes may be supplied. Their refs are grounded exactly like any
-other raw memory. The result therefore says both *this is remembered past* and
+`normal_recall` and `deliberate_ponder` rather than duplicated. The lane asks
+for the SAME budget passive recall just used -- `recall_limit` after absorption
+has narrowed it, so 16 for a relaxed mind, 8 part-absorbed, and a floor of 4 --
+rather than a fixed four. A fixed four served a deliberate act of remembering
+as though the mind were maximally absorbed, which is the one state it is not
+in; absorption narrows recall because attention is elsewhere, and a ponder is
+attention deliberately placed. Measured on 470 independent questions
+(LongMemEval): four answers 287 of them, sixteen answers 396, so the old cap
+cost 28% of everything answerable -- and the loss fell hardest on exactly the
+shapes a ponder tends to have, preferences losing 47% of answerable and
+multi-session 34%, while single-row answers barely noticed. Their refs are
+grounded exactly like any other raw memory. The result therefore says both *this is remembered past* and
 *this came back because I deliberately asked myself about it*.
 
 Ponder is intentionally not a default retrieval tax. A non-empty query and a

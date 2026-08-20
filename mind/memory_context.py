@@ -361,16 +361,39 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     ponder_query = " ".join(str(ponder_query or "").split())[:240]
     pondered = []
     if ponder_query:
+        # The SAME budget passive recall just used, which is `recall_limit`
+        # after absorption has narrowed it -- not a fixed 4.
+        #
+        # A fixed 4 meant a deliberate act of remembering was always served as
+        # though the mind were maximally absorbed, which is the one state it
+        # is not in: absorption narrows passive recall precisely because
+        # attention is elsewhere, and a ponder is attention deliberately
+        # placed. Scaling with absorption keeps that meaning in both
+        # directions -- an absorbed mind's ponder is still small.
+        #
+        # Measured on 470 independent questions (LongMemEval, ranks from the
+        # k=16 payload): k=4 answers 287, k=16 answers 396. The cap was
+        # costing 28% of answerable questions, and the loss falls hardest on
+        # exactly the classes a ponder tends to be -- preferences 47% of
+        # answerable, multi-session 34%, temporal 32% -- while questions whose
+        # evidence sits in a single row barely notice it. The curve has no
+        # knee at 4; it is simply the bottom of it.
+        #
+        # The payload argument the old comment made is real and does not bite
+        # here: measured on the live corpus, a ponder fires on roughly 1 turn
+        # in 332, so this spends about a thousand extra tokens on 0.3% of
+        # beats, on the lane where a character has decided it needs to
+        # remember something.
+        ponder_k = max(4, int(recall_limit))
         pondered = search_memories(
-            chat_id, char_id, ponder_query, k=4, include_archived=True,
+            chat_id, char_id, ponder_query, k=ponder_k, include_archived=True,
             current_turn_idx=current_turn_idx, chronological=True,
             here=here, in_sight=in_sight, record_access=True)
-        # Chronological-neighbour expansion may return k+2. Deliberate recall
-        # is a small supplement, not a second full memory payload.
-        if len(pondered) > 4:
+        # Chronological-neighbour expansion may return k+2; trim to the budget.
+        if len(pondered) > ponder_k:
             pondered = sorted(
                 sorted(pondered, key=lambda m: float(m.get("score") or 0.0),
-                       reverse=True)[:4],
+                       reverse=True)[:ponder_k],
                 key=lambda m: (m.get("turn_idx") is None,
                                m.get("turn_idx")
                                if m.get("turn_idx") is not None else 10**12,
