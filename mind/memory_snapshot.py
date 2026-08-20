@@ -7,7 +7,7 @@ import hashlib
 import re
 import time
 from core.db import q, qi, transaction
-from llm.providers import embed_texts, embed_texts_meta
+from llm.providers import embed_texts, embed_texts_meta, embedding_model_key
 from dataclasses import dataclass
 
 from mind.memory_common import (
@@ -404,7 +404,32 @@ def import_character_memories(chat_id, char_id, memories):
             "importance": m.get("importance"),
             "disputed": m.get("disputed") or "",
         })
-    return len(add_memories_batch(prepared))
+    if not prepared:
+        return 0
+    # Refuse a hashed bank rather than storing one (UNBUILT 1.75). The shared
+    # writer deliberately does NOT do this: a turn whose provider is briefly
+    # down should keep its memory and have it rebuilt later, because losing
+    # the beat is worse. An import is the opposite case -- it is one host
+    # action, retryable in full, and a whole bank stamped `cheap:crc32:256`
+    # measures 0% paraphrase recall while reporting success. Measured: the
+    # three largest banks in the live corpus each exceed the provider's
+    # request ceiling on their own.
+    #
+    # The discriminator is `rebuild_embeddings`', restated: a fallback batch is
+    # only a FAILURE when the hash is not what this install is embedding onto.
+    # Running with no embeddings provider is a supported configuration, and
+    # there crc32 is the target rather than a degradation -- refusing it would
+    # break import for everyone who has not configured one.
+    batch = prepare_memories_batch(prepared)
+    embedded = batch.get("embedded")
+    if (embedded is not None and embedded.fallback
+            and embedding_model_key() != "cheap:crc32:256"):
+        raise ValueError(
+            "refusing to import: embeddings fell back to the crc32 hash, so "
+            "every imported memory would be reachable by keyword only while "
+            f"{embedding_model_key()} is configured. "
+            f"Provider error: {embedded.error or 'unknown'}")
+    return len(add_memories_batch(prepared_batch=batch))
 
 def dump_memory_summaries(chat_id):
     return [
