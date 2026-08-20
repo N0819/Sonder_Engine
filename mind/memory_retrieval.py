@@ -185,12 +185,50 @@ _RRF_SCALE = 12.0
 # 0.640 while the least relevant slot does not move, i.e. the added memories
 # are better than the padding they displace, not filler.
 #
-# 16 rather than 24: end-to-end recall of a paraphrased memory goes 7/16 ->
-# 11/16 -> 13/16 across 8/16/24, but relevance flattens (0.640 -> 0.649) while
-# the payload keeps growing (~890 -> ~1242 tokens per character per beat). The
-# attention budget is real -- see docs/UNBUILT.md 1.12 on nine payload keys --
-# so this stops where the curve does.
-_RECALL_LIMIT = 16
+# 24 since 2026-08-20, and the 16 it replaces was a considered choice rather
+# than a default, so the reasoning that moved it is recorded here rather than
+# overwritten.
+#
+# The case for 16 was: paraphrase recall 7/16 -> 11/16 -> 13/16 across 8/16/24,
+# relevance flattening (0.640 -> 0.649), payload growing ~890 -> ~1242 tokens
+# per character per beat, and a real attention budget (UNBUILT 1.12). Nothing
+# in that is wrong. What changed is the evidence available on both sides.
+#
+# BENEFIT, on 470 questions written by people who have never seen this engine
+# (LongMemEval, run at each k rather than derived):
+#
+#     k     4    8   12   16   24
+#     hit 304  359  382  399  413
+#
+# 16 was not where the curve stops -- +14 probes sit between 16 and 24. The
+# earlier reading rested on 16 paraphrase probes; this rests on 470.
+#
+# COST, the part the old note was protecting and the part that had never been
+# measured behaviourally: the worry is dilution, since rows ranked 17-24 are
+# mostly noise by construction. Measured with the behavioural benchmark
+# (9 cases, 2 repeats, both retrieval modes, real character calls):
+#
+#                    passed      accuracy  grounded  historical hits
+#     k=16 lexical    8/18         0.444     0.778        12/16
+#     k=16 semantic  10/18         0.556     0.944        12/16
+#     k=24 lexical   12/18         0.667     0.889        14/16
+#     k=24 semantic  12/18         0.667     0.889        14/16
+#
+# Better in both modes on four measures including the deterministic one. The
+# dilution did not happen. Read with the instrument's own caution: 18 cases
+# cannot separate an arm from its noise, and noise is exactly what a single
+# improving metric would be -- four moving together in two independent modes
+# is what makes this worth acting on.
+#
+# The payload growth is also smaller than the arithmetic suggests, because
+# `build_character_memory_context` drops rows already in the recent buffer:
+# measured on chat 63, k=24 returned 25 rows from the seam and delivered 16 to
+# the payload, the rest being things the character already had in front of it.
+# The cost self-limits.
+#
+# And the owner accepted the token cost explicitly when shown it, which is the
+# half of this decision that was never mine to make.
+_RECALL_LIMIT = 24
 
 # How many EARLIER summary windows travel beside the current one. Two, for the
 # same attention-budget reason the number above stops at 16 -- and because the
@@ -734,6 +772,23 @@ _RECALL_CONFIDENCE_COVERAGE = 0.5
 # table in docs/experiments/MEMORY_IMPROVEMENTS.md; sharper teeth would
 # need row-level evidence (the audit's cross-encoder note), not a better
 # threshold.
+# How many of the best scores define the PEAK the lift is measured against.
+#
+# This used to read `_RECALL_LIMIT`, which was never a decision -- it inherited
+# a number chosen for a different question. "How many rows does a character
+# receive" and "how many top scores describe the shape of this bank's response"
+# are unrelated, and coupling them meant the abstention threshold silently
+# recalibrated whenever the payload size moved. Raising the payload to 24
+# lowered every lift (a wider top pulls in more mediocre scores), and a
+# genuinely strong match measured 1.2428 against a threshold of 1.7 -- so the
+# floor would have begun refusing real recall, which is strictly worse than
+# the inert-but-harmless state UNBUILT 1.76 records it in.
+#
+# Pinned at 16 to hold the calibration the threshold was measured on. It is
+# not a claim that 16 is right for this statistic; it is a refusal to change
+# two things at once.
+_RECALL_CONFIDENCE_TOPK = 16
+
 _RECALL_ABSTAIN_LIFT = 1.7
 
 
@@ -789,7 +844,7 @@ def recall_confidence(chat_id, char_id, query, *, current_turn_idx,
     sigma = float(arr.std())
     if sigma <= 1e-9:
         return out
-    top = _np.sort(arr)[-int(k or _RECALL_LIMIT):]
+    top = _np.sort(arr)[-int(k or _RECALL_CONFIDENCE_TOPK):]
     lift = (float(top.mean()) - float(arr.mean())) / sigma
     out["available"] = True
     out["lift_sigma"] = round(lift, 4)
