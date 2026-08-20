@@ -44,8 +44,13 @@ an `assistant` turn becomes `witnessed` (the speaker's own conduct) and a
 scoped-summary machinery honestly without pretending the corpus has a
 perception layer.
 
+Runs against a COPY of a configured database, never a fresh one -- see
+`_refuse_fallback_embeddings` for why that is not merely convenient. The new
+bank gets its own `chats` and `characters` rows; nothing existing is touched.
+
 Usage:
     python3 tools/fetch_longmemeval.py --out /tmp/lme
+    cp engine.db /tmp/lme/bank.db
     ENGINE_DB=/tmp/lme/bank.db python3 tools/longmemeval_to_bank.py \\
         --source /tmp/lme/longmemeval_oracle.json \\
         --out-probes tools/memory_probes/longmemeval_merged.json
@@ -72,6 +77,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # is what gets shortened, which is what a gist is for.
 GIST_CHARS = 240
 
+# The embeddings provider caps a request at 120,000 tokens. A batch is TWO
+# texts per row (document and cues), and LongMemEval rows are far longer than
+# anything this engine mints -- mean 1,206 characters against a live median
+# well below it -- so a row-counted batch overshoots on this corpus while
+# looking reasonable on ours. Measured: 256 rows produced a 120,817-token
+# request, the provider returned 400, and `embed_texts_meta` fell back to
+# crc32 for 491 texts and let the write proceed. Budget tokens, not rows, and
+# leave half the cap as headroom for the estimate being wrong.
+EMBED_TOKEN_BUDGET = 60_000
+CHARS_PER_TOKEN = 4
+
 
 def _refuse_live_database():
     """The harness's rule, restated here because this tool WRITES.
@@ -89,6 +105,32 @@ def _refuse_live_database():
         raise SystemExit(
             f"refusing to write the live database at {repo_db}. "
             "Point ENGINE_DB at a scratch path.")
+
+
+def _refuse_fallback_embeddings():
+    """Fail before writing anything if embeddings are not really configured.
+
+    One probe text through the production seam. Cheap, and it turns a corpus
+    that is silently worthless into an error at second zero.
+
+    This guard is the reason the tool runs against a COPY of a configured
+    database rather than a database it creates itself. A fresh `db.init()`
+    has no providers and no `agent_models`, so the embeddings role resolves to
+    nothing and `embed_texts_meta` returns crc32 lexical hashes -- and nothing
+    on the write path objects, because `prepare_memories_batch` embeds whatever
+    it is handed. Measured: the first run of this tool wrote 561 rows of hash
+    vectors and reported success. The harness refuses fallback QUERY vectors
+    for the same reason; the corpus side had no such guard, which is how this
+    was found.
+    """
+    from llm.providers import embed_texts_meta
+    batch = embed_texts_meta(["retrieval configuration probe"])
+    if batch.fallback:
+        raise SystemExit(
+            "embeddings resolved to the crc32 fallback -- every row would be "
+            "written with a lexical hash vector and the bank would measure a "
+            "retrieval nobody runs. Check --seed-config-from.")
+    return batch.model_key, batch.dimensions
 
 
 def _seed_bank(db, label):
@@ -169,6 +211,8 @@ def convert(source, out_probes, limit, batch_size, label):
         records = records[:limit]
 
     db.init()
+    model_key, dims = _refuse_fallback_embeddings()
+    print(f"embeddings: {model_key} ({dims}d)")
     chat_id, char_id = _seed_bank(db, label)
 
     pending, pending_meta, probes = [], [], []
@@ -184,7 +228,21 @@ def convert(source, out_probes, limit, batch_size, label):
         nonlocal pending, pending_meta, written
         if not pending:
             return
-        ids = add_memories_batch(prepared_batch=prepare_memories_batch(pending))
+        prepared = prepare_memories_batch(pending)
+        # The up-front probe proves the provider is CONFIGURED; it cannot
+        # prove every later request succeeds. A batch that overshoots the
+        # request cap comes back fallback-stamped with only a log line, and
+        # the write path is happy to store it -- so refuse here instead. The
+        # rows already committed stay; the run stops rather than quietly
+        # producing a bank that is half real vectors and half crc32.
+        batch = prepared.get("embedded")
+        if batch is not None and getattr(batch, "fallback", False):
+            raise SystemExit(
+                f"embedding fell back to crc32 after {written} rows -- the "
+                f"batch of {len(pending)} rows was refused by the provider. "
+                f"Lower --batch-size (currently {batch_size} estimated "
+                f"tokens) and start a fresh bank; this one is now mixed.")
+        ids = add_memories_batch(prepared_batch=prepared)
         written += len(ids)
         for rec, start, count, evidence, span in pending_meta:
             target_ids = [ids[start + e] for e in evidence
@@ -193,18 +251,24 @@ def convert(source, out_probes, limit, batch_size, label):
         pending, pending_meta = [], []
         print(f"  wrote {written} rows, {len(probes)} probes", flush=True)
 
+    pending_tokens = 0
     for rec in records:
         rows, evidence, turn_cursor = _rows_for_record(
             rec, chat_id, char_id, turn_cursor)
         if not rows:
             continue
         span = [rows[0]["turn_idx"], rows[-1]["turn_idx"]]
+        # Two embedded texts per row, so the estimate doubles.
+        cost = 2 * sum(len(r["content"]) for r in rows) // CHARS_PER_TOKEN
         # A record is never split across batches: its targets are resolved
         # from one id list, and a split would strand half of them.
-        if pending and len(pending) + len(rows) > batch_size:
+        if pending and (pending_tokens + cost > batch_size
+                        or len(pending) >= 512):
             flush()
+            pending_tokens = 0
         pending_meta.append((rec, len(pending), len(rows), evidence, span))
         pending.extend(rows)
+        pending_tokens += cost
     flush()
 
     positives = [p for p in probes if p["kind"] == "positive"]
@@ -246,8 +310,9 @@ def main():
     ap.add_argument("--out-probes", required=True)
     ap.add_argument("--limit", type=int, default=0,
                     help="convert only the first N records (0 = all)")
-    ap.add_argument("--batch-size", type=int, default=256,
-                    help="rows per embedding request group")
+    ap.add_argument("--batch-size", type=int, default=EMBED_TOKEN_BUDGET,
+                    help="estimated TOKENS per embedding request group, not "
+                         f"rows (default {EMBED_TOKEN_BUDGET})")
     ap.add_argument("--label", default="LongMemEval merged bank")
     args = ap.parse_args()
     _refuse_live_database()
