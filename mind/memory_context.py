@@ -13,7 +13,7 @@ from mind.memory_common import (
 from mind.memory_write import _clamp
 from mind.memory_retrieval import (
     _RECALL_LIMIT, _SUMMARY_RECALL_LIMIT, provenance_context_label,
-    recent_memory_buffer, search_memories,
+    recall_confidence, recent_memory_buffer, search_memories,
 )
 from mind.memory_summaries import (
     backfill_missing_memory_event_keys, get_memory_summary,
@@ -334,6 +334,18 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                chronological=True, here=here, in_sight=in_sight,
                                aspects=aspects, embedded=embedded,
                                record_access=True)
+    # The abstention floor (audit 4.3 item 3): a deterministic, per-query
+    # signal that this bank holds nothing convincing for this beat, read from
+    # the score distribution the scan already computed the shape of. The
+    # recalled rows are still delivered -- they are legitimately visible, and
+    # suppressing them is a behaviour change no one has measured -- but the
+    # mind is told its own recall came back without conviction, which is what
+    # licenses "I don't remember" over confabulating a connection. Calibrated
+    # so no measured real recall is ever flagged (zero false abstention on
+    # the frozen probe sets); it fires only on the emptiest queries.
+    recall_conviction = recall_confidence(
+        chat_id, char_id, query_text, current_turn_idx=current_turn_idx,
+        embedded=embedded)
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     if len(recalled) > recall_limit:
         recalled = sorted(
@@ -512,6 +524,12 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         **({"recent_conclusions": recent_conclusions}
            if recent_conclusions else {}),
         "recalled_old_memories": recalled_projected,
+        # Present only when the floor fires, like every other optional key --
+        # an absent signal must cost no attention. Self-describing on
+        # purpose: the value a mind should take from it is exactly its name.
+        **({"nothing_comes_back_clearly": True}
+           if recall_conviction.get("available")
+           and recall_conviction.get("abstain") else {}),
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried
         # separately below and must not be folded in here.

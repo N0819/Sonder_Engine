@@ -48,15 +48,15 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 123 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory.py` | 124 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 191 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
-| `mind/memory_context.py` | 539 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
+| `mind/memory_context.py` | 557 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_inference.py` | 154 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_lore_entries.py` | 520 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 222 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
-| `mind/memory_retrieval.py` | 854 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
+| `mind/memory_retrieval.py` | 954 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
 | `mind/memory_snapshot.py` | 586 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_vectors.py` | 770 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
@@ -578,7 +578,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 253 | 275 lines |
+| `build_character_memory_context()` | 253 | 293 lines |
 | `_with_reading()` | 23 | 101 lines |
 | `_origin_on_drift()` | 154 | 97 lines |
 | `_beats_ago_span()` | 126 | 21 lines |
@@ -648,13 +648,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `search_memories()` | 369 | 278 lines |
-| `contrast_memory()` | 682 | 117 lines |
+| `contrast_memory()` | 782 | 117 lines |
 | `_rank_normalized_importance()` | 306 | 61 lines |
-| `recent_memory_buffer()` | 813 | 41 lines |
+| `recall_confidence()` | 688 | 58 lines |
+| `recent_memory_buffer()` | 913 | 41 lines |
 | `_congruence_valence()` | 212 | 29 lines |
 | `_warn_stranded_embeddings()` | 267 | 29 lines |
 | `_exact_cue_score()` | 69 | 23 lines |
-| `_lexical_memory_ranking()` | 30 | 11 lines |
 
 ### `mind/memory_snapshot.py`
 
