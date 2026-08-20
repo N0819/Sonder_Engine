@@ -2702,6 +2702,83 @@ offline/test operation without a provider, and near-duplicate detection --
 measured 99.1% precise against real cosine 0.95, which is a genuinely useful
 tool for finding the forty near-identical descriptions of one room in a bank.
 
+### 2.22 Exact-cue matching scans the whole bank, and an index is what it wants
+
+Measured 2026-08-20, [`experiments/RETRIEVAL_COST.md`](experiments/RETRIEVAL_COST.md).
+Roadmap rather than defect: the 4.9x constant-factor fix landed, and what is
+left is an algorithm choice that only bites at a scale no live bank has reached
+yet.
+
+`_exact_cue_score` runs once per ROW per query. Profiled over 8 queries on a
+10,960-row bank it was 79.9 of 89.9 seconds -- **89% of all retrieval time**,
+against roughly 10% for the vector scan, which is the opposite of where this
+project assumed the cost was. Guarding the word-boundary regex with a
+substring test and caching compiled patterns took `search_memories` from
+4,732 ms to 968 ms with an identical verdict set on all 470 LongMemEval
+probes.
+
+That is a constant factor. The complexity is unchanged: every row is still
+visited to ask whether any of its cues appears in the query, and the answer is
+no for almost all of them.
+
+**The shape the problem actually has is an inverted index**, and this codebase
+already runs one for the neighbouring ranking: `_lexical_memory_ranking` asks
+SQLite FTS which rows match, rather than asking every row whether it matches.
+An `cue -> row ids` index over `key_phrases`, `entities` and `location` would
+make the exact ranking O(matching rows) instead of O(bank), and the matching
+set is tiny by construction -- that is what makes the cue signal worth having.
+
+Two things to settle before building it, neither hard, both easy to get wrong:
+
+- **Substring semantics.** The phrase branch matches when a stored phrase is a
+  substring of the QUERY (and, for short queries, the reverse). An FTS index is
+  token-based, so it would need the cue tokenised and the substring rule
+  re-derived from token adjacency, or the index used as a candidate filter with
+  the exact rule re-run only on the candidates. The second is safer and still
+  removes almost all the work.
+- **Write cost.** The index has to be maintained on every mint and every cue
+  repair. `repair_memory_cues` rewrites cues in bulk, so the rebuild path needs
+  to be part of the design rather than an afterthought.
+
+The vector scan is now the largest remaining term and is still a Python loop
+over BLOB-decoded rows with no cache. Holding a bank's vectors as one
+contiguous matrix is the standard fix, but after this change it is worth about
+a tenth of what it looked worth before it -- which is the reason to measure
+before optimising, recorded here because this entry got that backwards once
+already.
+
+### 2.23 Four of the seven memory kinds cannot be minted
+
+Measured 2026-08-20 while chasing why preference recall is the worst class in
+the LongMemEval benchmark (15/30 with real embeddings, 7/30 lexical --
+[`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md)).
+
+`MEMORY_KINDS` promises seven: `episodic`, `dialogue`, `inference`,
+`semantic`, `relationship`, `promise`, `intention`. Every mint site in
+`persist/commit_memory.py` hardcodes its kind -- `dialogue` at 580, `episodic`
+at 637 and 715, `inference` at 743 -- so no model chooses one and no path
+produces the other four. The live corpus agrees exactly: 5,353 `episodic`,
+3,576 `inference`, 425 `dialogue`, 253 legacy `episode`, one stray `belief`,
+and **zero `semantic`, `relationship` or `intention`**.
+
+Kind barely reaches ranking today (only `inference` is read, for belief
+weighting), so this is not a retrieval bug on its own. What it means is that a
+stable fact about a person has nowhere to live. A preference is stored as the
+EPISODE of the moment it was mentioned, so its retrieval document carries that
+moment's location, turn and cast -- and a question asking what somebody
+prefers has to compete with all of it.
+
+That is a hypothesis about the 15/30, not a finding. The synthetic fiction
+bank (`tools/generate_synthetic_bank.py`) mints everything `episodic` and so
+cannot discriminate; testing it needs an arm that mints preference rows as
+`semantic` with a document that drops the episode's incidentals, measured
+against the same probes. Cheap to build now that the generator plants
+preferences deliberately.
+
+Related: 2.20 wants exactly this shape for a different reason -- an authored
+past is mostly semantic rather than episodic, and the same missing tier is why
+it has nowhere to go.
+
 ## 3. Information-pipeline leaks still open
 
 Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
