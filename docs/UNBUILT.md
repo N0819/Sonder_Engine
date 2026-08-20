@@ -1497,22 +1497,6 @@ function column above; the file column exists so the next reader does not
 spend an afternoon re-deriving it and conclude it is news.
 
 
-### 1.57 The chronological-padding brake stops the inner loop only
-
-Found 2026-08-20 by adversarial verification of the memory-probe harness.
-`search_memories` pads its selection with chronological neighbours of the top
-3 selected episodes, documented (MEMORY.md §5, and the in-code intent) as "up
-to k+2 total" — but the `len(expanded) >= k + 2` brake sits inside the inner
-neighbour-pair loop and never breaks the outer `selected[:3]` loop, so the
-payload can reach k+6; k+4 was observed live on both measured banks. Present
-since before the 2026-08 retrieval work (equal at the frozen-probe baseline),
-and measured as deciding nothing: zero probe verdicts on any bank in any
-state came via padding rows. Not fixed in the branch that found it because
-shrinking payloads is a retrieval behaviour change that needs its own probe
-run; the fix is moving the brake to the outer loop (or checking it before
-each append) and re-measuring with `tools/memory_probe_harness.py`.
-
-
 ### 1.56 The project tier's occasion now arrives, and is declined
 
 v4 made the review beat reachable (`Design.md`'s project row has the diagnosis:
@@ -1958,6 +1942,49 @@ to be improved, so it must be applied before anything derives one. Until then,
 `guessed_spans` reports these garments — which is the right report, since
 nothing did in fact know where they go.
 
+
+### 1.73 The chronological-padding brake stops the inner loop only
+
+Found 2026-08-20 by adversarial verification of the memory-probe harness.
+`search_memories` pads its selection with chronological neighbours of the top
+3 selected episodes, documented (MEMORY.md §5, and the in-code intent) as "up
+to k+2 total" — but the `len(expanded) >= k + 2` brake sits inside the inner
+neighbour-pair loop and never breaks the outer `selected[:3]` loop, so the
+payload can reach k+6; k+4 was observed live on both measured banks. Present
+since before the 2026-08 retrieval work (equal at the frozen-probe baseline),
+and measured as deciding nothing: zero probe verdicts on any bank in any
+state came via padding rows. Not fixed in the branch that found it because
+shrinking payloads is a retrieval behaviour change that needs its own probe
+run; the fix is moving the brake to the outer loop (or checking it before
+each append) and re-measuring with `tools/memory_probe_harness.py`.
+
+
+
+
+### 1.74 A memory import carries the other story's persona verbatim
+
+Found 2026-08-19 while theorizing the pre-story tier
+([`design/DESIGN_PRESTORY_MEMORY.md`](design/DESIGN_PRESTORY_MEMORY.md)).
+`import_character_memories` (`mind/memory_snapshot.py:374`) is the additive
+path behind `POST /api/chats/{cid}/characters/{ch}/memories/import`, and it
+copies `content` from the export straight into the new chat's bank. Every other
+cross-story read scrubs the previous story's player handle through
+`player_handle_for`; this one does not, so importing a bank moves one player's
+persona name into another player's story as fact a mind can recall. That is the
+plain shape of a firewall leak: a mind acquires a name it has no channel to.
+
+Two smaller faults in the same function. `archived` is not in the prepared
+dict, so retired memories come back alive on import. `frame_id` is never set,
+so it falls through to whatever the ambient contextvar happens to hold at
+import time rather than to the frame the host is importing into -- the same
+class as the B5 thread-pool defect in
+`tests/test_fable_audit_memory_consolidation.py`, which was fixed by passing
+the value explicitly instead of trusting the ambient default.
+
+Dropping `turn_id`/`turn_idx` is NOT a fault -- the docstring argues for it and
+the argument holds. It is what makes this function the engine's existing,
+unlabelled `inherit` mode for memory, which is why §2.20 begins from it rather
+than from a blank page.
 
 ## 2. Roadmap
 
@@ -2467,6 +2494,48 @@ does it deterministically from permitted inputs. If other pre- or post-work is
 bundled into the same call, that is separable without touching the decision at
 all, and is where any character-side decomposition should start.
 
+
+### 2.20 Characters begin every story with no past they can recall
+
+**HIGH PRIORITY.** Raised 2026-08-19; the full argument, with its measurements,
+refusals and falsifier, is
+[`design/DESIGN_PRESTORY_MEMORY.md`](design/DESIGN_PRESTORY_MEMORY.md). This
+entry exists so the register names it; that note is the authority.
+
+The measured shape: no memory row in the live corpus has a `turn_idx` below
+zero, so the first thing that ever happened to any character is turn 0 of the
+story they are in. Their semantic self is rich and their episodic self is
+empty.
+
+The diagnosis is not the obvious one. 56 of 58 cards carry
+`knowledge.public_history` and it is delivered to the deciding mind every beat
+(`agents/character.py`), so the past is not absent -- it is **unrecallable and
+unforgettable at once**. It has no `when`, no epistemic origin, and no id
+`_ground_observation_citations` will accept, so a mind may mention its history
+but may never cite it as evidence for a belief, an appraisal or a dispute. It
+never entered the retrieval layer.
+
+The substrate is already half-built and already broken on four counts.
+`turn_idx IS NULL` rows are admitted by the read seam and already described to
+minds as "before this story's recorded turns" (`mind/memory_context.py`, with a
+test pinning the string), and two live mint sites produce them. But the
+old-memory temporal cue is gated on `ti is not None`, so the one query language
+that names the pre-story past cannot reach the only rows that hold it; those
+rows never consolidate; they never archive; and they count toward two floors
+calibrated on lived banks.
+
+Why "generate a backstory" is the wrong first move, in arithmetic rather than
+taste: the median bank holds 11.5 rows at turn 3, the recent buffer excludes
+turn-less rows, and `contrast_memory` scores by subtracting overlap -- which is
+near zero for material from another decade, making authored rows
+penalty-free by construction. Twenty seeded episodes would clear the contrast
+gate at turn 0 and BE the character's entire recall for the opening beats. A
+thick authored childhood does not read as depth; it reads as haunting.
+
+Related and separately actionable: §1.74 (the import path already performs an
+unlabelled `inherit`, with a live persona leak), and the fact that
+`recall_confidence` cannot fire below 40 rows -- which the median bank does not
+reach until turn 10, precisely the window this entry is about.
 
 ## 3. Information-pipeline leaks still open
 
