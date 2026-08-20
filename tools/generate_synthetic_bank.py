@@ -124,12 +124,28 @@ def _refuse_fallback_embeddings():
     return batch.model_key, batch.dimensions
 
 
-def _json_call(role, system, user, *, retries=3):
-    """One model call that must return JSON, with the fences stripped."""
+def _json_call(role, system, user, *, retries=5):
+    """One model call that must return JSON, with the fences stripped.
+
+    Retries the TRANSPORT as well as the parse. The first version retried only
+    a malformed response, so a single `RemoteDisconnected` from the provider
+    killed a fifteen-minute run and lost every call before it -- which is the
+    same shape as the defects this whole afternoon has been about: a transient
+    failure writing a permanent loss. A dropped connection is a thing you wait
+    out, exactly like the rate limit `_repair_loop` was built for.
+    """
     from llm.providers import chat_complete
+
     last = ""
     for attempt in range(retries):
-        raw = chat_complete(role, system, user)
+        try:
+            raw = chat_complete(role, system, user)
+        except Exception as exc:                # transport, not content
+            last = "%s: %s" % (type(exc).__name__, exc)
+            if attempt == retries - 1:
+                break
+            time.sleep(min(30, 2 ** attempt))
+            continue
         text = str(raw or "").strip()
         if text.startswith("```"):
             text = text.split("```")[1]
@@ -138,8 +154,9 @@ def _json_call(role, system, user, *, retries=3):
         try:
             return json.loads(text)
         except Exception:
+            time.sleep(1)
             continue
-    raise SystemExit("model did not return JSON after %d attempts: %s"
+    raise SystemExit("model call failed after %d attempts: %s"
                      % (retries, last[:200]))
 
 
@@ -339,15 +356,36 @@ def main():
     Path(args.out_probes + ".plan.json").write_text(
         json.dumps(plan, indent=1, ensure_ascii=False), encoding="utf-8")
 
-    # ---- prose, one call per fact -------------------------------------
+    # ---- prose, one call per fact, checkpointed ------------------------
+    # Written to disk as each fact completes, and read back on a rerun. A
+    # provider blip fifteen minutes into a run used to lose every call before
+    # it; now it loses one. The cache is keyed by fact id, so editing the plan
+    # invalidates only the facts that changed.
+    cache_path = Path(args.out_probes + ".prose.jsonl")
+    prose_cache = {}
+    if cache_path.exists():
+        for line in cache_path.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+                prose_cache[rec["id"]] = rec["prose"]
+            except Exception:
+                continue
+        print("  resuming: %d facts already have prose" % len(prose_cache))
+
     pending = []          # (fact, role_in_fact, text)
     for i, fact in enumerate(plan["facts"], 1):
-        try:
-            prose = prose_for_fact(fact, plan, args.role, args.decoys,
-                                   args.owner)
-        except SystemExit as exc:
-            print("  fact %s skipped: %s" % (fact.get("id"), exc))
-            continue
+        fid = fact.get("id")
+        prose = prose_cache.get(fid)
+        if prose is None:
+            try:
+                prose = prose_for_fact(fact, plan, args.role, args.decoys,
+                                       args.owner)
+            except SystemExit as exc:
+                print("  fact %s skipped: %s" % (fid, exc))
+                continue
+            with cache_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"id": fid, "prose": prose},
+                                    ensure_ascii=False) + "\n")
         early = str(prose.get("early") or "").strip()
         late = str(prose.get("late") or "").strip()
         # A `channel` fact's `early` is the OTHER person's direct observation.
