@@ -761,3 +761,101 @@ character's bank that a story is *likely* to contradict.
   `when` string is already correct for it. Marking it may be host-facing
   honesty or may be a fact with no channel. Undecided, and it is the last
   question that has to be answered before §8.4 is written.
+
+---
+
+## Addendum, 2026-08-20: what was measured after this note was written
+
+Five results from the retrieval work bear directly on the design above. Two
+strengthen it, one weakens an argument it makes, one changes its arithmetic,
+and one hands it a falsifier it did not have.
+
+### (1) The attention budget is now a number, and it makes §4(a) WORSE
+
+`_RECALL_LIMIT` moved 16 -> 24 on measurement
+([`../experiments/RETRIEVAL_COST.md`](../experiments/RETRIEVAL_COST.md) §6:
+conduct peaks at 24 and declines at 48 and 96). Every payload arithmetic in
+§4(a) above was computed against 16.
+
+This cuts AGAINST a generous authored past rather than for it. The argument in
+§4(a) is that for the opening turns a seeded childhood would BE the character's
+entire recalled lane, because the bank is too small to compete. Widening the
+lane to 24 gives authored rows eight more slots to occupy while the lived bank
+is still nearly empty. The median bank holds 11.5 rows at turn 3; at k=24 it
+cannot even fill the payload, so anything authored is delivered in full, every
+beat, for longer than this note assumed.
+
+The cap of "one summary window and <=3 episodes" therefore stands and is if
+anything generous. Recompute before changing it.
+
+### (2) 2.23's retrieval argument is REFUTED, and the note should not lean on it
+
+This note observes that `semantic` is unreachable and that stable facts have
+nowhere to live. That remains true and remains a reason to want the tier.
+
+What is now measured false is the RETRIEVAL consequence: that storing a stable
+fact as an episode hurts recall because the episode's incidentals dilute its
+document. Tested directly -- embedding the stored document against the bare
+content across 15 missed preference probes -- dropping every incidental made it
+0.005 WORSE, and content beat document on 9 of 15. The real cause is a plain
+semantic gap: misses sit at 0.33-0.36 cosine from their answers, hits near
+0.50, in every class.
+
+So do not justify the tier's SHAPE by retrieval quality. Justify it by
+citability -- the argument §1 already makes, which measurement did not touch.
+
+### (3) The dispute prediction in §7 is now much more credible
+
+This note predicts that a pre-story tier is where `record_dispute` would
+finally fire, since an authored past is the one thing in a bank a story is
+likely to contradict. That was a hypothesis about a mechanism which had fired
+once in 9,608 rows.
+
+Measured since
+([`../experiments/SYNTHETIC_BANK.md`](../experiments/SYNTHETIC_BANK.md), and
+UNBUILT 2.24 as corrected): handed a belief and the observation overturning it,
+characters took the corrected fact **18 times out of 18** and NAMED the
+contradiction in 15 of those, unprompted, with the stale row usually ranked
+higher. The capability is real and runs at 83%; only the recording channel is
+missing.
+
+That makes the prediction testable rather than speculative, and it raises the
+stakes: an authored past that a story contradicts will produce disputes a
+character articulates and the engine still cannot store. **Build the channel
+(2.24) before the tier, or the tier's most interesting output is discarded on
+arrival.**
+
+### (4) There is now an instrument for the tier's own falsifier
+
+`memories.last_accessed_turn` (schema v32) records the TURN a recall reached a
+row on, so depth of reach is `last_accessed_turn - turn_idx` and
+`tools/recall_depth.py` reports the distribution.
+
+Turn-less rows -- which is what this tier is made of -- have no `turn_idx`, so
+depth is undefined for them. But `last_accessed_turn` alone answers the
+question that decides whether the tier works at all: **are authored rows ever
+reached, and how late in a story?** A seeded past that is retrieved in the
+opening ten beats and never again is the failure §4 predicts, and it is now
+visible without a benchmark. Instrument the arm this way rather than by
+question-answering.
+
+### (5) The ponder lane now scales with the payload
+
+Deliberate recall asked for a fixed 4 rows and now asks for `recall_limit`
+after absorption. It also passes `include_archived=True`, so it can reach
+retired rows.
+
+Both matter here. A character asking itself about its own past is exactly the
+lane a pre-story tier should serve, and it is no longer the narrowest one in
+the engine -- it was, until this week, permanently sized for a maximally
+absorbed mind. If the tier is built summary-heavy as §5 Option D recommends,
+the ponder lane is where those summaries will actually be consulted.
+
+### Standing conclusion, unchanged
+
+Nothing measured since contradicts the recommendation: a thin, summary-heavy
+`turn_idx IS NULL` tier, authored with per-entry provenance, capped in the
+writer, seeded once from card material already present. What changed is the
+ORDER -- 2.24's channel should land first -- and the strength of the case
+against a generous seed, which the wider payload makes worse rather than
+better.
