@@ -114,7 +114,7 @@ from mind.memory_vectors import (  # noqa: F401
     _REBUILD_BATCH, _REBUILD_LOCK, _REBUILD_STATE, _memory_vector_key,
     _rebuild_book_ids, _run_rebuild, _summary_vector_key, _vector_key,
     embedding_bank_status, rebuild_checkpoint_embeddings, rebuild_embeddings,
-    rebuild_progress, start_rebuild_if_needed,
+    rebuild_progress, repair_memory_cues, start_rebuild_if_needed,
 )
 from mind.memory_inference import (  # noqa: F401
     _ABANDONED_BELIEF_DECAY, _ABANDONED_BELIEF_FLOOR, _abandoned_confidence,

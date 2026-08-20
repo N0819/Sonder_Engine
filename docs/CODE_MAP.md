@@ -56,11 +56,11 @@
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 345 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 222 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
-| `mind/memory_retrieval.py` | 821 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
+| `mind/memory_retrieval.py` | 854 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
 | `mind/memory_snapshot.py` | 586 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
-| `mind/memory_vectors.py` | 662 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
-| `mind/memory_write.py` | 644 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
+| `mind/memory_vectors.py` | 770 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
+| `mind/memory_write.py` | 662 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
 | `persist/__init__.py` | 6 |  | — |
@@ -647,13 +647,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_memories()` | 345 | 269 lines |
-| `contrast_memory()` | 649 | 117 lines |
-| `_rank_normalized_importance()` | 282 | 61 lines |
-| `recent_memory_buffer()` | 780 | 41 lines |
-| `_congruence_valence()` | 188 | 29 lines |
-| `_warn_stranded_embeddings()` | 243 | 29 lines |
-| `_exact_cue_score()` | 50 | 18 lines |
+| `search_memories()` | 369 | 278 lines |
+| `contrast_memory()` | 682 | 117 lines |
+| `_rank_normalized_importance()` | 306 | 61 lines |
+| `recent_memory_buffer()` | 813 | 41 lines |
+| `_congruence_valence()` | 212 | 29 lines |
+| `_warn_stranded_embeddings()` | 267 | 29 lines |
+| `_exact_cue_score()` | 69 | 23 lines |
 | `_lexical_memory_ranking()` | 30 | 11 lines |
 
 ### `mind/memory_snapshot.py`
@@ -689,24 +689,24 @@
 | `rebuild_embeddings()` | 178 | 213 lines |
 | `embedding_bank_status()` | 28 | 125 lines |
 | `rebuild_checkpoint_embeddings()` | 430 | 124 lines |
-| `start_rebuild_if_needed()` | 613 | 48 lines |
-| `_run_rebuild()` | 585 | 26 lines |
+| `repair_memory_cues()` | 579 | 106 lines |
+| `start_rebuild_if_needed()` | 721 | 48 lines |
+| `_run_rebuild()` | 693 | 26 lines |
 | `_vector_key()` | 393 | 22 lines |
 | `_rebuild_book_ids()` | 155 | 21 lines |
-| `_summary_vector_key()` | 422 | 6 lines |
 
 ### `mind/memory_write.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_extract_entities()` | 83 | 64 lines |
-| `repair_pending_embeddings()` | 454 | 59 lines |
-| `_extract_key_phrases()` | 148 | 48 lines |
-| `prepare_memory()` | 311 | 39 lines |
-| `_upsert_memory()` | 545 | 38 lines |
-| `_row_memory()` | 276 | 34 lines |
-| `queue_fallback_rows_for_repair()` | 515 | 28 lines |
-| `_repair_loop()` | 426 | 26 lines |
+| `_extract_entities()` | 109 | 63 lines |
+| `repair_pending_embeddings()` | 472 | 59 lines |
+| `_extract_key_phrases()` | 173 | 41 lines |
+| `prepare_memory()` | 329 | 39 lines |
+| `_upsert_memory()` | 563 | 38 lines |
+| `_row_memory()` | 294 | 34 lines |
+| `queue_fallback_rows_for_repair()` | 533 | 28 lines |
+| `_repair_loop()` | 444 | 26 lines |
 
 ### `mind/psychology_runtime.py`
 

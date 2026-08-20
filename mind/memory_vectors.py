@@ -576,6 +576,114 @@ _REBUILD_STATE = {
 }
 
 
+def repair_memory_cues(chat_id=None, char_id=None, *, dry_run=True,
+                       batch=_REBUILD_BATCH, progress=None):
+    """One-shot stock repair of junk retrieval-cue material on stored rows.
+
+    Legacy extraction stamped stopword-grade key phrases ("the", "her",
+    "'; said '") and entities ("She", "Uhmm", "Dr") onto most of the corpus
+    (76.1% of rows carried at least one junk key phrase when the audit
+    measured it), and those items fire the highest-weighted "exact match"
+    ranking by bare substring on nearly every query
+    (docs/experiments/AUDIT_MEMORY.md 1.3). The mint-time extractors now
+    refuse the class; this walks the stock.
+
+    The repair is SUBTRACTIVE: it removes items `_junk_cue` condemns and
+    keeps everything else, so a clean model-supplied cue is never rewritten
+    -- stored rows do not record whether their cues came from the extractor
+    or a model, and junk-detection is the only discriminator that cannot
+    destroy model-supplied signal. Only when subtraction empties a list that
+    was non-empty is it refilled from `content` through today's extractor,
+    which is where the extractor-quality material was coming from anyway.
+
+    Changed rows re-embed BOTH vectors, because `_memory_document` folds the
+    cue lists in beside the content -- same recipe discipline as
+    `rebuild_embeddings` above, same refusal to write a fallback vector over
+    a real one, same per-batch commit. Idempotent and resumable by
+    construction: a repaired row no longer carries anything `_junk_cue`
+    condemns, so the second pass selects nothing.
+
+    A checkpoint written before this repair still holds the junk cues and a
+    restore resurrects them for the restored rows; re-running the repair
+    fixes them again. Never call on the turn path: O(bank), talks to a
+    provider.
+    """
+    from mind.memory_write import (
+        _extract_entities, _extract_key_phrases, _junk_cue,
+        _replace_memory_fts,
+    )
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    if char_id is not None:
+        where.append("char_id=?"); args.append(char_id)
+    clause = " AND ".join(where)
+    report = {"scanned": 0, "repaired": 0, "items_removed": 0,
+              "key_phrases_refilled": 0, "entities_refilled": 0,
+              "batches": 0, "dry_run": bool(dry_run),
+              "stopped_early": False, "error": ""}
+
+    def _embed(texts):
+        got = embed_texts_meta(texts)
+        if got.fallback:
+            raise RuntimeError(
+                "embedding provider unavailable (%s); refusing to write "
+                "fallback vectors over real ones" % (got.error or "unknown"))
+        return got
+
+    rows = q(f"SELECT * FROM memories WHERE {clause} ORDER BY id",
+             tuple(args))
+    report["scanned"] = len(rows)
+    pending = []
+    for row in rows:
+        mem = _row_memory(row)
+        kp = [str(p) for p in (mem.get("key_phrases") or [])]
+        ent = [str(e) for e in (mem.get("entities") or [])]
+        new_kp = [p for p in kp if not _junk_cue(p)]
+        new_ent = [e for e in ent if not _junk_cue(e)]
+        removed = (len(kp) - len(new_kp)) + (len(ent) - len(new_ent))
+        if not removed:
+            continue
+        if kp and not new_kp:
+            new_kp = _extract_key_phrases(mem.get("content") or "")
+            report["key_phrases_refilled"] += 1
+        if ent and not new_ent:
+            new_ent = _extract_entities(mem.get("content") or "")
+            report["entities_refilled"] += 1
+        mem["key_phrases"], mem["entities"] = new_kp, new_ent
+        report["repaired"] += 1
+        report["items_removed"] += removed
+        pending.append(mem)
+    if dry_run:
+        return report
+    try:
+        for start in range(0, len(pending), batch):
+            chunk = pending[start:start + batch]
+            docs = []
+            for mem in chunk:
+                docs.append(_memory_document(mem))
+                docs.append(_memory_cues(mem) or _memory_document(mem))
+            got = _embed(docs)
+            with transaction():
+                for index, mem in enumerate(chunk):
+                    qi("UPDATE memories SET key_phrases=?,entities=?,"
+                       "embedding=?,cue_embedding=?,embedding_model=?,"
+                       "embedding_dim=? WHERE id=?",
+                       (json.dumps(mem["key_phrases"], ensure_ascii=False),
+                        json.dumps(mem["entities"], ensure_ascii=False),
+                        _blob(got.vectors[index * 2]),
+                        _blob(got.vectors[index * 2 + 1]),
+                        got.model_key, got.dimensions, mem["id"]))
+                    _replace_memory_fts(mem["id"], mem)
+            report["batches"] += 1
+            if progress:
+                progress(min(start + batch, len(pending)), "memories")
+    except RuntimeError as exc:
+        report["stopped_early"] = True
+        report["error"] = str(exc)
+    return report
+
+
 def rebuild_progress():
     """A snapshot of the reconciler, for the status endpoint."""
     with _REBUILD_LOCK:
