@@ -60,7 +60,7 @@
 | `mind/memory_snapshot.py` | 586 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_vectors.py` | 662 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
-| `mind/memory_write.py` | 594 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
+| `mind/memory_write.py` | 644 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
 | `persist/__init__.py` | 6 |  | — |
@@ -699,14 +699,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `repair_pending_embeddings()` | 404 | 59 lines |
-| `prepare_memory()` | 261 | 39 lines |
-| `_upsert_memory()` | 495 | 38 lines |
-| `_extract_entities()` | 83 | 35 lines |
-| `_row_memory()` | 226 | 34 lines |
-| `queue_fallback_rows_for_repair()` | 465 | 28 lines |
-| `_extract_key_phrases()` | 119 | 27 lines |
-| `_repair_loop()` | 376 | 26 lines |
+| `_extract_entities()` | 83 | 64 lines |
+| `repair_pending_embeddings()` | 454 | 59 lines |
+| `_extract_key_phrases()` | 148 | 48 lines |
+| `prepare_memory()` | 311 | 39 lines |
+| `_upsert_memory()` | 545 | 38 lines |
+| `_row_memory()` | 276 | 34 lines |
+| `queue_fallback_rows_for_repair()` | 515 | 28 lines |
+| `_repair_loop()` | 426 | 26 lines |
 
 ### `mind/psychology_runtime.py`
 
