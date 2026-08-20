@@ -207,6 +207,13 @@ def _extract_key_phrases(text: str, entities: list[str] | None = None, limit: in
     for p in ranked:
         if p.lower() in {x.lower() for x in phrases}:
             continue
+        # The stopword filter above is not the whole judge: block-list words
+        # that are not stopwords ("one", "nothing", "yeah") pass it in
+        # lowercase and were still being stamped -- found by an adversarial
+        # re-measurement, which caught mint writing items the stock repair
+        # immediately strips. One judge, every path.
+        if _junk_cue(p):
+            continue
         phrases.append(p)
         if len(phrases) >= limit:
             break
@@ -719,7 +726,12 @@ def repair_seed_salience(chat_id=None, char_id=None, *, dry_run=True):
     on, which is essentially never the opening beat; a drive shift ON the
     opening beat would be re-capped with the seeds, and that limit is
     accepted rather than hidden. `importance` is untouched: if a consequence
-    ever revised one of these rows upward, that judgment survives.
+    ever revised one of these rows upward, that judgment survives. A NULL
+    turn_idx is excluded by SQL comparison semantics, and deliberately:
+    greeting seeds always mint turn 0, so a NULL-turn salience-1.0 row is
+    authored or imported material this repair must not re-judge -- though it
+    shares the never-archives condition, which is stated here rather than
+    silently cured.
     """
     where, args = ["salience>=0.99", "turn_idx<=1"], []
     if chat_id is not None:

@@ -324,7 +324,7 @@ def _route_mind_memories(chat_id, char_id, seeds, handle):
             digest = hashlib.sha1(content.encode("utf-8", "ignore")).hexdigest()
             seed_specs.append({
                 "chat_id": chat_id, "char_id": char_id, "turn_id": None,
-                "kind": "episode", "provenance": "remembered",
+                "kind": "episodic", "provenance": "remembered",
                 "salience": _seed_salience(seed.get("salience")),
                 "content": content, "turn_idx": 0,
                 "event_key": "greeting_seed:%s" % digest[:16],

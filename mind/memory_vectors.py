@@ -678,7 +678,9 @@ def repair_memory_cues(chat_id=None, char_id=None, *, dry_run=True,
             report["batches"] += 1
             if progress:
                 progress(min(start + batch, len(pending)), "memories")
-    except RuntimeError as exc:
+    except Exception as exc:  # noqa: BLE001 - parity with rebuild_embeddings:
+        # a mid-run sqlite error must land in the report, not escape a batch
+        # loop whose earlier batches already committed.
         report["stopped_early"] = True
         report["error"] = str(exc)
     return report
