@@ -34,6 +34,7 @@ from language_runtime import linguistic
 from mind.memory_common import (  # noqa: F401
     KNOWLEDGE_RANGES, KNOWLEDGE_TAGS, LOREBOOK_LINK_TYPES, LOREBOOK_TYPES,
     LORE_CATEGORIES, LORE_INHERITANCE_MODES, MEMORY_CATEGORIES,
+    MEMORY_KIND_ALIASES, MEMORY_KINDS,
     MEMORY_PROVENANCE, SUMMARY_SCOPE_FIRSTHAND, SUMMARY_SCOPE_HEARSAY,
     SUMMARY_SCOPE_SURMISE, _PROVENANCE_SCOPE, _SUMMARY_SCOPES, _UNSET,
     _b64_to_blob, _blob, _blob_to_b64, _cos, _fts_query, _ids, _kw_scores,
@@ -58,7 +59,8 @@ from mind.memory_write import (  # noqa: F401
     _repair_loop, _replace_memory_fts, _row_memory, _turn_idx_for,
     _upsert_memory, add_memories_batch, add_memory, delete_turn_memories,
     effective_importance, note_failed_embedding_write, prepare_memories_batch,
-    prepare_memory, queue_fallback_rows_for_repair, repair_pending_embeddings,
+    _SEED_SALIENCE_CEILING, prepare_memory, queue_fallback_rows_for_repair,
+    repair_memory_kinds, repair_pending_embeddings, repair_seed_salience,
 )
 from mind.memory_read import (  # noqa: F401
     HOST_SCOPE_READERS, delete_memory, dramatic_irony_feed, list_memories,

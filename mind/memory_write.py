@@ -14,8 +14,8 @@ from core.logging_utils import logger
 from core.db import active_frame_id as _active_frame_id
 
 from mind.memory_common import (
-    MEMORY_CATEGORIES, MEMORY_PROVENANCE, _UNSET, _blob, _ling, _storage_json,
-    _summary_retrieval_text,
+    MEMORY_CATEGORIES, MEMORY_KIND_ALIASES, MEMORY_KINDS, MEMORY_PROVENANCE,
+    _UNSET, _blob, _ling, _storage_json, _summary_retrieval_text,
 )
 
 # ---- Memory normalization and storage helpers ----
@@ -335,6 +335,18 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
     content = re.sub(r"\s+", " ", str(content or "")).strip()
     entities = list(dict.fromkeys(entities if entities is not None else _extract_entities(content)))
     key_phrases = list(dict.fromkeys(key_phrases if key_phrases is not None else _extract_key_phrases(content, entities)))
+    # The kind vocabulary is enforced here, at the one door every mint path
+    # walks through. Rows HAD escaped it (audit 1.5): three live mint sites
+    # said "episode", one row said "belief" -- and since belief weighting and
+    # confidence reconciliation both test kind by exact string, that row was
+    # a belief that could never be revised or demoted. Known spellings coerce
+    # quietly; an unknown kind coerces loudly, because every future
+    # kind-equality predicate inherits whatever gets stored here.
+    kind = str(kind or "episodic").strip().lower() or "episodic"
+    kind = MEMORY_KIND_ALIASES.get(kind, kind)
+    if kind not in MEMORY_KINDS:
+        logger.warning("memory: unknown kind %r coerced to 'episodic'", kind)
+        kind = "episodic"
     # frame_id defaults to whatever era this chat is CURRENTLY being
     # portrayed at -- almost always None (the present), so ordinary chats
     # that never time-travel see zero behavior change. _UNSET (not None)
@@ -659,4 +671,66 @@ def delete_turn_memories(turn_id):
     for r in q("SELECT id FROM memories WHERE turn_id=?", (turn_id,)):
         _delete_memory_fts(r["id"])
     qi("DELETE FROM memories WHERE turn_id=?", (turn_id,))
+
+
+# ---- One-shot stock repairs (deterministic, no provider) ----
+
+def repair_memory_kinds(chat_id=None, char_id=None, *, dry_run=True):
+    """Fold escaped `kind` spellings back into the vocabulary.
+
+    prepare_memory now coerces at mint; this walks the stock the old paths
+    left behind -- 253 `episode` rows and one `belief` row when the audit
+    counted (1.5). The `belief` row is the one with consequences: belief
+    weighting and confidence reconciliation both select kind='inference' by
+    exact string, so it could never be revised or demoted. Pure SQL, no
+    embedding changes (kind is not part of either embedded document).
+    """
+    where, args = ["1=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    if char_id is not None:
+        where.append("char_id=?"); args.append(char_id)
+    clause = " AND ".join(where)
+    report = {"dry_run": bool(dry_run)}
+    for stray, proper in MEMORY_KIND_ALIASES.items():
+        n = q(f"SELECT COUNT(*) AS n FROM memories WHERE {clause} "
+              "AND kind=?", tuple(args) + (stray,), one=True)["n"]
+        report[stray] = n
+        if n and not dry_run:
+            qi(f"UPDATE memories SET kind=? WHERE {clause} AND kind=?",
+               (proper, *args, stray))
+    return report
+
+
+# What greeting seeds mint at today (story/greetings._seed_salience clamps to
+# this); the legacy rows predate the clamp and sat at 1.0, above the 0.72
+# archive threshold forever.
+_SEED_SALIENCE_CEILING = 0.7
+
+
+def repair_seed_salience(chat_id=None, char_id=None, *, dry_run=True):
+    """Bring legacy salience-1.0 opening seeds down to today's mint ceiling.
+
+    story/greetings clamps seed salience to 0.7 now, so new seeds age into
+    the archive like anything else; the pre-clamp stock (105 rows corpus-wide
+    at the audit's count, 104 of them at turn <= 1) never can. Selection is
+    salience >= 0.99 AND turn_idx <= 1: the only deliberate 1.0 mint that
+    remains live -- the drive-shift memory -- carries the turn it happened
+    on, which is essentially never the opening beat; a drive shift ON the
+    opening beat would be re-capped with the seeds, and that limit is
+    accepted rather than hidden. `importance` is untouched: if a consequence
+    ever revised one of these rows upward, that judgment survives.
+    """
+    where, args = ["salience>=0.99", "turn_idx<=1"], []
+    if chat_id is not None:
+        where.append("chat_id=?"); args.append(chat_id)
+    if char_id is not None:
+        where.append("char_id=?"); args.append(char_id)
+    clause = " AND ".join(where)
+    n = q(f"SELECT COUNT(*) AS n FROM memories WHERE {clause}",
+          tuple(args), one=True)["n"]
+    if n and not dry_run:
+        qi(f"UPDATE memories SET salience=? WHERE {clause}",
+           (_SEED_SALIENCE_CEILING, *args))
+    return {"dry_run": bool(dry_run), "reseeded": n}
 
