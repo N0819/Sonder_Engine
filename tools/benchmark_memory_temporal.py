@@ -164,13 +164,14 @@ SYSTEM = (
 
 
 def _ask(chat_id, char_id, turn_idx, case, mode, view, observations, active):
+    asker = case.get("asker") or "Hinami"
     question_observation = {
         "observation_id": f"current:{char_id}:benchmark",
-        "observed": {"text": f'Hinami asks, "{case["question"]}"'},
+        "observed": {"text": f'{asker} asks, "{case["question"]}"'},
         "channel": "hearing", "fidelity": "rendered",
     }
     all_observations = [*observations, question_observation]
-    current = view + f' Hinami asks, "{case["question"]}"'
+    current = view + f' {asker} asks, "{case["question"]}"'
     with _retrieval_mode(mode):
         context = memory.build_character_memory_context(
             chat_id, char_id, turn_idx + 1, current, active)
@@ -263,7 +264,22 @@ def _retrieval_score(case, context, chat_id, char_id):
     }
 
 
-def run(chat_id, char_id, turn_idx, modes, keys=(), repeats=1):
+def load_cases(path):
+    """Cases from a JSON file, so the instrument is no longer married to one
+    story. Same shape as CASES; JSON lists stand in for the tuples and sets
+    (`in` and iteration treat them alike), and `claim_origin`/`basis` become
+    sets for exact parity with the built-ins.
+    """
+    spec = json.loads(Path(path).read_text(encoding="utf-8"))
+    cases = spec["cases"] if isinstance(spec, dict) else spec
+    for case in cases:
+        for key in ("claim_origin", "basis"):
+            if key in case:
+                case[key] = set(case[key])
+    return cases
+
+
+def run(chat_id, char_id, turn_idx, modes, keys=(), repeats=1, cases=None):
     """`keys` narrows to named cases and `repeats` re-asks each one.
 
     Both exist because the provider is not deterministic at temperature 0: the
@@ -274,7 +290,8 @@ def run(chat_id, char_id, turn_idx, modes, keys=(), repeats=1):
     """
     active = _active_state(chat_id, char_id)
     view, observations = _present(chat_id, char_id, turn_idx)
-    selected = [case for case in CASES
+    pool = cases if cases is not None else CASES
+    selected = [case for case in pool
                 if not keys or case["key"] in keys] * max(1, int(repeats))
     result = {"chat_id": chat_id, "char_id": char_id, "turn_idx": turn_idx,
               "modes": {}}
@@ -322,15 +339,22 @@ def main():
     parser.add_argument("--mode", choices=("both", "semantic", "lexical"),
                         default="both")
     parser.add_argument("--case", action="append", default=[],
-                        choices=[case["key"] for case in CASES],
-                        help="run only this case (repeatable)")
+                        help="run only this case key (repeatable)")
+    parser.add_argument("--cases-file",
+                        help="JSON case file (same shape as CASES); the "
+                             "built-in chat-38 cases remain the default")
     parser.add_argument("--repeats", type=int, default=1,
                         help="ask each selected case this many times")
     parser.add_argument("--output")
     args = parser.parse_args()
+    cases = load_cases(args.cases_file) if args.cases_file else CASES
+    known = {case["key"] for case in cases}
+    unknown = [key for key in args.case if key not in known]
+    if unknown:
+        parser.error("unknown case keys: %s" % ", ".join(unknown))
     modes = ("lexical", "semantic") if args.mode == "both" else (args.mode,)
     result = run(args.chat, args.character, args.turn, modes,
-                 keys=tuple(args.case), repeats=args.repeats)
+                 keys=tuple(args.case), repeats=args.repeats, cases=cases)
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(text + "\n", encoding="utf-8")
