@@ -56,9 +56,9 @@
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 374 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 222 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
-| `mind/memory_retrieval.py` | 1103 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
+| `mind/memory_retrieval.py` | 1147 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
 | `mind/memory_snapshot.py` | 712 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
-| `mind/memory_summaries.py` | 688 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
+| `mind/memory_summaries.py` | 699 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_vectors.py` | 772 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 815 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
@@ -647,11 +647,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_memories()` | 471 | 299 lines |
-| `contrast_memory()` | 931 | 117 lines |
+| `search_memories()` | 471 | 335 lines |
+| `contrast_memory()` | 967 | 125 lines |
 | `_rank_normalized_importance()` | 408 | 61 lines |
-| `recall_confidence()` | 837 | 58 lines |
-| `recent_memory_buffer()` | 1062 | 41 lines |
+| `recall_confidence()` | 873 | 58 lines |
+| `recent_memory_buffer()` | 1106 | 41 lines |
 | `_exact_cue_score()` | 96 | 33 lines |
 | `_congruence_valence()` | 314 | 29 lines |
 | `_warn_stranded_embeddings()` | 369 | 29 lines |
@@ -673,14 +673,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `backfill_memory_summary_windows()` | 490 | 89 lines |
-| `search_memory_summaries()` | 69 | 77 lines |
-| `consolidate_character_memory()` | 581 | 75 lines |
-| `derive_summary_support()` | 165 | 59 lines |
-| `_write_consolidated_window()` | 392 | 57 lines |
-| `save_memory_summary()` | 247 | 39 lines |
+| `backfill_memory_summary_windows()` | 501 | 89 lines |
+| `search_memory_summaries()` | 69 | 88 lines |
+| `consolidate_character_memory()` | 592 | 75 lines |
+| `derive_summary_support()` | 176 | 59 lines |
+| `_write_consolidated_window()` | 403 | 57 lines |
+| `save_memory_summary()` | 258 | 39 lines |
 | `get_memory_summary()` | 30 | 38 lines |
-| `memory_summary_coverage()` | 451 | 37 lines |
+| `memory_summary_coverage()` | 462 | 37 lines |
 
 ### `mind/memory_vectors.py`
 

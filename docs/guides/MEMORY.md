@@ -413,6 +413,25 @@ measured against a real 441-memory story with vocabulary-disjoint paraphrases,
 recall was **0% at every k**, median rank 228 of 441 — indistinguishable from
 random.
 
+**A hash batch does not RANK.** Since 2026-08-20 `search_memories` and
+`contrast_memory` contribute no vector ranking when `EmbeddingBatch.fallback`
+is set, so BM25 and exact-cue carry the query on their own. This bites only
+where the sketch IS the configured embedding -- an install that has never set
+a provider -- because where a real provider is configured, a fallback query's
+model key already disagrees with every row's and both scores were already
+zero. Measured on the 10,960-row LongMemEval bank, 470 probes at k=16:
+**289 -> 346**. Ranking on the hash was worse than having no vector channel at
+all (338), because its noise displaced genuine keyword candidates out of a
+fixed-size payload.
+
+What the sketch KEEPS is memory-against-memory work: `_memory_similarity` is
+still given the vectors, because near-duplicate detection is measured 99.1%
+precise against real cosine 0.95 and that is a different question from
+relevance. `search_memory_summaries` also still ranks on it, because there the
+hash competes against no other signal and refusing it would return no windows
+rather than better ones. Details and the three arms:
+[`../experiments/CRC32_CONTROL.md`](../experiments/CRC32_CONTROL.md) §8.
+
 The failure is silent by construction, so it is announced in three places: a
 `ctx.warning` on the turn, `_warn_stranded_embeddings` once per
 (chat, char, model) at retrieval, and `embedding_bank_status`'s
