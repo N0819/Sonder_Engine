@@ -92,3 +92,43 @@ what it was worth this morning.
 Not claimed: that 4.4 s at 50,000 rows is acceptable. It is not. It is merely
 five times less unacceptable than 23.7 s, and a thousand-turn story is the
 case this project is being built for.
+
+
+## 6. Where more memory stops paying, measured
+
+Added 2026-08-20, answering the question the retrieval curve cannot: recall
+rises monotonically with `k` -- 304, 359, 382, 399, 413, 425, 437 at
+k = 4, 8, 12, 16, 24, 32, 48, still climbing -- and at k = bank size it is 100%
+by construction. There is no knee to find. Only conduct can choose the number.
+
+Behavioural benchmark, 9 cases x 2 repeats x both retrieval modes, real
+character calls, identical bank:
+
+| k | accuracy lex / sem | grounded lex / sem | relevant evidence delivered |
+|---|---|---|---|
+| 16 | 0.444 / 0.556 | 0.778 / 0.944 | 12/16 |
+| **24** | **0.667 / 0.667** | 0.889 / 0.889 | **14/16** |
+| 48 | 0.556 / 0.556 | 0.889 / 0.889 | 14/16 |
+| 96 | 0.500 / 0.556 | **0.833 / 0.833** | 14/16 |
+
+**Conduct peaks at 24 and declines after it.** The mechanism is the last
+column: relevant evidence delivered plateaus at 24. Past that the payload does
+not contain more of what the character needs, only more of what it does not --
+so retrieval recall keeps rising while answers get worse. At 96 the citation
+rate degrades as well: given more references to choose from, a mind cites more
+loosely. Coherence frays as citation quality before it fails as wrongness.
+
+The prediction on record before this ran was a PLATEAU, not a decline, on the
+reasoning that irrelevant rows are ignored rather than misleading. That was
+wrong, and the direction it was wrong in is the useful part: marginal rows do
+not sit inertly in a payload, they compete for the attention the relevant ones
+need.
+
+**This is the first number anyone has put on the attention budget.**
+`UNBUILT.md` 1.12 argues for one on principle -- nine payload keys, a real
+limit -- without measuring it. It sits between 24 and 48.
+
+Caveat, kept attached: 18 cases cannot separate an arm from its own noise, and
+the instrument's docstring says so. What makes this worth acting on is
+consistency rather than magnitude -- accuracy down in both modes at 48 and 96,
+grounding down in both modes at 96, evidence flat throughout.
