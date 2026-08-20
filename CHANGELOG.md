@@ -1,5 +1,157 @@
 # Changelog
 
+## alpha 9.7 — A mind can now say that nothing came back, and glass was never a door
+
+Thirty-six commits. The spine is memory: `mind/memory.py` was split into twelve
+modules behind a facade, audited against its own documentation, and then — for
+the first time in this project — *measured* on a frozen instrument, with the
+arms that scored worse recorded beside the ones that shipped.
+
+The measurement discipline is the part worth keeping. A 55-probe harness was
+committed with its baselines BEFORE any ranking or extraction change, one of
+its two banks authored by an agent that never saw the implementing agent's
+work. Two independent agents were then sent to refute the results, and they
+landed: a junk-rate claim had been scored by two different judges each lenient
+for its own side, and the honest number replaced it. Everything below is
+against a copy of a real 9,608-memory database. Nothing ran against the live
+one.
+
+The suite is 8,477 tests, green on both dependency resolutions.
+
+- **A character can now be told that its own recall came back without
+  conviction.** `memory_retrieval.recall_confidence` is a per-query signal
+  measured against the bank's own score distribution — not an absolute cosine
+  floor, which is the shape that has never worked, because the band is
+  0.45–0.55 wide for everything. When it fires, the payload carries
+  `nothing_comes_back_clearly` beside the rows. Measured at zero false
+  abstention across all 37 positive-probe hits in both corpus states, plus six
+  unseen paraphrases authored by a verifier. It fails OPEN — a small bank, a
+  degenerate distribution or a fallback query vector all read as "no signal",
+  never as "empty".
+
+  The modesty is recorded rather than rounded up: on the corpus as it stands
+  the floor catches 0 of 15 negative probes. Most of those name events that
+  were *discussed* and never happened, and a score distribution cannot tell
+  topical resonance from answer presence. It fires on the emptiest queries
+  only. Sharper teeth need row-level evidence, not a better threshold.
+
+  It validated once organically, which is the result that earned it: of the
+  three deliberate-recall (`ponder`) queries a character has actually written
+  in real play, the one asking what a sound reminded it of has no answer
+  anywhere in that character's memory — and the floor abstains on it. It is
+  deliberately NOT extended to the ponder lane, because measurement showed it
+  would falsely abstain on a diffuse pattern-over-a-session question whose
+  answer *was* delivered.
+
+- **Retrieval improved on recollection-shaped queries, and the losses are
+  named.** Positive probes hitting the payload went 34/40 to 37/40. Three
+  changes carry it, all held-out positive with no held-out regression: the
+  exact-match ranking was the only uncapped list at the highest weight and is
+  now capped like its siblings; cue extraction stopped stamping junk (quote
+  marks and speaker-label colons open an utterance, so the word after one is
+  sentence-initial — 20.2% of live rows junk-stamped on re-extraction, now
+  0.0%); and the exact scorer is tiered, reserving its full weight for
+  distinctive stored phrases and leaving word overlap to BM25, whose job it is.
+
+  Against that: under a production view-shaped query the count of
+  question-relevant rows delivered fell. The old junk-wide list had been
+  working as an accidental question-keyword booster, and removing the junk
+  removed the accident. Answer quality did not move outside model noise and
+  every case still received relevant evidence, but the trade is real and the
+  candidate repair — carrying the newest heard utterance as its own retrieval
+  aspect — is left unbuilt rather than shipped unmeasured.
+
+- **Four arms measured worse and were reverted**, recorded so nobody retries
+  them without new evidence: two tie-break orderings (one a lottery, three
+  probes each way), the cue repair without the scorer (the audit predicted this
+  trap and it reproduced), and a mid-sentence-recurrence rule for entity
+  extraction that dropped a character's name from 396 rows.
+
+- **`mind/memory.py` is a 123-line facade over twelve modules**, split
+  verbatim, one module per commit, with every patch site repointed in the same
+  commit that moved its reader. Registering the family in
+  `tools/project_check.py` immediately found seven monkeypatches that had been
+  silently inert — patching a facade rebinds nothing a sibling reads — none of
+  which had ever failed a test run. `tests/helpers.py` gains `patch_seam`,
+  which rebinds wherever the original object is actually bound.
+
+- **On a fresh install, lore had been ranked on half its scoring function,
+  silently, forever.** `init()` stamps a new database straight to the current
+  schema version and skips migrations — deliberate, and pinned — but six FTS
+  triggers existed only inside the migration list. So a database created today
+  had zero triggers where a migrated one had all six, and `search_lore`'s 0.35
+  keyword term scored 0.0 for every entry. The triggers moved into the schema;
+  a rebuild repairs existing files; and a new test holds fresh and migrated
+  schemas equal, which is the thing that will catch the next one.
+
+- **First-run setup belongs to whoever is at the machine.** `/api/auth/setup`
+  was public by design and took no request object at all, so on an unclaimed
+  instance the first client to reach it took every chat, persona and lorebook,
+  and the ability to spend the host's provider credentials. This app hands out
+  a tunnel recipe in its own settings screen, so that was not hypothetical.
+  Setup now requires a loopback peer read from the ASGI scope, never from a
+  header. Both rate-limit ledgers were unlocked module lists read concurrently
+  by threadpool workers: 20 concurrent logins yielded 20 failures where they
+  now yield 10 failures and 10 refusals. Password records carry their own
+  algorithm and work factor and upgrade on login.
+
+- **A lorebook plan could write into a different story's book.** `update_lore`
+  ended in an UPDATE keyed on id alone — no book, no chat, no canon check — and
+  the generator prompt asked the model for ids it was never given, so every
+  update op carried a hallucinated integer against a live table whose ids run
+  9–3880 across some twenty chats. Both sides are closed: the write is scoped,
+  and the generator is now sent real ids so the feature works instead of
+  merely being dangerous.
+
+- **Glass is not a door.** Doorway discovery gated on "not a wall" while the
+  passable set is open/open_door/membrane, so windows, bars and one-way mirrors
+  all minted walkable route edges — and a third writer was minting one to every
+  room a character could merely SEE. Characters then read a specific distance
+  through a pane they cannot pass, walked to it, and failed, with no way to
+  retract the belief. One predicate answers it for all three writers, and
+  narrowing discovery supplies the retraction: an old glass edge is stamped
+  disproven the next time somebody stands there. A locked door stays a
+  remembered route, because you may get the key.
+
+- **Nobody undresses completely by displacement.** A specialist restated two
+  characters' entire wardrobes into the coverage channel with empty region
+  lists, and an empty list is precisely how a garment is displaced — so the
+  engine stripped two fully-dressed people mid-conversation and narrated them
+  bare for two beats while every garment record still read `worn`. The
+  discriminator is not "empties everything it covers", which is a designed
+  state; it is that a claim leaving a body covered NOWHERE, on a beat whose
+  words remove nothing, is a restatement rather than a change.
+
+- **A job slot held by a thread that never started was held forever.** The
+  submit path published into the active map before starting its thread, outside
+  any guard, so a start failure stranded the slot for the life of the process
+  and memory consolidation for that chat silently never ran again until
+  restart. The out-of-band queue had the mirror of it, killing a running
+  generation and wedging the signature permanently.
+
+- **CI now runs the interpreter a fresh player is most likely to get.** Both
+  launchers try 3.13 first; CI ran 3.11 and 3.12. A check holds
+  `requires-python`, both launcher lists and the CI matrix to the same set so
+  they cannot drift in either direction. Package import cycles gain a budget —
+  an AST census, Tarjan over the result, failing on a new strongly-connected
+  component and never on a new edge.
+
+- **The unbuilt register stopped overstating its debt.** Seven commits had
+  landed work the register still listed, against that file's own rule; four
+  entries are deleted, three narrowed to what actually remains, and one
+  corrected. This is not cosmetic — nine of the 46 findings in a recent
+  external review were things the register already knew, several with sharper
+  diagnoses than the review's, so a stale register is the condition that makes
+  a fixed bug look new.
+
+**Left to the owner, deliberately.** `tools/repair_memory_cues.py` removes
+roughly 2,400 stopword-grade cue items per large bank and its probe effect is
+a wash — one bank says run it, the other says it is neutral — so it ships as a
+tool and is not run for you. And what a character *does* with what reaches it
+remains unverified: retrieval improved on questions, conduct was measured only
+through eighteen noisy answer checks, and the instrument that would settle it
+is still unbuilt. Nothing here should be read as closing that.
+
 ## alpha 9.6.2 — Every gate here runs on POSIX, which is why nobody saw it
 
 A point release answering the Directive team's post-refactor review of
