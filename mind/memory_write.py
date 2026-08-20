@@ -80,6 +80,32 @@ def _gist(text: str, limit: int = 240) -> str:
     clipped = text[:max(1, limit - 1)].rsplit(" ", 1)[0].rstrip(" ,;:-")
     return (clipped or text[:max(1, limit - 1)]) + "…"
 
+def _junk_cue(text: str) -> bool:
+    """A stored cue item that can only match queries by noise.
+
+    True for anything empty, any bare stopword, and any item carrying no
+    content word at all ("Dr", "No", "Oh.", "But She", "'; said '").
+    Retrieval matches cue items by SUBSTRING (`_exact_cue_score`), so a junk
+    item fires on nearly every query -- measured 71% of one live bank firing
+    the "exact match" ranking (docs/experiments/AUDIT_MEMORY.md 1.3). One
+    judge, shared by the mint-time extractors and the stock repair
+    (`repair_memory_cues`), so the two cannot drift apart.
+    """
+    s = str(text or "").strip()
+    if not s:
+        return True
+    stopwords = _ling("_STOPWORDS")
+    if s.casefold() in stopwords:
+        return True
+    # The entity block list is vocabulary for the same judgment: a word that
+    # LOOKS like a name and is not one ("She", "Nothing", "Mmm"). An item
+    # that IS such a word, whole, is junk wherever it is stored.
+    if any(s.casefold() == b.casefold() for b in _ling("_ENTITY_BLOCKED")):
+        return True
+    return not any(tok not in stopwords
+                   for tok in _ling("_WORD_RE").findall(s.lower()))
+
+
 def _extract_entities(text: str, limit: int = 12) -> list[str]:
     text = str(text or "")
     # Capitalisation is an English convention for marking a name, and the
@@ -88,10 +114,8 @@ def _extract_entities(text: str, limit: int = 12) -> list[str]:
     # and against this pattern found none at all.
     matches = list(_ling("_ENTITY_CANDIDATE_RE").finditer(text))
     blocked = _ling("_ENTITY_BLOCKED")
-    stopwords = _ling("_STOPWORDS")
     sentence_end = _ling("_SENTENCE_END_CHARS")
     quote_chars = _ling("_QUOTE_CHARS")
-    word_re = _ling("_WORD_RE")
     # Legacy inference rows encode their subject explicitly as
     # ``About <subject>: <claim>``.  Preserve that semantic handle even when
     # the subject is a lower-case role ("the stranger"), which capitalization
@@ -105,21 +129,16 @@ def _extract_entities(text: str, limit: int = 12) -> list[str]:
         c = match.group(0).strip()
         if c in blocked or c in out:
             continue
-        # A stopword wearing a capital is never a name. The block list is a
-        # hand-picked subset of this rule; the pack's stopword set closes the
-        # words it happens not to spell ("About", "Because", "Said").
-        if c.casefold() in stopwords:
-            continue
-        # And a candidate with no content word at all is not a retrieval
-        # handle: entity matching is substring matching, so a stamped "Dr"
-        # (the period splits it from its name, which survives on its own)
-        # fires inside "drink" and "dragon", and "No"/"Ok"/"But She" fire
-        # everywhere. Measured on the live corpus, this gate plus the two
-        # above take re-extraction junk-stamping from 16.7% of rows to zero
-        # at the cost of standalone two-letter names, which the pack word
-        # regex already treats as below the token floor.
-        if not any(tok not in stopwords
-                   for tok in word_re.findall(c.lower())):
+        # A stopword wearing a capital is never a name, and a candidate with
+        # no content word at all is not a retrieval handle: entity matching
+        # is substring matching, so a stamped "Dr" (the period splits it from
+        # its name, which survives on its own) fires inside "drink" and
+        # "dragon", and "No"/"Ok"/"But She" fire everywhere. Measured on the
+        # live corpus, this gate plus the quote-boundary rule below take
+        # re-extraction junk-stamping from 16.7% of rows to zero, at the cost
+        # of standalone two-letter names, which the pack word regex already
+        # treats as below the token floor.
+        if _junk_cue(c):
             continue
         # Capitalization alone does not make a sentence's first word an
         # entity.  A one-off single token at a sentence boundary is ambiguous
@@ -139,6 +158,12 @@ def _extract_entities(text: str, limit: int = 12) -> list[str]:
                              or prefix[-1] in quote_chars)
         if at_sentence_start and " " not in c and not re.search(
                 rf"\b{re.escape(c)}\b", text[match.end():]):
+            # A mid-sentence-only recurrence rule was tried here and measured
+            # DISQUALIFYING: inference contents lead with their subject
+            # ("Hinami is testing the replicator"), so it dropped the name
+            # "Hinami" from 396 live rows. Interjections that recur at
+            # utterance starts ("Mmm", "Rice?") are handled as vocabulary in
+            # the pack's _ENTITY_BLOCKED instead.
             continue
         out.append(c)
         if len(out) >= limit:
@@ -158,23 +183,16 @@ def _extract_key_phrases(text: str, entities: list[str] | None = None, limit: in
     text = str(text or "")
     stopwords = _ling("_STOPWORDS")
     word_re = _ling("_WORD_RE")
-
-    def _substantive(candidate):
-        # A phrase must carry at least one content word to be a retrieval
-        # cue; a quoted "Oh." or "'; said '" matches queries by punctuation
-        # and function words alone, which is the exact-match poison the
-        # audit measured firing on 71% of a live bank.
-        return any(tok not in stopwords
-                   for tok in word_re.findall(candidate.lower()))
-
     phrases = []
     # The quote pair(s) come from the language pack -- \u300c...\u300d is a quote in
     # a script this regex's ASCII pair would never match.
     for match in _ling("_QUOTED_SPAN_RE").finditer(text):
         # The pack patterns capture nothing (lookaround-delimited), so every
-        # language reads the same way: the whole match is the span.
+        # language reads the same way: the whole match is the span. A span
+        # with no content word (a quoted "Oh.") is exact-match poison, not a
+        # cue -- same judge as the entity gate.
         quote = re.sub(r"\s+", " ", match.group(0) or "").strip()
-        if (quote and _substantive(quote)
+        if (quote and not _junk_cue(quote)
                 and quote.lower() not in {p.lower() for p in phrases}):
             phrases.append(quote)
     words = word_re.findall(text.lower())
