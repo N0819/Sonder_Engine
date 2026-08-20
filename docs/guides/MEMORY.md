@@ -312,10 +312,11 @@ rather than a fixed four. A fixed four served a deliberate act of remembering
 as though the mind were maximally absorbed, which is the one state it is not
 in; absorption narrows recall because attention is elsewhere, and a ponder is
 attention deliberately placed. Measured on 470 independent questions
-(LongMemEval): four answers 287 of them, sixteen answers 396, so the old cap
-cost 28% of everything answerable -- and the loss fell hardest on exactly the
-shapes a ponder tends to have, preferences losing 47% of answerable and
-multi-session 34%, while single-row answers barely noticed. Their refs are
+(LongMemEval, run at each k rather than derived from one payload): four
+answers 304 of them, sixteen answers 399, so the old cap cost 24% of
+everything answerable -- and the loss fell hardest on exactly the shapes a
+ponder tends to have, preferences losing 40% of answerable, multi-session 32%
+and temporal reasoning 30%, while single-row answers lost 11%. Their refs are
 grounded exactly like any other raw memory. The result therefore says both *this is remembered past* and
 *this came back because I deliberately asked myself about it*.
 

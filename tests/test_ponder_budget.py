@@ -7,12 +7,18 @@ was always served as though it were maximally absorbed, which is the one state
 it is demonstrably not in.
 
 Measured before the change, on 470 questions nobody on this project wrote
-(LongMemEval, ranks taken from the k=16 payload): k=4 answers 287 of them and
-k=16 answers 396. The cap cost 28% of everything answerable, and the loss fell
-hardest on precisely the question shapes a ponder tends to have -- preferences
-lost 47% of answerable, multi-session 34%, temporal reasoning 32% -- while
-questions whose evidence sits in one row barely noticed. The curve has no knee
-at 4; 4 is the bottom of it.
+(LongMemEval, RUN at each k): k=4 answers 304 of them and k=16 answers 399.
+The cap cost 24% of everything answerable, and the loss fell hardest on
+precisely the question shapes a ponder tends to have -- preferences lost 40%
+of answerable, multi-session 32%, temporal reasoning 30% -- while questions
+whose evidence sits in one row lost 11%. The curve has no knee at 4; 4 is the
+bottom of it: 304, 359, 382, 399 at k = 4, 8, 12, 16.
+
+The first version of these numbers was derived from ONE k=16 run by asking
+which targets ranked at or below k, and it understated every arm -- worst at
+k=4, by 17 probes. Chronological-neighbour padding is computed relative to k,
+so a real small-k run admits neighbours a strict top-k slice never contains
+(UNBUILT 1.73). Derived ranks are not a substitute for running the arm.
 
 The payload objection is real and was measured rather than waved away: a ponder
 fires on roughly 1 turn in 332 across the live corpus, so this spends about a
