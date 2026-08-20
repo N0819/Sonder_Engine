@@ -88,6 +88,10 @@ def _extract_entities(text: str, limit: int = 12) -> list[str]:
     # and against this pattern found none at all.
     matches = list(_ling("_ENTITY_CANDIDATE_RE").finditer(text))
     blocked = _ling("_ENTITY_BLOCKED")
+    stopwords = _ling("_STOPWORDS")
+    sentence_end = _ling("_SENTENCE_END_CHARS")
+    quote_chars = _ling("_QUOTE_CHARS")
+    word_re = _ling("_WORD_RE")
     # Legacy inference rows encode their subject explicitly as
     # ``About <subject>: <claim>``.  Preserve that semantic handle even when
     # the subject is a lower-case role ("the stranger"), which capitalization
@@ -101,13 +105,38 @@ def _extract_entities(text: str, limit: int = 12) -> list[str]:
         c = match.group(0).strip()
         if c in blocked or c in out:
             continue
+        # A stopword wearing a capital is never a name. The block list is a
+        # hand-picked subset of this rule; the pack's stopword set closes the
+        # words it happens not to spell ("About", "Because", "Said").
+        if c.casefold() in stopwords:
+            continue
+        # And a candidate with no content word at all is not a retrieval
+        # handle: entity matching is substring matching, so a stamped "Dr"
+        # (the period splits it from its name, which survives on its own)
+        # fires inside "drink" and "dragon", and "No"/"Ok"/"But She" fire
+        # everywhere. Measured on the live corpus, this gate plus the two
+        # above take re-extraction junk-stamping from 16.7% of rows to zero
+        # at the cost of standalone two-letter names, which the pack word
+        # regex already treats as below the token floor.
+        if not any(tok not in stopwords
+                   for tok in word_re.findall(c.lower())):
+            continue
         # Capitalization alone does not make a sentence's first word an
         # entity.  A one-off single token at a sentence boundary is ambiguous
         # and was the source of labels such as adjectives, imperatives and
         # exclamations.  Keep multi-word proper forms and names that recur;
         # otherwise decline to invent an entity from typography alone.
+        #
+        # A quote mark opens an utterance, so a word right after one is
+        # sentence-initial for this rule even though the preceding character
+        # is not a sentence end. That bypass -- the guard read only ".!?" --
+        # was junk-stamping quote-initial interjections ("Oh", "Uhmm") on
+        # 9.9% of live rows re-extracted through this function
+        # (docs/experiments/AUDIT_MEMORY.md 1.3). Both character classes come
+        # from the language pack, like the rest of this recognizer.
         prefix = text[:match.start()].rstrip()
-        at_sentence_start = not prefix or prefix[-1] in ".!?"
+        at_sentence_start = (not prefix or prefix[-1] in sentence_end
+                             or prefix[-1] in quote_chars)
         if at_sentence_start and " " not in c and not re.search(
                 rf"\b{re.escape(c)}\b", text[match.end():]):
             continue
@@ -117,14 +146,38 @@ def _extract_entities(text: str, limit: int = 12) -> list[str]:
     return out
 
 def _extract_key_phrases(text: str, entities: list[str] | None = None, limit: int = 12) -> list[str]:
+    """Key phrases from content: quoted spans, then frequent content words.
+
+    `entities` is accepted for caller compatibility and deliberately UNUSED:
+    key phrases used to append the entity list wholesale, which is how entity
+    junk became key-phrase junk (docs/experiments/AUDIT_MEMORY.md 1.3) --
+    and it was pure duplication even when clean, because `_memory_cues`, the
+    FTS mirror and `_exact_cue_score` all already read entities as their own
+    channel beside key phrases.
+    """
     text = str(text or "")
-    phrases = []
-    for quote in re.findall(r'["\u201c](.{3,100}?)[\u201d"]', text):
-        quote = re.sub(r"\s+", " ", quote).strip()
-        if quote and quote.lower() not in {p.lower() for p in phrases}:
-            phrases.append(quote)
-    words = _ling("_WORD_RE").findall(text.lower())
     stopwords = _ling("_STOPWORDS")
+    word_re = _ling("_WORD_RE")
+
+    def _substantive(candidate):
+        # A phrase must carry at least one content word to be a retrieval
+        # cue; a quoted "Oh." or "'; said '" matches queries by punctuation
+        # and function words alone, which is the exact-match poison the
+        # audit measured firing on 71% of a live bank.
+        return any(tok not in stopwords
+                   for tok in word_re.findall(candidate.lower()))
+
+    phrases = []
+    # The quote pair(s) come from the language pack -- \u300c...\u300d is a quote in
+    # a script this regex's ASCII pair would never match.
+    for match in _ling("_QUOTED_SPAN_RE").finditer(text):
+        # The pack patterns capture nothing (lookaround-delimited), so every
+        # language reads the same way: the whole match is the span.
+        quote = re.sub(r"\s+", " ", match.group(0) or "").strip()
+        if (quote and _substantive(quote)
+                and quote.lower() not in {p.lower() for p in phrases}):
+            phrases.append(quote)
+    words = word_re.findall(text.lower())
     counts = defaultdict(int)
     for i, w in enumerate(words):
         if w in stopwords:
@@ -133,9 +186,6 @@ def _extract_key_phrases(text: str, entities: list[str] | None = None, limit: in
         if i + 1 < len(words) and words[i + 1] not in stopwords:
             counts[f"{w} {words[i + 1]}"] += 1.5
     ranked = sorted(counts, key=lambda item: (-counts[item], -len(item.split()), item))
-    for e in entities or []:
-        if e.lower() not in {p.lower() for p in phrases}:
-            phrases.append(e)
     for p in ranked:
         if p.lower() in {x.lower() for x in phrases}:
             continue

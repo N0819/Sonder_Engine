@@ -2994,6 +2994,34 @@
           ]
         }
       ]
+    },
+    "_SENTENCE_END_CHARS": {
+      "$type": "frozenset",
+      "items": [
+        ".",
+        "!",
+        "?",
+        "…",
+        ":",
+        ";"
+      ]
+    },
+    "_QUOTE_CHARS": {
+      "$type": "frozenset",
+      "items": [
+        "\"",
+        "'",
+        "“",
+        "”",
+        "‘",
+        "’",
+        "«",
+        "»"
+      ]
+    },
+    "_QUOTED_SPAN_RE": {
+      "$type": "regex",
+      "pattern": "(?<=[\"“])[^\"”\\n]{3,100}(?=[”\"])"
     }
   },
   "persist.commit_memory": {

@@ -52,6 +52,61 @@ def test_entity_and_key_phrase_extraction_drop_formatting_noise():
     assert not ({"She", "Sharp", "Break", "Pet", "Hhah"} & set(entities))
     assert not ({"the", "and", "her", "she"} & set(phrases))
 
+def test_quote_initial_interjection_is_not_an_entity():
+    # The sentence-start decline rule read only ".!?", so a word opening a
+    # QUOTED utterance bypassed it -- "Oh"/"Uhmm" junk-stamped 9.9% of live
+    # rows re-extracted through the old rule (AUDIT_MEMORY.md 1.3). A colon
+    # introduces an utterance the same way ("the player: Uhmm my name is").
+    text = 'the player: Uhmm my name is Hinami. She said, "Oh. That is new."'
+    entities = _extract_entities(text)
+
+    assert "Uhmm" not in entities
+    assert "Oh" not in entities
+    assert "Hinami" in entities
+
+
+def test_quote_initial_name_survives_when_it_recurs():
+    text = 'She said, "Hinami, wait for me." Hinami turned at the gate.'
+
+    assert "Hinami" in _extract_entities(text)
+
+
+def test_capitalized_stopword_is_not_an_entity_even_when_it_recurs():
+    # The block list is a hand-picked subset; the pack stopword set closes
+    # the capitalized function words it does not spell.
+    entities = _extract_entities("Said the woman, softly. Said the man.")
+
+    assert "Said" not in entities
+
+
+def test_entity_needs_a_content_word():
+    # "Dr" splits from its name at the period and, as a stored entity, fires
+    # substring exact-match inside "drink" and "dragon". The name itself
+    # survives on its own; the fragment does not.
+    entities = _extract_entities("Dr. Moon frowned. Dr. Moon left. No. Ok.")
+
+    assert "Moon" in entities
+    assert "Dr" not in entities
+    assert "No" not in entities
+    assert "Ok" not in entities
+
+
+def test_key_phrases_do_not_inherit_entity_junk():
+    # Entities used to be appended into key phrases wholesale, so entity junk
+    # became key-phrase junk and fired the exact-match ranking. Entities are
+    # their own cue channel everywhere they are read.
+    phrases = _extract_key_phrases("A quiet night by the fire.", ["She", "And"])
+
+    assert "She" not in phrases
+    assert "And" not in phrases
+
+
+def test_quoted_span_without_content_words_is_not_a_phrase():
+    phrases = _extract_key_phrases('She said, "Oh." Then she left quietly.')
+
+    assert "Oh." not in phrases
+
+
 def test_gist_truncation():
     long_text = "This is a sentence. " * 50
     gist = _gist(long_text, limit=100)
