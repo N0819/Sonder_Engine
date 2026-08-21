@@ -8,7 +8,7 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 95 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1100 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 3599 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character.py` | 3618 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 6838 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 2020 |  | `agents.common`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 3767 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
@@ -50,8 +50,9 @@
 | `mind/canon_provenance.py` | 379 |  | — |
 | `mind/memory.py` | 127 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 229 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
-| `mind/memory_context.py` | 580 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
+| `mind/memory_context.py` | 641 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_inference.py` | 154 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory_judge.py` | 415 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers` |
 | `mind/memory_lore_entries.py` | 540 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 374 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
@@ -66,7 +67,7 @@
 | `persist/__init__.py` | 6 |  | — |
 | `persist/chat_archive.py` | 1179 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
 | `persist/checkpoints.py` | 1300 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 594 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit.py` | 608 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1047 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 1791 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 408 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
@@ -76,7 +77,7 @@
 | `persist/commit_mapping.py` | 492 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
 | `persist/commit_mechanics.py` | 364 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 1512 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.comfort`, `world.survival` |
-| `persist/commit_memory_write.py` | 247 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
+| `persist/commit_memory_write.py` | 324 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 444 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
 | `persist/commit_scene_state.py` | 789 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `world.spatial`, `world.spatial_frames`, `world.weather` |
@@ -149,14 +150,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2599 | 1001 lines |
-| `_annotate_known_exits()` | 1950 | 458 lines |
-| `_ground_observation_citations()` | 951 | 302 lines |
-| `_unanswered_question_note()` | 325 | 163 lines |
-| `_destination_from_goals()` | 1516 | 109 lines |
-| `sprint_offers()` | 2443 | 97 lines |
-| `_recent_self_moves()` | 158 | 90 lines |
-| `_verdict()` | 1362 | 71 lines |
+| `character_step()` | 2600 | 1019 lines |
+| `_annotate_known_exits()` | 1951 | 458 lines |
+| `_ground_observation_citations()` | 952 | 302 lines |
+| `_unanswered_question_note()` | 326 | 163 lines |
+| `_destination_from_goals()` | 1517 | 109 lines |
+| `sprint_offers()` | 2444 | 97 lines |
+| `_recent_self_moves()` | 159 | 90 lines |
+| `_verdict()` | 1363 | 71 lines |
 
 ### `agents/common.py`
 
@@ -578,7 +579,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `build_character_memory_context()` | 253 | 316 lines |
+| `build_character_memory_context()` | 253 | 377 lines |
 | `_with_reading()` | 23 | 101 lines |
 | `_origin_on_drift()` | 154 | 97 lines |
 | `_beats_ago_span()` | 126 | 21 lines |
@@ -591,6 +592,19 @@
 | `reconcile_inference_confidence()` | 85 | 70 lines |
 | `_abandoned_confidence()` | 70 | 13 lines |
 | `_mint_confidence_of()` | 56 | 12 lines |
+
+### `mind/memory_judge.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `review_minted_memories()` | 343 | 73 lines |
+| `review_recall()` | 164 | 44 lines |
+| `pending_tensions()` | 275 | 28 lines |
+| `pending_subject()` | 250 | 23 lines |
+| `_clean_tension()` | 141 | 21 lines |
+| `_store_tensions()` | 305 | 19 lines |
+| `_existing_tensions()` | 326 | 15 lines |
+| `_parse()` | 127 | 12 lines |
 
 ### `mind/memory_lore_entries.py`
 
@@ -760,14 +774,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 363 | 231 lines |
-| `commit_crowds()` | 243 | 82 lines |
-| `commit_narration_person()` | 162 | 29 lines |
-| `commit_authored_events()` | 194 | 25 lines |
-| `_prepare_turn_commit()` | 340 | 12 lines |
-| `commit_offscreen_epoch()` | 221 | 11 lines |
-| `commit_all()` | 327 | 11 lines |
-| `commit_offscreen_plans()` | 234 | 7 lines |
+| `_commit_all_locked()` | 364 | 244 lines |
+| `commit_crowds()` | 244 | 82 lines |
+| `commit_narration_person()` | 163 | 29 lines |
+| `commit_authored_events()` | 195 | 25 lines |
+| `_prepare_turn_commit()` | 341 | 12 lines |
+| `commit_offscreen_epoch()` | 222 | 11 lines |
+| `commit_all()` | 328 | 11 lines |
+| `commit_offscreen_plans()` | 235 | 7 lines |
 
 ### `persist/commit_attire.py`
 
@@ -882,7 +896,8 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `schedule_memory_consolidation()` | 78 | 85 lines |
-| `commit_memories()` | 165 | 83 lines |
+| `commit_memories()` | 242 | 83 lines |
+| `schedule_memory_tension_pass()` | 168 | 72 lines |
 | `_consolidate_committed_memories()` | 22 | 51 lines |
 
 ### `persist/commit_place_graph.py`

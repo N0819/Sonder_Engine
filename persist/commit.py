@@ -145,6 +145,7 @@ from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,
     _salience_of, _own_sequence_memory, prepare_memory_commit)
 from persist.commit_memory_write import (_consolidate_committed_memories,
     MEMORY_CONSOLIDATION_JOB_KEY, schedule_memory_consolidation,
+    MEMORY_TENSION_JOB_KEY, schedule_memory_tension_pass,
     commit_memories)
 # ---- end split facade ----
 
@@ -490,6 +491,19 @@ def _commit_all_locked(ctx, nonce):
     except Exception as exc:
         ctx.add_warning(f"memory consolidation scheduling failed: {exc}")
         results["memory_consolidation"] = {"error": str(exc)}
+
+    # And the contradiction pass, on the same terms and for the same reason:
+    # measured at 114s against a 24-row payload, which is not a cost a player
+    # may be asked to pay for an annotation that is not a turn fact. UNBUILT
+    # 2.24. A scheduling failure is a warning like its neighbour's -- the next
+    # beat that mints anything asks again, so nothing here is lost, only
+    # deferred.
+    try:
+        job = schedule_memory_tension_pass(ctx)
+        results["memory_tension"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"memory tension scheduling failed: {exc}")
+        results["memory_tension"] = {"error": str(exc)}
 
     # Autonomous background->cast promotion likewise runs after the primary
     # transaction: it mints a sheet with an LLM call and is additive and

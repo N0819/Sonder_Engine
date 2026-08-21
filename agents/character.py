@@ -34,6 +34,7 @@ from story.character_schema import (
 )
 from core.frames import is_recognized_in_frame
 from world.gaps import interim_for
+from mind.memory_judge import pending_subject
 from mind.memory import (
     _RECALL_LIMIT,
     build_character_memory_context,
@@ -2724,6 +2725,22 @@ def character_step(ctx, cid, nonce):
         _ponder_ready = False
     _ponder_query = (str(_ponder_state.get("query") or "")
                      if _ponder_ready else "")
+    # And the REASON, which was write-only until 2026-08-20. `agents/common.py`
+    # requires it -- a ponder arriving without one is dropped entirely and
+    # warned about -- and `commit_memory.py` stores it beside the query. Then
+    # nothing read it. So a mind was made to say why it wanted to remember
+    # something, and on the beat the answer arrived it was shown WHAT it had
+    # asked and left to re-derive its own motive from the question. The
+    # asking and the reason for asking are one act; delivering half of it is
+    # the same failure shape the `why`-less ponder warning exists to catch.
+    _ponder_why = (str(_ponder_state.get("why") or "")
+                   if _ponder_ready else "")
+    # A subject the out-of-band pass found sitting oddly with itself. Read
+    # BEFORE the context is built, because it seeds a retrieval rather than
+    # annotating a finished payload -- which is the correction the
+    # measurement forced: telling a mind that two memories disagree scored
+    # 13/16 against 16/16 for handing it the rows and saying nothing.
+    _resurfaced = pending_subject(stored_state, ctx.turn.idx)
     _self_lines = _recent_self_lines(
         chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
     _self_moves = _recent_self_moves(
@@ -2770,6 +2787,8 @@ def character_step(ctx, cid, nonce):
         ] if char_room else None,
         absorption=absorption,
         ponder_query=_ponder_query,
+        ponder_why=_ponder_why,
+        resurfaced_subject=_resurfaced,
     )
     memory_internal = memory_context.get("_internal") or {}
     _unbidden_mem_id = None
