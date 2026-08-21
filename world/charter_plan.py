@@ -62,7 +62,8 @@ def criticality(charter, roster=None):
     return only
 
 
-def plan_watch(charter, horizon_hours=4.0, seed=0):
+def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
+               reluctance=None):
     """One planning window: ``{post_key: body_key}`` plus what went unfilled.
 
     A body holds at most one post per window. Where two posts want the same
@@ -85,28 +86,49 @@ def plan_watch(charter, horizon_hours=4.0, seed=0):
         reverse=True)
 
     scarce = criticality(charter)
+    reluctance = reluctance or {}
     watch = {}
     unfilled = []
     taken = set()
     for post in posts:
         candidates = [b for b in assignable(charter["roster"], post["requires"])
                       if b not in taken]
-        # Spend the most replaceable body first. `assignable` has already
-        # ordered by belief strength; re-ordering by what a body is uniquely
-        # needed for elsewhere takes precedence over that, because a confident
-        # belief about the wrong person to spend is still the wrong person.
-        candidates.sort(key=lambda b: (scarce.get(b, 0), b))
+        if reach is not None:
+            # A body that cannot get to the post within the window is not a
+            # candidate for it. Without this a five-hundred-hand ship rosters
+            # by competence alone and produces a watch bill nobody could
+            # physically stand.
+            candidates = [b for b in candidates
+                          if (b, post["place"]) in reach]
+        # Spend the most replaceable body first, and the nearest of the
+        # equally replaceable. `assignable` has already ordered by belief
+        # strength; re-ordering by what a body is uniquely needed for
+        # elsewhere takes precedence over that, because a confident belief
+        # about the wrong person to spend is still the wrong person. Standing
+        # rides on the same axis: a body the institution is reluctant to spend
+        # is treated as scarcer than their competence alone implies.
+        candidates.sort(key=lambda b: (
+            scarce.get(b, 0) + float(reluctance.get(b, 0.0)),
+            (reach or {}).get((b, post["place"]), 0),
+            b))
         if not candidates:
-            # Distinguish "nobody could ever do this" from "somebody could,
-            # but they are already standing a more urgent post". The second is
-            # a staffing story; the first is a competence story, and an author
-            # reading the log needs to be able to tell them apart.
+            # Three distinct stories, and an author reading the log has to be
+            # able to tell them apart: nobody can do this at all, somebody can
+            # but is already standing a more urgent post, or somebody can and
+            # is simply too far away to get there this window.
             any_capable = assignable(charter["roster"], post["requires"])
+            if not any_capable:
+                reason = "no_competence"
+            elif reach is not None and not any(
+                    (b, post["place"]) in reach for b in any_capable):
+                reason = "out_of_reach"
+            else:
+                reason = "contended"
             unfilled.append({
                 "post": post["key"],
                 "place": post["place"],
                 "serves": list(post["serves"]),
-                "reason": "contended" if any_capable else "no_competence",
+                "reason": reason,
             })
             continue
         watch[post["key"]] = candidates[0]
