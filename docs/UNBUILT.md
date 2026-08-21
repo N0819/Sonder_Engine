@@ -2718,6 +2718,18 @@ unlabelled `inherit`, with a live persona leak), and the fact that
 `recall_confidence` cannot fire below 40 rows -- which the median bank does not
 reach until turn 10, precisely the window this entry is about.
 
+Partial prototype answer (2026-08-21, `offscreen-charter-prototype` branch,
+unwired): `world/charter_promote.remembered` converts a background body's
+charter life into `prepare_memory`-vocabulary rows under one selection rule --
+minted only from what changed a tracked ledger, the routine compressed to one
+semantic row per post, the whole list capped and flat in quiet time (a
+30-day famine month: 89 watches stood became 6 memories). It answers the
+haunting warning above for the PROMOTION case only; characters authored with
+a past, and the retrieval-layer plumbing this entry is really about, are
+untouched. Its firewall tests (unheard blame does not cross, the register
+does not cross) are the promotion-leak tests
+`DESIGN_INSTITUTIONS_AND_UPKEEP.md` §12a called for.
+
 ### 2.21 An install with no embeddings provider retrieves worse than one with no vectors
 
 Measured 2026-08-19/20, [`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md).

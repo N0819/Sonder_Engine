@@ -299,15 +299,41 @@ class TestStorageStaysIncident:
     def test_feel_and_stood_grow_with_shape_not_time(self):
         """The rule this package has broken three times, checked for the
         fourth: twice the quiet hours must mean identical feel storage and
-        identical STOOD KEY COUNTS — the ledger deepens, it does not
-        widen."""
-        short, _ = run(_ready(twin_towns(240)), hours=240.0, window=4.0)
-        long_, _ = run(_ready(twin_towns(240)), hours=480.0, window=4.0)
+        identical STOOD KEY COUNTS — the ledger deepens, it does not widen.
+
+        Pinned at `errand_rate: 0.0`, because the strict form of the
+        invariant belongs to the frozen world it was written in: once the
+        population circulates, the watch legitimately rotates through more
+        hands over more time and `stood` widens TOWARD its bodies-x-posts
+        bound. That bounded widening has its own test below.
+        """
+        still = _ready(twin_towns(240))
+        still["errand_rate"] = 0.0
+        short, _ = run(still, hours=240.0, window=4.0)
+        long_, _ = run(dict(still, errand_rate=0.0), hours=480.0, window=4.0)
 
         assert short["feel"] == {} and long_["feel"] == {}
         assert set(short["stood"]) == set(long_["stood"])
         for body, held in long_["stood"].items():
             assert set(held) == set(short["stood"][body])
+
+    def test_a_circulating_watch_widens_only_within_its_shape(self):
+        """With errands on, more time may mean more hands have taken a turn
+        — but the ledger stays inside bodies x posts, and doubling the
+        quiet hours must not double the pairs. Width is bounded by the
+        SHAPE; only depth is bought with time."""
+        short, _ = run(_ready(twin_towns(240)), hours=240.0, window=4.0)
+        long_, _ = run(_ready(twin_towns(240)), hours=480.0, window=4.0)
+
+        def pairs(charter):
+            return {(body, post) for body, held in charter["stood"].items()
+                    for post in held}
+
+        assert short["feel"] == {} and long_["feel"] == {}
+        assert pairs(long_) >= pairs(short)
+        assert len(pairs(long_)) <= 2 * len(pairs(short))
+        posts = set(long_["posts"])
+        assert all(post in posts for _body, post in pairs(long_))
 
     def test_a_famine_writes_no_new_event_kinds(self):
         """Feeling produces state, never rows: the event vocabulary is

@@ -397,6 +397,68 @@ if it arrived holding a claim it could not legitimately have perceived under
 `perception`'s rules, promotion is where that leaks into a real mind. That is
 the first test to write when this wires up.
 
+**Amendment (2026-08-21, prototype): built, and wrong in one claim.** The
+author-switch exists: `charter_practice` names every affordance, `offers`
+hands the action instances outward (Versu's line, verbatim), `enact`'s
+`conduct` and `charter_author.authored` land an authored act through the
+IDENTICAL builders — pinned by a test in which a run re-authored with its own
+chosen conduct is equal, charter and events both, to the run that chose. An
+act outside the licence is refused with a reason and changes nothing. Figures
+(`charter_figure`) make the player and major characters claim SUBJECTS —
+seen, told about, decaying, wrong — never rostered, never blamed, and never
+holding a mind here; a figure's own acts (`greet`/`ask`/`tell`/`accuse`/
+`tend`) touch only what a body could receive, with tellings arriving through
+`charter_mind.hear_claim`, the one uptake door. Promotion
+(`charter_promote`) converts the query-over-ledger past into
+`prepare_memory`-vocabulary rows under one selection rule — it changed a
+tracked ledger, the routine survives only as its aggregate — and the
+firewall tests came first: unheard blame does not cross, the register does
+not cross, register-fact events do not cross.
+
+Where §12a was WRONG: point 4. `pick_background_reactor` decides who
+SPEAKS, not who ACTS — the gate is an author-switch for voice only, and
+until conduct lands back through the affordance path the on-screen stretch
+is still a hole in the body's life, just with the polarity reversed: the
+simulation keeps ticking, and never hears what the body did. The switch had
+to be built at the conduct layer; the gate alone was never one.
+
+And the layer §12a assumed was working was not. Its premise — "a charter
+that MINTS `world_events` rows is witnessed and gossiped by machinery that
+exists" — held for witnessing and failed for gossip, four separate ways,
+every one invisible until a test called the consumer: a retold news claim
+was rebuilt in body-claim shape and arrived unable to be articulated; `ask`
+chose its subject by enumerating the other head's holdings (634 of 2,413
+asks named a subject the asker did not hold); affordances kept firing for
+up to two hours after a pair parted, including a first-hand GREET across
+rooms; and `report_up` promoted every claim kind into the register, so
+witnessed events joined the institution's books as pseudo-people named
+`news:…`. With those fixed the channel still measured dead — 244
+witnessable events in a famine month, ZERO spread second-hand — for two
+structural reasons: nobody off the watch ever left their room (no
+circulation, no rumour; `charter_move.errands` is the fix, and the
+`(origin, place)` path cache persisting across a run is what makes it
+cost lookups), and the tell slot always went to the freshest co-presence
+claim (`charter_talk.tellable` now prefers the remarkable — a happening, a
+stranger — over the standing description of your own people). After: the
+mill failure reached 107 heads, 101 of them second-hand; a traveller
+present 16 hours became known to 96 of 240 heads, 74 second-hand, peaked
+AFTER departure, went stale in every head the moment it moved, and was
+forgotten everywhere within four days. That last number is the recognition
+horizon, and `PERSONAL_DECAY_PER_HOUR` is its dial.
+
+Two rates were caught lying on the way and are worth naming as a class.
+`crc32(key|seed)` is linear over GF(2), so adjacent seeds XOR every
+same-length key by one constant — the errand "rotation" selected the same
+bodies at seed 7 and seed 8, and any threshold selection on that idiom
+does the same (tie-BREAKS are safe; membership tests are not —
+`charter_move._roll` now finalizes multiplicatively). And a missed ask
+counted as an effect kept every conversation warm forever: the town
+measured 0.9 acts per body per hour against the 0.147 the layer was tuned
+at, so a dead question is silence again and situations can end. Cost,
+honestly: circulation takes the 500-hand month from 8.0s to 16.7s — 459
+of 500 bodies now move and every head runs at its claim cap — with the
+30s guard holding and no single term over a quarter of the profile.
+
 ## 13. Rejected shapes, and why
 
 - **A genre module** (`starship.py`). Every other story pays for it. Refused

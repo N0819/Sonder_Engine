@@ -53,6 +53,68 @@ def _rotate(seq, by):
     return seq[by:] + seq[:by]
 
 
+def tellable(held, exclude=(), visible=()):
+    """The claim a speaker offers, or ``None``. The REMARKABLE first.
+
+    Three pools, in order: what happened and who passed through (claims
+    with a ``kind`` — news and figures — about nothing visibly present);
+    then the strongest claim about a person not in the room; then, only
+    when the speaker knows nothing beyond the room, the room itself.
+
+    Each preference was forced by a measurement, not taste. Strongest-claim
+    selection alone: 244 witnessable events in a famine month, zero spread
+    second-hand — co-presence refreshes roommate claims to full strength
+    every window, so nothing decaying could ever win the slot. Preferring
+    the absent: one of 244 — the blocker had moved, not gone: a visitor
+    returns holding fresh claims about the PEOPLE it saw at the mill, which
+    decay slower than news of the mill failing and outsort it, so the town
+    discussed the millers and never the milling. What a speaker finds worth
+    SAYING is not what it is most sure of; it is the happening, the
+    stranger, the absent friend — in that order — and only then the
+    weather in the room.
+    """
+    for pool in tell_ranking(held, exclude=exclude, visible=visible):
+        for subject in pool:
+            if subject not in exclude:
+                return subject
+    return None
+
+
+def tell_ranking(held, exclude=(), visible=()):
+    """The top two of each `tellable` pool, best first.
+
+    The one implementation of the ordering, under `tellable`. Two per pool
+    suffices for any caller whose only extra exclusion is the listener
+    itself, which occupies at most one slot. (A per-speaker cache over this
+    was tried for `converse` and measured 16.9s -> 16.7s on the month run
+    — not worth the one-window relay latency it introduced, so `converse`
+    ranks per pair and the profile stays honest.)
+    """
+    pools = ([], [], [])
+    for subject, claim in held.items():
+        if subject in exclude:
+            continue
+        if subject in visible:
+            index = 2
+        elif claim.get("kind"):
+            index = 0
+        else:
+            index = 1
+        pools[index].append(subject)
+
+    def top2(pool):
+        first = second = None
+        for subject in pool:
+            rank = (float(held[subject].get("strength") or 0.0), subject)
+            if first is None or rank > first:
+                first, second = rank, first
+            elif second is None or rank > second:
+                second = rank
+        return [entry[1] for entry in (first, second) if entry is not None]
+
+    return tuple(top2(pool) for pool in pools)
+
+
 def co_present(bodies, speaking=False):
     """``{place: [body keys]}``, sorted.
 
@@ -125,7 +187,7 @@ def witnessed(bodies, seed=0):
     return seen
 
 
-def converse(minds, bodies, seed=0, regard=None, at_hours=0.0):
+def converse(minds, bodies, seed=0, regard=None, at_hours=0.0, figures=None):
     """One window of talk, per head. Returns ``(minds, told_count)``.
 
     Two things happen when two bodies share a room, and they are different
@@ -133,16 +195,17 @@ def converse(minds, bodies, seed=0, regard=None, at_hours=0.0):
 
       * **They see each other.** First-hand, full strength, accurate. This is
         the only way an accurate claim enters a head.
-      * **They talk about somebody else.** The speaker passes on its own
-        strongest claim about a THIRD party, thinned by `RETOLD_RETENTION`
-        and scaled by what the listener thinks of the speaker. That is the
-        channel that lets a body know about people it has never met, and the
-        channel by which the institution comes to believe things that are not
-        so.
+      * **They talk about somebody else.** The speaker passes on a claim
+        about a THIRD party, thinned by `RETOLD_RETENTION` and scaled by
+        what the listener thinks of the speaker. That is the channel that
+        lets a body know about people it has never met, and the channel by
+        which the institution comes to believe things that are not so.
 
-    A speaker offers the claim it holds most strongly, not a random one:
-    people repeat what they are surest of, and it makes the pass deterministic
-    without a draw.
+    WHAT GETS TOLD IS `tellable`'s decision — the remarkable first, the
+    absent second, the room last — and the two measurements that forced
+    that ordering live on `tellable` itself. No head is read to make it:
+    who is standing in the room is public, which is exactly why nobody
+    wastes breath describing them.
     """
     minds = {k: dict(v) for k, v in (minds or {}).items()}
     regard = regard or {}
@@ -156,14 +219,18 @@ def converse(minds, bodies, seed=0, regard=None, at_hours=0.0):
         if body is not None:
             see(minds, watcher, body, at_hours)
 
-    for speaker, listener, _place in pair_up(bodies, seed=seed):
-        held = minds.get(speaker) or {}
-        candidates = [subject for subject in held if subject != listener]
-        if not candidates:
+    visible_at = {place: set(members)
+                  for place, members in co_present(bodies).items()}
+    for fig_key, figure in (figures or {}).items():
+        fig_place = str((figure or {}).get("place") or "")
+        if fig_place:
+            visible_at.setdefault(fig_place, set()).add(str(fig_key))
+
+    for speaker, listener, place in pair_up(bodies, seed=seed):
+        subject = tellable(minds.get(speaker) or {}, exclude=(listener,),
+                           visible=visible_at.get(place, set()))
+        if subject is None:
             continue
-        subject = max(
-            candidates,
-            key=lambda s: (float(held[s].get("strength") or 0.0), s))
         weight = float(regard.get((listener, speaker), 1.0))
         if hear(minds, listener, speaker, subject, RETOLD_RETENTION, weight):
             told += 1
@@ -189,6 +256,17 @@ def report_up(roster, minds, watch, bodies, standing=None, at_hours=0.0):
             continue
         voice = 1.0 + max(0.0, float(standing.get(body_key, 0.0)) * 0.1)
         for subject, claim in (minds.get(body_key) or {}).items():
+            # ONLY CLAIMS ABOUT BODIES REACH THE REGISTER. The register is
+            # the institution's book of who it can post; a news claim or a
+            # figure claim in a watch-stander's head is not a person to
+            # roster. Without this filter the traveller the gate guard met
+            # became a register entry, and every witnessed event joined the
+            # books as a pseudo-person named `news:…` — a consumer written
+            # before `kind` existed, never taught to discriminate. Found by
+            # the figure tests; the news pollution had been live since news
+            # landed.
+            if claim.get("kind"):
+                continue
             arriving = min(1.0, float(claim.get("strength") or 0.0) * voice)
             if arriving < TRUST_FLOOR:
                 continue

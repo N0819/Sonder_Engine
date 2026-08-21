@@ -33,8 +33,9 @@ from .charter_roster import decay_roster, observe
 from .charter_space import charter_places, reach_map, refresh_reach
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_log import window_note
-from .charter_mind import decay_minds
-from .charter_move import relocate
+from .charter_figure import sight_figures
+from .charter_mind import cap_minds, decay_minds
+from .charter_move import ERRAND_RATE, errands, homecomings, relocate, walk
 from .charter_news import decay_news, news_keys_in, witness
 from .charter_practice import (
     close_stale, enact, normalize_practices, opportunities)
@@ -47,7 +48,7 @@ def _event(kind, at_hours, place, **payload):
             "place": str(place or ""), **payload}
 
 
-def step(charter, hours=4.0, seed=0, reach=None):
+def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     """Advance one planning window. Returns ``(charter, events)``.
 
     The charter is returned rather than mutated, so a caller may explore a
@@ -167,6 +168,24 @@ def step(charter, hours=4.0, seed=0, reach=None):
         charter["bodies"], plan["watch"], charter["posts"], scene,
         charter.get("travelled"))
 
+    # THEN EVERYBODY ELSE'S DAY. Errands are the circulation without which
+    # a town has no rumour: a famine month minted 244 witnessable events
+    # and not one ever spread second-hand, because apart from the posted
+    # half-dozen nobody ever left the room they were authored into. A body
+    # off the watch visits the place its needs are fed from — or its
+    # nearest charter place — and everyone with nowhere to be walks home to
+    # its berth. Same mover, same distance bookkeeping, no new state.
+    rate = charter.get("errand_rate")
+    rate = ERRAND_RATE if rate is None else float(rate)
+    if scene and rate > 0.0:
+        visits = errands(bodies, needs, charter["upkeeps"], plan["watch"],
+                         charter_places(charter), reach, seed=seed,
+                         rate=rate, hours=hours)
+        moves = dict(homecomings(bodies, plan["watch"], visits), **visits)
+        if moves:
+            bodies, travelled = walk(bodies, moves, scene, travelled,
+                                     cache=paths)
+
     upkeeps = {}
     for key, upkeep in charter["upkeeps"].items():
         was_down = out_of_band(upkeep)
@@ -262,10 +281,18 @@ def step(charter, hours=4.0, seed=0, reach=None):
     # beat. Presence is the whole test -- a body standing where something
     # happened knows it, nobody else does, and it spreads only by being told.
     minds, witnessed = witness(minds, bodies, events, at + hours)
+    # Figures are seen wherever they stand, active place or not: laying eyes
+    # on the traveller is perception, not beat-scale social detail, and it is
+    # the same rule witnessing an event follows -- presence is the whole
+    # test. What a body DOES about the sighting still waits for a scene.
+    figures = charter.get("figures") or {}
+    if figures:
+        minds = sight_figures(minds, bodies, figures, at + hours)
     if witnessed or news_keys:
         news_keys = news_keys_in(minds)
     minds, told = converse(minds, bodies, seed=seed,
-                           regard=regard_map(politics), at_hours=at + hours)
+                           regard=regard_map(politics), at_hours=at + hours,
+                           figures=figures)
     roster = report_up(roster, minds, plan["watch"], bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
 
@@ -296,15 +323,19 @@ def step(charter, hours=4.0, seed=0, reach=None):
     if active:
         in_focus = {k: b for k, b in bodies.items()
                     if str(b.get("place") or "") in active}
+        figs_in_focus = {k: f for k, f in figures.items()
+                         if str(f.get("place") or "") in active}
         practices.update(opportunities(
             in_focus, minds, needs_after, events, practices, at + hours,
-            seed=seed))
+            seed=seed, figures=figs_in_focus))
     else:
         in_focus = {}
+        figs_in_focus = {}
     regard = dict(politics.get("regard") or {})
-    acts, spawned, closed, heard = enact(
+    acts, spawned, closed, heard, refused = enact(
         in_focus, minds, needs_after, practices, regard,
-        politics.get("blame") or {}, at + hours, seed=seed)
+        politics.get("blame") or {}, at + hours, seed=seed,
+        figures=figs_in_focus, conduct=conduct)
     for key in closed:
         practices.pop(key, None)
     for key, entry in spawned:
@@ -316,6 +347,12 @@ def step(charter, hours=4.0, seed=0, reach=None):
                    (charter.get("heard_blame") or {}).items()}
     for subject, tellers in heard.items():
         heard_blame.setdefault(subject, set()).update(tellers)
+
+    # The carry limit runs where the window's additions END, not only where
+    # decay does: witnessing, sighting and talk all put claims into heads
+    # after `decay_minds` capped them, and a circulating population can meet
+    # more in a window than decay had capped for.
+    minds = cap_minds(minds)
 
     # THEN THEY FEEL IT. After the window's events exist, because what a body
     # appraises is what happened where it stood; after needs, because
@@ -349,6 +386,9 @@ def step(charter, hours=4.0, seed=0, reach=None):
     after_charter["minds"] = minds
     after_charter["practices"] = practices
     after_charter["acts"] = list(acts)
+    # Authored conduct the state refused, with reasons. Diagnostics for the
+    # author -- nothing reads it, and a refusal changes no state.
+    after_charter["refused"] = list(refused)
     after_charter["heard_blame"] = {k: sorted(v)
                                     for k, v in heard_blame.items()}
     after_charter["feel"] = feel
@@ -397,7 +437,12 @@ def run(charter, hours, window=4.0, seed=0, trace=False):
     # does.
     scene = charter.get("scene")
     places = charter_places(charter) if scene else ()
-    reach = reach_map(scene, places, charter["bodies"]) if scene else None
+    # One path cache for the whole run: a fixed scene's walk between two
+    # rooms never changes, so once a population circulates (`errands`) the
+    # per-window cost of movement is dict lookups, not graph walks.
+    paths = {}
+    reach = reach_map(scene, places, charter["bodies"], cache=paths) \
+        if scene else None
     where = {k: b["place"] for k, b in charter["bodies"].items()}
     while remaining > 0.0:
         span = min(window, remaining)
@@ -405,13 +450,13 @@ def run(charter, hours, window=4.0, seed=0, trace=False):
         if scene and now != where:
             moved = {k for k, place in now.items() if where.get(k) != place}
             reach = refresh_reach(reach, scene, places, charter["bodies"],
-                                  moved)
+                                  moved, cache=paths)
             where = now
         # The seed advances with the window so successive windows are not
         # identical draws, while the whole run stays a pure function of the
         # caller's seed.
         charter, produced = step(charter, hours=span, seed=int(seed) + index,
-                                 reach=reach)
+                                 reach=reach, paths=paths)
         events.extend(produced)
         if trace:
             notes.append(window_note(charter, produced,
