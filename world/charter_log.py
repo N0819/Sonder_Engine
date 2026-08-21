@@ -31,6 +31,8 @@ from __future__ import annotations
 from .charter_feel import normalize_feel, overloaded_bodies
 from .charter_mind import acquaintance, contested, divergence
 from .charter_needs import mood, pressure
+from .charter_news import known_news
+from .charter_feel import strain_of
 from .charter_model import out_of_band
 from .charter_temper import temperament_of
 
@@ -166,6 +168,123 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
              if e.get("body") == key
              or key in (e.get("bodies") or ())],
             hours_per_day=hours_per_day),
+    }
+
+
+def scene_ledger(charter, place, events=(), hours_per_day=24.0):
+    """Everything a scene manager could riff from, for one place, per presence.
+
+    THE SHAPE THIS OWES ITS CALLER. `docs/design/BACKGROUND_LIFE_DESIGN.md`
+    voices extras in a room, and `agents/background.py` says outright what it
+    has to work with today: *no memory, no mind-models, no relationships, no
+    persistent psychology*, plus a `sketch` that is "replayed self-description,
+    not remembered psychology." This is the missing half — a presence with a
+    past, scoped to what that presence may legitimately have.
+
+    PER PRESENCE, NOT PER SCENE, and that is the firewall doing its job.
+    Every field under `presences` is derived from that body's OWN state: its
+    needs, its own claims, its own regard, the news it personally witnessed or
+    was told. The institution's register is absent — that is the charter's
+    belief, not this person's. Another body's interior is absent. What the
+    place objectively is appears only under `place`, for the Director staging
+    it, never inside a presence's slice.
+
+    AND IT IS SELECTED, NOT DUMPED. `can_bring_up` is capped, because handing
+    a cheap model everything a body knows is how chat 78's wardrobe got
+    transposed into a diff: a payload large enough to restate gets restated.
+    Three things somebody could plausibly raise beats forty they could not.
+    """
+    place = str(place)
+    bodies = charter.get("bodies") or {}
+    minds = charter.get("minds") or {}
+    politics = charter.get("politics") or {}
+    regard = politics.get("regard") or {}
+    blame = politics.get("blame") or {}
+    heard_blame = charter.get("heard_blame") or {}
+    needs = charter.get("needs") or {}
+    feel = charter.get("feel") or {}
+    strains = strain_of(feel)
+    watch = charter.get("watch") or {}
+    posts = charter.get("posts") or {}
+
+    here = sorted(k for k, b in bodies.items()
+                  if str(b.get("place") or "") == place)
+    present = set(here)
+
+    presences = {}
+    for key in here:
+        body = bodies[key]
+        held_needs = needs.get(key) or {}
+        # What this body could raise: its news, strongest first, then the
+        # people here it has an opinion about. Capped hard.
+        news = [
+            {"what": n["event_kind"], "about": n["about"],
+             "where": n["place"], "hours_ago": round(
+                 float(charter.get("clock_hours") or 0.0)
+                 - float(n["happened_at"]), 1),
+             "firsthand": n.get("heard_from") is None,
+             "from": n.get("heard_from")}
+            for n in known_news(minds, key)[:3]]
+        # CAPPED, and ranked by what would actually come up. A room of forty
+        # produced forty entries of `regard: 1.0` on the first run of this
+        # function — the payload-dump failure named two paragraphs up, made
+        # while writing the warning about it. A presence brings up the person
+        # they have a view about, not the roll of everyone standing there.
+        def _salience(other):
+            claim = minds[key][other]
+            return (
+                abs(1.0 - float(regard.get((key, other), 1.0))),   # a view
+                0.0 if claim.get("believed_available") else 1.0,   # a surprise
+                float(claim.get("strength") or 0.0),               # confidence
+            )
+
+        ranked = sorted(
+            (o for o in present if o != key and o in (minds.get(key) or {})),
+            key=lambda o: (_salience(o), o), reverse=True)[:4]
+        known_here = {
+            other: {
+                "firsthand": (minds[key][other].get("heard_from") is None),
+                "believes_present": bool(
+                    minds[key][other].get("believed_available")),
+                "regard": round(float(regard.get((key, other), 1.0)), 3),
+            }
+            for other in ranked
+        }
+        presences[key] = {
+            "competence": dict(body.get("competence") or {}),
+            "able": bool(body.get("available", True)),
+            "condition": {n: round(float(v["level"]), 2)
+                          for n, v in held_needs.items()},
+            "strain": round(float(strains.get(key, 0.0)), 3),
+            "standing_post": next(
+                (p for p, who in watch.items() if who == key), None),
+            "watches_stood": sum(
+                (charter.get("stood") or {}).get(key, {}).values()),
+            "can_bring_up": news,
+            "knows_here": known_here,
+            "strangers_here": sorted(present - set(known_here) - {key}),
+            "blamed": int(blame.get(key, 0)),
+            "knows_it_is_blamed": sorted(heard_blame.get(key, ())),
+        }
+
+    return {
+        "place": place,
+        "at_hours": float(charter.get("clock_hours") or 0.0),
+        # What the place OBJECTIVELY is. For the Director to stage from, and
+        # deliberately outside every presence's slice: a body knows the mill
+        # is cold because it is standing in it, not because it read a level.
+        "place_state": {
+            key: {"level": round(float(u["level"]), 2),
+                  "failing": out_of_band(u)}
+            for key, u in (charter.get("upkeeps") or {}).items()
+            if str(u.get("place") or "") == place},
+        "posts_here": sorted(
+            p for p, entry in posts.items()
+            if str(entry.get("place") or "") == place),
+        "recent_here": chronicle(
+            [e for e in (events or []) if str(e.get("place") or "") == place],
+            hours_per_day=hours_per_day)[-6:],
+        "presences": presences,
     }
 
 

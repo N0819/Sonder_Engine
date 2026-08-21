@@ -317,6 +317,86 @@ produce meaning. It can strand a cook on the reactor watch and scram the
 core; it cannot decide that this is the beat where the chief realises he has
 been protecting the wrong person.
 
+## 12a. The seam: there is no handoff, only a change of author
+
+A background body that walks on screen, gets voiced by the scene manager, and
+walks off again must not have a hole in its life where the model held it. The
+obvious design — hand control to the model, take it back, reconcile — is the
+wrong one, and the reason is that it invents a boundary the system does not
+need.
+
+> **The body never leaves the simulation.** Its needs keep draining, its
+> feeling keeps resolving, its position keeps being its position. What changes
+> for a stretch is only WHO WRITES ITS CONDUCT. There is nothing to bring
+> back, because nothing went anywhere.
+
+Versu reached the same arrangement and states it in one line: *"The same
+architecture is used for player choice — except the Action Instances are sent
+directly to the user-interface, rather than to the Decision Maker."* One
+affordance set; either the utility selector picks from it or something else
+does; the machinery underneath cannot tell which, and must not be able to.
+
+**What it requires.**
+
+1. **Affordances are the shared vocabulary of conduct.** `charter_practice`
+   currently computes utilities and calls the winner. The effects must be
+   callable from outside as well, so an AUTHORED act lands through the
+   identical path a chosen one would — not a parallel "apply the model's
+   result" function, which is how the two paths drift.
+2. **The voiced body keeps ticking.** Being on screen does not suspend hunger.
+   Needs, feeling and decay advance as normal; only the conduct slot is
+   authored.
+3. **Commit is the reduction point**, exactly as it already is everywhere
+   else: model output is provisional until deterministic commit code
+   validates it, and what survives becomes acts and `world_events` rows on
+   the same path the simulation's own acts take.
+4. **The gate is already the author-switch.** `commit_background.pick_background_reactor`
+   is deterministic, model-free, and already decides who speaks this beat. It
+   does not need to become a mode flag; it IS one.
+
+**One ledger, many producers.** The charter must not own a private event list
+that gets translated into engine events — a mapping table between two
+vocabularies is a visible seam that drifts, and it duplicates work already
+done. `story/carriers.py` reads `world_events` directly
+(`SELECT * FROM world_events WHERE chat_id=? AND frame_id IS ?`), so a
+charter that MINTS `world_events` rows is witnessed, carried, gossiped and
+told by machinery that already exists and never learns the charter is there.
+The engine solved this once already: the Director, its six specialists and the
+player's own declaration all emit the same `state_diff`, and commit applies it
+uniformly.
+
+**Non-determinism is not the problem it looks like.** Player and major-
+character conduct is an INPUT, not derived state. The engine already replays
+model output from `steps`/`variants` rows — that is what rerun-from-stage is.
+So charter state is `f(recorded events, seed)`, and a free agent writing
+events threatens replay no more than a player typing does.
+
+**Two failure modes, both with existing answers.**
+
+- *The model invents what the simulation cannot express* — a brother the
+  ledger has never heard of. `world/background_claims.py` is the answer
+  already built for this: commit invention as CLAIMS, not facts. The brother
+  attaches to that presence as a claim, survives to the next time it is
+  voiced (which is most of what "seamless" means in practice), and can later
+  be ratified or contradicted.
+- *The model contradicts what the body actually did* — says it has been on the
+  road all week when the ledger has it standing a watch. This is the wardrobe
+  problem in another costume, and takes the same answer: an assertion outside
+  what the state licenses is dropped with a notice, and `charter_log.scene_ledger`'s
+  `can_bring_up` IS the licence. That field is capped and salience-ranked for
+  the same reason the attire gate exists — a payload large enough to restate
+  gets restated.
+
+**The asymmetry that should stay.** A charter body's witnessing is coarse:
+place plus a public surface. A character's is `agents/perception.py`, a
+stricter instrument with a firewall to defend. Those are different questions
+at different resolutions, not one question done twice, and collapsing them
+would cost either fidelity or a great deal of money. The seam to watch is
+PROMOTION, where a body crosses from the coarse instrument to the strict one:
+if it arrived holding a claim it could not legitimately have perceived under
+`perception`'s rules, promotion is where that leaks into a real mind. That is
+the first test to write when this wires up.
+
 ## 13. Rejected shapes, and why
 
 - **A genre module** (`starship.py`). Every other story pays for it. Refused

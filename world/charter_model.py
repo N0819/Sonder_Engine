@@ -217,6 +217,24 @@ def normalize_charter(stored):
         # reluctance axis, which is the only way in it will ever get -- an
         # experiment with a dial, not a second planner.
         "mood_weight": float(stored.get("mood_weight") or 0.0),
+        # Open social situations. Sparse: a population with nothing going on
+        # between it carries none. See `charter_practice`.
+        # Places where social detail is simulated at beat resolution. Empty
+        # is the default and means none: a body off-screen keeps its needs,
+        # feeling, belief and past, and simply is not gossiping this window.
+        "news_keys": sorted(
+            str(k) for k in (stored.get("news_keys") or ()) if k),
+        "active_places": sorted(
+            str(p) for p in (stored.get("active_places") or ()) if p),
+        "practices": {
+            str(k): dict(v) for k, v in (stored.get("practices") or {}).items()
+            if isinstance(v, dict) and v.get("kind")},
+        # Who has learned they are blamed. Blame was an institutional fact
+        # that reached nobody; this is the record of it having been said out
+        # loud to the person it landed on.
+        "heard_blame": {
+            str(k): sorted(str(x) for x in v)
+            for k, v in (stored.get("heard_blame") or {}).items()},
         # Per-body felt state, in `mind/psychology_runtime`'s own persisted
         # shapes -- see `charter_feel`. Sparse: a body feeling nothing has no
         # entry, so a quiet institution carries an empty dict.

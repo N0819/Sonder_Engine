@@ -43,6 +43,24 @@ def travel_rooms(scene, from_room, to_room, limit=REACH_LIMIT):
     return len(path) if path else None
 
 
+def refresh_reach(reach, scene, places, bodies, moved, limit=REACH_LIMIT):
+    """Update reach for the bodies that MOVED, and no others.
+
+    `reach_map` walks every body against every place. Once bodies actually
+    relocate to their posts, `run`'s "did anybody move" guard fires most
+    windows, and a full rebuild for the sake of a handful of movers measured
+    as 3.5 of 9.6 seconds -- the largest single cost in the profile, and one
+    created by adding movement rather than by anything movement needed.
+    """
+    if not moved:
+        return reach
+    out = {k: v for k, v in (reach or {}).items() if k[0] not in moved}
+    out.update(reach_map(scene, places,
+                         {k: bodies[k] for k in moved if k in bodies},
+                         limit=limit))
+    return out
+
+
 def reach_map(scene, places, bodies, limit=REACH_LIMIT):
     """``{(body, place): rooms}`` for every body/place pair that is reachable.
 
