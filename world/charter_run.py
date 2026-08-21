@@ -31,6 +31,7 @@ from .charter_politics import (
     attribute_blame, normalize_politics, regard_map, spend_reluctance)
 from .charter_roster import decay_roster, observe
 from .charter_space import charter_places, reach_map
+from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_log import window_note
 from .charter_mind import decay_minds
 from .charter_move import relocate
@@ -230,8 +231,17 @@ def step(charter, hours=4.0, seed=0, reach=None):
     # So a failing chain reaches the bodies at the end of it, and the bodies
     # going under take the posts with them — the spiral is not scripted
     # anywhere, it is these two facts meeting.
+    # FEELING COSTS REST, AND NOTHING ELSE. Last window's strain — computed
+    # by the engine's own stress model over what each body witnessed and
+    # carried — wears tonight's rest, and any consequence arrives through
+    # the same body_unable path the famine uses. The toll is a dial for the
+    # same reason mood_weight is: an experiment must be able to hold its
+    # control arm still.
+    toll = charter.get("strain_toll")
+    toll = STRAIN_REST_TOLL if toll is None else float(toll)
     needs_after, unable, recovered = advance_needs(
-        needs, bodies, plan["watch"], upkeeps, hours)
+        needs, bodies, plan["watch"], upkeeps, hours,
+        strain=strain_of(charter.get("feel")), toll=toll)
     for key in unable:
         bodies[key] = dict(bodies[key], available=False, stood_down=True)
         events.append(_event("body_unable", at + hours,
@@ -248,6 +258,27 @@ def step(charter, hours=4.0, seed=0, reach=None):
     roster = report_up(roster, minds, plan["watch"], bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
 
+    # THEN THEY FEEL IT. After the window's events exist, because what a body
+    # appraises is what happened where it stood; after needs, because
+    # deprivation is this window's pain rather than last window's. The felt
+    # state is produced by `mind/psychology_runtime`'s own resolvers — one
+    # affect model across both tiers — and it reads only channelled inputs:
+    # own needs, the state of the body's own place, and the transient
+    # events there.
+    feel = advance_feel(charter.get("feel"), bodies, needs_after,
+                        plan["watch"], charter["posts"], upkeeps, events,
+                        hours)
+
+    # The service record: a window actually stood is a window remembered.
+    # Keyed bodies x posts, so it grows with the shape of the institution
+    # rather than with time.
+    stood = {k: dict(v) for k, v in (charter.get("stood") or {}).items()}
+    for post_key, body_key in plan["watch"].items():
+        body = bodies.get(body_key)
+        if body is not None and body.get("available"):
+            held = stood.setdefault(body_key, {})
+            held[post_key] = held.get(post_key, 0) + 1
+
     after_charter = dict(charter)
     after_charter["upkeeps"] = upkeeps
     after_charter["roster"] = roster
@@ -257,6 +288,8 @@ def step(charter, hours=4.0, seed=0, reach=None):
     after_charter["needs"] = needs_after
     after_charter["travelled"] = travelled
     after_charter["minds"] = minds
+    after_charter["feel"] = feel
+    after_charter["stood"] = stood
     after_charter["told"] = told
     after_charter["reported"] = {
         "post_unfilled": now_unfilled,

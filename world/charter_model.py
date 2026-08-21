@@ -127,7 +127,7 @@ def normalize_body(key, entry):
     belief and may be wrong. Keeping the two apart is the whole of §5.
     """
     entry = entry if isinstance(entry, dict) else {}
-    return {
+    body = {
         "key": str(key),
         "competence": _tags(entry.get("competence")),
         "available": bool(entry.get("available", True)),
@@ -136,6 +136,13 @@ def normalize_body(key, entry):
         "stood_down": bool(entry.get("stood_down", False)),
         "place": str(entry.get("place") or ""),
     }
+    # An AUTHORED temperament only. The unauthored case is derived on demand
+    # by `charter_temper.temperament_of` and stored nowhere, so the field is
+    # absent for almost every body -- carrying five defaults per head would
+    # be state that says nothing.
+    if isinstance(entry.get("temperament"), dict):
+        body["temperament"] = dict(entry["temperament"])
+    return body
 
 
 def normalize_charter(stored):
@@ -210,6 +217,27 @@ def normalize_charter(stored):
         # reluctance axis, which is the only way in it will ever get -- an
         # experiment with a dial, not a second planner.
         "mood_weight": float(stored.get("mood_weight") or 0.0),
+        # Per-body felt state, in `mind/psychology_runtime`'s own persisted
+        # shapes -- see `charter_feel`. Sparse: a body feeling nothing has no
+        # entry, so a quiet institution carries an empty dict.
+        "feel": {
+            str(key): dict(entry)
+            for key, entry in (stored.get("feel") or {}).items()
+            if isinstance(entry, dict)},
+        # What full strain multiplies the rest drift by
+        # (`charter_needs.advance_needs`). None means the shipped default,
+        # `charter_feel.STRAIN_REST_TOLL`; carried explicitly so an
+        # experiment arm can pin it, including to zero.
+        "strain_toll": (None if stored.get("strain_toll") is None
+                        else max(0.0, float(stored.get("strain_toll")))),
+        # Windows actually stood, per body per post. Bounded by bodies x
+        # posts rather than by time, and the evidence a promotion call needs
+        # to deliberate a project from -- a month at the same post is a
+        # life's shape, and nothing else records it.
+        "stood": {
+            str(key): {str(p): int(n) for p, n in held.items()}
+            for key, held in (stored.get("stood") or {}).items()
+            if isinstance(held, dict)},
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
     }
