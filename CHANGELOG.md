@@ -2,12 +2,12 @@
 
 ## alpha 9.7.1 — Four things this project believed, measured and found false
 
-Twenty-seven commits, and the honest summary is that most of them are
+Twenty-eight commits, and the honest summary is that most of them are
 corrections. Every headline number here replaced one this repository already
 had written down, and the replaced ones were not sloppy — they were carefully
 reasoned from premises nobody had checked.
 
-The suite is **8,566 tests**, green on both dependency resolutions, and now
+The suite is **8,575 tests**, green on both dependency resolutions, and now
 runs in **76 seconds** instead of 220.
 
 ### The crc32 fallback was not a floor, it was a hole
@@ -180,6 +180,49 @@ when xdist is absent, rather than failing on `unrecognized arguments: -n`.
 - **`last_accessed` is a wall clock and could not say how far back a mind
   reached.** `last_accessed_turn` records depth in beats.
 - **A dropped connection is a thing you wait out**, not a run you lose.
+
+### A body the engine could not place was visible to everyone and audible to nobody
+
+Chat 78 t3. A restrained player whose entire perception output was two lines
+over a PA system was narrated this:
+
+> Beyond the one-way window an unfamiliar person checks their weapon safety,
+> then glances toward the monitor displaying your vitals.
+
+It survived a reroll unchanged, because it was not the model inventing — it was
+an input. Three defects with one question under them: **where is the body**.
+
+- **`spatial_digest` rendered every adjacency edge identically to both rooms it
+  joins**, so the narrator's `spatial_frame` handed the *watched* side the far
+  room's name and the word `one_way_window` — the mechanism, to the mind on the
+  blind side of it. The geometry had always been right (`spatial_rel` resolves
+  that edge to `wall` from the cell, `visible_adjacent_rooms` returns nothing,
+  and the narrator's own portal states are gated on it); the digest beside them
+  was not. An edge that is a wall only from THIS side is no longer rendered at
+  all — naming the room with `barrier: "wall"` leaks the same fact in quieter
+  words. Scoped to edges the observer-side resolution makes *more* restrictive
+  than the record, because an adjacency declaring no barrier normalizes to
+  `wall` for everyone and dropping those would take real exits out of every
+  payload a mind navigates by.
+- **A background presence's reaction carried no room, and the two stages that
+  needed one disagreed about what its absence meant.** The name-keyed lookup
+  comes back empty for a presence the scene places nowhere and for one whose
+  name two entities answer to — that cell holds a guard at each of two corner
+  stations. Perception located them with `cast_room` and failed CLOSED, so a
+  guard standing in the player's own room spoke to nobody; the narrator's sight
+  gate fell back to the room-level question, which resolves an unknown room to
+  the PLAYER'S OWN, so every unplaceable presence was visible to them. One
+  missing answer, an over-denial and a leak, on the same beat. Each reaction
+  now carries the room the stage actually voiced it at, `presence_room` answers
+  when it does not, and the narrator gate fails closed when nothing can.
+- **A presence's ACT reached no observer at all.** Only its `dialogue_log_entry`
+  was merged into perception, so the one physical thing an unregistered body did
+  each beat travelled to the narrator's `event_order` alone — the single
+  delivery path that never asks whether the player could see it. It rides the
+  outcome pass now, gated by sight like every other body's.
+
+The guard was real and was in the room; nothing about him was invented. What the
+engine could not say was where he stood, and both stages guessed.
 
 ### Operational
 

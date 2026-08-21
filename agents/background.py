@@ -247,6 +247,7 @@ def _result(selected, reactions, mode="background_react", agent_calls=None):
         "name": first.get("name") or (selected[0] if selected else None),
         "dialogue_log_entry": first.get("dialogue_log_entry"),
         "action": first.get("action", ""),
+        "room": first.get("room", ""),
         "reactions": reactions,
         "selected": selected,
         # Provenance for the pipeline UI: which path ran and which sub-agents
@@ -657,6 +658,15 @@ def scene_life(ctx, nonce, level, cfg):
     withheld = _withheld_bodies(dr)
     known_names = _known_world_names(ctx, sc, names)
     rec_by_name = {n: r for _, n, r, _rm in managed}
+    # WHERE THE BODY IS, carried on the beat it acted in. Both stage paths
+    # already resolve it (`presence_room`) to decide what the presence
+    # perceives; nothing passed it OUT, so every later reader re-derived it
+    # from the name alone -- which is the one question that can come back
+    # empty (nothing places the presence, or two entities answer to its name).
+    # Perception then found no channel to the body and the narrator's sight
+    # gate degraded to "wherever the player is". Passing the room the stage
+    # actually used means neither has to ask.
+    room_by_name = {n: rm for _, n, _r, rm in managed}
     reactions, seen, claims = [], set(), []
     for e in (out.get("entries") or []):
         if not isinstance(e, dict):
@@ -699,7 +709,8 @@ def scene_life(ctx, nonce, level, cfg):
                 "conceal_from": [],
             }
         reactions.append({"name": canon, "dialogue_log_entry": entry,
-                          "action": action})
+                          "action": action,
+                          "room": room_by_name.get(canon) or ""})
     # Downstream merge paths key off dialogue_log_entry; an action-only entry
     # still rides through as a reaction so commit/narration can use it.
     calls = ["scene_life"]
@@ -1097,4 +1108,5 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
     entry["speaker"] = name
     entry.setdefault("visibility", "overt")
     entry.setdefault("conceal_from", [])
-    return {"name": name, "dialogue_log_entry": entry, "action": out.get("action", "")}
+    return {"name": name, "dialogue_log_entry": entry,
+            "action": out.get("action", ""), "room": here or ""}

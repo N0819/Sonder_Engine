@@ -744,6 +744,73 @@ def test_background_act_survives_a_reaction_with_no_line(temp_db):
     assert "half-meter closer" in events[0]["action"]
 
 
+# A background presence is not cast, and the scene places it under a scene
+# ENTITY id when it places it at all -- so the name-keyed room lookup comes
+# back empty for one the scene places nowhere, and for one whose name two
+# entities answer to (chat 78's cell holds a guard at each of two corner
+# stations). The room-level fallback under this gate then reads an unknown
+# room as the PLAYER'S OWN, so an act from behind a one-way window arrived at
+# the narrator as an enforced fact. The tests below use placements the lookup
+# cannot answer; with the presence sitting in `positions` under its own name
+# the broken gate and the repaired one agree and the defect is invisible.
+
+def _yard_and_vault(**positions):
+    return {"rooms": {"yard": {"name": "Yard"},
+                      "vault": {"name": "Vault", "barrier": "wall"}},
+            "positions": {"Player": "yard", **positions},
+            "entities": {}}
+
+
+_HEARD = 'You hear A Machine says: "STOP WHERE YOU ARE."'
+
+
+def _bg_events(ctx, scene):
+    return _ordered_beat_events(
+        ctx, "Player", _HEARD, {"A Machine"},
+        {"A Machine": {"appearance": "", "aliases": []}},
+        scene=scene, p_room="yard")
+
+
+def test_background_act_is_gated_by_the_room_the_stage_voiced_it_at(temp_db):
+    # The background stage resolves where the presence stands to decide what
+    # it perceives, and now records that room on the reaction. Same act, same
+    # scene, two rooms: co-present is listed, walled off is not.
+    scene = _yard_and_vault()
+    action = "Its lens swivels and locks on you, the weapon holding its aim."
+
+    ctx = _bg_ctx(temp_db, scene, action)
+    ctx["background_react"]["reactions"][0]["room"] = "yard"
+    assert [e["kind"] for e in _bg_events(ctx, scene)] == ["speech", "action"]
+
+    ctx = _bg_ctx(temp_db, scene, action)
+    ctx["background_react"]["reactions"][0]["room"] = "vault"
+    assert [e["kind"] for e in _bg_events(ctx, scene)] == ["speech"]
+
+
+def test_background_act_falls_back_to_the_stored_station_room(temp_db):
+    # A reaction replayed from a stored turn predates the stage recording its
+    # room, so the resolver answers from the presence's own record instead.
+    scene = _yard_and_vault()
+    ctx = _bg_ctx(temp_db, scene, "Its lens swivels and locks on you.")
+    temp_db.wset(ctx.chat.id, "background_presences",
+                 {"A Machine": {"sketch": {"station_room": "vault"}}})
+    assert [e["kind"] for e in _bg_events(ctx, scene)] == ["speech"]
+
+    ctx = _bg_ctx(temp_db, scene, "Its lens swivels and locks on you.")
+    temp_db.wset(ctx.chat.id, "background_presences",
+                 {"A Machine": {"sketch": {"station_room": "yard"}}})
+    assert [e["kind"] for e in _bg_events(ctx, scene)] == ["speech", "action"]
+
+
+def test_background_act_from_an_unplaceable_presence_is_withheld(temp_db):
+    # Nothing places this body: no position, no entity, no station room, no
+    # room on the reaction. The gate's contract is that it fails CLOSED, and
+    # for background presences it did the exact opposite.
+    scene = _yard_and_vault()
+    ctx = _bg_ctx(temp_db, scene, "Its lens swivels and locks on you.")
+    assert [e["kind"] for e in _bg_events(ctx, scene)] == ["speech"]
+
+
 def test_a_silent_sight_channel_carries_no_standing_sight():
     """The manifest said `status: silent, why: no light reaches this room` and
     listed `["storm sky", "heavy rain", "light: dark"]` as standing content on

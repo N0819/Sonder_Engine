@@ -1911,6 +1911,63 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
 
     return " ".join(kept) if kept else _REDACTED_NOTICE
 
+
+def _background_beats(ctx, scene):
+    """Every background presence that spoke or ACTED this beat, each with the
+    room it stands in. Cached per turn; empty when the stage did not fire.
+
+    Two things were missing and they were the same thing. Only the presences
+    carrying a `dialogue_log_entry` were collected, so an action-only reaction
+    reached no observer at all -- it travelled to the narrator's `event_order`
+    alone, which is the one delivery path that never asks whether the player
+    could see it. And every presence collected was located with `cast_room`,
+    which reaches a presence only through the entity table: it answers None
+    for one the scene places nowhere, and for one whose name TWO entities
+    answer to, where `room_of` refuses to pick (ambiguity resolves to
+    nothing, and folding two beings into one is the worse error).
+
+    A None room makes `spatial_rel_between` report "no known spatial channel",
+    so this merge delivered nothing at all. Live in chat 78 t3, whose cell
+    holds a guard at each of two corner stations under one name: the guard's
+    line reached nobody while the narrator, on the same beat and from the same
+    missing answer, rendered that guard's act as fact -- perception failing
+    closed and the narrator's sight gate failing open.
+
+    `presence_room` is the canonical resolver -- scene position, then entity
+    id, then the sketch's station room -- and the background stage now records
+    the room it actually voiced each presence at, which is preferred over
+    re-deriving it here so the two cannot disagree.
+    """
+    cached = ctx.get("_background_beats_cache")
+    if cached is not None:
+        return cached
+    br = ctx.get("background_react") or {}
+    raw = br.get("reactions")
+    if raw is None:                     # legacy single-entry shape
+        raw = ([br] if br.get("fired")
+               and (br.get("dialogue_log_entry") or br.get("action")) else [])
+    # Local import: `persist.commit` reaches back into `agents.common` from
+    # inside its own functions -- the same shape used for
+    # `presence_has_an_identity` below.
+    from persist.commit import presence_room
+    records = wget(ctx.chat["id"], "background_presences", {}) or {}
+    beats = []
+    for r in raw:
+        if not isinstance(r, dict):
+            continue
+        entry = r.get("dialogue_log_entry")
+        entry = entry if isinstance(entry, dict) else None
+        name = str((entry or {}).get("speaker") or r.get("name") or "").strip()
+        if not name:
+            continue
+        room = str(r.get("room") or "").strip() or presence_room(
+            scene, name, records.get(name) or {})
+        beats.append({"name": name, "entry": entry, "room": room or None,
+                      "action": str(r.get("action") or "").strip()})
+    ctx["_background_beats_cache"] = beats
+    return beats
+
+
 def perception_outcome(ctx, nonce):
     chat = ctx.chat
     sc = get_scene(chat["id"], chat)
@@ -1993,15 +2050,9 @@ def perception_outcome(ctx, nonce):
     # the shared dict afterward would desync the persisted director_resolve
     # step from what perception/narrator actually rendered, and a rerun
     # from this step onward would silently lose the background reaction.
-    br = ctx.get("background_react") or {}
-    _fired = br.get("reactions")
-    if _fired is None:  # legacy single-entry shape
-        _fired = ([{"name": br.get("name"), "dialogue_log_entry": br["dialogue_log_entry"],
-                    "action": br.get("action", "")}]
-                  if br.get("fired") and br.get("dialogue_log_entry") else [])
-    else:
-        _fired = [r for r in _fired if isinstance(r, dict) and r.get("dialogue_log_entry")]
-    br_entries = [r["dialogue_log_entry"] for r in _fired]
+    _bg_beats = _background_beats(ctx, sc)
+    _bg_rooms = {b["name"]: b["room"] for b in _bg_beats if b["room"]}
+    br_entries = [b["entry"] for b in _bg_beats if b["entry"]]
 
     raw_dlog = list(res.get("dialogue_log") or [])
     raw_dlog.extend(br_entries)
@@ -2011,7 +2062,7 @@ def perception_outcome(ctx, nonce):
         if is_player_speaker(speaker, chat):
             sp_room = p_room
         else:
-            sp_room = cast_room(sc, speaker, ctx.cast)
+            sp_room = cast_room(sc, speaker, ctx.cast) or _bg_rooms.get(speaker)
         enriched_dlog.append({
             "speaker": speaker, "exact_quote": d.get("exact_quote", ""),
             "volume": d.get("volume", "normal"),
@@ -2025,8 +2076,10 @@ def perception_outcome(ctx, nonce):
         })
 
     sources = [{"name": p_name, "room": p_room}]
-    for _e in br_entries:
-        sources.append({"name": _e.get("speaker"), "room": cast_room(sc, _e.get("speaker"), ctx.cast)})
+    # Every presence that spoke OR acted -- an act needs a channel to its
+    # observer exactly as a line does, and only a source has one.
+    for _b in _bg_beats:
+        sources.append({"name": _b["name"], "room": _b["room"]})
     for c in ctx.cast:
         d = ctx.character_results.get(c["id"])
         sh = json.loads(c["sheet"])
@@ -3347,6 +3400,21 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 if surface:
                     last_overt_by_actor[cname] = {
                         "actor": cname, "attempt": surface, "event": e}
+    # A background presence's act, through the same gate. `background.py`
+    # authors it as the outward surface already (there is no `observable`/
+    # `visibility` pair to read), so it is wrapped in the event shape the
+    # percept builder expects rather than re-derived. An unplaceable presence
+    # is skipped: with no room there is no channel, and a body the engine
+    # cannot place must not be rendered into a view as though it were here.
+    for _b in _background_beats(ctx, sc):
+        if not _b["action"] or not _b["room"]:
+            continue
+        last_overt_by_actor[_b["name"]] = {
+            "actor": _b["name"], "attempt": _b["action"],
+            "event": {"actor": _b["name"], "observable": _b["action"],
+                      "visibility": "overt",
+                      "event_id": "background:%s" % _b["name"]},
+        }
 
     # The complete set of lines actually spoken this beat (the invented-
     # dialogue tripwire's ground truth).

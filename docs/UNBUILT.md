@@ -1821,6 +1821,15 @@ where the leak it replaces — chat 82's restrained subject watching her
 interviewer through a mirror her own room note called opaque — is not noticed
 until it has been true for fifty beats.
 
+**Also landed 2026-08-20, the structured strand:** `spatial_digest` rendered
+each adjacency edge identically to both rooms it joins, so the blind side was
+handed the far room's name and the word `one_way_window` in the narrator's own
+`spatial_frame` — the middle and bottom rows of the table below, arriving
+through the payload rather than through a room note. Chat 78 t3: a restrained
+player whose whole perception output was two PA lines was narrated a figure
+"beyond the one-way window". The edge is now dropped from the digest on the
+side it is a wall from; the watching side is unchanged.
+
 **The open half is that one physical object is described in three registers and
 the engine only has one place to put them.** Owner's statement of it, 2026-08-19:
 
@@ -3194,10 +3203,21 @@ production caller; see §1.45's dead family.)*
   sentence, not the other way round). *(Promoted out of §8 on 2026-08-19: it
   cites live data showing prose contradicting the deterministic verdict, which
   makes it a defect rather than an idea.)*
-- **F6 / S3-A5 residual — `spatial.spatial_digest` is still ungated** and
-  renders every edge's authored room name, including rooms never visited. The
-  perception payload was fixed (unseen edges keep their barrier, lose
-  `to`/`to_name`); the digest that reaches the **narrator** was not.
+- **F6 / S3-A5 residual — `spatial.spatial_digest` still renders the authored
+  room name behind every edge, including rooms never visited.** The perception
+  payload was fixed (unseen edges keep their barrier, lose `to`/`to_name`);
+  the digest that reaches the **narrator** was not, and the same digest is
+  what every character navigates by (`agents/character.py`,
+  `spatial_prose._annotate_known_exits`, which maps the rendered NAME back to
+  a room id) — so matching perception's shape here is a change to that
+  contract, not a one-line gate.
+  **The directional half landed 2026-08-20**: an edge that is a wall only from
+  THIS side is no longer rendered at all, so the blind side of a
+  `one_way_window` stops naming the room behind it and the barrier keyword
+  that says how it works (chat 78 t3 — see §1.68). Scoped to edges the
+  observer-side resolution makes more restrictive than the record, because an
+  adjacency declaring no barrier normalizes to `wall` for everyone and
+  dropping those would take real exits out of every navigation payload.
 - **F7 — `known_pronouns` releases pronouns on unverified mind-model keys.**
   `agents/character.py` keys off `set(relationships) | set(mind_models)`, which
   is the unvalidated set.

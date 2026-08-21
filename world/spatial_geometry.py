@@ -135,12 +135,40 @@ def spatial_digest(scene, observer, label_for=None):
     bucket. The narrator binds egocentric direction words strictly to these
     buckets (see the narrator prompt's SPATIAL FRAME license). A digest with
     only 'unclassified' (or empty) means the observer has no movement history,
-    so the narrator must assert no direction -- topological phrasing only."""
+    so the narrator must assert no direction -- topological phrasing only.
+
+    RENDERED FROM THE OBSERVER'S SIDE. An adjacency edge is one objective
+    record read from two places, and this listed every edge the room declared
+    with the barrier keyword the record carries -- so the blind side of a
+    one-way window arrived as `{room: "Observation Room", barrier:
+    "one_way_window"}`, naming the room a mind cannot see into and the
+    mechanism it cannot know. Measured live (chat 78 t3): a restrained player
+    whose own perception held nothing but two PA lines was narrated a figure
+    "beyond the one-way window", and the phrase came from here.
+
+    An edge that is a wall only from THIS side is not this side's exit, and is
+    not rendered at all -- naming the room behind it with `barrier: "wall"`
+    would leak the same fact in quieter words. Scoped to edges the resolution
+    makes more restrictive than the record: an adjacency that declares no
+    barrier at all already normalizes to `wall` for everyone, and dropping
+    those would take real exits out of the payload every mind navigates by.
+    `spatial_rel` is the one place that answers which side of a directional
+    barrier a room is on (`sight_direction`); asking it here rather than
+    re-deriving keeps that policy in a single function."""
     rooms = scene.get("rooms") or {}
     frame = egocentric_frame(scene, observer)
+    # Local: world.spatial_light imports this module for `proximity_rel`, and
+    # spatial_routing imports spatial_light, so a module-level import here
+    # closes a cycle. Every other reader of both lives above them in the graph.
+    from world.spatial_routing import spatial_rel
+    here = room_of(scene, observer)
 
     def ref(edge):
         rid = edge.get("to")
+        if here and rid \
+                and spatial_rel(scene, here, rid).get("barrier") == "wall" \
+                and normalize_barrier(edge.get("barrier")) != "wall":
+            return None
         out = {"room": (rooms.get(rid) or {}).get("name") or rid,
                "barrier": edge.get("barrier")}
         # Which way the doorway itself faces. The buckets are EGOCENTRIC and
@@ -164,7 +192,7 @@ def spatial_digest(scene, observer, label_for=None):
     out = {}
     for bucket in ("behind", "ahead", "left", "right", "aside",
                    "above", "below", "unclassified"):
-        refs = [ref(e) for e in frame.get(bucket) or []]
+        refs = [r for r in (ref(e) for e in frame.get(bucket) or []) if r]
         if refs:
             out[bucket] = refs
     if frame.get("ahead_entity"):
