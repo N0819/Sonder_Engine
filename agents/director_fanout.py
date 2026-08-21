@@ -191,6 +191,17 @@ def _specialist_payload(name, ctx, sc, view, extras):
     if name == "body":
         payload.update({
             "attire": scene_compact_attire(sc),
+            # The index its own sheet sends it to: "take the name from an
+            # index the payload already carries (cast, entity_names, the room
+            # index, worn_garments)". Every specialist that might mention a
+            # garment in passing had it; the one whose channels ARE the
+            # wardrobe did not, so the only garment names in its payload lived
+            # inside the compact attire line -- delimiter-packed, with each
+            # description truncated at ATTIRE_LOOK_CHARS. Chat 78 t7: it read
+            # across the `=` and emitted a coverage entry for "modern
+            # open-front jacket", the first 58 characters of the travel
+            # jacket's description, which is a garment no ledger has ever had.
+            "worn_garments": worn_index,
             "overlays": sc.get("overlays") or {},
             "active_awareness": extras.get("active_awareness"),
             "active_restraints": extras.get("active_restraints"),

@@ -153,12 +153,19 @@ class TestANoOpRemovalIsSurfaced:
         assert not sc.get("entities")
 
     def test_a_legitimate_alias_removal_still_lands_silently(self):
-        """`resolve_garment`'s tiers are the gate: "tank top" IS the fitted
-        tank top, so the removal applies and no no-op is reported."""
+        """`resolve_garment`'s tiers resolve the handle: "tank top" IS the
+        fitted tank top, so the removal applies and no no-op is reported.
+
+        The beat now has to NAME the garment as well -- resolving a handle
+        says which garment a change is about, never that a change happened --
+        so the prose says it came off. That is the only thing added here; the
+        claim under test is still the resolver's.
+        """
         sc = self._scene()
         ctx = _Ctx()
         commit.apply_attire_diff(
-            sc, {"attire": {"Hinami": {"remove": ["tank top"]}}}, ctx, {})
+            sc, {"attire": {"Hinami": {"remove": ["tank top"]}}}, ctx,
+            {"resolved_event": "She pulls the tank top off over her head."})
 
         assert "fitted tank top" not in sc["attire"]["Hinami"]["wearing"]
         assert not any("no-op removal" in m for m in ctx.warned)

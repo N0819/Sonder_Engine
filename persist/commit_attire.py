@@ -748,6 +748,74 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
         for _read in d.pop("_notes_read", None) or []:
             if report:
                 ctx.tell_director(_read)
+
+        # THE WRITE GATE. A change to what a body wears is licensed by the
+        # beat's own words naming the garment, and by nothing else. Scoped to
+        # the three channels that can UNDRESS somebody -- `add` only ever puts
+        # clothing on, so an ungated one cannot expose a body and gating it
+        # would refuse the first dressing of a body whose arrival is the beat.
+        #
+        # Every other axis here already reads the prose (`_PROCESS`,
+        # `_DECISIVE`, `removal_directed_at`); the write itself read nothing,
+        # so a `remove` or a `coverage` block landed whether or not a word of
+        # the beat concerned clothing. Chat 78: nine turns, no garment named in
+        # any of them, the wardrobe rewritten twice -- t7 restated the whole
+        # thing into `coverage` as "covers nothing", t8 removed two garments
+        # nobody touched, and the two together put the body's `beneath` prose
+        # on the page under garments that were still on.
+        #
+        # Failure direction is the module's own: a real change refused costs
+        # one beat and a notice telling the Director to restate it in prose,
+        # while a phantom one destroys ledger state, mints a floor object and
+        # never re-derives.
+        _worn_now = attire_model.flat_wearing(
+            attire_model.normalize_regions(cur))
+        _licence = ([getattr(ctx.turn, "player_input", "") or ""]
+                    + list(_beat_voices(ctx, res)))
+        for _channel in ("remove", "coverage", "placement"):
+            _entries = d.get(_channel)
+            if not _entries:
+                continue
+            _as_list = isinstance(_entries, list)
+            _handles = list(_entries) if _as_list else list(_entries.keys())
+            _names = {}
+            for _h in _handles:
+                _names[id(_h)] = (_h if isinstance(_h, str)
+                                  else str((_h or {}).get("name") or ""))
+            # Only handles that would actually change something are gated. One
+            # naming nothing this body wears is already answered further down
+            # -- resolved, refused and reported as the no-op it is -- and
+            # taking it here would replace a precise diagnosis with a vaguer
+            # one.
+            _live = [h for h in _handles if _names[id(h)]
+                     and attire_model.resolve_garment(
+                         _names[id(h)], _worn_now)]
+            _named = set(attire_model.garments_named_in(
+                _licence, [_names[id(h)] for h in _live], _worn_now))
+            _kept = [h for h in _handles
+                     if h not in _live or _names[id(h)] in _named]
+            if len(_kept) == len(_handles):
+                continue
+            _dropped = sorted({_names[id(h)] for h in _handles
+                               if _names[id(h)] not in _named and _names[id(h)]})
+            d[_channel] = (_kept if _as_list
+                           else {k: v for k, v in _entries.items()
+                                 if k in _named})
+            ctx.add_warning(
+                "attire: dropped an unsupported %s for %s (%s) -- no word of "
+                "this beat names the garment" % (
+                    _channel, name, ", ".join(_dropped)))
+            if report:
+                ctx.tell_director(
+                    "attire: dropped the %s of %s for %s. Nothing in this "
+                    "beat's words -- the player's input, your resolved prose, "
+                    "or what anyone declared -- names that garment, and a "
+                    "wardrobe changes only where the beat says it does. The "
+                    "`attire` block in your payload is the CURRENT state of "
+                    "the wardrobe, not a form to fill in: when clothing did "
+                    "not change, leave the channel empty. If it did change, "
+                    "say so in the prose and restate it next beat." % (
+                        _channel, ", ".join(repr(x) for x in _dropped), name))
         if d.get("wearing") is not None and not any(
                 d.get(k) for k in ("add", "remove", "replace")):
             cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
