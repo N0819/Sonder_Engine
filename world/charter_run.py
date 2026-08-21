@@ -30,11 +30,14 @@ from .charter_plan import plan_watch, tended_upkeeps
 from .charter_politics import (
     attribute_blame, normalize_politics, regard_map, spend_reluctance)
 from .charter_roster import decay_roster, observe
-from .charter_space import charter_places, reach_map
+from .charter_space import charter_places, reach_map, refresh_reach
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_log import window_note
 from .charter_mind import decay_minds
 from .charter_move import relocate
+from .charter_news import decay_news, news_keys_in, witness
+from .charter_practice import (
+    close_stale, enact, normalize_practices, opportunities)
 from .charter_needs import advance_needs, mood, pressure, unmet
 from .charter_talk import converse, report_up
 
@@ -253,10 +256,66 @@ def step(charter, hours=4.0, seed=0, reach=None):
                              bodies[key].get("place", ""), body=key))
 
     minds = decay_minds(charter.get("minds") or {}, hours)
+    news_keys = set(charter.get("news_keys") or ())
+    minds = decay_news(minds, hours, news_keys)
+    # WITNESSED BEFORE ANYBODY TALKS, so this beat's news can travel in this
+    # beat. Presence is the whole test -- a body standing where something
+    # happened knows it, nobody else does, and it spreads only by being told.
+    minds, witnessed = witness(minds, bodies, events, at + hours)
+    if witnessed or news_keys:
+        news_keys = news_keys_in(minds)
     minds, told = converse(minds, bodies, seed=seed,
                            regard=regard_map(politics), at_hours=at + hours)
     roster = report_up(roster, minds, plan["watch"], bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
+
+    # SITUATIONS, AND WHAT THEY MAKE AVAILABLE. Gossip alone saturates: a
+    # claim passes only when it beats what the listener holds, so a population
+    # that has met itself goes silent and stays silent until decay reopens the
+    # door. Measured: 103 interactions in a hundred beats, every one of them
+    # in the first nine. Practices supply reasons to act that do not depend on
+    # claim strength -- meeting a stranger, attending somebody who has gone
+    # down, saying aloud that you blame somebody -- and acting spawns further
+    # situations, so the loop feeds itself.
+    #
+    # AND ONLY WHERE SOMEBODY MIGHT SEE IT. Practices are beat-scale social
+    # detail; running them for five hundred bodies nobody is near, once per
+    # four-hour planning window, took a simulated month from 3.6s to 32.7s and
+    # tripped this package's own cost guard. That is not a tuning problem, it
+    # is the wrong cadence: an off-screen body does not need beat-resolution
+    # gossip, it needs its state to be RIGHT when somebody arrives, which is
+    # the `O(re-contact)` rule the whole architecture rests on.
+    #
+    # So `active_places` is the resolution dial: uniform existence, variable
+    # resolution. Everybody keeps needs, feeling, belief and a past; only the
+    # places a scene is actually in get social simulation. Empty means none,
+    # because the cheap thing must be the default.
+    active = charter.get("active_places")
+    practices = close_stale(
+        normalize_practices(charter.get("practices")), at + hours)
+    if active:
+        in_focus = {k: b for k, b in bodies.items()
+                    if str(b.get("place") or "") in active}
+        practices.update(opportunities(
+            in_focus, minds, needs_after, events, practices, at + hours,
+            seed=seed))
+    else:
+        in_focus = {}
+    regard = dict(politics.get("regard") or {})
+    acts, spawned, closed, heard = enact(
+        in_focus, minds, needs_after, practices, regard,
+        politics.get("blame") or {}, at + hours, seed=seed)
+    for key in closed:
+        practices.pop(key, None)
+    for key, entry in spawned:
+        practices.setdefault(key, entry)
+    politics = dict(politics, regard=regard)
+    told += len(acts)
+
+    heard_blame = {k: set(v) for k, v in
+                   (charter.get("heard_blame") or {}).items()}
+    for subject, tellers in heard.items():
+        heard_blame.setdefault(subject, set()).update(tellers)
 
     # THEN THEY FEEL IT. After the window's events exist, because what a body
     # appraises is what happened where it stood; after needs, because
@@ -288,9 +347,15 @@ def step(charter, hours=4.0, seed=0, reach=None):
     after_charter["needs"] = needs_after
     after_charter["travelled"] = travelled
     after_charter["minds"] = minds
+    after_charter["practices"] = practices
+    after_charter["acts"] = list(acts)
+    after_charter["heard_blame"] = {k: sorted(v)
+                                    for k, v in heard_blame.items()}
     after_charter["feel"] = feel
     after_charter["stood"] = stood
     after_charter["told"] = told
+    after_charter["witnessed"] = witnessed
+    after_charter["news_keys"] = sorted(news_keys)
     after_charter["reported"] = {
         "post_unfilled": now_unfilled,
         "post_believed_filled": now_absent,
@@ -338,7 +403,9 @@ def run(charter, hours, window=4.0, seed=0, trace=False):
         span = min(window, remaining)
         now = {k: b["place"] for k, b in charter["bodies"].items()}
         if scene and now != where:
-            reach = reach_map(scene, places, charter["bodies"])
+            moved = {k for k, place in now.items() if where.get(k) != place}
+            reach = refresh_reach(reach, scene, places, charter["bodies"],
+                                  moved)
             where = now
         # The seed advances with the window so successive windows are not
         # identical draws, while the whole run stays a pure function of the

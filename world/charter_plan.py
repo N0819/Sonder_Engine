@@ -41,7 +41,26 @@ def _post_urgency(post, charter, ranks, horizon_hours):
     return best if best is not None else (-len(ranks) - 1, 0.0)
 
 
-def criticality(charter, roster=None):
+def _assignable_cache(roster):
+    """`assignable` memoized on the requirement, for one planning window.
+
+    It scans the whole roster, and `criticality` plus the staffing loop ask it
+    the same question once per post and then again for the unfilled diagnosis
+    -- 720,000 `meets` calls across thirty windows of a five-hundred-hand ship,
+    2.7 of 9.6 seconds in profile, all of it recomputation.
+    """
+    memo = {}
+
+    def ask(requires):
+        key = tuple(sorted((requires or {}).items()))
+        if key not in memo:
+            memo[key] = assignable(roster, requires)
+        return memo[key]
+
+    return ask
+
+
+def criticality(charter, roster=None, ask=None):
     """``{body: how many posts it is the ONLY assignable body for}``.
 
     THE DEFECT THIS EXISTS FOR, measured on the town fixture's first run: a
@@ -56,9 +75,10 @@ def criticality(charter, roster=None):
     spent last, and the most replaceable body is spent first.
     """
     roster = charter["roster"] if roster is None else roster
+    ask = ask or _assignable_cache(roster)
     only = {}
     for post in charter["posts"].values():
-        candidates = assignable(roster, post["requires"])
+        candidates = ask(post["requires"])
         if len(candidates) == 1:
             only[candidates[0]] = only.get(candidates[0], 0) + 1
     return only
@@ -93,14 +113,14 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
                                     .encode("utf-8")) & 0xFFFF)),
         reverse=True)
 
-    scarce = criticality(charter)
+    ask = _assignable_cache(charter["roster"])
+    scarce = criticality(charter, ask=ask)
     reluctance = reluctance or {}
     watch = {}
     unfilled = []
     taken = set()
     for post in posts:
-        candidates = [b for b in assignable(charter["roster"], post["requires"])
-                      if b not in taken]
+        candidates = [b for b in ask(post["requires"]) if b not in taken]
         if reach is not None:
             # A body that cannot get to the post within the window is not a
             # candidate for it. Without this a five-hundred-hand ship rosters
@@ -124,7 +144,7 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
             # able to tell them apart: nobody can do this at all, somebody can
             # but is already standing a more urgent post, or somebody can and
             # is simply too far away to get there this window.
-            any_capable = assignable(charter["roster"], post["requires"])
+            any_capable = ask(post["requires"])
             if not any_capable:
                 reason = "no_competence"
             elif reach is not None and not any(
