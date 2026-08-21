@@ -101,15 +101,17 @@
 | `web/story_view.py` | 881 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/charter.py` | 152 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_run`, `world.charter_space`, `world.charter_talk` |
+| `world/charter.py` | 178 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_run`, `world.charter_space`, `world.charter_talk` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
-| `world/charter_log.py` | 105 |  | `world.charter_mind`, `world.charter_model` |
+| `world/charter_log.py` | 173 |  | `world.charter_mind`, `world.charter_model`, `world.charter_needs` |
 | `world/charter_mind.py` | 159 |  | — |
-| `world/charter_model.py` | 218 |  | — |
+| `world/charter_model.py` | 231 |  | — |
+| `world/charter_move.py` | 70 |  | `world.charter_space` |
+| `world/charter_needs.py` | 256 |  | `world.charter_model` |
 | `world/charter_plan.py` | 159 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 139 |  | — |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 263 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_space`, `world.charter_talk` |
+| `world/charter_run.py` | 307 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_space`, `world.charter_talk` |
 | `world/charter_space.py` | 75 |  | `world.spatial` |
 | `world/charter_talk.py` | 204 |  | `world.charter_mind`, `world.charter_roster` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
@@ -1172,9 +1174,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `summarize()` | 52 | 35 lines |
-| `chronicle()` | 89 | 17 lines |
-| `window_note()` | 35 | 15 lines |
+| `life_of()` | 90 | 65 lines |
+| `summarize()` | 53 | 35 lines |
+| `chronicle()` | 157 | 17 lines |
+| `window_note()` | 36 | 15 lines |
 
 ### `world/charter_mind.py`
 
@@ -1193,14 +1196,34 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 138 | 59 lines |
+| `normalize_charter()` | 141 | 69 lines |
 | `normalize_upkeep()` | 73 | 33 lines |
+| `normalize_body()` | 122 | 17 lines |
 | `_tags()` | 51 | 15 lines |
-| `normalize_body()` | 122 | 14 lines |
 | `normalize_post()` | 108 | 12 lines |
-| `priority_rank()` | 211 | 8 lines |
+| `priority_rank()` | 224 | 8 lines |
 | `_clamp()` | 43 | 6 lines |
-| `meets()` | 199 | 6 lines |
+| `meets()` | 212 | 6 lines |
+
+### `world/charter_move.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `relocate()` | 31 | 34 lines |
+| `furthest_travelled()` | 67 | 4 lines |
+
+### `world/charter_needs.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `advance_needs()` | 101 | 48 lines |
+| `mood()` | 207 | 35 lines |
+| `pressure()` | 165 | 24 lines |
+| `normalize_need()` | 73 | 16 lines |
+| `unmet()` | 191 | 14 lines |
+| `body_state()` | 244 | 13 lines |
+| `able()` | 151 | 12 lines |
+| `seed_needs()` | 91 | 8 lines |
 
 ### `world/charter_plan.py`
 
@@ -1236,9 +1259,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 44 | 169 lines |
-| `run()` | 215 | 49 lines |
-| `_event()` | 39 | 3 lines |
+| `step()` | 46 | 211 lines |
+| `run()` | 259 | 49 lines |
+| `_event()` | 41 | 3 lines |
 
 ### `world/charter_space.py`
 

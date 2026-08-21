@@ -28,7 +28,8 @@ The statistics worth watching, and why each one earned its place:
 
 from __future__ import annotations
 
-from .charter_mind import acquaintance, contested
+from .charter_mind import acquaintance, contested, divergence
+from .charter_needs import mood, pressure
 from .charter_model import out_of_band
 
 
@@ -83,6 +84,73 @@ def summarize(charter, events, trace=()):
             (charter.get("politics") or {}).get("blame", {}).items(),
             key=lambda kv: -kv[1])[:5]),
         "windows_traced": len(trace or ()),
+    }
+
+
+def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
+    """One body's whole record: where it went, what it stood, what it knows,
+    what is believed about it, and what it was blamed for.
+
+    THE VIEW A SIMULATION OWES ITS AUTHOR. A thousand bodies producing six
+    events is the cost model working correctly and it is also unreadable — the
+    interesting thing is never in the event log, because the event log only
+    holds what BRANCHED. Everything below is reconstructed from state instead,
+    which is why it costs nothing to not ask for it.
+
+    Diagnostics, like everything else here: nothing reads this, and no mind
+    receives it.
+    """
+    key = str(body_key)
+    body = (charter.get("bodies") or {}).get(key) or {}
+    minds = charter.get("minds") or {}
+    politics = charter.get("politics") or {}
+    needs = (charter.get("needs") or {}).get(key) or {}
+
+    held = minds.get(key) or {}
+    about = {holder: claims[key] for holder, claims in minds.items()
+             if key in claims and holder != key}
+    views = divergence(minds, key)
+
+    return {
+        "body": key,
+        "place": body.get("place"),
+        "competence": dict(body.get("competence") or {}),
+        "available": bool(body.get("available", True)),
+        "rooms_travelled": int((charter.get("travelled") or {}).get(key, 0)),
+        "posts_held": sorted(
+            post for post, who in (charter.get("watch") or {}).items()
+            if who == key),
+        "needs": {name: round(float(n["level"]), 3)
+                  for name, n in needs.items()},
+        "knows_about": len(held),
+        "known_by": len(about),
+        "believed_available_by": sorted(
+            {holder for holder, claim in about.items()
+             if claim.get("believed_available")}),
+        "believed_absent_by": sorted(
+            {holder for holder, claim in about.items()
+             if not claim.get("believed_available")}),
+        "contested": len(views) > 1,
+        "register": (charter.get("roster") or {}).get(key),
+        "blamed": int((politics.get("blame") or {}).get(key, 0)),
+        "pressure": pressure(needs),
+        # Reported, never acted on -- see `charter_needs.mood`.
+        "mood": mood(
+            needs,
+            blamed=int((politics.get("blame") or {}).get(key, 0)),
+            regard_of_others=[
+                w for (listener, speaker), w in (
+                    politics.get("regard") or {}).items() if speaker == key]),
+        "regarded_by": {
+            speaker: round(float(weight), 3)
+            for (listener, speaker), weight in (
+                politics.get("regard") or {}).items()
+            if listener == key},
+        "events": chronicle(
+            [e for e in (events or [])
+             if e.get("body") == key
+             or key in (e.get("bodies") or ())],
+            hours_per_day=hours_per_day),
     }
 
 

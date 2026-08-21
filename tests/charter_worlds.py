@@ -62,6 +62,105 @@ def town_scene(streets=8, per_street=12):
     return {"rooms": rooms}
 
 
+def twin_towns_scene(per_town=10, road=9):
+    """Two settlements joined by one long road, and nothing else.
+
+    The road is the only path between them, which is what makes it worth
+    guarding: `world.spatial.passable_path` has no alternative to route
+    around, so a body on the wrong side of a cut road is genuinely stuck.
+    """
+    rooms = {}
+    up_rooms, up = _spine("up", per_town)
+    low_rooms, low = _spine("low", per_town)
+    road_rooms, road_keys = _spine("road", road)
+    rooms.update(up_rooms)
+    rooms.update(low_rooms)
+    rooms.update(road_rooms)
+    rooms[up[-1]]["adjacent"].append({"to": road_keys[0], "barrier": DOOR})
+    rooms[road_keys[0]]["adjacent"].append({"to": up[-1], "barrier": DOOR})
+    rooms[road_keys[-1]]["adjacent"].append({"to": low[0], "barrier": DOOR})
+    rooms[low[0]]["adjacent"].append({"to": road_keys[-1], "barrier": DOOR})
+    return {"rooms": rooms}, up, low, road_keys
+
+
+def twin_towns(folk=240):
+    """Two towns that cannot feed themselves alone, and the road between them.
+
+    EACH NEEDS WHAT THE OTHER MAKES. The upland grows and cannot mill; the
+    lowland mills and cannot grow. So `up_bread` draws on `low_flour` and
+    `low_bread` draws on `up_grain`, and both draw on `road_open` — the road
+    is an INPUT to both chains rather than a thing beside them, which is what
+    makes cutting it a famine in two places instead of an inconvenience.
+
+    The road drifts on its own (weather, washouts, whoever is out there) and
+    is held open by patrols. It is the only upkeep here that nothing else
+    feeds, and the only one whose failure starves two chains at once.
+
+    Modelled as ONE charter over two places rather than two charters with a
+    treaty, which is the honest limit of the current model: `depends_on` names
+    upkeeps inside one institution. Two genuinely separate charters
+    negotiating is a real next step and is registered as such rather than
+    faked here.
+    """
+    scene, up, low, road = twin_towns_scene()
+    homes = {"up_field": up[1], "up_oven": up[3], "up_gate": up[-1],
+             "low_mill": low[2], "low_oven": low[4], "low_gate": low[0],
+             "road_mid": road[len(road) // 2]}
+
+    upkeeps = {
+        "road_open": {"place": homes["road_mid"], "drift_per_hour": 0.020,
+                      "service_per_hour": 0.075, "floor": 0.30,
+                      "requires": {"arms": 1}},
+        "up_grain": {"place": homes["up_field"], "drift_per_hour": 0.008,
+                     "service_per_hour": 0.045, "floor": 0.20,
+                     "requires": {"husbandry": 1}},
+        "low_flour": {"place": homes["low_mill"], "drift_per_hour": 0.012,
+                      "service_per_hour": 0.060, "floor": 0.25,
+                      "requires": {"milling": 1},
+                      "depends_on": ["up_grain", "road_open"]},
+        "up_bread": {"place": homes["up_oven"], "drift_per_hour": 0.024,
+                     "service_per_hour": 0.095, "floor": 0.30,
+                     "requires": {"baking": 1},
+                     "depends_on": ["low_flour", "road_open"]},
+        "low_bread": {"place": homes["low_oven"], "drift_per_hour": 0.024,
+                      "service_per_hour": 0.095, "floor": 0.30,
+                      "requires": {"baking": 1},
+                      "depends_on": ["low_flour"]},
+    }
+    posts = {
+        "patrol_a": {"place": homes["road_mid"], "serves": ["road_open"],
+                     "requires": {"arms": 1}},
+        "patrol_b": {"place": homes["road_mid"], "serves": ["road_open"],
+                     "requires": {"arms": 1}},
+        "up_fields": {"place": homes["up_field"], "serves": ["up_grain"],
+                      "requires": {"husbandry": 1}},
+        "low_mill": {"place": homes["low_mill"], "serves": ["low_flour"],
+                     "requires": {"milling": 1}},
+        "up_bakehouse": {"place": homes["up_oven"], "serves": ["up_bread"],
+                         "requires": {"baking": 1}},
+        "low_bakehouse": {"place": homes["low_oven"], "serves": ["low_bread"],
+                          "requires": {"baking": 1}},
+    }
+
+    bodies = {}
+    uplanders = ["husbandry", "baking", "arms", "labour"]
+    lowlanders = ["milling", "baking", "arms", "labour"]
+    for index in range(folk):
+        upland = index % 2 == 0
+        trades = uplanders if upland else lowlanders
+        trade = trades[(index // 2) % len(trades)]
+        home = up if upland else low
+        bodies[f"{'up' if upland else 'low'}_{index:03d}"] = {
+            "competence": {trade: 2 if index % 11 == 0 else 1},
+            "available": True,
+            "place": home[(index // 2) % len(home)],
+        }
+    return {"key": "twin_towns", "scene": scene, "upkeeps": upkeeps,
+            "posts": posts, "bodies": bodies,
+            "priority": ["road_open", "up_grain", "low_flour", "up_bread",
+                         "low_bread"]}
+
+
 def _departments(scene, names, per_department):
     """Assign each named department a home room off the graph, round-robin."""
     rooms = sorted(scene["rooms"])

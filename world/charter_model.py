@@ -131,6 +131,9 @@ def normalize_body(key, entry):
         "key": str(key),
         "competence": _tags(entry.get("competence")),
         "available": bool(entry.get("available", True)),
+        # Set only when NEEDS put this body down, so needs may pick it up
+        # again and nothing else is undone by them.
+        "stood_down": bool(entry.get("stood_down", False)),
         "place": str(entry.get("place") or ""),
     }
 
@@ -193,6 +196,16 @@ def normalize_charter(stored):
         # Regard, standing and blame. Normalized by `charter_politics` at use
         # rather than here, to keep this module free of behaviour.
         "politics": dict(stored.get("politics") or {}),
+        # Per-body needs, and the ground each body has covered. Needs are the
+        # reason `available` can stop being an authored flag; `travelled` is a
+        # diagnostic carried beside the bodies rather than on them.
+        "needs": {
+            str(key): {str(n): dict(spec) for n, spec in held.items()
+                       if isinstance(spec, dict)}
+            for key, held in (stored.get("needs") or {}).items()
+            if isinstance(held, dict)},
+        "travelled": {str(k): int(v)
+                      for k, v in (stored.get("travelled") or {}).items()},
     }
 
 

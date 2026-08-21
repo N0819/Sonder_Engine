@@ -33,6 +33,8 @@ from .charter_roster import decay_roster, observe
 from .charter_space import charter_places, reach_map
 from .charter_log import window_note
 from .charter_mind import decay_minds
+from .charter_move import relocate
+from .charter_needs import advance_needs, pressure, unmet
 from .charter_talk import converse, report_up
 
 
@@ -68,8 +70,16 @@ def step(charter, hours=4.0, seed=0, reach=None):
         reach = reach_map(scene, charter_places(charter), charter["bodies"])
 
     politics = normalize_politics(charter.get("politics"))
-    reluctance = {key: spend_reluctance(politics, key)
-                  for key in charter["bodies"]}
+    # PRESSURE RIDES THE SAME AXIS AS STANDING. A body whose needs are unmet
+    # is one the institution should be reluctant to spend, and the planner
+    # already knows how to weigh reluctance — so an exhausted hand is treated
+    # as scarce rather than as a special case. It never becomes unpostable
+    # that way; it becomes expensive, and a short-handed charter still posts
+    # it because it must.
+    needs = charter.get("needs") or {}
+    reluctance = {
+        key: spend_reluctance(politics, key) + pressure(needs.get(key) or {})
+        for key in charter["bodies"]}
 
     plan = plan_watch(charter, horizon_hours=hours, seed=seed, reach=reach,
                       reluctance=reluctance)
@@ -109,8 +119,13 @@ def step(charter, hours=4.0, seed=0, reach=None):
         body = charter["bodies"].get(body_key)
         if body is None or not body["available"]:
             post = charter["posts"][post_key]
+            # Keyed on the POST, not on who was sent. The standing fact is
+            # that this post is believed covered and is not; which name the
+            # charter tried this window is detail. Keying on the body wrote a
+            # row every window as the planner worked through the absent, 308
+            # of them for one cut road.
             now_absent[post_key] = body_key
-            if standing_absent.get(post_key) == body_key:
+            if post_key in standing_absent:
                 continue
             events.append(_event(
                 "post_believed_filled", at, post["place"],
@@ -123,6 +138,14 @@ def step(charter, hours=4.0, seed=0, reach=None):
     # upstream-first and another downstream-first, and neither replay nor
     # checkpoint restore would be honest.
     before_levels = dict(charter["upkeeps"])
+
+    # The posted bodies actually go. Before the needs advance, because the
+    # ground they covered is part of what this window cost them, and before
+    # the talking, because who is in a room with whom is the result of the
+    # watch rather than of last window's berthing.
+    bodies, travelled = relocate(
+        charter["bodies"], plan["watch"], charter["posts"], scene,
+        charter.get("travelled"))
 
     upkeeps = {}
     for key, upkeep in charter["upkeeps"].items():
@@ -185,10 +208,28 @@ def step(charter, hours=4.0, seed=0, reach=None):
     # up to the register. The order matters: this window's seeings circulate
     # in this window, and the roster hears the result rather than last
     # window's.
+    # NEEDS, AND AVAILABILITY AS A CONSEQUENCE RATHER THAN A FLAG. A body on
+    # watch spends rest faster than it can recover it, and a need whose
+    # `fed_by` upkeep has failed is serviced at whatever that upkeep permits.
+    # So a failing chain reaches the bodies at the end of it, and the bodies
+    # going under take the posts with them — the spiral is not scripted
+    # anywhere, it is these two facts meeting.
+    needs_after, unable, recovered = advance_needs(
+        needs, bodies, plan["watch"], upkeeps, hours)
+    for key in unable:
+        bodies[key] = dict(bodies[key], available=False, stood_down=True)
+        events.append(_event("body_unable", at + hours,
+                             bodies[key].get("place", ""), body=key,
+                             worst=unmet(needs_after.get(key) or {})))
+    for key in recovered:
+        bodies[key] = dict(bodies[key], available=True, stood_down=False)
+        events.append(_event("body_recovered", at + hours,
+                             bodies[key].get("place", ""), body=key))
+
     minds = decay_minds(charter.get("minds") or {}, hours)
-    minds, told = converse(minds, charter["bodies"], seed=seed,
+    minds, told = converse(minds, bodies, seed=seed,
                            regard=regard_map(politics), at_hours=at + hours)
-    roster = report_up(roster, minds, plan["watch"], charter["bodies"],
+    roster = report_up(roster, minds, plan["watch"], bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
 
     after_charter = dict(charter)
@@ -196,6 +237,9 @@ def step(charter, hours=4.0, seed=0, reach=None):
     after_charter["roster"] = roster
     after_charter["clock_hours"] = at + hours
     after_charter["watch"] = dict(plan["watch"])
+    after_charter["bodies"] = bodies
+    after_charter["needs"] = needs_after
+    after_charter["travelled"] = travelled
     after_charter["minds"] = minds
     after_charter["told"] = told
     after_charter["reported"] = {
