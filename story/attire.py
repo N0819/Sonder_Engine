@@ -1052,6 +1052,15 @@ def _garment_keys(name):
     return text, text.split()[-1]
 
 
+#: Words inside a garment name that are never evidence the prose meant THAT
+#: garment: they carry no identity, and a suffix window opening on one ("with
+#: pouches") reads as a phrase while naming nothing.
+_NAME_FUNCTION_WORDS = frozenset((
+    "with", "and", "of", "in", "on", "at", "for", "from", "that", "which",
+    "over", "under", "the", "a", "an", "to", "its", "her", "his", "their",
+))
+
+
 # How short a phrase may be before containment stops being evidence of
 # identity. "robe" is inside "wardrobe"; "silk" is inside half a wardrobe.
 _CONTAINMENT_FLOOR_WORDS = 2
@@ -1773,6 +1782,125 @@ def removal_directed_at(texts, garment_names, worn_names=()):
                     if not others:
                         return True
     return False
+
+
+def garments_named_in(texts, handles, worn_names=()):
+    """Which of these garment handles this beat's own words actually name.
+
+    THE LICENCE FOR TOUCHING A WARDROBE. Every other axis of this module is
+    defended by reading the beat's prose -- `_PROCESS` clamps a removal the
+    words say is still in progress, `_DECISIVE`/`_DECISIVE_GAP_OFF` recognise
+    completion, `removal_directed_at` tells a shove from a removal. The write
+    itself was defended by nothing: a `remove` or a `coverage` block was
+    applied whether or not a single word of the beat concerned clothing.
+
+    Measured over chat 78, nine turns of an interrogation: NOT ONE beat's
+    words name a garment, and the wardrobe was rewritten twice anyway -- once
+    as a `coverage` block restating the whole wardrobe into "covers nothing"
+    (t7), once as a `remove` of two garments nobody touched (t8). Between
+    them they left a tank top, a sash and sandals all `state: "worn"` and all
+    reading as bare, with the body's `beneath` prose on the page.
+
+    NAMED, NOT VERBED. The verb is the tempting test and it is the losing one:
+    this module has twice had to widen a completion vocabulary that was one
+    phrase short (design note 17, second and third incidents), and concluded
+    that enumerating the ways English finishes an undressing is unwinnable.
+    Whether the garment is MENTIONED is a closed question with a stable
+    answer, and a beat that changes what somebody wears names what they wear.
+    So the gate asks only that, and the ladder's existing clamps go on
+    deciding how far a named change travels.
+
+    The tiers are `removal_directed_at`'s, for the same reasons: the full
+    phrase as the card wrote it, or the head noun when it is unambiguous
+    among the OTHER garments this body has on.
+
+    ``texts`` is the beat as it stood when the diff was written -- the
+    player's input, the resolved prose, what characters declared. NEVER the
+    narrator's prose: narration is rendered FROM the ledger, so a wardrobe
+    already wrongly displaced describes itself as displaced and would then be
+    citing itself as its own evidence (chat 78 t8 names all five garments,
+    and only because the ledger had just been broken).
+    """
+    blob = " ".join(str(t or "") for t in (
+        texts if isinstance(texts, (list, tuple)) else [texts]))
+    folded = " ".join(_ARTICLE.sub("", blob).casefold().split())
+    if not folded:
+        return []
+    words = set(re.findall(r"[a-z0-9\-\u2019\']+", folded))
+
+    # Every worn spelling, so tier (c)'s uniqueness has the same denominator
+    # `resolve_garment` uses.
+    pool = [str(w or "") for w in (worn_names or []) if str(w or "").strip()]
+
+    def _says(phrase):
+        return bool(phrase) and bool(
+            re.search(r"\b%s\b" % re.escape(phrase), folded))
+
+    named = []
+    for handle in (handles or []):
+        # EVERY SPELLING IN PLAY, `removal_directed_at`'s rule: the diff writes
+        # a handle ("travel jacket") and the ledger holds a canonical name
+        # ("lightweight travel jacket"), and prose may use either or neither.
+        # Resolving first is also what makes tier (c) correct -- the garment
+        # the handle REFERS to must be the one excluded from the uniqueness
+        # pool, or a short handle is always ambiguous against its own
+        # canonical spelling.
+        canonical = resolve_garment(handle, pool) or str(handle or "")
+        spellings = {str(handle or ""), canonical}
+        hit = False
+        for spelling in spellings:
+            if hit:
+                break
+            phrase, _head = _garment_keys(spelling)
+            if not phrase:
+                continue
+            parts = phrase.split()
+            # (a) the whole name, and (b) its SUFFIXES -- prose drops the
+            # qualifiers and keeps the noun end of a name ("the tank top" for
+            # a "fitted tank top"), which is the case `resolve_garment`'s tier
+            # 3 containment exists for. Floored the same way, so a bare
+            # adjective cannot license a wardrobe, and never opened on a
+            # function word.
+            for i in range(len(parts)):
+                window = " ".join(parts[i:])
+                if window.split()[0] in _NAME_FUNCTION_WORDS:
+                    continue
+                if len(window.split()) < _CONTAINMENT_FLOOR_WORDS \
+                        and len(window) < _CONTAINMENT_FLOOR_CHARS:
+                    continue
+                if _says(window):
+                    hit = True
+                    break
+            if hit:
+                break
+            # (c) one distinctive word of the name, on `resolve_garment`'s
+            # tier-4 rule: a word only counts while exactly ONE garment this
+            # body has on carries it. That is what keeps "black" and "travel"
+            # from licensing a change to the other black or travelling thing,
+            # and it is why the tier is safe without being positional -- the
+            # head noun of "utility sash with pouches" is "pouches", and the
+            # word prose actually uses is "sash".
+            for word in parts:
+                if len(word) < 3 or word in _NAME_FUNCTION_WORDS \
+                        or word not in words:
+                    continue
+                # "top", "cap", "bra", "tie" are garment words at three
+                # letters, and uniqueness is what makes them safe here where
+                # `resolve_garment`'s tier 4 could not risk them. The one
+                # reading that is not a garment gets the guard
+                # `_CLOTHING_CONTEXT` already keeps for it.
+                if len(word) == 3 and re.search(
+                        r"\b%s\s+of\b" % re.escape(word), folded):
+                    continue
+                others = [w for w in pool
+                          if w.casefold() != canonical.casefold()
+                          and word in _garment_keys(w)[0].split()]
+                if not others:
+                    hit = True
+                    break
+        if hit:
+            named.append(handle)
+    return named
 
 
 def coverage_total_emptyings(coverage, regions):
@@ -2526,7 +2654,7 @@ def release_removed_garments(entry):
     entry = entry if isinstance(entry, dict) else {}
     regions = entry.get("regions")
     if isinstance(regions, dict):
-        for region_entry in regions.values():
+        for region, region_entry in regions.items():
             if not isinstance(region_entry, dict):
                 continue
             garments = region_entry.get("garments")
@@ -2535,11 +2663,23 @@ def release_removed_garments(entry):
             kept = [g for g in garments
                     if not (isinstance(g, dict)
                             and g.get("state") == "removed")]
-            if len(kept) != len(garments):
+            if len(kept) != len(garments) and not any(
+                    isinstance(g, dict) and not g.get("attaches")
+                    and covered_zones_for(g, region) for g in kept):
                 # The region remembers being uncovered even though the garment
                 # that uncovered it is gone -- that is what lets `beneath`
                 # surface where something came off and stay quiet where
                 # nothing ever did. A fact about the body, kept on the body.
+                #
+                # ONLY WHERE IT ACTUALLY BECAME UNCOVERED. Any departure at all
+                # used to set this, so taking a coat off over a shirt recorded
+                # the torso as bared while the shirt still covered it -- a fact
+                # about the body that had not happened. Harmless while
+                # `describe` finds the shirt first, and not harmless the moment
+                # something else stops the shirt counting as a covering: chat
+                # 78 t8 shed a jacket over a tank top whose coverage had been
+                # zeroed the beat before, and five regions became licensed to
+                # print their `beneath` prose at once.
                 region_entry["uncovered"] = True
             region_entry["garments"] = kept
     return rederive_entry(entry)
