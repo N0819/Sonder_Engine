@@ -162,6 +162,83 @@ def schedule_memory_consolidation(ctx):
                        base_turn=turn_idx)
 
 
+MEMORY_TENSION_JOB_KEY = "memory_tension"
+
+
+def schedule_memory_tension_pass(ctx):
+    """Queue the beat's contradiction pass out of band, beside consolidation.
+
+    UNBUILT 2.24's occasion. `record_dispute` is wired end to end and has
+    fired ONCE in 9,608 live memories, because the only way in is a
+    structured field a mind must volunteer on a beat where something asked --
+    and nothing ever asked. This asks, by leaving the pair somewhere a later
+    beat will hand over.
+
+    OUT OF BAND for a measured reason rather than a tidiness one. In front of
+    a player the same reading pass costs 114 seconds against a 24-row payload
+    and completed 20 of 36 benchmark calls; here a dropped connection is
+    simply a beat that found nothing, and the next beat asks again. It runs on
+    exactly the terms consolidation established: after the turn's facts are
+    durable, on scalars snapshotted from ctx, sequential per character with a
+    cancellation check between, and a failure logged rather than raised.
+
+    What it must NOT do, and does not: decide anything. It stores a pair of
+    the mind's own memories and the subject they disagree about. Which one
+    that mind now believes is the mind's, and the engine has no opinion --
+    see `memory_judge` for why a one-sided "tension" is dropped rather than
+    trusted.
+    """
+    from core import jobs
+
+    cid = ctx.chat.id
+    turn_idx = ctx.turn.idx
+    frame_id = ctx.turn.frame_id
+    language_id = story_language(cid)
+    members = [
+        {"id": row["id"], "name": character_name_from_text(row["sheet"])}
+        for row in (ctx.cast or [])
+    ]
+    if not members:
+        return None
+
+    def _produce(job):
+        from core.db import active_frame_id, q
+        from core.logging_utils import logger
+        from language_runtime import current_language_id
+        from mind.memory_judge import review_minted_memories
+
+        token = active_frame_id.set(frame_id)
+        language_token = current_language_id.set(language_id)
+        try:
+            found = 0
+            for member in members:
+                if job.cancelled.is_set():
+                    break
+                try:
+                    # Re-read rather than threaded through: "what this mind
+                    # just recorded" is a question the committed rows answer
+                    # exactly, and carrying ids across the thread hop would
+                    # be a second spelling of it free to drift.
+                    minted = q(
+                        "SELECT event_key, gist, content, provenance, turn_idx "
+                        "FROM memories WHERE chat_id=? AND char_id=? AND "
+                        "turn_idx=?", (cid, member["id"], turn_idx))
+                    found += review_minted_memories(
+                        cid, member["id"], member["name"], minted,
+                        current_turn_idx=turn_idx, frame_id=frame_id)
+                except Exception as exc:
+                    logger.info(
+                        "memory tension pass failed out of band: chat=%s "
+                        "char=%s error=%s", cid, member["id"], str(exc)[:300])
+            return ["%d occasion(s) recorded" % found] if found else []
+        finally:
+            current_language_id.reset(language_token)
+            active_frame_id.reset(token)
+
+    return jobs.submit(cid, MEMORY_TENSION_JOB_KEY, _produce,
+                       base_turn=turn_idx)
+
+
 def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
     prepared = prepared or prepare_memory_commit(ctx)
     turn = ctx.turn

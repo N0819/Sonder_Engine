@@ -13,7 +13,7 @@ from mind.memory_common import (
 from mind.memory_write import _clamp
 from mind.memory_retrieval import (
     _RECALL_LIMIT, _SUMMARY_RECALL_LIMIT, provenance_context_label,
-    recall_confidence, recent_memory_buffer, search_memories,
+    recent_memory_buffer, search_memories,
 )
 from mind.memory_summaries import (
     backfill_missing_memory_event_keys, get_memory_summary,
@@ -253,7 +253,8 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
                                    recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None, absorption=0.0,
-                                   ponder_query=""):
+                                   ponder_query="", ponder_why="",
+                                   resurfaced_subject=""):
     active_state = active_state or {}
     # Legacy banks predate event_key. Repair only the active mind's missing
     # handles before any row is projected, so every delivered citation is
@@ -334,18 +335,28 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                chronological=True, here=here, in_sight=in_sight,
                                aspects=aspects, embedded=embedded,
                                record_access=True)
-    # The abstention floor (audit 4.3 item 3): a deterministic, per-query
-    # signal that this bank holds nothing convincing for this beat, read from
-    # the score distribution the scan already computed the shape of. The
-    # recalled rows are still delivered -- they are legitimately visible, and
-    # suppressing them is a behaviour change no one has measured -- but the
-    # mind is told its own recall came back without conviction, which is what
-    # licenses "I don't remember" over confabulating a connection. Calibrated
-    # so no measured real recall is ever flagged (zero false abstention on
-    # the frozen probe sets); it fires only on the emptiest queries.
-    recall_conviction = recall_confidence(
-        chat_id, char_id, query_text, current_turn_idx=current_turn_idx,
-        embedded=embedded)
+    # NO ABSTENTION SIGNAL IS COMPUTED HERE ANY MORE, and the reason is worth
+    # the paragraph because the thing that was here looked like it worked.
+    #
+    # `recall_confidence` is an NQC/WIG-shape z-score against the bank's own
+    # score distribution, and it annotated this payload with
+    # `nothing_comes_back_clearly`. Measured against 470 positive and 30
+    # negative LongMemEval probes -- negatives whose answers are absent by
+    # construction -- it fires 0 of 30 times, and recalibrating cannot fix it:
+    # positives climb 1.9x across a bank-size sweep while negatives climb
+    # 2.2x, so the gap holds at about one sigma at every scale and never
+    # widens. A query whose answer is absent still retrieves topically related
+    # rows and still produces a peaked distribution: presence and absence have
+    # the SAME SHAPE, and a statistic over scores cannot read content
+    # (UNBUILT 1.76).
+    #
+    # The replacement reads the rows, and lives in `agents/character.py`
+    # (`_attach_recall_review`) rather than here -- it costs a model call, and
+    # the other caller of this function is an author-facing preview route that
+    # must not pay for one. The function survives for the probe harness, which
+    # is the only reader entitled to a number it must not trust. Removing the
+    # call also removes a second full bank scan per character per beat, which
+    # is most of what the review costs back.
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     if len(recalled) > recall_limit:
         recalled = sorted(
@@ -359,6 +370,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # cue/mood/goal recall above remains untouched. It costs an embedding call
     # only when a ponder is actually pending, which should be exceptional.
     ponder_query = " ".join(str(ponder_query or "").split())[:240]
+    ponder_why = " ".join(str(ponder_why or "").split())[:240]
     pondered = []
     if ponder_query:
         # The SAME budget passive recall just used, which is `recall_limit`
@@ -498,6 +510,23 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         if str(item.get("memory_ref") or "") in ponder_refs:
             item["retrieval_origin"] = [
                 "normal_recall", "deliberate_ponder"]
+            # The reason travels WITH the label, on these rows only.
+            #
+            # `deliberate_ponder` says "you went looking for this", and these
+            # are the ponder results that came back through ordinary recall
+            # too -- so they sit in `recalled_old_memories`, structurally
+            # apart from the `deliberate_recall` lane where the reason is
+            # stated once. Without this a mind reads a row stamped "you
+            # deliberately went looking" with the motive an indirection away
+            # through `result_refs`, which is the same complaint the
+            # `memory_ref` per-row constant was RESTORED to answer: the label
+            # marks the lane at the point of use, and a discrimination the
+            # engine cannot re-impose downstream is worth its bytes.
+            #
+            # Only here. Rows inside the lane already have the reason at their
+            # head, and repeating it there would be paying for it twice.
+            if ponder_why:
+                item["why_i_went_looking"] = ponder_why
     ponder_additional = []
     for mem in pondered:
         ref = str(mem.get("event_key") or "")
@@ -508,6 +537,9 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         ponder_additional.append(item)
     ponder_payload = ({"deliberate_recall": {
         "query_i_chose_last_turn": ponder_query,
+        # Absent rather than empty when a legacy state blob has no reason
+        # stored, like every other optional key here.
+        **({"why_i_chose_it": ponder_why} if ponder_why else {}),
         "temporal_status": "remembered_past",
         "retrieval_origin": "deliberate_ponder",
         "result_refs": ponder_refs,
@@ -516,6 +548,40 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         # may be pondered immediately; optionality lives in the explicit act.
         "may_set_another_ponder_this_turn": True,
     }} if ponder_query else {})
+
+    # A subject that came back on its own.
+    #
+    # Seeded by the out-of-band pass that reads what this mind just recorded
+    # against what it already held (`schedule_memory_tension_pass`). That pass
+    # finds contradictions; this lane deliberately does NOT say so. It runs
+    # the subject as a query and hands over whatever returns, because the
+    # measurement is unambiguous about which of those two things works: told
+    # that two memories disagree, minds disputed 13/16; handed the rows with
+    # nothing said, 16/16. And on an unaimed beat ordinary recall delivers
+    # both halves 0 times in 18, so the retrieval is the entire mechanism.
+    #
+    # Labelled as unbidden rather than chosen, on the same grounds the engine
+    # refuses to speak for a silent player: this mind did not ask for it, and
+    # `query_i_chose_last_turn` would be the engine telling a character it
+    # decided something it did not.
+    resurfaced_subject = " ".join(str(resurfaced_subject or "").split())[:240]
+    resurfaced_payload = {}
+    if resurfaced_subject:
+        already = normal_refs | set(ponder_refs)
+        back = [m for m in search_memories(
+            chat_id, char_id, resurfaced_subject, k=max(4, int(recall_limit)),
+            include_archived=True, current_turn_idx=current_turn_idx,
+            chronological=True, here=here, in_sight=in_sight,
+            record_access=True)
+            if str(m.get("event_key") or "") not in already]
+        if back:
+            resurfaced_payload = {"resurfaced_without_asking": {
+                "subject": resurfaced_subject,
+                "temporal_status": "remembered_past",
+                "retrieval_origin": "unbidden_subject",
+                "episodes": [_with_reading(m, current_turn_idx)
+                             for m in back[:max(4, int(recall_limit))]],
+            }}
     score_rows = {}
     for mem in (*recalled, *pondered):
         ref = str(mem.get("event_key") or "")
@@ -547,12 +613,6 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         **({"recent_conclusions": recent_conclusions}
            if recent_conclusions else {}),
         "recalled_old_memories": recalled_projected,
-        # Present only when the floor fires, like every other optional key --
-        # an absent signal must cost no attention. Self-describing on
-        # purpose: the value a mind should take from it is exactly its name.
-        **({"nothing_comes_back_clearly": True}
-           if recall_conviction.get("available")
-           and recall_conviction.get("abstain") else {}),
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried
         # separately below and must not be folded in here.
@@ -564,6 +624,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         **earlier_payload,
         **origin_payload,
         **ponder_payload,
+        **resurfaced_payload,
         **provenance_summaries,
     }
 
