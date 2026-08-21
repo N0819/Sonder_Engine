@@ -6,7 +6,7 @@ deliberately different verification levels.
 ## Test commands
 
 ```bash
-make test-full     # every Python regression test
+make test-full     # every Python regression test, in parallel
 make test-lf       # last-failed first, then the rest -- the fix-verify loop
 make test-browser  # optional Chromium behavior tests
 make check-fast    # compile, structure/map freshness, then the full suite
@@ -18,6 +18,43 @@ make test-fast     # CI matrix-breadth only -- see the warning below
 `check-fast` now run every test**; they differ only in that `check`
 regenerates `docs/CODE_MAP.md` while `check-fast` verifies the copy on disk is
 current.
+
+### The full tier runs in parallel, and the worker count is not `auto` by luck
+
+Measured 2026-08-20 on 8,566 tests, 8 physical cores / 16 logical:
+
+| workers | wall |
+|---|---|
+| serial | 220s |
+| `-n 4` | 117s |
+| **`-n 8`** | **76s** |
+| `-n 16` | 87s |
+
+**The curve turns back up past the PHYSICAL core count.** The engine keeps
+daemon threads alive across tests -- `memory_write`'s embedding repair thread
+is the loud one -- so one worker per hardware thread oversubscribes them and
+loses more than the extra parallelism wins.
+
+`JOBS ?= auto` in the Makefile is xdist's physical-core count, **but only when
+`psutil` is importable**; without it `auto` silently means LOGICAL cores, which
+on this machine is 16 -- the wrong side of the knee. That is the entire reason
+`psutil` is a dev dependency. Override with `make test JOBS=4`, or `JOBS=0`
+for the serial run (also `make test-serial`).
+
+Parallel isolation holds by construction rather than by arrangement:
+`tests/helpers.scratch_db_path()` is `tempfile.mkstemp`, and
+`tests/conftest.py` redirects `db.DB` at conftest IMPORT -- which happens once
+per worker PROCESS. So every worker gets its own scratch database before it
+collects a single test, and no worker can reach another's.
+
+**Reach for `JOBS=0` when a failure is confusing.** xdist interleaves workers,
+so the live log of the test that failed is not shown beside its traceback.
+
+When `pytest-xdist` is not installed for whatever `python` resolves to, the
+tier degrades to a serial run and says so, rather than failing on
+`unrecognized arguments: -n`. A PEP 668 system interpreter cannot be
+pip-installed into without `--break-system-packages`, and a developer who did
+nothing wrong should not meet a cryptic argument error.
 
 ### Why the fast tier is no longer a tier you should use
 
