@@ -2,3 +2,16 @@
 # The floor is the version CI installs, for the reason in requirements.txt:
 # a minimum nothing has run is not a supported minimum.
 pytest>=8.4.1,<10
+
+# Parallel test execution. Measured on this suite (8,566 tests, 8 physical
+# cores / 16 logical): 220s serial, 117s at -n 4, **76s at -n 8**, 87s at
+# -n 16. The curve turns back up past the PHYSICAL core count, because the
+# engine keeps daemon threads alive across tests and one worker per hardware
+# thread oversubscribes them.
+#
+# psutil is here for that reason and no other: xdist's `-n auto` resolves to
+# physical cores only when psutil is importable, and falls back to LOGICAL
+# cores otherwise. Without it `auto` picks 16 on this machine -- the wrong
+# side of the knee, and slower than half as many workers.
+pytest-xdist>=3.8,<4
+psutil>=5.9

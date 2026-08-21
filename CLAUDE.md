@@ -23,8 +23,10 @@ Do not duplicate content from these files in explanations; point to them instead
 ```bash
 make run        # start the local server (uvicorn web.app:app --reload, port 8008)
 make serve      # the same server with no file watcher — for playing, not developing
-make test-full  # every Python regression test (run this freely; pytest reports the count)
+make test-full  # every Python regression test, in parallel (run this freely; pytest reports the count)
 make test       # alias for test-full
+make test JOBS=0  # the same, serially -- reach for it when a failure's output is confusing
+make test-serial # always serial, same thing under its own name
 make test-lf    # last-failed first, then the rest — the fix-verify loop
 make test-fast  # NOT a tier to check your own work with; deselects every
                 #   database-backed test file, including the persistence and

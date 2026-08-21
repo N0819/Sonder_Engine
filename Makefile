@@ -1,7 +1,17 @@
 PYTHON ?= python
 PYTEST ?= $(PYTHON) -m pytest
 
-.PHONY: run serve test test-fast test-full test-lf test-browser browser-install map structure compile check-fast check clean
+# Workers for the full tier. `auto` is xdist's PHYSICAL core count -- but only
+# when psutil is importable, which is why psutil is a dev dependency; without
+# it `auto` silently means LOGICAL cores. Measured on 8,566 tests, 8 physical
+# / 16 logical: 220s serial, 117s at 4, 76s at 8, 87s at 16. The curve turns
+# back up past the physical count because the engine keeps daemon threads
+# alive across tests, so one worker per hardware thread oversubscribes them.
+# Override for a machine that disagrees: `make test JOBS=4`, or `JOBS=0` for
+# the serial run.
+JOBS ?= auto
+
+.PHONY: run serve test test-fast test-full test-serial test-lf test-browser browser-install map structure compile check-fast check clean
 
 # `--reload` is not free. With watchfiles installed (which `uvicorn[standard]`
 # in pyproject.toml already asks for) the watcher is event-driven and costs
@@ -43,7 +53,28 @@ test: test-full
 test-fast:
 	$(PYTEST) -q -m "not slow"
 
+# Parallel by default, because this is the tier the docs tell you to check
+# your own work with and 76s against 220s decides whether it actually gets
+# run. `JOBS=0` is the serial escape hatch -- reach for it when a failure's
+# output is confusing, since xdist interleaves workers and cannot show the
+# live log of the test that failed.
+# DEGRADES rather than fails when xdist is absent, and says why. `make test`
+# runs on whatever `python` resolves to, which on a PEP 668 system interpreter
+# cannot be pip-installed into without --break-system-packages -- so the
+# choice is a working slow run with one line of explanation, or
+# "unrecognized arguments: -n" for a developer who did nothing wrong.
 test-full:
+	@if [ "$(JOBS)" = "0" ]; then \
+		$(PYTEST) -q; \
+	elif $(PYTHON) -c "import xdist" 2>/dev/null; then \
+		$(PYTEST) -q -n $(JOBS); \
+	else \
+		echo "note: pytest-xdist not installed for '$(PYTHON)' -- running serially (~3x slower)."; \
+		echo "      pip install -r requirements-dev.txt, or run: make test JOBS=0 to silence this."; \
+		$(PYTEST) -q; \
+	fi
+
+test-serial:
 	$(PYTEST) -q
 
 # The fix-verify loop: last-failed first, then the rest. Free -- the pytest
