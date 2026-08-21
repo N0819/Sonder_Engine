@@ -120,6 +120,25 @@ charter proposes; the character's own psychology disposes. The charter must
 never write a character's wants directly, or the crew becomes puppets and the
 psychology layer is a decoration.
 
+**Amendment (2026-08-21, prototype): feeling is the character tier's own
+model, called earlier.** Two affect experiments settled how a background
+body feels. A `mood` scalar built at this tier from pressure, blame and
+regard measured r = 0.994 against `pressure` — a duplicate signal — and
+stays out of planning (`charter_needs.mood`). `charter_feel` instead calls
+`mind/psychology_runtime.resolve_hedonic`/`resolve_stress` per body per
+window over channelled inputs (own needs; the state of the body's own place;
+transient events there), with per-body temperament (`charter_temper`) drawn
+in the card's own vocabulary — `interoception` and `stress_profile` — so a
+promotion is a copy, never a translation. Measured on the twin-town famine:
+r(pressure, strain) runs 0.07–0.72 by crisis phase where mood held ≥ 0.98,
+and 240 bodies at identical saturated pressure carry strain 0.161–0.485.
+One consequence channel only: strain wears rest
+(`charter_needs.advance_needs`), never a term in the planner — the mood
+lesson, kept. Deterministic project-minting for background bodies was
+REFUSED: adoption is a deliberation the model owns, so the background tier
+records the evidence instead (`stood`, windows actually stood per post) and
+hands it to the promotion call that can deliberate honestly.
+
 ## 5. Competence is a BELIEF, not a stat
 
 The charter must not know who is competent. It knows who it *believes* is

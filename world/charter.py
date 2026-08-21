@@ -19,6 +19,9 @@ one, because this repo has now paid for that split three times
     that; ground truth lives on the bodies and is never read by the planner.
   * ``charter_plan``   — the attempt: rank posts, staff them, report the gap.
   * ``charter_run``    — advancing time, and the only things written down.
+  * ``charter_temper`` — per-body dispositions, in the card's own vocabulary.
+  * ``charter_feel``   — felt state per body, produced by calling
+    ``mind/psychology_runtime``'s own resolvers rather than a second model.
 
 A caller imports this module. A test may name a sibling it patches or reads the
 source of; one that only calls through should come here, which is the same rule
@@ -49,8 +52,28 @@ from .charter_model import (
     out_of_band,
     priority_rank,
 )
+from .charter_feel import (
+    NEGLIGIBLE,
+    STRAIN_REST_TOLL,
+    advance_feel,
+    appraise_window,
+    felt_handoff,
+    normalize_feel,
+    overloaded_bodies,
+    strain_of,
+)
 from .charter_log import chronicle, life_of, summarize, window_note
 from .charter_move import furthest_travelled, relocate
+from .charter_temper import (
+    SPREAD,
+    TRAITS,
+    derived_temperament,
+    interoception_of,
+    normalize_temperament,
+    stress_profile_of,
+    temperament_of,
+    temperament_warnings,
+)
 from .charter_needs import (
     DEFAULT_NEEDS,
     ON_WATCH_STRAIN,
@@ -105,9 +128,25 @@ from .charter_roster import (
 from .charter_run import run, step
 
 __all__ = [
+    "NEGLIGIBLE",
     "RECOVERY_MARGIN",
+    "SPREAD",
+    "STRAIN_REST_TOLL",
+    "TRAITS",
+    "advance_feel",
+    "appraise_window",
+    "derived_temperament",
+    "felt_handoff",
+    "interoception_of",
     "mood",
+    "normalize_feel",
+    "normalize_temperament",
+    "overloaded_bodies",
     "pressure",
+    "strain_of",
+    "stress_profile_of",
+    "temperament_of",
+    "temperament_warnings",
     "ON_WATCH_STRAIN",
     "DEFAULT_NEEDS",
     "unmet",

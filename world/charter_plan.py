@@ -15,6 +15,8 @@ Pure: no clock, no writes, no randomness beyond the caller's seed.
 
 from __future__ import annotations
 
+import zlib
+
 from .charter_drift import urgency
 from .charter_model import priority_rank
 from .charter_roster import assignable
@@ -82,7 +84,13 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
                        # Stable, total, and seed-varied: the key is hashed
                        # with the seed rather than drawn, so the order is a
                        # pure function of (charter, seed) and replays exactly.
-                       -(hash((p["key"], int(seed))) & 0xFFFF)),
+                       # crc32 rather than hash(): Python salts string hashes
+                       # per PROCESS, and a checkpoint restore is a different
+                       # process -- with hash() the tie-break order survived
+                       # a same-process replay test and would not have
+                       # survived the restart the test exists to stand for.
+                       -(zlib.crc32(f"{p['key']}|{int(seed)}"
+                                    .encode("utf-8")) & 0xFFFF)),
         reverse=True)
 
     scarce = criticality(charter)

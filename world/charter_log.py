@@ -28,9 +28,11 @@ The statistics worth watching, and why each one earned its place:
 
 from __future__ import annotations
 
+from .charter_feel import normalize_feel, overloaded_bodies
 from .charter_mind import acquaintance, contested, divergence
 from .charter_needs import mood, pressure
 from .charter_model import out_of_band
+from .charter_temper import temperament_of
 
 
 def window_note(charter, events, told):
@@ -83,6 +85,11 @@ def summarize(charter, events, trace=()):
         "blame": dict(sorted(
             (charter.get("politics") or {}).get("blame", {}).items(),
             key=lambda kv: -kv[1])[:5]),
+        # SPARSENESS IS THE HEALTH SIGNAL here: a quiet institution feels
+        # nothing, so `feeling_bodies` at zero after a quiet month is the
+        # cost model working, and nonzero after one is a leak.
+        "feeling_bodies": len(normalize_feel(charter.get("feel"))),
+        "overloaded_bodies": overloaded_bodies(charter.get("feel")),
         "windows_traced": len(trace or ()),
     }
 
@@ -134,6 +141,14 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
         "register": (charter.get("roster") or {}).get(key),
         "blamed": int((politics.get("blame") or {}).get(key, 0)),
         "pressure": pressure(needs),
+        # Windows actually stood, per post -- the shape of this body's
+        # working life, and the evidence a promotion deliberates a project
+        # from.
+        "stood": dict((charter.get("stood") or {}).get(key) or {}),
+        # The engine's own affect state (`mind/psychology_runtime` shapes),
+        # or empty dicts for a body currently feeling nothing.
+        "feel": normalize_feel(charter.get("feel")).get(key) or {},
+        "temperament": temperament_of(dict(body, key=key)),
         # Reported, never acted on -- see `charter_needs.mood`.
         "mood": mood(
             needs,

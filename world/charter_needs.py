@@ -98,16 +98,28 @@ def seed_needs(bodies, template=None):
     }
 
 
-def advance_needs(needs, bodies, watch, upkeeps, hours):
+def advance_needs(needs, bodies, watch, upkeeps, hours, strain=None,
+                  toll=0.0):
     """One window of living. Returns ``(needs, newly_unable, recovered)``.
 
     A body on watch spends rest faster and eats no better for it. A need whose
     ``fed_by`` upkeep has failed is serviced at whatever that upkeep's level
     permits — the same weakest-link rule the supply chain uses, because it is
     the same question one layer down.
+
+    ``strain`` is ``{body: 0..1}`` from last window's felt state
+    (`charter_feel.strain_of`), and ``toll`` is what full strain multiplies
+    the rest drift by, on watch and off. This is the ONLY door feeling has
+    back into the institution: a shaken body rests badly, worn rest crosses
+    its floor, and the existing `body_unable` path does the rest — no second
+    stand-down channel and no term on the planner's reluctance axis, which is
+    where the mood experiment measured a duplicate. At ``toll=0.0`` this
+    function is bit-for-bit what it was before the parameters existed.
     """
     hours = max(0.0, float(hours))
     on_watch = set((watch or {}).values())
+    strain = strain or {}
+    toll = max(0.0, float(toll))
     out, newly_unable, recovered = {}, [], []
 
     for key, held in (needs or {}).items():
@@ -115,12 +127,16 @@ def advance_needs(needs, bodies, watch, upkeeps, hours):
         if body is None:
             continue
         was_able = bool(body.get("available", True))
+        worn = 1.0 + toll * max(0.0, min(1.0, float(strain.get(key, 0.0)))) \
+            if toll else 1.0
         after = {}
         for name, need in held.items():
-            strain = ON_WATCH_STRAIN if (key in on_watch and name == "rest") \
+            cost = ON_WATCH_STRAIN if (key in on_watch and name == "rest") \
                 else 1.0
+            if name == "rest":
+                cost *= worn
             level = float(need["level"])
-            level -= float(need["drift_per_hour"]) * strain * hours
+            level -= float(need["drift_per_hour"]) * cost * hours
             supply = 1.0
             if need["fed_by"]:
                 supply = float(
@@ -241,16 +257,41 @@ def mood(held, blamed=0, regard_of_others=(), weights=None):
         + weights["regard"] * regard_term)), 6)
 
 
+#: Which vital each default need speaks as, in `world/survival.py`'s
+#: vocabulary. `health` is the inversion: survival counts injury UP from
+#: zero, needs count health DOWN from one.
+_VITAL_OF_NEED = {"rest": "stamina", "sustenance": "nourishment"}
+
+
 def body_state(held):
     """The shape `mind/psychology_runtime.resolve_hedonic` takes as input.
 
     THE HANDOFF, and the reason this module computes no feelings. A promoted
     body arrives at the character tier with the pressures its background life
     actually produced, and the tier that owns appraisal turns them into tone.
+
+    THE KEYS ARE `world/survival.py`'S VITALS — `stamina`, `nourishment`,
+    `injury` — because those are the keys `resolve_hedonic` actually reads.
+    The first version of this function returned `{needs, unmet, able}` and
+    claimed the same handoff: every key was ignored, the defaults filled in,
+    and a starving, exhausted background body would have arrived at the
+    character tier reading as perfectly fresh. The same defect class
+    `resolve_stress`'s own docstring records for `goal_impacts` — a caller
+    and a callee agreeing about a payload's shape and being wrong about it —
+    caught here before a promotion path existed to be silently wrong through.
+    `needs`/`unmet`/`able` stay for readers that want the detail; the vitals
+    are the contract.
     """
-    return {
+    out = {
         "needs": {name: round(float(need["level"]), 4)
                   for name, need in (held or {}).items()},
         "unmet": unmet(held),
         "able": able(held),
     }
+    for name, need in (held or {}).items():
+        vital = _VITAL_OF_NEED.get(str(name))
+        if vital:
+            out[vital] = round(float(need["level"]), 4)
+        elif str(name) == "health":
+            out["injury"] = round(1.0 - float(need["level"]), 4)
+    return out
