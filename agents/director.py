@@ -241,6 +241,8 @@ from .director_evidence import (
 )
 from .director_scopes import (
     SPECIALISTS,
+    SPEECH_WRITTEN_CHANNELS,
+    reads_dialogue,
     _DELEGATED_CHANNELS,
     _CATEGORY_CHANNELS,
     _LIST_DELEGATED,

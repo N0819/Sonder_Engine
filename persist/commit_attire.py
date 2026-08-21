@@ -906,6 +906,67 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                         "so in the prose and write it as `coverage` on a beat "
                         "that names it." % (
                             ", ".join(repr(x) for x in _strip), name))
+        # THE FIFTH AND SIXTH DOORS, and the ones that undress a body fastest.
+        # `remove` names what comes off and is gated above. `replace` and
+        # `wearing` name what stays ON, so every worn garment the restatement
+        # OMITS comes off silently -- `apply_flat_change` marks each absent
+        # name `state: "removed"`, which mints a floor object and hands
+        # `release_removed_garments` the departure that sets `uncovered`, the
+        # licence `describe` reads before printing a body's `beneath`. So one
+        # omission does what t7 and t8 did together, in a single write.
+        #
+        # `ed8e1e3`'s message got this wrong -- it argued `replace` "cannot be
+        # a door" because it is `list[str]` and so cannot carry a
+        # `covered_zones` override. True, and beside the point: removal by
+        # omission needs no override. Measured on this branch, on the same
+        # clothing-free beat: `{"replace": ["fitted tank top"]}` stripped four
+        # garments, set `uncovered` on five regions and rendered the body's
+        # private prose, with no warning anywhere; `{"replace": []}` emptied
+        # the wardrobe the same way.
+        #
+        # Gated as the shrinkage half only, per garment: an omitted garment
+        # this beat does not name is put BACK, additions and named departures
+        # land untouched. Exactly one channel is examined -- whichever will
+        # actually apply below -- because appending to an empty `replace`
+        # would otherwise make it truthy and divert a diff that the `wearing`
+        # branch was going to handle.
+        _takes_wearing = (d.get("wearing") is not None and not any(
+            d.get(k) for k in ("add", "remove", "replace")))
+        _wholesale = ("wearing" if _takes_wearing
+                      else ("replace" if isinstance(d.get("replace"), list)
+                            else None))
+        if _wholesale:
+            _wanted = list(d.get(_wholesale) or [])
+            _staying = []
+            for _h in _wanted:
+                _t = str(_h or "").strip()
+                _staying.append(attire_model.resolve_garment(_t, _worn_now)
+                                or _t)
+            _omitted = [g for g in _worn_now if g not in _staying]
+            if _omitted:
+                _named = set(attire_model.garments_named_in(
+                    _licence, _omitted, _worn_now))
+                # Held in their existing order, so a restatement cannot
+                # silently relayer the wardrobe either.
+                _held = [g for g in _omitted if g not in _named]
+                if _held:
+                    d[_wholesale] = _wanted + _held
+                    ctx.add_warning(
+                        "attire: kept %s on %s against a %s that dropped them "
+                        "(%s) -- no word of this beat names the garment" % (
+                            "them" if len(_held) > 1 else "it", name,
+                            _wholesale, ", ".join(_held)))
+                    if report:
+                        ctx.tell_director(
+                            "attire: %s is still wearing %s. Your `%s` for "
+                            "them listed what remains ON, and leaving a "
+                            "garment out of that list takes it OFF -- but "
+                            "nothing in this beat's words names it. When "
+                            "clothing did not change, leave the channel "
+                            "empty; to take something off, say so in the "
+                            "prose and use `remove`, which names what goes."
+                            % (name, ", ".join(repr(x) for x in _held),
+                               _wholesale))
         if d.get("wearing") is not None and not any(
                 d.get(k) for k in ("add", "remove", "replace")):
             cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))

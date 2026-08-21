@@ -310,6 +310,118 @@ class TestACharacterMayStillUndress:
             assert "'type':" not in voice, voice[:80]
         assert any("utility sash" in v for v in voices)
 
+
+class TestRemovalByOmission:
+    """`replace` and `wearing` name what STAYS ON, so a garment left out of
+    the list comes off -- and the fifth and sixth doors were open.
+
+    `ed8e1e3`'s message claimed `replace` "cannot be a door" because it is
+    `list[str]` and so cannot carry a `covered_zones` override. That is true
+    and irrelevant: removal by omission needs no override. Measured on the
+    branch before this class existed, on the quiet beat below, every case
+    here stripped the wardrobe, set `uncovered`, minted floor objects and
+    rendered the body's `beneath` prose, with no warning anywhere.
+    """
+
+    def test_a_replace_may_not_drop_an_unnamed_garment(self, temp_db):
+        entry, ctx = _apply(temp_db, {"replace": ["fitted tank top"]},
+                            resolved=_QUIET_BEAT)
+
+        assert entry["wearing"] == _WORN
+        assert not any(r.get("uncovered") for r in entry["regions"].values())
+        assert "PRIVATE BODY PROSE" not in attire.compact_line(
+            entry["regions"], beneath_visible=True)
+        assert any("names the garment" in w for w in ctx.warnings)
+
+    def test_a_wearing_restatement_may_not_drop_one_either(self, temp_db):
+        entry, ctx = _apply(temp_db, {"wearing": ["fitted tank top"]},
+                            resolved=_QUIET_BEAT)
+
+        assert entry["wearing"] == _WORN
+        assert any("names the garment" in w for w in ctx.warnings)
+
+    def test_an_empty_replace_does_not_empty_the_wardrobe(self, temp_db):
+        """The worst shape: `{"replace": []}` asserted the body wears
+        nothing. It also proves the gate examines the channel that will
+        actually APPLY -- holding garments back makes an empty `replace`
+        truthy, which must not divert a diff the `wearing` branch owns."""
+        entry, ctx = _apply(temp_db, {"replace": []}, resolved=_QUIET_BEAT)
+
+        assert entry["wearing"] == _WORN
+        assert any("names the garment" in w for w in ctx.warnings)
+
+    def test_a_named_garment_may_still_be_dropped_by_omission(self, temp_db):
+        """The control. Omission is a legitimate way to undress somebody when
+        the beat says so; only the unnamed half is held."""
+        entry, _ = _apply(
+            temp_db,
+            {"replace": ["lightweight travel jacket", "fitted tank top",
+                         "utility sash with pouches", "travel shorts"]},
+            resolved="She kicks the sturdy sandals off and leaves them there.")
+
+        assert "sturdy sandals" not in entry["wearing"]
+        assert "travel shorts" in entry["wearing"]
+        assert entry["regions"]["feet"].get("uncovered") is True
+
+    def test_an_addition_beside_a_restatement_still_lands(self, temp_db):
+        """Holding an omission back must not refuse what the same diff ADDS."""
+        entry, _ = _apply(
+            temp_db, {"replace": ["fitted tank top"], "add": ["wool blanket"]},
+            resolved=_QUIET_BEAT)
+
+        assert "wool blanket" in entry["wearing"]
+        for garment in _WORN:
+            assert garment in entry["wearing"]
+
+
+class TestTheGateSpeaksMoreThanOneLanguage:
+    """A licence gate that cannot fire is worse than no gate.
+
+    Every other prose reader in this module fails OPEN for a language it
+    cannot read -- `_PROCESS` and `_DECISIVE` are English word tables, so a
+    Japanese beat simply gets their mildest reading. This one REFUSES, and
+    `\\b` does not exist between two Han or kana characters, so before this
+    fix every undressing in a Japanese story was refused on every beat and
+    "restate next beat" could never recover it. The engine ships language
+    packs; this is a supported surface.
+    """
+
+    def test_a_japanese_beat_names_its_garment(self):
+        assert attire.garments_named_in(
+            ["彼女は上着を脱いだ。"], ["上着"], ["上着", "タンクトップ"]) == ["上着"]
+
+    def test_an_unrelated_japanese_beat_still_names_nothing(self):
+        """Fails open, not always open."""
+        assert attire.garments_named_in(
+            ["彼女は椅子に座った。"], ["上着"], ["上着", "タンクトップ"]) == []
+
+    def test_english_word_boundaries_are_unchanged(self):
+        """A name inside a longer word is still not a mention -- the anchor
+        is dropped per EDGE and only where the script has no boundaries."""
+        assert attire.garments_named_in(
+            ["She adjusts the jacketing on the pipe."],
+            ["lightweight travel jacket"], ["lightweight travel jacket"]) == []
+
+
+class TestNumberIsNotIdentity:
+    """"one sandal" and "her jackets" name their garment exactly as well as
+    the ledger's own spelling, and both were refused on the number alone."""
+
+    def test_a_singular_prose_word_names_a_plural_ledger_garment(self):
+        assert attire.garments_named_in(
+            ["She kicks one sandal off."], ["sturdy sandals"],
+            ["sturdy sandals"]) == ["sturdy sandals"]
+
+    def test_a_plural_prose_word_names_a_singular_ledger_garment(self):
+        assert attire.garments_named_in(
+            ["She peels her jackets off."], ["lightweight travel jacket"],
+            ["lightweight travel jacket"]) == ["lightweight travel jacket"]
+
+    def test_an_unrelated_garment_is_still_not_named(self):
+        assert attire.garments_named_in(
+            ["She kicks one sandal off."], ["fitted tank top"],
+            ["fitted tank top", "sturdy sandals"]) == []
+
     def test_a_removal_named_by_nobody_is_the_only_thing_refused(
             self, temp_db):
         """THE LIMIT, stated rather than discovered later.
