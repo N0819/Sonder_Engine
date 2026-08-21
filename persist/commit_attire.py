@@ -156,6 +156,39 @@ def _heal_attire_identity_keys(sc, cast, player_name=None):
     return canonical
 
 
+#: Where a DECLARED element's prose actually lives. A speech element keeps it
+#: in `text`; an action element has no `text` at all -- its words are `attempt`
+#: (the actor's own framing) and `observable` (the intent-free surface a
+#: bystander sees), with `raw_text` when a player authored the element. Both
+#: intent and surface are read because this is a MENTION test: either may be
+#: where the garment is named, and neither is authoritative over the other.
+_DECLARED_PROSE_KEYS = ("text", "attempt", "observable", "raw_text")
+
+
+def _declared_texts(value):
+    """Every prose string inside a declaration, at whatever depth it arrived.
+
+    NOT `str(value)`. A declaration is structured, and stringifying it yields a
+    Python dict repr -- which happens to contain the words, so a caller reading
+    it looks like it works while depending on `repr` for its meaning. Same
+    hazard `llm/schemas.py` names where it refuses to `str()` a sequence
+    ("{'type': 'action'}; {'type': 'speech'}" read as something the character
+    considered saying), and the same answer: reduce a structured value to the
+    prose inside it.
+    """
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [value[key] for key in _DECLARED_PROSE_KEYS
+                if isinstance(value.get(key), str) and value[key].strip()]
+    if isinstance(value, (list, tuple)):
+        found = []
+        for item in value:
+            found.extend(_declared_texts(item))
+        return found
+    return []
+
+
 def _beat_voices(ctx, res):
     """Every text this beat was acted in, EXCEPT the player's own input.
 
@@ -164,9 +197,22 @@ def _beat_voices(ctx, res):
     only a reliable subject there -- "I rip my coat off" names its subject
     nowhere else in the sentence.
 
-    Used only to decide how FAST an undressing the fiction has already asked
-    for happens -- never who may know what -- so reading across all of it
-    carries no information-firewall cost.
+    A CHARACTER'S PHYSICAL ACT IS IN HERE, which it previously was only by
+    accident. The old reader took ("action", "speech", "text") off each
+    sequence element and `str()` of the top-level `action` -- and a live action
+    element carries none of those three keys (measured against chat 78's
+    interaction_loop rows: `attempt`, `verb`, `targets`, `intended_effects`,
+    `asserted_effects`, `observable`, and no `text`). So an act declared in
+    `sequence` contributed NOTHING, `actions` was never read at all, and the
+    only reason an NPC's deed reached this list was the dict repr of the
+    top-level `action`. That was survivable while the readers only decided how
+    FAST a removal already licensed elsewhere completed; it is not survivable
+    now that the write gate can REFUSE one, because an NPC undressing somebody
+    in `sequence` would have been refused for saying nothing.
+
+    Used only to decide what this beat's words assert about clothing -- never
+    who may know what -- so reading across all of it carries no
+    information-firewall cost.
     """
     texts = []
     if isinstance(res, dict):
@@ -174,12 +220,8 @@ def _beat_voices(ctx, res):
     for result in (getattr(ctx, "character_results", None) or {}).values():
         if not isinstance(result, dict):
             continue
-        for key in ("action", "speech"):
-            texts.append(str(result.get(key) or ""))
-        for element in result.get("sequence") or []:
-            if isinstance(element, dict):
-                for key in ("action", "speech", "text"):
-                    texts.append(str(element.get(key) or ""))
+        for key in ("action", "actions", "speech", "sequence"):
+            texts.extend(_declared_texts(result.get(key)))
     return [t for t in texts if t.strip()]
 
 

@@ -85,9 +85,13 @@ def _scene():
                 list(_WORN), [], _regions())}}
 
 
-def _apply(temp_db, diff, *, player_input="", resolved=""):
+def _apply(temp_db, diff, *, player_input="", resolved="", declared=None):
     sc = _scene()
     ctx = _ctx(temp_db, player_input, resolved)
+    if declared:
+        # `ctx.character_results` is keyed by character id; `_beat_voices`
+        # reads the values, so the ids only have to be distinct.
+        ctx.character_results = {i + 1: d for i, d in enumerate(declared)}
     commit.apply_attire_diff(sc, {"attire": {"Hinami": diff}}, ctx,
                              ctx.director_resolve)
     return sc["attire"]["Hinami"], ctx
@@ -179,6 +183,152 @@ class TestANamedChangeStillLands:
             resolved="The top comes free over her head.")
 
         assert "fitted tank top" not in entry["wearing"]
+
+
+def _declared_action(attempt, observable=""):
+    """One action element in the shape the pipeline actually stores.
+
+    Taken from chat 78's own `interaction_loop` rows. THE POINT OF THIS
+    HELPER is the key that is missing: an action element has no `text`. Its
+    words are in `attempt` and `observable`, and a fixture that invents a
+    `text` key tests a shape the engine never produces -- which is how the
+    first version of these tests passed while an NPC undressing anybody in
+    `sequence` was in fact refused.
+    """
+    return {"type": "action", "attempt": attempt, "observable": observable,
+            "verb": "", "targets": [], "intended_effects": [],
+            "asserted_effects": [], "commitment": "full", "stage": "attempt",
+            "interrupts": False, "visibility": "public", "conceal_from": [],
+            "event_id": "e1"}
+
+
+class TestACharacterMayStillUndress:
+    """THE CASE THIS GATE MUST NOT COST: a character taking clothing off.
+
+    Every control above licenses the change from the Director's resolved prose
+    or the player's input, and a character undressing -- itself or somebody
+    else -- is neither. It reaches the seam through `ctx.character_results`,
+    which is the third licence text and the one with no test behind it until
+    now. If a declared removal were refused, an NPC could never undress
+    anybody, which is a far worse defect than the one this gate closes.
+
+    Every fixture here uses `_declared_action`, so the shape under test is the
+    stored one.
+    """
+
+    def test_a_character_undressing_itself_is_licensed_by_its_declaration(
+            self, temp_db):
+        """Declared, and nowhere else. The resolved prose here is the same
+        clothing-free beat that t7 refused, so the declaration is carrying the
+        licence alone."""
+        entry, ctx = _apply(
+            temp_db, {"remove": ["lightweight travel jacket"]},
+            resolved=_QUIET_BEAT,
+            declared=[{"sequence": [_declared_action(
+                "Shrug the travel jacket off her shoulders and let it drop "
+                "behind the chair.")]}])
+
+        assert "lightweight travel jacket" not in entry["wearing"]
+        assert not any("names the garment" in w for w in ctx.warnings)
+
+    def test_one_character_may_undress_another(self, temp_db):
+        """The licence is the BEAT's words, not the body's own voice.
+
+        Dr. Moon names the sash; the sash is Hinami's. A gate scoped to the
+        undressed body's own declarations would refuse every NPC who ever
+        removed somebody else's clothing -- restraints, a medical exam, a
+        search, a fight.
+        """
+        entry, ctx = _apply(
+            temp_db, {"remove": ["utility sash with pouches"]},
+            resolved=_QUIET_BEAT,
+            declared=[{"action": _declared_action(
+                "Unclip the utility sash from Hinami's waist and set it on "
+                "the tray beside the chair.")}])
+
+        assert "utility sash with pouches" not in entry["wearing"]
+        assert not any("names the garment" in w for w in ctx.warnings)
+
+    def test_the_observable_surface_alone_is_licence(self, temp_db):
+        """`attempt` is the actor's framing and `observable` is what a
+        bystander sees. A garment named in only one of them is still named in
+        this beat, so both are read."""
+        entry, ctx = _apply(
+            temp_db, {"remove": ["sturdy sandals"]},
+            resolved=_QUIET_BEAT,
+            declared=[{"sequence": [_declared_action(
+                "Get her ready for transport.",
+                observable="pulls the sturdy sandals off her feet")]}])
+
+        assert "sturdy sandals" not in entry["wearing"]
+        assert not any("names the garment" in w for w in ctx.warnings)
+
+    def test_an_act_in_the_actions_list_is_read_too(self, temp_db):
+        """`actions` is the other top-level list a merged result carries, and
+        it was never read at all."""
+        entry, _ = _apply(
+            temp_db, {"remove": ["travel shorts"]},
+            resolved=_QUIET_BEAT,
+            declared=[{"actions": [_declared_action(
+                "Draw the travel shorts down and off her legs.")]}])
+
+        assert "travel shorts" not in entry["wearing"]
+
+    def test_a_declared_displacement_lands_too(self, temp_db):
+        """Not just `remove` -- the coverage channel takes a declaration as
+        licence on the same terms."""
+        entry, _ = _apply(
+            temp_db, {"coverage": {"travel shorts": {"groin": [], "legs": []}}},
+            resolved=_QUIET_BEAT,
+            declared=[{"sequence": [
+                {"type": "speech", "text": "Hold still."},
+                _declared_action(
+                    "Work her travel shorts down past her knees.")]}])
+
+        assert "travel shorts" in entry["wearing"]
+        assert "groin" in attire.exposed_regions(entry["regions"])
+
+    def test_a_declaration_is_never_reduced_to_a_dict_repr(self, temp_db):
+        """The mechanism, pinned directly.
+
+        `str()` of a declaration yields a repr that CONTAINS the words, so a
+        reader depending on it looks correct while depending on `repr` for its
+        meaning. What must be false is that any voice is a Python literal.
+        """
+        # Through the facade: this test CALLS the helper rather than patching
+        # it, and `persist.commit` re-exports the private names too.
+        from persist.commit import _beat_voices
+
+        class _Ctx:
+            character_results = {63: {"sequence": [_declared_action(
+                "Unclip the utility sash from Hinami's waist.")]}}
+
+        voices = _beat_voices(_Ctx(), {})
+        assert voices, "a declared act contributed no text at all"
+        for voice in voices:
+            assert not voice.lstrip().startswith("{"), voice[:80]
+            assert "'type':" not in voice, voice[:80]
+        assert any("utility sash" in v for v in voices)
+
+    def test_a_removal_named_by_nobody_is_the_only_thing_refused(
+            self, temp_db):
+        """THE LIMIT, stated rather than discovered later.
+
+        A removal whose every mention is a pronoun -- "he pulls it off her" --
+        names no garment and is refused. That is the cost of gating on
+        mention, and it is the deliberate trade: design note 17 twice widened
+        a verb vocabulary that was still one phrase short, so the gate asks
+        the question with a stable answer instead. The Director is told to
+        restate it, and a beat that says WHAT came off passes immediately --
+        as the three tests above do.
+        """
+        entry, ctx = _apply(
+            temp_db, {"remove": ["lightweight travel jacket"]},
+            resolved="He reaches over and pulls it off her, tossing it aside.",
+            declared=[{"action": "She lets him take it."}])
+
+        assert "lightweight travel jacket" in entry["wearing"]
+        assert any("names the garment" in w for w in ctx.warnings)
 
 
 class TestUncoveredMeansUncovered:

@@ -68,7 +68,7 @@
 | `persist/chat_archive.py` | 1179 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
 | `persist/checkpoints.py` | 1300 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 608 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
-| `persist/commit_attire.py` | 1163 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
+| `persist/commit_attire.py` | 1205 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
 | `persist/commit_background.py` | 1791 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 408 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
@@ -787,14 +787,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_attire_diff()` | 688 | 476 lines |
-| `interpret_attire_notes()` | 208 | 115 lines |
-| `_fold_duplicate_shed_garments()` | 325 | 85 lines |
-| `_fold_worn_garment_entities()` | 412 | 69 lines |
-| `_mint_shed_garments()` | 554 | 66 lines |
+| `apply_attire_diff()` | 730 | 476 lines |
+| `interpret_attire_notes()` | 250 | 115 lines |
+| `_fold_duplicate_shed_garments()` | 367 | 85 lines |
+| `_fold_worn_garment_entities()` | 454 | 69 lines |
+| `_mint_shed_garments()` | 596 | 66 lines |
 | `_merge_attire_regions()` | 29 | 65 lines |
 | `_heal_attire_identity_keys()` | 96 | 61 lines |
-| `_drop_overlay_conditions()` | 642 | 44 lines |
+| `_drop_overlay_conditions()` | 684 | 44 lines |
 
 ### `persist/commit_background.py`
 
