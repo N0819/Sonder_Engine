@@ -29,6 +29,18 @@ TRUST_FLOOR = 0.2
 #: Small: rosters go stale over shifts, not minutes.
 DECAY_PER_HOUR = 0.004
 
+#: What a register entry never decays below. A ROSTER IS WRITTEN DOWN — it
+#: does not forget a name the way a head forgets a face, it only stops being
+#: sure the name is current. Below `TRUST_FLOOR` so an unconfirmed body is not
+#: staked on a post, and above zero so it is never erased: the chief still has
+#: the name and will not roster it without somebody vouching.
+#:
+#: Measured on the 500-hand fixture: without this the register held 1.0 for
+#: the two dozen bodies standing posts and 0.0 for everyone else, which is an
+#: institution that had struck 95% of its own crew off the books while they
+#: were aboard and at work.
+ARCHIVE_FLOOR = 0.05
+
 
 def seed_roster(bodies, strength=1.0):
     """A roster that currently happens to be correct.
@@ -56,7 +68,8 @@ def decay_roster(roster, hours):
     for key, record in (roster or {}).items():
         record = dict(record)
         record["strength"] = max(
-            0.0, float(record.get("strength") or 0.0) - DECAY_PER_HOUR * hours)
+            ARCHIVE_FLOOR,
+            float(record.get("strength") or 0.0) - DECAY_PER_HOUR * hours)
         out[key] = record
     return out
 

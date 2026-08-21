@@ -177,6 +177,22 @@ def normalize_charter(stored):
             str(kind): dict(entries)
             for kind, entries in (stored.get("reported") or {}).items()
             if isinstance(entries, dict)},
+        # The room graph the bodies stand in, in `world.spatial`'s own shape,
+        # or absent for an institution small enough to be one place. Carried
+        # rather than passed so a charter is a single restorable object.
+        "scene": stored.get("scene") or None,
+        # One belief set per head, about the bodies that head has met. Held
+        # beside the charter's own roster rather than replacing it: an
+        # institution is an agent too, and its register is its belief, not a
+        # summary of everyone else's.
+        "minds": {
+            str(holder): {str(s): dict(c) for s, c in claims.items()
+                          if isinstance(c, dict)}
+            for holder, claims in (stored.get("minds") or {}).items()
+            if isinstance(claims, dict)},
+        # Regard, standing and blame. Normalized by `charter_politics` at use
+        # rather than here, to keep this module free of behaviour.
+        "politics": dict(stored.get("politics") or {}),
     }
 
 

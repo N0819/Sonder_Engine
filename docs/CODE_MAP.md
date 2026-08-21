@@ -101,12 +101,17 @@
 | `web/story_view.py` | 881 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/charter.py` | 93 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster`, `world.charter_run` |
+| `world/charter.py` | 152 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_run`, `world.charter_space`, `world.charter_talk` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
-| `world/charter_model.py` | 202 |  | — |
-| `world/charter_plan.py` | 137 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
-| `world/charter_roster.py` | 121 |  | `world.charter_model` |
-| `world/charter_run.py` | 191 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster` |
+| `world/charter_log.py` | 105 |  | `world.charter_mind`, `world.charter_model` |
+| `world/charter_mind.py` | 159 |  | — |
+| `world/charter_model.py` | 218 |  | — |
+| `world/charter_plan.py` | 159 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
+| `world/charter_politics.py` | 139 |  | — |
+| `world/charter_roster.py` | 134 |  | `world.charter_model` |
+| `world/charter_run.py` | 263 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_space`, `world.charter_talk` |
+| `world/charter_space.py` | 75 |  | `world.spatial` |
+| `world/charter_talk.py` | 204 |  | `world.charter_mind`, `world.charter_roster` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
 | `world/crowds.py` | 673 |  | `world.spatial` |
 | `world/degradation.py` | 171 |  | — |
@@ -1163,45 +1168,96 @@
 | `hours_until_floor()` | 75 | 13 lines |
 | `supply_factor()` | 18 | 11 lines |
 
+### `world/charter_log.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `summarize()` | 52 | 35 lines |
+| `chronicle()` | 89 | 17 lines |
+| `window_note()` | 35 | 15 lines |
+
+### `world/charter_mind.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `hear()` | 75 | 29 lines |
+| `decay_minds()` | 106 | 20 lines |
+| `divergence()` | 137 | 17 lines |
+| `normalize_minds()` | 39 | 12 lines |
+| `claim_from()` | 53 | 9 lines |
+| `see()` | 64 | 9 lines |
+| `contested()` | 156 | 4 lines |
+| `acquaintance()` | 132 | 3 lines |
+
 ### `world/charter_model.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 138 | 43 lines |
+| `normalize_charter()` | 138 | 59 lines |
 | `normalize_upkeep()` | 73 | 33 lines |
 | `_tags()` | 51 | 15 lines |
 | `normalize_body()` | 122 | 14 lines |
 | `normalize_post()` | 108 | 12 lines |
-| `priority_rank()` | 195 | 8 lines |
+| `priority_rank()` | 211 | 8 lines |
 | `_clamp()` | 43 | 6 lines |
-| `meets()` | 183 | 6 lines |
+| `meets()` | 199 | 6 lines |
 
 ### `world/charter_plan.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `plan_watch()` | 65 | 51 lines |
+| `plan_watch()` | 65 | 73 lines |
 | `criticality()` | 42 | 21 lines |
-| `tended_upkeeps()` | 118 | 20 lines |
+| `tended_upkeeps()` | 140 | 20 lines |
 | `_post_urgency()` | 23 | 17 lines |
+
+### `world/charter_politics.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `attribute_blame()` | 102 | 38 lines |
+| `normalize_politics()` | 49 | 20 lines |
+| `spend_reluctance()` | 90 | 10 lines |
+| `_clamp_regard()` | 71 | 6 lines |
+| `regard_between()` | 79 | 4 lines |
+| `regard_map()` | 85 | 3 lines |
 
 ### `world/charter_roster.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `assignable()` | 81 | 21 lines |
-| `stale_claims()` | 104 | 18 lines |
-| `seed_roster()` | 33 | 17 lines |
-| `observe()` | 64 | 15 lines |
-| `decay_roster()` | 52 | 10 lines |
+| `assignable()` | 94 | 21 lines |
+| `stale_claims()` | 117 | 18 lines |
+| `seed_roster()` | 45 | 17 lines |
+| `observe()` | 77 | 15 lines |
+| `decay_roster()` | 64 | 11 lines |
 
 ### `world/charter_run.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 38 | 130 lines |
-| `run()` | 170 | 22 lines |
-| `_event()` | 33 | 3 lines |
+| `step()` | 44 | 169 lines |
+| `run()` | 215 | 49 lines |
+| `_event()` | 39 | 3 lines |
+
+### `world/charter_space.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `reach_map()` | 46 | 22 lines |
+| `travel_rooms()` | 31 | 13 lines |
+| `charter_places()` | 70 | 6 lines |
+
+### `world/charter_talk.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `converse()` | 128 | 44 lines |
+| `report_up()` | 174 | 31 lines |
+| `co_present()` | 56 | 27 lines |
+| `witnessed()` | 106 | 20 lines |
+| `pair_up()` | 85 | 19 lines |
+| `_rotate()` | 49 | 5 lines |
 
 ### `world/comfort.py`
 
