@@ -215,3 +215,97 @@ class TestUncoveredMeansUncovered:
         assert entry["regions"]["groin"].get("uncovered") is True
         assert "PRIVATE BODY PROSE" in attire.compact_line(
             entry["regions"], beneath_visible=True)
+
+
+def _regions_zeroing(*names):
+    """`_regions()` with those garments asserted to cover nothing.
+
+    The `regions` spelling of the same claim `coverage` makes -- `{region: []}`
+    survives `_clean_covered_zones` (an explicitly empty list is the one way to
+    say "displaced off it outright") and lands on the garment while it stays
+    `state: "worn"`.
+    """
+    blocks = _regions()
+    for entry in blocks.values():
+        for item in entry["garments"]:
+            if item["name"] in names:
+                item["covered_zones"] = {
+                    region: [] for region in
+                    (item.get("covers") or [])} or {"torso": []}
+    # The zones have to name the region the garment is filed under, not just
+    # the ones it spans, or the override misses where it is read from.
+    for region, entry in blocks.items():
+        for item in entry["garments"]:
+            if item["name"] in names:
+                item["covered_zones"][region] = []
+    return blocks
+
+
+class TestTheRegionsDoor:
+    """The fourth writer of `covered_zones`, and the only ungated one.
+
+    `coverage`, `remove` and `placement` are gated at the seam. `regions` gets
+    there too -- commit hands the block to `normalize_regions`, which reads a
+    per-garment `covered_zones` off each item and replaces the body's whole
+    region map -- and the body specialist is offered both spellings on every
+    beat. Chat 78's t7 diff carries `"regions": {}` beside the `coverage`
+    block that did the damage, so the same restatement one field over was one
+    model choice away from landing.
+    """
+
+    def test_a_regions_block_may_not_undress_an_unnamed_garment(
+            self, temp_db):
+        entry, ctx = _apply(
+            temp_db,
+            {"wearing": list(_WORN),
+             "regions": _regions_zeroing("fitted tank top", "travel shorts")},
+            resolved=_QUIET_BEAT)
+
+        assert attire.exposed_regions(entry["regions"]) == []
+        assert "PRIVATE BODY PROSE" not in attire.compact_line(
+            entry["regions"], beneath_visible=True)
+        assert any("no word of this beat names the garment" in w
+                   for w in ctx.warnings)
+
+    def test_a_named_garment_may_still_be_displaced_by_regions(self, temp_db):
+        """The control. The door is gated, not closed.
+
+        The region goes bare and says what displaced it. It does NOT print the
+        body's `beneath`: nothing departed, so `uncovered` is unset and the
+        garment is still `worn`, which is the pair `describe` reads before
+        printing private prose. Displacement bares a region; only a departure
+        licenses what is under it. Pinned here because it is the distinction
+        the whole gate exists to protect -- t7 shrank coverage and t8 supplied
+        the departure, and it took both to put that prose on the page.
+        """
+        entry, _ = _apply(
+            temp_db,
+            {"wearing": list(_WORN),
+             "regions": _regions_zeroing("travel shorts")},
+            resolved="She works the travel shorts down past her hips.")
+
+        assert "groin" in attire.exposed_regions(entry["regions"])
+        line = attire.compact_line(entry["regions"], beneath_visible=True)
+        assert "groin:bare[off:travel shorts]" in line
+        assert "PRIVATE BODY PROSE" not in line
+
+    def test_the_rest_of_an_unnamed_garments_block_still_lands(self, temp_db):
+        """Per garment and per field -- not a wholesale refusal.
+
+        A beat that re-arranges a wardrobe must not have its whole block
+        refused because one garment in it was quiet; only the half that can
+        bare a body is withheld.
+        """
+        blocks = _regions_zeroing("fitted tank top")
+        for item in blocks["torso"]["garments"]:
+            if item["name"] == "fitted tank top":
+                item["condition"] = "damp at the collar"
+
+        entry, _ = _apply(temp_db,
+                          {"wearing": list(_WORN), "regions": blocks},
+                          resolved=_QUIET_BEAT)
+
+        garment = next(g for g in entry["regions"]["torso"]["garments"]
+                       if g["name"] == "fitted tank top")
+        assert garment["condition"] == "damp at the collar"
+        assert "covered_zones" not in garment

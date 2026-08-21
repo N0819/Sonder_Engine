@@ -816,6 +816,54 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
                     "not change, leave the channel empty. If it did change, "
                     "say so in the prose and restate it next beat." % (
                         _channel, ", ".join(repr(x) for x in _dropped), name))
+
+        # THE FOURTH DOOR. `regions` reaches `covered_zones` too, and by the
+        # widest route: the block below hands it to `normalize_regions`, which
+        # reads a per-garment `covered_zones` straight off each item and
+        # REPLACES the body's whole region map with the result. The same
+        # shrink written as `coverage` is refused twenty lines up; written as
+        # `regions` it was not, and the body specialist is offered both
+        # spellings on every beat -- chat 78's t7 diff carries `"regions": {}`
+        # sitting beside the `coverage` block that did the damage.
+        #
+        # Only the EXPOSING half is gated, and per garment: an unnamed garment
+        # keeps the coverage it already had, while everything else the block
+        # says -- placement, description, condition, ordering, `beneath` -- is
+        # left alone. Gating the block wholesale would refuse a beat's
+        # legitimate re-arrangement because one garment in it was quiet.
+        _regions_in = d.get("regions")
+        if isinstance(_regions_in, dict) and _regions_in:
+            _items = [_it for _entry in _regions_in.values()
+                      if isinstance(_entry, dict)
+                      for _it in (_entry.get("garments") or [])
+                      if isinstance(_it, dict)
+                      and _it.get("covered_zones") is not None]
+            _live = sorted({str(_it.get("name") or "") for _it in _items}
+                           - {""})
+            _live = [_h for _h in _live
+                     if attire_model.resolve_garment(_h, _worn_now)]
+            _named = set(attire_model.garments_named_in(
+                _licence, _live, _worn_now))
+            _strip = sorted(set(_live) - _named)
+            if _strip:
+                for _it in _items:
+                    if str(_it.get("name") or "") in _strip:
+                        _it.pop("covered_zones", None)
+                ctx.add_warning(
+                    "attire: dropped an unsupported regions coverage for %s "
+                    "(%s) -- no word of this beat names the garment" % (
+                        name, ", ".join(_strip)))
+                if report:
+                    ctx.tell_director(
+                        "attire: kept the existing coverage of %s for %s "
+                        "against a `regions` block that shrank it. Nothing in "
+                        "this beat's words -- the player's input, your "
+                        "resolved prose, or what anyone declared -- names that "
+                        "garment. `regions` is where a wardrobe is ARRANGED, "
+                        "not where it is undressed: to displace something, say "
+                        "so in the prose and write it as `coverage` on a beat "
+                        "that names it." % (
+                            ", ".join(repr(x) for x in _strip), name))
         if d.get("wearing") is not None and not any(
                 d.get(k) for k in ("add", "remove", "replace")):
             cur["wearing"] = sanitize_attire_items(list(d.get("wearing") or []))
