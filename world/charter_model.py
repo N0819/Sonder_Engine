@@ -204,6 +204,12 @@ def normalize_charter(stored):
                        if isinstance(spec, dict)}
             for key, held in (stored.get("needs") or {}).items()
             if isinstance(held, dict)},
+        # How much felt state is allowed to bias the watch bill. 0.0 is the
+        # default and the shipped behaviour: mood is computed, reported, and
+        # read by nothing. Above zero it joins standing and pressure on the
+        # reluctance axis, which is the only way in it will ever get -- an
+        # experiment with a dial, not a second planner.
+        "mood_weight": float(stored.get("mood_weight") or 0.0),
         "travelled": {str(k): int(v)
                       for k, v in (stored.get("travelled") or {}).items()},
     }

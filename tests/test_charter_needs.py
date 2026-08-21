@@ -174,13 +174,31 @@ class TestMoodIsMeasuredNotUsed:
         assert mood(spent, blamed=3) <= mood(
             spent, blamed=3, regard_of_others=[0.4, 0.5])
 
-    def test_nothing_in_the_engine_reads_it(self):
-        """The guard: `mood` may be reported and must not be planned on."""
-        import pathlib
+    def test_it_changes_nothing_unless_it_is_asked_to(self):
+        """THE GUARD, and it is the one that matters now that a dial exists.
 
-        package = pathlib.Path(__file__).resolve().parent.parent / "world"
-        for path in package.glob("charter*.py"):
-            if path.name in ("charter_needs.py", "charter_log.py",
-                             "charter.py"):
-                continue
-            assert "mood" not in path.read_text(), path.name
+        `mood_weight` defaults to 0.0, and at zero a run must be byte-identical
+        to one where the concept is absent. An experiment that quietly alters
+        the control is not an experiment.
+        """
+        off, off_events = run(_ready(twin_towns(240)), hours=240.0, seed=5)
+        explicit = _ready(twin_towns(240))
+        explicit["mood_weight"] = 0.0
+        same, same_events = run(explicit, hours=240.0, seed=5)
+
+        assert off_events == same_events
+        assert off["upkeeps"] == same["upkeeps"]
+        assert off.get("travelled") == same.get("travelled")
+
+    def test_turning_it_on_changes_who_is_spent(self):
+        """The measurement the dial exists for. Mood rides the reluctance
+        axis, so it can reorder a watch bill; it must never make anybody
+        unpostable, or an unhappy crew becomes an unusable one."""
+        charter = _ready(twin_towns(240))
+        charter["mood_weight"] = 1.0
+
+        after, events = run(charter, hours=480.0, window=4.0, seed=5)
+
+        # A working institution still works when it is miserable.
+        assert not [e for e in events if e["kind"] == "upkeep_out_of_band"]
+        assert after.get("watch"), "mood emptied the watch bill"
