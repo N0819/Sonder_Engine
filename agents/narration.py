@@ -439,6 +439,32 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     return manifest
 
 
+def _presence_room_of(ctx, scene, name, reaction=None):
+    """Where a background presence stood for the beat it just acted in, or
+    None when nothing can place it.
+
+    Three sources, most specific first: the room the background stage
+    resolved and recorded on the reaction itself, the canonical resolver over
+    the stored record, and nothing. The stage's own answer comes first
+    because it is the room the presence was GATED and voiced at -- asking a
+    second time invites the two to disagree, which is the defect
+    `presence_room` was written to end.
+
+    `presence_room` rather than `room_of`: it knows the sketch's station room
+    as well as the entity table, which is what answers for a presence the
+    scene places nowhere and for one whose name two entities answer to.
+    """
+    room = str((reaction or {}).get("room") or "").strip()
+    if room:
+        return room
+    # Local import: `persist.commit` reaches back into `agents.common` from
+    # inside its own functions, and this is a cold path -- the same shape
+    # `agents/perception.py` uses for `presence_has_an_identity`.
+    from persist.commit import presence_room
+    records = wget(ctx.chat["id"], "background_presences", {}) or {}
+    return presence_room(scene, name, records.get(name) or {}) or None
+
+
 def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
                          scene=None, p_room=None, player_forms=()):
     """F1/F4: the pipeline's own numbered causal record of this beat, built
@@ -463,7 +489,7 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
 
     seen_cache = {}
 
-    def _player_perceives(name):
+    def _player_perceives(name, room=None, strict=False):
         """Can the player place this actor's overt physical act this beat.
 
         The same gate `co_present_positions` already uses. An act is listed by
@@ -472,13 +498,28 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         position payload it already holds for that character. Fails CLOSED
         (no scene, no player room, actor unseen): a thin beat is a worse page,
         a leaked act is a broken firewall.
+
+        `room` names where this body stands when the caller already knows and
+        `room_of` does not -- a background presence is placed under a scene
+        entity id, and that lookup comes back empty when the scene places it
+        nowhere or when two entities answer to its name (chat 78's cell holds
+        two identically-named guards). `strict` refuses an unplaceable body
+        outright instead of taking `_player_sees_character`'s room-level
+        fallback, which resolves an unknown room to the player's OWN and
+        therefore answers "visible" for anybody it cannot place. That fallback
+        exists for a cast member whose room is stored under an alias --
+        over-denial there drops a plainly co-present character out of the page
+        -- and it is the wrong default for a body the engine cannot place at
+        all.
         """
         if not name or not scene or not p_room:
             return False
-        if name not in seen_cache:
-            seen_cache[name] = _player_sees_character(
-                scene, p_name, p_room, name, room_of(scene, name))
-        return seen_cache[name]
+        key = (name, room, strict)
+        if key not in seen_cache:
+            now = room or room_of(scene, name)
+            seen_cache[key] = False if (now is None and strict) else \
+                _player_sees_character(scene, p_name, p_room, name, now)
+        return seen_cache[key]
 
     def _seq_events(name, seq):
         """Every outward element of one character's declared sequence, in the
@@ -560,7 +601,9 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         # prose. background.py authors the act as the outward surface already;
         # the perceptibility gate is the same one the cast path uses.
         act = str((r or {}).get("action") or "").strip()
-        if act and speaker and _player_perceives(speaker):
+        if act and speaker and _player_perceives(
+                speaker, room=_presence_room_of(ctx, scene, speaker, r),
+                strict=True):
             raw.append((speaker, "action", act))
 
     view_norm = re.sub(r"\s+", " ", str(view or "")).casefold()

@@ -5,6 +5,8 @@ list they must invent geometry from."""
 
 from __future__ import annotations
 
+import json
+
 from world.spatial import (egocentric_frame, rooms_adjacent, spatial_digest,
                      normalize_bearing, opposite_bearing, relative_bearing,
                      lateral_of, travel_bearing, normalize_scene_bearings,
@@ -128,6 +130,51 @@ def test_spatial_digest_renders_room_names_by_bucket():
     assert d["behind"] == [{"room": "Checkpoint", "barrier": "open_door"}]
     assert d["ahead"] == [{"room": "Common Room", "barrier": "open"}]
     assert "aside" not in d
+
+
+def test_spatial_digest_hides_the_blind_side_of_a_one_way_window():
+    """An adjacency edge is one record read from two rooms, and the digest
+    rendered it identically to both: the room behind it by name, and the
+    barrier keyword that says what the barrier IS. On the blind side of a
+    directional barrier both are unperceived -- the mind there has a mirror,
+    not a window onto a named room -- and the narrator, handed the name, put a
+    body it could not see on the far side of it (chat 78 t3).
+    """
+    rooms = {
+        "cell": {"name": "Interview Cell", "adjacent": [
+            {"to": "observation", "barrier": "one_way_window",
+             "sight_from": "observation"},
+            {"to": "hallway", "barrier": "closed_door"},
+        ]},
+        "observation": {"name": "Observation Room", "adjacent": [
+            {"to": "cell", "barrier": "one_way_window",
+             "sight_from": "observation"},
+        ]},
+        "hallway": {"name": "Hallway"},
+    }
+    sc = _scene({"Watched": "cell", "Watcher": "observation"}, {}, rooms)
+
+    watched = spatial_digest(sc, "Watched")["unclassified"]
+    assert watched == [{"room": "Hallway", "barrier": "closed_door"}]
+    # Not merely un-named: the room is absent, since `barrier: "wall"` beside
+    # its name would leak the same fact in quieter words.
+    assert "Observation Room" not in json.dumps(watched)
+
+    # The watching side keeps it -- the gate subtracts from one direction only.
+    assert spatial_digest(sc, "Watcher")["unclassified"] == [
+        {"room": "Interview Cell", "barrier": "one_way_window"}]
+
+
+def test_spatial_digest_keeps_an_exit_whose_barrier_was_never_declared():
+    """An adjacency with no `barrier` normalizes to `wall` for everyone, which
+    is not the directional case and must not be dropped: these are ordinary
+    exits, and every mind that navigates reads them out of this payload."""
+    rooms = {"corridor": {"name": "The Corridor",
+                          "adjacent": [{"to": "checkpoint"}]},
+             "checkpoint": {"name": "Checkpoint"}}
+    sc = _scene({"P": "corridor"}, {}, rooms)
+    assert spatial_digest(sc, "P")["unclassified"] == [
+        {"room": "Checkpoint", "barrier": None}]
 
 
 def test_spatial_digest_unclassified_when_no_history():
