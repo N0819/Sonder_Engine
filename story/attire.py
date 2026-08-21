@@ -1784,6 +1784,69 @@ def removal_directed_at(texts, garment_names, worn_names=()):
     return False
 
 
+#: Scripts written WITHOUT word separators, where `\b` cannot fire because
+#: both neighbours of a run are word characters. Han, kana, Thai, Lao, Khmer,
+#: Myanmar, Tibetan. Hangul and Cyrillic are deliberately ABSENT: Korean and
+#: Russian put spaces between words, so `\b` is correct for them and dropping
+#: it would only widen what counts as a mention.
+_UNSEGMENTED = re.compile(
+    r"[぀-ヿ㐀-䶿一-鿿豈-﫿"
+    r"฀-໿ༀ-࿿က-႟ក-៿]")
+
+
+def _number_variants(word):
+    """A word and its ordinary singular/plural twin.
+
+    "one sandal" against a ledger's "sturdy sandals", and "her jackets"
+    against a "lightweight travel jacket", are the same garment named. Both
+    were refused on the number alone, and both are ordinary English.
+    """
+    forms = {word}
+    if word.endswith("es") and len(word) > 3:
+        forms.add(word[:-2])
+    if word.endswith("s") and len(word) > 2:
+        forms.add(word[:-1])
+    else:
+        forms.add(word + "s")
+        forms.add(word + "es")
+    return forms
+
+
+def _named_pattern(phrase):
+    """A phrase as it counts when prose NAMES it.
+
+    Two departures from a plain `\\b<phrase>\\b`, both of which were live
+    refusals of correct prose:
+
+    ANCHORED PER EDGE, NOT PER PHRASE. `\\b` is a property of scripts that put
+    spaces between words; it is not a safety property. Between two Han or kana
+    characters both neighbours are word characters, so no boundary exists
+    there and `\\b上着\\b` cannot match text that plainly contains 上着 -- while
+    `"上着" in text` is true. This engine ships language packs, so that is a
+    supported surface, and a licence gate that cannot fire is worse here than
+    anywhere else in this module: every other prose reader (`_PROCESS`,
+    `_DECISIVE`, their word tables) fails OPEN for a language it cannot read,
+    where a gate fails CLOSED and refuses every undressing on every beat with
+    no restatement able to recover it. So each edge is anchored only when the
+    character there belongs to a segmented script; where it does not,
+    containment IS the unit test that script uses.
+
+    NUMBER-TOLERANT AT THE TAIL, because "one sandal" and "her jackets" name
+    their garment exactly as well as the ledger's own spelling does.
+    """
+    words = phrase.split()
+    if not words:
+        return re.escape(phrase)
+    body = [re.escape(w) for w in words[:-1]]
+    tail = "(?:%s)" % "|".join(
+        re.escape(f) for f in sorted(_number_variants(words[-1]),
+                                     key=lambda f: (-len(f), f)))
+    core = r"\s+".join(body + [tail])
+    left = "" if _UNSEGMENTED.match(phrase[:1]) else r"\b"
+    right = "" if _UNSEGMENTED.match(phrase[-1:]) else r"\b"
+    return left + core + right
+
+
 def garments_named_in(texts, handles, worn_names=()):
     """Which of these garment handles this beat's own words actually name.
 
@@ -1833,8 +1896,7 @@ def garments_named_in(texts, handles, worn_names=()):
     pool = [str(w or "") for w in (worn_names or []) if str(w or "").strip()]
 
     def _says(phrase):
-        return bool(phrase) and bool(
-            re.search(r"\b%s\b" % re.escape(phrase), folded))
+        return bool(phrase) and bool(re.search(_named_pattern(phrase), folded))
 
     named = []
     for handle in (handles or []):
@@ -1855,6 +1917,15 @@ def garments_named_in(texts, handles, worn_names=()):
             if not phrase:
                 continue
             parts = phrase.split()
+            # The floor below counts WORDS and ASCII characters, which a
+            # script without word separators has neither enough of: a whole
+            # two-character Japanese garment name reads as a fragment by both
+            # measures and is skipped, and tier (c) cannot rescue it because
+            # its word set is `[a-z0-9...]`. So the name never matched at all,
+            # which is the fail-closed half of the same defect
+            # `_named_pattern` documents. A name in such a script is exempt
+            # from the floor -- it is not a fragment, it is the name.
+            unsegmented = bool(_UNSEGMENTED.search(phrase))
             # (a) the whole name, and (b) its SUFFIXES -- prose drops the
             # qualifiers and keeps the noun end of a name ("the tank top" for
             # a "fitted tank top"), which is the case `resolve_garment`'s tier
@@ -1865,7 +1936,8 @@ def garments_named_in(texts, handles, worn_names=()):
                 window = " ".join(parts[i:])
                 if window.split()[0] in _NAME_FUNCTION_WORDS:
                     continue
-                if len(window.split()) < _CONTAINMENT_FLOOR_WORDS \
+                if not unsegmented \
+                        and len(window.split()) < _CONTAINMENT_FLOOR_WORDS \
                         and len(window) < _CONTAINMENT_FLOOR_CHARS:
                     continue
                 if _says(window):
@@ -1882,7 +1954,7 @@ def garments_named_in(texts, handles, worn_names=()):
             # word prose actually uses is "sash".
             for word in parts:
                 if len(word) < 3 or word in _NAME_FUNCTION_WORDS \
-                        or word not in words:
+                        or not (_number_variants(word) & words):
                     continue
                 # "top", "cap", "bra", "tie" are garment words at three
                 # letters, and uniqueness is what makes them safe here where

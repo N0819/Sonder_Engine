@@ -2808,3 +2808,76 @@ def test_a_ledger_this_story_does_not_keep_is_not_a_gate_mispredict(temp_db,
     # ...and the Director is told what it actually needs to know instead.
     assert any("this story keeps no vitals ledger" in n
                for n in ctx.engine_feedback)
+
+
+def test_dialogue_reaches_only_the_hands_a_speech_act_can_write(temp_db):
+    """Saying a thing is not a physical action.
+
+    The beat's dialogue rode in the COMMON payload, so all six hands got it
+    whether or not any channel they own could be written by somebody talking.
+    Three cannot -- `body`, `contact` and `objects` own physical ledgers, and
+    a transcript is material they can only echo, which is this fan-out's
+    measured failure mode rather than a hypothetical one. Measured over chat
+    78: 27% of the beat text every hand received.
+
+    The three that DO keep it each have a named reason in the channel table:
+    a name is given by being said (`introductions`), a line carried by a
+    device IS the op (`comms_ops`), and a claim is made and disputed in
+    speech (`telling_ops`, `ratified_claims`, `contradicted_claims`).
+    """
+    scene = json.loads(json.dumps(BASE_SCENE))
+    ctx = _make_ctx(temp_db, scene=scene)
+    view = {"source": "resolved_beat", "prose": "x",
+            "dialogue": [{"speaker": "Mara", "exact_quote": "\"Hello.\""}],
+            "player": "Mara", "cast": [], "declared_actions": [],
+            "dice": [], "manifest": []}
+
+    for name in ("social", "spatial", "offscreen"):
+        payload = director._specialist_payload(name, ctx, scene, view, {})
+        assert payload.get("dialogue_log"), name
+    for name in ("body", "contact", "objects"):
+        payload = director._specialist_payload(name, ctx, scene, view, {})
+        assert "dialogue_log" not in payload, name
+        # The beat still reaches them -- what happened, including what speech
+        # made happen, is in the Director's prose.
+        assert payload["resolved_event"] == "x", name
+
+
+def test_who_reads_dialogue_is_derived_from_the_channel_table():
+    """Not a per-specialist list. A channel that moves between hands takes
+    its answer with it, so this cannot drift out of agreement with
+    `SPECIALISTS` the way a second copy of the rule would."""
+    from agents.director import (
+        SPECIALISTS, SPEECH_WRITTEN_CHANNELS, reads_dialogue)
+
+    for name, spec in SPECIALISTS.items():
+        expected = bool(set(spec["channels"]) & SPEECH_WRITTEN_CHANNELS)
+        assert reads_dialogue(name) is expected, name
+    # Every speech-written channel is owned by somebody, or the set has a
+    # name in it that no longer exists.
+    owned = {c for s in SPECIALISTS.values() for c in s["channels"]}
+    assert SPEECH_WRITTEN_CHANNELS <= owned
+
+
+def test_no_sheet_promises_a_dialogue_field_its_hand_may_not_receive():
+    """A sheet naming a field the payload does not carry is not a wording
+    problem, it is the defect that minted a garment.
+
+    The body sheet sent its hand to a `worn_garments` index `director_fanout`
+    never attached, so the only garment names in its payload lived inside the
+    compact attire line and it read across the `=` delimiter -- emitting
+    coverage for "modern open-front jacket", the first 58 characters of
+    another garment's description. The shared stage clause made the same
+    promise about `dialogue_log` to all six hands, and now only three receive
+    it, so the clause states the condition instead of asserting the field.
+    """
+    from llm.prompts import specialist_prompt
+    from agents.director import SPECIALISTS, reads_dialogue
+
+    for name, spec in SPECIALISTS.items():
+        sheet = specialist_prompt(name, list(spec["channels"]))
+        if "dialogue_log" not in sheet:
+            continue
+        assert "WHEN YOUR PAYLOAD CARRIES IT" in sheet, (
+            f"{name}'s sheet names dialogue_log without saying it may be "
+            f"absent (this hand receives it: {reads_dialogue(name)})")

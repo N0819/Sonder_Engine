@@ -126,6 +126,38 @@ SPECIALISTS = {
     },
 }
 
+#: Channels an ACT OF SPEECH can write. Saying a thing is not a physical
+#: action, so for most channels a line of dialogue is material a hand cannot
+#: act on and can only restate; for these it is the act itself.
+SPEECH_WRITTEN_CHANNELS = frozenset((
+    "introductions",         # a name is given by being said
+    "world_facts",           # a fact can be asserted aloud
+    "comms_ops",             # a line carried by a device IS the op
+    "telling_ops",           # who told whom what
+    "ratified_claims",       # a claim is made in speech
+    "contradicted_claims",   # and disputed in speech
+))
+
+
+def reads_dialogue(name):
+    """Does this specialist own a channel a speech act can write.
+
+    The beat's dialogue used to ride in the COMMON payload, so all six hands
+    got it whether or not any channel they own could be written by somebody
+    talking. Three cannot: `body`, `contact` and `objects` own physical
+    ledgers, and for them a transcript is text they can only echo. That
+    matters because echoing the payload into the diff is this fan-out's
+    measured failure mode, not a hypothetical one -- chat 78 t7's `coverage`
+    block is the wardrobe it was shown, transposed -- and because the body
+    sheet is already ~6,700 tokens of instruction whose correct answer on an
+    ordinary beat is `{}`.
+
+    DERIVED FROM THE CHANNEL TABLE rather than listed per specialist, so a
+    channel that moves between hands takes its answer with it and this cannot
+    drift out of agreement with `SPECIALISTS`.
+    """
+    return bool(set(SPECIALISTS[name]["channels"]) & SPEECH_WRITTEN_CHANNELS)
+
 #: Every channel any specialist owns, in canonical assembly order. MUTATED
 #: in place by `_rebuild_channel_owners`, never rebound: `director.py` and
 #: `director_fanout.py` bind the name at import, so a rebind would leave both

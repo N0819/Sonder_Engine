@@ -20,6 +20,7 @@ from .common import scene_compact_attire
 from .director_evidence import _manifest_items
 from .director_scopes import (
     SPECIALISTS,
+    reads_dialogue,
     _CATEGORY_CHANNELS,
     _DELEGATED_CHANNELS,
     _LIST_DELEGATED,
@@ -153,7 +154,17 @@ def _specialist_payload(name, ctx, sc, view, extras):
     }
     if view["source"] == "resolved_beat":
         payload["resolved_event"] = view["prose"]
-        payload["dialogue_log"] = view["dialogue"]
+        # Dialogue only to the hands that own a channel a speech act can
+        # write (`director_scopes.reads_dialogue`). Saying a thing is not a
+        # physical action, so for `body`, `contact` and `objects` the
+        # transcript is material they cannot act on and can only echo -- and
+        # echoing the payload into the diff is this fan-out's measured
+        # failure mode. Measured over chat 78: 27% of the beat text every
+        # hand received, ~68 tokens a beat, on sheets whose correct answer
+        # was `{}`. The prose still carries what happened, including what
+        # speech made happen.
+        if reads_dialogue(name):
+            payload["dialogue_log"] = view["dialogue"]
     else:
         payload["player_declaration"] = view["declaration"]
     manifest = _specialist_manifest_slice(name, view)
