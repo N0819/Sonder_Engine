@@ -79,49 +79,103 @@ def hear(minds, listener, speaker, subject, retention, regard=1.0):
     it already holds if that is stronger — so a rumour cannot overwrite a
     seeing, and two heads cannot talk a claim into certainty between them by
     passing it back and forth.
+
+    THE WHOLE RECORD TRAVELS, not a rebuilt one. The first version of this
+    function reconstructed the claim from the three body-claim fields, which
+    quietly destroyed every OTHER kind on retell: a news claim arrived
+    stripped of ``kind``/``event_kind``/``place``/``happened_at`` — a
+    body-claim asserting ``believed_available: False`` about a pseudo-body
+    named ``news:…`` — so a second-hand fact could never surface in
+    ``known_news`` or a scene ledger's ``can_bring_up``. "News travels on
+    the practice machinery for free" was half-true: it travelled as an
+    unintelligible token. Found by calling the consumer, which no test did.
     """
     told = (minds.get(str(speaker)) or {}).get(str(subject))
     if not told:
         return False
-    arriving = float(told.get("strength") or 0.0) * float(retention) \
+    return hear_claim(minds, listener, told, retention, regard,
+                      heard_from=speaker)
+
+
+def hear_claim(minds, listener, claim, retention, regard=1.0,
+               heard_from=None):
+    """One claim arriving in one head, whoever is doing the telling.
+
+    THE ONLY UPTAKE DOOR. ``hear`` routes through it for body-to-body talk;
+    an authored telling — a voiced presence, the player, a major character
+    speaking to a background body — lands through the same door with the
+    same rules: thinned by retention, scaled by the listener's regard for
+    the teller, refused below the floor, and never overwriting a stronger
+    holding. A second uptake path with its own arithmetic is how the two
+    authors would drift apart.
+    """
+    subject = str(claim.get("body") or "")
+    if not subject:
+        return False
+    arriving = float(claim.get("strength") or 0.0) * float(retention) \
         * float(regard)
     if arriving < PERSONAL_FLOOR:
         return False
     held = minds.setdefault(str(listener), {})
-    current = held.get(str(subject))
+    current = held.get(subject)
     if current is not None \
             and float(current.get("strength") or 0.0) >= arriving:
         return False
-    held[str(subject)] = {
-        "body": str(subject),
-        "competence": dict(told.get("competence") or {}),
-        "believed_available": bool(told.get("believed_available")),
-        "strength": arriving,
-        "as_of_hours": float(told.get("as_of_hours") or 0.0),
-        "heard_from": str(speaker),
-    }
+    record = dict(claim)
+    record["strength"] = arriving
+    record["heard_from"] = str(heard_from) if heard_from else None
+    held[subject] = record
     return True
 
 
 def decay_minds(minds, hours):
-    """Time passing in every head, and the weakest opinions falling away."""
+    """Time passing in every head, and the weakest opinions falling away.
+
+    News claims are decayed by ``charter_news.decay_news`` and ONLY there —
+    its docstring already promised body claims to this module, but this
+    module was decaying everything, so news actually faded at the sum of two
+    rates and ``NEWS_DECAY_PER_HOUR`` was not the news decay rate. An
+    authored rate that does not mean what it says fails silently; each store
+    now has exactly one decayer. The cap still counts every kind, because a
+    head's capacity does not care what the opinions are about.
+    """
     hours = max(0.0, float(hours))
     loss = PERSONAL_DECAY_PER_HOUR * hours
     out = {}
     for holder, claims in (minds or {}).items():
         kept = {}
         for subject, claim in claims.items():
+            if claim.get("kind") == "news":
+                kept[subject] = dict(claim)
+                continue
             strength = float(claim.get("strength") or 0.0) - loss
             if strength < PERSONAL_FLOOR:
                 continue
             record = dict(claim)
             record["strength"] = strength
             kept[subject] = record
-        if len(kept) > RECALL_CAP:
-            ordered = sorted(kept.items(),
-                             key=lambda kv: (-float(kv[1]["strength"]), kv[0]))
-            kept = dict(ordered[:RECALL_CAP])
         out[holder] = kept
+    return cap_minds(out)
+
+
+def cap_minds(minds):
+    """The carry limit, enforced wherever a window's additions end.
+
+    Decay used to be the only place the cap ran, which held while heads
+    only gained claims slowly: witnessing, sighting and talk all add claims
+    AFTER decay, and once the population circulates (`charter_move.errands`)
+    a body can meet more people in one window than decay had capped for —
+    measured, a head at 49 of 48. The weakest fall away, whatever their
+    kind: capacity does not care what the opinions are about.
+    """
+    out = {}
+    for holder, claims in (minds or {}).items():
+        if len(claims) > RECALL_CAP:
+            ordered = sorted(
+                claims.items(),
+                key=lambda kv: (-float(kv[1].get("strength") or 0.0), kv[0]))
+            claims = dict(ordered[:RECALL_CAP])
+        out[holder] = claims
     return out
 
 

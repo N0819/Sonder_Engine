@@ -29,6 +29,8 @@ representation to keep in step.
 
 from __future__ import annotations
 
+from .charter_figure import normalize_figures
+
 #: A level is a fraction of nominal: 1.0 is perfectly kept, 0.0 is gone.
 LEVEL_MAX = 1.0
 LEVEL_MIN = 0.0
@@ -135,6 +137,11 @@ def normalize_body(key, entry):
         # again and nothing else is undone by them.
         "stood_down": bool(entry.get("stood_down", False)),
         "place": str(entry.get("place") or ""),
+        # Where this body lives, as distinct from where it stands: the room
+        # it walks back to when neither posted nor on an errand. Defaults to
+        # the authored starting place, and survives every window after,
+        # which is what lets `place` be honest about visits.
+        "berth": str(entry.get("berth") or entry.get("place") or ""),
     }
     # An AUTHORED temperament only. The unauthored case is derived on demand
     # by `charter_temper.temperament_of` and stored nowhere, so the field is
@@ -203,6 +210,11 @@ def normalize_charter(stored):
         # Regard, standing and blame. Normalized by `charter_politics` at use
         # rather than here, to keep this module free of behaviour.
         "politics": dict(stored.get("politics") or {}),
+        # People the institution can know without owning: the player, the
+        # major characters, anyone with a mind of their own elsewhere. Not
+        # bodies — never rostered, never planned, never blamed, and holding
+        # no mind here. See `charter_figure`.
+        "figures": normalize_figures(stored.get("figures")),
         # Per-body needs, and the ground each body has covered. Needs are the
         # reason `available` can stop being an authored flag; `travelled` is a
         # diagnostic carried beside the bodies rather than on them.
@@ -248,6 +260,12 @@ def normalize_charter(stored):
         # experiment arm can pin it, including to zero.
         "strain_toll": (None if stored.get("strain_toll") is None
                         else max(0.0, float(stored.get("strain_toll")))),
+        # Chance per HOUR that an off-duty body goes somewhere
+        # (`charter_move.errands`). None means the shipped default,
+        # `charter_move.ERRAND_RATE`; 0.0 pins the quiet control — nobody
+        # stirs, which is the pre-circulation behaviour exactly.
+        "errand_rate": (None if stored.get("errand_rate") is None
+                        else max(0.0, float(stored.get("errand_rate")))),
         # Windows actually stood, per body per post. Bounded by bodies x
         # posts rather than by time, and the evidence a promotion call needs
         # to deliberate a project from -- a month at the same post is a

@@ -43,7 +43,8 @@ def travel_rooms(scene, from_room, to_room, limit=REACH_LIMIT):
     return len(path) if path else None
 
 
-def refresh_reach(reach, scene, places, bodies, moved, limit=REACH_LIMIT):
+def refresh_reach(reach, scene, places, bodies, moved, limit=REACH_LIMIT,
+                  cache=None):
     """Update reach for the bodies that MOVED, and no others.
 
     `reach_map` walks every body against every place. Once bodies actually
@@ -57,11 +58,11 @@ def refresh_reach(reach, scene, places, bodies, moved, limit=REACH_LIMIT):
     out = {k: v for k, v in (reach or {}).items() if k[0] not in moved}
     out.update(reach_map(scene, places,
                          {k: bodies[k] for k in moved if k in bodies},
-                         limit=limit))
+                         limit=limit, cache=cache))
     return out
 
 
-def reach_map(scene, places, bodies, limit=REACH_LIMIT):
+def reach_map(scene, places, bodies, limit=REACH_LIMIT, cache=None):
     """``{(body, place): rooms}`` for every body/place pair that is reachable.
 
     Computed once per window and handed to the planner, because the same body
@@ -70,9 +71,16 @@ def reach_map(scene, places, bodies, limit=REACH_LIMIT):
     one. Unreachable pairs are ABSENT rather than stored as infinity, so a
     caller that forgets to check gets a KeyError instead of a body silently
     posted across the ship.
+
+    ``cache`` maps ``(origin_room, place) -> rooms-or-None`` and MAY OUTLIVE
+    the call: for a fixed scene the walk between two rooms never changes, so
+    a caller advancing many windows hands the same dict back in and pays for
+    each origin once per run rather than once per window. That is what makes
+    a population that actually circulates (`charter_move.errands`) cost
+    lookups rather than graph walks.
     """
     out = {}
-    cache = {}
+    cache = {} if cache is None else cache
     for key, body in (bodies or {}).items():
         origin = str(body.get("place") or "")
         for place in places:

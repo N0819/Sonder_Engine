@@ -210,6 +210,10 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     here = sorted(k for k, b in bodies.items()
                   if str(b.get("place") or "") == place)
     present = set(here)
+    figures = charter.get("figures") or {}
+    figures_here = sorted(k for k, f in figures.items()
+                          if str(f.get("place") or "") == place)
+    company = present | set(figures_here)
 
     presences = {}
     for key in here:
@@ -232,21 +236,34 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         # they have a view about, not the roll of everyone standing there.
         def _salience(other):
             claim = minds[key][other]
+            if claim.get("kind") == "figure":
+                # A figure is a surprise where the claim's place is NOT this
+                # one -- the traveller believed at the gate, standing here.
+                surprise = 0.0 if str(claim.get("place") or "") == place \
+                    else 1.0
+            else:
+                surprise = 0.0 if claim.get("believed_available") else 1.0
             return (
                 abs(1.0 - float(regard.get((key, other), 1.0))),   # a view
-                0.0 if claim.get("believed_available") else 1.0,   # a surprise
+                surprise,
                 float(claim.get("strength") or 0.0),               # confidence
             )
 
+        def _believes_present(claim):
+            if claim.get("kind") == "figure":
+                return str(claim.get("place") or "") == place
+            return bool(claim.get("believed_available"))
+
         ranked = sorted(
-            (o for o in present if o != key and o in (minds.get(key) or {})),
+            (o for o in company if o != key and o in (minds.get(key) or {})),
             key=lambda o: (_salience(o), o), reverse=True)[:4]
         known_here = {
             other: {
                 "firsthand": (minds[key][other].get("heard_from") is None),
-                "believes_present": bool(
-                    minds[key][other].get("believed_available")),
+                "believes_present": _believes_present(minds[key][other]),
                 "regard": round(float(regard.get((key, other), 1.0)), 3),
+                **({"figure": True}
+                   if minds[key][other].get("kind") == "figure" else {}),
             }
             for other in ranked
         }
@@ -262,7 +279,8 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
                 (charter.get("stood") or {}).get(key, {}).values()),
             "can_bring_up": news,
             "knows_here": known_here,
-            "strangers_here": sorted(present - set(known_here) - {key}),
+            "strangers_here": sorted(
+                company - set(minds.get(key) or {}) - {key}),
             "blamed": int(blame.get(key, 0)),
             "knows_it_is_blamed": sorted(heard_blame.get(key, ())),
         }
@@ -281,6 +299,11 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         "posts_here": sorted(
             p for p, entry in posts.items()
             if str(entry.get("place") or "") == place),
+        # Who with a mind of their own is standing here -- the player, a
+        # major character. Place-level fact for the Director staging the
+        # room, like `place_state`; what any PRESENCE makes of them lives
+        # only in that presence's own slice.
+        "figures_here": figures_here,
         "recent_here": chronicle(
             [e for e in (events or []) if str(e.get("place") or "") == place],
             hours_per_day=hours_per_day)[-6:],

@@ -22,6 +22,12 @@ one, because this repo has now paid for that split three times
   * ``charter_temper`` — per-body dispositions, in the card's own vocabulary.
   * ``charter_feel``   — felt state per body, produced by calling
     ``mind/psychology_runtime``'s own resolvers rather than a second model.
+  * ``charter_figure`` — the player and major characters as claim SUBJECTS:
+    seen, told about, decaying, wrong — never rostered and never minded here.
+  * ``charter_author`` — the §12a author-switch: authored conduct landing
+    through the identical affordance path a chosen act takes.
+  * ``charter_promote``— the selected past a promotion hands over, and the
+    firewall on what may not cross with it.
 
 A caller imports this module. A test may name a sibling it patches or reads the
 source of; one that only calls through should come here, which is the same rule
@@ -64,7 +70,8 @@ from .charter_feel import (
 )
 from .charter_log import (
     chronicle, life_of, scene_ledger, summarize, window_note)
-from .charter_move import furthest_travelled, relocate
+from .charter_move import (
+    ERRAND_RATE, errands, furthest_travelled, homecomings, relocate, walk)
 from .charter_temper import (
     SPREAD,
     TRAITS,
@@ -87,17 +94,34 @@ from .charter_needs import (
     seed_needs,
     unmet,
 )
+from .charter_author import FIGURE_ACTS, action_instances, authored
+from .charter_figure import (
+    figure_claim,
+    figure_spread,
+    known_figures,
+    normalize_figures,
+    sight_figures,
+    stale_figure_claims,
+)
 from .charter_mind import (
     PERSONAL_FLOOR,
     RECALL_CAP,
     acquaintance,
     believes,
+    cap_minds,
     contested,
     decay_minds,
     divergence,
     hear,
+    hear_claim,
     normalize_minds,
     see,
+)
+from .charter_promote import (
+    RELATIONSHIP_CAP,
+    REMEMBERED_CAP,
+    promotion_handoff,
+    remembered,
 )
 from .charter_news import (
     WITNESSABLE, decay_news, known_news, news_key, spread_of, witness)
@@ -106,9 +130,14 @@ from .charter_practice import (
     ASKED_RETENTION,
     IDLE_CLOSE_HOURS,
     PRACTICE_CAP,
+    REFUSED_ABSENT,
+    REFUSED_NO_SITUATION,
+    REFUSED_OUTSIDE_LICENCE,
+    REFUSED_UNABLE,
     close_stale,
     enact,
     normalize_practices,
+    offers,
     opportunities,
 )
 from .charter_politics import (
@@ -126,6 +155,8 @@ from .charter_talk import (
     converse,
     pair_up,
     report_up,
+    tell_ranking,
+    tellable,
     witnessed,
 )
 from .charter_roster import (
@@ -140,6 +171,32 @@ from .charter_roster import (
 from .charter_run import run, step
 
 __all__ = [
+    "ERRAND_RATE",
+    "errands",
+    "homecomings",
+    "walk",
+    "FIGURE_ACTS",
+    "REFUSED_ABSENT",
+    "REFUSED_NO_SITUATION",
+    "REFUSED_OUTSIDE_LICENCE",
+    "REFUSED_UNABLE",
+    "RELATIONSHIP_CAP",
+    "REMEMBERED_CAP",
+    "action_instances",
+    "authored",
+    "cap_minds",
+    "figure_claim",
+    "figure_spread",
+    "hear_claim",
+    "known_figures",
+    "normalize_figures",
+    "offers",
+    "promotion_handoff",
+    "remembered",
+    "sight_figures",
+    "stale_figure_claims",
+    "tell_ranking",
+    "tellable",
     "decay_news",
     "WITNESSABLE",
     "news_key",
