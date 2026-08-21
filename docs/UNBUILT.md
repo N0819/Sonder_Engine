@@ -2244,6 +2244,48 @@ declared basis. `character_agent` is marked built in the UI.
   while nothing computes over the history, and a trap for the first thing that
   does.
 
+**Direction changed 2026-08-21, and it reopens this entry.** The goal is now
+*relatively high-fidelity off-screen simulation performed in code*, with model
+calls reserved for the aperture (interpretation at contact, and promotion when
+a background body becomes someone the player talks to). The premise this entry
+was written under — that the deterministic spine is a cheap floor and fidelity
+above it is bought with calls — was measured false: a per-turn sweep of 1,000
+bodies × 100 belief facets is 193 ms in plain Python, 500,000 facets is 845 ms,
+off the critical path against a ~22.5 s character call. Recorded at
+`design/DESIGN_LIVING_WORLD.md` §8.1 and
+`design/OFFSCREEN_WORLD_ARCHITECTURE.md` §1.1; the worked case is
+`design/DESIGN_INSTITUTIONS_AND_UPKEEP.md` (draft, nothing built).
+
+What that adds to this register, none of it started:
+
+- **The `offscreen_log` migration above is now BLOCKING, not deferred.** A
+  simulation that reads its own past is exactly "the first thing that computes
+  over the history." Nothing else here should start before it.
+- **Institutions and upkeep** — five genre-neutral primitives (upkeep, post,
+  competence, watch, charter) so a crew, a ward, a kitchen or a monastery can
+  hold a functioning institution together off screen. Deliberately NOT called
+  `stations`: that word already means a body's within-room position.
+  Charters mint through the existing consequence-fuse path
+  (`world/living_world.py`), so this adds a producer and no delivery
+  machinery. Open questions are listed in the design note; §14.2 (how a
+  charter is authored) is the one most likely to fail silently.
+- **Typed belief facets for what travels off screen.** Contradiction over
+  prose is semantic, which is why deterministic dispute detection was refuted;
+  over `(owner, subject, facet_type, value)` it is a key comparison. Scope it
+  to a small closed vocabulary whose values are REFERENCES (entity, room,
+  `event_id`) rather than strings — a reference needs no hand-authored
+  mutation graph, which is the tuning burden that measurably hurt the one
+  published system at this scale. Facets must be a derived index over
+  `world_events`, never a parallel store; the precedent is
+  `composer.observations_from_render`, where the second representation is
+  re-derived so it cannot expand the information budget.
+- **Two rules the extra fidelity must not be allowed to break**, stated here
+  because they are cheap to lose: storage grows with *incident* rather than
+  time (recompute from the clock at contact, commit only branches —
+  `world/routines.py` is the standard), and the world never forgets while
+  minds do (the objective spine is monotonic; culling unreachable facts makes
+  the world observer-relative).
+
 
 ### 2.9 Predictive staging
 

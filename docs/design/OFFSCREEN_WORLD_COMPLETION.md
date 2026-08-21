@@ -1,6 +1,18 @@
 # Completing the illusion of an off-screen world
 
-Status: **8.0 development roadmap**
+Status: **8.0 development roadmap.** **Direction amended 2026-08-21 — read
+this first.** The ordering below was written when fidelity above the
+deterministic spine was understood to be bought with model calls. It is now
+bought with code: see
+[`OFFSCREEN_WORLD_ARCHITECTURE.md`](OFFSCREEN_WORLD_ARCHITECTURE.md) §1.1 and
+[`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md) §8.1. The remaining work
+here is still wanted and still correctly ordered; what changed is what it is
+allowed to cost, and therefore how deep it may go. Two caveats on this file
+specifically: [`../UNBUILT.md`](../UNBUILT.md) §1.57 records that two of its
+per-item tags overstate what is built, so re-verify against source before
+planning on top of a row; and `UNBUILT` §2.8's `offscreen_log` migration is
+now **blocking** rather than deferred, because a simulation that reads its own
+past is the first thing that computes over that history.
 
 Sonder's safe simulation spine is mostly built, but the illusion is not yet
 complete. The engine can advance off-screen facts without granting minds
@@ -454,7 +466,12 @@ information, and motivated actors intersect.
   room: the ladder, reactivation, villain ticks.
 - [`BACKGROUND_LIFE_DESIGN.md`](BACKGROUND_LIFE_DESIGN.md) — extras in the room.
 - [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md) — the five routes A–E rated
-  on cheapness × fidelity.
+  on cheapness × fidelity. **§8.1 amends the recommendation**: the two axes do
+  not trade, so the last of the fidelity is bought with code rather than calls.
+- [`DESIGN_INSTITUTIONS_AND_UPKEEP.md`](DESIGN_INSTITUTIONS_AND_UPKEEP.md) —
+  draft, nothing built. What high-fidelity-through-code means in practice:
+  five genre-neutral primitives letting a crew, a ward or a monastery hold a
+  functioning institution together off screen.
 - [`DESIGN_CROWDS.md`](DESIGN_CROWDS.md) — crowd blobs. Built; §7a records what
   the building changed.
 - [`UNBUILT.md`](../UNBUILT.md) — the register.

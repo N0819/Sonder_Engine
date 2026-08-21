@@ -510,6 +510,57 @@ is best:** the full character-agent tick for a single antagonist — rung 3 —
 because a world that can genuinely move against you is the illusion every
 other approach can only imply.
 
+### 8.1 Amendment 2026-08-21 — the last 20% is bought with code, not calls
+
+The frontier above prices fidelity in model calls and concludes that the
+remaining fidelity "is not the same *kind* of thing" and can only be bought
+with E's ceiling. **That conclusion rested on an unstated premise: that
+motivated, chaining, adaptive consequence requires a mind.** It does not. It
+requires an institution with a goal, bodies competent to serve it, and a gap
+between the two — which is arithmetic.
+
+Two measurements moved this, both 2026-08-21:
+
+- A full per-turn sweep of 1,000 agents × 100 belief facets — decay, forget,
+  propagate between co-present pairs, detect conflicts — is **193 ms in plain
+  Python**; 500,000 facets is **845 ms**. Against a character call at ~22.5 s,
+  and running off the critical path per §0.1, that is not a cost.
+- *Talk of the Town* (GameAI Pro 3, 2017) reported **~60 s per turn** at that
+  same 500k-facet scale and named its own cause: facet values represented as
+  strings, mutated through hand-authored per-attribute graphs, plus salience
+  summed over every entity each conversant knew. That is an implementation
+  cost from 2016-era research Python, not the cost of the work. Reference
+  values need no mutation graph at all.
+
+**The direction, restated.** The goal is now *relatively high-fidelity
+off-screen simulation performed in code*. Model calls are reserved for the
+aperture — interpretation when someone perceives the state, and promotion when
+a background body becomes someone the player talks to. Fidelity is no longer
+money-bounded, so the ratings above should be read as a record of what was
+believed when cheapness and fidelity were thought to trade against each other.
+
+**E's ceiling is not retired**, but it is demoted: from *the only way* to get
+a world that moves against you, to *one way, and no longer the first*. A
+charter that cannot fill its reactor watch produces a losable race with no
+call at all (see
+[`DESIGN_INSTITUTIONS_AND_UPKEEP.md`](DESIGN_INSTITUTIONS_AND_UPKEEP.md)).
+What a paid tick still buys that code cannot is *meaning* — a simulation
+produces facts, causality and consequence; it does not decide what a moment
+signifies.
+
+**What does not change, and is not up for renegotiation by this amendment:**
+§0.1 (a turn never waits on off-screen work), §0.2 (never told, only
+encountered — the two surfaces are still aftermath and in-progress), the
+layer-1 semantics that stop a fired fuse teaching anyone anything, and
+`scene.OFFSCREEN_LIFE_LADDER` as the only permission ceiling. Higher fidelity
+is not a licence to widen any of those; it is only a licence to spend more
+computation behind them.
+
+Revised build advice: the floors still come first, for the reason already
+given — they are the substrate, not the cheap option. What changes is what
+follows them. Instead of buying E's ceiling next, extend the deterministic
+spine until the model is needed only at the aperture.
+
 ---
 
 ## 9. The author's constraints, verbatim — phase-2 commitments
