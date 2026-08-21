@@ -101,12 +101,12 @@
 | `web/story_view.py` | 881 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/charter.py` | 84 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster`, `world.charter_run` |
-| `world/charter_drift.py` | 72 |  | `world.charter_model` |
-| `world/charter_model.py` | 178 |  | — |
-| `world/charter_plan.py` | 108 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
+| `world/charter.py` | 93 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster`, `world.charter_run` |
+| `world/charter_drift.py` | 106 |  | `world.charter_model` |
+| `world/charter_model.py` | 202 |  | — |
+| `world/charter_plan.py` | 137 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_roster.py` | 121 |  | `world.charter_model` |
-| `world/charter_run.py` | 149 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster` |
+| `world/charter_run.py` | 191 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
 | `world/crowds.py` | 673 |  | `world.spatial` |
 | `world/degradation.py` | 171 |  | — |
@@ -1157,29 +1157,32 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `advance_level()` | 18 | 21 lines |
-| `urgency()` | 56 | 17 lines |
-| `hours_until_floor()` | 41 | 13 lines |
+| `advance_level()` | 46 | 27 lines |
+| `urgency()` | 90 | 17 lines |
+| `starving_input()` | 31 | 13 lines |
+| `hours_until_floor()` | 75 | 13 lines |
+| `supply_factor()` | 18 | 11 lines |
 
 ### `world/charter_model.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 123 | 34 lines |
-| `normalize_upkeep()` | 73 | 18 lines |
+| `normalize_charter()` | 138 | 43 lines |
+| `normalize_upkeep()` | 73 | 33 lines |
 | `_tags()` | 51 | 15 lines |
-| `normalize_body()` | 107 | 14 lines |
-| `normalize_post()` | 93 | 12 lines |
-| `priority_rank()` | 171 | 8 lines |
+| `normalize_body()` | 122 | 14 lines |
+| `normalize_post()` | 108 | 12 lines |
+| `priority_rank()` | 195 | 8 lines |
 | `_clamp()` | 43 | 6 lines |
-| `meets()` | 159 | 6 lines |
+| `meets()` | 183 | 6 lines |
 
 ### `world/charter_plan.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `plan_watch()` | 42 | 45 lines |
-| `tended_upkeeps()` | 89 | 20 lines |
+| `plan_watch()` | 65 | 51 lines |
+| `criticality()` | 42 | 21 lines |
+| `tended_upkeeps()` | 118 | 20 lines |
 | `_post_urgency()` | 23 | 17 lines |
 
 ### `world/charter_roster.py`
@@ -1196,8 +1199,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 38 | 88 lines |
-| `run()` | 128 | 22 lines |
+| `step()` | 38 | 130 lines |
+| `run()` | 170 | 22 lines |
 | `_event()` | 33 | 3 lines |
 
 ### `world/comfort.py`
