@@ -1,5 +1,198 @@
 # Changelog
 
+## alpha 9.7.1 — Four things this project believed, measured and found false
+
+Twenty-seven commits, and the honest summary is that most of them are
+corrections. Every headline number here replaced one this repository already
+had written down, and the replaced ones were not sloppy — they were carefully
+reasoned from premises nobody had checked.
+
+The suite is **8,566 tests**, green on both dependency resolutions, and now
+runs in **76 seconds** instead of 220.
+
+### The crc32 fallback was not a floor, it was a hole
+
+An install with no embeddings provider stamps its vectors `cheap:crc32:256` —
+a character n-gram sketch that correlates with real similarity at **r = 0.028**
+over 7,998,000 row pairs. Because that sketch also wrote the bank, the model
+keys matched and nothing excluded it, so it carried 2.15 of the 4.5 RRF weight
+on pure noise. Measured over the 10,960-row LongMemEval bank, 470 probes at
+k=16:
+
+| arm | hits |
+|---|---|
+| ranking on the hash (before) | 289 |
+| no vector channel at all | 338 |
+| **refused as a ranker, kept for near-duplicate work** | **346** |
+
+Both control arms reproduced their recorded numbers exactly, months later,
+which is what makes the third a comparison rather than a coincidence. The +8
+over the previously recommended arm is a confound that file could not remove:
+dropping the vectors entirely also drops MMR redundancy to Jaccard. The sketch
+is refused as a memory-versus-QUERY relevance signal and kept as a
+memory-versus-MEMORY near-duplicate signal — the one job it is measured to be
+near-exact at (99.1% precise against real cosine 0.95).
+
+This affects every install that has never configured a provider. It changes
+nothing for one that has.
+
+### The dispute lane was not starved because nothing asked
+
+`record_dispute` has fired **once in 9,608 live memories**, and the register
+said that was because a mind must volunteer the field on a beat where
+something asks, and nothing ever asked. The asking was built, and measured,
+and it makes minds dispute **less**:
+
+| on a neutral beat, both rows in the payload | |
+|---|---|
+| no occasion offered | **16/16 (100%)** |
+| handed the pair and the subject | **13/16 (81%)** |
+
+That is the third instance of one shape in a single day — an arm inviting
+characters to name disagreements had already scored 4/6 against an unled 6/6.
+**Telling a mind to notice something makes it notice less**, reliably enough
+to plan around now.
+
+What was actually missing is co-presence, and it is total: on an unaimed beat,
+ordinary recall put both halves of a contradiction in front of a mind **0
+times in 18**. Never, not rarely. Every one of the sixteen successful disputes
+had both rows present, and ponder is what put them there in every case.
+
+So what shipped is the direction the register listed first and nobody built: a
+pass after commit reads what a mind just recorded against what it already
+held, stores the SUBJECT of anything that does not sit together, and a later
+beat runs that subject as a retrieval. The mind receives rows. It is never told
+they disagree — which is both the measured-better behaviour and the only
+version that respects the rule that nothing outside a mind decides which of
+its memories to believe.
+
+Out of band because the reading pass costs 114s against a 24-row payload.
+Its reviewer discriminates a real belief revision from an ordinary state change
+at **85% against 20%**, with zero contradictions invented across 36 cases —
+a wider gap than any character model measured beside it.
+
+Also landed: a dispute may now cite the later memory that overturned a belief
+(the actual barrier — the grounding namespace dropped exactly the citation
+characters make), and a re-reading is an addendum with an evidence trail rather
+than an overwrite, so a mind that read one moment three ways still has the
+shape of having done so.
+
+### `ponder.why` was required, stored, and never read back
+
+A ponder arriving without a reason is DROPPED and warned about, on the stated
+grounds that dropping half of one silently is the same failure as blanking an
+act. Commit stores the reason. Nothing read it. So a mind was compelled to say
+why it wanted to remember something, and on the beat its answer arrived it was
+shown 24 rows each stamped *"you deliberately went looking for this"* and the
+bare question. `why_i_chose_it` now heads the lane and `why_i_went_looking`
+rides the labelled rows outside it.
+
+The ponder budget also stopped being a fixed 4: a deliberate act of
+remembering was served as though the mind were maximally absorbed, which is
+the one state it is not in. Measured on 470 questions, k=4 answers 287 and
+k=16 answers 396.
+
+### The abstention floor never fired, and is now honestly absent
+
+`recall_confidence` annotated the payload with `nothing_comes_back_clearly`.
+Against 30 negatives whose answers are absent by construction it fires **0
+times**, and recalibrating cannot fix it — positives climb 1.9× across a
+bank-size sweep and negatives 2.2×, so the gap holds at about one sigma at
+every scale. Presence and absence produce the same distribution SHAPE; only
+the content of the rows differs, and a statistic over scores cannot read
+content.
+
+Its production reader is removed, which also removes a second full bank scan
+per character per beat. **The engine now has no abstention signal at all**,
+recorded as a deliberate absence rather than left to be discovered. The
+row-level replacement exists and is unmeasured; false abstention is the number
+that must come first.
+
+### Retrieval got 4.9× faster, and not where anyone expected
+
+Profiled over 8 queries on a 10,960-row bank, `_exact_cue_score` was **79.9 of
+89.9 seconds — 89% of all retrieval time**, against roughly 10% for the vector
+scan, which is the opposite of where this project assumed the cost was.
+Guarding the word-boundary regex with a substring test and caching compiled
+patterns took `search_memories` from 4,732ms to 968ms with a byte-identical
+verdict set on all 470 probes.
+
+The recall payload also grew from 16 rows to 24, which is where conduct peaks
+— it declines again at 48 and 96, so the attention budget is real and has a
+knee. `recall_confidence`'s top-k was decoupled from it in the same change,
+because raising the payload had been quietly dragging the lift statistic down.
+
+### The instrument was measuring the wrong axis
+
+The six-world conduct bank's per-world "named the contradiction" rate runs
+100, 100, 50, 17, 100, 67 — a six-fold spread that survived doubling the
+sample. It now has a mechanism. Every planted fact was classified BLIND on one
+question: was the earlier statement wrong when it was made, or true and then
+overtaken by an event?
+
+World 3 has 3 belief-type facts and scored 3 conflicts. World 4 has 1 and
+scored 1. **World 4 sat at 17% because five of its six "superseded" facts are
+ordinary state changes** — a debt repaid, a boat bought back, a canal refilled
+by rain — where declining to call it a contradiction is CORRECT and the
+benchmark scored it second-best. The earlier hypothesis in that file (a
+"gradual hedged contradiction") is refuted.
+
+And the flat rate ranks models backwards. Same 24 cases:
+
+| model | belief facts | change facts | gap | flat rate |
+|---|---|---|---|---|
+| glm-5p2-fast | 86% | 40% | **+46** | 67% |
+| grok-4.3 | 71% | 70% | **+1** | 71% |
+| deepseek-v4-pro | 43% | 70% | **-27** | 54% |
+
+On the flat rate grok wins; on the axis that means anything it cannot tell a
+real revision from a Tuesday, and v4-pro is inverted. What varies by model is
+DISCRIMINATION, not rate. Report both or neither.
+
+### The suite runs in eight processes
+
+220s serial, **76s on 8 workers**. The curve turns back up past the physical
+core count (87s at 16) because the engine keeps daemon threads alive across
+tests, so one worker per hardware thread oversubscribes them. `JOBS ?= auto`
+is xdist's physical-core count — but only when `psutil` is importable, which
+is the entire reason it is now a dev dependency; without it `auto` silently
+means logical cores and lands on the wrong side of the knee.
+
+Isolation holds by construction: `scratch_db_path()` is `tempfile.mkstemp` and
+`conftest.py` redirects the default database at conftest IMPORT, once per
+worker process. The tier degrades to a serial run with one line of explanation
+when xdist is absent, rather than failing on `unrecognized arguments: -n`.
+
+### Smaller, and each one a real defect
+
+- **A memory import carried the other story's player** verbatim into a new
+  one — a name the receiving mind had no channel to. Refused rather than
+  scrubbed, because rewriting the prose would be authoring what a character
+  remembers. Two faults fixed beside it: `archived` rode the export and was
+  never read back, so retired memories came back alive; and `frame_id` fell
+  through to the ambient contextvar.
+- **A batch refused for being too large degraded instead of splitting.** The
+  three largest live banks each estimate ~127k request tokens against a
+  120,000 cap, so the one path a host uses to give a character a past silently
+  produced a keyword-only bank. Split before asking, not hash after refusal —
+  and an input-count cap of 64 beside the token budget, because the token
+  budget alone left a 424-input request stuck in retry.
+- **`last_accessed` is a wall clock and could not say how far back a mind
+  reached.** `last_accessed_turn` records depth in beats.
+- **A dropped connection is a thing you wait out**, not a run you lose.
+
+### Operational
+
+The live corpus was repaired with `tools/repair_memory_cues.py --apply`:
+7,705 of 9,608 rows, **32,215 junk cue items removed**, 502 entity lists
+refilled, 254 escaped kind spellings folded back, 104 pre-clamp seeds
+reclamped. And 840 lore entries carrying vectors with no provenance were
+stamped and rebuilt — those were not merely unlabelled, they were output from a
+*different* model sitting at mean cosine 0.9915 to their own same-text twins,
+close enough to look right and far enough to rank wrong. After the rebuild,
+324 of 324 verifiable pairs are byte-identical.
+
+
 ## alpha 9.7 — A mind can now say that nothing came back, and glass was never a door
 
 Thirty-six commits. The spine is memory: `mind/memory.py` was split into twelve
