@@ -36,6 +36,64 @@ consequences, belief, and authority. Lorebooks and the Director decide whether
 those facts mean politics, magic, romance, combat, trade, horror, or something
 else.
 
+### 1.1 Direction amendment, 2026-08-21 — fidelity comes from code
+
+The outcome above is unchanged in every particular except its ambition, and
+one clause is now read differently. "One cheap deterministic spine" was
+written when *cheap* and *high fidelity* were understood to trade against each
+other, so the spine was the economical floor and fidelity was bought above it
+with model calls (`DESIGN_LIVING_WORLD.md` §8, now amended at §8.1).
+
+**They do not trade.** Measured 2026-08-21: a full per-turn sweep of 1,000
+simulated bodies × 100 belief facets — decay, forget, propagate between
+co-present pairs, detect conflicts — is 193 ms in plain Python, and 500,000
+facets is 845 ms, off the critical path, against a character call at ~22.5 s.
+The one published system at that scale (*Talk of the Town*, GameAI Pro 3,
+2017) reported ~60 s per turn and named its own cause — string-valued facets
+mutated through hand-authored per-attribute graphs — which is an
+implementation cost, not the cost of the work.
+
+So the goal is now **relatively high-fidelity off-screen simulation performed
+in code**. The spine is no longer the floor under a paid ceiling; it is the
+whole building. Model calls are reserved for the aperture, and there are
+exactly two:
+
+- **interpretation at contact** — the Director staging and the narrator
+  rendering what a perceiver actually meets;
+- **promotion** — when a background body becomes someone the player talks to,
+  and its accumulated past is handed to a character call.
+
+Point 4 above ("important opted-in characters may deliberate from their own
+knowledge") therefore stays available and stops being the route to fidelity.
+Deliberation is for people whose *choices* matter, not for making the world
+detailed.
+
+**This raises no ceiling.** Every invariant in §2 holds unchanged, and higher
+fidelity is explicitly not a licence to widen any of them: §2.1's ladder
+remains the only permission vocabulary, §2.2's earned-information rule is
+untouched, and §2.3's *state, never cutaway prose* is if anything more
+load-bearing, since a richer simulation has more it could be tempted to
+narrate. More computation, behind the same gap.
+
+Two consequences worth stating plainly, because they are what the extra
+fidelity is *for*:
+
+1. **Storage grows with incident, not with time.** What can be recomputed from
+   the clock is recomputed at contact (`world/routines.py` is the standard: it
+   never ticks and never writes); only branches commit. A quiet year is a
+   handful of rows.
+2. **The world never forgets; minds do.** Decay, mutation and forgetting
+   belong to the subjective layer. The objective spine is monotonic, because
+   culling facts that nothing can currently reach makes the world
+   observer-relative — and channels open later, when a body is promoted, a
+   room becomes enterable, or a record is found.
+
+The worked case for what "high fidelity through code" means in practice — an
+entire crew keeping a ship running, in engine vocabulary, with no genre
+knowledge in the engine — is
+[`DESIGN_INSTITUTIONS_AND_UPKEEP.md`](DESIGN_INSTITUTIONS_AND_UPKEEP.md)
+(draft; nothing built).
+
 ## 2. Non-negotiable invariants
 
 ### 2.1 One authority ceiling

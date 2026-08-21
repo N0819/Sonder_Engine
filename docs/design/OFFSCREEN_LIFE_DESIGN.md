@@ -28,6 +28,19 @@
 > One precedent that did not exist when this was written:
 > `world/background_claims.py` is exactly the "commit invention as claims, not facts"
 > mechanism decision 3 asks for, built for background presences.
+>
+> **Direction amended 2026-08-21.** The goal is now *relatively high-fidelity
+> off-screen simulation performed in code*, with model calls reserved for the
+> aperture. This document's ladder survives unchanged and is still the only
+> permission vocabulary — what changes is where the ambition sits on it.
+> `deterministic` and the seeded, model-free `stochastic` rung are no longer
+> the economical floor beneath a paid ceiling; they are where the fidelity is
+> now expected to come from, and `character_agent` becomes the rung for people
+> whose *choices* matter rather than the route to a detailed world. Reasoning
+> and the measurements at
+> [`OFFSCREEN_WORLD_ARCHITECTURE.md`](OFFSCREEN_WORLD_ARCHITECTURE.md) §1.1 and
+> [`DESIGN_LIVING_WORLD.md`](DESIGN_LIVING_WORLD.md) §8.1; the worked case at
+> [`DESIGN_INSTITUTIONS_AND_UPKEEP.md`](DESIGN_INSTITUTIONS_AND_UPKEEP.md).
 
 ## The problem
 

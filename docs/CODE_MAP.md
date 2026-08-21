@@ -101,6 +101,12 @@
 | `web/story_view.py` | 881 |  | `core.db` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
+| `world/charter.py` | 84 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster`, `world.charter_run` |
+| `world/charter_drift.py` | 72 |  | `world.charter_model` |
+| `world/charter_model.py` | 178 |  | — |
+| `world/charter_plan.py` | 108 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
+| `world/charter_roster.py` | 121 |  | `world.charter_model` |
+| `world/charter_run.py` | 149 |  | `world.charter_drift`, `world.charter_model`, `world.charter_plan`, `world.charter_roster` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
 | `world/crowds.py` | 673 |  | `world.spatial` |
 | `world/degradation.py` | 171 |  | — |
@@ -1146,6 +1152,53 @@
 | `_mint()` | 221 | 29 lines |
 | `write_canon()` | 389 | 24 lines |
 | `_named_in_record()` | 449 | 24 lines |
+
+### `world/charter_drift.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `advance_level()` | 18 | 21 lines |
+| `urgency()` | 56 | 17 lines |
+| `hours_until_floor()` | 41 | 13 lines |
+
+### `world/charter_model.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `normalize_charter()` | 123 | 34 lines |
+| `normalize_upkeep()` | 73 | 18 lines |
+| `_tags()` | 51 | 15 lines |
+| `normalize_body()` | 107 | 14 lines |
+| `normalize_post()` | 93 | 12 lines |
+| `priority_rank()` | 171 | 8 lines |
+| `_clamp()` | 43 | 6 lines |
+| `meets()` | 159 | 6 lines |
+
+### `world/charter_plan.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `plan_watch()` | 42 | 45 lines |
+| `tended_upkeeps()` | 89 | 20 lines |
+| `_post_urgency()` | 23 | 17 lines |
+
+### `world/charter_roster.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `assignable()` | 81 | 21 lines |
+| `stale_claims()` | 104 | 18 lines |
+| `seed_roster()` | 33 | 17 lines |
+| `observe()` | 64 | 15 lines |
+| `decay_roster()` | 52 | 10 lines |
+
+### `world/charter_run.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `step()` | 38 | 88 lines |
+| `run()` | 128 | 22 lines |
+| `_event()` | 33 | 3 lines |
 
 ### `world/comfort.py`
 
