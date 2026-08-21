@@ -162,6 +162,60 @@ outright failure. Any single world would have supported a confident and wrong
 general claim -- and the first three did, which is why this table exists. The
 rate is a property of the material, not of the engine.
 
+**And the property is now named. Added 2026-08-20.** "A property of the
+material" was right and useless; this is the mechanism.
+
+Every planted `superseded` pair was classified BLIND -- by a model shown only
+the EARLIER and LATER text, never a verdict, world, model or question --
+against one distinction: was the earlier statement WRONG when it was made, or
+was it TRUE and then overtaken by an event?
+
+| world | belief-type facts | conflicts (glm-5p2-fast) |
+|---|---|---|
+| 1 | 5/6 | 6/6 |
+| 2 | 5/6 | 6/6 |
+| 3 | **3/6** | **3/6** |
+| 4 | **1/6** | **1/6** |
+| 5 | 6/6 | 6/6 |
+| 6 | 6/6 | 4/6 |
+
+Worlds 3 and 4 match exactly. **World 4 scored 17% because five of its six
+"superseded" facts are not superseded beliefs at all** -- a crane rated two
+tons replaced by a five-ton one, a debt repaid, a boat sold for scrap and
+bought back, a canal that drops and refills after rain. Nobody was ever wrong
+about any of them. Declining to call those a contradiction is the CORRECT
+answer, and this table has been scoring it as the second-best outcome.
+
+**So the earlier hypothesis in this file is refuted.** It read: *"world 4's
+contradiction was the gradual hedged one (a canal level that fell and later
+recovered) rather than a flat reversal."* Wrong mechanism. The canal is one of
+five, and what they share is that the world moved, not that the move was
+gradual.
+
+### The flat rate ranks models backwards
+
+Same 24 cases, worlds 1-4, three character models:
+
+| model | belief facts | change facts | gap | flat rate |
+|---|---|---|---|---|
+| glm-5p2-fast | 12/14 = 86% | 4/10 = 40% | **+46** | 16/24 = 67% |
+| grok-4.3 | 10/14 = 71% | 7/10 = 70% | **+1** | 17/24 = 71% |
+| deepseek-v4-pro | 6/14 = 43% | 7/10 = 70% | **-27** | 13/24 = 54% |
+
+**On the flat rate grok wins. On the axis that means anything it is blind** --
+one point between a real revision and an ordinary Tuesday -- and v4-pro is
+inverted, naming contradictions more often where there are none. The number
+this file has been reporting would have recommended the model that cannot tell
+the difference.
+
+What varies by model is DISCRIMINATION, not rate. Report both or neither.
+
+*(v4-pro's failure is specific rather than general: 6 of its 20 belief cases
+scored `neither`, answering the question asked and stopping. Verbatim: "I
+thought the old ledger ended up lost in the flood, because Mara told me the
+1998 ledger was ruined and gone in the flood." Both rows were in the payload.
+It is not confused; it is incurious.)*
+
 The failure is legible rather than mysterious, which is what a good instrument
 buys: the judge records that the answer *"affirms the earlier belief that the
 canal water level was dangerously low, citing specific memories, and does not
@@ -177,6 +231,15 @@ with belief revision here, the reasoning is not it.
 
 It does NOT establish a rate for ordinary play. Every case aims a question
 squarely at the contradicted fact; a beat that merely happens near one does
-not. The gap between those two situations is `2.24`'s remaining open half, and
-the deterministic detector built to close it is measured not to work (same
-entry).
+not.
+
+**That gap was measured on 2026-08-20 and it closed the entry.** On a neutral
+beat with both rows in the payload, minds disputed 16/16 unprompted and 13/16
+when handed the pair -- being told makes it worse. And on an unaimed beat,
+ordinary recall put both halves in front of a mind **0 times in 18**. What was
+missing was never the asking; it was co-presence, and ponder is the only lane
+that produces it. See UNBUILT 2.24.
+
+*Read every arm in this file with that caveat live: an instrument that aims a
+question measures capability, and this one aims a question. It took building
+the wrong thing twice to notice.*

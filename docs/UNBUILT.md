@@ -2086,6 +2086,23 @@ content. MEMORY_IMPROVEMENTS.md §5 reached the edge of this from the other
 side -- "sharper teeth need row-level evidence... not a better threshold" -- and
 this is the measurement that closes it.
 
+**Its one production reader is gone, 2026-08-20.** It annotated the character
+payload with `nothing_comes_back_clearly`; that call is removed, which also
+removes a second full bank scan per character per beat. Nothing replaced it,
+so **the engine currently has no abstention signal at all** -- a mind is never
+told its own recall came back empty. That is a deliberate absence rather than
+an oversight: the statistic fired 0 of 30 times, so removing it took away
+nothing that ever happened.
+
+The row-level replacement was attempted the same day and is unmeasured. A
+reading pass over the top-k (`mind/memory_judge.review_recall`) answers the
+question properly, but the arm that would price it -- 470 positives and 30
+negatives -- was abandoned at 3 of 90 after two invalid runs and roughly two
+minutes per call. **The number that matters is FALSE abstention**: a positive
+probe the reviewer calls empty is a mind told it does not remember something
+it does, which would be strictly worse than an inert statistic. Until that is
+measured, do not wire it.
+
 What survives: the signal fails open, and it has never falsely suppressed a
 real recall in any measurement. So it is inert rather than harmful, and there
 is no urgency to remove it. What it must not do is be trusted, cited as an
@@ -2956,50 +2973,87 @@ invisibly: `tests/test_dispute_addendum.py` pins that four re-readings citing
 one source are distinguishable from three citing three, which a bare counter
 could never separate.
 
-**What is still open: the occasion -- and the obvious way to build it is
-MEASURED NOT TO WORK.** This entry proposed deterministic detection: two rows
-about one subject, separated in time, both in the payload, surfaced as an
-occasion the mind may act on. It was built, measured against the 18 known
-superseded pairs in the synthetic worlds, and reverted the same afternoon.
+**BUILT 2026-08-20, and the entry's own premise was refuted on the way.**
 
-Neither available signal separates supersession from coincidence, and one is
-inverted:
+The reading above -- and every version of this entry before it -- says the
+dispute lane is starved because nothing ASKS. The asking was built and
+measured, and it makes minds dispute LESS.
 
-| | similarity (median) | share an entity |
+On a neutral beat, with both rows already in the payload, a character asked
+what is on its mind:
+
+| | |
+|---|---|
+| no occasion offered | **16/16 (100%)** |
+| handed the pair and the subject | **13/16 (81%)** |
+
+That is the third measured instance of one shape in a single day. The conduct
+table above records an arm run WITH a clause inviting the character to name
+disagreements scoring 4/6 against an unled 6/6, and
+[`experiments/SYNTHETIC_BANK.md`](experiments/SYNTHETIC_BANK.md) 6 records the
+same. **Telling a mind to notice something makes it notice less**, reliably
+enough now to plan around.
+
+**What is actually missing is CO-PRESENCE, and the number is absolute:**
+
+| | |
+|---|---|
+| unaimed beat, ordinary recall, no ponder | |
+| both halves of a contradiction in the payload together | **0 / 18 (0%)** |
+
+Never, not rarely. Every one of the sixteen successful disputes had both rows
+present, and in every case the ponder lane is what put them there. Ponder
+fires roughly 1 turn in 332; `record_dispute` fires 1 in 9,608. That ratio was
+the finding, and it was sitting in this file the whole time.
+
+So this entry's FIRST suggested direction was correct and the two that were
+buildable were not: *"the ponder lane already does it accidentally... making
+ponder more likely on a subject a character has beliefs about may be the whole
+fix, and it needs no detector."*
+
+**What shipped.** `schedule_memory_tension_pass` runs after commit, beside
+consolidation, and reads what a mind just recorded against what it already
+held. It stores the SUBJECT of anything that does not sit together; a later
+beat runs that subject as a retrieval and hands over whatever returns
+(`resurfaced_without_asking`). The mind receives ROWS. It is never told they
+disagree -- which is both the measured-better behaviour and the only version
+that respects this entry's own rule that nothing outside a mind may decide
+which of its memories is true. Labelled `unbidden_subject` rather than
+`query_i_chose_last_turn`, because this mind did not ask and saying it did
+would be the engine speaking for a character (compare 1.11i).
+
+Out of band for a measured reason: the reading pass costs **114s** against a
+24-row payload and completed 20 of 36 calls in band. Its two failure modes
+were budget rather than classification -- `RemoteDisconnected` was already
+retryable and merely exhausted three attempts, and a reasoning model ate the
+reply whole at 700 tokens and again at 6000.
+
+**The reviewer discriminates better than any character model measured**, and it
+is the same deepseek that scores worst as a character (n=18 scorable):
+
+| | belief that turned out unfounded | the world simply changed |
 |---|---|---|
-| known superseded pairs | **0.477** (0.353-0.598) | **0.0%** |
-| random pairs from the same bank | 0.235, p95 0.602 | 16.6% |
+| named the planted pair | **11/13 (85%)** | **1/5 (20%)** |
 
-A real contradiction scores BELOW the 95th percentile of unrelated pairs, so
-no similarity floor catches supersession without firing on roughly a fifth of
-everything -- at 24 recalled rows that is dozens of false occasions per beat.
-And entity overlap runs the wrong way entirely: a belief and its refutation
-name the same people LESS often than two random memories do, because the
-refutation characteristically comes from a different mouth. Elias says the
-chapel is unreachable; JUNE saw his lights there. The different source is what
-makes it a refutation.
+Zero tensions invented from nothing across 36 cases. The gap of +65 compares
+with glm-5p2-fast +46, grok-4.3 +1, deepseek-v4-pro -20 as CHARACTERS on the
+same axis. The framing does the work, not the weights.
 
-The reason is worth stating in the engine's vocabulary, because it generalises:
-**contradiction is a semantic relation, and the signals available here are
-topical ones.** Two rows can be about one subject without disagreeing, and can
-disagree while sharing almost no surface. Nothing short of reading them can
-tell the difference.
+**What is still open.**
 
-So the occasion needs a mind, not a threshold. Three directions, none built:
-
-- **The ponder lane already does it accidentally.** A character asking "what
-  do I know about X" retrieves both rows by construction -- which is exactly
-  the setup every measurement of this used. Making ponder more likely on a
-  subject a character has beliefs about may be the whole fix, and it needs no
-  detector.
-- **A cheap judge over the top-k**, the same row-level reading 1.76 concluded
-  the abstention floor needs. One model call could answer both questions.
-- **At mint rather than at recall**: the beat that forms the refutation is the
-  beat where a mind has both in view, and that is where the occasion is
-  cheapest to notice.
-
-Do not rebuild the threshold version without evidence that beats the table
-above.
+- **The unaimed case is bounded but not closed.** Every dispute arm keeps the
+  ponder query in the payload, and that query is itself a pointer. The
+  genuinely unaimed case -- both rows present through ordinary recall alone --
+  could not be arranged, because it happens 0 times in 18. That is evidence
+  for the finding rather than a hole in it, but it is not the same as having
+  measured it.
+- **Whether the shipped retrieval raises the live rate.** 1 in 9,608 is the
+  number to beat and it can only be read off a real corpus over many beats.
+- **A mind has no record of HAVING pondered.** `memory_ponder` is popped when
+  consumed and no row is minted, so a character that has asked itself the same
+  question five times cannot notice. Deliberately not built: a row per ponder
+  is noise, and it changes what gets minted. It is the same shape as the
+  rumination watch on disputes, which chose legibility over prohibition.
 
 **The original reading, kept because it was the reasoning at the time:**
 
