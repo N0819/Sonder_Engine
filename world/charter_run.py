@@ -34,7 +34,7 @@ from .charter_space import charter_places, reach_map
 from .charter_log import window_note
 from .charter_mind import decay_minds
 from .charter_move import relocate
-from .charter_needs import advance_needs, pressure, unmet
+from .charter_needs import advance_needs, mood, pressure, unmet
 from .charter_talk import converse, report_up
 
 
@@ -77,9 +77,25 @@ def step(charter, hours=4.0, seed=0, reach=None):
     # that way; it becomes expensive, and a short-handed charter still posts
     # it because it must.
     needs = charter.get("needs") or {}
-    reluctance = {
-        key: spend_reluctance(politics, key) + pressure(needs.get(key) or {})
-        for key in charter["bodies"]}
+    mood_weight = float(charter.get("mood_weight") or 0.0)
+    blame = (politics.get("blame") or {})
+    regard_of = {}
+    if mood_weight:
+        for (listener, speaker), weight in (politics.get("regard") or {}).items():
+            regard_of.setdefault(speaker, []).append(weight)
+    reluctance = {}
+    for key in charter["bodies"]:
+        held = needs.get(key) or {}
+        weight = spend_reluctance(politics, key) + pressure(held)
+        if mood_weight:
+            # Felt state joins the SAME axis as standing and exhaustion: a
+            # body the institution is reluctant to spend, for whatever reason,
+            # is spent later. It can never become unpostable that way, which
+            # is what keeps an unhappy crew from becoming an unusable one.
+            weight += mood_weight * mood(
+                held, blamed=int(blame.get(key, 0)),
+                regard_of_others=regard_of.get(key, ()))
+        reluctance[key] = weight
 
     plan = plan_watch(charter, horizon_hours=hours, seed=seed, reach=reach,
                       reluctance=reluctance)

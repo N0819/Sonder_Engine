@@ -105,13 +105,13 @@
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
 | `world/charter_log.py` | 173 |  | `world.charter_mind`, `world.charter_model`, `world.charter_needs` |
 | `world/charter_mind.py` | 159 |  | — |
-| `world/charter_model.py` | 231 |  | — |
+| `world/charter_model.py` | 237 |  | — |
 | `world/charter_move.py` | 70 |  | `world.charter_space` |
 | `world/charter_needs.py` | 256 |  | `world.charter_model` |
 | `world/charter_plan.py` | 159 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 139 |  | — |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
-| `world/charter_run.py` | 307 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_space`, `world.charter_talk` |
+| `world/charter_run.py` | 323 |  | `world.charter_drift`, `world.charter_log`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_plan`, `world.charter_politics`, `world.charter_roster`, `world.charter_space`, `world.charter_talk` |
 | `world/charter_space.py` | 75 |  | `world.spatial` |
 | `world/charter_talk.py` | 204 |  | `world.charter_mind`, `world.charter_roster` |
 | `world/comfort.py` | 349 |  | `world.spatial` |
@@ -1196,14 +1196,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 141 | 69 lines |
+| `normalize_charter()` | 141 | 75 lines |
 | `normalize_upkeep()` | 73 | 33 lines |
 | `normalize_body()` | 122 | 17 lines |
 | `_tags()` | 51 | 15 lines |
 | `normalize_post()` | 108 | 12 lines |
-| `priority_rank()` | 224 | 8 lines |
+| `priority_rank()` | 230 | 8 lines |
 | `_clamp()` | 43 | 6 lines |
-| `meets()` | 212 | 6 lines |
+| `meets()` | 218 | 6 lines |
 
 ### `world/charter_move.py`
 
@@ -1259,8 +1259,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `step()` | 46 | 211 lines |
-| `run()` | 259 | 49 lines |
+| `step()` | 46 | 227 lines |
+| `run()` | 275 | 49 lines |
 | `_event()` | 41 | 3 lines |
 
 ### `world/charter_space.py`
