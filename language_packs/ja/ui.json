@@ -691,7 +691,6 @@
   "Engine": "エンジン",
   "Engine preferences": "エンジン設定",
   "Enter": "入力",
-  "Enter the join code your friend gave you.": "友達から教えてもらった参加コードを入力してください。",
   "Entities": "エンティティ",
   "Entity id, e.g. \"pete\"": "エンティティID（例：\"pete\"）",
   "Entity scope": "エンティティスコープ",
@@ -897,7 +896,6 @@
   "Invite a friend": "友達を招待",
   "It keeps running even if you close this window.": "このウィンドウを閉じても実行され続けます。",
   "It makes no continuous sound of its own.": "それ自体は連続した音を立てません。",
-  "Join a friend's story": "友達のストーリーに参加",
   "Join code": "参加コード",
   "Join story": "ストーリーに参加",
   "Keep body appearance separate from clothing. Initial outfit seeds the story's live attire state and can change during play.": "身体の外見と衣服は分けて管理してください。初期衣装は物語の実際の服装状態の出発点となり、プレイ中に変化しうるものです。",
@@ -2409,5 +2407,10 @@
   "Use a story lens when you need a project-like view. Characters, personas, and lore remain reusable.": "プロジェクトのような表示が必要なときはストーリー範囲を使います。キャラクター、ペルソナ、ロアは引き続き再利用できます。",
   "View options": "表示オプション",
   "Welcome back": "おかえりなさい",
-  "Your story material": "あなたのストーリー素材"
+  "Your story material": "あなたのストーリー素材",
+  "Enter your join code": "参加コードを入力",
+  "Guest story": "ゲストストーリー",
+  "Join a story": "ストーリーに参加",
+  "Reconnect": "再接続",
+  "Use the code your host shared with you. You can start playing as soon as the story opens.": "ホストから共有されたコードを使います。ストーリーが開いたらすぐにプレイを始められます。"
 }

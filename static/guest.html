@@ -5,62 +5,54 @@
 <title>Sonder Engine — Join a Story</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="/static/js/i18n.js" defer></script>
-<script src="/static/js/theme-init.js"></script>
-<!-- Shares the host app's actual stylesheet (tokens, .turn/.pin/.prose,
-     button variants) rather than a hand-rolled parallel palette -- a
-     guest's first-ever impression of the app used to share nothing
-     visually with what the host sees: different accent, different
-     radii, different focus ring, filled-blue buttons where the host UI
-     defaults to a gray gradient. Only guest-page-specific layout
-     (the join screen, the composer bar) is defined locally below. -->
-<link rel="stylesheet" href="/static/styles.css">
-<link rel="stylesheet" href="/static/themes.css">
-<style>
-  body { display: flex; flex-direction: column; }
-  header {
-    padding: 14px 18px; border-bottom: 1px solid var(--bd);
-    display: flex; align-items: center; gap: 10px; min-height: 50px;
-    background: var(--chrome-bg);
-  }
-  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-  header .sub { color: var(--dim); font-size: 13px; }
-  #join-screen, #play-screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  #join-screen { align-items: center; justify-content: center; padding: 24px; gap: 14px; }
-  #join-screen .card { width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; }
-  #code-input { text-transform: uppercase; letter-spacing: .05em; }
-  .err { color: var(--err); font-size: 13px; min-height: 18px; }
-  #msgs { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
-  .turn .waiting { color: var(--dim); font-style: italic; }
-  .turn .stale-note { color: var(--dim); font-size: 12px; margin-top: 6px; }
-  #composer {
-    display: flex; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--bd);
-  }
-  #composer textarea { flex: 1; resize: none; height: 52px; max-height: 160px; }
-</style>
+<script src="/static/js/ui/appearance-preflight.js?release=wp11.1"></script>
+<link rel="stylesheet" href="/static/css/ui/reset.css?release=wp11.1">
+<link rel="stylesheet" href="/static/css/ui/tokens.css?release=wp11.1">
+<link rel="stylesheet" href="/static/css/ui/themes/carbon-signal.css?release=wp11.1">
+<link rel="stylesheet" href="/static/css/ui/typography.css?release=wp11.1">
+<link rel="stylesheet" href="/static/css/ui/components.css?release=wp11.1">
+<link rel="stylesheet" href="/static/css/ui/guest.css?release=wp11.1">
 </head>
-<body>
-<header>
-  <h1>Sonder Engine</h1>
-  <span class="sub" id="head-sub">Join a friend's story</span>
+<body class="ui-guest-page">
+<header class="ui-guest-header">
+  <span class="ui-guest-header__mark" aria-hidden="true">S</span>
+  <span class="ui-guest-header__copy">
+    <strong>Sonder Engine</strong>
+    <span id="head-sub">Guest story</span>
+  </span>
 </header>
 
-<div id="join-screen">
-  <div class="card">
-    <div>Enter the join code your friend gave you.</div>
-    <label for="code-input">Join code</label>
-    <input id="code-input" placeholder="ABCD1234" autocomplete="off" autocapitalize="characters" maxlength="8">
-    <button id="join-btn" class="primary">Join story</button>
-    <div class="err" id="join-err" role="alert" aria-live="polite"></div>
-  </div>
-</div>
+<main id="join-screen" class="ui-guest-join">
+  <section id="join-card" class="ui-card ui-guest-join__card" aria-labelledby="join-title">
+    <p class="ui-guest-eyebrow">Join a story</p>
+    <h1 id="join-title">Enter your join code</h1>
+    <p class="ui-guest-join__intro">Use the code your host shared with you. You can start playing as soon as the story opens.</p>
+    <label class="ui-field" for="code-input">
+      <span class="ui-field__label">Join code</span>
+      <input id="code-input" class="ui-field__control" placeholder="ABCD1234" autocomplete="off" autocapitalize="characters" maxlength="8" inputmode="text">
+    </label>
+    <button id="join-btn" class="ui-button ui-button--primary ui-button--prominent">Join story</button>
+    <div class="ui-field__error ui-guest-status" id="join-err" role="status" aria-live="polite"></div>
+  </section>
+</main>
 
-<div id="play-screen" style="display:none">
-  <div id="msgs"></div>
-  <div id="composer">
-    <textarea id="input" aria-label="Your action or speech" placeholder="Act, speak, or leave empty…"></textarea>
-    <button id="send-btn" class="primary">Send</button>
+<main id="play-screen" class="ui-guest-play" hidden>
+  <div id="connection-status" class="ui-notice ui-guest-connection" data-tone="warning" role="status" aria-live="polite" hidden>
+    <span id="connection-message"></span>
+    <button id="connection-retry" class="ui-button ui-button--compact">Reconnect</button>
   </div>
-</div>
+  <div id="msgs" class="ui-guest-transcript" aria-live="polite" aria-label="Story transcript"></div>
+  <div class="ui-guest-composer">
+    <div class="ui-guest-composer__inner">
+      <label class="ui-guest-composer__field">
+        <span class="ui-visually-hidden">Your action or speech</span>
+        <textarea id="input" class="ui-field__control" aria-label="Your action or speech" placeholder="Act, speak, or leave empty…"></textarea>
+      </label>
+      <button id="send-btn" class="ui-button ui-button--primary">Send</button>
+      <div id="send-status" class="ui-guest-send-status" role="status" aria-live="polite"></div>
+    </div>
+  </div>
+</main>
 
 <script>
 "use strict";
@@ -73,6 +65,10 @@ const headSub = document.getElementById("head-sub");
 const msgsEl = document.getElementById("msgs");
 const inputEl = document.getElementById("input");
 const sendBtn = document.getElementById("send-btn");
+const sendStatus = document.getElementById("send-status");
+const connectionStatus = document.getElementById("connection-status");
+const connectionMessage = document.getElementById("connection-message");
+const connectionRetry = document.getElementById("connection-retry");
 
 const params = new URLSearchParams(location.search);
 if (params.get("code")) codeInput.value = params.get("code").toUpperCase();
@@ -90,20 +86,29 @@ async function api(method, url, body) {
   return data;
 }
 
+let joining = false;
 async function doJoin() {
   const code = codeInput.value.trim().toUpperCase();
-  if (!code) return;
+  if (!code || joining) return;
+  joining = true;
   joinBtn.disabled = true;
+  joinBtn.dataset.loading = "true";
+  joinBtn.setAttribute("aria-busy", "true");
   joinErr.textContent = "";
   try {
     await api("POST", "/api/join", { code });
     const state = await api("GET", "/api/guest/state");
     showPlayState(state);
     startPolling();
+    inputEl.focus();
   } catch (e) {
     joinErr.textContent = e.message;
+    codeInput.focus();
   } finally {
+    joining = false;
     joinBtn.disabled = false;
+    joinBtn.dataset.loading = "false";
+    joinBtn.removeAttribute("aria-busy");
   }
 }
 joinBtn.onclick = doJoin;
@@ -115,28 +120,26 @@ let busy = false;
 function render(turns) {
   msgsEl.innerHTML = "";
   for (const t of turns) {
-    const d = document.createElement("div");
-    // .turn.stale dims the prose via the shared stylesheet; the note below
-    // says why, because a dim on its own is not a message.
-    d.className = t.stale ? "turn stale" : "turn";
+    const d = document.createElement("article");
+    d.className = t.stale ? "ui-guest-turn turn stale" : "ui-guest-turn turn";
     if (t.player_input) {
       const pin = document.createElement("div");
-      pin.className = "pin";
+      pin.className = "ui-guest-turn__input pin";
       pin.textContent = t.player_input;
       d.appendChild(pin);
     }
     const prose = document.createElement("div");
     if (t.prose) {
-      prose.className = "prose";
+      prose.className = "ui-guest-turn__prose prose";
       prose.textContent = t.prose;
     } else {
-      prose.className = "waiting";
+      prose.className = "ui-guest-turn__waiting waiting";
       prose.textContent = "Waiting for this beat to resolve…";
     }
     d.appendChild(prose);
     if (t.stale_from) {
       const note = document.createElement("div");
-      note.className = "stale-note";
+      note.className = "ui-guest-turn__stale stale-note";
       note.textContent = t.prose_stale
         ? `Superseded — this text was written before “${t.stale_from.label}” was re-run.`
         : `Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.`;
@@ -147,18 +150,22 @@ function render(turns) {
   msgsEl.scrollTop = msgsEl.scrollHeight;
 }
 
+function setConnected() {
+  connectionStatus.hidden = true;
+  connectionMessage.textContent = "";
+}
+
 function showPlayState(state) {
   headSub.textContent = `${state.chat_name} — playing as ${state.persona_name}`;
-  joinScreen.style.display = "none";
-  playScreen.style.display = "flex";
+  joinScreen.hidden = true;
+  playScreen.hidden = false;
   nextIdx = state.next_idx;
   render(state.turns);
+  setConnected();
 }
 
 let refreshInFlight = null;
 function refresh() {
-  // A slow request must not overlap the next poll and later roll the
-  // transcript back to an older next_idx.
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
     try {
@@ -166,9 +173,8 @@ function refresh() {
       showPlayState(state);
       return true;
     } catch (e) {
-      // A revoked/expired session shows up here; leave the last known
-      // view up rather than clearing it, and just stop polling.
-      headSub.textContent = "Connection lost — " + e.message;
+      connectionMessage.textContent = "Connection lost — " + e.message;
+      connectionStatus.hidden = false;
       stopPolling();
       return false;
     }
@@ -189,12 +195,6 @@ function stopPolling() {
 
 async function pollOnce() {
   if (!polling) return;
-  // Skip the request while the tab is hidden -- a guest page left open in a
-  // background tab was the one unconditional poll in the app, waking the
-  // machine every ten seconds forever to fetch state nobody is looking at.
-  // The visibilitychange handler below refreshes immediately on return, so
-  // coming back to the tab still shows current state rather than up-to-ten-
-  // seconds-stale.
   if (!document.hidden) await refresh();
   if (polling) pollHandle = setTimeout(pollOnce, 10000);
 }
@@ -204,8 +204,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function startPolling() {
-  // Callers already hold fresh state (from join or session restore), so wait
-  // one interval instead of issuing a duplicate request immediately.
   stopPolling();
   polling = true;
   pollHandle = setTimeout(pollOnce, 10000);
@@ -217,25 +215,41 @@ async function resumeGuestSession() {
     showPlayState(state);
     startPolling();
   } catch (e) {
-    // No valid HttpOnly guest cookie: remain on the join screen. The same
-    // response intentionally covers missing, expired, and revoked sessions.
+    codeInput.focus();
   }
 }
+
+async function reconnect() {
+  connectionRetry.disabled = true;
+  connectionRetry.dataset.loading = "true";
+  const restored = await refresh();
+  connectionRetry.disabled = false;
+  connectionRetry.dataset.loading = "false";
+  if (restored) {
+    startPolling();
+    inputEl.focus();
+  }
+}
+connectionRetry.onclick = reconnect;
 
 async function send() {
   const text = inputEl.value.trim();
   if (busy) return;
   busy = true;
   sendBtn.disabled = true;
+  sendBtn.dataset.loading = "true";
+  sendStatus.textContent = "";
   try {
     await api("POST", "/api/guest/input", { idx: nextIdx, input: text });
     inputEl.value = "";
     await refresh();
   } catch (e) {
-    alert(e.message);
+    sendStatus.textContent = e.message;
+    inputEl.focus();
   } finally {
     busy = false;
     sendBtn.disabled = false;
+    sendBtn.dataset.loading = "false";
   }
 }
 sendBtn.onclick = send;
