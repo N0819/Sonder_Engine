@@ -27,7 +27,7 @@ for workflows that later packages still own.
 
 **Candidate disposition:** substantially adapt the three-zone composition,
 indexed rail, neutral surfaces, and responsive transitions from the attached
-candidate's `static/css/remaster-shell.css`. Adapt interaction ideas only from
+candidate's remaster shell stylesheet. Adapt interaction ideas only from
 `remaster/shell.js` and `remaster/inspector.js`. Rebuild routing, focus, scroll,
 shortcuts, Go To, and extension hosting on the WP-02 services. Reject candidate
 ID selectors, `!important` compatibility hiding, off-screen focusables,

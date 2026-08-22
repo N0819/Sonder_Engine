@@ -4,6 +4,16 @@ import { createOverlayController } from "../ui/components/overlay.js?release=wp0
 
 const LAYER_ID = "go-to";
 
+// UI_CATALOG_START: expert navigation chrome and core destination labels.
+const GO_TO_COPY = Object.freeze({
+  title: "Go To",
+  close: "Close",
+  placeholder: "Type a destination",
+  searchLabel: "Find a destination",
+  resultsLabel: "Destinations",
+  noResults: "No destinations match.",
+  shortcutLabel: "Open Go To",
+});
 const CORE_RESULTS = Object.freeze([
   ["Play", "Your active story", "play", ""],
   ["Story tools", "Play", "play", "story-tools"],
@@ -20,6 +30,7 @@ const CORE_RESULTS = Object.freeze([
   ["Maintenance", "Settings", "settings", "maintenance"],
   ["Advanced", "Settings", "settings", "advanced"],
 ]);
+// UI_CATALOG_END
 
 function element(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
@@ -49,24 +60,24 @@ export function createGoTo(options = {}) {
   dialog.setAttribute("aria-modal", "true");
   dialog.setAttribute("aria-labelledby", "ui-go-to-title");
   const header = element(documentRef, "header", "ui-go-to__header");
-  const title = element(documentRef, "h2", "ui-heading ui-heading--2", t("Go To"));
+  const title = element(documentRef, "h2", "ui-heading ui-heading--2", t(GO_TO_COPY.title));
   title.id = "ui-go-to-title";
-  const close = element(documentRef, "button", "ui-button ui-button--quiet", t("Close"));
+  const close = element(documentRef, "button", "ui-button ui-button--quiet", t(GO_TO_COPY.close));
   close.type = "button";
   header.append(title, close);
   const search = element(documentRef, "input", "ui-field__control ui-go-to__search");
   search.type = "search";
   search.autocomplete = "off";
-  search.placeholder = t("Type a destination");
+  search.placeholder = t(GO_TO_COPY.placeholder);
   search.setAttribute("role", "searchbox");
-  search.setAttribute("aria-label", t("Find a destination"));
+  search.setAttribute("aria-label", t(GO_TO_COPY.searchLabel));
   search.setAttribute("aria-controls", "ui-go-to-results");
   search.setAttribute("aria-activedescendant", "");
   const results = element(documentRef, "div", "ui-go-to__results");
   results.id = "ui-go-to-results";
   results.setAttribute("role", "listbox");
-  results.setAttribute("aria-label", t("Destinations"));
-  const empty = element(documentRef, "p", "ui-empty ui-go-to__empty", t("No destinations match."));
+  results.setAttribute("aria-label", t(GO_TO_COPY.resultsLabel));
+  const empty = element(documentRef, "p", "ui-empty ui-go-to__empty", t(GO_TO_COPY.noResults));
   empty.hidden = true;
   dialog.append(header, search, results, empty);
   overlay.append(dialog);
@@ -200,7 +211,7 @@ export function createGoTo(options = {}) {
     owner: "core-shell",
     id: "go-to",
     combo: "mod+k",
-    label: t("Open Go To"),
+    label: t(GO_TO_COPY.shortcutLabel),
     handler: open,
     core: true,
   });

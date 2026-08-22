@@ -1,6 +1,14 @@
 import { initAccessibility } from "../ui/accessibility.js?release=wp03.1";
 import { bootRuntime } from "./bootstrap.js?release=wp03.1";
 
+// UI_CATALOG_START: application-start fallback copy used before localization is available.
+const APPLICATION_FAILURE_COPY = Object.freeze({
+  forbidden: "This account cannot open the replacement interface.",
+  failed: "The interface could not start.",
+  unchanged: "Your saved stories were not changed. Return to sign in or try again.",
+});
+// UI_CATALOG_END
+
 const root = document.documentElement;
 
 if (!new Set(["application", "runtime-harness"]).has(root.dataset.uiNextEntry)) {
@@ -20,10 +28,10 @@ bootRuntime({ host: application, shell: application }).catch(error => {
   const title = document.createElement("strong");
   title.className = "ui-empty__title";
   title.textContent = error?.kind === "forbidden"
-    ? "This account cannot open the replacement interface."
-    : "The interface could not start.";
+    ? APPLICATION_FAILURE_COPY.forbidden
+    : APPLICATION_FAILURE_COPY.failed;
   const detail = document.createElement("p");
-  detail.textContent = "Your saved stories were not changed. Return to sign in or try again.";
+  detail.textContent = APPLICATION_FAILURE_COPY.unchanged;
   state.append(title, detail);
   view.replaceChildren(state);
 });

@@ -249,6 +249,7 @@
   [data-layout-state="compact"] .ui-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; padding-block-end: env(safe-area-inset-bottom); }
   [data-layout-state="compact"] .ui-shell__center { grid-column: 1; grid-row: 1; }
   [data-layout-state="compact"] .ui-shell__navigation {
+    z-index: var(--ui-z-dropdown);
     grid-column: 1;
     grid-row: 2;
     grid-template-columns: minmax(0, 1fr);
@@ -260,14 +261,14 @@
   [data-layout-state="compact"] .ui-shell__brand { display: none; }
   [data-layout-state="compact"] .ui-shell__go-to {
     position: fixed;
-    z-index: calc(var(--ui-z-sticky) + 1);
+    z-index: var(--ui-z-dropdown);
     inset-block-start: max(var(--ui-space-5), env(safe-area-inset-top));
-    inset-inline-end: calc(max(var(--ui-space-5), env(safe-area-inset-right)) + var(--ui-target-touch) + var(--ui-space-3));
+    inset-inline-end: calc(max(var(--ui-space-5), env(safe-area-inset-right)) + max(var(--ui-target-current), var(--ui-target-touch)) + var(--ui-space-3));
     display: grid;
     grid-template-columns: 1fr;
     place-items: center;
-    inline-size: var(--ui-target-touch);
-    min-block-size: var(--ui-target-touch);
+    inline-size: max(var(--ui-target-current), var(--ui-target-touch));
+    min-block-size: max(var(--ui-target-current), var(--ui-target-touch));
     padding: 0;
     border-color: var(--ui-color-border);
     background: var(--ui-color-canvas-subtle);
@@ -288,6 +289,7 @@
   }
   [data-layout-state="compact"] .ui-shell__destination[aria-current="page"] { border-block-start-color: var(--ui-color-interactive); box-shadow: none; }
   [data-layout-state="compact"] .ui-shell__destination-index { display: none; }
+  [data-layout-state="compact"] .ui-shell__orientation { padding-inline-end: calc(max(var(--ui-target-current), var(--ui-target-touch)) + var(--ui-space-4)); }
   [data-layout-state="compact"] .ui-shell__header { min-block-size: 5.25rem; padding: var(--ui-space-4) max(var(--ui-space-5), env(safe-area-inset-right)) var(--ui-space-4) max(var(--ui-space-5), env(safe-area-inset-left)); }
   [data-layout-state="compact"] .ui-shell__context,
   [data-layout-state="compact"] .ui-shell__save { display: none; }

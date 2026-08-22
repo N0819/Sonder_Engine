@@ -2,6 +2,8 @@ export const MODULE_RELEASE = "wp03.1";
 
 export const CORE_DESTINATIONS = Object.freeze(["play", "library", "settings"]);
 
+// UI_CATALOG_START: destination and placeholder copy owned by the shell.
+const SHELL_NAME = "Sonder Engine";
 const DESTINATION_COPY = Object.freeze({
   play: Object.freeze({
     label: "Play",
@@ -41,6 +43,23 @@ const SUBVIEW_COPY = Object.freeze({
     advanced: "Advanced",
   }),
 });
+const PLACEHOLDER_COPY = Object.freeze({
+  storyPending: "Story workspace is coming next",
+  storyPendingDetail: "This shell preserves the selected story without pretending the Play workflow is already replaced.",
+  chooseStory: "Choose a story to begin.",
+  chooseStoryDetail: "Open Library to choose an existing story. Story creation arrives with the dedicated story workflow.",
+  loadingLibrary: "Loading Library…",
+  readingEngine: "Reading the current engine state.",
+  stories: "Stories",
+  characters: "Characters",
+  personas: "Personas",
+  lore: "Lore",
+  inventory: "Library inventory",
+  inventoryDetail: "These counts come from the current engine. Browsing and editing arrive with the Library replacement.",
+  settingsReady: "Settings are available",
+  settingsDetail: "The current settings were loaded safely. Editing moves here with the Settings replacement.",
+});
+// UI_CATALOG_END
 
 function element(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
@@ -63,36 +82,40 @@ function playView(documentRef, state, t) {
   if (state.story?.status === "ready" && state.story.data) {
     return emptyState(
       documentRef,
-      t("Story workspace is coming next"),
-      t("This shell preserves the selected story without pretending the Play workflow is already replaced."),
+      t(PLACEHOLDER_COPY.storyPending),
+      t(PLACEHOLDER_COPY.storyPendingDetail),
     );
   }
   return emptyState(
     documentRef,
-    t("Choose a story to begin."),
-    t("Open Library to choose an existing story. Story creation arrives with the dedicated story workflow."),
+    t(PLACEHOLDER_COPY.chooseStory),
+    t(PLACEHOLDER_COPY.chooseStoryDetail),
   );
 }
 
 function libraryView(documentRef, state, t) {
   const library = state.library || {};
   if (library.status === "unrequested" || library.status === "loading") {
-    return emptyState(documentRef, t("Loading Library…"), t("Reading the current engine state."));
+    return emptyState(
+      documentRef,
+      t(PLACEHOLDER_COPY.loadingLibrary),
+      t(PLACEHOLDER_COPY.readingEngine),
+    );
   }
   const counts = [
-    ["Stories", library.chats],
-    ["Characters", library.characters],
-    ["Personas", library.personas],
-    ["Lore", library.lorebooks],
+    [PLACEHOLDER_COPY.stories, library.chats],
+    [PLACEHOLDER_COPY.characters, library.characters],
+    [PLACEHOLDER_COPY.personas, library.personas],
+    [PLACEHOLDER_COPY.lore, library.lorebooks],
   ];
   const section = element(documentRef, "section", "ui-shell-placeholder");
   section.append(
-    element(documentRef, "h2", "ui-heading ui-heading--2", t("Library inventory")),
+    element(documentRef, "h2", "ui-heading ui-heading--2", t(PLACEHOLDER_COPY.inventory)),
     element(
       documentRef,
       "p",
       "ui-muted",
-      t("These counts come from the current engine. Browsing and editing arrive with the Library replacement."),
+      t(PLACEHOLDER_COPY.inventoryDetail),
     ),
   );
   const list = element(documentRef, "dl", "ui-shell-counts");
@@ -111,12 +134,12 @@ function libraryView(documentRef, state, t) {
 function settingsView(documentRef, _state, t) {
   const section = element(documentRef, "section", "ui-shell-placeholder");
   section.append(
-    element(documentRef, "h2", "ui-heading ui-heading--2", t("Settings are available")),
+    element(documentRef, "h2", "ui-heading ui-heading--2", t(PLACEHOLDER_COPY.settingsReady)),
     element(
       documentRef,
       "p",
       "ui-muted",
-      t("The current settings were loaded safely. Editing moves here with the Settings replacement."),
+      t(PLACEHOLDER_COPY.settingsDetail),
     ),
   );
   const categories = element(documentRef, "ul", "ui-shell-category-list");
@@ -140,7 +163,7 @@ export function destinationCopy(destination, segment = "", t = value => value) {
   const subview = SUBVIEW_COPY[safe]?.[segment];
   return Object.freeze({
     label: t(subview || copy.label),
-    parent: t(subview ? copy.label : "Sonder Engine"),
+    parent: t(subview ? copy.label : SHELL_NAME),
     context: t(copy.context),
   });
 }

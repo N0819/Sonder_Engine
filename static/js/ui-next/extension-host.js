@@ -2,6 +2,17 @@ export const MODULE_RELEASE = "wp03.1";
 
 const VIEW_KINDS = Object.freeze(["destination", "legacy-view", "addon-settings"]);
 
+// UI_CATALOG_START: contained add-on surface labels and failure states.
+const EXTENSION_COPY = Object.freeze({
+  view: "Add-on View",
+  addon: "Add-on",
+  unavailable: "This add-on view is unavailable. The rest of Sonder Engine is still ready.",
+  views: "Add-on Views",
+  viewsHelp: "Open a contained view supplied by an enabled add-on.",
+  removed: "That add-on view is no longer available. Add-ons was opened instead.",
+});
+// UI_CATALOG_END
+
 function element(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
   if (className) node.className = className;
@@ -57,7 +68,7 @@ export function createExtensionHost(options = {}) {
     section.dataset.extensionView = entry.id;
     const header = element(documentRef, "header", "ui-extension-view__header");
     header.append(
-      element(documentRef, "p", "ui-shell__eyebrow", t("Add-on View")),
+      element(documentRef, "p", "ui-shell__eyebrow", t(EXTENSION_COPY.view)),
       element(documentRef, "h2", "ui-heading ui-heading--2", String(entry.label || entry.title || entry.id)),
     );
     const container = element(documentRef, "div", "ui-extension-view__mount");
@@ -78,7 +89,7 @@ export function createExtensionHost(options = {}) {
           documentRef,
           "div",
           "ui-empty",
-          t("This add-on view is unavailable. The rest of Sonder Engine is still ready."),
+          t(EXTENSION_COPY.unavailable),
         );
         unavailable.dataset.state = "error";
         container.append(unavailable);
@@ -100,7 +111,7 @@ export function createExtensionHost(options = {}) {
     const copy = element(documentRef, "span", "ui-list-row__copy");
     copy.append(
       element(documentRef, "span", "ui-list-row__title", String(entry.label || entry.title || entry.id)),
-      element(documentRef, "span", "ui-list-row__meta", `${t("Add-on")} · ${entry.owner}`),
+      element(documentRef, "span", "ui-list-row__meta", `${t(EXTENSION_COPY.addon)} · ${entry.owner}`),
     );
     link.append(copy);
     host.append(link);
@@ -119,8 +130,8 @@ export function createExtensionHost(options = {}) {
     if (!entries.length) return;
     const section = element(documentRef, "section", "ui-shell-placeholder ui-extension-launchers");
     section.append(
-      element(documentRef, "h2", "ui-heading ui-heading--2", t("Add-on Views")),
-      element(documentRef, "p", "ui-muted", t("Open a contained view supplied by an enabled add-on.")),
+      element(documentRef, "h2", "ui-heading ui-heading--2", t(EXTENSION_COPY.views)),
+      element(documentRef, "p", "ui-muted", t(EXTENSION_COPY.viewsHelp)),
     );
     const list = element(documentRef, "div", "ui-list");
     for (const entry of entries) launcher(entry, list);
@@ -130,7 +141,7 @@ export function createExtensionHost(options = {}) {
 
   const goToResults = () => viewEntries().map(entry => ({
     label: String(entry.label || entry.title || entry.id),
-    context: `${t("Add-on View")} · ${entry.owner}`,
+    context: `${t(EXTENSION_COPY.view)} · ${entry.owner}`,
     route: routeFor(entry),
   }));
 
@@ -141,7 +152,7 @@ export function createExtensionHost(options = {}) {
       services.notices.problem({
         owner: String(route.query.extension),
         condition: "extension-view-unavailable",
-        message: t("That add-on view is no longer available. Add-ons was opened instead."),
+        message: t(EXTENSION_COPY.removed),
         error: { kind: "extension", retryable: false },
       });
       services.router.navigate({ destination: "settings", segments: ["add-ons"] }, { replace: true });
