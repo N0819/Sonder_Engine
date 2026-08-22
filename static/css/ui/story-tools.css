@@ -75,6 +75,7 @@
     min-block-size: 0;
     padding-block-end: max(var(--ui-space-6), env(safe-area-inset-bottom));
   }
+  .ui-shell__inspector-sheet .ui-shell__inspector-header .ui-button { min-block-size: 44px; }
 
   @container (max-width: 340px) {
     .ui-story-tools__list { grid-template-columns: minmax(0, 1fr); }

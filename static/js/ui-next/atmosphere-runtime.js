@@ -88,8 +88,11 @@ export function createAtmosphereRuntime(options = {}) {
       audio.volume = boundedVolume(
         preferences.volume * Number(audio.dataset?.gain ?? 1),
       );
-      if (shouldPlay) void audio.play().catch(() => publish({ mediaError: "Audio could not start." }));
-      else audio.pause();
+      if (shouldPlay) {
+        audio.preload = "auto";
+        audio.load?.();
+        void audio.play().catch(() => publish({ mediaError: "Audio could not start." }));
+      } else audio.pause();
     }
     publish({});
   };
@@ -115,9 +118,10 @@ export function createAtmosphereRuntime(options = {}) {
       if (payload?.ready && !payload?.silent && token) {
         const layers = payload.layers?.length ? payload.layers : [{ url: payload.url, gain: 1 }];
         audioLayers = layers.filter(layer => layer?.url).map(layer => {
-          const audio = new target.Audio(layer.url);
+          const audio = new target.Audio();
           audio.loop = true;
-          audio.preload = "auto";
+          audio.preload = "none";
+          audio.src = layer.url;
           audio.dataset ||= {};
           audio.dataset.gain = String((payload.gain ?? 1) * (layer.gain ?? 1));
           return audio;
