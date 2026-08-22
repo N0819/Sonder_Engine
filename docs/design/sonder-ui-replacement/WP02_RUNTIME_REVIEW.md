@@ -122,8 +122,10 @@ WP-02 qualification completed on Windows with Chromium 149:
 
 - runtime/source/server/browser focus: 110 passed;
 - Python compile across every maintained source root: passed;
-- generated code map, structure, documentation links, and catalog freshness:
-  passed with no findings;
+- generated code map, documentation links, and catalog freshness: passed;
+- isolated worktree structure check: passed with no findings; the merged root
+  additionally reports the same seven pre-existing `extensions/directive`
+  integration-test facade-coupling findings, with no replacement-UI finding;
 - full repository suite: 8,763 passed, 4 platform skips;
 - complete browser suite: 96 passed;
 - two consecutive complete runtime evidence captures: byte-identical across
