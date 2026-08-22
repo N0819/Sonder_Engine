@@ -143,10 +143,10 @@ porting source.
 | `docs/design/sonder-ui-bible/**` | **Adapt** | Import only after reconciling authority, contradictory completion claims, current extension/i18n contracts, and approved deviations. |
 | `docs/design/sonder-ui-remaster/**` | **Reference** | Valuable requirements/history; do not copy implementation status as fact. |
 | `static/assets/icons/sonder-icons.svg` | **Accept** into a spike | Retain accessible labels in consumers and verify license/provenance already recorded by the package. |
-| `static/css/remaster-tokens.css` | **Adapt** | Strong semantic foundation; merge with existing variables deliberately. |
-| `static/css/remaster-components.css` | **Adapt** | Keep components; reduce compatibility specificity and audit every state. |
-| `static/css/remaster-shell.css` | **Adapt substantially** | Preserve layouts; remove hidden-focus traps, mobile capability deletion, and permanent legacy-ID dependence. |
-| `static/css/remaster-entry.css` | **Adapt** | Suitable for auth/guest after behavior and localization verification. |
+| `candidate/static/css/remaster-tokens.css` | **Adapt** | Strong semantic foundation; merge with existing variables deliberately. |
+| `candidate/static/css/remaster-components.css` | **Adapt** | Keep components; reduce compatibility specificity and audit every state. |
+| `candidate/static/css/remaster-shell.css` | **Adapt substantially** | Preserve layouts; remove hidden-focus traps, mobile capability deletion, and permanent legacy-ID dependence. |
+| `candidate/static/css/remaster-entry.css` | **Adapt** | Suitable for auth/guest after behavior and localization verification. |
 | `static/js/remaster/icons.js` | **Adapt** | Keep explicit icon helper; constrain and eventually retire heuristic whole-body enhancement. |
 | `static/js/remaster/accessibility.js` | **Adapt** | Keep preference shape; make effects reversible and integrate every component family. |
 | `static/js/remaster/main.js` | **Adapt** | Keep native-module entry; initialize only supported modules and provide teardown/test seams. |
