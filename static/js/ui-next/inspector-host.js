@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=wp06.1";
+import { createOverlayController } from "../ui/components/overlay.js?release=wp07.1";
 
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["narrow", "default", "wide"]);
@@ -159,12 +159,16 @@ export function createInspectorHost(options = {}) {
     }
     if (destination === "library") {
       body.dataset.libraryContext = "true";
-      desktopLibrary = modules.libraryView.mountLibraryDetail({
+      const libraryModule = route.query?.mode === "edit"
+        ? modules.libraryAuthoringView : modules.libraryView;
+      const mount = route.query?.mode === "edit"
+        ? libraryModule.mountLibraryAuthoring : libraryModule.mountLibraryDetail;
+      desktopLibrary = mount({
         document: documentRef,
         services,
         target: body,
       });
-      sheetLibrary = modules.libraryView.mountLibraryDetail({
+      sheetLibrary = mount({
         document: documentRef,
         services,
         target: sheet.body,

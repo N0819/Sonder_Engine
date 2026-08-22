@@ -1,15 +1,15 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
-import { mountCastTool } from "./story-tools/cast.js?release=wp06.1";
-import { mountConditionsTool } from "./story-tools/conditions.js?release=wp06.1";
-import { mountFramesTool } from "./story-tools/frames.js?release=wp06.1";
-import { mountMultiplayerTool } from "./story-tools/multiplayer.js?release=wp06.1";
-import { mountWorldTool } from "./story-tools/world.js?release=wp06.1";
-import { mountStyleTool } from "./story-tools/style.js?release=wp06.1";
-import { mountDialogueTool } from "./story-tools/dialogue.js?release=wp06.1";
-import { mountAttireTool } from "./story-tools/attire.js?release=wp06.1";
-import { mountBackdropsTool } from "./story-tools/backdrops.js?release=wp06.1";
-import { mountAmbienceTool } from "./story-tools/ambience.js?release=wp06.1";
+import { mountCastTool } from "./story-tools/cast.js?release=wp07.1";
+import { mountConditionsTool } from "./story-tools/conditions.js?release=wp07.1";
+import { mountFramesTool } from "./story-tools/frames.js?release=wp07.1";
+import { mountMultiplayerTool } from "./story-tools/multiplayer.js?release=wp07.1";
+import { mountWorldTool } from "./story-tools/world.js?release=wp07.1";
+import { mountStyleTool } from "./story-tools/style.js?release=wp07.1";
+import { mountDialogueTool } from "./story-tools/dialogue.js?release=wp07.1";
+import { mountAttireTool } from "./story-tools/attire.js?release=wp07.1";
+import { mountBackdropsTool } from "./story-tools/backdrops.js?release=wp07.1";
+import { mountAmbienceTool } from "./story-tools/ambience.js?release=wp07.1";
 
 const MOUNTS = Object.freeze({
   cast: mountCastTool,

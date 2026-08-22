@@ -2,7 +2,109 @@
 
 from __future__ import annotations
 
+import json
+import re
+
 from playwright.sync_api import Page
+from playwright.sync_api import expect
+
+
+BOOTSTRAP = {
+    "ui_language": "en", "ui_direction": "ltr", "ui_messages": {},
+    "chats": [{"id": 1, "name": "Lantern Archive"}],
+    "characters": [],
+    "personas": [{"id": 9, "name": "Mira"}],
+    "lorebooks": [], "providers": [], "language_packs": [],
+    "extensions": [], "extension_errors": [], "extension_lanes": [],
+}
+
+
+def test_story_editor_is_routed_and_round_trips_a_recovered_draft(
+    page: Page, ui_base_url: str,
+) -> None:
+    stored = {
+        "name": "Lantern Archive", "scenario": "Rain", "persona_id": None,
+    }
+    authoring_calls = []
+
+    def projection(route):
+        route.fulfill(content_type="application/json", body=json.dumps({
+            "items": [{
+                "kind": "story", "id": 1, "key": "story:1",
+                "name": stored["name"], "summary": stored["scenario"],
+                "subtype": "", "created": 1, "reusable": False,
+                "archived": False, "use_count": 0, "associations": [],
+            }],
+            "facets": {
+                "types": {"story": 1, "character": 0, "persona": 0, "lore": 0},
+                "scopes": {"all": 1, "story": 0, "unassigned": 0, "multiple": 0},
+            },
+            "page": {"offset": 0, "limit": 100, "returned": 1, "total": 1},
+            "query": {"scope": "all", "sort": "name", "visibility": "active"},
+        }))
+
+    def authoring(route):
+        nonlocal stored
+        authoring_calls.append(route.request.method)
+        if route.request.method == "PUT":
+            body = route.request.post_data_json
+            assert body["expected_revision"] == "revision-one"
+            stored = {
+                "name": body["name"], "scenario": body["scenario"],
+                "persona_id": body["persona_id"],
+            }
+            payload = {
+                "kind": "story", "id": 1, "owner": "story:1",
+                "revision": "revision-two", "document": stored,
+            }
+        else:
+            payload = {
+                "kind": "story", "id": 1, "owner": "story:1",
+                "revision": "revision-one", "document": stored,
+                "overview": {
+                    "cast": [], "personas": [], "lore": [],
+                    "activity": {"turn_count": 4, "recent": []}, "issues": [],
+                },
+            }
+        route.fulfill(content_type="application/json", body=json.dumps(payload))
+
+    page.set_viewport_size({"width": 1280, "height": 800})
+    page.route("**/api/bootstrap", lambda route: route.fulfill(
+        content_type="application/json", body=json.dumps(BOOTSTRAP),
+    ))
+    page.route("**/api/library?*", projection)
+    page.route("**/api/library/authoring/story/1", authoring)
+    page.route("**/api/chats/1", authoring)
+    response = page.goto(
+        f"{ui_base_url}/static/ui-next.html#/library/stories?item=story%3A1"
+    )
+    assert response is not None and response.ok
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    inspector = page.locator("[data-shell-inspector]:visible")
+    expect(inspector.get_by_role("button", name="Edit story")).to_be_visible()
+    expect(inspector.get_by_text("4 turns recorded")).to_be_visible()
+
+    inspector.get_by_role("button", name="Edit story").click()
+    expect(page).to_have_url(re.compile(r"mode=edit"))
+    page.wait_for_timeout(100)
+    assert authoring_calls.count("GET") >= 2, authoring_calls
+    name = inspector.get_by_role("textbox", name="Story name")
+    expect(name).to_have_value("Lantern Archive")
+    name.fill("Recovered Lantern")
+    inspector.get_by_role("textbox", name="Story premise").fill("Rain and brass")
+    inspector.get_by_role("combobox", name="Player persona").select_option("9")
+    expect(inspector.get_by_text("Unsaved draft")).to_be_visible()
+
+    page.reload()
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    inspector = page.locator("[data-shell-inspector]:visible")
+    expect(inspector.get_by_role("textbox", name="Story name")).to_have_value("Recovered Lantern")
+    expect(inspector.get_by_text("Recovered local draft")).to_be_visible()
+    inspector.get_by_role("button", name="Save story").click()
+    expect(inspector.get_by_text("Saved", exact=True)).to_be_visible()
+    assert stored == {
+        "name": "Recovered Lantern", "scenario": "Rain and brass", "persona_id": 9,
+    }
 
 
 def test_authoring_runtime_preserves_drafts_and_rejects_late_save(

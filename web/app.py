@@ -629,7 +629,7 @@ _RELEASED_UI_ASSET_PREFIXES = (
     "/static/js/ui-next/", "/static/js/ui/", "/static/css/ui/",
     "/static/assets/icons/sonder-icons.svg",
 )
-_UI_RELEASE = "wp06.1"
+_UI_RELEASE = "wp07.1"
 
 
 @app.middleware("http")
@@ -3280,7 +3280,9 @@ def chat_edit(cid: int, body: dict = Body(...)):
                     persona_initial_outfit(sheet),
                 ):
                     wset(cid, "scene", existing_scene)
-    return {"ok": True, **authoring_payload("story", cid)}
+    if "expected_revision" in body:
+        return {"ok": True, **authoring_payload("story", cid)}
+    return {"ok": True}
 
 @app.post("/api/chats/{cid}/lorebooks")
 def attach_lore(cid: int, body: dict = Body(...)):

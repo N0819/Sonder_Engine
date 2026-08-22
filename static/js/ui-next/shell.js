@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
 
@@ -43,7 +43,8 @@ export function createApplicationShell(options = {}) {
   if (!modules?.destinations || !modules?.inspectorHost
       || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost
       || !modules?.playView || !modules?.prose || !modules?.storyToolsRegistry
-      || !modules?.storyToolsView || !modules?.libraryView) {
+      || !modules?.storyToolsView || !modules?.libraryView
+      || !modules?.libraryAuthoringView) {
     throw new Error("The application shell presentation modules are missing.");
   }
 

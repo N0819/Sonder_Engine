@@ -55,9 +55,9 @@ def test_story_tool_registry_and_route_parser_are_exact(page: Page, ui_base_url:
     result = page.evaluate(
         """async base => {
           const registry = await import(
-            `${base}/static/js/ui-next/story-tools-registry.js?release=wp06.1`
+            `${base}/static/js/ui-next/story-tools-registry.js?release=wp07.1`
           );
-          const router = await import(`${base}/static/js/ui-next/router.js?release=wp06.1`);
+          const router = await import(`${base}/static/js/ui-next/router.js?release=wp07.1`);
           const route = router.parseHashRoute(
             "#/play/story-tools?chat=17&tool=conditions"
           );

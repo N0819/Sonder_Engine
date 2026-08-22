@@ -91,10 +91,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp06.1`
+            `${base}/static/js/ui-next/store.js?release=wp07.1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=wp06.1`
+            `${base}/static/js/ui-next/library-runtime.js?release=wp07.1`
           );
           const store = storeModule.createStore();
           let current = {
@@ -135,6 +135,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
             page: { offset: 0, limit: 100, returned: 1, total: 1 },
             query: {},
           });
+          store.dispatch({
+            type: "server/patch", slice: "library",
+            value: { authoring: { owner: "story:1", status: "dirty" } },
+          });
           pending[1].resolve({ data: payload("new") });
           await Promise.resolve(); await Promise.resolve();
           pending[0].resolve({ data: payload("old") });
@@ -152,6 +156,7 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
           runtime.teardown();
           return {
             item: store.getSnapshot().library.items[0].name,
+            authoring: store.getSnapshot().library.authoring,
             requests: pending.map(entry => ({ path: entry.path, owner: entry.options.owner,
               hasOwnerCheck: typeof entry.options.isCurrent === "function" })),
             recents: envelope.panes.library.recents.length,
@@ -166,6 +171,7 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
         ui_base_url,
     )
     assert result["item"] == "new"
+    assert result["authoring"] == {"owner": "story:1", "status": "dirty"}
     assert result["recents"] == 50
     assert result["favorites"] == 20
     assert all(request["hasOwnerCheck"] for request in result["requests"])
@@ -184,10 +190,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp06.1`
+            `${base}/static/js/ui-next/store.js?release=wp07.1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=wp06.1`
+            `${base}/static/js/ui-next/library-runtime.js?release=wp07.1`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",
