@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -45,7 +46,7 @@ def test_shell_exposes_three_destinations_and_truthful_empty_play(
     _open_shell(page, ui_base_url)
 
     primary = page.get_by_role("navigation", name="Primary")
-    expect(primary.get_by_role("link")).to_have_count(3)
+    expect(primary.locator("[data-core-destination]")).to_have_count(3)
     for name in ("Play", "Library", "Settings"):
         expect(primary.get_by_role("link", name=name, exact=True)).to_be_visible()
 
@@ -61,19 +62,19 @@ def test_destination_navigation_refresh_and_history_preserve_orientation(
     _open_shell(page, ui_base_url)
 
     page.get_by_role("link", name="Library", exact=True).click()
-    expect(page).to_have_url("#/library")
+    expect(page).to_have_url(re.compile(r"#/library$"))
     expect(page.get_by_role("heading", name="Library", level=1)).to_be_focused()
 
     page.reload()
     page.wait_for_function(
         "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
     )
-    expect(page).to_have_url("#/library")
+    expect(page).to_have_url(re.compile(r"#/library$"))
     expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
 
     page.get_by_role("link", name="Settings", exact=True).click()
     page.go_back()
-    expect(page).to_have_url("#/library")
+    expect(page).to_have_url(re.compile(r"#/library$"))
     expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
 
 
@@ -89,7 +90,7 @@ def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     expect(search).to_be_focused()
     search.fill("settings")
     search.press("Enter")
-    expect(page).to_have_url("#/settings")
+    expect(page).to_have_url(re.compile(r"#/settings$"))
 
     typing_probe = page.locator("[data-shell-typing-probe]")
     typing_probe.focus()

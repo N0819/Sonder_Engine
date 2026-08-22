@@ -34,6 +34,15 @@ def test_ui_next_boots_as_an_isolated_native_module(
         else None,
     )
     page.on("pageerror", lambda error: page_errors.append(str(error)))
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body='{"ui_language":"en","ui_direction":"ltr","ui_messages":{},'
+            '"chats":[],"characters":[],"personas":[],"lorebooks":[],'
+            '"extensions":[],"extension_errors":[],"extension_lanes":[]}',
+        ),
+    )
 
     response = page.goto(f"{ui_base_url}/static/ui-next.html")
 
@@ -45,7 +54,7 @@ def test_ui_next_boots_as_an_isolated_native_module(
     assert page.locator("script[type=module]").count() == 1
     assert page.evaluate("window.__uiNextIntervals") == 0
     assert page.evaluate("Object.hasOwn(window, 'S')") is False
-    assert not any(path.startswith("/api/") for path in requested)
+    assert requested.count("/api/bootstrap") == 1
     assert "/static/ui-next.html" in requested
     assert "/static/js/ui-next/main.js" in requested
     assert "/static/js/ui/appearance-preflight.js" in requested
