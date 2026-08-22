@@ -1977,5 +1977,6 @@
   "The result belongs to an older selection.": "この結果は以前の選択に対するものです。",
   "This account cannot perform that action.": "このアカウントではその操作を実行できません。",
   "This changed somewhere else. Review both versions before saving.": "別の場所で変更されています。保存する前に両方の内容を確認してください。",
-  "Your Sonder session ended. Sign in to continue.": "Sonder のセッションが終了しました。続けるにはサインインしてください。"
+  "Your Sonder session ended. Sign in to continue.": "Sonder のセッションが終了しました。続けるにはサインインしてください。",
+  "Open runtime harness": "ランタイムハーネスを開く"
 }

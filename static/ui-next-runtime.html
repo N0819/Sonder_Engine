@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-ui-next-entry="runtime-harness" data-ui-next-version="wp02.1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sonder Engine runtime boundary</title>
+  <script src="/static/js/ui/appearance-preflight.js?release=wp02.1"></script>
+  <link rel="stylesheet" href="/static/css/ui/reset.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/tokens.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/themes/carbon-signal.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/themes/ash-brass.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/themes/midnight-ink.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/themes/parchment-night.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/typography.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/components.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/utilities.css?release=wp02.1">
+  <link rel="stylesheet" href="/static/css/ui/runtime.css?release=wp02.1">
+</head>
+<body class="ui-app ui-runtime">
+  <main class="ui-runtime__panel" aria-labelledby="runtime-title">
+    <p class="ui-kicker">Authenticated development fixture · WP02</p>
+    <h1 class="ui-heading ui-heading--1" id="runtime-title">Runtime boundary</h1>
+    <p class="ui-runtime__status" data-runtime-status role="status" aria-live="polite">Loading runtime services…</p>
+    <p class="ui-muted" data-runtime-detail>The replacement service graph has not finished booting.</p>
+    <label class="ui-runtime__diagnostic-toggle">
+      <input type="checkbox" data-runtime-diagnostics>
+      Show redacted diagnostics
+    </label>
+    <pre class="ui-runtime__diagnostics" data-runtime-diagnostic-output hidden translate="no"></pre>
+    <p class="ui-runtime__note">This verifies native runtime boundaries only. The replacement Play, Library, and Settings shell begins in WP03.</p>
+    <a class="ui-button ui-button--secondary ui-runtime__back" href="/ui-next">Back to replacement entry</a>
+  </main>
+  <script type="module" src="/static/js/ui-next/main.js?release=wp02.1"></script>
+</body>
+</html>

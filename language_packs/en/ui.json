@@ -1248,6 +1248,7 @@
   "Open ${chat.name}": "Open ${chat.name}",
   "Open component laboratory": "Open component laboratory",
   "Open in workspace": "Open in workspace",
+  "Open runtime harness": "Open runtime harness",
   "Open the advanced generator after returning to the lorebook workspace": "Open the advanced generator after returning to the lorebook workspace",
   "OpenRouter upstream routing": "OpenRouter upstream routing",
   "Operations the engine refused": "Operations the engine refused",

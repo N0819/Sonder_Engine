@@ -1,0 +1,10 @@
+@layer ui-runtime {
+  html { min-block-size: 100%; background: var(--ui-color-canvas); }
+  .ui-runtime { min-block-size: 100dvh; display: grid; place-items: center; padding: var(--ui-space-6); background: var(--ui-color-canvas); }
+  .ui-runtime__panel { inline-size: min(42rem, 100%); display: grid; gap: var(--ui-space-4); padding: var(--ui-space-7); border: 1px solid var(--ui-color-border-strong); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface); box-shadow: var(--ui-shadow-raised); }
+  .ui-runtime__status { margin: 0; color: var(--ui-color-text-strong); font-weight: 650; }
+  .ui-runtime__diagnostic-toggle { min-block-size: var(--ui-target-min); display: inline-flex; align-items: center; gap: var(--ui-space-3); }
+  .ui-runtime__diagnostics { max-block-size: 16rem; overflow: auto; margin: 0; padding: var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface-sunken); color: var(--ui-color-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ui-runtime__note { margin: 0; color: var(--ui-color-text-muted); }
+  .ui-runtime__back { justify-self: start; text-decoration: none; }
+}
