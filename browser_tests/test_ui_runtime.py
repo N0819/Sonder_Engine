@@ -345,3 +345,179 @@ def test_api_parses_text_empty_and_ndjson_without_retrying_writes(
         "diagnosticHasBody": False,
         "hasCorrelation": True,
     }
+
+
+def test_store_owns_documented_slices_and_immutable_copied_state(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createStore, SLICE_OWNERS } = await import(
+            `${base}/static/js/ui-next/store.js?release=wp02.1`
+          );
+          const store = createStore();
+          const extensionProjection = {
+            status: "ready",
+            items: [{ id: "example", enabled: true }],
+          };
+          store.dispatch({
+            type: "server/replace",
+            slice: "extensions",
+            value: extensionProjection,
+          });
+          extensionProjection.items[0].enabled = false;
+          const snapshot = store.getSnapshot();
+          const mutationRejected = Reflect.set(
+            snapshot.extensions.items[0],
+            "enabled",
+            false,
+          ) === false;
+          const errors = [];
+          for (const action of [
+            { type: "server/replace", slice: "route", value: {} },
+            { type: "presentation/replace", slice: "story", value: {} },
+            { type: "server/replace", slice: "unknown", value: {} },
+            { type: "unknown/action", slice: "story", value: {} },
+          ]) {
+            try { store.dispatch(action); } catch (error) { errors.push(error.kind); }
+          }
+          return {
+            owners: SLICE_OWNERS,
+            sliceNames: Object.keys(snapshot),
+            sessionStatus: snapshot.session.status,
+            storyStatus: snapshot.story.status,
+            routeStatus: snapshot.route.status,
+            copiedExtension: snapshot.extensions.items[0].enabled,
+            frozen: Object.isFrozen(snapshot)
+              && Object.isFrozen(snapshot.extensions.items[0]),
+            mutationRejected,
+            errors,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "owners": {
+            "server": [
+                "session",
+                "story",
+                "transcript",
+                "library",
+                "settings",
+                "extensions",
+            ],
+            "presentation": [
+                "route",
+                "composer",
+                "inspector",
+                "tasks",
+                "notices",
+                "appearance",
+                "diagnostics",
+            ],
+        },
+        "sliceNames": [
+            "session",
+            "route",
+            "story",
+            "transcript",
+            "composer",
+            "inspector",
+            "library",
+            "settings",
+            "tasks",
+            "notices",
+            "appearance",
+            "extensions",
+            "diagnostics",
+        ],
+        "sessionStatus": "unrequested",
+        "storyStatus": "unrequested",
+        "routeStatus": "ready",
+        "copiedExtension": True,
+        "frozen": True,
+        "mutationRejected": True,
+        "errors": ["slice-owner", "slice-owner", "unknown-slice", "unknown-action"],
+    }
+
+
+def test_store_batches_selector_events_and_tears_down_deterministically(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createStore } = await import(
+            `${base}/static/js/ui-next/store.js?release=wp02.1`
+          );
+          const store = createStore();
+          const routeEvents = [];
+          const allEvents = [];
+          const unsubscribeRoute = store.subscribe(
+            state => state.route.destination,
+            (next, previous, actions) => routeEvents.push({ next, previous, actions }),
+          );
+          store.subscribe(
+            state => state,
+            (_next, _previous, actions) => allEvents.push(actions),
+          );
+          store.dispatch({
+            type: "presentation/patch",
+            slice: "appearance",
+            value: { theme: "ash-brass" },
+          });
+          store.batch(() => {
+            store.dispatch({
+              type: "presentation/patch",
+              slice: "route",
+              value: { destination: "library" },
+            });
+            store.dispatch({
+              type: "presentation/patch",
+              slice: "route",
+              value: { destination: "settings" },
+            });
+          });
+          unsubscribeRoute();
+          store.dispatch({
+            type: "presentation/patch",
+            slice: "route",
+            value: { destination: "play" },
+          });
+          store.destroy();
+          let destroyed = null;
+          try {
+            store.dispatch({
+              type: "presentation/patch",
+              slice: "route",
+              value: { destination: "library" },
+            });
+          } catch (error) {
+            destroyed = error.kind;
+          }
+          return {
+            routeEvents,
+            allEvents,
+            finalRoute: store.getSnapshot().route.destination,
+            destroyed,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "routeEvents": [
+            {
+                "next": "settings",
+                "previous": "play",
+                "actions": ["presentation/patch", "presentation/patch"],
+            }
+        ],
+        "allEvents": [
+            ["presentation/patch"],
+            ["presentation/patch", "presentation/patch"],
+            ["presentation/patch"],
+        ],
+        "finalRoute": "play",
+        "destroyed": "store-destroyed",
+    }
