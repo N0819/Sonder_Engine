@@ -47,7 +47,7 @@ STAGES = ("perception_establish", "perception_act", "perception_outcome")
 
 
 def _tree():
-    return ast.parse(open(perception.__file__).read())
+    return ast.parse(open(perception.__file__, encoding="utf-8").read())
 
 
 def _fn(name):
@@ -174,4 +174,6 @@ def test_no_perception_prompt_survives_anywhere():
     # "perception"` branches it justified could never fire.
     assert "perception" not in schemas.SCHEMA_MAP
     assert not any(key.startswith("perception") for key in schemas.SCHEMA_MAP)
-    assert "_agent_json" not in open(perception.__file__).read()
+    assert "_agent_json" not in open(
+        perception.__file__, encoding="utf-8"
+    ).read()

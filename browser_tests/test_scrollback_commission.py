@@ -26,7 +26,7 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import Page
 
-from test_backdrop_commission import BOOTSTRAP
+from .test_backdrop_commission import BOOTSTRAP
 
 # Turns 1..8 sit in the plaza, which has never been drawn. Turns 9..12 sit in
 # the market, whose picture is on disk -- the situation live chat 65 was in

@@ -76,7 +76,9 @@ def test_the_japanese_pack_kept_all_three_labels():
     the fix is English catching up rather than a new idea."""
     import json
 
-    labels = json.load(open("language_packs/ja/cards/linguistics.json"))[
+    labels = json.load(open(
+        "language_packs/ja/cards/linguistics.json", encoding="utf-8"
+    ))[
         "agents.common"]["_APPEARANCE_LABELS"]["items"]
     # FIRST match wins: the rewrite is a sequential `.replace`, so the
     # Japanese rows fire and the English fallback rows below them then find

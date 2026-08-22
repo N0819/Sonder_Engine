@@ -116,7 +116,9 @@ def test_the_prompts_ask_for_the_field_in_both_packs():
 
     for lang in ("en", "ja"):
         prompts = json.load(open(
-            "language_packs/%s/cards/system_prompts.json" % lang))["prompts"]
+            "language_packs/%s/cards/system_prompts.json" % lang,
+            encoding="utf-8",
+        ))["prompts"]
         for key in ("director_establish", "resolve_repair"):
             assert "sight_from" in str(prompts[key]), (lang, key)
 

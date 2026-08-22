@@ -92,7 +92,7 @@ def test_no_stage_hardcodes_a_budget_the_ceiling_cannot_raise():
     root = pathlib.Path(__file__).resolve().parent.parent
     offenders = []
     for path in list((root / "agents").glob("*.py")) + [root / "llm" / "llm_quality.py"]:
-        for n, line in enumerate(path.read_text().splitlines(), 1):
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "max_tokens" not in line or line.lstrip().startswith("#"):
                 continue
             if "16000" in line:
