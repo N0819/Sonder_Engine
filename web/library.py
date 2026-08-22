@@ -275,6 +275,13 @@ def _sort_key(item, selected_sort):
     return identity
 
 
+def _belongs_to_story(item, story_id):
+    return (
+        (item["kind"] == "story" and item["id"] == story_id)
+        or any(row["story_id"] == story_id for row in item["associations"])
+    )
+
+
 @router.get("/api/library")
 def library_projection(
     scope: Literal["all", "story", "unassigned", "multiple"] = "all",
@@ -289,25 +296,35 @@ def library_projection(
     if scope == "story" and story_id is None:
         raise HTTPException(422, "story_id is required for story scope")
     selected_types = _parse_types(types)
-    items = _base_items(story_id if scope == "story" else None)
+    items = _base_items(story_id)
     wants_archived = visibility == "archived"
     items = [item for item in items
              if item["kind"] in selected_types
              and item["archived"] is wants_archived]
+    needle = q_text.strip().casefold()
+    if needle:
+        items = [item for item in items if needle in _search_text(item)]
+    scope_facets = {
+        "all": len(items),
+        "story": (
+            None if story_id is None
+            else sum(1 for item in items if _belongs_to_story(item, story_id))
+        ),
+        "unassigned": sum(
+            1 for item in items if item["reusable"] and item["use_count"] == 0
+        ),
+        "multiple": sum(
+            1 for item in items if item["reusable"] and item["use_count"] > 1
+        ),
+    }
     if scope == "story":
-        items = [item for item in items if (
-            (item["kind"] == "story" and item["id"] == story_id)
-            or any(row["story_id"] == story_id for row in item["associations"])
-        )]
+        items = [item for item in items if _belongs_to_story(item, story_id)]
     elif scope == "unassigned":
         items = [item for item in items
                  if item["reusable"] and item["use_count"] == 0]
     elif scope == "multiple":
         items = [item for item in items
                  if item["reusable"] and item["use_count"] > 1]
-    needle = q_text.strip().casefold()
-    if needle:
-        items = [item for item in items if needle in _search_text(item)]
     items.sort(key=lambda item: _sort_key(item, sort))
     total = len(items)
     facets = {kind: sum(1 for item in items if item["kind"] == kind)
@@ -319,7 +336,7 @@ def library_projection(
             "offset": offset, "limit": limit,
             "returned": len(page), "total": total,
         },
-        "facets": {"types": facets},
+        "facets": {"types": facets, "scopes": scope_facets},
         "query": {
             "scope": scope, "story_id": story_id,
             "types": sorted(selected_types), "q": q_text.strip(),

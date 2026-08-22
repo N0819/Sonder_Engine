@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import time
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from web import app as app_module
@@ -156,6 +158,9 @@ def test_library_projection_normalizes_real_associations_without_private_state(
     assert "sheet" not in serialized
     assert payload["page"]["returned"] == len(payload["items"])
     assert payload["facets"]["types"]["story"] == 2
+    assert payload["facets"]["scopes"] == {
+        "all": 8, "story": None, "unassigned": 3, "multiple": 3,
+    }
 
 
 def test_story_unassigned_multiple_and_search_scopes_follow_database_truth(
@@ -186,6 +191,7 @@ def test_story_unassigned_multiple_and_search_scopes_follow_database_truth(
     owned = _by_key(story)[f"lore:{seeded['story_owned']}"]
     assert owned["reusable"] is False
     assert owned["associations"][0]["state"] == "owned"
+    assert story["facets"]["scopes"]["story"] == 5
 
     assert set(_by_key(unassigned)) == {
         f"character:{seeded['char_unused']}",
@@ -272,6 +278,39 @@ def test_archive_metadata_never_enters_story_snapshots_or_exports(
     assert "library_item_state" not in snapshot_state(seeded["story_a"])
     assert "library_item_state" not in exported.json()
     assert "library_item_state" not in json.dumps(exported.json())
+
+
+def test_library_membership_mutations_refuse_a_running_story_without_changes(
+    temp_db,
+):
+    seeded = _seed_library(temp_db)
+    story_id = seeded["story_a"]
+    app_module.ABORTS[(story_id, None)] = object()
+    try:
+        operations = (
+            lambda: app_module.chat_del_char(story_id, seeded["char_used"]),
+            lambda: app_module.chat_add_char(story_id, {"char_id": seeded["char_unused"]}),
+            lambda: app_module.chat_del_persona(story_id, seeded["persona_main"]),
+            lambda: app_module.chat_add_persona(story_id, {"persona_id": seeded["persona_unused"]}),
+        )
+        for operation in operations:
+            with pytest.raises(HTTPException) as exc_info:
+                operation()
+            assert exc_info.value.status_code == 409
+    finally:
+        app_module.ABORTS.pop((story_id, None), None)
+
+    assert temp_db.q(
+        "SELECT status FROM chat_chars WHERE chat_id=? AND char_id=?",
+        (story_id, seeded["char_used"]), one=True,
+    )["status"] == "active"
+    assert temp_db.q(
+        "SELECT 1 FROM chat_chars WHERE chat_id=? AND char_id=?",
+        (story_id, seeded["char_unused"]), one=True,
+    ) is None
+    assert temp_db.q(
+        "SELECT 1 FROM characters WHERE id=?", (seeded["char_used"],), one=True,
+    ) is not None
 
 
 def test_projection_validation_and_pagination_are_bounded_and_deterministic(
