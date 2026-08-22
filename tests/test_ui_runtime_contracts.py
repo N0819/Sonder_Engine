@@ -49,6 +49,7 @@ def test_runtime_modules_have_one_literal_release_and_no_classic_bridge():
     assert "clickLegacy" not in combined
     assert ".click()" not in combined
     assert ".innerHTML" not in combined
+    assert "console." not in combined
 
 
 def test_v1_adapter_is_the_only_runtime_global_assignment():
