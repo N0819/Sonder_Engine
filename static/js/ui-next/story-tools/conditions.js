@@ -1,6 +1,6 @@
 export const MODULE_RELEASE = "wp05.1";
 
-import { element, errorState, frameQuery, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
+import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
 
 const VITALS = Object.freeze([
   Object.freeze({ key: "air", label: "Air", invert: false }),
@@ -65,7 +65,7 @@ export function mountConditionsTool({ services, target, document: documentRef })
         const card = element(documentRef, "article", "ui-tool-card ui-condition-card");
         const heading = element(documentRef, "header", "ui-tool-card__header");
         heading.append(
-          element(documentRef, "h4", "ui-heading ui-heading--5", body.name),
+          markData(element(documentRef, "h4", "ui-heading ui-heading--5", body.name)),
           element(documentRef, "span", "ui-badge", body.is_player ? COPY.player : COPY.cast),
         );
         const grid = element(documentRef, "div", "ui-condition-card__vitals");

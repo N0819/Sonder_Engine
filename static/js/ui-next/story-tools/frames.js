@@ -1,6 +1,6 @@
 export const MODULE_RELEASE = "wp05.1";
 
-import { button, element, errorState, fieldLabel, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
+import { button, element, errorState, fieldLabel, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
 
 // UI_CATALOG_START: Frames tool copy.
 const COPY = Object.freeze({
@@ -63,7 +63,7 @@ export function mountFramesTool({ services, target, document: documentRef }) {
       const head = element(documentRef, "header", "ui-tool-card__header");
       const identity = element(documentRef, "div");
       identity.append(
-        element(documentRef, "h4", "ui-heading ui-heading--5", title),
+        markData(element(documentRef, "h4", "ui-heading ui-heading--5", title)),
         element(documentRef, "span", "ui-badge", frame.kind || COPY.present),
       );
       if (id === frameId) identity.append(element(documentRef, "span", "ui-badge", COPY.current));
@@ -101,6 +101,7 @@ export function mountFramesTool({ services, target, document: documentRef }) {
       for (const person of services.store.getSnapshot().story.data?.participants || []) {
         const option = element(documentRef, "option", "", person.name);
         option.value = person.id;
+        markData(option);
         select.append(option);
       }
       return select;
@@ -138,6 +139,7 @@ export function mountFramesTool({ services, target, document: documentRef }) {
         const option = element(documentRef, "option", "", frame.id === null ? COPY.present : frame.label);
         option.value = frame.id ?? "";
         option.selected = (frame.id ?? null) === (persona.frame_id ?? null);
+        if (frame.id !== null) markData(option);
         select.append(option);
       }
       select.addEventListener("change", () => save(
@@ -146,7 +148,7 @@ export function mountFramesTool({ services, target, document: documentRef }) {
         { frame_id: select.value ? Number(select.value) : null },
       ));
       const row = element(documentRef, "div", "ui-tool-card ui-tool-inline");
-      row.append(element(documentRef, "strong", "", persona.name), select);
+      row.append(markData(element(documentRef, "strong", "", persona.name)), select);
       body.append(row);
     }
     replaceLocalized(services, target, body);
