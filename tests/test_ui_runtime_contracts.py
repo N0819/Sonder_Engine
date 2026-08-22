@@ -55,7 +55,9 @@ def test_v1_adapter_is_the_only_runtime_global_assignment():
     assignments: list[tuple[str, str]] = []
     for path in RUNTIME.glob("*.js"):
         text = path.read_text(encoding="utf-8")
-        for match in re.finditer(r"(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=", text):
+        for match in re.finditer(
+            r"(?:window|globalThis)\.([A-Za-z_$][\w$]*)\s*=(?!=)", text
+        ):
             assignments.append((path.name, match.group(1)))
     assert assignments == [("extensions-v1.js", "Sonder")]
 
@@ -68,4 +70,3 @@ def test_runtime_entry_names_the_versioned_graph_and_no_classic_assets():
     assert "/static/js/utils.js" not in html
     assert "/static/js/extensions.js" not in html
     assert "/static/styles.css" not in html
-

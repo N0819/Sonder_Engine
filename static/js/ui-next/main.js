@@ -1,4 +1,5 @@
-import { initAccessibility } from "../ui/accessibility.js";
+import { initAccessibility } from "../ui/accessibility.js?release=wp02.1";
+import { bootRuntime } from "./bootstrap.js?release=wp02.1";
 
 const root = document.documentElement;
 
@@ -7,4 +8,6 @@ if (root.dataset.uiNextEntry !== "development") {
 }
 
 initAccessibility();
-root.dataset.uiNextReady = "true";
+bootRuntime().catch(() => {
+  root.dataset.uiNextState = "failed";
+});
