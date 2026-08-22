@@ -1,7 +1,7 @@
 export const MODULE_RELEASE = "wp05.1";
 
 import {
-  button, element, errorState, fieldLabel, frameQuery, replaceLocalized, stateMessage, toolScope,
+  button, element, errorState, fieldLabel, frameQuery, markData, replaceLocalized, stateMessage, toolScope,
 } from "./shared.js?release=wp05.1";
 
 // UI_CATALOG_START: Cast tool actions and states.
@@ -70,7 +70,7 @@ export function mountCastTool({ services, target, document: documentRef }) {
       const head = element(documentRef, "header", "ui-tool-card__header");
       const identity = element(documentRef, "div");
       identity.append(
-        element(documentRef, "h5", "ui-heading ui-heading--5", person.name),
+        markData(element(documentRef, "h5", "ui-heading ui-heading--5", person.name)),
         element(documentRef, "span", "ui-badge", person.status === "active" ? COPY.active : COPY.dormant),
       );
       const status = button(documentRef, person.status === "active" ? "Move to dormant" : "Restore to active");
@@ -93,6 +93,7 @@ export function mountCastTool({ services, target, document: documentRef }) {
           ? `${room.parent_name} — ${room.name}` : room.name);
         option.value = room.id;
         option.selected = room.id === placed;
+        markData(option);
         location.append(option);
       }
       location.addEventListener("change", () => mutate(
@@ -132,6 +133,7 @@ export function mountCastTool({ services, target, document: documentRef }) {
       for (const person of available) {
         const option = element(documentRef, "option", "", person.name);
         option.value = person.id;
+        markData(option);
         select.append(option);
       }
       const add = button(documentRef, COPY.add, "ui-button ui-button--primary");

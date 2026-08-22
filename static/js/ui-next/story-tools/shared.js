@@ -13,6 +13,11 @@ export function button(documentRef, label, className = "ui-button ui-button--qui
   return node;
 }
 
+export function markData(node) {
+  node.setAttribute("translate", "no");
+  return node;
+}
+
 export function stateMessage(documentRef, state, message, retry = null) {
   const box = element(documentRef, "div", "ui-tool-state");
   box.dataset.state = state;

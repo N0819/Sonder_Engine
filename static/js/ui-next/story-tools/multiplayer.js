@@ -1,6 +1,6 @@
 export const MODULE_RELEASE = "wp05.1";
 
-import { button, element, errorState, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
+import { button, element, errorState, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
 
 // UI_CATALOG_START: Multiplayer tool copy.
 const COPY = Object.freeze({
@@ -61,11 +61,12 @@ export function mountMultiplayerTool({ services, target, document: documentRef }
       reveal.setAttribute("aria-live", "polite");
       reveal.append(element(documentRef, "p", "", COPY.share));
       const output = element(documentRef, "output", "ui-invite-result__link", revealedInvite.link);
+      markData(output);
       output.dataset.inviteSecret = "ephemeral";
       const copy = button(documentRef, "Copy invite link", "ui-button ui-button--primary");
       copy.addEventListener("click", async () => {
         await navigator.clipboard?.writeText(revealedInvite.link);
-        copy.textContent = COPY.copied;
+        copy.textContent = services.localizer.t(COPY.copied);
       });
       reveal.append(output, copy);
       body.append(reveal);
@@ -74,7 +75,7 @@ export function mountMultiplayerTool({ services, target, document: documentRef }
     for (const persona of personas) {
       const card = element(documentRef, "article", "ui-tool-card");
       const head = element(documentRef, "header", "ui-tool-card__header");
-      head.append(element(documentRef, "h4", "ui-heading ui-heading--5", persona.name));
+      head.append(markData(element(documentRef, "h4", "ui-heading ui-heading--5", persona.name)));
       const grant = grants.find(item => Number(item.persona_id) === Number(persona.id)
         && ["pending", "active"].includes(item.status));
       if (grant) {
@@ -132,6 +133,7 @@ export function mountMultiplayerTool({ services, target, document: documentRef }
       for (const persona of available) {
         const option = element(documentRef, "option", "", persona.name);
         option.value = persona.id;
+        markData(option);
         select.append(option);
       }
       const add = button(documentRef, COPY.add, "ui-button ui-button--primary");

@@ -63,6 +63,13 @@
   .ui-vital[data-tone="warning"] .ui-vital__fill { background: var(--ui-color-warning); }
   .ui-vital[data-tone="danger"] .ui-vital__fill { background: var(--ui-color-danger); }
   .ui-invite-result__link { display: block; overflow-wrap: anywhere; padding: var(--ui-space-3); font-family: var(--ui-font-mono); }
+  .ui-tool-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); gap: var(--ui-space-3); }
+  .ui-tool-metric { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; }
+  .ui-tool-metric strong { font: 700 1.35rem/1 var(--ui-font-mono); }
+  .ui-document-editor__advanced > summary { display: flex; align-items: center; min-block-size: 44px; cursor: pointer; font-weight: 650; }
+  .ui-document-editor__textarea { box-sizing: border-box; inline-size: 100%; min-block-size: 18rem; resize: block; font-family: var(--ui-font-mono); line-height: 1.5; }
+  .ui-field-error { color: var(--ui-color-danger); }
+  .ui-document-editor__status:empty { display: none; }
 
   .ui-shell__inspector-sheet .ui-story-tools {
     min-block-size: 0;

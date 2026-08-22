@@ -29,8 +29,8 @@ def test_world_and_attire_preserve_complete_authoritative_payloads():
     assert "/api/chats/${chatId}/attire" in attire
     assert "wearing" in attire and "regions" in attire
     for source in (world, attire):
-        assert "JSON.stringify" in source
-        assert 'method: "PUT"' in source
+        assert "mountDocumentEditor" in source
+        assert '"PUT"' in source
 
 
 def test_style_preserves_story_language_survival_and_authority_without_ui_language():
@@ -89,4 +89,3 @@ def test_long_form_tools_keep_owner_scoped_drafts_until_accepted_or_discarded():
     assert ".innerHTML" not in source
     assert "prompt(" not in source
     assert "confirm(" not in source
-
