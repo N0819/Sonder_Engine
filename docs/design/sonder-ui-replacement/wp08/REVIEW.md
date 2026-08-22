@@ -22,13 +22,19 @@ current UI runtime instead of inventing a substitute runtime contract.
 - Ported the AI Connections provider ledger into the same reference field-grid treatment.
 - Connected provider creation, existing-provider edits, credential-safe saves, connection tests,
   model discovery, and default-model saves to the current runtime APIs.
+- Connected per-provider prompt caching and the provider-side response limit, always reflecting
+  the server's returned cache state rather than the requested checkbox state.
+- Added the required advanced disclosure for per-role model and reasoning assignments while
+  preserving untouched sampler and fallback configuration fields.
+- Connected embeddings-model change warnings, backdrop image configuration, backdrop enablement
+  and continuity, and credential-safe local/Freesound ambience configuration.
 - Added the reference terminal glyph used by Advanced and Turn details.
 - Preserved safe fallback behavior for invalid Settings deep links.
 
 ## Deliberately incomplete
 
-- AI Connections still needs prompt-cache, generation-limit, image/ambience model, embedding,
-  and advanced per-role controls from the current provider surface.
+- AI Connections still needs advanced sampler and backup-model editing, OpenRouter upstream
+  routing, image-model catalogue discovery, and the embeddings rebuild action.
 - Content, Add-ons, and Maintenance still need their reference panels.
 - Settings search and legacy theme selection are not connected yet.
 - The four Advanced launchers are visual ports only until their replacement editors are
@@ -41,6 +47,8 @@ current UI runtime instead of inventing a substitute runtime contract.
 - `screenshots/settings-advanced-1024.png`
 - `screenshots/settings-ai-1440.png`
 - `screenshots/settings-ai-connect-1440.png`
-- `57 passed` across Settings, shell, Play, and Library browser contracts.
+- `screenshots/settings-ai-models-1440.png`
+- `screenshots/settings-ai-media-1440.png`
+- `9 passed` in the focused Settings browser suite after the AI defaults/media tranche.
 - `node --check static/js/ui-next/settings-view.js`
 - `git diff --check`

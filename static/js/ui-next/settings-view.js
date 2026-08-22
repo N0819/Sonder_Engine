@@ -54,6 +54,13 @@ function icon(documentRef, name) {
   return svg;
 }
 
+function humanizeSettingKey(value) {
+  return String(value || "")
+    .replace(/^ext:/, "")
+    .replace(/[_:-]+/g, " ")
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 function categoryNav(documentRef, services, active) {
   const nav = el(documentRef, "nav", "ui-settings__categories");
   nav.dataset.settingsCategories = "true";
@@ -450,8 +457,38 @@ function aiConnections(documentRef, services, state) {
     edit.type = "button";
     edit.setAttribute("aria-label", `Edit ${provider.name || provider.kind || "provider"} connection`);
     edit.addEventListener("click", () => openProviderForm(provider));
+    const cacheLabel = el(documentRef, "label", "ui-settings__provider-cache");
+    const cache = documentRef.createElement("input");
+    cache.type = "checkbox";
+    cache.checked = Boolean(provider.prompt_cache);
+    cache.disabled = Boolean(provider.prompt_cache_locked);
+    cache.setAttribute("aria-label", `Cache repeated prompts for ${provider.name || provider.kind || "provider"}`);
+    cacheLabel.append(cache, el(documentRef, "span", "", "Prompt cache"));
     const status = el(documentRef, "p", "ui-settings__provider-status");
     status.setAttribute("role", "status");
+    cache.addEventListener("change", async () => {
+      const requested = cache.checked;
+      cache.disabled = true;
+      status.textContent = "Saving prompt cache preference…";
+      try {
+        const result = await services.apiClient.put(`/api/providers/${provider.id}/prompt_cache`, {
+          enabled: requested,
+        }, {
+          channel: `settings-provider-cache:${provider.id}`,
+          owner: `settings-provider:${provider.id}`,
+        });
+        if (!cache.isConnected) return;
+        const enabled = Boolean(result.data?.prompt_cache);
+        cache.checked = enabled;
+        status.textContent = `Prompt caching ${enabled ? "remains on" : "is off"} for ${provider.name || provider.kind || "this provider"}.`;
+      } catch (error) {
+        if (!cache.isConnected) return;
+        cache.checked = !requested;
+        status.textContent = error?.userMessage || error?.message || "Sonder could not change prompt caching.";
+      } finally {
+        if (cache.isConnected) cache.disabled = Boolean(provider.prompt_cache_locked);
+      }
+    });
     test.addEventListener("click", async () => {
       test.disabled = true;
       status.textContent = "Testing connection…";
@@ -470,7 +507,7 @@ function aiConnections(documentRef, services, state) {
         if (test.isConnected) test.disabled = false;
       }
     });
-    row.append(icon(documentRef, "api"), copy, credential, edit, test, status);
+    row.append(icon(documentRef, "api"), copy, credential, cacheLabel, edit, test, status);
     connections.append(row);
   });
 
@@ -486,7 +523,327 @@ function aiConnections(documentRef, services, state) {
     el(documentRef, "code", "ui-settings__theme-readout", defaultModel.model || "Not selected"),
   );
   defaults.append(defaultRow);
-  section.append(head, connections, defaults);
+
+  const limitBounds = data.max_output_tokens_bounds || { min: 1024, max: 128000, default: 20000 };
+  const limitGroup = el(documentRef, "section", "ui-settings__group");
+  const limitHead = el(documentRef, "div", "ui-settings__field-head");
+  const limitCopy = el(documentRef, "span", "ui-settings__field-copy");
+  limitCopy.append(
+    el(documentRef, "strong", "", "Response limit"),
+    el(documentRef, "small", "", "Caps the output requested from any one model call. Specialized stages keep their smaller limits."),
+  );
+  const limitControl = el(documentRef, "span", "ui-settings__inline-control");
+  const limit = documentRef.createElement("input");
+  limit.type = "number";
+  limit.min = String(limitBounds.min);
+  limit.max = String(limitBounds.max);
+  limit.step = "1000";
+  limit.value = String(data.max_output_tokens ?? limitBounds.default);
+  limit.setAttribute("aria-label", "Maximum output tokens");
+  const saveLimit = el(documentRef, "button", "ui-button ui-button--quiet", "Save response limit");
+  saveLimit.type = "button";
+  limitControl.append(limit, saveLimit);
+  limitHead.append(limitCopy, limitControl);
+  const limitStatus = el(documentRef, "p", "ui-settings__connection-status");
+  limitStatus.setAttribute("role", "status");
+  saveLimit.addEventListener("click", async () => {
+    saveLimit.disabled = true;
+    limitStatus.textContent = "Saving response limit…";
+    try {
+      const result = await services.apiClient.put("/api/max_output_tokens", { value: limit.value }, {
+        channel: "settings-output-limit",
+        owner: "settings-generation-defaults",
+      });
+      if (!saveLimit.isConnected) return;
+      const saved = Number(result.data?.value);
+      if (Number.isFinite(saved)) limit.value = String(saved);
+      limitStatus.textContent = `Response limit saved: ${Number(limit.value).toLocaleString("en-US")} tokens.`;
+    } catch (error) {
+      if (!saveLimit.isConnected) return;
+      limitStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the response limit.";
+    } finally {
+      if (saveLimit.isConnected) saveLimit.disabled = false;
+    }
+  });
+  limitGroup.append(limitHead, limitStatus);
+
+  const assignments = documentRef.createElement("details");
+  assignments.className = "ui-settings__group ui-settings__model-assignments";
+  const assignmentsSummary = el(documentRef, "summary", "ui-settings__details-summary", "Advanced model assignments");
+  const assignmentsIntro = el(
+    documentRef,
+    "p",
+    "ui-muted",
+    "Optional role assignments can use a different model. Blank roles follow Default; embeddings must name a vector model.",
+  );
+  const assignmentRows = el(documentRef, "div", "ui-settings__assignment-rows");
+  const roleNames = Array.isArray(data.roles) ? data.roles : Object.keys(data.agent_models || {});
+  const orderedRoles = [...new Set(["default", "embeddings", ...roleNames])].filter(role => role === "default" || role === "embeddings" || roleNames.includes(role));
+  const roleControls = new Map();
+  const effortLevels = Array.isArray(data.reasoning_effort_levels)
+    ? data.reasoning_effort_levels : ["off", "minimal", "low", "medium", "high"];
+  orderedRoles.forEach(role => {
+    const label = humanizeSettingKey(role);
+    const existing = data.agent_models?.[role] || {};
+    const row = el(documentRef, "fieldset", "ui-settings__assignment-row");
+    row.append(el(documentRef, "legend", "", label));
+    const providerField = el(documentRef, "label", "ui-field");
+    providerField.append(el(documentRef, "span", "ui-field__label", "Provider"));
+    const providerSelect = documentRef.createElement("select");
+    providerSelect.setAttribute("aria-label", `Provider for ${label}`);
+    const emptyProvider = el(documentRef, "option", "", role === "default" || role === "embeddings" ? "Not configured" : "Follow Default");
+    emptyProvider.value = "";
+    providerSelect.append(emptyProvider);
+    providers.forEach(provider => {
+      const option = el(documentRef, "option", "", provider.name || provider.kind || `Provider ${provider.id}`);
+      option.value = String(provider.id);
+      option.selected = String(existing.provider ?? "") === String(provider.id);
+      providerSelect.append(option);
+    });
+    providerField.append(providerSelect);
+    const modelField = el(documentRef, "label", "ui-field");
+    modelField.append(el(documentRef, "span", "ui-field__label", "Model"));
+    const modelInput = documentRef.createElement("input");
+    modelInput.type = "text";
+    modelInput.value = existing.model || "";
+    modelInput.placeholder = role === "embeddings" ? "Vector model id" : "Model id";
+    modelInput.setAttribute("aria-label", `Model for ${label}`);
+    modelField.append(modelInput);
+    const effortField = el(documentRef, "label", "ui-field");
+    effortField.append(el(documentRef, "span", "ui-field__label", "Reasoning"));
+    const effort = documentRef.createElement("select");
+    effort.setAttribute("aria-label", `Reasoning effort for ${label}`);
+    const inherited = el(documentRef, "option", "", role === "default" ? "Model default" : "Follow Default");
+    inherited.value = "";
+    effort.append(inherited);
+    effortLevels.forEach(level => {
+      const option = el(documentRef, "option", "", humanizeSettingKey(level));
+      option.value = level;
+      option.selected = data.reasoning_effort?.[role] === level;
+      effort.append(option);
+    });
+    effortField.append(effort);
+    row.append(providerField, modelField, effortField);
+    assignmentRows.append(row);
+    roleControls.set(role, { providerSelect, modelInput, effort });
+  });
+  const assignmentFooter = el(documentRef, "div", "ui-settings__connection-footer");
+  const assignmentStatus = el(documentRef, "p", "ui-settings__connection-status");
+  assignmentStatus.setAttribute("role", "status");
+  const embeddingNotice = el(documentRef, "p", "ui-settings__warning-inline");
+  embeddingNotice.hidden = true;
+  const saveAssignments = el(documentRef, "button", "ui-button ui-button--primary", "Save model assignments");
+  saveAssignments.type = "button";
+  assignmentFooter.append(saveAssignments);
+  saveAssignments.addEventListener("click", async () => {
+    saveAssignments.disabled = true;
+    assignmentStatus.textContent = "Saving model assignments…";
+    const nextModels = structuredClone(data.agent_models || {});
+    const efforts = {};
+    for (const [role, controls] of roleControls.entries()) {
+      const providerId = controls.providerSelect.value;
+      const model = controls.modelInput.value.trim();
+      if (!providerId || !model) {
+        delete nextModels[role];
+        continue;
+      }
+      const provider = providers.find(item => String(item.id) === providerId);
+      nextModels[role] = {
+        ...(nextModels[role] || {}),
+        provider: provider?.id ?? providerId,
+        model,
+      };
+      if (controls.effort.value) efforts[role] = controls.effort.value;
+    }
+    try {
+      const modelsResult = await services.apiClient.put("/api/agent_models", nextModels, {
+        channel: "settings-agent-models-save",
+        owner: "settings-agent-models",
+      });
+      await services.apiClient.put("/api/reasoning_effort", { efforts }, {
+        channel: "settings-reasoning-effort-save",
+        owner: "settings-agent-models",
+      });
+      if (!saveAssignments.isConnected) return;
+      assignmentStatus.textContent = "Model assignments saved.";
+      if (modelsResult.data?.embeddings_role_changed) {
+        embeddingNotice.textContent = "Memory vectors need rebuilding for the new embeddings model.";
+        embeddingNotice.hidden = false;
+      }
+    } catch (error) {
+      if (!saveAssignments.isConnected) return;
+      assignmentStatus.textContent = error?.userMessage || error?.message || "Sonder could not save model assignments.";
+    } finally {
+      if (saveAssignments.isConnected) saveAssignments.disabled = false;
+    }
+  });
+  assignments.append(assignmentsSummary, assignmentsIntro, assignmentRows, assignmentStatus, embeddingNotice, assignmentFooter);
+
+  const backdropConfig = data.image_model || {};
+  const backdrops = el(documentRef, "section", "ui-settings__group");
+  const backdropTitle = el(documentRef, "div", "ui-settings__field-copy");
+  backdropTitle.append(
+    el(documentRef, "strong", "", "Scene backdrops"),
+    el(documentRef, "small", "", "Generate and cache a room image from its spatial description. People are never included."),
+  );
+  const backdropFields = el(documentRef, "div", "ui-settings__media-fields");
+  const backdropProviderField = el(documentRef, "label", "ui-field");
+  backdropProviderField.append(el(documentRef, "span", "ui-field__label", "Provider"));
+  const backdropProvider = documentRef.createElement("select");
+  backdropProvider.setAttribute("aria-label", "Backdrop image provider");
+  const noBackdropProvider = el(documentRef, "option", "", "Not configured");
+  noBackdropProvider.value = "";
+  backdropProvider.append(noBackdropProvider);
+  providers.forEach(provider => {
+    const option = el(documentRef, "option", "", provider.name || provider.kind || `Provider ${provider.id}`);
+    option.value = String(provider.id);
+    option.selected = String(backdropConfig.provider ?? "") === String(provider.id);
+    backdropProvider.append(option);
+  });
+  backdropProviderField.append(backdropProvider);
+  const backdropModelField = el(documentRef, "label", "ui-field");
+  backdropModelField.append(el(documentRef, "span", "ui-field__label", "Image model"));
+  const backdropModel = documentRef.createElement("input");
+  backdropModel.type = "text";
+  backdropModel.value = backdropConfig.model || "";
+  backdropModel.setAttribute("aria-label", "Backdrop image model");
+  backdropModelField.append(backdropModel);
+  const backdropSizeField = el(documentRef, "label", "ui-field");
+  backdropSizeField.append(el(documentRef, "span", "ui-field__label", "Landscape size"));
+  const backdropSize = documentRef.createElement("input");
+  backdropSize.type = "text";
+  backdropSize.value = backdropConfig.size || "";
+  backdropSize.placeholder = "1536x1024";
+  backdropSize.setAttribute("aria-label", "Backdrop image size");
+  backdropSizeField.append(backdropSize);
+  backdropFields.append(backdropProviderField, backdropModelField, backdropSizeField);
+  const backdropToggles = el(documentRef, "div", "ui-settings__media-toggles");
+  const backdropEnabledLabel = el(documentRef, "label", "");
+  const backdropEnabled = documentRef.createElement("input");
+  backdropEnabled.type = "checkbox";
+  backdropEnabled.checked = Boolean(data.backdrops_enabled);
+  backdropEnabled.setAttribute("aria-label", "Generate backdrops for new rooms");
+  backdropEnabledLabel.append(backdropEnabled, documentRef.createTextNode(" Generate backdrops for new rooms"));
+  const continuityLabel = el(documentRef, "label", "");
+  const continuity = documentRef.createElement("input");
+  continuity.type = "checkbox";
+  continuity.checked = Boolean(data.backdrop_continuity);
+  continuity.setAttribute("aria-label", "Keep room images visually consistent");
+  continuityLabel.append(continuity, documentRef.createTextNode(" Keep room images visually consistent"));
+  backdropToggles.append(backdropEnabledLabel, continuityLabel);
+  const backdropFooter = el(documentRef, "div", "ui-settings__connection-footer");
+  const backdropStatus = el(documentRef, "p", "ui-settings__connection-status");
+  backdropStatus.setAttribute("role", "status");
+  const saveBackdrops = el(documentRef, "button", "ui-button ui-button--quiet", "Save backdrop settings");
+  saveBackdrops.type = "button";
+  backdropFooter.append(saveBackdrops);
+  saveBackdrops.addEventListener("click", async () => {
+    saveBackdrops.disabled = true;
+    backdropStatus.textContent = "Saving backdrop settings…";
+    const providerId = backdropProvider.value;
+    const provider = providers.find(item => String(item.id) === providerId);
+    try {
+      await services.apiClient.put("/api/image_model", {
+        provider: provider?.id ?? (providerId || null),
+        model: backdropModel.value.trim(),
+        size: backdropSize.value.trim(),
+      }, { channel: "settings-image-model", owner: "settings-backdrops" });
+      await services.apiClient.put("/api/backdrops", {
+        enabled: backdropEnabled.checked,
+        continuity: continuity.checked,
+      }, { channel: "settings-backdrops", owner: "settings-backdrops" });
+      if (saveBackdrops.isConnected) backdropStatus.textContent = "Backdrop settings saved.";
+    } catch (error) {
+      if (saveBackdrops.isConnected) backdropStatus.textContent = error?.userMessage || error?.message || "Sonder could not save backdrop settings.";
+    } finally {
+      if (saveBackdrops.isConnected) saveBackdrops.disabled = false;
+    }
+  });
+  backdrops.append(backdropTitle, backdropFields, backdropToggles, backdropStatus, backdropFooter);
+
+  const ambienceConfig = data.ambience || {};
+  const ambience = el(documentRef, "section", "ui-settings__group");
+  const ambienceTitle = el(documentRef, "div", "ui-settings__field-copy");
+  ambienceTitle.append(
+    el(documentRef, "strong", "", "Room ambience"),
+    el(documentRef, "small", "", "Play a cached sound bed chosen from the current room, weather, and time."),
+  );
+  const ambienceFields = el(documentRef, "div", "ui-settings__media-fields");
+  const sourceField = el(documentRef, "label", "ui-field");
+  sourceField.append(el(documentRef, "span", "ui-field__label", "Source"));
+  const source = documentRef.createElement("select");
+  source.setAttribute("aria-label", "Ambience source");
+  [["local", "Local folder"], ["freesound", "Freesound"]].forEach(([value, label]) => {
+    const option = el(documentRef, "option", "", label);
+    option.value = value;
+    option.selected = ambienceConfig.source === value;
+    source.append(option);
+  });
+  sourceField.append(source);
+  const libraryField = el(documentRef, "label", "ui-field");
+  libraryField.append(el(documentRef, "span", "ui-field__label", "Local folder"));
+  const library = documentRef.createElement("input");
+  library.type = "text";
+  library.value = ambienceConfig.library || "";
+  library.setAttribute("aria-label", "Ambience library folder");
+  libraryField.append(library);
+  const freesoundField = el(documentRef, "label", "ui-field");
+  freesoundField.append(el(documentRef, "span", "ui-field__label", "Freesound API key"));
+  const freesoundKey = documentRef.createElement("input");
+  freesoundKey.type = "password";
+  freesoundKey.autocomplete = "new-password";
+  freesoundKey.placeholder = ambienceConfig.has_key ? "Leave blank to keep saved key" : "API key";
+  freesoundKey.setAttribute("aria-label", "Freesound API key");
+  freesoundField.append(freesoundKey);
+  ambienceFields.append(sourceField, libraryField, freesoundField);
+  const ambienceToggles = el(documentRef, "div", "ui-settings__media-toggles");
+  const ambienceEnabledLabel = el(documentRef, "label", "");
+  const ambienceEnabled = documentRef.createElement("input");
+  ambienceEnabled.type = "checkbox";
+  ambienceEnabled.checked = Boolean(ambienceConfig.enabled);
+  ambienceEnabled.setAttribute("aria-label", "Play room ambience");
+  ambienceEnabledLabel.append(ambienceEnabled, documentRef.createTextNode(" Play room ambience"));
+  ambienceToggles.append(ambienceEnabledLabel);
+  const selectedLicenses = new Set(Array.isArray(ambienceConfig.licenses) ? ambienceConfig.licenses : []);
+  const licenseInputs = [];
+  const availableLicenses = Array.isArray(data.ambience_licenses) ? data.ambience_licenses : [];
+  availableLicenses.forEach(license => {
+    const label = el(documentRef, "label", "");
+    const input = documentRef.createElement("input");
+    input.type = "checkbox";
+    input.checked = selectedLicenses.has(license);
+    input.setAttribute("aria-label", license === "Attribution NonCommercial" ? "Allow NonCommercial sounds" : `Allow ${license} sounds`);
+    label.append(input, documentRef.createTextNode(` ${license}`));
+    ambienceToggles.append(label);
+    licenseInputs.push([license, input]);
+  });
+  const ambienceFooter = el(documentRef, "div", "ui-settings__connection-footer");
+  const ambienceStatus = el(documentRef, "p", "ui-settings__connection-status");
+  ambienceStatus.setAttribute("role", "status");
+  const saveAmbience = el(documentRef, "button", "ui-button ui-button--quiet", "Save ambience settings");
+  saveAmbience.type = "button";
+  ambienceFooter.append(saveAmbience);
+  saveAmbience.addEventListener("click", async () => {
+    saveAmbience.disabled = true;
+    ambienceStatus.textContent = "Saving ambience settings…";
+    try {
+      await services.apiClient.put("/api/ambience", {
+        enabled: ambienceEnabled.checked,
+        source: source.value,
+        library: library.value.trim(),
+        freesound_key: freesoundKey.value.trim(),
+        licenses: licenseInputs.filter(([, input]) => input.checked).map(([license]) => license),
+      }, { channel: "settings-ambience", owner: "settings-ambience" });
+      if (saveAmbience.isConnected) ambienceStatus.textContent = "Ambience settings saved.";
+    } catch (error) {
+      if (saveAmbience.isConnected) ambienceStatus.textContent = error?.userMessage || error?.message || "Sonder could not save ambience settings.";
+    } finally {
+      if (saveAmbience.isConnected) saveAmbience.disabled = false;
+    }
+  });
+  ambience.append(ambienceTitle, ambienceFields, ambienceToggles, ambienceStatus, ambienceFooter);
+
+  section.append(head, connections, defaults, limitGroup, assignments, backdrops, ambience);
   return section;
 }
 
