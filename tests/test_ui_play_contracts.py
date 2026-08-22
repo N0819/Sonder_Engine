@@ -41,6 +41,7 @@ def test_play_sources_are_release_coherent_native_modules():
 
 def test_play_uses_owned_story_drafts_and_current_server_routes():
     runtime = (RUNTIME / "play-runtime.js").read_text(encoding="utf-8")
+    bootstrap = (RUNTIME / "bootstrap.js").read_text(encoding="utf-8")
 
     assert 'getDraft("story"' in runtime
     assert 'setDraft("story"' in runtime
@@ -52,6 +53,8 @@ def test_play_uses_owned_story_drafts_and_current_server_routes():
     assert "/export" in runtime
     assert "isCurrent" in runtime
     assert "frameId" in runtime
+    for module in ("play-runtime.js", "play-view.js", "prose.js"):
+        assert f'"./{module}?release=wp04.1"' in bootstrap
 
 
 def test_play_entry_declares_semantic_transcript_composer_and_styles():

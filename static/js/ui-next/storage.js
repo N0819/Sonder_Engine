@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
-import { assertSafeToPersist } from "./credentials.js?release=wp03.1";
+import { assertSafeToPersist } from "./credentials.js?release=wp04.1";
 
 export const LOCAL_STATE_VERSION = 2;
 export const LOCAL_STATE_NAMESPACE = "sonder.ui-next";

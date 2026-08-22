@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=wp03.1";
+import { createOverlayController } from "../ui/components/overlay.js?release=wp04.1";
 
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["narrow", "default", "wide"]);

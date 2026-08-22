@@ -56,7 +56,7 @@ def test_shell_exposes_three_destinations_and_truthful_empty_play(
 
     expect(page.get_by_role("main")).to_be_visible()
     expect(page.get_by_role("heading", name="Play", level=1)).to_be_focused()
-    expect(page.get_by_text("Choose a story to begin.", exact=True)).to_be_visible()
+    expect(page.get_by_text("Choose a story to begin", exact=True)).to_be_visible()
     assert page.get_by_text("Provider", exact=True).count() == 0
 
 
@@ -90,10 +90,10 @@ def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
         """async (base) => {
           history.replaceState(null, "", location.pathname);
           const navigationModule = await import(
-            `${base}/static/js/ui-next/navigation-state.js?release=wp03.1`
+            `${base}/static/js/ui-next/navigation-state.js?release=wp04.1`
           );
           const routerModule = await import(
-            `${base}/static/js/ui-next/router.js?release=wp03.1`
+            `${base}/static/js/ui-next/router.js?release=wp04.1`
           );
           let record = {
             route: "#/library/characters",
@@ -378,7 +378,7 @@ def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
     result = page.evaluate(
         """async (base) => {
           const { createShortcutRegistry } = await import(
-            `${base}/static/js/ui-next/shortcuts.js?release=wp03.1`
+            `${base}/static/js/ui-next/shortcuts.js?release=wp04.1`
           );
           let calls = 0;
           let collision = null;

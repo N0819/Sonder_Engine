@@ -327,3 +327,181 @@ def test_stop_targets_the_story_that_started_the_run_after_navigation(
         "posts": ["/api/chats/1/abort"],
         "activeStory": 2,
     }
+
+
+def test_500_turn_render_stays_inside_the_recorded_budget(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=wp04.1`);
+          const viewModule = await import(`${base}/static/js/ui-next/play-view.js?release=wp04.1`);
+          const prose = await import(`${base}/static/js/ui-next/prose.js?release=wp04.1`);
+          const turns = Array.from({ length: 500 }, (_, index) => ({
+            id: index + 1, idx: index, player_input: `Action ${index + 1}`,
+            prose: `Turn ${index + 1}. Rain crosses the windows while the archive keeper waits.`,
+            stale: false, stale_from: null, prose_stale: false, frame_id: null, speech: [],
+          }));
+          const story = { chat: { id: 1, name: "Scale Story" }, turns,
+            frames: [{ id: null, label: "Present" }], dialogue_colors: {} };
+          const store = storeModule.createStore({
+            story: { status: "ready", owner: "chat-1:frame-present", frameId: null, data: story },
+            transcript: { status: "ready", owner: "chat-1:frame-present", items: turns, preview: null },
+            composer: { status: "ready", owner: "chat-1:frame-present", draft: "", run: null },
+            library: { status: "ready", chats: [{ id: 1, name: "Scale Story" }] },
+          });
+          const services = {
+            store,
+            router: { navigate() {} },
+            play: new Proxy({}, { get: () => (() => Promise.resolve({})) }),
+          };
+          const started = performance.now();
+          const mount = viewModule.createPlayView({ document, services, prose, state: store.getSnapshot() });
+          document.body.replaceChildren(mount.element);
+          const elapsed = performance.now() - started;
+          const count = document.querySelectorAll("[data-turn-id]").length;
+          const dom = document.querySelectorAll("*").length;
+          mount.teardown();
+          return { elapsed, count, dom };
+        }""",
+        ui_base_url,
+    )
+    assert result["count"] == 500
+    assert result["elapsed"] <= 198.73
+    assert result["dom"] < 10_000
+
+
+def test_scrollback_review_is_preserved_when_a_new_turn_arrives(
+    page: Page, ui_base_url: str
+) -> None:
+    generated = {"done": False}
+    old_turns = [
+        _turn(
+            index + 1,
+            index,
+            f"Action {index + 1}",
+            (f"Turn {index + 1}. The long gallery continues. " * 8),
+        )
+        for index in range(80)
+    ]
+
+    def story_handler(chat_id: int) -> dict:
+        turns = list(old_turns)
+        if generated["done"]:
+            turns.append(_turn(81, 80, "Continue", "A new bell sounds."))
+        return _story(chat_id, turns)
+
+    _open_play(page, ui_base_url, story_handler=story_handler)
+
+    def serve_turn(route) -> None:
+        generated["done"] = True
+        route.fulfill(
+            content_type="application/x-ndjson",
+            body=json.dumps({"type": "done", "turn_id": 81}) + "\n",
+        )
+
+    page.route("**/api/chats/1/turns", serve_turn)
+    transcript = page.locator("[data-play-transcript]")
+    geometry = transcript.evaluate(
+        "node => ({ top: node.scrollTop, height: node.clientHeight, scroll: node.scrollHeight, outer: node.parentElement.getBoundingClientRect().height })"
+    )
+    assert geometry["scroll"] > geometry["height"], geometry
+    before = transcript.evaluate("node => { node.scrollTop = 900; return node.scrollTop; }")
+    page.get_by_role("textbox", name="What do you do or say?").fill("Continue")
+    page.get_by_role("button", name="Send", exact=True).click()
+    expect(page.get_by_role("button", name="New turn", exact=True)).to_be_visible()
+    after = transcript.evaluate("node => node.scrollTop")
+    assert abs(after - before) <= 2
+
+
+def test_story_chrome_does_not_change_prose_line_breaks(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _open_play(
+        page,
+        ui_base_url,
+        story_handler=lambda chat_id: _story(
+            chat_id,
+            [_turn(1, 0, "Wait", "The archive keeper crosses the gallery and pauses beneath the high windows." * 5)],
+        ),
+    )
+    prose = page.locator(".ui-play__prose")
+    before = prose.evaluate(
+        "node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })"
+    )
+    page.get_by_role("button", name="Close context panel").click()
+    after = prose.evaluate(
+        "node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })"
+    )
+    assert abs(after["width"] - before["width"]) <= 1
+    assert abs(after["height"] - before["height"]) <= 1
+
+
+def test_prose_emphasis_and_speaker_color_never_parse_model_html(
+    page: Page, ui_base_url: str
+) -> None:
+    payload = _story(
+        1,
+        [_turn(1, 0, "Listen", 'Mara says, "<i>Come in.</i>" <script>stay literal</script>')],
+    )
+    payload["turns"][0]["speech"] = [
+        {"speaker": "Mara", "exact_quote": "Come in."}
+    ]
+    payload["dialogue_colors"] = {"Mara": "rgb(110, 191, 153)"}
+    _open_play(page, ui_base_url, story_handler=lambda _chat_id: payload)
+
+    prose = page.locator(".ui-play__prose")
+    expect(prose.locator("em")).to_have_text("Come in.")
+    expect(prose.locator(".ui-play__said")).to_have_attribute("title", "Mara")
+    expect(prose).to_contain_text("<script>stay literal</script>")
+    assert prose.locator("script").count() == 0
+
+
+def test_recoverable_send_failure_preserves_draft_and_offers_retry(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_play(page, ui_base_url)
+    page.route("**/api/chats/1/turns", lambda route: route.abort("failed"))
+    composer = page.get_by_role("textbox", name="What do you do or say?")
+    composer.fill("Do not lose this")
+    page.get_by_role("button", name="Send", exact=True).click()
+
+    expect(page.get_by_role("button", name="Retry", exact=True)).to_be_visible()
+    expect(composer).to_have_value("Do not lose this")
+
+
+def test_stream_transport_can_discard_token_history_while_delivering_events(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const apiModule = await import(`${base}/static/js/ui-next/api.js?release=wp04.1`);
+          const encoder = new TextEncoder();
+          const lines = [
+            { type: "step_start", key: "narrator", label: "Narrator" },
+            { type: "token", key: "narrator", delta: "A" },
+            { type: "done", turn_id: 1 },
+          ];
+          const fetchImpl = async () => new Response(new ReadableStream({
+            start(controller) {
+              for (const line of lines) controller.enqueue(encoder.encode(JSON.stringify(line) + "\\n"));
+              controller.close();
+            },
+          }), { status: 200, headers: { "content-type": "application/x-ndjson" } });
+          const seen = [];
+          const api = apiModule.createApiClient({ fetchImpl, baseUrl: location.origin });
+          const response = await api.stream("/turn", {
+            method: "POST", body: {}, collectEvents: false,
+            onEvent: event => seen.push(event.type),
+          });
+          return { data: response.data, seen };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "data": None,
+        "seen": ["step_start", "token", "done"],
+    }

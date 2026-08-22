@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
 const AUTOSAVE_ACTIONS = new Set(["field-edit", "draft-update"]);
 const INVERSE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);

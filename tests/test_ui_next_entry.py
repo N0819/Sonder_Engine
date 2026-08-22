@@ -41,7 +41,7 @@ def test_ui_next_serves_only_the_static_application_to_a_valid_host(
 
     assert response.status_code == 200
     assert 'data-ui-next-entry="application"' in response.text
-    assert '/static/js/ui-next/main.js?release=wp03.1' in response.text
+    assert '/static/js/ui-next/main.js?release=wp04.1' in response.text
     assert "/api/" not in response.text
     assert "Baseline Story" not in response.text
 

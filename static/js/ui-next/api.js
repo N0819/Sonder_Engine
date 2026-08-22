@@ -1,11 +1,11 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
 import {
   ApiError,
   apiErrorForStatus,
   malformedResponseError,
   normalizeApiError,
-} from "./errors.js?release=wp03.1";
+} from "./errors.js?release=wp04.1";
 
 const JSON_TYPES = (contentType) => (
   contentType.includes("application/json") || contentType.includes("+json")
@@ -41,8 +41,8 @@ async function parseResponse(response, responseType, identity) {
   return text;
 }
 
-async function parseNdjsonResponse(response, identity, onEvent) {
-  const events = [];
+async function parseNdjsonResponse(response, identity, onEvent, collectEvents = true) {
+  const events = collectEvents ? [] : null;
   const consumeLine = (line) => {
     if (!line.trim()) return;
     let event;
@@ -51,7 +51,7 @@ async function parseNdjsonResponse(response, identity, onEvent) {
     } catch {
       throw malformedResponseError({ ...identity, status: response.status });
     }
-    events.push(event);
+    if (events) events.push(event);
     onEvent?.(event);
   };
 
@@ -236,6 +236,7 @@ export function createApiClient(options = {}) {
         response,
         identity,
         streamOptions.onEvent,
+        streamOptions.collectEvents !== false,
       ),
     });
     return result;
