@@ -51,13 +51,20 @@ current UI runtime instead of inventing a substitute runtime contract.
   role configuration, and connected OpenRouter retention/fallback/upstream routing.
 - Added story-scoped Living world controls sourced entirely from the server's built/permitted/
   effective ladder, including visible clamp explanations for unbuilt or disallowed depth.
+- Completed the current prompt-preset lifecycle with selection, activation, explicit save,
+  import, export, and staged deletion, and connected provider image-model discovery.
+- Added the scoped, reversible Experience reset with a dedicated confirmation.
+- Added a staged Content-form reset and routed portable story backups to the Library's
+  per-story export owner instead of inventing an unsafe global export operation.
+- Proved the complete Advanced prompt surface remains available without horizontal overflow
+  at the supplied 390 px compact breakpoint.
 - Added the reference terminal glyph used by Advanced and Turn details.
 - Preserved safe fallback behavior for invalid Settings deep links.
 
-## Deliberately incomplete
+## WP12 boundary
 
-- Advanced Turn details routes to the replacement Play tool. Prompt preset import/export/activation
-  and image-model catalogue discovery remain before WP08 closure.
+- Advanced Turn details routes to the replacement Play tool; raw world and attire editors remain
+  inside Advanced and use current story routes.
 - Add-ons settings registrations are mounted by the existing contained extension host, but
   installed v1/v2 corpus qualification remains WP12.
 
@@ -77,7 +84,7 @@ current UI runtime instead of inventing a substitute runtime contract.
 - `screenshots/settings-advanced-story-data-1440.png`
 - `screenshots/settings-content-living-world-1440.png`
 - `screenshots/settings-search-1440.png`
-- `22 passed` in the focused Settings browser suite after Experience, raw-data, generation-default,
+- `25 passed` in the focused Settings browser suite after Experience, raw-data, generation-default,
   OpenRouter, and Living world coverage.
 - `node --check static/js/ui-next/settings-view.js`
 - `git diff --check`

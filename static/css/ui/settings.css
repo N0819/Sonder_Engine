@@ -98,6 +98,7 @@
   .ui-settings__media-fields :is(input, select) { inline-size: 100%; min-block-size: 38px; min-inline-size: 0; }
   .ui-settings__media-toggles { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-block-start: 14px; color: var(--ui-color-text-muted); font-size: 12px; }
   .ui-settings__data-note { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; }
+  .ui-settings__data-note > .ui-settings__extension-consent { grid-column: 1 / -1; inline-size: 100%; }
   .ui-settings__living-world { padding-block: 16px; }
   .ui-settings__living-world-rows { display: grid; margin-block-start: 14px; border-block-start: 1px solid var(--ui-color-border); }
   .ui-settings__living-world-row { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(280px, 1.2fr); gap: 20px; padding-block: 14px; border-block-end: 1px solid var(--ui-color-border); }
@@ -124,11 +125,12 @@
   .ui-settings__maintenance-result > .ui-button { justify-self: start; }
   .ui-settings__model-stage { padding-block-start: 12px; border-block-start: 1px solid var(--ui-color-border); }
   .ui-settings__model-stage .ui-field { flex: 1; display: grid; gap: 6px; }
-  .ui-settings__prompt-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
+  .ui-settings__prompt-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
   .ui-settings__prompt-controls .ui-field, .ui-settings__prompt-field { display: grid; gap: 6px; }
   .ui-settings__prompt-controls :is(input, select), .ui-settings__prompt-field textarea { inline-size: 100%; min-inline-size: 0; }
   .ui-settings__prompt-fields { display: grid; gap: 14px; }
   .ui-settings__prompt-field textarea { min-block-size: 190px; resize: vertical; }
+  .ui-settings__prompt-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block-start: 12px; }
   .ui-settings__raw-editor > textarea { inline-size: 100%; min-block-size: 380px; margin-block-start: 14px; resize: vertical; font: 12px/1.5 var(--ui-font-mono); tab-size: 2; }
 
   @media (min-width: 720px) and (max-width: 1099px) {
