@@ -1,6 +1,19 @@
 export const MODULE_RELEASE = "wp07.1";
 
-const VIEW_KINDS = Object.freeze(["destination", "legacy-view", "addon-settings"]);
+const VIEW_KINDS = Object.freeze([
+  "destination",
+  "legacy-view",
+  "addon-settings",
+  "play-tool",
+  "library-type",
+]);
+const KIND_DESTINATIONS = Object.freeze({
+  destination: "settings",
+  "legacy-view": "settings",
+  "addon-settings": "settings",
+  "play-tool": "play",
+  "library-type": "library",
+});
 
 // UI_CATALOG_START: contained add-on surface labels and failure states.
 const EXTENSION_COPY = Object.freeze({
@@ -20,10 +33,18 @@ function element(documentRef, tag, className = "", text = "") {
   return node;
 }
 
+function parentRoute(entryOrRoute) {
+  const destination = KIND_DESTINATIONS[entryOrRoute?.kind]
+    || String(entryOrRoute?.destination || "settings");
+  return destination === "settings"
+    ? { destination, segments: ["add-ons"] }
+    : { destination, segments: [] };
+}
+
 function routeFor(entry) {
+  const parent = parentRoute(entry);
   return {
-    destination: "settings",
-    segments: ["add-ons"],
+    ...parent,
     query: {
       extension: entry.owner,
       view: entry.id,
@@ -37,6 +58,7 @@ function selectedEntry(registry, route) {
   const id = String(route?.query?.view || "");
   const kind = String(route?.query?.kind || "legacy-view");
   if (!owner || !id || !VIEW_KINDS.includes(kind)) return null;
+  if (KIND_DESTINATIONS[kind] !== route?.destination) return null;
   return registry.entries(kind).find(entry => entry.owner === owner && entry.id === id) || null;
 }
 
@@ -48,7 +70,9 @@ export function createExtensionHost(options = {}) {
   let active = null;
   let stopped = false;
 
-  const viewEntries = () => VIEW_KINDS.flatMap(kind => services.registry.entries(kind));
+  const viewEntries = currentRoute => VIEW_KINDS
+    .filter(kind => KIND_DESTINATIONS[kind] === currentRoute?.destination)
+    .flatMap(kind => services.registry.entries(kind));
 
   const cleanupActive = () => {
     if (!active) return;
@@ -120,13 +144,15 @@ export function createExtensionHost(options = {}) {
   const decorate = ({ route: nextRoute, view }) => {
     route = nextRoute;
     cleanupActive();
-    if (route.destination !== "settings" || route.segments?.[0] !== "add-ons") return;
+    const supportedDestination = ["play", "library"].includes(route.destination)
+      || (route.destination === "settings" && route.segments?.[0] === "add-ons");
+    if (!supportedDestination) return;
     const selected = selectedEntry(services.registry, route);
     if (selected) {
       mount(selected, view);
       return;
     }
-    const entries = viewEntries();
+    const entries = viewEntries(route);
     if (!entries.length) return;
     const section = element(documentRef, "section", "ui-shell-placeholder ui-extension-launchers");
     section.append(
@@ -139,7 +165,7 @@ export function createExtensionHost(options = {}) {
     view.append(section);
   };
 
-  const goToResults = () => viewEntries().map(entry => ({
+  const goToResults = () => VIEW_KINDS.flatMap(kind => services.registry.entries(kind)).map(entry => ({
     label: String(entry.label || entry.title || entry.id),
     context: `${t(EXTENSION_COPY.view)} · ${entry.owner}`,
     route: routeFor(entry),
@@ -155,7 +181,7 @@ export function createExtensionHost(options = {}) {
         message: t(EXTENSION_COPY.removed),
         error: { kind: "extension", retryable: false },
       });
-      services.router.navigate({ destination: "settings", segments: ["add-ons"] }, { replace: true });
+      services.router.navigate(parentRoute(route), { replace: true });
       return;
     }
     options.onChange?.();

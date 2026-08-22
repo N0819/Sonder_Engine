@@ -17,7 +17,7 @@ export function createV1Adapter(registry) {
   };
 
   const boundFacade = owner => {
-    const facade = { id: owner, chats: registry.chats };
+    const facade = { apiVersion: 1, id: owner, chats: registry.chats };
     const publicNames = [
       ...Object.keys(LEGACY_REGISTRATIONS),
       "registerStepRenderer",
@@ -41,6 +41,7 @@ export function createV1Adapter(registry) {
   };
 
   adapter = {
+    apiVersion: 1,
     _begin: owner => registry.begin(owner),
     _end: () => registry.end(),
     _fault: (owner, error) => registry.fault(owner, error),
@@ -93,7 +94,7 @@ export function createV1Adapter(registry) {
   for (const [name, [kind, callbackName]] of Object.entries(LEGACY_REGISTRATIONS)) {
     adapter[name] = definition => registerDefinition(kind, callbackName, definition);
   }
-  registry.setFacadeFactory(boundFacade);
+  registry.setLegacyFacadeFactory(boundFacade);
   return Object.freeze(adapter);
 }
 

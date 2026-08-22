@@ -1,8 +1,8 @@
 // Cohesion demo -- the reference extension UI.
 //
-// Written the way a third party would write one: it talks to `Sonder` and to
-// the two DOM helpers the host publishes (`el`, `txt`), owns a class prefix of
-// its own, and assumes nothing about the host beyond the documented surface.
+// Written the way a third party would write one: it talks to the v1 `Sonder`
+// adapter, owns its DOM helpers and class prefix, and assumes nothing about
+// private host globals or DOM ids.
 (() => {
   // The bundle wrapper already guards on `window.Sonder`, but the code inside
   // it does not -- and the whole bundle is one script, so a ReferenceError
@@ -12,10 +12,22 @@
   const EXT = "cohesion-demo";
   const CLS = "ext-cohesion-demo";
 
-  // Story- and model-derived numbers are DATA. `el()` runs plain string
-  // children through the UI translator before they reach the DOM, so every
-  // value goes in through `txt()` inside a `translate="no"` box -- the same
-  // two-part guard the transcript uses.
+  const txt = value => document.createTextNode(String(value));
+  const el = (tag, attrs = {}, ...children) => {
+    const node = document.createElement(tag);
+    for (const [name, value] of Object.entries(attrs)) {
+      if (name === "class") node.className = value;
+      else if (name === "style") node.style.cssText = value;
+      else node.setAttribute(name, value);
+    }
+    for (const child of children.flat()) {
+      node.append(child instanceof Node ? child : txt(child));
+    }
+    return node;
+  };
+
+  // Story- and model-derived numbers are DATA, so every value goes through a
+  // text node inside a `translate="no"` box.
   const value = (v) => el("span", { class: `${CLS}-value`, translate: "no" }, txt(v));
 
   Sonder.registerSidebarTab({
@@ -24,23 +36,22 @@
     render: async (root) => {
       const { chatId } = Sonder.state();
       if (!chatId) {
-        root.append(typeof emptyState === "function"
-          ? emptyState("Open a story to see its cohesion.")
-          : el("div", { class: "empty-state" }, "Open a story to see its cohesion."));
+        root.append(el("div", { class: `${CLS}-empty` },
+          "Open a story to see its cohesion."));
         return;
       }
 
       const state = await Sonder.extState(EXT);
       if (!state || typeof state.cohesion !== "number") {
-        root.append(typeof emptyState === "function"
-          ? emptyState("No reading yet — cohesion is measured after the first turn.")
-          : el("div", { class: "empty-state" },
-              "No reading yet — cohesion is measured after the first turn."));
+        root.append(el("div", { class: `${CLS}-empty` },
+          "No reading yet — cohesion is measured after the first turn."));
         return;
       }
 
       const score = Math.max(0, Math.min(100, Number(state.cohesion)));
-      const tone = score >= 66 ? "var(--ok)" : score >= 33 ? "var(--warn)" : "var(--err)";
+      const tone = score >= 66
+        ? "var(--ui-color-success)"
+        : score >= 33 ? "var(--ui-color-warning)" : "var(--ui-color-danger)";
 
       // Layout and colour live in panel.css; only the two values that depend
       // on the reading -- the bar's width and its tone -- are set inline,

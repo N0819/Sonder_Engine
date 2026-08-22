@@ -1,70 +1,84 @@
-// The full-window surface. `registerView` hands it a container the host owns,
-// so a throw in here is charged to this extension and disabling it takes the
-// whole view down -- neither of which is true of an overlay appended to
-// `document.body`.
+// Extension-v2 destination. It receives only its owner-bound facade and the
+// contained mount node supplied by Sonder; it uses no private host helpers.
 
 import { readFrame, writeFrame } from "./client.js";
 
 const MAX_FRAME = 600;
 
+function element(tag, attributes = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [name, value] of Object.entries(attributes)) {
+    if (name === "class") node.className = value;
+    else if (name.startsWith("on") && typeof value === "function") {
+      node.addEventListener(name.slice(2).toLowerCase(), value);
+    } else node.setAttribute(name, value);
+  }
+  for (const child of children.flat()) {
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
 export function createFrameView(sonder) {
   return {
     id: "overlay-frame",
-    label: "Story frame",
+    title: "Story frame",
     async render(container) {
-      container.append(el("div", { class: "ext-overlay-demo-shell" },
-        el("header", { class: "ext-overlay-demo-head" },
-          el("h2", {}, "Story frame"),
-          el("button", {
-            class: "ext-overlay-demo-close",
-            onclick: () => sonder.closeView()
-          }, "Close")),
-        await body(sonder)));
-    }
+      const shell = element("div", { class: "ext-overlay-demo-shell" });
+      shell.append(element("h2", { class: "ext-overlay-demo-title" }, "Story frame"));
+      container.append(shell);
+      shell.append(await body(sonder));
+    },
   };
 }
 
 async function body(sonder) {
   const { chatId } = sonder.state();
   if (!chatId) {
-    return el("p", { class: "ext-overlay-demo-empty" },
+    return element("p", { class: "ext-overlay-demo-empty" },
       "Open a story to give it a standing frame.");
   }
 
   const current = await readFrame(sonder);
-  const input = el("textarea", {
+  const input = element("textarea", {
     class: "ext-overlay-demo-input",
-    rows: 6,
+    rows: "6",
     maxlength: String(MAX_FRAME),
-    placeholder: "The ship is three days into a fuel emergency; corridors are dim and cold."
+    placeholder: "The ship is three days into a fuel emergency; corridors are dim and cold.",
   });
-  // Story-derived text is DATA, not UI: `el()` runs plain string children
-  // through the UI translator, so anything that came back from a route goes in
-  // through `txt()` under `translate="no"`. The same two-part guard the
-  // transcript uses.
   input.value = String(current.frame || "");
 
-  const status = el("p", { class: "ext-overlay-demo-status", translate: "no" },
-    txt(revisionLabel(current)));
+  const status = element("p", {
+    class: "ext-overlay-demo-status",
+    translate: "no",
+    role: "status",
+  }, revisionLabel(current));
 
-  const save = el("button", {
-    class: "primary",
+  const save = element("button", {
+    class: "ext-overlay-demo-save",
+    type: "button",
     onclick: async () => {
-      const saved = await writeFrame(sonder, input.value);
-      status.replaceChildren(txt(revisionLabel(saved)));
-      toast(saved.frame ? "Frame installed." : "Frame cleared.", "ok");
-    }
+      save.disabled = true;
+      try {
+        const saved = await writeFrame(sonder, input.value);
+        status.textContent = revisionLabel(saved);
+        sonder.notify({
+          title: "Story frame",
+          body: saved.frame ? "Frame installed." : "Frame cleared.",
+          level: "ok",
+        });
+      } finally {
+        save.disabled = false;
+      }
+    },
   }, "Save frame");
 
-  return el("div", { class: "ext-overlay-demo-body" },
-    el("p", { class: "ext-overlay-demo-hint" },
-      "This text is given to the narrator on every beat of this story until "
-      + "you clear it. Put SETTING and standing situation here — the frame the "
-      + "story is told inside. Facts the engine already tracks (who is where, "
-      + "which doors are open) belong in the world, not here: the narrator "
-      + "checks those against the committed scene, and a frame that "
-      + "contradicts them makes the two fight."),
-    input, save, status);
+  return element("div", { class: "ext-overlay-demo-body" },
+    element("p", { class: "ext-overlay-demo-hint" },
+      "This text is given to the narrator on every beat of this story until you clear it. Put the standing situation here; facts the engine already tracks belong in the world."),
+    input,
+    save,
+    status);
 }
 
 function revisionLabel(record) {

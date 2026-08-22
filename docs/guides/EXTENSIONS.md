@@ -1493,10 +1493,12 @@ charged to the same counter.
 This covers the cooperative path only. Code that monkeypatches a host global
 directly bypasses the counter entirely (§8).
 
-### 7.3 Host helpers you may use
+### 7.3 Classic-host helpers
 
-`el`, `txt`, `modal`, `closeModal`, `toast`, `emptyState`, `$`, `$$`, `api`, `S`.
-They are browser globals, not modules.
+`el`, `txt`, `modal`, `closeModal`, `toast`, `emptyState`, `$`, `$$`, `api`, `S`
+exist only in the classic host. They are browser globals, not modules, and are
+not part of the replacement-host extension contract. A compatible extension
+must create its own DOM nodes and use the facade it receives.
 
 **`el()` runs plain string children through the UI translator** before they reach
 the DOM. Story- and model-derived text is data, not UI, so put it through `txt()`
@@ -1516,12 +1518,17 @@ concatenated with every other enabled extension's, linked in the page head
 **after** the host's sheets, so your rules win on specificity ties and a theme is
 in effect before first paint instead of flashing the host's colours first.
 
-Prefix your class names (`ext-<your-id>-…`). The host's stylesheet is not
-namespaced, so an unprefixed `.card` here restyles every card in the app.
+Prefix every class name (`ext-<your-id>-…`) and render inside the mount node the
+host gives you. Supported extension CSS may consume the public `--ui-*`
+semantic tokens, but must not write them on `:root`, select unowned host
+elements, or inject replacement stylesheets. The host stylesheet and the
+browser are not a security boundary, so unsupported global CSS can still cause
+damage; it is diagnosed as an extension fault, not treated as a theme feature.
 
-There is no CSS restriction beyond that. Set the theme custom properties on
-`:root` to reship the whole palette, or inject a `<style>`/`<link>` from JS and
-replace the stylesheet outright. Full custom themes are supported, not tolerated.
+The curated set is Carbon Signal, Ash & Brass, Midnight Ink, and Parchment
+Night. Legacy palettes are translated into the same semantic tokens. Themes
+never own layout, and an extension that stays within this prefixed contract
+inherits all five appearance modes without restyling the shell.
 
 ### 7.5 ES modules
 
@@ -1531,7 +1538,7 @@ statement is a SyntaxError that takes down every extension after it. For
 anything built as more than one file, declare a module entry instead:
 
 ```json
-"ui": {"module": "src/index.js", "css": "styles/app.css"}
+"ui": {"api": 2, "module": "src/index.js", "css": "styles/app.css"}
 ```
 
 and export a `register`:
@@ -1541,10 +1548,11 @@ and export a `register`:
 import { campaignView } from './views/campaign.js';
 
 export function register(sonder) {
-  sonder.registerView(campaignView);
-  sonder.registerTopBarButton({
-    id: "launch", icon: "🚀", title: "Campaign",
-    onClick: () => sonder.openView("campaign")
+  sonder.registerDestination({
+    id: "campaign", title: "Campaign", render: campaignView,
+  });
+  sonder.registerPlayTool({
+    id: "objectives", title: "Objectives", render: campaignView,
   });
 }
 ```
@@ -1555,8 +1563,12 @@ What the host does with that:
   with a dynamic `import()`. **Relative imports resolve against that URL**, so
   your whole directory tree is reachable — still containment-checked, so an
   import naming `../` outside the extension is refused rather than served.
-- `register` is called with an **id-bound facade**, not `window.Sonder`. It
-  carries every call in §7.1 and attributes each to you. `register` may be
+- `register` is called with an **id-bound facade**, not `window.Sonder`. A
+  manifest with `capabilities.ui.api: 2` receives the version-2 facade;
+  omitted or version 1 receives the compatibility facade from §7.1. The v2
+  facade owns destination, Library-type, Play-tool, Add-ons-settings and task
+  provider registrations plus notices, events, state, calls and teardown.
+  Every action is attributed to the extension. `register` may be
   async and may `await`: the bound facade is why. The classic path's
   `_begin`/`_end` attribution is ambient state that does not survive an await,
   so whatever ran during yours would have registered under your name.
@@ -1604,12 +1616,16 @@ subscriptions rather than polling or reading private DOM ids. The complete
 behavioral and visual evidence is in
 [`G2_SHELL_REVIEW.md`](../design/sonder-ui-replacement/G2_SHELL_REVIEW.md).
 
-This is a visible migration consumer, not the final compatibility claim.
-WP-12 still owns the installed-extension corpus, capability disclosure, every
-slot's destination-specific presentation, routing and CSS containment, plus
-any public extension-v2 contract. An extension that depends on `S`, `el`,
-`txt`, or a private classic DOM id is therefore not yet proven compatible with
-the replacement even when its `Sonder.*` registrations pass the current shell.
+WP-12 completes the replacement-host compatibility boundary. Version 2 is a
+native owner-bound module facade; version 1 remains an explicit global/classic
+adapter. Play tools mount only in Play, Library types only in Library, and
+destination, legacy-view and Add-ons settings surfaces only in Settings. A
+disable, retirement, third fault, or module teardown removes every owned
+registration, notice, listener and asset and returns a selected route to its
+safe parent. The bundled corpus proves one classic v1 extension and two ES
+module v2 extensions without private host helpers. An extension that depends
+on `S`, `el`, `txt`, a private DOM id, or global CSS remains a classic-host-only
+extension until its author migrates it.
 
 ---
 

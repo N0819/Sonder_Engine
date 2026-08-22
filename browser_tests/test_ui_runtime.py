@@ -1520,7 +1520,7 @@ def test_v1_extension_registers_calls_events_faults_and_fully_unloads(
           adapter.openView("fixture-view");
           const beforeUnload = registry.snapshot();
 
-          const broken = registry.facade("broken-extension");
+          const broken = adapter._facade("broken-extension");
           let brokenAttempts = 0;
           broken.registerView({
             id: "broken-view",
@@ -1621,7 +1621,7 @@ def test_extension_assets_use_authenticated_routes_and_fail_independently(
                 body=(
                     'export async function register(sonder){'
                     'await Promise.resolve();'
-                    'sonder.registerComposerControl({id:"module",render(){}});'
+                    'sonder.registerPlayTool({id:"module",title:"Module",render(){}});'
                     'return () => window.dispatchEvent(new Event("module-torn-down"));'
                     '}'
                 ),
@@ -1651,7 +1651,7 @@ def test_extension_assets_use_authenticated_routes_and_fail_independently(
             {
               id: "asset-fixture",
               enabled: true,
-              capabilities: { ui: { js: "ui.js", module: "index.js", css: "ui.css" } },
+              capabilities: { ui: { api: 2, js: "ui.js", module: "index.js", css: "ui.css" } },
             },
             {
               id: "failed-fixture",
@@ -1668,7 +1668,7 @@ def test_extension_assets_use_authenticated_routes_and_fail_independently(
           return {
             loaded,
             classic: before["legacy-view"].map(row => row.id),
-            module: before["legacy-composer"].map(row => row.id),
+            module: before["play-tool"].map(row => row.id),
             failedFaults: registry.faultCount("failed-fixture"),
             tornDown,
             assetsLeft,
