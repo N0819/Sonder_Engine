@@ -28,6 +28,7 @@ const QUERY_KEY = /^[a-z][a-z0-9_-]{0,39}$/;
 const SEGMENT = /^[a-z][a-z0-9_-]{0,63}$/;
 const LAYER_ID = /^[A-Za-z0-9:_-]{1,80}$/;
 
+// UI_CATALOG_START: invalid-link explanations shown beside the safe fallback.
 const DEFAULT_EXPLANATIONS = Object.freeze({
   "unknown-destination": "That area does not exist. Play was opened instead.",
   "unknown-segment": "That page does not exist. Its parent area was opened instead.",
@@ -35,6 +36,7 @@ const DEFAULT_EXPLANATIONS = Object.freeze({
   "unsafe-query": "That link contained an unsafe option. It was not opened.",
   "query-too-long": "That link contained too much information. It was not opened.",
 });
+// UI_CATALOG_END
 
 export class RouteError extends Error {
   constructor(kind, message) {

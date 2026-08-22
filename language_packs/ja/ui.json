@@ -1961,5 +1961,21 @@
   "Operations the engine refused": "エンジンが拒否した操作",
   "These were in the plan you approved and were not applied. Everything else in the plan landed.": "これらは承認された計画に含まれていましたが、適用されませんでした。計画のそれ以外はすべて反映されています。",
   ". They'll need this to actually be reachable -- run a tunnel (e.g. cloudflared tunnel --url http://localhost:8008) and swap this page's origin for the tunnel's public URL before sending it. Start the server with SONDER_PUBLIC=1 when you do: without it the session cookies are sent without the Secure flag, so anything that reaches this origin over plain http can read them.": "このリンクは一度だけ有効で、30分で期限切れになり、相手は指定のペルソナとしてのみプレイできます。実際に到達できるようにするにはトンネルを実行し(例: cloudflared tunnel --url http://localhost:8008)、送信前にこのページのオリジンをトンネルの公開URLに置き換えてください。その際はサーバーを SONDER_PUBLIC=1 で起動してください。指定しないとセッションCookieに Secure フラグが付かず、平文httpでこのオリジンに到達できるものから読み取られます。",
-  "Applied lorebook plan: ${counts} Refused: ${skipped.length}.": "ロアブック計画を適用しました: ${counts} 拒否: ${skipped.length}。"
+  "Applied lorebook plan: ${counts} Refused: ${skipped.length}.": "ロアブック計画を適用しました: ${counts} 拒否: ${skipped.length}。",
+  "Some information needs your attention.": "いくつかの情報を確認してください。",
+  "Sonder could not complete that action.": "Sonder はその操作を完了できませんでした。",
+  "Sonder could not reach the engine. Your work is still here.": "Sonder はエンジンに接続できませんでした。作業内容はそのまま残っています。",
+  "Sonder received an unreadable response.": "Sonder は読み取れない応答を受信しました。",
+  "That area does not exist. Play was opened instead.": "その場所は存在しません。代わりに「プレイ」を開きました。",
+  "That item is no longer available.": "その項目は利用できなくなりました。",
+  "That link contained an unsafe option. It was not opened.": "そのリンクには安全でないオプションが含まれていたため、開きませんでした。",
+  "That link contained too much information. It was not opened.": "そのリンクには情報が多すぎるため、開きませんでした。",
+  "That link could not be read. Its nearest safe area was opened.": "そのリンクを読み取れなかったため、最も近い安全な場所を開きました。",
+  "That page does not exist. Its parent area was opened instead.": "そのページは存在しません。代わりに親の場所を開きました。",
+  "The earlier request was replaced.": "先のリクエストは新しいリクエストに置き換えられました。",
+  "The interface stopped unexpectedly. Your saved stories were not changed.": "インターフェースが予期せず停止しました。保存済みの物語は変更されていません。",
+  "The result belongs to an older selection.": "この結果は以前の選択に対するものです。",
+  "This account cannot perform that action.": "このアカウントではその操作を実行できません。",
+  "This changed somewhere else. Review both versions before saving.": "別の場所で変更されています。保存する前に両方の内容を確認してください。",
+  "Your Sonder session ended. Sign in to continue.": "Sonder のセッションが終了しました。続けるにはサインインしてください。"
 }

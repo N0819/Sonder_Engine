@@ -2,6 +2,10 @@ import { assertReleaseModules } from "./release.js?release=wp02.1";
 
 export const MODULE_RELEASE = "wp02.1";
 
+// UI_CATALOG_START: fatal boundary copy is deliberately stack-free.
+const RUNTIME_FAILURE_MESSAGE = "The interface stopped unexpectedly. Your saved stories were not changed.";
+// UI_CATALOG_END
+
 const SERVICE_PATHS = Object.freeze({
   api: "./api.js?release=wp02.1",
   errors: "./errors.js?release=wp02.1",
@@ -35,7 +39,7 @@ function installErrorBoundary(target, root, onDiagnostic) {
     target.dispatchEvent(new CustomEvent("sonder:runtime-error", {
       detail: {
         kind,
-        message: "The interface stopped unexpectedly. Your saved stories were not changed.",
+        message: RUNTIME_FAILURE_MESSAGE,
       },
     }));
   };

@@ -660,3 +660,149 @@ def test_router_history_unwinds_layers_and_restores_focus_identity(
         "focusReturns": ["delete-story-17", "story-card-17"],
         "stopped": True,
     }
+
+
+def test_localizer_applies_explicit_chrome_rules_and_preserves_data(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createLocalizer } = await import(
+            `${base}/static/js/ui-next/localization.js?release=wp02.1`
+          );
+          const longSource = `Long ${"explanation ".repeat(30)}`.trim();
+          const longTarget = `長い ${"説明".repeat(180)}`;
+          const localizer = createLocalizer({
+            language: "ja",
+            direction: "rtl",
+            messages: {
+              "Open story": "物語を開く",
+              "Story title": "物語のタイトル",
+              "Saved {count} stories": "{count}件の物語を保存しました",
+              "${name} is ready": "${name}の準備ができました",
+              [longSource]: longTarget,
+            },
+          });
+          const doc = document.implementation.createHTMLDocument("test");
+          const root = doc.body;
+          const chrome = doc.createElement("p");
+          chrome.textContent = "Open story";
+          chrome.title = "Open story";
+          const story = doc.createElement("p");
+          story.setAttribute("translate", "no");
+          story.textContent = "Open story";
+          story.title = "Open story";
+          const model = doc.createElement("p");
+          model.dataset.noI18n = "";
+          model.textContent = "Open story";
+          const input = doc.createElement("input");
+          input.value = "Open story";
+          input.placeholder = "Story title";
+          const editable = doc.createElement("div");
+          editable.contentEditable = "true";
+          editable.textContent = "Open story";
+          root.append(chrome, story, model, input, editable);
+          localizer.localize(root);
+          let invalidProjection = null;
+          try {
+            createLocalizer({
+              language: "ja",
+              direction: "ltr",
+              messages: { "Saved {count} stories": "保存しました" },
+            });
+          } catch (error) {
+            invalidProjection = error.kind;
+          }
+          return {
+            exact: localizer.t("Open story"),
+            variable: localizer.t("Saved {count} stories", { count: 3 }),
+            template: localizer.t("Aya is ready"),
+            longCopy: localizer.t(longSource) === longTarget,
+            chrome: chrome.textContent,
+            chromeTitle: chrome.title,
+            story: story.textContent,
+            storyTitle: story.title,
+            model: model.textContent,
+            inputValue: input.value,
+            inputPlaceholder: input.placeholder,
+            editable: editable.textContent,
+            language: doc.documentElement.lang,
+            direction: doc.documentElement.dir,
+            invalidProjection,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "exact": "物語を開く",
+        "variable": "3件の物語を保存しました",
+        "template": "Ayaの準備ができました",
+        "longCopy": True,
+        "chrome": "物語を開く",
+        "chromeTitle": "物語を開く",
+        "story": "Open story",
+        "storyTitle": "Open story",
+        "model": "Open story",
+        "inputValue": "Open story",
+        "inputPlaceholder": "物語のタイトル",
+        "editable": "Open story",
+        "language": "ja",
+        "direction": "rtl",
+        "invalidProjection": "placeholder-mismatch",
+    }
+
+
+def test_content_boundary_uses_text_nodes_and_rebuilds_allowlisted_rich_text(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { setText, appendSafeRichText } = await import(
+            `${base}/static/js/ui-next/content.js?release=wp02.1`
+          );
+          const textHost = document.createElement("div");
+          setText(textHost, '<img src=x onerror="window.pwned=1">');
+          const richHost = document.createElement("div");
+          appendSafeRichText(richHost, `
+            <p class="bad" style="color:red" onclick="evil()">
+              Hello <strong data-bad="1">safe</strong>
+              <script>window.pwned=2</script>
+              <svg><script>window.pwned=3</script></svg>
+              <math><mi>bad</mi></math>
+              <custom-element>unknown</custom-element>
+              <a href="javascript:evil()" target="_blank">unsafe</a>
+              <a href="https://example.com/help" target="_blank">safe link</a>
+              <a href="/guide">relative</a>
+            </p>
+          `);
+          return {
+            text: textHost.textContent,
+            textChildren: textHost.children.length,
+            pwned: Boolean(window.pwned),
+            safeStrong: richHost.querySelector("strong")?.textContent,
+            containsUnknownText: richHost.textContent.includes("unknown"),
+            scripts: richHost.querySelectorAll("script,svg,math,custom-element").length,
+            eventAttributes: richHost.querySelectorAll("[onclick],[style],[data-bad]").length,
+            unsafeHref: richHost.querySelector("a")?.hasAttribute("href"),
+            safeHref: richHost.querySelectorAll("a")[1]?.getAttribute("href"),
+            safeRel: richHost.querySelectorAll("a")[1]?.getAttribute("rel"),
+            relativeHref: richHost.querySelectorAll("a")[2]?.getAttribute("href"),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "text": '<img src=x onerror="window.pwned=1">',
+        "textChildren": 0,
+        "pwned": False,
+        "safeStrong": "safe",
+        "containsUnknownText": False,
+        "scripts": 0,
+        "eventAttributes": 0,
+        "unsafeHref": False,
+        "safeHref": "https://example.com/help",
+        "safeRel": "noopener noreferrer",
+        "relativeHref": "/guide",
+    }
