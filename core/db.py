@@ -111,7 +111,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -129,6 +129,20 @@ CREATE TABLE IF NOT EXISTS settings(
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Host-authoring lifecycle state for the unified Library. This is not story
+-- state: archive/restore must not roll with a turn checkpoint or ride a
+-- portable story archive. Generic ids are deliberate because all four
+-- resource tables have independent integer namespaces.
+CREATE TABLE IF NOT EXISTS library_item_state(
+    item_type TEXT NOT NULL CHECK(item_type IN ('story','character','persona','lore')),
+    item_id INTEGER NOT NULL,
+    archived INTEGER NOT NULL DEFAULT 0,
+    updated REAL NOT NULL,
+    PRIMARY KEY(item_type, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_library_item_state_archived
+    ON library_item_state(archived, item_type, item_id);
 
 CREATE TABLE IF NOT EXISTS characters(
     id INTEGER PRIMARY KEY,
@@ -1574,6 +1588,21 @@ MIGRATIONS = [
         # to answer a measurement question, and inventing its first month of
         # data would poison the answer.
         "ALTER TABLE memories ADD COLUMN last_accessed_turn INTEGER",
+    ],
+    # v32 -> v33
+    [
+        # Reversible host Library lifecycle. Deliberately outside every story
+        # snapshot/archive path: archiving a reusable record is authoring UI
+        # state, not an event in any story.
+        "CREATE TABLE IF NOT EXISTS library_item_state("
+        "item_type TEXT NOT NULL CHECK(item_type IN "
+        "('story','character','persona','lore')),"
+        "item_id INTEGER NOT NULL,"
+        "archived INTEGER NOT NULL DEFAULT 0,"
+        "updated REAL NOT NULL,"
+        "PRIMARY KEY(item_type, item_id))",
+        "CREATE INDEX IF NOT EXISTS idx_library_item_state_archived "
+        "ON library_item_state(archived, item_type, item_id)",
     ],
 ]
 

@@ -141,6 +141,7 @@ from web.auth_routes import (
     _set_guest_cookie as set_guest_cookie,
     router as auth_router,
 )
+from web.library import cleanup_library_state, router as library_router
 
 # ---- App setup ----
 # No CORS middleware: the frontend is always served same-origin from this
@@ -929,6 +930,7 @@ def _require_turn_resolved(chat_id, frame_id):
 
 def _delete_book(lid):
     qi("DELETE FROM lorebooks WHERE id=?", (lid,))
+    cleanup_library_state("lore", lid)
 
 def _remap_active_books(world, bookmap):
     # active_books is frame-scoped (see db.py's FRAME_SCOPED_WORLD_KEYS),
@@ -2790,6 +2792,7 @@ def char_edit(cid: int, body: dict = Body(...)):
 def char_del(cid: int):
     qi("DELETE FROM characters WHERE id=?", (cid,))
     qi("DELETE FROM chat_chars WHERE char_id=?", (cid,))
+    cleanup_library_state("character", cid)
     return {"ok": True}
 
 # ============================ PERSONAS ============================
@@ -2870,6 +2873,7 @@ def persona_edit(pid: int, body: dict = Body(...)):
 @app.delete("/api/personas/{pid}")
 def persona_del(pid: int):
     qi("DELETE FROM personas WHERE id=?", (pid,))
+    cleanup_library_state("persona", pid)
     return {"ok": True}
 
 # ============================ LOREBOOKS ============================
@@ -3406,6 +3410,7 @@ def chat_del(cid: int):
         qi("DELETE FROM memory_summaries WHERE chat_id=?", (cid,))
         qi("DELETE FROM lorebooks WHERE chat_id=?", (cid,))
         qi("DELETE FROM chats WHERE id=?", (cid,))
+        cleanup_library_state("story", cid)
     return {"ok": True}
 
 @app.get("/api/chats/{cid}")
@@ -4865,6 +4870,7 @@ _chat_archive_service = ChatArchiveService(
 chat_export = _chat_archive_service.export_chat
 chat_import = _chat_archive_service.import_chat
 app.include_router(_chat_archive_service.router)
+app.include_router(library_router)
 
 # ============================ MEMORIES ============================
 @app.get("/api/chats/{cid}/characters/{ch}/memories")

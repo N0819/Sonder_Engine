@@ -14,6 +14,11 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
 - `lorebook_links`: typed relationships between books.
 - `chat_lorebooks`: attachments between chats and reusable or chat-owned books.
 - `providers`, `settings`: local model/provider configuration and prompt/runtime settings. `settings.ui_language` is the host-wide interface language (absent means `en`), intentionally separate from each chat's `world.story_language`; changing chrome must not rewrite a story's authored language, and changing a story must not relabel the host UI.
+- `library_item_state`: reversible host-authoring lifecycle metadata for the
+  unified Library, keyed by resource kind and its table-local id. Archive is
+  intentionally not story state: it does not roll back with a turn, enter a
+  checkpoint, or travel in a portable story archive. The underlying resource
+  and every story association remain unchanged; true deletion cleans its row.
 - `lore_gen_jobs`: resumable lorebook-tree generation runs (`importers.generate_lorebook_plan` / `resume_lorebook_plan`). A run is one structure model call plus one call per batch of outlined entries, and each completed unit is written here so an interruption (dropped stream, exhausted provider retries, closed tab, restarted server) costs one unit instead of the whole run. `status` is `running|interrupted|failed|ready|applied|cancelled`; `owner` is a per-process token, so a `running` row from any other process is a crash and reclassifies as an interruption with no staleness timeout. `params` holds the whole request (brief, mode, depth, entry target, flags, and the raised read `timeout`), so a resume reproduces it without the client. Authoring scratch state only — deliberately **not** exported, checkpointed, or branch-remapped, since no lore exists until the plan is applied; rows are pruned to the newest `LORE_GEN_KEEP_PER_BOOK` per book and cascade with the book.
 
 ## Runtime fiction tables
