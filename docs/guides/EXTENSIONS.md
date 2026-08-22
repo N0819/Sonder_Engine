@@ -1577,6 +1577,30 @@ Serve your own `.mjs` files if you prefer them; the asset route sends a
 JavaScript MIME type for both suffixes, which a browser requires before it will
 execute a module at all.
 
+### 7.6 Replacement-host migration boundary
+
+WP-02 implements the new host's temporary v1 adapter in
+`static/js/ui-next/extensions-v1.js`. It exposes exactly `window.Sonder`; the
+replacement does not recreate `window.S`, the old helper globals, private host
+DOM ids, or a general compatibility bag. Classic bundles keep `_begin`/`_end`
+owner attribution. Module entries receive an id-bound facade, so registrations
+made after `await` cannot leak into another extension's ownership.
+
+The internal host registry has explicit destination, Library-type, Play-tool,
+Add-ons-settings, task-provider, legacy surface, notice, and event slots. It
+contains synchronous throws and asynchronous rejections, retires an owner after
+three faults, closes its active view, removes its notices/listeners/
+registrations/assets, and calls optional module teardown. All UI assets load
+through authenticated `/api/extensions/...` routes; one failed extension does
+not stop host boot.
+
+Those slots are data until their owning replacement surface renders them.
+WP-03 owns the first visible consumers, and WP-12 owns installed-extension
+compatibility, capability disclosure, routing and CSS containment, plus any
+public extension-v2 contract. An extension that depends on `S`, `el`, `txt`,
+or a private classic DOM id is therefore not yet proven compatible with the
+replacement even when its `Sonder.*` registrations pass the WP-02 fixture.
+
 ---
 
 ## 8. What is actually restricted

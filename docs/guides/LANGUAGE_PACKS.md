@@ -210,6 +210,20 @@ that never render. Keeping an unchanged value for a confirmed non-UI code
 fragment is preferable to translating code. Actual reader-visible strings
 must be translated.
 
+The replacement runtime uses an explicit localizer rather than scanning the
+live DOM. It compiles catalog templates once, validates placeholder parity,
+sets the manifest language and direction, and translates only nodes handed to
+it by a component or entry owner. `translate="no"`, form controls,
+contenteditable regions, and story/user/model projections are hard boundaries;
+no mutation observer may discover and reinterpret later content.
+
+`tools/extract_ui_catalog.py` walks replacement modules recursively but reads
+only literals inside `UI_CATALOG_START` / `UI_CATALOG_END` blocks. Development
+fixtures such as the component laboratory and runtime harness are excluded by
+name. Adding visible replacement copy therefore requires both an owning block
+and regenerated `language_packs/en/ui.json`; technical strings elsewhere in a
+module are not silently promoted into translator work.
+
 ## 6. Validation and tests
 
 Before enabling `story: true`, add tests that prove behavior rather than file

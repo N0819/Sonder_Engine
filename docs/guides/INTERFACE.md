@@ -44,6 +44,16 @@ requests and owns no application truth. Its [G1 review and browser
 matrix](../design/sonder-ui-replacement/G1_FOUNDATION_REVIEW.md) qualify the
 foundation for reuse without claiming later product flows.
 
+WP-02 establishes the replacement service graph under `static/js/ui-next/`.
+The authenticated `/ui-next/runtime` fixture proves one release-coherent native
+boot against current `/api/bootstrap`, explicit state slices, request identity,
+route history, localization and content boundaries, task/notice/diagnostic
+services, browser-local draft ownership, save sequencing, and a contained v1
+extension adapter. Its [runtime review and browser
+matrix](../design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md) qualify those
+boundaries without claiming a product shell. G2 remains open until WP-03 makes
+Play, Library, Settings, focus, responsive routes, and extension consumers real.
+
 ## Runtime boundary
 
 - The replacement is delivered by the existing FastAPI process, same-origin.
@@ -62,6 +72,22 @@ foundation for reuse without claiming later product flows.
 - Browser-local migrations are versioned and idempotent. Consequential drafts
   are scoped to their real story or record, recoverable, and never silently
   moved between owners.
+- The application store separates server slices (`session`, `story`,
+  `transcript`, `library`, `settings`, `extensions`) from presentation slices
+  (`route`, `composer`, `inspector`, `tasks`, `notices`, `appearance`,
+  `diagnostics`). State enters by named owner actions and leaves as copied,
+  frozen snapshots.
+- The shared API client owns same-origin/no-store requests, response parsing,
+  correlation identity, cancellation, and stale-owner rejection. It never
+  retries a write automatically. A 401 requests login once; a 403 stays an
+  in-context authorization result.
+- Hash routes are bounded data. Stable destinations and subviews may survive a
+  refresh; transient layers occupy history entries and carry focus-return
+  identity rather than DOM nodes. Unknown or retired targets fall back to a
+  useful parent explanation.
+- Runtime modules and their entry assets carry one release id. Mixed cached
+  releases fail before services start. HTML is `no-store`; versioned
+  replacement assets are immutable for that release.
 
 ## Integration rules
 

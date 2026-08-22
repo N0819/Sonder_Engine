@@ -1,21 +1,23 @@
 # Frontend drift record
 
 **From candidate baseline:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
-**To current program baseline:** `230876b6d6f4a694f99ffae7768e4b78d240c110`  
-**Changed frontend-adjacent paths:** 168  
-**Review classes:** api-contract: 1, behavioral-test: 14, engine-or-test-context: 92, frontend-behavior: 14, localization-contract: 2, presentation: 14, security-contract: 2, tooling: 29
+**To current program baseline:** `c0465fdade03d840197f4351b69e4db6090cd269`  
+**Changed frontend-adjacent paths:** 191  
+**Review classes:** api-contract: 1, behavioral-test: 18, engine-or-test-context: 92, frontend-behavior: 30, localization-contract: 2, presentation: 16, security-contract: 2, tooling: 30
 
 A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.
 
 | Status | Path | Review class | Candidate collision | Rebase rule |
 |---|---|---|---|---|
 | A | `browser_tests/__init__.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `browser_tests/fixtures/ui_v1_extension.js` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `browser_tests/test_ambience_await.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `browser_tests/test_backdrop_await.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `browser_tests/test_checkpoint_compaction_ui.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `browser_tests/test_scrollback_commission.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `browser_tests/test_ui_foundation.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `browser_tests/test_ui_next_entry.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `browser_tests/test_ui_runtime.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/cards/linguistics.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/cards/system_prompts.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/ui.json` | localization-contract | yes | preserve current behavior; port scoped candidate intent only |
@@ -27,6 +29,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `static/css/ui/entry.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/lab.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/reset.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/css/ui/runtime.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/themes/ash-brass.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/themes/carbon-signal.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/themes/midnight-ink.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
@@ -36,7 +39,23 @@ A direct candidate collision means both the candidate implementation and current
 | A | `static/css/ui/utilities.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | M | `static/js/lorebooks.js` | frontend-behavior | yes | preserve current behavior; port scoped candidate intent only |
 | M | `static/js/settings.js` | frontend-behavior | yes | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/api.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/bootstrap.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/content.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/credentials.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/diagnostics.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/errors.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/extensions-v1.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/extensions.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/localization.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui-next/main.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/notices.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/release.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/router.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/save-policy.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/storage.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/store.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/tasks.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui/accessibility.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui/appearance-preflight.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui/appearance.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
@@ -49,6 +68,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `static/js/ui/icons.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui/lab.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/ui-next-lab.html` | presentation | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/ui-next-runtime.html` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/ui-next.html` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/charter_fixtures.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/charter_worlds.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -136,6 +156,8 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tests/test_ui_next_entry.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_replacement_control_plane.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_replacement_inventory.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_runtime_contracts.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_runtime_routes.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_unbidden_memory.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_voice_register_stability.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_world_model_action_stage.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -150,6 +172,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tools/benchmark_recall_review.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_baseline.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_foundation.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/capture_ui_runtime.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/cheap_embed_width_sweep.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | M | `tools/extract_ui_catalog.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/fetch_longmemeval.py` | tooling | no | preserve current behavior; port scoped candidate intent only |

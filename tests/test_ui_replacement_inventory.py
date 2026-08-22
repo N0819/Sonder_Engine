@@ -39,6 +39,12 @@ def ui_fixture(tmp_path: Path) -> Path:
         'document.querySelector("#story");\n',
         encoding="utf-8",
     )
+    (tmp_path / "static" / "js" / "runtime.js").write_text(
+        "import { boot } from './boot.js';\n"
+        "const privateModuleState = {};\n"
+        "window.ModuleSurface = { boot };\n",
+        encoding="utf-8",
+    )
     (tmp_path / "static" / "styles.css").write_text(
         ':root { --surface: #111; }\n'
         'html[data-theme="carbon"] { --surface: #101820; }\n',
@@ -76,6 +82,7 @@ def test_collect_inventory_finds_real_source_boundaries(ui_fixture: Path):
         {"kind": "classic-const", "name": "S", "source": "static/js/app.js:1"},
         {"kind": "classic-function", "name": "openChat", "source": "static/js/app.js:2"},
         {"kind": "window", "name": "Sonder", "source": "static/js/app.js:3"},
+        {"kind": "window", "name": "ModuleSurface", "source": "static/js/runtime.js:3"},
     ]
     assert inventory["dom_references"] == [
         {"id": "send", "source": "static/js/app.js:4"},

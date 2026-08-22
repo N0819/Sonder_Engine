@@ -24,6 +24,7 @@ WINDOW_GLOBAL = re.compile(r"\bwindow\.([A-Za-z_$][\w$]*)\s*=")
 CLASSIC_DECLARATION = re.compile(
     r"^(?:(const|let|var)\s+([A-Za-z_$][\w$]*)|function\s+([A-Za-z_$][\w$]*)\s*\()"
 )
+MODULE_DECLARATION = re.compile(r"(?m)^\s*(?:import|export)\b")
 DOM_REFERENCE = re.compile(
     r"(?:getElementById\(\s*[\"']([^\"']+)[\"']|"
     r"querySelector(?:All)?\(\s*[\"']#([A-Za-z_][\w:.-]*))"
@@ -179,9 +180,11 @@ def collect_inventory(root: Path) -> dict[str, object]:
         })
 
     for path in sorted((root / "static" / "js").rglob("*.js")) if (root / "static" / "js").exists() else []:
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        text = path.read_text(encoding="utf-8")
+        is_module = bool(MODULE_DECLARATION.search(text))
+        for number, line in enumerate(text.splitlines(), 1):
             source = f"{_relative(path, root)}:{number}"
-            if match := CLASSIC_DECLARATION.match(line):
+            if not is_module and (match := CLASSIC_DECLARATION.match(line)):
                 if match.group(3):
                     globals_.append({"kind": "classic-function", "name": match.group(3), "source": source})
                 else:
