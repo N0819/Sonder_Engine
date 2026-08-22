@@ -16,6 +16,7 @@ export const SLICE_OWNERS = Object.freeze({
     "tasks",
     "notices",
     "appearance",
+    "atmosphere",
     "diagnostics",
   ]),
 });
@@ -43,6 +44,15 @@ const DEFAULT_STATE = Object.freeze({
     theme: "carbon-signal",
     density: "comfortable",
     motion: "system",
+  },
+  atmosphere: {
+    status: "unrequested",
+    owner: null,
+    backdrop: { status: "unrequested", turnId: null, payload: null },
+    ambience: { status: "unrequested", turnId: null, payload: null },
+    preferences: { muted: false, volume: 0.7, chime: false },
+    audio: { unlocked: false, playing: false, token: null },
+    mediaError: null,
   },
   extensions: { status: "unrequested", items: [] },
   diagnostics: { status: "ready", enabled: false, entries: [] },

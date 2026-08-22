@@ -8,6 +8,8 @@ import { mountWorldTool } from "./story-tools/world.js?release=wp05.1";
 import { mountStyleTool } from "./story-tools/style.js?release=wp05.1";
 import { mountDialogueTool } from "./story-tools/dialogue.js?release=wp05.1";
 import { mountAttireTool } from "./story-tools/attire.js?release=wp05.1";
+import { mountBackdropsTool } from "./story-tools/backdrops.js?release=wp05.1";
+import { mountAmbienceTool } from "./story-tools/ambience.js?release=wp05.1";
 
 const MOUNTS = Object.freeze({
   cast: mountCastTool,
@@ -18,6 +20,8 @@ const MOUNTS = Object.freeze({
   style: mountStyleTool,
   dialogue: mountDialogueTool,
   attire: mountAttireTool,
+  backdrops: mountBackdropsTool,
+  ambience: mountAmbienceTool,
 });
 
 export function mountStoryTool(toolId, options) {

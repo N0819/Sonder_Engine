@@ -12,6 +12,9 @@ const COPY = Object.freeze({
   retryOpen: "Try again",
   emptyTranscript: "This story is ready for its first turn.",
   emptyMeaning: "Leave the box empty and send to let the story continue without a new action.",
+  muteAmbience: "Mute ambience",
+  unmuteAmbience: "Unmute ambience",
+  ambienceVolume: "Ambience volume",
   send: "Send",
   stop: "Stop",
   stopping: "Stopping…",
@@ -438,6 +441,15 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const root = element(documentRef, "section", "ui-play");
   root.dataset.playWorkspace = "true";
   const story = initialState.story.data;
+  const atmosphere = element(documentRef, "div", "ui-play__atmosphere");
+  atmosphere.setAttribute("data-play-atmosphere", "true");
+  atmosphere.setAttribute("aria-hidden", "true");
+  const backdrop = element(documentRef, "img", "ui-play__backdrop");
+  backdrop.setAttribute("data-play-backdrop", "true");
+  backdrop.alt = "";
+  const weather = element(documentRef, "div", "ui-play__weather");
+  weather.setAttribute("data-play-weather", "true");
+  atmosphere.append(backdrop, weather);
   const storyHeader = element(documentRef, "header", "ui-play__story-header");
   const identity = element(documentRef, "div", "ui-play__identity");
   const storyTitle = element(
@@ -520,8 +532,16 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const validation = element(documentRef, "p", "ui-play__validation");
   validation.setAttribute("role", "alert");
   composerActions.append(send, stop, retry);
-  composer.append(input, composerHelp, validation, progress, composerActions);
-  root.append(storyHeader, transcript, newTurn, composer);
+  const audioCluster = element(documentRef, "div", "ui-play__audio-cluster");
+  audioCluster.setAttribute("aria-label", "Ambience controls");
+  const muteAmbience = button(documentRef, COPY.muteAmbience, "ui-button ui-button--quiet");
+  const ambienceVolume = documentRef.createElement("input");
+  ambienceVolume.type = "range";
+  ambienceVolume.min = "0"; ambienceVolume.max = "1"; ambienceVolume.step = "0.05";
+  ambienceVolume.setAttribute("aria-label", COPY.ambienceVolume);
+  audioCluster.append(muteAmbience, ambienceVolume);
+  composer.append(input, composerHelp, validation, progress, composerActions, audioCluster);
+  root.append(atmosphere, storyHeader, transcript, newTurn, composer);
 
   let lastItems = null;
   let lastPreview = null;
@@ -607,6 +627,33 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     scheduleElapsed(current.run);
   };
 
+  const renderAtmosphere = state => {
+    const payload = state.atmosphere?.backdrop?.payload;
+    const url = payload?.ready ? payload.url : null;
+    if (url) {
+      if (backdrop.getAttribute("src") !== url) backdrop.setAttribute("src", url);
+      backdrop.hidden = false;
+    } else {
+      backdrop.hidden = true;
+      backdrop.removeAttribute("src");
+    }
+    const conditions = payload?.weather || {};
+    const kind = conditions.precipitation || conditions.sky || conditions.kind || "";
+    weather.dataset.weather = String(kind);
+    weather.dataset.severity = String(conditions.severity || "");
+    weather.hidden = !kind;
+    const preferences = state.atmosphere?.preferences || {};
+    muteAmbience.textContent = preferences.muted ? COPY.unmuteAmbience : COPY.muteAmbience;
+    ambienceVolume.value = String(preferences.volume ?? 0.7);
+    localize(services, audioCluster);
+  };
+
+  muteAmbience.addEventListener("click", () => {
+    const muted = services.store.getSnapshot().atmosphere.preferences.muted;
+    services.atmosphere.setMuted(!muted);
+  });
+  ambienceVolume.addEventListener("input", () => services.atmosphere.setVolume(ambienceVolume.value));
+
   input.addEventListener("input", () => services.play.updateDraft(input.value));
   input.addEventListener("keydown", event => {
     if (event.isComposing || event.key !== "Enter" || event.shiftKey) return;
@@ -622,6 +669,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     story: state.story,
     transcript: state.transcript,
     composer: state.composer,
+    atmosphere: state.atmosphere,
   });
   const unsubscribe = services.store.subscribe(selectPlayState, state => {
     storyTitle.textContent = state.story.data?.chat?.name || storyTitle.textContent;
@@ -629,15 +677,18 @@ function createStoryView(documentRef, services, proseModule, initialState) {
       renderTranscript(state);
     }
     renderComposer(state);
+    renderAtmosphere(state);
   }, { equality: (left, right) => (
     left.story === right.story
     && left.transcript === right.transcript
     && left.composer === right.composer
+    && left.atmosphere === right.atmosphere
   ) });
   const initial = selectPlayState(services.store.getSnapshot());
   renderTranscript(initial);
   input.value = initial.composer.draft || "";
   renderComposer(initial);
+  renderAtmosphere(initial);
 
   return {
     element: root,

@@ -38,6 +38,7 @@ MODULES = (
     "story-tools-registry.js",
     "story-tools-runtime.js",
     "story-tools-view.js",
+    "atmosphere-runtime.js",
 )
 
 
