@@ -1687,3 +1687,148 @@ def test_extension_assets_use_authenticated_routes_and_fail_independently(
     assert "/api/extensions/asset-fixture/asset/index.js" in requested
     assert "/api/extensions/failed-fixture/ui.js" in requested
     assert all(path.startswith("/api/extensions/") for path in requested)
+
+
+def test_runtime_harness_boots_once_from_bootstrap_without_classic_scripts(
+    page: Page, ui_base_url: str
+) -> None:
+    bootstrap_requests = []
+
+    def serve_bootstrap(route):
+        bootstrap_requests.append(
+            {
+                "method": route.request.method,
+                "headers": route.request.headers,
+                "post_data": route.request.post_data,
+            }
+        )
+        route.fulfill(
+            content_type="application/json",
+            body="""{
+              "ui_language": "ja",
+              "ui_direction": "ltr",
+              "ui_messages": {
+                "Loading runtime services…": "ランタイムサービスを読み込んでいます…",
+                "Runtime services ready": "ランタイムサービスの準備ができました"
+              },
+              "chats": [],
+              "characters": [],
+              "personas": [],
+              "lorebooks": [],
+              "providers": [],
+              "language_packs": [],
+              "extensions": [],
+              "extension_errors": [],
+              "extension_lanes": []
+            }""",
+        )
+
+    page.route("**/api/bootstrap", serve_bootstrap)
+    requested: list[str] = []
+    page_errors: list[str] = []
+    page.on("request", lambda request: requested.append(request.url))
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    response = page.goto(f"{ui_base_url}/static/ui-next-runtime.html")
+    assert response is not None and response.ok
+    page.locator("html").wait_for(state="attached")
+    page.wait_for_function(
+        "['ready', 'failed'].includes(document.documentElement.dataset.uiNextState)",
+        timeout=10000,
+    )
+    result = page.evaluate(
+        """() => ({
+          entry: document.documentElement.dataset.uiNextEntry,
+          state: document.documentElement.dataset.uiNextState,
+          language: document.documentElement.lang,
+          direction: document.documentElement.dir,
+          status: document.querySelector("[data-runtime-status]")?.textContent,
+          detail: document.querySelector("[data-runtime-detail]")?.textContent,
+          classicState: Object.hasOwn(window, "S"),
+          adapter: Object.hasOwn(window, "Sonder"),
+          sensitiveText: /password|api[_ -]?key|join code|cookie|session=/i.test(
+            document.body.textContent
+          ),
+          pageErrors: null,
+        })"""
+    )
+    result["pageErrors"] = page_errors
+    assert result == {
+        "entry": "runtime-harness",
+        "state": "ready",
+        "language": "ja",
+        "direction": "ltr",
+        "status": "ランタイムサービスの準備ができました",
+        "detail": "0 stories · 0 extensions",
+        "classicState": False,
+        "adapter": True,
+        "sensitiveText": False,
+        "pageErrors": [],
+    }
+    assert len(bootstrap_requests) == 1
+    assert bootstrap_requests[0]["method"] == "GET"
+    assert bootstrap_requests[0]["post_data"] is None
+    assert bootstrap_requests[0]["headers"].get("x-sonder-request-id", "").startswith(
+        "ui-"
+    )
+    assert sum(url.endswith("/api/bootstrap") for url in requested) == 1
+    assert not any("/api/ui" in url for url in requested)
+    assert not any("/static/js/app.js" in url for url in requested)
+    assert not any("/static/js/utils.js" in url for url in requested)
+
+
+def test_runtime_boot_drops_unknown_sensitive_bootstrap_fields_and_tears_down(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body="""{
+              "ui_language":"en",
+              "ui_direction":"ltr",
+              "ui_messages":{},
+              "chats":[],
+              "characters":[],
+              "personas":[],
+              "lorebooks":[],
+              "extensions":[],
+              "extension_errors":[],
+              "extension_lanes":[],
+              "password":"must-not-enter-state",
+              "api_key":"must-not-enter-state",
+              "join_code":"must-not-enter-state"
+            }""",
+        ),
+    )
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { bootRuntime } = await import(
+            `${base}/static/js/ui-next/bootstrap.js?release=wp02.1`
+          );
+          const root = document.documentElement;
+          const runtime = await bootRuntime({ host: true, root, target: window });
+          const snapshot = runtime.services.store.getSnapshot();
+          const serialized = JSON.stringify({
+            snapshot,
+            extensionState: runtime.services.registry.state(),
+            tasks: runtime.services.tasks.snapshot(),
+            notices: runtime.services.notices.snapshot(),
+            diagnostics: runtime.services.diagnostics.snapshot(),
+          });
+          runtime.teardown();
+          return {
+            hasPassword: serialized.includes("must-not-enter-state"),
+            readyAfterStop: root.dataset.uiNextReady || null,
+            stateAfterStop: root.dataset.uiNextState,
+            adapterAfterStop: Object.hasOwn(window, "Sonder"),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "hasPassword": False,
+        "readyAfterStop": None,
+        "stateAfterStop": "stopped",
+        "adapterAfterStop": False,
+    }
