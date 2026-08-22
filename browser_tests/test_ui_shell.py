@@ -249,10 +249,101 @@ def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     search.press("Enter")
     expect(page).to_have_url(re.compile(r"#/settings$"))
 
+    page.evaluate(
+        """() => {
+          const input = document.createElement("input");
+          input.dataset.shellTypingProbe = "true";
+          input.setAttribute("aria-label", "Typing guard probe");
+          document.querySelector('[data-shell-destination-view]').append(input);
+        }"""
+    )
     typing_probe = page.locator("[data-shell-typing-probe]")
     typing_probe.focus()
     typing_probe.press("Control+K")
     expect(dialog).not_to_be_visible()
+
+
+def test_shortcut_registry_rejects_collisions_and_guards_typing_and_ime(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createShortcutRegistry } = await import(
+            `${base}/static/js/ui-next/shortcuts.js?release=wp03.1`
+          );
+          let calls = 0;
+          let collision = null;
+          const registry = createShortcutRegistry({ target: window });
+          registry.register({
+            owner: "core-shell",
+            id: "go-to",
+            combo: "mod+k",
+            label: "Open Go To",
+            handler: () => { calls += 1; },
+            core: true,
+          });
+          try {
+            registry.register({
+              owner: "fixture-extension",
+              id: "replace-go-to",
+              combo: "mod+k",
+              label: "Collision",
+              handler: () => { calls += 100; },
+            });
+          } catch (error) {
+            collision = { kind: error.kind, owner: error.owner, combo: error.combo };
+          }
+          registry.start();
+          document.body.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "k", ctrlKey: true, bubbles: true,
+          }));
+          const input = document.createElement("input");
+          document.body.append(input);
+          input.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "k", ctrlKey: true, bubbles: true,
+          }));
+          document.body.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "k", ctrlKey: true, bubbles: true, isComposing: true,
+          }));
+          const entries = registry.entries();
+          registry.stop();
+          document.body.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "k", ctrlKey: true, bubbles: true,
+          }));
+          return { calls, collision, entries };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "calls": 1,
+        "collision": {
+            "kind": "shortcut-collision",
+            "owner": "core-shell",
+            "combo": "mod+k",
+        },
+        "entries": [
+            {
+                "owner": "core-shell",
+                "id": "go-to",
+                "combo": "mod+k",
+                "label": "Open Go To",
+                "core": True,
+            }
+        ],
+    }
+
+
+def test_go_to_remains_touch_reachable_on_compact_shell(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open_shell(page, ui_base_url)
+    opener = page.get_by_role("button", name="Go To", exact=True)
+    expect(opener).to_be_visible()
+    assert opener.evaluate("node => node.getBoundingClientRect().height") >= 44
+    opener.click()
+    expect(page.get_by_role("dialog", name="Go To")).to_be_visible()
 
 
 @pytest.mark.parametrize(

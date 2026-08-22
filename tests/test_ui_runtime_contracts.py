@@ -28,6 +28,8 @@ MODULES = (
     "destinations.js",
     "inspector-host.js",
     "navigation-state.js",
+    "shortcuts.js",
+    "go-to.js",
     "shell.js",
 )
 
