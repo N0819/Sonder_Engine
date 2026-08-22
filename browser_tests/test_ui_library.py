@@ -75,6 +75,7 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1280) -> None:
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
     expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
     expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(3)
+    expect(page.get_by_role("combobox", name="Library visibility")).to_have_value("active")
 
 
 def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
@@ -167,6 +168,109 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     assert result["normalized"] == {
         "scope": "all", "item": "", "sort": "name", "invalid": True,
         "query": {},
+    }
+
+
+def test_library_mutations_keep_story_owner_and_undo_expires(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const storeModule = await import(
+            `${base}/static/js/ui-next/store.js?release=wp06.1`
+          );
+          const libraryModule = await import(
+            `${base}/static/js/ui-next/library-runtime.js?release=wp06.1`
+          );
+          const item = {
+            kind: "character", id: 7, key: "character:7", name: "Mara Venn",
+            summary: "", reusable: true, archived: false, use_count: 1,
+            associations: [{ story_id: 1, story_name: "Story A", state: "active" }],
+          };
+          const payload = {
+            items: [item], facets: { types: {}, scopes: {} },
+            page: { offset: 0, limit: 100, returned: 1, total: 1 }, query: {},
+          };
+          const store = storeModule.createStore();
+          let current = {
+            destination: "library", segments: ["characters"],
+            query: { story: "1", item: "character:7" },
+            canonicalHash: "#/library/characters?item=character%3A7&story=1",
+          };
+          store.dispatch({ type: "presentation/replace", slice: "route", value: current });
+          const pending = [];
+          const apiClient = {
+            get: async () => ({ data: structuredClone(payload) }),
+            request: (method, path, options) => new Promise((resolve, reject) => {
+              pending.push({ method, path, options, resolve, reject });
+            }),
+            cancel: () => true,
+          };
+          let envelope = { version: 2, panes: {}, appearance: {}, navigation: {}, drafts: {} };
+          const localState = {
+            snapshot: () => structuredClone(envelope),
+            setRecord: (name, value) => { envelope = { ...envelope, [name]: structuredClone(value) }; },
+          };
+          const router = { current: () => current, navigate: () => true };
+          const runtime = libraryModule.createLibraryRuntime({ store, apiClient, localState, router });
+          await Promise.resolve(); await Promise.resolve();
+
+          const late = runtime.setAssociation(item, item.associations[0]);
+          current = {
+            ...current, query: { story: "2", item: "character:7" },
+            canonicalHash: "#/library/characters?item=character%3A7&story=2",
+          };
+          const first = pending[0];
+          if (first.options.isCurrent({ owner: first.options.owner })) {
+            first.resolve({ data: { ok: true } });
+          } else {
+            first.reject({ kind: "stale" });
+          }
+          const lateAccepted = await late;
+
+          current = {
+            ...current, query: { story: "1", item: "character:7" },
+            canonicalHash: "#/library/characters?item=character%3A7&story=1",
+          };
+          const accepted = runtime.setAssociation(
+            { ...item, associations: [{ ...item.associations[0], state: "dormant" }] },
+            { ...item.associations[0], state: "dormant" },
+          );
+          const second = pending[1];
+          if (second.options.isCurrent({ owner: second.options.owner })) {
+            second.resolve({ data: { ok: true } });
+          } else {
+            second.reject({ kind: "stale" });
+          }
+          const acceptedNow = await accepted;
+          const receipt = store.getSnapshot().library.undo;
+          const originalNow = Date.now;
+          Date.now = () => receipt.expiresAt + 1;
+          const expiredUndoAccepted = await runtime.runUndo();
+          Date.now = originalNow;
+          const finalUndo = store.getSnapshot().library.undo;
+          runtime.teardown();
+          return {
+            lateAccepted, acceptedNow, expiredUndoAccepted,
+            firstOwner: first.options.owner,
+            secondOwner: second.options.owner,
+            hasFirstGuard: typeof first.options.isCurrent === "function",
+            finalUndo,
+            requestCount: pending.length,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "lateAccepted": False,
+        "acceptedNow": True,
+        "expiredUndoAccepted": False,
+        "firstOwner": "character:7:1:cast-remove",
+        "secondOwner": "character:7:1:cast-reactivate",
+        "hasFirstGuard": True,
+        "finalUndo": None,
+        "requestCount": 2,
     }
 
 
@@ -274,3 +378,98 @@ def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
     expect(page.get_by_role("button", name=re.compile("Mara Venn"))).to_have_count(0)
     page.get_by_role("button", name="Undo").click()
     expect(page.get_by_role("button", name=re.compile("Mara Venn"))).to_be_visible()
+
+
+def test_primary_persona_is_protected_and_story_delete_names_its_scope(
+    page: Page, ui_base_url: str,
+) -> None:
+    deleted = {"story": False}
+    persona = {
+        "kind": "persona", "id": 9, "key": "persona:9", "name": "Ilyra",
+        "summary": "The player persona.", "subtype": "persona", "created": None,
+        "reusable": True, "archived": False, "use_count": 1,
+        "associations": [{
+            "story_id": 1, "story_name": "The Lantern Archive", "state": "primary",
+        }],
+    }
+    boot = {**BOOTSTRAP, "personas": [{"id": 9, "name": "Ilyra"}]}
+
+    def library_route(route):
+        items = [persona] if deleted["story"] else [ITEMS[0], persona]
+        route.fulfill(content_type="application/json", body=json.dumps(_projection(items)))
+
+    def delete_story(route):
+        deleted["story"] = True
+        route.fulfill(content_type="application/json", body='{"ok":true}')
+
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(boot)),
+    )
+    page.route("**/api/library?*", library_route)
+    page.route("**/api/chats/1", delete_story)
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/personas")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    page.get_by_role("button", name=re.compile("Ilyra")).click()
+    detail = page.get_by_role("complementary", name="Library details")
+    expect(detail.get_by_text("Primary", exact=True)).to_be_visible()
+    expect(detail.get_by_text("Primary persona · change in Story setup")).to_be_visible()
+    expect(detail.get_by_role("button", name=re.compile("Remove"))).to_have_count(0)
+
+    page.locator('[data-library-item="story:1"]').click()
+    detail.get_by_role("button", name="Delete story…").click()
+    expect(detail.get_by_text(re.compile("complete story, its history, and story-owned lore"))).to_be_visible()
+    detail.get_by_role("button", name="Delete this story").click()
+    expect(page.locator('[data-library-item="story:1"]')).to_have_count(0)
+    expect(page.get_by_role("button", name=re.compile("Ilyra"))).to_be_visible()
+
+
+def test_lore_detach_targets_story_copy_and_undo_reattaches_origin(
+    page: Page, ui_base_url: str,
+) -> None:
+    attached = {"value": True}
+    requests = []
+    lore = {
+        **ITEMS[2], "use_count": 1,
+        "associations": [{
+            "story_id": 1, "story_name": "The Lantern Archive",
+            "state": "attached", "story_item_id": 212,
+        }],
+    }
+
+    def library_route(route):
+        item = lore if attached["value"] else {**lore, "use_count": 0, "associations": []}
+        route.fulfill(content_type="application/json", body=json.dumps(_projection([ITEMS[0], item])))
+
+    def association_route(route):
+        requests.append({
+            "method": route.request.method,
+            "url": route.request.url,
+            "body": route.request.post_data_json if route.request.post_data else None,
+        })
+        attached["value"] = route.request.method == "POST"
+        result = {"lorebook_id": 212} if attached["value"] else {"ok": True}
+        route.fulfill(content_type="application/json", body=json.dumps(result))
+
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(BOOTSTRAP)),
+    )
+    page.route("**/api/library?*", library_route)
+    page.route("**/api/chats/1/lorebooks**", association_route)
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/lore")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    page.get_by_role("button", name=re.compile("Quiet Roads")).click()
+    detail = page.get_by_role("complementary", name="Library details")
+
+    detail.get_by_role("button", name="Detach from story").click()
+    expect(detail.get_by_text("Not used by a story.")).to_be_visible()
+    detail.get_by_role("button", name="Undo").click()
+    expect(detail.get_by_text("Attached", exact=True)).to_be_visible()
+
+    assert requests[0]["method"] == "DELETE"
+    assert requests[0]["url"].endswith("/api/chats/1/lorebooks/212")
+    assert requests[1]["method"] == "POST"
+    assert requests[1]["url"].endswith("/api/chats/1/lorebooks")
+    assert requests[1]["body"] == {"lorebook_id": 12}

@@ -20,6 +20,7 @@ const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
 const MAX_FAVORITES = 20;
 const MAX_RECENTS = 50;
 const MAX_SCROLLS = 20;
+const UNDO_LIFETIME_MS = 12_000;
 
 function numericId(value) {
   const number = Number(value);
@@ -133,6 +134,9 @@ export function createLibraryRuntime(options = {}) {
   let currentRoute = null;
   let safeLinkNotice = false;
   let presentation = presentationRecord(localState);
+  let mutationGeneration = 0;
+  let undoReceipt = null;
+  let undoTimer = null;
 
   const replace = value => store.dispatch({
     type: "server/replace",
@@ -148,6 +152,36 @@ export function createLibraryRuntime(options = {}) {
       personas: library.personas || [],
       lorebooks: library.lorebooks || [],
     };
+  };
+
+  const publicUndo = () => undoReceipt ? Object.freeze({
+    owner: undoReceipt.owner,
+    action: undoReceipt.action,
+    expiresAt: undoReceipt.expiresAt,
+    message: undoReceipt.message,
+  }) : null;
+
+  const patchLibrary = value => store.dispatch({
+    type: "server/patch",
+    slice: "library",
+    value,
+  });
+
+  const clearUndo = () => {
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = null;
+    undoReceipt = null;
+    patchLibrary({ undo: null });
+  };
+
+  const holdUndo = receipt => {
+    if (undoTimer) clearTimeout(undoTimer);
+    undoReceipt = receipt;
+    patchLibrary({ undo: publicUndo() });
+    undoTimer = setTimeout(() => {
+      if (undoReceipt?.owner === receipt.owner
+          && undoReceipt?.action === receipt.action) clearUndo();
+    }, UNDO_LIFETIME_MS);
   };
 
   const refresh = async route => {
@@ -172,6 +206,7 @@ export function createLibraryRuntime(options = {}) {
       notice: normalized.invalid || safeLinkNotice
         ? "Some Library link options were invalid and were safely ignored." : "",
       error: null,
+      undo: publicUndo(),
     });
     try {
       const result = await apiClient.get(requestPath(normalized), {
@@ -202,6 +237,7 @@ export function createLibraryRuntime(options = {}) {
         notice: normalized.invalid || safeLinkNotice
           ? "Some Library link options were invalid and were safely ignored." : "",
         error: null,
+        undo: publicUndo(),
       });
       presentation = { ...presentation, lastRoute: route.canonicalHash };
       savePresentation(localState, presentation);
@@ -222,6 +258,7 @@ export function createLibraryRuntime(options = {}) {
           kind: error?.kind || "unavailable",
           message: "Library information is temporarily unavailable.",
         },
+        undo: publicUndo(),
       });
     }
   };
@@ -291,10 +328,241 @@ export function createLibraryRuntime(options = {}) {
     savePresentation(localState, presentation);
   };
 
+  const requestMutation = async spec => {
+    const itemKey = cleanItemId(spec.itemKey);
+    const storyId = numericId(spec.storyId);
+    const action = boundedText(spec.action, 80);
+    if (!itemKey || !action || (spec.storyId !== undefined && !storyId)) {
+      throw new Error("Library mutation ownership is invalid.");
+    }
+    mutationGeneration += 1;
+    const requestGeneration = mutationGeneration;
+    const mutationOwner = `${itemKey}:${storyId || 0}:${action}`;
+    const routeOwner = boundedText(router.current()?.canonicalHash, 768);
+    const stillOwnsSelection = () => !stopped
+      && requestGeneration === mutationGeneration
+      && router.current()?.canonicalHash === routeOwner;
+    patchLibrary({
+      mutation: { status: "saving", owner: mutationOwner, routeOwner },
+      error: null,
+    });
+    try {
+      const result = await apiClient.request(spec.method, spec.path, {
+        body: spec.body,
+        channel: "library-mutation",
+        owner: mutationOwner,
+        isCurrent: identity => !stopped
+          && identity.owner === mutationOwner
+          && stillOwnsSelection(),
+      });
+      if (!stillOwnsSelection()) return false;
+      const inverse = typeof spec.inverse === "function"
+        ? spec.inverse(result.data) : spec.inverse;
+      if (inverse) {
+        holdUndo({
+          owner: mutationOwner,
+          action,
+          expiresAt: Date.now() + UNDO_LIFETIME_MS,
+          message: spec.undoMessage || "The Library change can be undone briefly.",
+          inverse,
+        });
+      } else {
+        clearUndo();
+      }
+      patchLibrary({
+        mutation: { status: "accepted", owner: mutationOwner, routeOwner },
+      });
+      if (spec.navigateAfter) {
+        const normalized = normalizeLibraryRoute(router.current());
+        const { item: _selectedItem, ...parentQuery } = normalized.query;
+        router.navigate({
+          destination: "library",
+          segments: normalized.segment ? [normalized.segment] : [],
+          query: parentQuery,
+        });
+      } else {
+        await refresh(router.current());
+      }
+      return true;
+    } catch (error) {
+      if (stopped || requestGeneration !== mutationGeneration
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patchLibrary({
+        mutation: {
+          status: "error",
+          owner: mutationOwner,
+          routeOwner,
+          message: error?.userMessage || error?.message || "The Library change was not saved.",
+        },
+      });
+      return false;
+    }
+  };
+
+  const setAssociation = (item, association) => {
+    const storyId = numericId(association?.story_id);
+    const itemKey = cleanItemId(item?.key);
+    if (!storyId || !itemKey) return Promise.resolve(false);
+    if (item.kind === "character") {
+      const active = association.state === "active";
+      return requestMutation({
+        itemKey, storyId,
+        action: active ? "cast-remove" : "cast-reactivate",
+        method: active ? "DELETE" : "POST",
+        path: active
+          ? `/api/chats/${storyId}/characters/${item.id}`
+          : `/api/chats/${storyId}/characters`,
+        body: active ? undefined : { char_id: item.id },
+        inverse: active
+          ? { method: "POST", path: `/api/chats/${storyId}/characters`, body: { char_id: item.id } }
+          : { method: "DELETE", path: `/api/chats/${storyId}/characters/${item.id}` },
+        undoMessage: active
+          ? "Character removed from the active cast. Their story history remains."
+          : "Character restored to the active cast.",
+      });
+    }
+    if (item.kind === "persona") {
+      if (association.state === "primary") return Promise.resolve(false);
+      const active = association.state === "active";
+      return requestMutation({
+        itemKey, storyId,
+        action: active ? "persona-remove" : "persona-reactivate",
+        method: active ? "DELETE" : "POST",
+        path: active
+          ? `/api/chats/${storyId}/personas/${item.id}`
+          : `/api/chats/${storyId}/personas`,
+        body: active ? undefined : { persona_id: item.id },
+        inverse: active
+          ? { method: "POST", path: `/api/chats/${storyId}/personas`, body: { persona_id: item.id } }
+          : { method: "DELETE", path: `/api/chats/${storyId}/personas/${item.id}` },
+        undoMessage: active ? "Additional player removed from the story." : "Additional player restored.",
+      });
+    }
+    if (item.kind === "lore" && item.reusable
+        && ["attached", "disabled", "canon"].includes(association.state)) {
+      const canon = association.state === "canon";
+      const storyItemId = numericId(association.story_item_id);
+      if (!canon && !storyItemId) return Promise.resolve(false);
+      return requestMutation({
+        itemKey, storyId,
+        action: "lore-detach",
+        method: "DELETE",
+        path: canon
+          ? `/api/chats/${storyId}/lorebook`
+          : `/api/chats/${storyId}/lorebooks/${storyItemId}`,
+        inverse: {
+          method: "POST",
+          path: canon
+            ? `/api/chats/${storyId}/lorebook`
+            : `/api/chats/${storyId}/lorebooks`,
+          body: { lorebook_id: item.id },
+        },
+        undoMessage: "Lore detached from the story; the reusable original remains in Library.",
+      });
+    }
+    return Promise.resolve(false);
+  };
+
+  const addToStory = (item, storyIdValue) => {
+    const storyId = numericId(storyIdValue);
+    const itemKey = cleanItemId(item?.key);
+    if (!storyId || !itemKey || item.kind === "story") return Promise.resolve(false);
+    if (item.kind === "character") {
+      return requestMutation({
+        itemKey, storyId, action: "cast-add", method: "POST",
+        path: `/api/chats/${storyId}/characters`, body: { char_id: item.id },
+        inverse: { method: "DELETE", path: `/api/chats/${storyId}/characters/${item.id}` },
+        undoMessage: "Character added to the story.",
+      });
+    }
+    if (item.kind === "persona") {
+      return requestMutation({
+        itemKey, storyId, action: "persona-add", method: "POST",
+        path: `/api/chats/${storyId}/personas`, body: { persona_id: item.id },
+        inverse: { method: "DELETE", path: `/api/chats/${storyId}/personas/${item.id}` },
+        undoMessage: "Additional player added to the story.",
+      });
+    }
+    if (item.kind === "lore" && item.reusable) {
+      return requestMutation({
+        itemKey, storyId, action: "lore-add", method: "POST",
+        path: `/api/chats/${storyId}/lorebooks`, body: { lorebook_id: item.id },
+        inverse: data => {
+          const storyItemId = numericId(data?.lorebook_id);
+          return storyItemId ? {
+            method: "DELETE",
+            path: `/api/chats/${storyId}/lorebooks/${storyItemId}`,
+          } : null;
+        },
+        undoMessage: "Lore attached to the story.",
+      });
+    }
+    return Promise.resolve(false);
+  };
+
+  const setArchived = (item, archived) => requestMutation({
+    itemKey: item?.key,
+    action: archived ? "archive" : "restore",
+    method: archived ? "PUT" : "DELETE",
+    path: `/api/library/${item?.kind}/${item?.id}/archive`,
+    inverse: {
+      method: archived ? "DELETE" : "PUT",
+      path: `/api/library/${item?.kind}/${item?.id}/archive`,
+    },
+    undoMessage: archived ? `${item?.name || "Item"} archived.` : `${item?.name || "Item"} restored.`,
+    navigateAfter: true,
+  });
+
+  const deleteStory = item => requestMutation({
+    itemKey: item?.key,
+    storyId: item?.id,
+    action: "story-delete",
+    method: "DELETE",
+    path: `/api/chats/${item?.id}`,
+    inverse: null,
+    navigateAfter: true,
+  });
+
+  const runUndo = async () => {
+    const receipt = undoReceipt;
+    if (!receipt || receipt.expiresAt <= Date.now()) {
+      if (receipt) clearUndo();
+      return false;
+    }
+    const requestGeneration = ++mutationGeneration;
+    try {
+      await apiClient.request(receipt.inverse.method, receipt.inverse.path, {
+        body: receipt.inverse.body,
+        channel: "library-mutation",
+        owner: receipt.owner,
+        isCurrent: identity => !stopped
+          && identity.owner === receipt.owner
+          && requestGeneration === mutationGeneration
+          && undoReceipt === receipt,
+      });
+      if (stopped || undoReceipt !== receipt) return false;
+      clearUndo();
+      await refresh(router.current());
+      return true;
+    } catch (error) {
+      if (stopped || ["aborted", "stale"].includes(error?.kind)) return false;
+      patchLibrary({
+        mutation: {
+          status: "error",
+          owner: receipt.owner,
+          message: error?.userMessage || error?.message || "Undo was not accepted.",
+        },
+      });
+      return false;
+    }
+  };
+
   const teardown = () => {
     if (stopped) return;
     stopped = true;
     generation += 1;
+    mutationGeneration += 1;
+    if (undoTimer) clearTimeout(undoTimer);
     apiClient.cancel("library-projection", "runtime-stop");
     unsubscribe();
   };
@@ -307,6 +575,11 @@ export function createLibraryRuntime(options = {}) {
     isFavorite: itemId => presentation.favorites.includes(cleanItemId(itemId)),
     scrollFor: routeIdentity => presentation.scrolls[routeIdentity] || 0,
     saveScroll,
+    setAssociation,
+    addToStory,
+    setArchived,
+    deleteStory,
+    runUndo,
     currentRoute: () => currentRoute,
     teardown,
   });

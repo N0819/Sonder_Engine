@@ -3651,6 +3651,7 @@ def chat_get(cid: int):
 
 @app.post("/api/chats/{cid}/characters")
 def chat_add_char(cid: int, body: dict = Body(...)):
+    _require_chat_idle(cid)
     ch = body.get("char_id")
     if ch is None:
         raise HTTPException(400, "char_id required")
@@ -3814,6 +3815,7 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
     existing single-persona chats.persona_id (untouched -- this is purely
     additive multiplayer support). Mirrors chat_add_char's pattern.
     """
+    _require_chat_idle(cid)
     pid = body.get("persona_id")
     if pid is None:
         raise HTTPException(400, "persona_id required")
@@ -3836,6 +3838,7 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/personas/{pid}")
 def chat_del_persona(cid: int, pid: int):
+    _require_chat_idle(cid)
     # Attachment and remote authority have the same lifecycle. Committing
     # these together prevents a detached player from retaining a live guest
     # session if the process stops between the two writes.
@@ -4039,6 +4042,7 @@ def guest_input(request: Request, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/characters/{ch}")
 def chat_del_char(cid: int, ch: int):
+    _require_chat_idle(cid)
     qi("UPDATE chat_chars SET status='dormant' WHERE chat_id=? AND char_id=?", (cid, ch))
     name = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)["name"]
     pend = wget(cid, "pending", [])
