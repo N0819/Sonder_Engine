@@ -30,3 +30,12 @@ def test_guest_join_uses_the_authoritative_state_response():
     assert 'api("POST", "/api/join", { code })' in join
     assert 'api("GET", "/api/guest/state")' in join
     assert "showPlayState(state)" in join
+
+
+def test_guest_failures_are_inline_and_recoverable():
+    assert "alert(" not in GUEST_HTML
+    assert 'id="send-status"' in GUEST_HTML
+    assert 'id="connection-status"' in GUEST_HTML
+    assert 'id="connection-retry"' in GUEST_HTML
+    assert "inputEl.value = \"\";" in GUEST_HTML
+    assert "sendStatus.textContent = e.message;" in GUEST_HTML

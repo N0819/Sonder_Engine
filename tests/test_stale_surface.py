@@ -324,7 +324,7 @@ def test_the_guest_page_marks_a_stale_turn_and_says_why():
     `.turn.stale .prose` rule could never match.
     """
     html = (STATIC / "guest.html").read_text(encoding="utf-8")
-    assert 't.stale ? "turn stale" : "turn"' in html
+    assert 't.stale ? "ui-guest-turn turn stale" : "ui-guest-turn turn"' in html
     assert "t.stale_from" in html
     assert "t.prose_stale" in html
     assert "Superseded" in html and "Partly out of date" in html
@@ -346,8 +346,11 @@ def test_the_dim_the_notes_sit_under_still_exists():
     rule were dropped the notes would still render and the visual signal they
     explain would be gone.
     """
-    css = (STATIC / "styles.css").read_text(encoding="utf-8")
-    assert ".turn.stale .prose" in css
-    assert ".stale-note" in css
-    assert '<link rel="stylesheet" href="/static/styles.css">' in (
+    legacy_css = (STATIC / "styles.css").read_text(encoding="utf-8")
+    guest_css = (STATIC / "css" / "ui" / "guest.css").read_text(encoding="utf-8")
+    assert ".turn.stale .prose" in legacy_css
+    assert ".stale-note" in legacy_css
+    assert ".ui-guest-turn.stale .ui-guest-turn__prose" in guest_css
+    assert ".ui-guest-turn__stale" in guest_css
+    assert '/static/css/ui/guest.css' in (
         STATIC / "guest.html").read_text(encoding="utf-8")
