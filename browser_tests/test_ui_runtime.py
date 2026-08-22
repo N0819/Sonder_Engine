@@ -521,3 +521,142 @@ def test_store_batches_selector_events_and_tears_down_deterministically(
         "finalRoute": "play",
         "destroyed": "store-destroyed",
     }
+
+
+def test_router_parses_stable_routes_and_reports_truthful_fallbacks(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { parseHashRoute, serializeRoute } = await import(
+            `${base}/static/js/ui-next/router.js?release=wp02.1`
+          );
+          const explain = code => `localized:${code}`;
+          const valid = parseHashRoute(
+            "#/library/characters?filter=recent&page=2",
+            { explain },
+          );
+          const unknownDestination = parseHashRoute("#/elsewhere", { explain });
+          const unknownChild = parseHashRoute("#/settings/not-real", { explain });
+          const malformed = parseHashRoute("#/library/%E0%A4%A", { explain });
+          const prototypeQuery = parseHashRoute(
+            "#/play?__proto__=polluted",
+            { explain },
+          );
+          const overlong = parseHashRoute(
+            `#/play?filter=${"x".repeat(201)}`,
+            { explain },
+          );
+          return {
+            valid,
+            serialized: serializeRoute({
+              destination: "settings",
+              segments: ["language"],
+              query: { z: "last", a: "first" },
+            }),
+            unknownDestination,
+            unknownChild,
+            malformed,
+            prototypeQuery,
+            overlong,
+            prototypeUntouched: ({}).polluted === undefined,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result["valid"] == {
+        "valid": True,
+        "destination": "library",
+        "segments": ["characters"],
+        "query": {"filter": "recent", "page": "2"},
+        "canonicalHash": "#/library/characters?filter=recent&page=2",
+        "explanation": "",
+        "reason": "",
+        "layers": [],
+    }
+    assert result["serialized"] == "#/settings/language?a=first&z=last"
+    assert result["unknownDestination"]["destination"] == "play"
+    assert result["unknownDestination"]["reason"] == "unknown-destination"
+    assert result["unknownDestination"]["explanation"] == (
+        "localized:route.unknown-destination"
+    )
+    for key, reason in (
+        ("unknownChild", "unknown-segment"),
+        ("malformed", "malformed-route"),
+        ("prototypeQuery", "unsafe-query"),
+        ("overlong", "query-too-long"),
+    ):
+        assert result[key]["valid"] is False
+        assert result[key]["reason"] == reason
+    assert result["unknownChild"]["destination"] == "settings"
+    assert result["malformed"]["destination"] == "library"
+    assert result["prototypeUntouched"] is True
+
+
+def test_router_history_unwinds_layers_and_restores_focus_identity(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html#/play")
+    result = page.evaluate(
+        """async (base) => {
+          const { createRouter } = await import(
+            `${base}/static/js/ui-next/router.js?release=wp02.1`
+          );
+          history.replaceState(null, "", "#/play");
+          const routes = [];
+          const focusReturns = [];
+          const router = createRouter({
+            target: window,
+            onRoute: route => routes.push({
+              destination: route.destination,
+              layers: route.layers.map(layer => layer.id),
+            }),
+            onFocusReturn: identity => focusReturns.push(identity),
+          });
+          router.start();
+          router.navigate({ destination: "library", segments: ["stories"] });
+          router.openLayer({ id: "story-actions", focusReturn: "story-card-17" });
+          router.openLayer({ id: "delete-confirm", focusReturn: "delete-story-17" });
+          const beforeBack = router.current();
+          const backOnce = new Promise(resolve => {
+            window.addEventListener("popstate", () => setTimeout(resolve, 0), { once: true });
+          });
+          history.back();
+          await backOnce;
+          const afterOne = router.current();
+          const backTwice = new Promise(resolve => {
+            window.addEventListener("popstate", () => setTimeout(resolve, 0), { once: true });
+          });
+          history.back();
+          await backTwice;
+          const afterTwo = router.current();
+          const beforeStopCount = routes.length;
+          router.stop();
+          window.dispatchEvent(new HashChangeEvent("hashchange"));
+          return {
+            beforeBack: beforeBack.layers.map(layer => ({
+              id: layer.id,
+              focusReturn: layer.focusReturn,
+              hasNode: Object.values(layer).some(value => value instanceof Node),
+            })),
+            afterOne: afterOne.layers.map(layer => layer.id),
+            afterTwo: afterTwo.layers.map(layer => layer.id),
+            destination: afterTwo.destination,
+            focusReturns,
+            stopped: routes.length === beforeStopCount,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "beforeBack": [
+            {"id": "story-actions", "focusReturn": "story-card-17", "hasNode": False},
+            {"id": "delete-confirm", "focusReturn": "delete-story-17", "hasNode": False},
+        ],
+        "afterOne": ["story-actions"],
+        "afterTwo": [],
+        "destination": "library",
+        "focusReturns": ["delete-story-17", "story-card-17"],
+        "stopped": True,
+    }
