@@ -1,0 +1,1831 @@
+{
+  "browser": "Chromium 149.0.7827.55",
+  "cases": [
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap"
+      ],
+      "classic_global": false,
+      "composer_geometry": null,
+      "console_errors": [],
+      "dom_count": 106,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "no-story",
+      "language": "en",
+      "layout_state": "wide",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": null,
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/no-story.png",
+      "screenshot_sha256": "9a0b834918136dcf0314177b7c148b945b9bdd15297a85b87ea3e1270b40d0c8",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": null,
+      "transcript_scroll_height": null,
+      "transcript_scroll_top": null,
+      "turn_count": 0,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 183
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "The Lantern Archive",
+          "width": 168.88
+        },
+        {
+          "height": 36.5,
+          "label": "Winter Road",
+          "width": 112.7
+        },
+        {
+          "height": 36.5,
+          "label": "Open Library",
+          "width": 119.88
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        }
+      ],
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "The Lantern Archive",
+        "Winter Road",
+        "Open Library",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 900,
+        "height": 130.59375,
+        "left": 320.5,
+        "right": 1024.5,
+        "top": 769.40625,
+        "width": 704,
+        "x": 320.5,
+        "y": 769.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "desktop",
+      "language": "en",
+      "layout_state": "expansive",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 689
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/desktop.png",
+      "screenshot_sha256": "a278576258cd944c771806dca560d14ca048f2dc40bf948afeda924f2c08d19e",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 259.890625,
+        "height": 117,
+        "left": 320.5,
+        "right": 1024.5,
+        "top": 142.890625,
+        "width": 704,
+        "x": 320.5,
+        "y": 142.890625
+      },
+      "transcript_scroll_height": 2395,
+      "transcript_scroll_top": 1885,
+      "turn_count": 12,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 215
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        }
+      ],
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 768,
+        "height": 130.59375,
+        "left": 186.5,
+        "right": 906.5,
+        "top": 637.40625,
+        "width": 720,
+        "x": 186.5,
+        "y": 637.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "medium",
+      "language": "en",
+      "layout_state": "medium",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 705
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/medium.png",
+      "screenshot_sha256": "0539942f104a96222f1f7059933826b457da431ec879fa8442c95db1c27e801d",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 257,
+        "height": 117,
+        "left": 186.5,
+        "right": 906.5,
+        "top": 140,
+        "width": 720,
+        "x": 186.5,
+        "y": 140
+      },
+      "transcript_scroll_height": 2395,
+      "transcript_scroll_top": 2015,
+      "turn_count": 12,
+      "undersized_visible_targets": [
+        {
+          "height": 36,
+          "label": "Go To",
+          "width": 59
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        }
+      ],
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 1024,
+        "height": 130.59375,
+        "left": 124.5,
+        "right": 712.5,
+        "top": 893.40625,
+        "width": 588,
+        "x": 124.5,
+        "y": 893.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "tablet",
+      "language": "en",
+      "layout_state": "medium",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 573
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/tablet.png",
+      "screenshot_sha256": "e177f51149b5021cce926c8b5f402705c25a799226b3c2da510ae022fd50061b",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 296.90625,
+        "height": 166.1875,
+        "left": 124.5,
+        "right": 712.5,
+        "top": 130.71875,
+        "width": 588,
+        "x": 124.5,
+        "y": 130.71875
+      },
+      "transcript_scroll_height": 2395,
+      "transcript_scroll_top": 1798,
+      "turn_count": 12,
+      "undersized_visible_targets": [
+        {
+          "height": 36,
+          "label": "Go To",
+          "width": 59
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        }
+      ],
+      "viewport": {
+        "height": 1024,
+        "width": 768
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 779,
+        "height": 148.59375,
+        "left": 0,
+        "right": 390,
+        "top": 630.40625,
+        "width": 390,
+        "x": 0,
+        "y": 630.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "phone",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 90.75,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 366
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/phone.png",
+      "screenshot_sha256": "8388dd29f4449bacb56b2ae0c47ebb906c00b9541a461912911187439a668aaa",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 258.1875,
+        "height": 166.1875,
+        "left": 12,
+        "right": 378,
+        "top": 92,
+        "width": 366,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 2848,
+      "transcript_scroll_top": 2476,
+      "turn_count": 12,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 735,
+        "height": 148.59375,
+        "left": 0,
+        "right": 360,
+        "top": 586.40625,
+        "width": 360,
+        "x": 0,
+        "y": 586.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "narrow-phone",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 90.75,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 336
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/narrow-phone.png",
+      "screenshot_sha256": "24ac2e2f36c21c5e45a40ac1a47b15512fadd0ab9560d6232c61198d64b321bc",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 258.1875,
+        "height": 166.1875,
+        "left": 12,
+        "right": 348,
+        "top": 92,
+        "width": 336,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 2848,
+      "transcript_scroll_top": 2520,
+      "turn_count": 12,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 800,
+        "width": 360
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 325,
+        "height": 94.59375,
+        "left": 0,
+        "right": 844,
+        "top": 230.40625,
+        "width": 844,
+        "x": 0,
+        "y": 230.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "landscape",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 820
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/landscape.png",
+      "screenshot_sha256": "fb63760e52afae63b64578f072abb5deed9756d0770a2ae75ad516f0b701b90d",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 201,
+        "height": 109,
+        "left": 12,
+        "right": 832,
+        "top": 92,
+        "width": 820,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 2977,
+      "transcript_scroll_top": 2929,
+      "turn_count": 12,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 390,
+        "width": 844
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 600,
+        "height": 130.59375,
+        "left": 186.5,
+        "right": 906.5,
+        "top": 469.40625,
+        "width": 720,
+        "x": 186.5,
+        "y": 469.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "short-desktop",
+      "language": "en",
+      "layout_state": "medium",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 705
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/short-desktop.png",
+      "screenshot_sha256": "9a1d399a401d60ec24697578345a3cb71ba75c8a4352fe10684a9bfd62a22c8a",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 257,
+        "height": 117,
+        "left": 186.5,
+        "right": 906.5,
+        "top": 140,
+        "width": 720,
+        "x": 186.5,
+        "y": 140
+      },
+      "transcript_scroll_height": 2395,
+      "transcript_scroll_top": 2183,
+      "turn_count": 12,
+      "undersized_visible_targets": [
+        {
+          "height": 36,
+          "label": "Go To",
+          "width": 59
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        }
+      ],
+      "viewport": {
+        "height": 600,
+        "width": 1024
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 295,
+        "height": 94.59375,
+        "left": 0,
+        "right": 640,
+        "top": 200.40625,
+        "width": 640,
+        "x": 0,
+        "y": 200.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "zoom-equivalent",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 616
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/zoom-equivalent.png",
+      "screenshot_sha256": "224c55648cf352ffa7da4d9285067f1e9980e9beeaad275b6519dc2beeaa0806",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 237,
+        "height": 145,
+        "left": 12,
+        "right": 628,
+        "top": 92,
+        "width": 616,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 2977,
+      "transcript_scroll_top": 2929,
+      "turn_count": 12,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 360,
+        "width": 640
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 900,
+        "height": 130.59375,
+        "left": 320.5,
+        "right": 1024.5,
+        "top": 769.40625,
+        "width": 704,
+        "x": 320.5,
+        "y": 769.40625
+      },
+      "console_errors": [],
+      "dom_count": 5637,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "turn-500",
+      "language": "en",
+      "layout_state": "expansive",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 689
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/turn-500.png",
+      "screenshot_sha256": "fc0dd62bc7ed2e00fdbcee345888566672f98b456c40cd48d1240837c11a6970",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 259.890625,
+        "height": 117,
+        "left": 320.5,
+        "right": 1024.5,
+        "top": 142.890625,
+        "width": 704,
+        "x": 320.5,
+        "y": 142.890625
+      },
+      "transcript_scroll_height": 140849,
+      "transcript_scroll_top": 140339,
+      "turn_count": 500,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 215
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        }
+      ],
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "none",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 779,
+        "height": 148.59375,
+        "left": 0,
+        "right": 390,
+        "top": 630.40625,
+        "width": 390,
+        "x": 0,
+        "y": 630.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "プレイ",
+      "horizontal_overflow_px": 0,
+      "id": "japanese",
+      "language": "ja",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 90.75,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 366
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/japanese.png",
+      "screenshot_sha256": "d33756fd0395f01fbdb4076fba122258604f77ffc401e1ff7ade09f3775c1313",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 258.1875,
+        "height": 166.1875,
+        "left": 12,
+        "right": 378,
+        "top": 92,
+        "width": 366,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 2848,
+      "transcript_scroll_top": 2476,
+      "turn_count": 12,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "visible_actions": [
+        "01\n            プレイ",
+        "02\n            ライブラリ",
+        "03\n            設定",
+        "移動先",
+        "コンテキストパネルを開く",
+        "ストーリーを切り替え",
+        "現在",
+        "Courtyard",
+        "編集",
+        "編集",
+        "編集",
+        "リロール",
+        "バージョン",
+        "何をする、または何と言いますか？",
+        "送信"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "scrollback",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 800,
+        "height": 130.59375,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 669.40625,
+        "width": 576,
+        "x": 288.5,
+        "y": 669.40625
+      },
+      "console_errors": [],
+      "dom_count": 1017,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "scrollback",
+      "language": "en",
+      "layout_state": "wide",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 561
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/scrollback.png",
+      "screenshot_sha256": "6cab01db1e776a5131c46f8502f6cb37b633f3c5a356e6f2ea5179db948857ed",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 259.890625,
+        "height": 117,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 142.890625,
+        "width": 576,
+        "x": 288.5,
+        "y": 142.890625
+      },
+      "transcript_scroll_height": 20970,
+      "transcript_scroll_top": 900,
+      "turn_count": 80,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 183
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        }
+      ],
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "What do you do or say?",
+        "Send",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "versions",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1",
+        "/api/turns/1/narration"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 717.03125,
+        "height": 130.59375,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 586.4375,
+        "width": 576,
+        "x": 288.5,
+        "y": 586.4375
+      },
+      "console_errors": [],
+      "dom_count": 158,
+      "focus": "Close",
+      "horizontal_overflow_px": 0,
+      "id": "versions",
+      "language": "en",
+      "layout_state": "wide",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 561
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/versions.png",
+      "screenshot_sha256": "a6db3c7a634c8ddffb625b037613e1d59658004cb9208393c1024924f42efabb",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 259.890625,
+        "height": 117,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 142.890625,
+        "width": 576,
+        "x": 288.5,
+        "y": 142.890625
+      },
+      "transcript_scroll_height": 327,
+      "transcript_scroll_top": 0,
+      "turn_count": 1,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 183
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Previous version",
+          "width": 142.47
+        },
+        {
+          "height": 36.5,
+          "label": "Next version",
+          "width": 115.09
+        },
+        {
+          "height": 36.5,
+          "label": "Close",
+          "width": 66
+        }
+      ],
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel",
+        "Previous version",
+        "Next version",
+        "Close"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "reroll",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 779,
+        "height": 148.59375,
+        "left": 0,
+        "right": 390,
+        "top": 630.40625,
+        "width": 390,
+        "x": 0,
+        "y": 630.40625
+      },
+      "console_errors": [],
+      "dom_count": 155,
+      "focus": "Reroll",
+      "horizontal_overflow_px": 0,
+      "id": "reroll-warning",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 90.75,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 366
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/reroll-warning.png",
+      "screenshot_sha256": "d366114c04ce4a0b2d163194225b69fdcdc4e52e61ed75b08d5142169e5d5d9d",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 258.1875,
+        "height": 166.1875,
+        "left": 12,
+        "right": 378,
+        "top": 92,
+        "width": 366,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 372,
+      "transcript_scroll_top": 0,
+      "turn_count": 1,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send",
+        "Cancel",
+        "Reroll"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "details",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1",
+        "/api/turns/1/pipeline"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 717.03125,
+        "height": 130.59375,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 586.4375,
+        "width": 576,
+        "x": 288.5,
+        "y": 586.4375
+      },
+      "console_errors": [],
+      "dom_count": 159,
+      "focus": "Close",
+      "horizontal_overflow_px": 0,
+      "id": "turn-details",
+      "language": "en",
+      "layout_state": "wide",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 561
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/turn-details.png",
+      "screenshot_sha256": "45195dcf1a157029caa9dad60a022f3dfdbf9047fdc4ac9ebfe9a518494989d6",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 259.890625,
+        "height": 117,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 142.890625,
+        "width": 576,
+        "x": 288.5,
+        "y": 142.890625
+      },
+      "transcript_scroll_height": 327,
+      "transcript_scroll_top": 0,
+      "turn_count": 1,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 183
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Close",
+          "width": 66
+        }
+      ],
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel",
+        "Close"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "story-actions",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 800,
+        "height": 130.59375,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 669.40625,
+        "width": 576,
+        "x": 288.5,
+        "y": 669.40625
+      },
+      "console_errors": [],
+      "dom_count": 269,
+      "focus": "Story actions",
+      "horizontal_overflow_px": 0,
+      "id": "story-actions",
+      "language": "en",
+      "layout_state": "wide",
+      "minimum_visible_target_px": 36,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 60.5,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 561
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/story-actions.png",
+      "screenshot_sha256": "996181c6a33d90bdcba32a08b644408d7e195832415cfb4287caa144e993e3c9",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 259.890625,
+        "height": 117,
+        "left": 288.5,
+        "right": 864.5,
+        "top": 142.890625,
+        "width": 576,
+        "x": 288.5,
+        "y": 142.890625
+      },
+      "transcript_scroll_height": 2395,
+      "transcript_scroll_top": 1985,
+      "turn_count": 12,
+      "undersized_visible_targets": [
+        {
+          "height": 36.5,
+          "label": "Go To",
+          "width": 183
+        },
+        {
+          "height": 36,
+          "label": "Open context panel",
+          "width": 36
+        },
+        {
+          "height": 36.5,
+          "label": "Rename story",
+          "width": 178
+        },
+        {
+          "height": 36.5,
+          "label": "Export archive",
+          "width": 178
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Edit",
+          "width": 53.3
+        },
+        {
+          "height": 36.5,
+          "label": "Reroll",
+          "width": 65.64
+        },
+        {
+          "height": 36.5,
+          "label": "Versions",
+          "width": 86.67
+        },
+        {
+          "height": 36,
+          "label": "Pin context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Resize context panel",
+          "width": 36
+        },
+        {
+          "height": 36,
+          "label": "Close context panel",
+          "width": 36
+        }
+      ],
+      "viewport": {
+        "height": 800,
+        "width": 1280
+      },
+      "visible_actions": [
+        "Sonder Engine · Play",
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Rename story",
+        "Export archive",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Send",
+        "Pin context panel",
+        "Resize context panel",
+        "Close context panel"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "failure",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1",
+        "/api/chats/1",
+        "/api/chats/1/turns"
+      ],
+      "classic_global": false,
+      "composer_geometry": {
+        "bottom": 779,
+        "height": 219.09375,
+        "left": 0,
+        "right": 390,
+        "top": 559.90625,
+        "width": 390,
+        "x": 0,
+        "y": 559.90625
+      },
+      "console_errors": [
+        "Failed to load resource: net::ERR_FAILED"
+      ],
+      "dom_count": 269,
+      "focus": "Skip to content\n  \n    \n      \n        S\n        \n          Sonder\n          Engine\n        \n      \n      \n        \n          \n            \n            01\n            Play\n          \n        \n        \n          \n            \n            02\n            Library\n          \n        \n        \n          \n            \n            03\n            Settings\n          \n        \n      \n      \n        \n        Go To\n        Ctrl K\n      \n    \n\n    \n      \n        \n          Sonder Engine\n          Play\n          Your active story and its tools stay together here.\n        \n        \n          Nothing to save\n          \n            \n          \n        \n      \n\n      \n        Current storyThe Lantern ArchiveSwitch storyThe Lantern ArchiveWinter RoadStory actionsRename storyExport archivePresentCourtyardI follow the keeper past shelf 1.Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 2.Turn 2. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 3.Turn 3. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 4.Turn 4. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 5.Turn 5. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 6.Turn 6. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 7.Turn 7. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 8.Turn 8. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 9.Turn 9. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 10.Turn 10. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 11.Turn 11. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditMoreEdit narrationBranch hereTurn detailsI follow the keeper past shelf 12.Turn 12. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.EditRerollVersionsMoreEdit narrationBranch hereTurn detailsDelete turnNew turnLeave the box empty and send to let the story continue without a new action.Sonder could not reach the engine. Your work is still here.0sAdvanced technical detailSendStopRetry\n      \n    \n\n    \n      \n        \n          Context\n          Story tools\n        \n        \n          \n            \n          \n          \n            \n          \n          \n            \n          \n        \n      \n      Choose a story before opening its contextual tools.\n    \n\n    Story toolsCloseChoose a story before opening its contextual tools.Go ToCloseNo destinations match.",
+      "horizontal_overflow_px": 0,
+      "id": "recoverable-error",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": {
+        "height": 90.75,
+        "text": "Turn 1. Rain crosses the high windows in silver threads. The archive keeper turns one page, then looks up and waits.",
+        "width": 366
+      },
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/recoverable-error.png",
+      "screenshot_sha256": "d7b3ca2865b8d37e72f58455bfbb78f54a69cb4a27ec7974c0dfc9ec54d4f987",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": {
+        "bottom": 258.1875,
+        "height": 166.1875,
+        "left": 12,
+        "right": 378,
+        "top": 92,
+        "width": 366,
+        "x": 12,
+        "y": 92
+      },
+      "transcript_scroll_height": 3055,
+      "transcript_scroll_top": 2753,
+      "turn_count": 12,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Switch story",
+        "Present",
+        "Courtyard",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Reroll",
+        "Versions",
+        "What do you do or say?",
+        "Retry"
+      ],
+      "window_scroll_y": 0
+    },
+    {
+      "action": "offline-story",
+      "api_requests": [
+        "/api/bootstrap",
+        "/api/chats/1"
+      ],
+      "classic_global": false,
+      "composer_geometry": null,
+      "console_errors": [
+        "Failed to load resource: net::ERR_FAILED"
+      ],
+      "dom_count": 103,
+      "focus": "Play",
+      "horizontal_overflow_px": 0,
+      "id": "offline-story",
+      "language": "en",
+      "layout_state": "compact",
+      "minimum_visible_target_px": 44,
+      "page_errors": [],
+      "prose_geometry": null,
+      "render_budget_ms": 198.73,
+      "render_within_budget": true,
+      "route": "#/play?chat=1",
+      "screenshot": "docs/design/sonder-ui-replacement/g3/screenshots/offline-story.png",
+      "screenshot_sha256": "20817de5f5be80199a321638bc6a9081cbb728e2cf660323a0b46c1475effeef",
+      "sensitive_text": false,
+      "state": "ready",
+      "story_header_geometry": null,
+      "transcript_scroll_height": null,
+      "transcript_scroll_top": null,
+      "turn_count": 0,
+      "undersized_visible_targets": [],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "visible_actions": [
+        "01\n            Play",
+        "02\n            Library",
+        "03\n            Settings",
+        "Go To",
+        "Open context panel",
+        "Try again"
+      ],
+      "window_scroll_y": 0
+    }
+  ],
+  "platform": "Windows-10-10.0.19045-SP0",
+  "schema_version": 1,
+  "source_commit": "d08b1ac1932a34a3e97a2086c3778e253cadbd14",
+  "source_tree_sha256": "185024c36abb3b714db6505e90cb662989eb8eb33ab734982467e2d4f7be4243"
+}
