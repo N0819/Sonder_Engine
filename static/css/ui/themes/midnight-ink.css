@@ -1,0 +1,23 @@
+@layer ui-themes {
+  :root[data-theme="midnight-ink"] {
+    --ui-color-canvas: rgb(7 9 16);
+    --ui-color-canvas-subtle: rgb(12 16 26);
+    --ui-color-surface: rgb(19 25 39 / 88%);
+    --ui-color-surface-solid: rgb(12 16 26);
+    --ui-color-surface-raised: rgb(29 37 53 / 96%);
+    --ui-color-surface-muted: rgb(24 31 48 / 64%);
+    --ui-color-text: rgb(233 237 246);
+    --ui-color-text-muted: rgb(168 176 198);
+    --ui-color-text-faint: rgb(112 124 153);
+    --ui-color-border: rgb(184 198 231 / 18%);
+    --ui-color-border-strong: rgb(184 198 231 / 36%);
+    --ui-color-interactive: rgb(114 194 210);
+    --ui-color-interactive-strong: rgb(178 226 234);
+    --ui-color-interactive-soft: rgb(114 194 210 / 12%);
+    --ui-color-callout: rgb(155 136 199);
+    --ui-color-callout-soft: rgb(155 136 199 / 13%);
+    --ui-color-success: rgb(111 181 149);
+    --ui-color-danger: rgb(212 113 132);
+    --ui-color-info: rgb(121 159 206);
+  }
+}

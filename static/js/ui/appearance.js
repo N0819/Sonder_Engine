@@ -1,0 +1,31 @@
+const THEMES = Object.freeze([
+  { id: "carbon-signal", name: "Carbon Signal" },
+  { id: "ash-brass", name: "Ash and Brass" },
+  { id: "midnight-ink", name: "Midnight Ink" },
+  { id: "parchment-night", name: "Parchment Night" },
+]);
+const themeIds = new Set(THEMES.map(({ id }) => id));
+const proseSizes = new Set(["15", "17", "19", "21"]);
+const effectLevels = new Set(["full", "reduced", "off"]);
+
+function store(key, value) {
+  try { localStorage.setItem(key, value); }
+  catch (_) { /* Preferences remain active for this page. */ }
+}
+
+function applyDataset(name, value, allowed, fallback, key, persist) {
+  const next = allowed.has(String(value)) ? String(value) : fallback;
+  document.documentElement.dataset[name] = next;
+  if (persist) store(key, next);
+  document.dispatchEvent(new CustomEvent("ui:appearance-change", {
+    detail: { name, value: next },
+  }));
+  return next;
+}
+
+export const appearance = Object.freeze({
+  themes: THEMES,
+  setTheme: (value, persist = true) => applyDataset("theme", value, themeIds, "carbon-signal", "sonder.ui.next.theme.v1", persist),
+  setProseSize: (value, persist = true) => applyDataset("proseSize", value, proseSizes, "17", "sonder.ui.next.prose.v1", persist),
+  setEffects: (value, persist = true) => applyDataset("effects", value, effectLevels, "full", "sonder.ui.next.effects.v1", persist),
+});

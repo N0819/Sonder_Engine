@@ -1,0 +1,28 @@
+@layer ui-typography {
+  :where(.ui-app, .ui-lab) {
+    font-family: var(--ui-font-interface);
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--ui-color-text);
+    text-rendering: optimizeLegibility;
+  }
+
+  .ui-heading { font-weight: 650; letter-spacing: -.02em; line-height: 1.2; }
+  .ui-heading--1 { font-size: clamp(1.5rem, 2.5vw, 2rem); }
+  .ui-heading--2 { font-size: 1.25rem; }
+  .ui-heading--3 { font-size: 1rem; }
+  .ui-kicker {
+    color: var(--ui-color-text-faint);
+    font: 600 .6875rem/1.2 var(--ui-font-mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .ui-muted { color: var(--ui-color-text-muted); }
+  .ui-prose {
+    max-inline-size: var(--ui-prose-measure);
+    font-family: var(--ui-font-prose);
+    font-size: var(--ui-prose-size);
+    line-height: var(--ui-prose-leading);
+  }
+  .ui-mono { font-family: var(--ui-font-mono); }
+}

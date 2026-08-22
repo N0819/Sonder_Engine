@@ -1,0 +1,132 @@
+@layer ui-tokens {
+  :root {
+    color-scheme: dark;
+
+    --ui-font-interface: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --ui-font-prose: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --ui-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --ui-prose-size: 17px;
+    --ui-prose-leading: 1.7;
+    --ui-prose-measure: 720px;
+
+    --ui-space-0: 0px;
+    --ui-space-1: 2px;
+    --ui-space-2: 4px;
+    --ui-space-3: 6px;
+    --ui-space-4: 8px;
+    --ui-space-5: 12px;
+    --ui-space-6: 16px;
+    --ui-space-7: 20px;
+    --ui-space-8: 24px;
+    --ui-space-9: 32px;
+    --ui-space-10: 40px;
+    --ui-space-11: 48px;
+
+    --ui-radius-sm: 3px;
+    --ui-radius-md: 4px;
+    --ui-radius-lg: 5px;
+    --ui-radius-round: 999px;
+    --ui-control-compact: 32px;
+    --ui-control-default: 36px;
+    --ui-control-prominent: 40px;
+    --ui-target-touch: 44px;
+
+    --ui-motion-fast: 120ms;
+    --ui-motion-default: 180ms;
+    --ui-motion-slow: 260ms;
+    --ui-ease-standard: cubic-bezier(.2, 0, 0, 1);
+
+    --ui-z-base: 0;
+    --ui-z-raised: 10;
+    --ui-z-sticky: 20;
+    --ui-z-dropdown: 30;
+    --ui-z-overlay: 40;
+    --ui-z-modal: 50;
+    --ui-z-toast: 60;
+
+    --ui-color-canvas: rgb(6 9 11);
+    --ui-color-canvas-subtle: rgb(10 15 19);
+    --ui-color-surface: rgb(16 23 28 / 86%);
+    --ui-color-surface-solid: rgb(11 17 21);
+    --ui-color-surface-raised: rgb(21 30 36 / 96%);
+    --ui-color-surface-muted: rgb(17 25 31 / 62%);
+    --ui-color-text: rgb(232 238 237);
+    --ui-color-text-muted: rgb(160 172 171);
+    --ui-color-text-faint: rgb(112 126 127);
+    --ui-color-border: rgb(183 209 210 / 17%);
+    --ui-color-border-strong: rgb(183 209 210 / 34%);
+    --ui-color-interactive: rgb(100 203 209);
+    --ui-color-interactive-strong: rgb(174 238 241);
+    --ui-color-interactive-soft: rgb(100 203 209 / 12%);
+    --ui-color-callout: rgb(201 164 92);
+    --ui-color-callout-soft: rgb(201 164 92 / 13%);
+    --ui-color-success: rgb(110 191 153);
+    --ui-color-warning: var(--ui-color-callout);
+    --ui-color-danger: rgb(217 112 121);
+    --ui-color-info: rgb(123 169 202);
+    --ui-color-on-strong: rgb(5 14 16);
+    --ui-color-scrim: rgb(2 5 7 / 78%);
+    --ui-color-shadow: rgb(0 0 0 / 44%);
+    --ui-color-focus-inner: var(--ui-color-canvas);
+    --ui-color-focus-outer: var(--ui-color-interactive-strong);
+    --ui-shadow-raised: 0 14px 34px var(--ui-color-shadow);
+    --ui-shadow-modal: 0 28px 80px var(--ui-color-shadow);
+    --ui-focus-ring: 0 0 0 2px var(--ui-color-focus-inner), 0 0 0 4px var(--ui-color-focus-outer);
+    --ui-surface-blur: 14px;
+    --ui-target-current: var(--ui-control-default);
+  }
+
+  :root[data-prose-size="15"] { --ui-prose-size: 15px; }
+  :root[data-prose-size="19"] { --ui-prose-size: 19px; }
+  :root[data-prose-size="21"],
+  :root[data-a11y-large-prose="true"] { --ui-prose-size: 21px; }
+
+  :root[data-a11y-solid="true"] {
+    --ui-color-surface: var(--ui-color-surface-solid);
+    --ui-color-surface-raised: var(--ui-color-surface-solid);
+    --ui-color-surface-muted: var(--ui-color-canvas-subtle);
+    --ui-surface-blur: 0px;
+  }
+
+  :root[data-a11y-high-contrast="true"] {
+    --ui-color-text: rgb(255 255 255);
+    --ui-color-text-muted: rgb(224 235 238);
+    --ui-color-text-faint: rgb(194 211 216);
+    --ui-color-border: rgb(255 255 255 / 42%);
+    --ui-color-border-strong: rgb(255 255 255 / 68%);
+    --ui-color-interactive-strong: rgb(213 251 255);
+  }
+
+  :root[data-a11y-strong-focus="true"] {
+    --ui-focus-ring: 0 0 0 3px var(--ui-color-canvas), 0 0 0 6px rgb(255 255 255), 0 0 0 8px var(--ui-color-interactive);
+  }
+
+  :root[data-a11y-large-ui="true"] {
+    font-size: 112.5%;
+    --ui-control-default: 42px;
+    --ui-control-prominent: 48px;
+    --ui-target-current: 50px;
+  }
+
+  :root[data-a11y-roomy-targets="true"] {
+    --ui-space-4: 10px;
+    --ui-space-5: 15px;
+    --ui-space-6: 20px;
+    --ui-space-8: 28px;
+    --ui-target-current: 50px;
+  }
+
+  :root[data-a11y-reduced-motion="true"] {
+    --ui-motion-fast: 0ms;
+    --ui-motion-default: 0ms;
+    --ui-motion-slow: 0ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-motion-preference="full"]) {
+      --ui-motion-fast: 0ms;
+      --ui-motion-default: 0ms;
+      --ui-motion-slow: 0ms;
+    }
+  }
+}

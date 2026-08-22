@@ -1,0 +1,31 @@
+@layer ui-reset {
+  :where(.ui-app, .ui-lab) {
+    box-sizing: border-box;
+    min-block-size: 100%;
+    margin: 0;
+  }
+
+  :where(.ui-app, .ui-lab),
+  :where(.ui-app, .ui-lab) *,
+  :where(.ui-app, .ui-lab) *::before,
+  :where(.ui-app, .ui-lab) *::after {
+    box-sizing: border-box;
+  }
+
+  :where(.ui-app, .ui-lab) :is(button, input, select, textarea) {
+    font: inherit;
+  }
+
+  :where(.ui-app, .ui-lab) :is(button, a, input, select, textarea, [tabindex]) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :where(.ui-app, .ui-lab) :is(img, svg) {
+    display: block;
+    max-inline-size: 100%;
+  }
+
+  :where(.ui-app, .ui-lab) :is(h1, h2, h3, p) {
+    margin-block: 0;
+  }
+}

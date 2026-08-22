@@ -1,0 +1,23 @@
+@layer ui-themes {
+  :root, :root[data-theme="carbon-signal"] {
+    --ui-color-canvas: rgb(6 9 11);
+    --ui-color-canvas-subtle: rgb(10 15 19);
+    --ui-color-surface: rgb(16 23 28 / 86%);
+    --ui-color-surface-solid: rgb(11 17 21);
+    --ui-color-surface-raised: rgb(21 30 36 / 96%);
+    --ui-color-surface-muted: rgb(17 25 31 / 62%);
+    --ui-color-text: rgb(232 238 237);
+    --ui-color-text-muted: rgb(160 172 171);
+    --ui-color-text-faint: rgb(112 126 127);
+    --ui-color-border: rgb(183 209 210 / 17%);
+    --ui-color-border-strong: rgb(183 209 210 / 34%);
+    --ui-color-interactive: rgb(100 203 209);
+    --ui-color-interactive-strong: rgb(174 238 241);
+    --ui-color-interactive-soft: rgb(100 203 209 / 12%);
+    --ui-color-callout: rgb(201 164 92);
+    --ui-color-callout-soft: rgb(201 164 92 / 13%);
+    --ui-color-success: rgb(110 191 153);
+    --ui-color-danger: rgb(217 112 121);
+    --ui-color-info: rgb(123 169 202);
+  }
+}
