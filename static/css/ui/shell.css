@@ -144,6 +144,13 @@
   .ui-go-to__result-context { color: var(--ui-color-text-faint); font-size: .75rem; }
   .ui-go-to__empty { min-block-size: 8rem; margin: 0; }
 
+  .ui-extension-launchers { margin-block-start: var(--ui-space-8); }
+  .ui-extension-launcher { text-decoration: none; }
+  .ui-extension-view { display: grid; gap: var(--ui-space-6); margin-block-start: var(--ui-space-8); }
+  .ui-extension-view__header { display: grid; gap: var(--ui-space-2); padding-block-end: var(--ui-space-5); border-block-end: 1px solid var(--ui-color-border); }
+  .ui-extension-view__header > * { margin: 0; }
+  .ui-extension-view__mount { min-block-size: 8rem; min-inline-size: 0; overflow-wrap: anywhere; }
+
   .ui-shell__center {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);

@@ -78,12 +78,24 @@ export function createGoTo(options = {}) {
   let syncing = false;
   let stopped = false;
 
-  const availableResults = () => CORE_RESULTS.map(([label, context, destination, segment], index) => ({
-    id: `ui-go-to-result-${index}`,
-    label: t(label),
-    context: t(context),
-    route: { destination, segments: segment ? [segment] : [] },
-  }));
+  const availableResults = () => {
+    const core = CORE_RESULTS.map(([label, context, destination, segment]) => ({
+      label: t(label),
+      context: t(context),
+      route: { destination, segments: segment ? [segment] : [] },
+    }));
+    const provided = (options.resultProviders || []).flatMap(provider => {
+      try {
+        return provider() || [];
+      } catch {
+        return [];
+      }
+    });
+    return [...core, ...provided].map((item, index) => ({
+      ...item,
+      id: `ui-go-to-result-${index}`,
+    }));
+  };
 
   const select = result => {
     services.router.navigate(result.route);
@@ -152,11 +164,16 @@ export function createGoTo(options = {}) {
     const shouldOpen = route.layers.some(layer => layer.id === LAYER_ID);
     syncing = true;
     if (shouldOpen) {
+      render();
       if (!controller.isOpen) {
-        render();
         controller.show();
       }
-    } else controller.close("route-sync");
+    } else {
+      controller.close("route-sync");
+      visible = [];
+      results.replaceChildren();
+      search.setAttribute("aria-activedescendant", "");
+    }
     syncing = false;
   };
 

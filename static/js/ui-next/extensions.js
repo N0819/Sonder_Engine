@@ -75,6 +75,7 @@ export function createExtensionRegistry(options = {}) {
   const assets = new Map();
   const teardowns = new Map();
   const pendingModules = new Map();
+  const listeners = new Set();
   const importModule = options.importModule || (href => import(href));
   const documentRef = options.document || document;
   const faultLimit = Math.max(1, Math.min(10, Number(options.faultLimit || FAULT_LIMIT)));
@@ -83,7 +84,15 @@ export function createExtensionRegistry(options = {}) {
   let noticeSequence = 0;
   let eventSequence = 0;
 
-  const emit = () => options.onChange?.();
+  const emit = () => {
+    options.onChange?.();
+    for (const listener of [...listeners]) listener();
+  };
+  const subscribe = listener => {
+    if (typeof listener !== "function") return () => {};
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
   const entries = kind => Object.freeze([...(registrations[kind] || [])]);
   const snapshot = () => deepFreeze(Object.fromEntries(
     REGISTRATION_KINDS.map(kind => [kind, registrations[kind].map(publicEntry)]),
@@ -422,6 +431,7 @@ export function createExtensionRegistry(options = {}) {
   return Object.freeze({
     register,
     registerAmbient,
+    subscribe,
     entries,
     snapshot,
     withOwner,

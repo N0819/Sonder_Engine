@@ -30,6 +30,7 @@ MODULES = (
     "navigation-state.js",
     "shortcuts.js",
     "go-to.js",
+    "extension-host.js",
     "shell.js",
 )
 
