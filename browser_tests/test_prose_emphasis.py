@@ -8,7 +8,7 @@ These run in a real browser because the thing under test IS the DOM: the
 guarantee is not "the tags are gone" but "only elements this code created
 exist, and everything else stayed text". A string assertion cannot tell those
 apart, and getting it wrong turns model output into markup -- which is the one
-thing ``paintProse`` has always been careful about.
+thing the replacement ``renderProse`` must remain careful about.
 """
 
 from __future__ import annotations
@@ -19,48 +19,25 @@ from playwright.sync_api import Page
 
 
 ROOT = Path(__file__).resolve().parents[1]
-JS = ROOT / "static" / "js"
+PROSE = ROOT / "static" / "js" / "ui-next" / "prose.js"
 
 
 def _harness(page: Page) -> None:
-    """Load `el` plus chat.js's prose-painting block into a blank page.
-
-    Sliced rather than imported whole: chat.js touches document ids and shared
-    state at load, none of which this block needs. The slice is bounded by
-    named functions so it fails loudly if the file is reorganised.
-    """
-    # `t` and `S` come first, and this slice is why the file is loaded at all:
-    # `el()` grew `t(...)` calls when the UI text moved into language packs
-    # (attribute values and every text node), so a harness holding `el` without
-    # `t` throws `ReferenceError: t is not defined` on the first element it
-    # builds. In the browser they always arrive together -- `utils.js` loads
-    # before `components.js`, per `static/index.html` -- so this was never a
-    # product defect, only a harness that had fallen a feature behind. It went
-    # unseen because the browser job was being SKIPPED whenever a sibling job
-    # failed, which is fixed in the same wave as this.
-    utils = (JS / "utils.js").read_text(encoding="utf-8")
-    s_start = utils.index("const S = {")
-    t_end = utils.index("function initTheme(") if "function initTheme(" in utils \
-        else utils.index("\n\n", utils.index("function t(source"))
-
-    components = (JS / "components.js").read_text(encoding="utf-8")
-    el_start = components.index("function el(")
-    el_end = components.index("// ---- Modal ----")
-
-    chat = (JS / "chat.js").read_text(encoding="utf-8")
-    start = chat.index("const _FOLD_PAIRS")
-    end = chat.index("function proseEl(")
+    """Load the production replacement prose module into a blank document."""
+    module = PROSE.read_text(encoding="utf-8")
+    module = module.replace("export const ", "const ").replace(
+        "export function ", "function "
+    )
 
     page.set_content("<!doctype html><body><div id='out'></div></body>")
-    page.add_script_tag(content=utils[s_start:t_end] + "\n"
-                        + components[el_start:el_end] + "\n" + chat[start:end])
+    page.add_script_tag(content=module + "\nwindow.renderProse = renderProse;")
 
 
 def _paint(page: Page, prose: str, speech=None, colors=None) -> dict:
     return page.evaluate(
         """(a) => {
             const host = document.getElementById('out');
-            paintProse(host, a.prose, a.speech, a.colors);
+            renderProse(host, a.prose, { speech: a.speech, colors: a.colors });
             return {
                 html: host.innerHTML,
                 text: host.textContent,
@@ -74,7 +51,7 @@ def _paint(page: Page, prose: str, speech=None, colors=None) -> dict:
 def test_an_italic_run_becomes_an_element(page: Page) -> None:
     _harness(page)
     out = _paint(page, "He shrugged. <i>That was almost too easy.</i>")
-    assert out["tags"] == ["I"]
+    assert out["tags"] == ["EM"]
     assert "That was almost too easy." in out["text"]
     # The reader must not see the machinery.
     assert "<i>" not in out["text"] and "</i>" not in out["text"]
@@ -89,7 +66,7 @@ def test_markup_that_is_not_on_the_allowlist_stays_text(page: Page) -> None:
         "She left. <script>window.PWNED=1</script> "
         "<img src=x onerror=alert(1)> <div>x</div> <i>Odd.</i>",
     )
-    assert out["tags"] == ["I"]
+    assert out["tags"] == ["EM"]
     assert "<script>" in out["text"]          # still there, as characters
     assert page.evaluate("!!window.PWNED") is False
 
@@ -119,12 +96,12 @@ def test_emphasis_inside_a_quoted_line_keeps_its_speaker_tint(page: Page) -> Non
     out = _paint(
         page,
         '"I have <i>absolutely</i> got this," he said.',
-        speech=[{"speaker": "The Doctor", "quote": "I have absolutely got this,"}],
+        speech=[{"speaker": "The Doctor", "exact_quote": "I have absolutely got this,"}],
         colors={"The Doctor": "#8ecfff"},
     )
-    assert out["tags"] == ["SPAN", "I"]
+    assert out["tags"] == ["SPAN", "EM"]
     said = page.evaluate(
-        "document.querySelector('#out .said').textContent")
+        "document.querySelector('#out .ui-play__said').textContent")
     assert said == '"I have absolutely got this,"'
 
 
@@ -145,7 +122,7 @@ def test_the_whole_canonical_set_renders(page: Page) -> None:
         "<i>a</i><b>b</b><u>c</u><s>d</s>"
         "<mark>e</mark><sup>f</sup><sub>g</sub><code>h</code>",
     )
-    assert out["tags"] == ["I", "B", "U", "S", "MARK", "SUP", "SUB", "CODE"]
+    assert out["tags"] == ["EM", "STRONG", "U", "S", "MARK", "SUP", "SUB", "CODE"]
     assert out["text"] == "abcdefgh"
 
 
@@ -155,7 +132,7 @@ def test_prose_that_talks_about_a_tag_does_not_become_one(page: Page) -> None:
     not have the explanation silently applied to itself."""
     _harness(page)
     out = _paint(page, "Type &lt;b&gt;this&lt;/b&gt; to make it <b>bold</b>.")
-    assert out["tags"] == ["B"]                    # only the real one
+    assert out["tags"] == ["STRONG"]               # only the real one
     assert "<b>this</b>" in out["text"]            # the rest reads as written
     assert out["text"].endswith("to make it bold.")
 
@@ -192,4 +169,4 @@ def test_marks_nest_rather_than_flattening(page: Page) -> None:
     _harness(page)
     _paint(page, '<b>bold and <font color="blue">blue</font></b>')
     assert page.evaluate(
-        "document.querySelector('#out b span.ink-blue').textContent") == "blue"
+        "document.querySelector('#out strong span.ink-blue').textContent") == "blue"

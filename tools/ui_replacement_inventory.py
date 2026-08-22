@@ -89,7 +89,7 @@ CAPABILITIES = (
     ("CAP-A11Y", "Use keyboard, screen reader, zoom, contrast, motion, and target preferences", "HTML/CSS/browser behavior", "WP-01", "required", "replace"),
     ("CAP-I18N", "Render UI copy through language packs without translating user data", "static/js/i18n.js; language_packs; UNBUILT §1.48", "WP-02", "required", "replace"),
     ("CAP-EXT-V1", "Run supported extension v1 UI and lifecycle", "static/js/ui-next/extensions-v1.js; /api/extensions", "WP-12", "required", "preserve"),
-    ("CAP-EXT-V2", "Register versioned routes, slots, tasks, permissions, and teardown", "not currently built; UNBUILT §6.2", "WP-12", "required", "rebuild"),
+    ("CAP-EXT-V2", "Register versioned routes, slots, tasks, permissions, and teardown", "static/js/ui-next/extensions.js; static/js/ui-next/extension-host.js; browser_tests/test_ui_wp12.py", "WP-12", "required", "rebuild"),
     ("CAP-LIVING-WORLD", "Configure built living-world floors without overstating ceilings", "static/js/ui-next/settings-view.js; LIVING_WORLD_BUILT; UNBUILT §6.8", "WP-08", "required", "replace"),
     ("CAP-ENGINE-NOTES", "Inspect per-turn engine notes and warnings", "pipeline drawer; UNBUILT §1.11", "WP-04", "required", "adapt"),
     ("CAP-TASKS", "Show persistent async tasks, progress, cancellation, and recovery", "static/js/ui-next/tasks.js and route-specific surfaces", "WP-02", "required", "rebuild"),
@@ -337,7 +337,7 @@ def write_artifacts(
     _write(
         output / "CAPABILITY_LEDGER.md",
         "# Current capability ledger\n\n"
-        "Evidence map only; `docs/UNBUILT.md` §2.26 remains status authority.\n\n"
+        "Evidence map for the completed replacement; WP14 is the release authority.\n\n"
         + _table(
             ("ID", "Capability", "Current authority / evidence", "Owner", "Mobile", "Disposition"),
             ((f"`{cid}`", name, source, owner, mobile, disposition) for cid, name, source, owner, mobile, disposition in CAPABILITIES),
