@@ -43,6 +43,9 @@ rather than prose, and everything points at them.
 - [`INTERFACE.md`](guides/INTERFACE.md) — maintained web-interface authority:
   replacement outcome, runtime/integration boundaries, responsive parity,
   content and credential safety, and evidence/change-control rules.
+- [`UI_REFERENCE.md`](guides/UI_REFERENCE.md) — exact Design Bible, supplied
+  screenshot, and reference-implementation identities; visual authority,
+  provenance, porting rules, and same-viewport comparison requirements.
 - [`PIPELINE.md`](guides/PIPELINE.md) — implemented turn execution, stage by
   stage, and the debugging map.
 - [`DATABASE.md`](guides/DATABASE.md) — persistence, schema, and the checklist
