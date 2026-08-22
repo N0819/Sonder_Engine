@@ -452,7 +452,7 @@ tokens, router, save model, responsive rules, or error vocabulary.
 
 ### Reference requirement-family ownership
 
-The reference traceability matrix contains 156 requirements across 14 named
+The reference traceability matrix contains 170 requirements across 15 named
 families. WP-00 imports the individual rows, but their program ownership is
 fixed here so none can disappear during decomposition.
 
@@ -468,15 +468,17 @@ fixed here so none can disappear during decomposition.
 | `AUTH` | 6 | WP-10 and WP-11 |
 | `THEME` | 13 | WP-01 and WP-12 |
 | `ICON` | 10 | WP-01 and WP-12 |
+| `A11Y` | 14 | WP-01 defines shared behavior; every surface proves it; WP-14 closes it |
 | `SAVE` | 8 | WP-02 contract; WP-04, WP-07, WP-08, WP-09, and WP-11 workflows |
 | `ARCH` | 14 | WP-02, WP-03, and WP-13 |
 | `EXT` | 7 | WP-02 and WP-03 prove the boundary early; WP-08 and WP-12 complete it |
 | `VER` | 12 | WP-00 establishes evidence; every gate contributes; WP-14 closes it |
 
 Accessibility, content/terminology, responsive parity, localization, and state
-completeness are cross-cutting Design Bible contracts even where the earlier
-traceability document placed them inside the families above. Each surface owns
-its applicable rows; WP-14 audits them across the product.
+completeness are cross-cutting Design Bible contracts. The 14 `A11Y` rows are
+an explicit family; the remaining cross-cutting contracts also constrain every
+applicable family. Each surface owns its applicable rows; WP-14 audits them
+across the product.
 
 ## Work packages
 
