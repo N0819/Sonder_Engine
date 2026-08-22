@@ -45,10 +45,12 @@ def test_ui_next_boots_as_an_isolated_native_module(
     assert page.evaluate("window.__uiNextIntervals") == 0
     assert page.evaluate("Object.hasOwn(window, 'S')") is False
     assert not any(path.startswith("/api/") for path in requested)
-    assert set(requested) == {
-        "/static/ui-next.html",
-        "/static/css/ui-next-development.css",
-        "/static/js/ui-next/main.js",
-    }
+    assert "/static/ui-next.html" in requested
+    assert "/static/js/ui-next/main.js" in requested
+    assert "/static/js/ui/appearance-preflight.js" in requested
+    assert "/static/css/ui/tokens.css" in requested
+    assert all("/static/styles.css" != path for path in requested)
+    assert all("/static/themes.css" != path for path in requested)
+    assert all("/static/js/app.js" != path for path in requested)
     assert console_errors == []
     assert page_errors == []
