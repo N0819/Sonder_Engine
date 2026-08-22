@@ -46,6 +46,23 @@
   .ui-story-tools__panel { min-block-size: 0; overflow: auto; padding-block: var(--ui-space-6); }
   .ui-story-tools__panel > * { margin-block-start: 0; }
   .ui-story-tools__state { padding: var(--ui-space-5); border: 1px solid var(--ui-color-border); background: var(--ui-color-surface-muted); color: var(--ui-color-text-muted); }
+  .ui-story-tools__content, .ui-tool-stack { display: grid; gap: var(--ui-space-4); min-inline-size: 0; }
+  .ui-tool-card { display: grid; gap: var(--ui-space-3); min-inline-size: 0; padding: var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-3); background: var(--ui-color-surface-muted); }
+  .ui-tool-card__header, .ui-tool-inline { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-space-3); min-inline-size: 0; }
+  .ui-tool-form { display: grid; gap: var(--ui-space-4); }
+  .ui-tool-field { display: grid; gap: var(--ui-space-2); min-inline-size: 0; }
+  .ui-tool-field__label { font-weight: 650; }
+  .ui-tool-field__hint, .ui-tool-state__message { color: var(--ui-color-text-muted); }
+  .ui-tool-field input:not([type="color"]), .ui-tool-field select, .ui-tool-inline select { min-block-size: 44px; max-inline-size: 100%; }
+  .ui-tool-state { padding: var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-3); }
+  .ui-tool-state[data-state="offline"], .ui-tool-state[data-state="error"] { border-color: var(--ui-color-danger); }
+  .ui-condition-card__vitals { display: grid; gap: var(--ui-space-3); }
+  .ui-vital { display: grid; grid-template-columns: minmax(5rem, auto) minmax(4rem, 1fr) minmax(4.5rem, auto); align-items: center; gap: var(--ui-space-3); }
+  .ui-vital__meter { block-size: .625rem; overflow: hidden; border-radius: 999px; background: var(--ui-color-border); }
+  .ui-vital__fill { display: block; block-size: 100%; background: var(--ui-color-success); }
+  .ui-vital[data-tone="warning"] .ui-vital__fill { background: var(--ui-color-warning); }
+  .ui-vital[data-tone="danger"] .ui-vital__fill { background: var(--ui-color-danger); }
+  .ui-invite-result__link { display: block; overflow-wrap: anywhere; padding: var(--ui-space-3); font-family: var(--ui-font-mono); }
 
   .ui-shell__inspector-sheet .ui-story-tools {
     min-block-size: 0;
@@ -56,4 +73,3 @@
     .ui-story-tools__list { grid-template-columns: minmax(0, 1fr); }
   }
 }
-

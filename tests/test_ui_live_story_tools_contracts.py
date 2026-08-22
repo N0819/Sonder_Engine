@@ -54,7 +54,7 @@ def test_frames_and_multiplayer_use_guarded_server_authority():
         "/api/chats/${chatId}/frames",
         "/api/chats/${chatId}/personas",
         "/personas/${personaId}/station",
-        "services.play.openStory",
+        "services.storyTools.openFrame",
     ):
         assert contract in frames
     for contract in (
@@ -84,4 +84,3 @@ def test_live_story_tools_avoid_legacy_and_unsafe_dom_bridges():
         "insertAdjacentHTML",
     ):
         assert forbidden not in combined
-

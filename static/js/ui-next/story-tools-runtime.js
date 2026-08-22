@@ -28,6 +28,7 @@ export function createStoryToolsRuntime(options = {}) {
   let stopped = false;
   let sequence = 0;
   let activeRequest = null;
+  const requestSequences = new Map();
   let current = contextFrom(store.getSnapshot(), toolRegistry);
 
   const publish = (status = "ready", patch = {}) => store.dispatch({
@@ -89,6 +90,52 @@ export function createStoryToolsRuntime(options = {}) {
     return true;
   };
 
+  const openFrame = frameValue => {
+    const chatId = current.chatId;
+    if (!chatId) return false;
+    const frameId = numericId(frameValue);
+    const query = { chat: String(chatId), tool: current.toolId };
+    if (frameId) query.frame = String(frameId);
+    router.navigate({
+      destination: "play",
+      segments: ["story-tools"],
+      query,
+    }, { replace: false, preserveLayers: true });
+    return true;
+  };
+
+  const request = async (toolValue, key, method, path, body) => {
+    const toolId = toolRegistry.resolveStoryTool(toolValue).id;
+    if (!current.chatId || toolId !== current.toolId || !path) return null;
+    const owner = current.owner;
+    const requestKey = `${toolId}:${String(key || "data")}`;
+    const requestSequence = (requestSequences.get(requestKey) || 0) + 1;
+    requestSequences.set(requestKey, requestSequence);
+    const options = {
+      channel: `story-tools:${requestKey}`,
+      owner,
+      isCurrent: () => (
+        !stopped
+        && current.owner === owner
+        && requestSequences.get(requestKey) === requestSequence
+      ),
+    };
+    const verb = String(method || "GET").toUpperCase();
+    const response = verb === "GET"
+      ? await apiClient.get(path, options)
+      : verb === "DELETE"
+        ? await apiClient.delete(path, options)
+        : await apiClient.request(verb, path, { ...options, body });
+    return response.data;
+  };
+
+  const cancelRequest = (toolValue, key) => {
+    const toolId = toolRegistry.resolveStoryTool(toolValue).id;
+    const requestKey = `${toolId}:${String(key || "data")}`;
+    requestSequences.delete(requestKey);
+    return apiClient.cancel(`story-tools:${requestKey}`, "story-tool-unmounted");
+  };
+
   const load = async (toolValue, path) => {
     const toolId = toolRegistry.resolveStoryTool(toolValue).id;
     if (!current.chatId || toolId !== current.toolId || !path) return null;
@@ -138,6 +185,7 @@ export function createStoryToolsRuntime(options = {}) {
     if (stopped) return;
     stopped = true;
     sequence += 1;
+    requestSequences.clear();
     activeRequest?.abort("story-tools-stop");
     activeRequest = null;
     unsubscribe();
@@ -145,9 +193,11 @@ export function createStoryToolsRuntime(options = {}) {
 
   return Object.freeze({
     open,
+    openFrame,
+    request,
+    cancelRequest,
     load,
     current: () => Object.freeze({ ...current, sequence }),
     teardown,
   });
 }
-
