@@ -1,26 +1,26 @@
-import { assertReleaseModules } from "./release.js?release=wp02.1";
+import { assertReleaseModules } from "./release.js?release=wp03.1";
 
-export const MODULE_RELEASE = "wp02.1";
+export const MODULE_RELEASE = "wp03.1";
 
 // UI_CATALOG_START: fatal boundary copy is deliberately stack-free.
 const RUNTIME_FAILURE_MESSAGE = "The interface stopped unexpectedly. Your saved stories were not changed.";
 // UI_CATALOG_END
 
 const SERVICE_PATHS = Object.freeze({
-  api: "./api.js?release=wp02.1",
-  errors: "./errors.js?release=wp02.1",
-  store: "./store.js?release=wp02.1",
-  router: "./router.js?release=wp02.1",
-  localization: "./localization.js?release=wp02.1",
-  content: "./content.js?release=wp02.1",
-  tasks: "./tasks.js?release=wp02.1",
-  notices: "./notices.js?release=wp02.1",
-  diagnostics: "./diagnostics.js?release=wp02.1",
-  storage: "./storage.js?release=wp02.1",
-  credentials: "./credentials.js?release=wp02.1",
-  savePolicy: "./save-policy.js?release=wp02.1",
-  extensions: "./extensions.js?release=wp02.1",
-  extensionsV1: "./extensions-v1.js?release=wp02.1",
+  api: "./api.js?release=wp03.1",
+  errors: "./errors.js?release=wp03.1",
+  store: "./store.js?release=wp03.1",
+  router: "./router.js?release=wp03.1",
+  localization: "./localization.js?release=wp03.1",
+  content: "./content.js?release=wp03.1",
+  tasks: "./tasks.js?release=wp03.1",
+  notices: "./notices.js?release=wp03.1",
+  diagnostics: "./diagnostics.js?release=wp03.1",
+  storage: "./storage.js?release=wp03.1",
+  credentials: "./credentials.js?release=wp03.1",
+  savePolicy: "./save-policy.js?release=wp03.1",
+  extensions: "./extensions.js?release=wp03.1",
+  extensionsV1: "./extensions-v1.js?release=wp03.1",
 });
 
 let activeTeardown = null;

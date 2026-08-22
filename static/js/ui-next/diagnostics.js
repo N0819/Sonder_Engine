@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp02.1";
+export const MODULE_RELEASE = "wp03.1";
 
-import { redactSensitive } from "./credentials.js?release=wp02.1";
+import { redactSensitive } from "./credentials.js?release=wp03.1";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;

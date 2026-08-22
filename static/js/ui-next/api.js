@@ -1,11 +1,11 @@
-export const MODULE_RELEASE = "wp02.1";
+export const MODULE_RELEASE = "wp03.1";
 
 import {
   ApiError,
   apiErrorForStatus,
   malformedResponseError,
   normalizeApiError,
-} from "./errors.js?release=wp02.1";
+} from "./errors.js?release=wp03.1";
 
 const JSON_TYPES = (contentType) => (
   contentType.includes("application/json") || contentType.includes("+json")

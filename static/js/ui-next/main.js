@@ -1,5 +1,5 @@
-import { initAccessibility } from "../ui/accessibility.js?release=wp02.1";
-import { bootRuntime } from "./bootstrap.js?release=wp02.1";
+import { initAccessibility } from "../ui/accessibility.js?release=wp03.1";
+import { bootRuntime } from "./bootstrap.js?release=wp03.1";
 
 const root = document.documentElement;
 
