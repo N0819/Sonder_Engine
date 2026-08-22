@@ -315,6 +315,10 @@ def capture() -> dict:
                 page.wait_for_selector("[data-play-composer]")
             render_ms = (time.perf_counter() - started) * 1000
             apply_action(page, action)
+            page.wait_for_function("document.fonts.status === 'loaded'")
+            page.evaluate(
+                "() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+            )
             screenshot = SCREENSHOTS / f"{case_id}.png"
             page.screenshot(path=screenshot, animations="disabled")
             results.append(
