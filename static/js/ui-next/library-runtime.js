@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 const TYPE_BY_SEGMENT = Object.freeze({
   "": "",
@@ -16,6 +16,7 @@ const SEGMENT_BY_TYPE = Object.freeze({
 const SCOPES = new Set(["all", "story", "unassigned", "multiple"]);
 const SORTS = new Set(["name", "type", "created", "usage"]);
 const VISIBILITIES = new Set(["active", "archived"]);
+const MODES = new Set(["view", "edit", "create", "import"]);
 const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
 const MAX_FAVORITES = 20;
 const MAX_RECENTS = 50;
@@ -45,6 +46,7 @@ export function normalizeLibraryRoute(route) {
   const sort = SORTS.has(raw.sort) ? raw.sort : "name";
   const visibility = VISIBILITIES.has(raw.visibility) ? raw.visibility : "active";
   const item = cleanItemId(raw.item);
+  const mode = MODES.has(raw.mode) ? raw.mode : "view";
   const q = boundedText(raw.q, 200);
   const reasons = [];
   if (raw.scope && raw.scope !== scope) reasons.push("scope");
@@ -53,11 +55,14 @@ export function normalizeLibraryRoute(route) {
   if (raw.sort && raw.sort !== sort) reasons.push("sort");
   if (raw.visibility && raw.visibility !== visibility) reasons.push("visibility");
   if (raw.item && !item) reasons.push("item");
+  if (raw.mode && raw.mode !== mode) reasons.push("mode");
+  if (mode === "edit" && !item) reasons.push("edit-item-required");
   const effectiveScope = scope === "story" && !story ? "all" : scope;
   const query = {};
   if (effectiveScope !== "all") query.scope = effectiveScope;
   if (story) query.story = String(story);
   if (item) query.item = item;
+  if (mode !== "view" && !(mode === "edit" && !item)) query.mode = mode;
   if (q) query.q = q;
   if (sort !== "name") query.sort = sort;
   if (visibility !== "active") query.visibility = visibility;
@@ -67,6 +72,7 @@ export function normalizeLibraryRoute(route) {
     scope: effectiveScope,
     story,
     item,
+    mode: mode === "edit" && !item ? "view" : mode,
     q,
     sort,
     visibility,
@@ -221,10 +227,12 @@ export function createLibraryRuntime(options = {}) {
       if (!payload || !Array.isArray(payload.items) || !payload.page || !payload.facets) {
         throw new Error("The Library projection response was incomplete.");
       }
+      const latest = store.getSnapshot().library || {};
       const selected = normalized.item
         ? payload.items.find(item => item?.key === normalized.item) || null : null;
       replace({
         ...legacy(),
+        ...latest,
         status: payload.items.length ? "ready" : "empty",
         owner: requestOwner,
         route: normalized,
@@ -245,9 +253,10 @@ export function createLibraryRuntime(options = {}) {
     } catch (error) {
       if (stopped || requestOwner !== owner || requestGeneration !== generation
           || ["aborted", "stale"].includes(error?.kind)) return;
+      const latest = store.getSnapshot().library || {};
       replace({
         ...legacy(),
-        ...previous,
+        ...latest,
         status: statusForError(error),
         owner: requestOwner,
         route: normalized,

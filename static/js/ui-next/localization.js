@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 const SKIP_TREE = 'script,style,[data-no-i18n],[translate="no"]';
 const SKIP_TEXT = `${SKIP_TREE},textarea,input,[contenteditable]`;

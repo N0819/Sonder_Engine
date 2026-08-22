@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 // UI_CATALOG_START: Library discovery and detail copy.
 const COPY = Object.freeze({
@@ -25,6 +25,7 @@ const COPY = Object.freeze({
   noAssociations: "Not used by a story.",
   undo: "Undo",
   openStory: "Open in Play",
+  editStory: "Edit story",
   exportStory: "Export story",
   deleteStory: "Delete story…",
   confirmDeleteStory: "Delete this story",
@@ -102,6 +103,13 @@ const COPY = Object.freeze({
   restoredTemplate: "${name} restored.",
   mutationFailed: "The Library change was not saved.",
   undoFailed: "Undo was not accepted.",
+  storyOverview: "Story overview",
+  connectedCast: "Connected cast",
+  connectedPlayers: "Player personas",
+  connectedLore: "Connected lore",
+  recentActivity: "Recent activity",
+  turnsRecorded: "${count} turns recorded",
+  setupIssues: "Needs attention",
 });
 // UI_CATALOG_END
 
@@ -464,7 +472,15 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
   const exported = node(documentRef, "a", "ui-button ui-button--quiet", COPY.exportStory);
   exported.href = `/api/chats/${item.id}/export`;
   exported.download = `${item.name || "story"}.json`;
-  section.prepend(open, exported);
+  const edit = button(documentRef, COPY.editStory);
+  edit.addEventListener("click", () => {
+    const route = services.library.currentRoute();
+    services.library.navigate({
+      type: "story",
+      query: { ...(route?.query || {}), item: item.key, mode: "edit" },
+    });
+  });
+  section.prepend(open, edit, exported);
 
   if (!viewState.confirmDelete) {
     const remove = button(documentRef, COPY.deleteStory, "ui-button ui-button--danger");
@@ -487,6 +503,44 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
   });
   warning.append(confirm, cancel);
   section.append(warning);
+  return section;
+}
+
+function storyOverview(documentRef, library, item) {
+  const authoring = library?.authoring;
+  if (item.kind !== "story" || authoring?.owner !== item.key
+      || !authoring.overview) return null;
+  const overview = authoring.overview;
+  const section = node(documentRef, "section", "ui-library-detail__overview");
+  section.append(node(documentRef, "h4", "ui-heading ui-heading--3", COPY.storyOverview));
+  const ledger = node(documentRef, "dl", "ui-library-detail__overview-ledger");
+  for (const [label, value] of [
+    [COPY.connectedCast, overview.cast?.length || 0],
+    [COPY.connectedPlayers, overview.personas?.length || 0],
+    [COPY.connectedLore, overview.lore?.length || 0],
+    [COPY.recentActivity, COPY.turnsRecorded.replace(
+      "${count}", String(overview.activity?.turn_count || 0),
+    )],
+  ]) {
+    ledger.append(
+      node(documentRef, "dt", "ui-muted", label),
+      node(documentRef, "dd", "", String(value)),
+    );
+  }
+  section.append(ledger);
+  if (overview.issues?.length) {
+    const warning = node(documentRef, "div", "ui-notice");
+    warning.dataset.tone = "warning";
+    warning.append(
+      node(documentRef, "strong", "", COPY.setupIssues),
+      node(documentRef, "p", "", overview.issues.map(issue => (
+        issue.code === "missing-player-persona"
+          ? COPY.primaryPersonaChange
+          : "Connected lore is missing its reusable origin."
+      )).join(" ")),
+    );
+    section.append(warning);
+  }
   return section;
 }
 
@@ -547,6 +601,8 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
     associations.append(list);
   }
   article.append(associations);
+  const overview = storyOverview(documentRef, library, item);
+  if (overview) article.append(overview);
   const add = addToStory(documentRef, services, library, item);
   if (add) article.append(add);
   article.append(lifecycleActions(documentRef, services, library, item, viewState, rerender));

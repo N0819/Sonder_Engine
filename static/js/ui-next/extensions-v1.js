@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 const LEGACY_REGISTRATIONS = Object.freeze({
   registerSidebarTab: ["legacy-sidebar", "render"],

@@ -1,0 +1,74 @@
+.ui-authoring {
+  display: grid;
+  gap: var(--ui-space-4);
+  min-width: 0;
+}
+
+.ui-authoring__status {
+  min-height: 1.5rem;
+  margin: 0;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-size-sm);
+}
+
+.ui-authoring-form,
+.ui-authoring-field {
+  display: grid;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.ui-authoring-form {
+  gap: var(--ui-space-4);
+}
+
+.ui-authoring-field__label {
+  color: var(--ui-text-secondary);
+  font-size: var(--ui-font-size-sm);
+  font-weight: 600;
+}
+
+.ui-authoring-form__long {
+  min-height: 10rem;
+  resize: vertical;
+}
+
+.ui-authoring-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ui-space-2);
+  position: sticky;
+  bottom: 0;
+  padding-block: var(--ui-space-3);
+  background: var(--ui-surface-1);
+}
+
+.ui-library-detail__overview,
+.ui-library-detail__overview-ledger {
+  display: grid;
+  gap: var(--ui-space-2);
+}
+
+.ui-library-detail__overview-ledger {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+}
+
+.ui-library-detail__overview-ledger dd {
+  margin: 0;
+  text-align: end;
+}
+
+@media (max-width: 719px), (max-height: 430px) and (max-width: 899px) {
+  .ui-authoring-form input,
+  .ui-authoring-form select,
+  .ui-authoring-form textarea {
+    font-size: 1rem;
+  }
+
+  .ui-authoring-form__actions > * {
+    min-height: 44px;
+    flex: 1 1 10rem;
+  }
+}

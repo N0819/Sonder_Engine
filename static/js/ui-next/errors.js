@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 // UI_CATALOG_START: player-safe error copy.
 const PLAYER_MESSAGES = Object.freeze({

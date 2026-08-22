@@ -1,43 +1,46 @@
-import { assertReleaseModules } from "./release.js?release=wp06.1";
+import { assertReleaseModules } from "./release.js?release=wp07.1";
 
-export const MODULE_RELEASE = "wp06.1";
+export const MODULE_RELEASE = "wp07.1";
 
 // UI_CATALOG_START: fatal boundary copy is deliberately stack-free.
 const RUNTIME_FAILURE_MESSAGE = "The interface stopped unexpectedly. Your saved stories were not changed.";
 // UI_CATALOG_END
 
 const SERVICE_PATHS = Object.freeze({
-  api: "./api.js?release=wp06.1",
-  errors: "./errors.js?release=wp06.1",
-  store: "./store.js?release=wp06.1",
-  router: "./router.js?release=wp06.1",
-  localization: "./localization.js?release=wp06.1",
-  content: "./content.js?release=wp06.1",
-  tasks: "./tasks.js?release=wp06.1",
-  notices: "./notices.js?release=wp06.1",
-  diagnostics: "./diagnostics.js?release=wp06.1",
-  storage: "./storage.js?release=wp06.1",
-  credentials: "./credentials.js?release=wp06.1",
-  savePolicy: "./save-policy.js?release=wp06.1",
-  extensions: "./extensions.js?release=wp06.1",
-  extensionsV1: "./extensions-v1.js?release=wp06.1",
-  destinations: "./destinations.js?release=wp06.1",
-  inspectorHost: "./inspector-host.js?release=wp06.1",
-  libraryRuntime: "./library-runtime.js?release=wp06.1",
-  libraryView: "./library-view.js?release=wp06.1",
-  navigationState: "./navigation-state.js?release=wp06.1",
-  shortcuts: "./shortcuts.js?release=wp06.1",
-  goTo: "./go-to.js?release=wp06.1",
-  extensionHost: "./extension-host.js?release=wp06.1",
-  shell: "./shell.js?release=wp06.1",
-  playRuntime: "./play-runtime.js?release=wp06.1",
-  playView: "./play-view.js?release=wp06.1",
-  prose: "./prose.js?release=wp06.1",
-  storyToolsRegistry: "./story-tools-registry.js?release=wp06.1",
-  storyToolsRuntime: "./story-tools-runtime.js?release=wp06.1",
-  storyToolsView: "./story-tools-view.js?release=wp06.1",
-  liveStoryTools: "./live-story-tools.js?release=wp06.1",
-  atmosphereRuntime: "./atmosphere-runtime.js?release=wp06.1",
+  api: "./api.js?release=wp07.1",
+  errors: "./errors.js?release=wp07.1",
+  store: "./store.js?release=wp07.1",
+  router: "./router.js?release=wp07.1",
+  localization: "./localization.js?release=wp07.1",
+  content: "./content.js?release=wp07.1",
+  tasks: "./tasks.js?release=wp07.1",
+  notices: "./notices.js?release=wp07.1",
+  diagnostics: "./diagnostics.js?release=wp07.1",
+  storage: "./storage.js?release=wp07.1",
+  credentials: "./credentials.js?release=wp07.1",
+  savePolicy: "./save-policy.js?release=wp07.1",
+  extensions: "./extensions.js?release=wp07.1",
+  extensionsV1: "./extensions-v1.js?release=wp07.1",
+  destinations: "./destinations.js?release=wp07.1",
+  inspectorHost: "./inspector-host.js?release=wp07.1",
+  libraryRuntime: "./library-runtime.js?release=wp07.1",
+  libraryView: "./library-view.js?release=wp07.1",
+  libraryAuthoringRuntime: "./library-authoring-runtime.js?release=wp07.1",
+  libraryAuthoringView: "./library-authoring-view.js?release=wp07.1",
+  libraryStoryEditor: "./library-editors/story.js?release=wp07.1",
+  navigationState: "./navigation-state.js?release=wp07.1",
+  shortcuts: "./shortcuts.js?release=wp07.1",
+  goTo: "./go-to.js?release=wp07.1",
+  extensionHost: "./extension-host.js?release=wp07.1",
+  shell: "./shell.js?release=wp07.1",
+  playRuntime: "./play-runtime.js?release=wp07.1",
+  playView: "./play-view.js?release=wp07.1",
+  prose: "./prose.js?release=wp07.1",
+  storyToolsRegistry: "./story-tools-registry.js?release=wp07.1",
+  storyToolsRuntime: "./story-tools-runtime.js?release=wp07.1",
+  storyToolsView: "./story-tools-view.js?release=wp07.1",
+  liveStoryTools: "./live-story-tools.js?release=wp07.1",
+  atmosphereRuntime: "./atmosphere-runtime.js?release=wp07.1",
 });
 
 let activeTeardown = null;
@@ -342,6 +345,14 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     router,
   });
   cleanups.push(() => library.teardown());
+  const authoring = modules.libraryAuthoringRuntime.createLibraryAuthoringRuntime({
+    store,
+    apiClient,
+    localState,
+    router,
+    target,
+  });
+  cleanups.push(() => authoring.teardown());
 
   if (harness.diagnosticsToggle) {
     const onDiagnostics = () => {
@@ -382,6 +393,7 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     atmosphere,
     storyTools,
     library,
+    authoring,
   };
   let shell = null;
   if (options.shell === true) {
