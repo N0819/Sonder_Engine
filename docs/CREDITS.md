@@ -200,9 +200,38 @@ only.
 
 ---
 
+## Sonder UI Design Bible 1.0
+
+| | |
+|---|---|
+| **Source** | Project reference package supplied by the Sonder maintainer on 2026-08-21. |
+| **Author** | Not stated in the supplied package. |
+| **Licence** | No separate licence notice was present in the package. It is retained here as project-provided design documentation; this entry does not claim broader reuse rights. |
+| **What it is** | Thirty chapters, four checklists, three templates, a manifest and supporting governance/history defining Sonder's approved UI/UX direction. |
+| **Surveyed** | 2026-08-21, package version 1.0 dated 2026-08-20. |
+
+### What was taken
+
+The complete package is preserved byte-for-byte under
+[`design/sonder-ui-bible/`](design/sonder-ui-bible/) as design context. Its
+quiet, precise, genre-neutral product character; soft-precision geometry;
+semantic theme model; Play/Library/Settings information architecture;
+responsive parity; accessibility; terminology; component contracts; and review
+checklists guide the full interface replacement.
+
+The package does not override engine behavior, persistence, security,
+localization, or extension contracts. [`guides/INTERFACE.md`](guides/INTERFACE.md)
+records the reconciled current authority, and
+[`design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`](design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md)
+records which supplied implementation ideas are accepted, adapted, rebuilt, or
+rejected.
+
+---
+
 ## Change log for this file
 
 | Date | Change |
 |---|---|
 | 2026-08-14 | Created. Directive and grb-systems surveyed; nothing adopted from either yet. |
 | 2026-08-14 | Antonio added — the register's first adopted *implementation*, bundled under OFL 1.1 for the `lcars` theme. |
+| 2026-08-21 | Imported the maintainer-supplied Sonder UI Design Bible 1.0 and recorded its authority boundary. |

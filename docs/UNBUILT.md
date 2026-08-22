@@ -2133,7 +2133,8 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; implementation has not started.** Replace the
+**Approved target 2026-08-21; WP-00 control-plane implementation is in
+progress.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2149,6 +2150,8 @@ The candidate-source disposition and verified defects are in
 [`design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`](design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md).
 Those documents hold evidence and execution detail; this entry remains the one
 status authority and is deleted only with the exact-head final qualification.
+The source-level G0 plan is
+[`superpowers/plans/2026-08-21-sonder-ui-replacement-wp00.md`](superpowers/plans/2026-08-21-sonder-ui-replacement-wp00.md).
 
 ### 2.2 Make stance auditable
 
