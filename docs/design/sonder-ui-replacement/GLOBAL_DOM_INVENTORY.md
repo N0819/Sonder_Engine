@@ -338,7 +338,37 @@ Classic declarations are potential shared-global bindings because current script
 | `appearanceButton` | classic-const | `static/js/themes.js:158` |
 | `openAppearanceSettings` | classic-function | `static/js/themes.js:19` |
 | `themePreview` | classic-function | `static/js/themes.js:3` |
-| `root` | classic-const | `static/js/ui-next/main.js:1` |
+| `root` | classic-const | `static/js/ui-next/main.js:3` |
+| `STORAGE_KEY` | classic-const | `static/js/ui/accessibility.js:1` |
+| `attributes` | classic-const | `static/js/ui/accessibility.js:15` |
+| `readPreferences` | classic-function | `static/js/ui/accessibility.js:26` |
+| `writePreferences` | classic-function | `static/js/ui/accessibility.js:35` |
+| `THEMES` | classic-const | `static/js/ui/appearance.js:1` |
+| `store` | classic-function | `static/js/ui/appearance.js:11` |
+| `applyDataset` | classic-function | `static/js/ui/appearance.js:16` |
+| `themeIds` | classic-const | `static/js/ui/appearance.js:7` |
+| `proseSizes` | classic-const | `static/js/ui/appearance.js:8` |
+| `effectLevels` | classic-const | `static/js/ui/appearance.js:9` |
+| `FOCUSABLE` | classic-const | `static/js/ui/components/focus.js:1` |
+| `restoreBackground` | classic-function | `static/js/ui/components/overlay.js:18` |
+| `setBackgroundInert` | classic-function | `static/js/ui/components/overlay.js:3` |
+| `SPRITE` | classic-const | `static/js/ui/icons.js:1` |
+| `assertName` | classic-function | `static/js/ui/icons.js:11` |
+| `ICON_NAMES` | classic-const | `static/js/ui/icons.js:2` |
+| `themePicker` | classic-const | `static/js/ui/lab.js:14` |
+| `selectTheme` | classic-function | `static/js/ui/lab.js:15` |
+| `activeTheme` | classic-const | `static/js/ui/lab.js:24` |
+| `a11yMode` | classic-const | `static/js/ui/lab.js:27` |
+| `syncA11yControls` | classic-function | `static/js/ui/lab.js:30` |
+| `densityPicker` | classic-const | `static/js/ui/lab.js:39` |
+| `form` | classic-const | `static/js/ui/lab.js:48` |
+| `storyName` | classic-const | `static/js/ui/lab.js:49` |
+| `storyNameError` | classic-const | `static/js/ui/lab.js:50` |
+| `dialog` | classic-const | `static/js/ui/lab.js:59` |
+| `root` | classic-const | `static/js/ui/lab.js:6` |
+| `sheet` | classic-const | `static/js/ui/lab.js:64` |
+| `announcer` | classic-const | `static/js/ui/lab.js:68` |
+| `preferences` | classic-const | `static/js/ui/lab.js:7` |
 | `I18N_SKIP_TREE` | classic-const | `static/js/utils.js:130` |
 | `I18N_SKIP_TEXT` | classic-const | `static/js/utils.js:131` |
 | `localizeDocument` | classic-function | `static/js/utils.js:133` |
@@ -391,8 +421,8 @@ Classic declarations are potential shared-global bindings because current script
 
 ## DOM IDs declared by entries
 
-`activity`, `activity-count`, `activity-head`, `activity-list`, `activity-title`, `amb-vol`, `ambience-bar`, `app`, `auth-screen`, `b-amb-mute`, `b-amb-reroll`, `b-ambience`, `b-api`, `b-attire`, `b-backdrop`, `b-cast`, `b-chime`, `b-dlg`, `b-extensions`, `b-menu`, `b-nsfw`, `b-prompts`, `b-style`, `b-theme`, `b-update`, `b-world`, `chatname`, `code-input`, `composer`, `composer-inner`, `drawer`, `framebar`, `head-sub`, `input`, `join-btn`, `join-err`, `join-screen`, `live`, `login-btn`, `login-err`, `login-form`, `login-password`, `login-username`, `main`, `modal`, `modalbody`, `modalbox`, `modalhead`, `modaltitle`, `modalx`, `msgs`, `play-screen`, `send`, `send-btn`, `setup-btn`, `setup-confirm`, `setup-err`, `setup-form`, `setup-password`, `setup-username`, `side`, `sideactions`, `sidelist`, `stop`, `streamtgl`, `tabs`, `toasts`, `top`, `top-context`, `topactions`, `turnstatus`, `turnstatus-elapsed`, `turnstatus-phase`, `ui-next-title`, `vitals`, `vitals-npcs`
+`a11y-mode`, `activity`, `activity-count`, `activity-head`, `activity-list`, `activity-title`, `amb-vol`, `ambience-bar`, `announce-status`, `app`, `appearance`, `appearance-title`, `auth-screen`, `b-amb-mute`, `b-amb-reroll`, `b-ambience`, `b-api`, `b-attire`, `b-backdrop`, `b-cast`, `b-chime`, `b-dlg`, `b-extensions`, `b-menu`, `b-nsfw`, `b-prompts`, `b-style`, `b-theme`, `b-update`, `b-world`, `cancel-dialog`, `chatname`, `close-dialog`, `close-sheet`, `code-input`, `composer`, `composer-inner`, `composition`, `composition-title`, `controls`, `controls-title`, `density-picker`, `dialog-overlay`, `dialog-title`, `drawer`, `example-form`, `forms`, `forms-title`, `framebar`, `head-sub`, `icon-only`, `input`, `join-btn`, `join-err`, `join-screen`, `lab-main`, `live`, `localization`, `localization-title`, `login-btn`, `login-err`, `login-form`, `login-password`, `login-username`, `main`, `modal`, `modalbody`, `modalbox`, `modalhead`, `modaltitle`, `modalx`, `msgs`, `navigation`, `navigation-title`, `open-dialog`, `open-sheet`, `overlays`, `overlays-title`, `panel-cast`, `panel-summary`, `panel-world`, `play-screen`, `send`, `send-btn`, `setup-btn`, `setup-confirm`, `setup-err`, `setup-form`, `setup-password`, `setup-username`, `sheet-overlay`, `sheet-title`, `side`, `sideactions`, `sidelist`, `states`, `states-title`, `stop`, `story-menu`, `story-name`, `story-name-error`, `story-name-help`, `streamtgl`, `tab-cast`, `tab-summary`, `tab-world`, `tabs`, `theme-picker`, `toasts`, `top`, `top-context`, `topactions`, `turnstatus`, `turnstatus-elapsed`, `turnstatus-phase`, `ui-next-title`, `vitals`, `vitals-npcs`
 
 ## DOM IDs referenced by classic scripts
 
-`b-theme`, `chatname`, `composer-inner`, `ext-notices`, `ext-view`, `lk-`, `lt-`, `main`, `msgs`, `topactions`
+`a11y-mode`, `announce-status`, `b-theme`, `cancel-dialog`, `chatname`, `close-dialog`, `close-sheet`, `composer-inner`, `density-picker`, `dialog-overlay`, `example-form`, `ext-notices`, `ext-view`, `icon-only`, `lk-`, `lt-`, `main`, `msgs`, `open-dialog`, `open-sheet`, `sheet-overlay`, `story-menu`, `story-name`, `story-name-error`, `theme-picker`, `topactions`

@@ -1,0 +1,333 @@
+{
+  "browser": "Chromium 149.0.7827.55",
+  "cases": [
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "theme-carbon",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/theme-carbon.png",
+      "screenshot_sha256": "7eaef03a653db0b180a942e7cf5782253a38a86d7f3258dca1009baae52201c8",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "theme-ash",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/theme-ash.png",
+      "screenshot_sha256": "a468d57e64aacb2e502ec36da80471345ce02a51222d843c1ebfec69789a769c",
+      "semantic_colors": {
+        "canvas": "rgb(11 11 10)",
+        "text": "rgb(238 234 224)"
+      },
+      "theme": "ash-brass",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "theme-midnight",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/theme-midnight.png",
+      "screenshot_sha256": "e035d3799401102601bdbd28e9da7a07f2c1a6eb7ecd7fd9b79e4b6283940c51",
+      "semantic_colors": {
+        "canvas": "rgb(7 9 16)",
+        "text": "rgb(233 237 246)"
+      },
+      "theme": "midnight-ink",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "theme-parchment",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/theme-parchment.png",
+      "screenshot_sha256": "dca637aa2325896d790261b54db2626eff0fdcf814173efa8a40ac09c7a3718a",
+      "semantic_colors": {
+        "canvas": "rgb(14 11 8)",
+        "text": "rgb(238 227 203)"
+      },
+      "theme": "parchment-night",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "solid-surfaces",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "solid-surfaces"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/solid-surfaces.png",
+      "screenshot_sha256": "9d94af692cab8a2dcdf3d7fad0573e2ab252938be22c78e156bfdc01f0e5ebe6",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "reduced-motion",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "reduced-motion"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/reduced-motion.png",
+      "screenshot_sha256": "d899382fe2841a0fe3caba1165f8c69871f2940e99bf11e304eda89fa250c76f",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "accessibility-mode",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "accessibility-mode"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/accessibility-mode.png",
+      "screenshot_sha256": "b386aec00e8421454f5d664f1db5dc7ec09f2ec4aea158181951c11ee6d54761",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "large-ui-prose",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "large-ui",
+        "large-prose"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/large-ui-prose.png",
+      "screenshot_sha256": "933635fb6dd6b879b1f4aab2e64343e0fd498374679c155a6467fada570e0549",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "high-contrast",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "high-contrast"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/high-contrast.png",
+      "screenshot_sha256": "106a9f0cd0aa3b310b21463f3d0607716e9b5d7b02309f92e4a142d5ddec20aa",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "tablet-long-copy",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "long-copy"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/tablet-long-copy.png",
+      "screenshot_sha256": "d899382fe2841a0fe3caba1165f8c69871f2940e99bf11e304eda89fa250c76f",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "mobile",
+      "minimum_target_px": 44,
+      "page_errors": [],
+      "preferences": [
+        "long-copy"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/mobile.png",
+      "screenshot_sha256": "d20c8194bc2224eb86d2ca11facff4c1d269429e268d5cb87d5fb9f7d7b52a6c",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "narrow",
+      "minimum_target_px": 44,
+      "page_errors": [],
+      "preferences": [
+        "accessibility-mode",
+        "long-copy"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/narrow.png",
+      "screenshot_sha256": "3f8e9581022c70d74851cbfcb6b6dd11c28478e7fc5088aabe51bf4b2f8e89e4",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 640,
+        "width": 360
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "zoom-200-equivalent",
+      "minimum_target_px": 44,
+      "page_errors": [],
+      "preferences": [
+        "long-copy"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/zoom-200-equivalent.png",
+      "screenshot_sha256": "1f0de5248cbd97fcfb0ab3d0324ca3c9cef81e209d0887e01d5a475e8039dbcf",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 360,
+        "width": 640
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "landscape",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "long-copy"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/landscape.png",
+      "screenshot_sha256": "2e38ebc0bc46edcc4da0b1d7477576e12fdab1df9ed293cfca7f6b885acc1fc6",
+      "semantic_colors": {
+        "canvas": "rgb(7 9 16)",
+        "text": "rgb(233 237 246)"
+      },
+      "theme": "midnight-ink",
+      "viewport": {
+        "height": 390,
+        "width": 844
+      }
+    },
+    {
+      "api_requests": 0,
+      "console_errors": [],
+      "horizontal_overflow_px": 0,
+      "id": "desktop",
+      "minimum_target_px": 32.5,
+      "page_errors": [],
+      "preferences": [
+        "long-copy"
+      ],
+      "screenshot": "docs/design/sonder-ui-replacement/g1/screenshots/desktop.png",
+      "screenshot_sha256": "7eaef03a653db0b180a942e7cf5782253a38a86d7f3258dca1009baae52201c8",
+      "semantic_colors": {
+        "canvas": "rgb(6 9 11)",
+        "text": "rgb(232 238 237)"
+      },
+      "theme": "carbon-signal",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    }
+  ],
+  "platform": "Windows-10-10.0.19045-SP0",
+  "schema_version": 1,
+  "source_commit": "bc2ac5e3ae13a6981bdb2fc63ad1dce67029489e",
+  "source_tree_sha256": "3a7d9a85552efd75eb75a702c55c69940d683fab7d2024bd8508881afd70913a"
+}
