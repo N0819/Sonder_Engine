@@ -116,6 +116,12 @@ class TestPersonaStationing:
 
 
 class TestTurnFrameTagging:
+    @pytest.fixture(autouse=True)
+    def _drain_direct_streams(self, monkeypatch):
+        # These tests call route functions directly, so no ASGI server exists
+        # to consume the StreamingResponse and join its producer thread.
+        monkeypatch.setattr(app, "_stream", lambda gen: list(gen))
+
     def test_new_turn_is_tagged_with_the_requested_frame(self, temp_db, monkeypatch):
         from agents.runtime import ABORTS
 

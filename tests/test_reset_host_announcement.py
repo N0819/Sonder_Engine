@@ -20,6 +20,9 @@ from web import guest_access as guest
 @pytest.fixture
 def clean_env(monkeypatch):
     monkeypatch.delenv("FICTION_ENGINE_RESET_HOST", raising=False)
+    # This module tests startup messaging, not asynchronous memory-bank
+    # reconciliation; lifespan coverage owns that worker separately.
+    monkeypatch.setattr(app_module, "_reconcile_embedding_bank", lambda: None)
     return monkeypatch
 
 
