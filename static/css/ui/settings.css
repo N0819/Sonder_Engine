@@ -55,10 +55,11 @@
   .ui-settings__launcher-copy small { margin-block-start: 3px; color: var(--ui-color-text-faint); font-size: 12px; }
   .ui-settings__warning { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: center; padding: 14px 16px; border: 1px solid var(--ui-color-border); border-inline-start: 2px solid var(--ui-color-warning); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-color-surface-solid) 58%, transparent); }
   .ui-settings__warning > .ui-icon { inline-size: 18px; block-size: 18px; }
-  .ui-settings__provider-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto auto; gap: 12px; align-items: center; min-block-size: 64px; padding-block: 10px; border-block-end: 1px solid var(--ui-color-border); }
+  .ui-settings__provider-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto auto auto; gap: 12px; align-items: center; min-block-size: 64px; padding-block: 10px; border-block-end: 1px solid var(--ui-color-border); }
   .ui-settings__provider-row:last-child { border-block-end: 0; }
   .ui-settings__provider-row > .ui-icon { inline-size: 18px; block-size: 18px; }
   .ui-settings__provider-credential { color: var(--ui-color-text-muted); font: 10px var(--ui-font-mono); }
+  .ui-settings__provider-cache { display: inline-flex; align-items: center; gap: 7px; color: var(--ui-color-text-muted); font-size: 12px; white-space: nowrap; }
   .ui-settings__provider-status { grid-column: 2 / -1; min-block-size: 0; margin: -7px 0 4px; color: var(--ui-color-text-muted); font-size: 12px; }
   .ui-settings__provider-status:empty { display: none; }
   .ui-settings__provider-empty { margin: 0; padding-block: 16px; color: var(--ui-color-text-muted); }
@@ -69,6 +70,20 @@
   .ui-settings__connection-fields :is(input, select), .ui-settings__model-stage select { min-block-size: 38px; }
   .ui-settings__connection-status { min-block-size: 18px; margin: 12px 0 0; color: var(--ui-color-text-muted); font-size: 12px; }
   .ui-settings__connection-footer, .ui-settings__model-stage { display: flex; align-items: end; justify-content: flex-end; gap: 10px; margin-block-start: 12px; }
+  .ui-settings__inline-control { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+  .ui-settings__inline-control input { inline-size: min(160px, 100%); min-block-size: 38px; }
+  .ui-settings__details-summary { padding-block: 16px; font-weight: 700; cursor: pointer; }
+  .ui-settings__model-assignments[open] > .ui-settings__details-summary { border-block-end: 1px solid var(--ui-color-border); }
+  .ui-settings__model-assignments > .ui-muted { margin: 16px 0 4px; }
+  .ui-settings__assignment-row { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(220px, 1.4fr) minmax(150px, .8fr); gap: 12px; margin: 0; padding: 16px 0; border: 0; border-block-end: 1px solid var(--ui-color-border); }
+  .ui-settings__assignment-row legend { grid-column: 1 / -1; padding: 0; font-weight: 700; }
+  .ui-settings__assignment-row .ui-field { display: grid; gap: 6px; }
+  .ui-settings__assignment-row :is(input, select) { min-block-size: 38px; min-inline-size: 0; inline-size: 100%; }
+  .ui-settings__warning-inline { margin: 12px 0 0; padding: 10px 12px; border-inline-start: 2px solid var(--ui-color-warning); color: var(--ui-color-text-muted); font-size: 12px; }
+  .ui-settings__media-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block-start: 16px; }
+  .ui-settings__media-fields .ui-field { display: grid; gap: 6px; }
+  .ui-settings__media-fields :is(input, select) { inline-size: 100%; min-block-size: 38px; min-inline-size: 0; }
+  .ui-settings__media-toggles { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-block-start: 14px; color: var(--ui-color-text-muted); font-size: 12px; }
   .ui-settings__model-stage { padding-block-start: 12px; border-block-start: 1px solid var(--ui-color-border); }
   .ui-settings__model-stage .ui-field { flex: 1; display: grid; gap: 6px; }
 
@@ -96,11 +111,15 @@
     .ui-settings__field-head, .ui-settings__legacy, .ui-settings__toggle-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
     .ui-settings__field-head { gap: 6px; padding-block: 12px; }
     .ui-settings__provider-row { grid-template-columns: 20px minmax(0, 1fr) auto; }
+    .ui-settings__provider-cache { grid-column: 2 / -1; }
     .ui-settings__provider-row .ui-button { grid-column: 2 / -1; justify-self: start; }
     .ui-settings__provider-status { grid-column: 2 / -1; margin-block-start: 0; }
     .ui-settings__connection-fields { grid-template-columns: minmax(0, 1fr); }
     .ui-settings__connection-actions { align-items: stretch; flex-direction: column; }
     .ui-settings__connection-footer, .ui-settings__model-stage { align-items: stretch; flex-direction: column; }
+    .ui-settings__inline-control { align-items: stretch; flex-direction: column; }
+    .ui-settings__assignment-row { grid-template-columns: minmax(0, 1fr); }
+    .ui-settings__media-fields { grid-template-columns: minmax(0, 1fr); }
     .ui-settings__theme-ledger { grid-template-columns: minmax(0, 1fr); }
     .ui-settings__theme-choice { border-inline-end: 0; }
     .ui-settings__toggle-row { grid-template-columns: minmax(0, 1fr) auto auto; }
