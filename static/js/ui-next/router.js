@@ -52,7 +52,9 @@ export class RouteError extends Error {
 
 function explanation(reason, explain) {
   if (!reason) return "";
-  return explain?.(`route.${reason}`) || DEFAULT_EXPLANATIONS[reason];
+  const key = `route.${reason}`;
+  const localized = explain?.(key);
+  return localized && localized !== key ? localized : DEFAULT_EXPLANATIONS[reason];
 }
 
 function safeDestination(raw) {

@@ -172,7 +172,68 @@ def test_shell_restores_only_a_valid_saved_route_when_url_has_no_hash(
     )
     _open_shell(page, ui_base_url, hash_value="")
     expect(page).to_have_url(re.compile(r"#/library/characters$"))
-    expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
+    expect(page.get_by_role("heading", name="Characters", level=1)).to_be_visible()
+
+
+def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_workspace(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _open_shell(page, ui_base_url)
+    inspector = page.get_by_role("complementary", name="Story tools")
+    expect(inspector).to_be_visible()
+
+    inspector.get_by_role("button", name="Resize context panel").click()
+    expect(page.locator("html")).to_have_attribute("data-inspector-size", "wide")
+    inspector.get_by_role("button", name="Pin context panel").click()
+    expect(page.locator("html")).to_have_attribute("data-inspector-pinned", "false")
+    inspector.get_by_role("button", name="Close context panel").click()
+    expect(inspector).to_be_hidden()
+
+    opener = page.get_by_role("button", name="Open context panel")
+    expect(opener).to_be_focused()
+    opener.click()
+    expect(inspector).to_be_visible()
+    expect(inspector.get_by_role("heading", name="Story tools")).to_be_focused()
+    overlap = page.evaluate(
+        """() => {
+          const workspace = document.querySelector('[data-ui-region="workspace"]')
+            .getBoundingClientRect();
+          const inspector = document.querySelector('[data-ui-region="inspector"]')
+            .getBoundingClientRect();
+          return workspace.right - inspector.left;
+        }"""
+    )
+    assert overlap <= 1
+
+
+def test_mobile_inspector_is_a_back_owned_focus_contained_sheet(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    _open_shell(page, ui_base_url)
+    opener = page.get_by_role("button", name="Open context panel")
+    opener.click()
+    dialog = page.get_by_role("dialog", name="Story tools")
+    expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("button", name="Close")).to_be_focused()
+    assert page.locator("[data-ui-region='workspace']").evaluate(
+        "node => Boolean(node.closest('[inert]'))"
+    )
+
+    page.go_back()
+    expect(dialog).to_be_hidden()
+    expect(opener).to_be_focused()
+
+
+def test_invalid_nested_link_shows_explanation_at_its_safe_parent(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_shell(page, ui_base_url, hash_value="#/settings/not-real")
+    expect(page.get_by_role("heading", name="Settings", level=1)).to_be_visible()
+    expect(page.get_by_role("status")).to_contain_text(
+        "That page does not exist. Its parent area was opened instead."
+    )
 
 def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     page: Page, ui_base_url: str
