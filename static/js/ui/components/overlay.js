@@ -34,7 +34,11 @@ export function createOverlayController(overlay, {
 
   const onKeydown = (event) => {
     containFocus(surface, event);
-    if (event.key === "Escape" && closeOnEscape) close("escape");
+    if (event.key === "Escape" && closeOnEscape) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      close("escape");
+    }
   };
 
   function show() {

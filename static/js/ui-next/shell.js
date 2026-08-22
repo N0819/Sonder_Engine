@@ -31,7 +31,8 @@ export function createApplicationShell(options = {}) {
   if (!services?.store || !services?.router || !services?.localizer) {
     throw new Error("The application shell requires the coherent host runtime.");
   }
-  if (!modules?.destinations || !modules?.inspectorHost) {
+  if (!modules?.destinations || !modules?.inspectorHost
+      || !modules?.shortcuts || !modules?.goTo) {
     throw new Error("The application shell presentation modules are missing.");
   }
 
@@ -44,6 +45,7 @@ export function createApplicationShell(options = {}) {
   let stopped = false;
   let renderedDestination = null;
   let inspectorHost = null;
+  let goTo = null;
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
@@ -89,6 +91,7 @@ export function createApplicationShell(options = {}) {
     }
     services.localizer.localize(view);
     inspectorHost?.sync(shellState.route);
+    goTo?.sync(shellState.route);
     if (renderedDestination !== destination) {
       renderedDestination = destination;
       target.requestAnimationFrame(() => heading.focus({ preventScroll: true }));
@@ -99,6 +102,34 @@ export function createApplicationShell(options = {}) {
     services,
     document: documentRef,
     root,
+  });
+  const shortcutRegistry = modules.shortcuts.createShortcutRegistry({
+    target,
+    onCollision: entry => services.diagnostics.record({ kind: "shortcut-collision", ...entry }),
+  });
+  shortcutRegistry.start();
+  goTo = modules.goTo.createGoTo({
+    services,
+    modules,
+    shortcutRegistry,
+    document: documentRef,
+  });
+  const unregisterSettings = shortcutRegistry.register({
+    owner: "core-shell",
+    id: "open-settings",
+    combo: "mod+,",
+    label: services.localizer.t("Open Settings"),
+    handler: () => services.router.navigate({ destination: "settings" }),
+    core: true,
+  });
+  const unregisterEscape = shortcutRegistry.register({
+    owner: "core-shell",
+    id: "close-layer",
+    combo: "escape",
+    label: services.localizer.t("Close the top panel"),
+    handler: () => services.router.closeTopLayer(),
+    allowWhenTyping: true,
+    core: true,
   });
   applyLayout();
   target.addEventListener("resize", applyLayout);
@@ -119,9 +150,18 @@ export function createApplicationShell(options = {}) {
     stopped = true;
     unsubscribe();
     target.removeEventListener("resize", applyLayout);
+    unregisterEscape();
+    unregisterSettings();
+    goTo.teardown();
+    shortcutRegistry.stop();
     inspectorHost.teardown();
     view.replaceChildren();
   };
 
-  return Object.freeze({ teardown, layoutState: () => root.dataset.layoutState });
+  return Object.freeze({
+    teardown,
+    layoutState: () => root.dataset.layoutState,
+    shortcuts: shortcutRegistry,
+    goTo,
+  });
 }
