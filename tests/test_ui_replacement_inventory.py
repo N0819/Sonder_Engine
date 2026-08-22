@@ -124,3 +124,26 @@ def test_write_artifacts_is_deterministic_and_capabilities_are_owned(
         assert cells[4] in {"required", "presentation-only"}
         assert cells[5] in {"preserve", "adapt", "rebuild", "replace", "remove-at-cutover"}
 
+    debt = (output / "UNBUILT_UI_OWNERSHIP.md").read_text(encoding="utf-8")
+    assert "`1.66`" in debt
+    assert "WP-05" in next(line for line in debt.splitlines() if "`1.66`" in line)
+    assert "never overlap continuously" in debt
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("static/js/settings.js", "frontend-behavior"),
+        ("static/styles.css", "presentation"),
+        ("web/auth_routes.py", "security-contract"),
+        ("web/app.py", "api-contract"),
+        ("language_packs/en/ui.json", "localization-contract"),
+        ("extension_runtime/api.py", "extension-contract"),
+        ("browser_tests/test_ui_smoke.py", "behavioral-test"),
+        ("tools/project_check.py", "tooling"),
+    ],
+)
+def test_drift_paths_receive_the_review_class_that_controls_rebase(path, expected):
+    from tools.ui_replacement_inventory import classify_drift_path
+
+    assert classify_drift_path(path) == expected
