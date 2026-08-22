@@ -196,7 +196,10 @@ def test_legacy_story_write_without_revision_remains_compatible(
         )
 
     assert response.status_code == 200
-    assert response.json()["document"]["name"] == "Legacy rename"
+    assert response.json() == {"ok": True}
+    assert temp_db.q(
+        "SELECT name FROM chats WHERE id=?", (seeded["story"],), one=True,
+    )["name"] == "Legacy rename"
 
 
 def test_reusable_authoring_read_normalizes_sheet_but_never_exposes_source(
