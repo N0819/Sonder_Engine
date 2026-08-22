@@ -1,25 +1,35 @@
 # Frontend drift record
 
 **From candidate baseline:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
-**To current program baseline:** `c99173dd8b7544d6ef7c53e9ed837fc0f841bbcc`  
-**Changed frontend-adjacent paths:** 115  
-**Review classes:** api-contract: 1, engine-or-test-context: 83, frontend-behavior: 2, localization-contract: 2, security-contract: 2, tooling: 25
+**To current program baseline:** `ee2ad9f441fc0679fb76282671fa79006c0102cb`  
+**Changed frontend-adjacent paths:** 139  
+**Review classes:** api-contract: 1, behavioral-test: 10, engine-or-test-context: 92, frontend-behavior: 3, localization-contract: 2, presentation: 2, security-contract: 2, tooling: 27
 
 A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.
 
 | Status | Path | Review class | Candidate collision | Rebase rule |
 |---|---|---|---|---|
+| A | `browser_tests/__init__.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| M | `browser_tests/test_ambience_await.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| M | `browser_tests/test_backdrop_await.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| M | `browser_tests/test_checkpoint_compaction_ui.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| M | `browser_tests/test_scrollback_commission.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `browser_tests/test_ui_next_entry.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/cards/linguistics.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/cards/system_prompts.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/ui.json` | localization-contract | yes | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/ja/cards/linguistics.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/ja/cards/system_prompts.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/ja/ui.json` | localization-contract | yes | preserve current behavior; port scoped candidate intent only |
+| A | `static/css/ui-next-development.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | M | `static/js/lorebooks.js` | frontend-behavior | yes | preserve current behavior; port scoped candidate intent only |
 | M | `static/js/settings.js` | frontend-behavior | yes | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/main.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/ui-next.html` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/charter_fixtures.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/charter_worlds.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/helpers.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_appearance_clause_boundaries.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_archive_fidelity.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_attire_commit_stored_shape.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_attire_coverage_is_the_partial_axis.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -27,6 +37,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tests/test_attire_write_gate.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_background_presence_channels.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_background_work_lifecycle.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_character_card_sheet_carry.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_charter_author.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_charter_feel.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_charter_figure.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -49,7 +60,10 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tests/test_embedding_request_chunking.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_embedding_write_repair.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_exact_cue_boundary.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_extension_install.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_fable_audit_frame_bugs.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_fable_audit_memory_consolidation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_frames_integration.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_greetings.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_host_surface_bootstrap.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_host_surface_credentials.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -72,7 +86,10 @@ A direct candidate collision means both the candidate implementation and current
 | M | `tests/test_memory_summary_windows.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_narrator_world_fidelity.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_no_provider_retrieval.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_one_way_sight_direction.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_orientation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_output_budget.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_perception_has_no_model.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ponder_budget.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_project_check_matchers.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_provenance_survives_consolidation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -80,6 +97,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tests/test_recall_depth.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_recall_review.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_repo_hygiene_source_roots.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_reset_host_announcement.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_schema_integrity_archive_version.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_schema_integrity_fresh_vs_migrated.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_schema_integrity_presence_entity_key.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -87,6 +105,10 @@ A direct candidate collision means both the candidate implementation and current
 | M | `tests/test_summary_backfill.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_summary_window_recall.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_time_travel_memory.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_baseline_recorder.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_next_entry.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_replacement_control_plane.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_replacement_inventory.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_unbidden_memory.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | M | `tests/test_voice_register_stability.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_world_model_action_stage.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -99,6 +121,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tools/benchmark_memory_rationality.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | M | `tools/benchmark_memory_temporal.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/benchmark_recall_review.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/capture_ui_baseline.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/cheap_embed_width_sweep.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/fetch_longmemeval.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | M | `tools/generate_code_map.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
@@ -121,6 +144,7 @@ A direct candidate collision means both the candidate implementation and current
 | M | `tools/project_check.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/recall_depth.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/repair_memory_cues.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/ui_replacement_inventory.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | M | `web/app.py` | api-contract | no | preserve current behavior; port scoped candidate intent only |
 | M | `web/auth_routes.py` | security-contract | no | preserve current behavior; port scoped candidate intent only |
 | M | `web/guest_access.py` | security-contract | no | preserve current behavior; port scoped candidate intent only |
