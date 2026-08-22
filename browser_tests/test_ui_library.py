@@ -207,3 +207,70 @@ def test_compact_library_detail_is_history_staged_and_targets_are_large(
     page.go_back()
     expect(sheet).to_be_hidden()
     expect(page.locator("[data-library-ledger]")).to_be_visible()
+
+
+def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
+    page: Page, ui_base_url: str,
+) -> None:
+    state = {"active": True, "archived": False}
+
+    def projection():
+        associations = [{
+            "story_id": 1, "story_name": "The Lantern Archive",
+            "state": "active" if state["active"] else "dormant",
+        }]
+        return _projection([
+            ITEMS[0],
+            {**ITEMS[1], "archived": state["archived"], "associations": associations},
+        ])
+
+    def library_route(route):
+        archived_view = "visibility=archived" in route.request.url
+        payload = projection()
+        payload["items"] = [
+            item for item in payload["items"]
+            if bool(item.get("archived")) == archived_view
+        ]
+        payload["page"] = {
+            "offset": 0, "limit": 100,
+            "returned": len(payload["items"]), "total": len(payload["items"]),
+        }
+        route.fulfill(content_type="application/json", body=json.dumps(payload))
+
+    def character_route(route):
+        if route.request.method == "DELETE":
+            state["active"] = False
+        elif route.request.method == "POST":
+            state["active"] = True
+        route.fulfill(content_type="application/json", body='{"ok":true}')
+
+    def archive_route(route):
+        state["archived"] = route.request.method == "PUT"
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"key": "character:7", "archived": state["archived"], "changed": True}),
+        )
+
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(BOOTSTRAP)),
+    )
+    page.route("**/api/library?*", library_route)
+    page.route("**/api/chats/1/characters**", character_route)
+    page.route("**/api/library/character/7/archive", archive_route)
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/characters")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    page.get_by_role("button", name=re.compile("Mara Venn")).click()
+    detail = page.get_by_role("complementary", name="Library details")
+
+    detail.get_by_role("button", name="Remove from active cast").click()
+    expect(detail.get_by_text("Dormant", exact=True)).to_be_visible()
+    expect(detail.get_by_role("button", name="Undo")).to_be_visible()
+    detail.get_by_role("button", name="Undo").click()
+    expect(detail.get_by_text("Active", exact=True)).to_be_visible()
+
+    detail.get_by_role("button", name="Archive character").click()
+    expect(page.get_by_role("button", name="Undo")).to_be_visible()
+    expect(page.get_by_role("button", name=re.compile("Mara Venn"))).to_have_count(0)
+    page.get_by_role("button", name="Undo").click()
+    expect(page.get_by_role("button", name=re.compile("Mara Venn"))).to_be_visible()
