@@ -806,3 +806,225 @@ def test_content_boundary_uses_text_nodes_and_rebuilds_allowlisted_rich_text(
         "safeRel": "noopener noreferrer",
         "relativeHref": "/guide",
     }
+
+
+def test_task_service_tracks_lifecycle_elapsed_time_and_bounded_cleanup(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createTaskService } = await import(
+            `${base}/static/js/ui-next/tasks.js?release=wp02.1`
+          );
+          let now = 100;
+          let cancelCalls = 0;
+          const changes = [];
+          const tasks = createTaskService({
+            limit: 2,
+            clock: () => now,
+            onChange: snapshot => changes.push(snapshot.map(task => task.status)),
+          });
+          const first = tasks.start({
+            owner: "story-a",
+            requestId: 4,
+            correlationId: "corr-4",
+            name: "Load story",
+            phase: "reading",
+            progress: 0.2,
+          });
+          now = 175;
+          tasks.update(first, { phase: "assembling", progress: 0.75 });
+          const running = tasks.snapshot()[0];
+          tasks.complete(first, { summary: "Ready" });
+          const second = tasks.start({
+            owner: "story-a",
+            name: "Generate",
+            cancel: () => { cancelCalls += 1; },
+          });
+          await tasks.cancel(second);
+          await tasks.cancel(second);
+          const third = tasks.start({ owner: "story-b", name: "Refresh" });
+          tasks.fail(third, { kind: "network", userMessage: "Offline" });
+          const final = tasks.snapshot();
+          return {
+            running,
+            final,
+            cancelCalls,
+            changeCount: changes.length,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result["running"] == {
+        "id": "task-1",
+        "owner": "story-a",
+        "requestId": 4,
+        "correlationId": "corr-4",
+        "name": "Load story",
+        "phase": "assembling",
+        "status": "running",
+        "progress": 0.75,
+        "startedAt": 100,
+        "finishedAt": None,
+        "elapsedMs": 75,
+        "summary": "",
+        "error": None,
+        "cancellable": False,
+    }
+    assert result["cancelCalls"] == 1
+    assert result["changeCount"] == 7
+    assert [task["id"] for task in result["final"]] == ["task-2", "task-3"]
+    assert [task["status"] for task in result["final"]] == ["cancelled", "failed"]
+    assert result["final"][1]["error"] == {
+        "kind": "network",
+        "message": "Offline",
+    }
+
+
+def test_notices_distinguish_acknowledgement_condition_and_safe_retry(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createNoticeService } = await import(
+            `${base}/static/js/ui-next/notices.js?release=wp02.1`
+          );
+          const notices = createNoticeService({ limit: 3 });
+          let retries = 0;
+          const acknowledgement = notices.publish({
+            owner: "library",
+            kind: "acknowledgement",
+            message: "Imported",
+          });
+          const persistent = notices.problem({
+            owner: "story-a",
+            condition: "offline",
+            message: "Still offline",
+            error: { kind: "network", retryable: true },
+            retry: () => { retries += 1; return "retried"; },
+          });
+          const unsafe = notices.problem({
+            owner: "story-a",
+            condition: "delete-failed",
+            message: "Delete failed",
+            error: { kind: "network", retryable: false },
+            retry: () => { retries += 100; },
+          });
+          const retryResult = await notices.retry(persistent);
+          const unsafeRetry = await notices.retry(unsafe);
+          notices.acknowledge(acknowledgement);
+          const afterAcknowledge = notices.snapshot();
+          const overflow = notices.publish({
+            owner: "runtime",
+            kind: "acknowledgement",
+            message: "Newer acknowledgement",
+          });
+          const boundedIds = notices.snapshot().map(notice => notice.id);
+          notices.clearCondition("story-a", "offline");
+          notices.dismiss(unsafe);
+          notices.dismiss(overflow);
+          const final = notices.snapshot();
+          return {
+            retryResult,
+            unsafeRetry,
+            retries,
+            afterAcknowledge,
+            boundedIds,
+            final,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result["retryResult"] == "retried"
+    assert result["unsafeRetry"] is False
+    assert result["retries"] == 1
+    assert result["afterAcknowledge"] == [
+        {
+            "id": "notice-1",
+            "owner": "library",
+            "condition": "",
+            "kind": "acknowledgement",
+            "message": "Imported",
+            "persistent": False,
+            "recoverable": False,
+            "acknowledged": True,
+            "canRetry": False,
+        },
+        {
+            "id": "notice-2",
+            "owner": "story-a",
+            "condition": "offline",
+            "kind": "problem",
+            "message": "Still offline",
+            "persistent": True,
+            "recoverable": True,
+            "acknowledged": False,
+            "canRetry": True,
+        },
+        {
+            "id": "notice-3",
+            "owner": "story-a",
+            "condition": "delete-failed",
+            "kind": "problem",
+            "message": "Delete failed",
+            "persistent": True,
+            "recoverable": True,
+            "acknowledged": False,
+            "canRetry": False,
+        },
+    ]
+    assert result["boundedIds"] == ["notice-2", "notice-3", "notice-4"]
+    assert result["final"] == []
+
+
+def test_diagnostics_are_opt_in_bounded_and_recursively_redacted(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createDiagnostics } = await import(
+            `${base}/static/js/ui-next/diagnostics.js?release=wp02.1`
+          );
+          const diagnostics = createDiagnostics({ enabled: false, limit: 2 });
+          diagnostics.record({ ignored: true, password: "first" });
+          diagnostics.setEnabled(true);
+          diagnostics.record({
+            kind: "request",
+            password: "hunter2",
+            nested: {
+              Authorization: "Bearer abc.def.ghi",
+              url: "/api/test?token=secret-token&safe=yes",
+              note: "uses sk-supersecretvalue",
+              safe: "visible",
+            },
+          });
+          const redacted = diagnostics.snapshot()[0];
+          diagnostics.record({ kind: "second", cookie: "session=private" });
+          diagnostics.record({ kind: "third", value: "plain" });
+          const snapshot = diagnostics.snapshot();
+          const mutable = snapshot[0];
+          const mutationRejected = Reflect.set(mutable, "kind", "changed") === false;
+          return { redacted, snapshot, mutationRejected };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "redacted": {
+            "kind": "request",
+            "password": "[redacted]",
+            "nested": {
+                "Authorization": "[redacted]",
+                "url": "/api/test?token=[redacted]&safe=yes",
+                "note": "uses [redacted]",
+                "safe": "visible",
+            },
+        },
+        "snapshot": [
+            {"kind": "second", "cookie": "[redacted]"},
+            {"kind": "third", "value": "plain"},
+        ],
+        "mutationRejected": True,
+    }
