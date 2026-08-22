@@ -103,6 +103,52 @@ def main() -> None:
                     content_type="application/json", body=json.dumps(BOOTSTRAP)
                 ),
             )
+            page.route(
+                "**/api/extensions",
+                lambda route: route.fulfill(
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "extensions": [
+                                {
+                                    "id": "directive",
+                                    "name": "Directive",
+                                    "version": "0.8.2",
+                                    "description": "Adds campaign and mission tools to Sonder stories.",
+                                    "provenance": "git:local",
+                                    "trust": "code",
+                                    "disclosures": [
+                                        "Read story state",
+                                        "Write extension-owned story data",
+                                        "Register story tools",
+                                    ],
+                                    "enabled": True,
+                                    "updatable": True,
+                                }
+                            ],
+                            "load_errors": [],
+                            "safe_mode": False,
+                            "ext_api": 1,
+                            "host_capabilities": ["ui"],
+                        }
+                    ),
+                ),
+            )
+            page.route(
+                "**/api/maintenance/checkpoints",
+                lambda route: route.fulfill(
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "checkpoints": 128,
+                            "legacy": 7,
+                            "bytes": 340_000_000,
+                            "legacy_bytes": 210_000_000,
+                            "progress": {"running": False},
+                        }
+                    ),
+                ),
+            )
             page.goto(
                 f"http://{host}:{port}/static/ui-next.html#/settings/ai-connections"
             )
@@ -117,6 +163,20 @@ def main() -> None:
 
             page.get_by_text("Scene backdrops", exact=True).scroll_into_view_if_needed()
             page.screenshot(path=OUTPUT / "settings-ai-media-1440.png")
+
+            page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/content")
+            page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+            page.screenshot(path=OUTPUT / "settings-content-1440.png")
+
+            page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/add-ons")
+            page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+            page.get_by_text("Directive", exact=True).wait_for()
+            page.screenshot(path=OUTPUT / "settings-add-ons-1440.png")
+
+            page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/maintenance")
+            page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+            page.get_by_text("7 of 128 checkpoints use the legacy format.", exact=True).wait_for()
+            page.screenshot(path=OUTPUT / "settings-maintenance-1440.png")
             browser.close()
     finally:
         server.shutdown()

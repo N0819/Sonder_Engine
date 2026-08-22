@@ -136,6 +136,23 @@ function toggleRow(documentRef, key, label, detail, preferences, onUpdate) {
   return row;
 }
 
+function settingToggle(documentRef, label, detail, checked) {
+  const row = el(documentRef, "label", "ui-settings__toggle-row");
+  const copy = el(documentRef, "span", "ui-settings__field-copy");
+  copy.append(el(documentRef, "strong", "", label), el(documentRef, "small", "", detail));
+  const input = documentRef.createElement("input");
+  input.type = "checkbox";
+  input.checked = Boolean(checked);
+  input.setAttribute("aria-label", label);
+  const visual = el(documentRef, "span", "ui-settings__toggle-visual");
+  const state = el(documentRef, "span", "ui-settings__toggle-state", input.checked ? "On" : "Off");
+  input.addEventListener("change", () => {
+    state.textContent = input.checked ? "On" : "Off";
+  });
+  row.append(copy, input, visual, state);
+  return { row, input };
+}
+
 function experience(documentRef, services) {
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
@@ -174,6 +191,549 @@ function experience(documentRef, services) {
     toggleRow(documentRef, key, label, detail, preferences, syncAccessibility),
   ));
   section.append(head, themeGroup, accessibilityGroup);
+  return section;
+}
+
+function contentSettings(documentRef, services, state) {
+  const data = state.settings?.data || {};
+  const section = el(documentRef, "section", "ui-settings__section");
+  const head = el(documentRef, "header", "ui-settings__section-head");
+  head.append(
+    el(documentRef, "p", "ui-settings__crumb", "Settings / 03"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", "Content"),
+    el(documentRef, "p", "ui-muted", "Story boundaries, authored detail, and local data"),
+  );
+
+  const permissions = el(documentRef, "section", "ui-settings__group");
+  const adult = settingToggle(
+    documentRef,
+    "Allow adult story content",
+    "Lets stories use mature material. This does not change provider policies or add content by itself.",
+    data.nsfw_enabled,
+  );
+  const beneath = settingToggle(
+    documentRef,
+    "Use underneath descriptions from cards",
+    "Includes author-written body-region detail when clothing no longer covers it. Card text is not erased when this is off.",
+    data.attire_beneath,
+  );
+  const promote = settingToggle(
+    documentRef,
+    "Allow stories to promote recurring extras",
+    "Permits a story to turn a recurring extra into a full cast member after its own story-level threshold is met.",
+    data.auto_promote,
+  );
+  permissions.append(adult.row, beneath.row, promote.row);
+  const actions = el(documentRef, "div", "ui-settings__connection-footer");
+  const status = el(documentRef, "p", "ui-settings__connection-status");
+  status.setAttribute("role", "status");
+  const save = el(documentRef, "button", "ui-button ui-button--primary", "Save content preferences");
+  save.type = "button";
+  actions.append(save);
+  save.addEventListener("click", async () => {
+    save.disabled = true;
+    status.textContent = "Saving content preferences…";
+    try {
+      await services.apiClient.put("/api/nsfw", { enabled: adult.input.checked }, {
+        channel: "settings-content-nsfw", owner: "settings-content",
+      });
+      await services.apiClient.put("/api/attire_beneath", { enabled: beneath.input.checked }, {
+        channel: "settings-content-attire", owner: "settings-content",
+      });
+      await services.apiClient.put("/api/auto_promote", { enabled: promote.input.checked }, {
+        channel: "settings-content-promotion", owner: "settings-content",
+      });
+      if (save.isConnected) status.textContent = "Content preferences saved.";
+    } catch (error) {
+      if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save content preferences.";
+    } finally {
+      if (save.isConnected) save.disabled = false;
+    }
+  });
+  permissions.append(status, actions);
+
+  const localData = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
+  const dataCopy = el(documentRef, "span", "ui-settings__field-copy");
+  dataCopy.append(
+    el(documentRef, "strong", "", "Your stories stay on this Sonder host."),
+    el(documentRef, "small", "", "Story exports and permanent deletion remain attached to the specific story or Library item, so a broad control cannot erase the wrong data."),
+  );
+  const manage = el(documentRef, "a", "ui-button ui-button--quiet", "Manage story exports and deletion");
+  manage.href = "#/library/stories";
+  localData.append(dataCopy, manage);
+  section.append(head, permissions, localData);
+  return section;
+}
+
+function extensionTrustText(extension) {
+  const trust = String(extension?.trust || "code");
+  if (trust === "data") return "Data only. It runs no code.";
+  if (trust === "prompt") return "Supplies prompt text. It runs no code of its own.";
+  return "Runs code inside Sonder with access to stories, world state, and provider connections.";
+}
+
+function addOnsSettings(documentRef, services) {
+  const section = el(documentRef, "section", "ui-settings__section");
+  const head = el(documentRef, "header", "ui-settings__section-head");
+  head.append(
+    el(documentRef, "p", "ui-settings__crumb", "Settings / 04"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", "Add-ons"),
+    el(documentRef, "p", "ui-muted", "Installed extensions, permissions, updates, and settings"),
+  );
+  const status = el(documentRef, "p", "ui-settings__connection-status", "Loading installed extensions…");
+  status.setAttribute("role", "status");
+  const list = el(documentRef, "section", "ui-settings__group ui-settings__extension-list");
+  const install = el(documentRef, "section", "ui-settings__group");
+  const installCopy = el(documentRef, "span", "ui-settings__field-copy");
+  installCopy.append(
+    el(documentRef, "strong", "", "Install an extension"),
+    el(documentRef, "small", "", "Use a git repository, a zip URL, or a local folder. New extensions arrive switched off."),
+  );
+  const installControls = el(documentRef, "div", "ui-settings__install-row");
+  const source = documentRef.createElement("input");
+  source.type = "text";
+  source.placeholder = "Repository, zip URL, or local folder";
+  source.setAttribute("aria-label", "Extension source");
+  const stageInstall = el(documentRef, "button", "ui-button ui-button--quiet", "Install extension");
+  stageInstall.type = "button";
+  installControls.append(source, stageInstall);
+  const installConsent = el(documentRef, "div", "ui-settings__extension-consent");
+  installConsent.hidden = true;
+  const installWarning = el(documentRef, "p", "", "Nothing has reviewed this code. Installation copies it to this Sonder host; it still will not run until you enable it.");
+  const confirmInstall = el(documentRef, "button", "ui-button ui-button--primary", "Confirm install extension");
+  confirmInstall.type = "button";
+  const cancelInstall = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel installation");
+  cancelInstall.type = "button";
+  installConsent.append(installWarning, confirmInstall, cancelInstall);
+  install.append(installCopy, installControls, installConsent);
+
+  let listing = null;
+  let updateReports = new Map();
+  const render = () => {
+    list.replaceChildren();
+    if (!listing) return;
+    if (listing.safe_mode) {
+      const safeMode = el(documentRef, "aside", "ui-settings__warning");
+      const copy = el(documentRef, "span", "ui-settings__launcher-copy");
+      copy.append(
+        el(documentRef, "strong", "", "Safe mode is active."),
+        el(documentRef, "small", "", "Every extension is off for this run. Restart without safe mode to load enabled extensions."),
+      );
+      safeMode.append(icon(documentRef, "warning"), copy);
+      list.append(safeMode);
+    }
+    for (const failure of listing.load_errors || []) {
+      const error = el(documentRef, "div", "ui-settings__extension-error");
+      error.append(
+        el(documentRef, "strong", "", `${failure.dir || "An extension"} failed to load`),
+        el(documentRef, "small", "", String(failure.error || failure)),
+      );
+      list.append(error);
+    }
+    const extensions = Array.isArray(listing.extensions) ? listing.extensions : [];
+    list.dataset.extensionCount = String(extensions.length);
+    if (!extensions.length) list.append(el(documentRef, "p", "ui-settings__provider-empty", "No extensions are installed."));
+    extensions.forEach(extension => {
+      const name = extension.name || extension.id;
+      const row = el(documentRef, "article", "ui-settings__extension-row");
+      const rowHead = el(documentRef, "div", "ui-settings__extension-head");
+      const title = el(documentRef, "span", "ui-settings__field-copy");
+      title.append(
+        el(documentRef, "strong", "", name),
+        el(documentRef, "small", "", `v${extension.version || "?"} · ${extension.provenance || "local"}`),
+      );
+      const enabled = el(documentRef, "span", "ui-settings__provider-credential", extension.enabled ? "Enabled" : "Disabled");
+      rowHead.append(title, enabled);
+      if (extension.description) row.append(rowHead, el(documentRef, "p", "ui-muted", extension.description));
+      else row.append(rowHead);
+      const permissions = Array.isArray(extension.disclosures) ? extension.disclosures : [];
+      if (permissions.length) {
+        const permissionList = el(documentRef, "ul", "ui-settings__permission-list");
+        permissions.forEach(permission => permissionList.append(el(documentRef, "li", "", permission)));
+        row.append(permissionList);
+      }
+      row.append(el(documentRef, "p", "ui-settings__trust-note", extensionTrustText(extension)));
+      if (extension.error) row.append(el(documentRef, "p", "ui-settings__extension-error", String(extension.error)));
+      const actions = el(documentRef, "div", "ui-settings__extension-actions");
+      const toggle = el(documentRef, "button", "ui-button ui-button--quiet", extension.enabled ? `Disable ${name}` : `Enable ${name}`);
+      toggle.type = "button";
+      const remove = el(documentRef, "button", "ui-button ui-button--quiet", `Remove ${name}`);
+      remove.type = "button";
+      const report = updateReports.get(extension.id);
+      if (report?.update) {
+        const update = el(documentRef, "button", "ui-button ui-button--primary", `Update ${name}`);
+        update.type = "button";
+        update.addEventListener("click", async () => {
+          update.disabled = true;
+          status.textContent = `Updating ${name}…`;
+          try {
+            await services.apiClient.post(`/api/extensions/${encodeURIComponent(extension.id)}/update`, {}, {
+              channel: `settings-extension-update:${extension.id}`, owner: "settings-add-ons",
+            });
+            services.registry.unregisterOwner(extension.id);
+            updateReports.delete(extension.id);
+            await load();
+          } catch (error) {
+            status.textContent = error?.userMessage || error?.message || `Sonder could not update ${name}.`;
+          }
+        });
+        actions.append(update);
+      }
+      actions.append(toggle, remove);
+      row.append(actions);
+      const consent = el(documentRef, "div", "ui-settings__extension-consent");
+      consent.hidden = true;
+      row.append(consent);
+      toggle.addEventListener("click", async () => {
+        if (extension.enabled) {
+          toggle.disabled = true;
+          status.textContent = `Disabling ${name}…`;
+          try {
+            await services.apiClient.post(`/api/extensions/${encodeURIComponent(extension.id)}/disable`, {}, {
+              channel: `settings-extension-toggle:${extension.id}`, owner: "settings-add-ons",
+            });
+            services.registry.unregisterOwner(extension.id);
+            await load();
+          } catch (error) {
+            status.textContent = error?.userMessage || error?.message || `Sonder could not disable ${name}.`;
+          }
+          return;
+        }
+        consent.replaceChildren(
+          el(documentRef, "strong", "", "Nothing has reviewed this code."),
+          el(documentRef, "p", "", extensionTrustText(extension)),
+        );
+        if (permissions.length) {
+          const disclosure = el(documentRef, "ul", "ui-settings__permission-list");
+          permissions.forEach(permission => disclosure.append(el(documentRef, "li", "", permission)));
+          consent.append(disclosure);
+        }
+        const confirm = el(documentRef, "button", "ui-button ui-button--primary", `Confirm enable ${name}`);
+        confirm.type = "button";
+        const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+        cancel.type = "button";
+        consent.append(confirm, cancel);
+        consent.hidden = false;
+        confirm.addEventListener("click", async () => {
+          confirm.disabled = true;
+          status.textContent = `Enabling ${name}…`;
+          try {
+            await services.apiClient.post(`/api/extensions/${encodeURIComponent(extension.id)}/enable`, {}, {
+              channel: `settings-extension-toggle:${extension.id}`, owner: "settings-add-ons",
+            });
+            await services.registry.loadEnabled([{ ...extension, enabled: true }]);
+            await load();
+          } catch (error) {
+            status.textContent = error?.userMessage || error?.message || `Sonder could not enable ${name}.`;
+          }
+        });
+        cancel.addEventListener("click", () => {
+          consent.hidden = true;
+          toggle.focus();
+        });
+      });
+      remove.addEventListener("click", () => {
+        consent.replaceChildren(
+          el(documentRef, "strong", "", `Remove ${name}?`),
+          el(documentRef, "p", "", "Its files will be deleted. Story data it owns is kept so reinstalling can recover it."),
+        );
+        const confirm = el(documentRef, "button", "ui-button ui-button--danger", `Confirm remove ${name}`);
+        confirm.type = "button";
+        const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+        cancel.type = "button";
+        consent.append(confirm, cancel);
+        consent.hidden = false;
+        confirm.addEventListener("click", async () => {
+          confirm.disabled = true;
+          status.textContent = `Removing ${name}…`;
+          try {
+            await services.apiClient.delete(`/api/extensions/${encodeURIComponent(extension.id)}`, {
+              channel: `settings-extension-remove:${extension.id}`, owner: "settings-add-ons",
+            });
+            services.registry.unregisterOwner(extension.id);
+            await load();
+          } catch (error) {
+            status.textContent = error?.userMessage || error?.message || `Sonder could not remove ${name}.`;
+          }
+        });
+        cancel.addEventListener("click", () => {
+          consent.hidden = true;
+          remove.focus();
+        });
+      });
+      list.append(row);
+    });
+    const footer = el(documentRef, "div", "ui-settings__extension-footer");
+    footer.append(el(documentRef, "small", "ui-muted", `Extension API ${listing.ext_api || "?"}`));
+    const checkUpdates = el(documentRef, "button", "ui-button ui-button--quiet", "Check for extension updates");
+    checkUpdates.type = "button";
+    checkUpdates.addEventListener("click", async () => {
+      checkUpdates.disabled = true;
+      status.textContent = "Checking extension updates…";
+      try {
+        const result = await services.apiClient.get("/api/extensions/updates", {
+          channel: "settings-extension-updates", owner: "settings-add-ons",
+        });
+        updateReports = new Map((result.data?.updates || []).map(report => [report.id, report]));
+        status.textContent = "Extension update check finished.";
+        render();
+      } catch (error) {
+        status.textContent = error?.userMessage || error?.message || "Sonder could not check extension updates.";
+      }
+    });
+    footer.append(checkUpdates);
+    list.append(footer);
+  };
+  const load = async () => {
+    try {
+      const result = await services.apiClient.get("/api/extensions", {
+        channel: "settings-extensions-list", owner: "settings-add-ons",
+      });
+      if (!section.isConnected) return;
+      listing = result.data || {};
+      status.textContent = "";
+      render();
+    } catch (error) {
+      if (!section.isConnected) return;
+      status.textContent = error?.userMessage || error?.message || "Sonder could not load installed extensions.";
+    }
+  };
+  stageInstall.addEventListener("click", () => {
+    if (!source.value.trim()) {
+      status.textContent = "Enter a repository, zip URL, or local folder first.";
+      source.focus();
+      return;
+    }
+    installConsent.hidden = false;
+    confirmInstall.focus();
+  });
+  cancelInstall.addEventListener("click", () => {
+    installConsent.hidden = true;
+    stageInstall.focus();
+  });
+  confirmInstall.addEventListener("click", async () => {
+    confirmInstall.disabled = true;
+    status.textContent = "Installing extension…";
+    try {
+      await services.apiClient.post("/api/extensions/install", { source: source.value.trim() }, {
+        channel: "settings-extension-install", owner: "settings-add-ons",
+      });
+      source.value = "";
+      installConsent.hidden = true;
+      await load();
+    } catch (error) {
+      status.textContent = error?.userMessage || error?.message || "Sonder could not install the extension.";
+    } finally {
+      if (confirmInstall.isConnected) confirmInstall.disabled = false;
+    }
+  });
+  section.append(head, status, list, install);
+  queueMicrotask(load);
+  return section;
+}
+
+function maintenanceSettings(documentRef, services) {
+  const section = el(documentRef, "section", "ui-settings__section");
+  const head = el(documentRef, "header", "ui-settings__section-head");
+  head.append(
+    el(documentRef, "p", "ui-settings__crumb", "Settings / 05"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", "Maintenance"),
+    el(documentRef, "p", "ui-muted", "Updates, storage conversion, and recovery tools"),
+  );
+
+  const updates = el(documentRef, "section", "ui-settings__group");
+  const updateHead = el(documentRef, "div", "ui-settings__field-head");
+  const updateCopy = el(documentRef, "span", "ui-settings__field-copy");
+  updateCopy.append(
+    el(documentRef, "strong", "", "Sonder updates"),
+    el(documentRef, "small", "", "Check the configured Git remote. Nothing downloads or changes until you choose Install update."),
+  );
+  const checkUpdates = el(documentRef, "button", "ui-button ui-button--quiet", "Check for Sonder updates");
+  checkUpdates.type = "button";
+  updateHead.append(updateCopy, checkUpdates);
+  const updateResult = el(documentRef, "div", "ui-settings__maintenance-result");
+  const updateStatus = el(documentRef, "p", "ui-settings__connection-status");
+  updateStatus.setAttribute("role", "status");
+  updates.append(updateHead, updateResult, updateStatus);
+  checkUpdates.addEventListener("click", async () => {
+    checkUpdates.disabled = true;
+    updateStatus.textContent = "Checking for Sonder updates…";
+    updateResult.replaceChildren();
+    try {
+      const result = await services.apiClient.get("/api/updates/check", {
+        channel: "settings-update-check", owner: "settings-maintenance",
+      });
+      if (!checkUpdates.isConnected) return;
+      const report = result.data || {};
+      if (!report.ok) throw new Error(report.error || "Update check failed.");
+      updateStatus.textContent = `Branch ${report.branch || "unknown"} · current ${report.current || "unknown"}`;
+      if (report.up_to_date) {
+        updateResult.append(el(documentRef, "strong", "", "Sonder is up to date."));
+        return;
+      }
+      const count = Number(report.behind || 0);
+      updateResult.append(el(documentRef, "strong", "", `${count.toLocaleString("en-US")} ${count === 1 ? "update is" : "updates are"} available.`));
+      const commits = Array.isArray(report.commits) ? report.commits : [];
+      if (commits.length) {
+        const changes = el(documentRef, "ul", "ui-settings__permission-list");
+        commits.forEach(commit => changes.append(el(documentRef, "li", "", `${commit.hash || ""} ${commit.subject || ""}`.trim())));
+        updateResult.append(changes);
+      }
+      if (report.dirty) {
+        updateResult.append(el(documentRef, "p", "ui-settings__warning-inline", "Local uncommitted changes must be committed or stashed before installing."));
+        return;
+      }
+      const installUpdate = el(documentRef, "button", "ui-button ui-button--primary", "Install update");
+      installUpdate.type = "button";
+      const consent = el(documentRef, "div", "ui-settings__extension-consent");
+      consent.hidden = true;
+      installUpdate.addEventListener("click", () => {
+        consent.replaceChildren(
+          el(documentRef, "strong", "", "Install this Sonder update?"),
+          el(documentRef, "p", "", "The running server will need a restart."),
+        );
+        const confirm = el(documentRef, "button", "ui-button ui-button--primary", "Confirm install update");
+        confirm.type = "button";
+        const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+        cancel.type = "button";
+        consent.append(confirm, cancel);
+        consent.hidden = false;
+        confirm.addEventListener("click", async () => {
+          confirm.disabled = true;
+          updateStatus.textContent = "Installing Sonder update…";
+          try {
+            const installed = await services.apiClient.post("/api/updates/install", {}, {
+              channel: "settings-update-install", owner: "settings-maintenance",
+            });
+            if (!confirm.isConnected) return;
+            const answer = installed.data || {};
+            if (!answer.ok) throw new Error(answer.error || "Update installation failed.");
+            updateResult.replaceChildren(el(
+              documentRef,
+              "strong",
+              "",
+              answer.updated
+                ? "Update installed. Restart the Sonder server, then reload this page."
+                : answer.message || "Sonder is already up to date.",
+            ));
+            updateStatus.textContent = "";
+          } catch (error) {
+            updateStatus.textContent = error?.userMessage || error?.message || "Sonder could not install the update.";
+            if (confirm.isConnected) confirm.disabled = false;
+          }
+        });
+        cancel.addEventListener("click", () => {
+          consent.hidden = true;
+          installUpdate.focus();
+        });
+      });
+      updateResult.append(installUpdate, consent);
+    } catch (error) {
+      if (checkUpdates.isConnected) updateStatus.textContent = error?.userMessage || error?.message || "Sonder could not check for updates.";
+    } finally {
+      if (checkUpdates.isConnected) checkUpdates.disabled = false;
+    }
+  });
+
+  const checkpoints = el(documentRef, "section", "ui-settings__group");
+  const checkpointCopy = el(documentRef, "span", "ui-settings__field-copy");
+  checkpointCopy.append(
+    el(documentRef, "strong", "", "Checkpoint storage"),
+    el(documentRef, "small", "", "Older checkpoints may store duplicate memory vectors. Conversion changes storage only; it does not re-embed memories."),
+  );
+  const checkpointResult = el(documentRef, "div", "ui-settings__maintenance-result", "Checking checkpoint storage…");
+  checkpointResult.setAttribute("role", "status");
+  checkpoints.append(checkpointCopy, checkpointResult);
+  const loadCheckpoints = async () => {
+    try {
+      const result = await services.apiClient.get("/api/maintenance/checkpoints", {
+        channel: "settings-checkpoint-status", owner: "settings-maintenance",
+      });
+      if (!checkpoints.isConnected) return;
+      const report = result.data || {};
+      checkpointResult.replaceChildren();
+      if (report.error) {
+        checkpointResult.append(el(documentRef, "p", "ui-settings__extension-error", report.error));
+        return;
+      }
+      const progress = report.progress || {};
+      if (progress.running) {
+        const total = Number(progress.total || 0);
+        const done = Number(progress.done || 0);
+        const progressElement = documentRef.createElement("progress");
+        progressElement.max = total || 1;
+        progressElement.value = done;
+        checkpointResult.append(
+          el(documentRef, "p", "", `Converting ${done.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} checkpoints.`),
+          progressElement,
+        );
+        setTimeout(loadCheckpoints, 1000);
+        return;
+      }
+      const total = Number(report.checkpoints || 0);
+      const legacy = Number(report.legacy || 0);
+      if (!total) {
+        checkpointResult.append(el(documentRef, "p", "", "No checkpoints are stored yet."));
+        return;
+      }
+      if (!legacy) {
+        checkpointResult.append(el(documentRef, "p", "", `All ${total.toLocaleString("en-US")} checkpoints use the current format.`));
+        return;
+      }
+      checkpointResult.append(
+        el(documentRef, "p", "", `${legacy.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} checkpoints use the legacy format.`),
+        el(documentRef, "p", "ui-muted", "Conversion is resumable and leaves any checkpoint that fails its equivalence check untouched."),
+      );
+      const convert = el(documentRef, "button", "ui-button ui-button--quiet", "Convert legacy checkpoints");
+      convert.type = "button";
+      const consent = el(documentRef, "div", "ui-settings__extension-consent");
+      consent.hidden = true;
+      convert.addEventListener("click", () => {
+        consent.replaceChildren(
+          el(documentRef, "strong", "", "Convert legacy checkpoints?"),
+          el(documentRef, "p", "", "Rollback history will be rewritten into the current storage format."),
+        );
+        const confirm = el(documentRef, "button", "ui-button ui-button--primary", "Confirm checkpoint conversion");
+        confirm.type = "button";
+        const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+        cancel.type = "button";
+        consent.append(confirm, cancel);
+        consent.hidden = false;
+        confirm.addEventListener("click", async () => {
+          confirm.disabled = true;
+          try {
+            const started = await services.apiClient.post("/api/maintenance/checkpoints/compact", {}, {
+              channel: "settings-checkpoint-convert", owner: "settings-maintenance",
+            });
+            if (!confirm.isConnected) return;
+            const answer = started.data || {};
+            checkpointResult.replaceChildren(el(
+              documentRef,
+              "p",
+              "",
+              answer.started === false
+                ? `Checkpoint conversion was not started: ${answer.reason || "nothing to convert"}.`
+                : `Checkpoint conversion started for ${Number(answer.total || legacy).toLocaleString("en-US")} checkpoints.`,
+            ));
+          } catch (error) {
+            if (confirm.isConnected) {
+              confirm.disabled = false;
+              consent.append(el(documentRef, "p", "ui-settings__extension-error", error?.userMessage || error?.message || "Sonder could not start checkpoint conversion."));
+            }
+          }
+        });
+        cancel.addEventListener("click", () => {
+          consent.hidden = true;
+          convert.focus();
+        });
+      });
+      checkpointResult.append(convert, consent);
+    } catch (error) {
+      if (checkpoints.isConnected) checkpointResult.textContent = error?.userMessage || error?.message || "Sonder could not check checkpoint storage.";
+    }
+  };
+  section.append(head, updates, checkpoints);
+  queueMicrotask(loadCheckpoints);
   return section;
 }
 
@@ -874,6 +1434,12 @@ export function createSettingsView(options = {}) {
       ? experience(documentRef, services)
       : active === "ai-connections"
         ? aiConnections(documentRef, services, state)
+      : active === "content"
+        ? contentSettings(documentRef, services, state)
+      : active === "add-ons"
+        ? addOnsSettings(documentRef, services)
+      : active === "maintenance"
+        ? maintenanceSettings(documentRef, services)
       : active === "advanced"
         ? advanced(documentRef)
         : placeholder(documentRef, active),

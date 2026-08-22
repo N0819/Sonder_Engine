@@ -28,6 +28,14 @@ current UI runtime instead of inventing a substitute runtime contract.
   preserving untouched sampler and fallback configuration fields.
 - Connected embeddings-model change warnings, backdrop image configuration, backdrop enablement
   and continuity, and credential-safe local/Freesound ambience configuration.
+- Connected Content preferences to the current adult-content, authored-underneath-detail, and
+  recurring-extra promotion routes, with one explicit save and a scoped path to story export and
+  deletion controls.
+- Replaced the legacy extension panel with installed-state, trust and permission disclosures,
+  safe-mode/load-failure recovery, update checks, staged install and enable consent, disable,
+  update, and staged removal that explicitly preserves extension-owned story data.
+- Replaced the Maintenance placeholder with explicit update checking/install staging and the
+  resumable, equivalence-checked legacy-checkpoint conversion flow.
 - Added the reference terminal glyph used by Advanced and Turn details.
 - Preserved safe fallback behavior for invalid Settings deep links.
 
@@ -35,10 +43,11 @@ current UI runtime instead of inventing a substitute runtime contract.
 
 - AI Connections still needs advanced sampler and backup-model editing, OpenRouter upstream
   routing, image-model catalogue discovery, and the embeddings rebuild action.
-- Content, Add-ons, and Maintenance still need their reference panels.
 - Settings search and legacy theme selection are not connected yet.
 - The four Advanced launchers are visual ports only until their replacement editors are
   connected to current engine owners. They do not bridge to the legacy DOM.
+- Maintenance still needs its log and repair/rebuild controls, and Add-ons still needs to render
+  extension-owned settings slots. Those are not represented as complete by the current captures.
 
 ## Evidence
 
@@ -49,6 +58,9 @@ current UI runtime instead of inventing a substitute runtime contract.
 - `screenshots/settings-ai-connect-1440.png`
 - `screenshots/settings-ai-models-1440.png`
 - `screenshots/settings-ai-media-1440.png`
-- `9 passed` in the focused Settings browser suite after the AI defaults/media tranche.
+- `screenshots/settings-content-1440.png`
+- `screenshots/settings-add-ons-1440.png`
+- `screenshots/settings-maintenance-1440.png`
+- `13 passed` in the focused Settings browser suite after the Content/Add-ons/Maintenance tranche.
 - `node --check static/js/ui-next/settings-view.js`
 - `git diff --check`
