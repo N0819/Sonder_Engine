@@ -188,3 +188,8 @@ def test_effects_off_keeps_static_backdrop_and_removes_weather_overlay(
     expect(page.locator("[data-play-backdrop]")).to_be_visible()
     weather = page.locator("[data-play-weather]")
     expect(weather).to_be_hidden()
+    cluster = page.locator(".ui-play__audio-cluster")
+    sizes = cluster.locator("button,input").evaluate_all(
+        "nodes => nodes.map(node => { const r = node.getBoundingClientRect(); return [r.width, r.height]; })"
+    )
+    assert all(min(width, height) >= 44 for width, height in sizes)

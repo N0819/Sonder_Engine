@@ -230,7 +230,7 @@
   .ui-play__composer-actions .ui-button { min-inline-size: 5.75rem; min-block-size: 44px; }
   .ui-play__audio-cluster { grid-column: 2; grid-row: 2 / span 2; display: flex; align-items: center; justify-content: end; gap: var(--ui-space-2); min-inline-size: 0; }
   .ui-play__audio-cluster .ui-button { min-block-size: 44px; }
-  .ui-play__audio-cluster input[type="range"] { inline-size: clamp(4.5rem, 9vw, 7rem); }
+  .ui-play__audio-cluster input[type="range"] { inline-size: clamp(4.5rem, 9vw, 7rem); min-block-size: 44px; }
   .ui-play__progress { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--ui-space-3); align-items: center; color: var(--ui-color-text-muted); font-size: .8125rem; }
   .ui-play__progress[hidden] { display: none; }
   .ui-play__progress-elapsed { font: 600 .75rem var(--ui-font-mono); }
