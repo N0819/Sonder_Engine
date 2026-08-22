@@ -1,7 +1,7 @@
 # Frontend drift record
 
 **From candidate baseline:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
-**To current program baseline:** `49895c7f4f7e238b93b217dc8e980c3cec3d4fa6`
+**To current program baseline:** `dd0528d085e2c87f8691f49c9ef6e0e1b0d585df`
 **Changed frontend-adjacent paths:** 202
 **Review classes:** api-contract: 1, behavioral-test: 20, engine-or-test-context: 92, frontend-behavior: 37, localization-contract: 2, presentation: 17, security-contract: 2, tooling: 31
 
