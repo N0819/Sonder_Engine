@@ -59,11 +59,17 @@ layout states, versioned route/focus/scroll restoration, the desktop and mobile
 inspector frame, Go To, overlay/notice/task hosts, and the first visible
 extension-v1 route consumer. The [G2 review and deterministic browser
 matrix](../design/sonder-ui-replacement/G2_SHELL_REVIEW.md) qualify that shell
-without claiming the destination workflows. WP-04 is next and owns the Play
-transcript, turn lifecycle, streaming, composer, and current story actions.
-The lock passed 110 focused checks, 8,769 repository tests with four expected
-platform skips, all 119 browser tests, the maintained-source compile and
-structure gates, and byte-identical repeated G2 captures.
+without claiming the destination workflows.
+
+WP-04 establishes the accepted Play-core tranche of G3. One runtime-owned coordinator owns
+selected story/frame identity, story loading, generation, stop/retry, reroll,
+variants, mutations, and authoritative refresh across destination remounts.
+The view owns the literary transcript, story-scoped composer, current story
+and turn actions, explicit Play states, and responsive presentation. The
+[G3 review and deterministic browser matrix](../design/sonder-ui-replacement/G3_PLAY_REVIEW.md)
+qualify those behaviors without closing G3 as a whole or claiming Story Tools,
+conditions, backdrops, ambience, or Library lifecycle. WP-05 is next and owns
+the remaining contextual Play surfaces required for full G3 parity.
 
 ## Runtime boundary
 
@@ -166,6 +172,34 @@ composer must never overlap continuously at supported sizes.
 Loading, unavailable, confirmed empty, error, and stale states are distinct.
 Recoverable errors stay in context; toasts acknowledge completed actions and
 do not carry persistent work, failures, or choices.
+
+### Play-core ownership
+
+- `static/js/ui-next/play-runtime.js` is the sole client owner of selected
+  story/frame loads and active generation lifetime. Every async result is
+  checked against captured owner identity; navigation does not retarget a run.
+- `static/js/ui-next/play-view.js` is a projection. Destination remounts may
+  replace its DOM and listeners, but cannot own or cancel the run, selected
+  story, or browser-local draft.
+- Drafts use the WP-02 versioned local envelope and the stable
+  `chat-{id}:frame-{id}` owner. A send clears the draft only when an accepted
+  response exists; a pre-acceptance failure preserves it and exposes Retry.
+- `static/js/ui-next/prose.js` builds prose from text and reviewed elements.
+  Model HTML is never parsed as document markup. Interface copy localizes;
+  story names, player input, prose, dialogue, and raw technical data do not.
+- Turn streaming is incremental and does not collect token history. Friendly
+  status is first-level; bounded technical events remain under Advanced. The
+  current extension registry receives post-host `turn:*` events without a
+  general-purpose browser global.
+- Reroll, narration selection, edit, branch, delete, rename, pipeline detail,
+  and portable export delegate to current server routes. The browser never
+  reconstructs checkpoints or invents archive/lifecycle authority.
+- Transcript scroll is internal and named. Initial/current reading stays
+  pinned; prior-turn review preserves its offset and announces a New turn
+  affordance without stealing scroll.
+- Compact Play retains every current action and a minimum 44 px target.
+  Short-landscape treatment prioritizes the active field and primary action;
+  safe-area padding belongs to the composer and bottom navigation.
 
 ## Design-system boundary
 

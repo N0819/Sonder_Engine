@@ -2133,7 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-03 complete and G2 locked.** Replace the
+**Approved target 2026-08-21; WP-04 complete and its Play-core G3 tranche locked.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2187,9 +2187,21 @@ findings, deterministic evidence, and qualification are recorded in
 [`design/sonder-ui-replacement/G2_SHELL_REVIEW.md`](design/sonder-ui-replacement/G2_SHELL_REVIEW.md).
 Only shell-complete `IA-*` and architectural rows close here; responsive,
 destination, save, installed-extension, auth/guest, cutover, and final
-verification requirements remain open. WP-04 is next and owns the Play
-transcript, streaming and generation lifecycle, composer/draft behavior,
-turn actions, story switching, and current story controls required for G3.
+verification requirements remain open.
+
+WP-04's source plan is
+[`superpowers/plans/2026-08-22-sonder-ui-replacement-wp04.md`](superpowers/plans/2026-08-22-sonder-ui-replacement-wp04.md).
+Its selected-story runtime, safe literary transcript, frame-owned drafts,
+streaming generation/stop/retry lifecycle, reroll and narration variants,
+current story/turn actions, explicit empty/offline/recoverable/fatal states,
+responsive 18-case matrix, historical-candidate disposition, review findings,
+deterministic evidence, and qualification are recorded in
+[`design/sonder-ui-replacement/G3_PLAY_REVIEW.md`](design/sonder-ui-replacement/G3_PLAY_REVIEW.md).
+Only the Play-core rows linked in traceability close here; G3 as a whole remains
+open. WP-05 is next and owns Story Tools, conditions, backdrops, ambience, and
+contextual state preservation needed to complete G3 parity. Library lifecycle,
+New Story, settings/editors, auth/guest, installed-extension compatibility,
+cutover, and final qualification remain open under later packages.
 
 ### 2.2 Make stance auditable
 
