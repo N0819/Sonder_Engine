@@ -90,8 +90,8 @@
   .ui-list-row:last-child { border-block-end: 0; }
   .ui-list-row[aria-current="true"], .ui-list-row[aria-selected="true"] { box-shadow: inset 2px 0 var(--ui-color-interactive); background: var(--ui-color-interactive-soft); }
   .ui-list-row__copy { min-inline-size: 0; }
-  .ui-list-row__title { font-weight: 620; overflow-wrap: anywhere; }
-  .ui-list-row__meta { color: var(--ui-color-text-faint); font-size: .8125rem; }
+  .ui-list-row__title { display: block; font-weight: 620; overflow-wrap: anywhere; }
+  .ui-list-row__meta { display: block; color: var(--ui-color-text-faint); font-size: .8125rem; }
 
   .ui-card { padding: var(--ui-space-6); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface-muted); container-type: inline-size; }
   .ui-card[data-state="selected"] { border-color: var(--ui-color-interactive); box-shadow: inset 2px 0 var(--ui-color-interactive); }
@@ -102,6 +102,7 @@
   .ui-notice[data-tone="success"] { border-inline-start-color: var(--ui-color-success); }
   .ui-notice[data-tone="warning"] { border-inline-start-color: var(--ui-color-warning); }
   .ui-notice[data-tone="error"] { border-inline-start-color: var(--ui-color-danger); }
+  :root[data-a11y-status-markers="true"] .ui-notice { grid-template-columns: auto auto minmax(0, 1fr) auto; }
   :root[data-a11y-status-markers="true"] .ui-notice::before { content: attr(data-marker); font-family: var(--ui-font-mono); font-weight: 700; }
 
   .ui-task { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--ui-space-5); align-items: start; }
@@ -136,6 +137,10 @@
     .ui-tabs__tab,
     .ui-menu__item,
     .ui-field__control { min-block-size: var(--ui-target-touch); }
+    .ui-notice,
+    :root[data-a11y-status-markers="true"] .ui-notice { grid-template-columns: auto minmax(0, 1fr); }
+    .ui-notice > .ui-button { grid-column: 2; justify-self: start; }
+    :root[data-a11y-status-markers="true"] .ui-notice::before { display: none; }
   }
 
   @keyframes ui-spin { to { transform: rotate(1turn); } }
