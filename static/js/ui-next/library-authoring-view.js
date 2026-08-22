@@ -4,6 +4,7 @@ import {
   createStoryEditor,
   createStoryImporter,
 } from "./library-editors/story.js?release=wp07.1";
+import { createPersonEditor } from "./library-editors/character-persona.js?release=wp07.1";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({
@@ -54,6 +55,17 @@ export function mountLibraryAuthoring(options = {}) {
     if (rendering) return;
     rendering = true;
     const state = library?.authoring;
+    if (state?.owner && state.status === "dirty"
+        && target.dataset.authoringOwner === state.owner
+        && target.querySelector("[data-story-editor], [data-person-editor]")) {
+      const status = target.querySelector("[data-save-status]");
+      if (status) {
+        status.textContent = statusCopy(state, services.localizer.t);
+        status.dataset.saveStatus = state.status;
+      }
+      rendering = false;
+      return;
+    }
     if (!state || state.status === "loading") {
       target.replaceChildren(stateBlock(
         documentRef,
@@ -83,6 +95,26 @@ export function mountLibraryAuthoring(options = {}) {
       return;
     }
     if (!state.draft || state.kind !== "story") {
+      if (state.draft && (state.kind === "character" || state.kind === "persona")) {
+        const wrapper = node(documentRef, "section", "ui-authoring");
+        const back = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.backToLibrary));
+        back.type = "button";
+        back.addEventListener("click", () => services.library.navigate({
+          type: state.kind, query: { item: state.owner },
+        }));
+        const status = node(documentRef, "p", "ui-authoring__status", statusCopy(state, services.localizer.t));
+        status.setAttribute("role", "status");
+        status.dataset.saveStatus = state.status;
+        wrapper.append(back, status, createPersonEditor({
+          document: documentRef, services, state,
+        }));
+        target.dataset.authoringOwner = state.owner;
+        target.replaceChildren(wrapper);
+        services.localizer.localize(target);
+        onTitle?.(state.draft.identity?.name || "Person editor");
+        rendering = false;
+        return;
+      }
       target.replaceChildren(stateBlock(
         documentRef,
         services.localizer.t(COPY.unavailable),
@@ -111,6 +143,7 @@ export function mountLibraryAuthoring(options = {}) {
       state,
       onRender: () => render(services.store.getSnapshot().library),
     }));
+    target.dataset.authoringOwner = state.owner;
     target.replaceChildren(wrapper);
     services.localizer.localize(target);
     onTitle?.(state.draft.name || "Story editor");

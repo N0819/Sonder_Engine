@@ -28,6 +28,7 @@ const SERVICE_PATHS = Object.freeze({
   libraryAuthoringRuntime: "./library-authoring-runtime.js?release=wp07.1",
   libraryAuthoringView: "./library-authoring-view.js?release=wp07.1",
   libraryStoryEditor: "./library-editors/story.js?release=wp07.1",
+  libraryPersonEditor: "./library-editors/character-persona.js?release=wp07.1",
   navigationState: "./navigation-state.js?release=wp07.1",
   shortcuts: "./shortcuts.js?release=wp07.1",
   goTo: "./go-to.js?release=wp07.1",

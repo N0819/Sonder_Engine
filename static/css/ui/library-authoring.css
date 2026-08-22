@@ -33,6 +33,17 @@
   resize: vertical;
 }
 
+.ui-authoring-form__json {
+  min-height: 22rem;
+  font-family: var(--ui-font-mono);
+  tab-size: 2;
+}
+
+.ui-authoring-advanced {
+  display: grid;
+  gap: var(--ui-space-2);
+}
+
 .ui-authoring-form__actions {
   display: flex;
   flex-wrap: wrap;
