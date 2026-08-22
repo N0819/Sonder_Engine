@@ -318,6 +318,26 @@ def test_long_japanese_shell_copy_and_accessibility_preset_keep_actions_reachabl
     assert all(size >= 50 for size in geometry["targets"])
     opener = page.get_by_role("button", name="目的の場所へすばやく移動", exact=True)
     expect(opener).to_be_visible()
+    compact_geometry = page.evaluate(
+        """() => {
+          const opener = document.querySelector('[data-shell-go-to]').getBoundingClientRect();
+          const destinations = [...document.querySelectorAll('[data-core-destination]')];
+          const labels = destinations.map(node => node.querySelector('.ui-shell__destination-label'));
+          return {
+            openerTop: opener.top,
+            openerBottom: opener.bottom,
+            navigationTop: document.querySelector('.ui-shell__navigation').getBoundingClientRect().top,
+            labelHeights: labels.map(node => node.getBoundingClientRect().height),
+            labelScrollHeights: labels.map(node => node.scrollHeight),
+          };
+        }"""
+    )
+    assert compact_geometry["openerBottom"] <= compact_geometry["navigationTop"]
+    assert compact_geometry["openerTop"] < 96
+    assert max(compact_geometry["labelHeights"]) <= 48
+    assert page.locator(".ui-shell__destination-label").first.evaluate(
+        "node => getComputedStyle(node).webkitLineClamp"
+    ) == "2"
     opener.click()
     expect(page.get_by_role(
         "searchbox", name="移動したい画面や機能の名前を入力して検索"
@@ -430,6 +450,15 @@ def test_go_to_remains_touch_reachable_on_compact_shell(
     opener = page.get_by_role("button", name="Go To", exact=True)
     expect(opener).to_be_visible()
     assert opener.evaluate("node => node.getBoundingClientRect().height") >= 44
+    geometry = page.evaluate(
+        """() => {
+          const opener = document.querySelector('[data-shell-go-to]').getBoundingClientRect();
+          const navigation = document.querySelector('.ui-shell__navigation').getBoundingClientRect();
+          return { openerTop: opener.top, openerBottom: opener.bottom, navigationTop: navigation.top };
+        }"""
+    )
+    assert geometry["openerTop"] < 96
+    assert geometry["openerBottom"] <= geometry["navigationTop"]
     opener.click()
     expect(page.get_by_role("dialog", name="Go To")).to_be_visible()
 
