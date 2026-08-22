@@ -73,6 +73,9 @@ export function createApplicationShell(options = {}) {
     const destination = modules.destinations.CORE_DESTINATIONS.includes(
       shellState.route?.destination,
     ) ? shellState.route.destination : "play";
+    root.dataset.destination = destination;
+    root.dataset.librarySelection = destination === "library" && shellState.route?.query?.item
+      ? "true" : "false";
     const segment = shellState.route?.segments?.[0] || "";
     const copy = modules.destinations.destinationCopy(destination, segment, t);
     parent.textContent = copy.parent;
@@ -94,6 +97,7 @@ export function createApplicationShell(options = {}) {
       : String(shellState.route?.canonicalHash || "");
     if (renderedDestination !== destination || renderedData !== data
         || renderedRouteIdentity !== routeIdentity) {
+      const activeIdentity = documentRef.activeElement?.dataset?.focusIdentity || "";
       const destinationMount = modules.destinations.renderDestination({
         document: documentRef,
         destination,
@@ -121,6 +125,13 @@ export function createApplicationShell(options = {}) {
       }
       extensionHost?.decorate({ route: shellState.route, view });
       services.localizer.localize(view);
+      if (activeIdentity) {
+        const restoredFocus = [...view.querySelectorAll("[data-focus-identity]")]
+          .find(element => element.dataset.focusIdentity === activeIdentity);
+        if (restoredFocus) {
+          target.requestAnimationFrame(() => restoredFocus.focus({ preventScroll: true }));
+        }
+      }
       renderedData = data;
       renderedRouteIdentity = routeIdentity;
     }
@@ -128,7 +139,12 @@ export function createApplicationShell(options = {}) {
     goTo?.sync(shellState.route);
     if (renderedDestination !== destination) {
       renderedDestination = destination;
-      target.requestAnimationFrame(() => heading.focus({ preventScroll: true }));
+      target.requestAnimationFrame(() => {
+        const focusTarget = destination === "library"
+          ? view.querySelector('[data-focus-identity="destination:library"]')
+          : heading;
+        focusTarget?.focus({ preventScroll: true });
+      });
     }
   };
 
