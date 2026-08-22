@@ -126,7 +126,7 @@
 
   @container (max-width: 360px) {
     .ui-list-row { grid-template-columns: minmax(0, 1fr) auto; }
-    .ui-list-row > .ui-icon { display: none; }
+    .ui-list-row > :is(.ui-icon, [data-icon]) { display: none; }
     .ui-card { padding: var(--ui-space-5); }
   }
 
