@@ -2194,1124 +2194,1124 @@
     {
       "method": "GET",
       "path": "/api/extensions",
-      "source": "web/app.py:1773"
+      "source": "web/app.py:1810"
     },
     {
       "method": "POST",
       "path": "/api/extensions/install",
-      "source": "web/app.py:1795"
+      "source": "web/app.py:1832"
     },
     {
       "method": "GET",
       "path": "/api/extensions/ui.css",
-      "source": "web/app.py:1973"
+      "source": "web/app.py:2010"
     },
     {
       "method": "GET",
       "path": "/api/extensions/ui.js",
-      "source": "web/app.py:1964"
+      "source": "web/app.py:2001"
     },
     {
       "method": "GET",
       "path": "/api/extensions/updates",
-      "source": "web/app.py:1816"
+      "source": "web/app.py:1853"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}",
-      "source": "web/app.py:1837"
+      "source": "web/app.py:1874"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/asset/{path:path}",
-      "source": "web/app.py:2028"
+      "source": "web/app.py:2065"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/disable",
-      "source": "web/app.py:1845"
+      "source": "web/app.py:1882"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1941"
+      "source": "web/app.py:1978"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1909"
+      "source": "web/app.py:1946"
     },
     {
       "method": "PUT",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1921"
+      "source": "web/app.py:1958"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:1951"
+      "source": "web/app.py:1988"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:1888"
+      "source": "web/app.py:1925"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/documents/verify",
-      "source": "web/app.py:1899"
+      "source": "web/app.py:1936"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/enable",
-      "source": "web/app.py:1787"
+      "source": "web/app.py:1824"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/state",
-      "source": "web/app.py:1850"
+      "source": "web/app.py:1887"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/ui.css",
-      "source": "web/app.py:1995"
+      "source": "web/app.py:2032"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/ui.js",
-      "source": "web/app.py:1983"
+      "source": "web/app.py:2020"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/update",
-      "source": "web/app.py:1827"
+      "source": "web/app.py:1864"
     }
   ],
   "routes": [
     {
       "method": "GET",
       "path": "/",
-      "source": "web/app.py:518"
+      "source": "web/app.py:555"
     },
     {
       "method": "PUT",
       "path": "/api/active_preset",
-      "source": "web/app.py:1756"
+      "source": "web/app.py:1793"
     },
     {
       "method": "PUT",
       "path": "/api/affect_habituation",
-      "source": "web/app.py:2076"
+      "source": "web/app.py:2113"
     },
     {
       "method": "PUT",
       "path": "/api/agent_models",
-      "source": "web/app.py:1446"
+      "source": "web/app.py:1483"
     },
     {
       "method": "PUT",
       "path": "/api/ambience",
-      "source": "web/app.py:1567"
+      "source": "web/app.py:1604"
     },
     {
       "method": "GET",
       "path": "/api/ambience/library",
-      "source": "web/app.py:6170"
+      "source": "web/app.py:6207"
     },
     {
       "method": "GET",
       "path": "/api/ambience/search",
-      "source": "web/app.py:6149"
+      "source": "web/app.py:6186"
     },
     {
       "method": "PUT",
       "path": "/api/attire_beneath",
-      "source": "web/app.py:2095"
+      "source": "web/app.py:2132"
     },
     {
       "method": "GET",
       "path": "/api/auto_promote",
-      "source": "web/app.py:3656"
+      "source": "web/app.py:3693"
     },
     {
       "method": "PUT",
       "path": "/api/auto_promote",
-      "source": "web/app.py:3669"
+      "source": "web/app.py:3706"
     },
     {
       "method": "PUT",
       "path": "/api/backdrops",
-      "source": "web/app.py:1557"
+      "source": "web/app.py:1594"
     },
     {
       "method": "GET",
       "path": "/api/bootstrap",
-      "source": "web/app.py:1340"
+      "source": "web/app.py:1377"
     },
     {
       "method": "POST",
       "path": "/api/characters",
-      "source": "web/app.py:2551"
+      "source": "web/app.py:2588"
     },
     {
       "method": "POST",
       "path": "/api/characters/generate",
-      "source": "web/app.py:2528"
+      "source": "web/app.py:2565"
     },
     {
       "method": "POST",
       "path": "/api/characters/import",
-      "source": "web/app.py:2576"
+      "source": "web/app.py:2613"
     },
     {
       "method": "DELETE",
       "path": "/api/characters/{cid}",
-      "source": "web/app.py:2702"
+      "source": "web/app.py:2739"
     },
     {
       "method": "PUT",
       "path": "/api/characters/{cid}",
-      "source": "web/app.py:2692"
+      "source": "web/app.py:2729"
     },
     {
       "method": "GET",
       "path": "/api/characters/{cid}/export",
-      "source": "web/app.py:2684"
+      "source": "web/app.py:2721"
     },
     {
       "method": "POST",
       "path": "/api/characters/{cid}/fill_appearance",
-      "source": "web/app.py:2672"
-    },
-    {
-      "method": "POST",
-      "path": "/api/characters/{cid}/fill_psychology",
-      "source": "web/app.py:2643"
-    },
-    {
-      "method": "POST",
-      "path": "/api/characters/{cid}/generate_greeting",
-      "source": "web/app.py:2627"
-    },
-    {
-      "method": "POST",
-      "path": "/api/characters/{cid}/recover_greetings",
-      "source": "web/app.py:2617"
-    },
-    {
-      "method": "POST",
-      "path": "/api/characters/{cid}/start",
-      "source": "web/app.py:2591"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats",
-      "source": "web/app.py:3059"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}",
-      "source": "web/app.py:3294"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}",
-      "source": "web/app.py:3324"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}",
-      "source": "web/app.py:3157"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/abort",
-      "source": "web/app.py:5043"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/ambience/oneshot/{name}",
-      "source": "web/app.py:6179"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/ambience/pin",
-      "source": "web/app.py:6227"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/ambience/pin",
-      "source": "web/app.py:6208"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/ambience/pins",
-      "source": "web/app.py:6203"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/ambience/{signature}.audio",
-      "source": "web/app.py:6133"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/attire",
-      "source": "web/app.py:4379"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/attire",
-      "source": "web/app.py:4390"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/backdrop/{signature}.png",
-      "source": "web/app.py:5973"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/background_config",
-      "source": "web/app.py:4562"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/background_config",
-      "source": "web/app.py:4566"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/characters",
-      "source": "web/app.py:3560"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/characters/{ch}",
-      "source": "web/app.py:3948"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/characters/{ch}/card",
-      "source": "web/app.py:3958"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/characters/{ch}/dialogue_color",
-      "source": "web/app.py:4263"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/memories",
-      "source": "web/app.py:4783"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/characters/{ch}/memories",
-      "source": "web/app.py:4930"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/characters/{ch}/memories/backfill",
-      "source": "web/app.py:4900"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/characters/{ch}/memories/consolidate",
-      "source": "web/app.py:4885"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/memories/coverage",
-      "source": "web/app.py:4921"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/memories/export",
-      "source": "web/app.py:4829"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/characters/{ch}/memories/import",
-      "source": "web/app.py:4840"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/memories/search",
-      "source": "web/app.py:4804"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/memory-context",
-      "source": "web/app.py:4861"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/characters/{ch}/position",
-      "source": "web/app.py:4175"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/private_history",
-      "source": "web/app.py:4244"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/characters/{ch}/private_history",
-      "source": "web/app.py:4254"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/characters/{ch}/relationships",
-      "source": "web/app.py:4874"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/dialogue_config",
-      "source": "web/app.py:4429"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/dialogue_config",
-      "source": "web/app.py:4446"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/dramatic_irony",
-      "source": "web/app.py:3614"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/fixed_points",
-      "source": "web/app.py:4729"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/fixed_points",
-      "source": "web/app.py:4739"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/fixed_points/{anchor_id}",
-      "source": "web/app.py:4761"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/frames",
-      "source": "web/app.py:4683"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/frames",
-      "source": "web/app.py:4687"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/guest_invites",
-      "source": "web/app.py:3829"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/guest_invites",
-      "source": "web/app.py:3809"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/guest_invites/{gid}",
-      "source": "web/app.py:3833"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/language",
-      "source": "web/app.py:3124"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/language",
-      "source": "web/app.py:3141"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/living_world",
-      "source": "web/app.py:4527"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/living_world",
-      "source": "web/app.py:4550"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/lorebook",
-      "source": "web/app.py:3285"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/lorebook",
-      "source": "web/app.py:3264"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/lorebooks",
-      "source": "web/app.py:2179"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/lorebooks",
-      "source": "web/app.py:3188"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/lorebooks/{lid}",
-      "source": "web/app.py:3249"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/lorebooks/{lid}",
-      "source": "web/app.py:3213"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/paradox_policy",
-      "source": "web/app.py:4714"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/paradox_policy",
-      "source": "web/app.py:4718"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/persona_private_history",
-      "source": "web/app.py:4315"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/persona_private_history",
-      "source": "web/app.py:4328"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/personas",
-      "source": "web/app.py:3674"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/personas",
-      "source": "web/app.py:3719"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/chats/{cid}/personas/{pid}",
-      "source": "web/app.py:3745"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/personas/{pid}/station",
-      "source": "web/app.py:3684"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/player_authority",
-      "source": "web/app.py:4646"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/player_authority",
-      "source": "web/app.py:4661"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/player_view",
-      "source": "web/app.py:4623"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/positions",
-      "source": "web/app.py:4108"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/promises",
-      "source": "web/app.py:3618"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/promotable",
-      "source": "web/app.py:3610"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/promotions/confirm",
-      "source": "web/app.py:3636"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/promotions/draft",
-      "source": "web/app.py:3622"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/story_view",
-      "source": "web/app.py:4592"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/style_guide",
-      "source": "web/app.py:4412"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/style_guide",
-      "source": "web/app.py:4418"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/survival",
-      "source": "web/app.py:4016"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/survival",
-      "source": "web/app.py:4021"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/turns",
-      "source": "web/app.py:4983"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chats/{cid}/turns/{idx}/player_input",
-      "source": "web/app.py:3759"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/viewers",
-      "source": "web/app.py:4638"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/vitals",
-      "source": "web/app.py:4073"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chats/{cid}/world",
-      "source": "web/app.py:4333"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/chats/{cid}/world",
-      "source": "web/app.py:4343"
-    },
-    {
-      "method": "GET",
-      "path": "/api/default_prompts",
-      "source": "web/app.py:1686"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/director_fanout_mode",
-      "source": "web/app.py:2052"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/exemplars",
-      "source": "web/app.py:1526"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions",
-      "source": "web/app.py:1773"
-    },
-    {
-      "method": "POST",
-      "path": "/api/extensions/install",
-      "source": "web/app.py:1795"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/ui.css",
-      "source": "web/app.py:1973"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/ui.js",
-      "source": "web/app.py:1964"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/updates",
-      "source": "web/app.py:1816"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/extensions/{eid}",
-      "source": "web/app.py:1837"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/asset/{path:path}",
-      "source": "web/app.py:2028"
-    },
-    {
-      "method": "POST",
-      "path": "/api/extensions/{eid}/disable",
-      "source": "web/app.py:1845"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1941"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1909"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1921"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:1951"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:1888"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/documents/verify",
-      "source": "web/app.py:1899"
-    },
-    {
-      "method": "POST",
-      "path": "/api/extensions/{eid}/enable",
-      "source": "web/app.py:1787"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/state",
-      "source": "web/app.py:1850"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/ui.css",
-      "source": "web/app.py:1995"
-    },
-    {
-      "method": "GET",
-      "path": "/api/extensions/{eid}/ui.js",
-      "source": "web/app.py:1983"
-    },
-    {
-      "method": "POST",
-      "path": "/api/extensions/{eid}/update",
-      "source": "web/app.py:1827"
-    },
-    {
-      "method": "POST",
-      "path": "/api/guest/input",
-      "source": "web/app.py:3923"
-    },
-    {
-      "method": "GET",
-      "path": "/api/guest/state",
-      "source": "web/app.py:3855"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/image_model",
-      "source": "web/app.py:1504"
-    },
-    {
-      "method": "POST",
-      "path": "/api/join",
-      "source": "web/app.py:3839"
-    },
-    {
-      "method": "GET",
-      "path": "/api/language-packs",
-      "source": "web/app.py:3077"
-    },
-    {
-      "method": "GET",
-      "path": "/api/language-packs/{language_id}/ui",
-      "source": "web/app.py:3098"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/lore_entries/{eid}",
-      "source": "web/app.py:3052"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/lore_entries/{eid}",
-      "source": "web/app.py:2980"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/lore_gen_jobs/{job_id}",
-      "source": "web/app.py:2335"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lore_gen_jobs/{job_id}/resume",
-      "source": "web/app.py:2317"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/lorebook_links/{link_id}",
-      "source": "web/app.py:2275"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/lorebook_links/{link_id}",
-      "source": "web/app.py:2261"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks",
-      "source": "web/app.py:2808"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/import",
-      "source": "web/app.py:2371"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/lorebooks/{lid}",
-      "source": "web/app.py:2901"
-    },
-    {
-      "method": "GET",
-      "path": "/api/lorebooks/{lid}",
-      "source": "web/app.py:2789"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/lorebooks/{lid}",
-      "source": "web/app.py:2831"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/apply_plan",
-      "source": "web/app.py:2344"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/entries",
-      "source": "web/app.py:2951"
-    },
-    {
-      "method": "GET",
-      "path": "/api/lorebooks/{lid}/export",
-      "source": "web/app.py:2907"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/generate",
-      "source": "web/app.py:2937"
-    },
-    {
-      "method": "GET",
-      "path": "/api/lorebooks/{lid}/generate_job",
-      "source": "web/app.py:2306"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/generate_plan",
-      "source": "web/app.py:2280"
-    },
-    {
-      "method": "GET",
-      "path": "/api/lorebooks/{lid}/links",
-      "source": "web/app.py:2234"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/links",
-      "source": "web/app.py:2239"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/move",
-      "source": "web/app.py:2161"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/reinterpret",
-      "source": "web/app.py:2924"
-    },
-    {
-      "method": "POST",
-      "path": "/api/lorebooks/{lid}/reorder",
-      "source": "web/app.py:2170"
-    },
-    {
-      "method": "GET",
-      "path": "/api/maintenance/checkpoints",
-      "source": "web/app.py:2118"
-    },
-    {
-      "method": "POST",
-      "path": "/api/maintenance/checkpoints/compact",
-      "source": "web/app.py:2134"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/max_output_tokens",
-      "source": "web/app.py:1653"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/memories/{mid}",
-      "source": "web/app.py:4977"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/memories/{mid}",
-      "source": "web/app.py:4956"
-    },
-    {
-      "method": "GET",
-      "path": "/api/memory/embeddings",
-      "source": "web/app.py:1477"
-    },
-    {
-      "method": "POST",
-      "path": "/api/memory/embeddings/rebuild",
-      "source": "web/app.py:1492"
-    },
-    {
-      "method": "GET",
-      "path": "/api/nsfw",
-      "source": "web/app.py:2043"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/nsfw",
-      "source": "web/app.py:2047"
-    },
-    {
-      "method": "GET",
-      "path": "/api/openrouter/endpoints",
-      "source": "web/app.py:1611"
-    },
-    {
-      "method": "PUT",
-      "path": "/api/openrouter_routing",
-      "source": "web/app.py:1597"
-    },
-    {
-      "method": "POST",
-      "path": "/api/personas",
-      "source": "web/app.py:2731"
-    },
-    {
-      "method": "POST",
-      "path": "/api/personas/generate",
       "source": "web/app.py:2709"
     },
     {
       "method": "POST",
+      "path": "/api/characters/{cid}/fill_psychology",
+      "source": "web/app.py:2680"
+    },
+    {
+      "method": "POST",
+      "path": "/api/characters/{cid}/generate_greeting",
+      "source": "web/app.py:2664"
+    },
+    {
+      "method": "POST",
+      "path": "/api/characters/{cid}/recover_greetings",
+      "source": "web/app.py:2654"
+    },
+    {
+      "method": "POST",
+      "path": "/api/characters/{cid}/start",
+      "source": "web/app.py:2628"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats",
+      "source": "web/app.py:3096"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}",
+      "source": "web/app.py:3331"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}",
+      "source": "web/app.py:3361"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}",
+      "source": "web/app.py:3194"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/abort",
+      "source": "web/app.py:5080"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/ambience/oneshot/{name}",
+      "source": "web/app.py:6216"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/ambience/pin",
+      "source": "web/app.py:6264"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/ambience/pin",
+      "source": "web/app.py:6245"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/ambience/pins",
+      "source": "web/app.py:6240"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/ambience/{signature}.audio",
+      "source": "web/app.py:6170"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/attire",
+      "source": "web/app.py:4416"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/attire",
+      "source": "web/app.py:4427"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/backdrop/{signature}.png",
+      "source": "web/app.py:6010"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/background_config",
+      "source": "web/app.py:4599"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/background_config",
+      "source": "web/app.py:4603"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/characters",
+      "source": "web/app.py:3597"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/characters/{ch}",
+      "source": "web/app.py:3985"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/characters/{ch}/card",
+      "source": "web/app.py:3995"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/characters/{ch}/dialogue_color",
+      "source": "web/app.py:4300"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/memories",
+      "source": "web/app.py:4820"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/characters/{ch}/memories",
+      "source": "web/app.py:4967"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/characters/{ch}/memories/backfill",
+      "source": "web/app.py:4937"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/characters/{ch}/memories/consolidate",
+      "source": "web/app.py:4922"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/memories/coverage",
+      "source": "web/app.py:4958"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/memories/export",
+      "source": "web/app.py:4866"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/characters/{ch}/memories/import",
+      "source": "web/app.py:4877"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/memories/search",
+      "source": "web/app.py:4841"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/memory-context",
+      "source": "web/app.py:4898"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/characters/{ch}/position",
+      "source": "web/app.py:4212"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/private_history",
+      "source": "web/app.py:4281"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/characters/{ch}/private_history",
+      "source": "web/app.py:4291"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/characters/{ch}/relationships",
+      "source": "web/app.py:4911"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/dialogue_config",
+      "source": "web/app.py:4466"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/dialogue_config",
+      "source": "web/app.py:4483"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/dramatic_irony",
+      "source": "web/app.py:3651"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/fixed_points",
+      "source": "web/app.py:4766"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/fixed_points",
+      "source": "web/app.py:4776"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/fixed_points/{anchor_id}",
+      "source": "web/app.py:4798"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/frames",
+      "source": "web/app.py:4720"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/frames",
+      "source": "web/app.py:4724"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/guest_invites",
+      "source": "web/app.py:3866"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/guest_invites",
+      "source": "web/app.py:3846"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/guest_invites/{gid}",
+      "source": "web/app.py:3870"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/language",
+      "source": "web/app.py:3161"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/language",
+      "source": "web/app.py:3178"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/living_world",
+      "source": "web/app.py:4564"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/living_world",
+      "source": "web/app.py:4587"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/lorebook",
+      "source": "web/app.py:3322"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/lorebook",
+      "source": "web/app.py:3301"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/lorebooks",
+      "source": "web/app.py:2216"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/lorebooks",
+      "source": "web/app.py:3225"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/lorebooks/{lid}",
+      "source": "web/app.py:3286"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/lorebooks/{lid}",
+      "source": "web/app.py:3250"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/paradox_policy",
+      "source": "web/app.py:4751"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/paradox_policy",
+      "source": "web/app.py:4755"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/persona_private_history",
+      "source": "web/app.py:4352"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/persona_private_history",
+      "source": "web/app.py:4365"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/personas",
+      "source": "web/app.py:3711"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/personas",
+      "source": "web/app.py:3756"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/chats/{cid}/personas/{pid}",
+      "source": "web/app.py:3782"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/personas/{pid}/station",
+      "source": "web/app.py:3721"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/player_authority",
+      "source": "web/app.py:4683"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/player_authority",
+      "source": "web/app.py:4698"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/player_view",
+      "source": "web/app.py:4660"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/positions",
+      "source": "web/app.py:4145"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/promises",
+      "source": "web/app.py:3655"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/promotable",
+      "source": "web/app.py:3647"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/promotions/confirm",
+      "source": "web/app.py:3673"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/promotions/draft",
+      "source": "web/app.py:3659"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/story_view",
+      "source": "web/app.py:4629"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/style_guide",
+      "source": "web/app.py:4449"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/style_guide",
+      "source": "web/app.py:4455"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/survival",
+      "source": "web/app.py:4053"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/survival",
+      "source": "web/app.py:4058"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/turns",
+      "source": "web/app.py:5020"
+    },
+    {
+      "method": "POST",
+      "path": "/api/chats/{cid}/turns/{idx}/player_input",
+      "source": "web/app.py:3796"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/viewers",
+      "source": "web/app.py:4675"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/vitals",
+      "source": "web/app.py:4110"
+    },
+    {
+      "method": "GET",
+      "path": "/api/chats/{cid}/world",
+      "source": "web/app.py:4370"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/chats/{cid}/world",
+      "source": "web/app.py:4380"
+    },
+    {
+      "method": "GET",
+      "path": "/api/default_prompts",
+      "source": "web/app.py:1723"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/director_fanout_mode",
+      "source": "web/app.py:2089"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/exemplars",
+      "source": "web/app.py:1563"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions",
+      "source": "web/app.py:1810"
+    },
+    {
+      "method": "POST",
+      "path": "/api/extensions/install",
+      "source": "web/app.py:1832"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/ui.css",
+      "source": "web/app.py:2010"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/ui.js",
+      "source": "web/app.py:2001"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/updates",
+      "source": "web/app.py:1853"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/extensions/{eid}",
+      "source": "web/app.py:1874"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/asset/{path:path}",
+      "source": "web/app.py:2065"
+    },
+    {
+      "method": "POST",
+      "path": "/api/extensions/{eid}/disable",
+      "source": "web/app.py:1882"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/extensions/{eid}/document",
+      "source": "web/app.py:1978"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/document",
+      "source": "web/app.py:1946"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/extensions/{eid}/document",
+      "source": "web/app.py:1958"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/extensions/{eid}/documents",
+      "source": "web/app.py:1988"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/documents",
+      "source": "web/app.py:1925"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/documents/verify",
+      "source": "web/app.py:1936"
+    },
+    {
+      "method": "POST",
+      "path": "/api/extensions/{eid}/enable",
+      "source": "web/app.py:1824"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/state",
+      "source": "web/app.py:1887"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/ui.css",
+      "source": "web/app.py:2032"
+    },
+    {
+      "method": "GET",
+      "path": "/api/extensions/{eid}/ui.js",
+      "source": "web/app.py:2020"
+    },
+    {
+      "method": "POST",
+      "path": "/api/extensions/{eid}/update",
+      "source": "web/app.py:1864"
+    },
+    {
+      "method": "POST",
+      "path": "/api/guest/input",
+      "source": "web/app.py:3960"
+    },
+    {
+      "method": "GET",
+      "path": "/api/guest/state",
+      "source": "web/app.py:3892"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/image_model",
+      "source": "web/app.py:1541"
+    },
+    {
+      "method": "POST",
+      "path": "/api/join",
+      "source": "web/app.py:3876"
+    },
+    {
+      "method": "GET",
+      "path": "/api/language-packs",
+      "source": "web/app.py:3114"
+    },
+    {
+      "method": "GET",
+      "path": "/api/language-packs/{language_id}/ui",
+      "source": "web/app.py:3135"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/lore_entries/{eid}",
+      "source": "web/app.py:3089"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/lore_entries/{eid}",
+      "source": "web/app.py:3017"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/lore_gen_jobs/{job_id}",
+      "source": "web/app.py:2372"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lore_gen_jobs/{job_id}/resume",
+      "source": "web/app.py:2354"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/lorebook_links/{link_id}",
+      "source": "web/app.py:2312"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/lorebook_links/{link_id}",
+      "source": "web/app.py:2298"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks",
+      "source": "web/app.py:2845"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/import",
+      "source": "web/app.py:2408"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/lorebooks/{lid}",
+      "source": "web/app.py:2938"
+    },
+    {
+      "method": "GET",
+      "path": "/api/lorebooks/{lid}",
+      "source": "web/app.py:2826"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/lorebooks/{lid}",
+      "source": "web/app.py:2868"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/apply_plan",
+      "source": "web/app.py:2381"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/entries",
+      "source": "web/app.py:2988"
+    },
+    {
+      "method": "GET",
+      "path": "/api/lorebooks/{lid}/export",
+      "source": "web/app.py:2944"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/generate",
+      "source": "web/app.py:2974"
+    },
+    {
+      "method": "GET",
+      "path": "/api/lorebooks/{lid}/generate_job",
+      "source": "web/app.py:2343"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/generate_plan",
+      "source": "web/app.py:2317"
+    },
+    {
+      "method": "GET",
+      "path": "/api/lorebooks/{lid}/links",
+      "source": "web/app.py:2271"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/links",
+      "source": "web/app.py:2276"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/move",
+      "source": "web/app.py:2198"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/reinterpret",
+      "source": "web/app.py:2961"
+    },
+    {
+      "method": "POST",
+      "path": "/api/lorebooks/{lid}/reorder",
+      "source": "web/app.py:2207"
+    },
+    {
+      "method": "GET",
+      "path": "/api/maintenance/checkpoints",
+      "source": "web/app.py:2155"
+    },
+    {
+      "method": "POST",
+      "path": "/api/maintenance/checkpoints/compact",
+      "source": "web/app.py:2171"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/max_output_tokens",
+      "source": "web/app.py:1690"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/memories/{mid}",
+      "source": "web/app.py:5014"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/memories/{mid}",
+      "source": "web/app.py:4993"
+    },
+    {
+      "method": "GET",
+      "path": "/api/memory/embeddings",
+      "source": "web/app.py:1514"
+    },
+    {
+      "method": "POST",
+      "path": "/api/memory/embeddings/rebuild",
+      "source": "web/app.py:1529"
+    },
+    {
+      "method": "GET",
+      "path": "/api/nsfw",
+      "source": "web/app.py:2080"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/nsfw",
+      "source": "web/app.py:2084"
+    },
+    {
+      "method": "GET",
+      "path": "/api/openrouter/endpoints",
+      "source": "web/app.py:1648"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/openrouter_routing",
+      "source": "web/app.py:1634"
+    },
+    {
+      "method": "POST",
+      "path": "/api/personas",
+      "source": "web/app.py:2768"
+    },
+    {
+      "method": "POST",
+      "path": "/api/personas/generate",
+      "source": "web/app.py:2746"
+    },
+    {
+      "method": "POST",
       "path": "/api/personas/import",
-      "source": "web/app.py:2751"
+      "source": "web/app.py:2788"
     },
     {
       "method": "DELETE",
       "path": "/api/personas/{pid}",
-      "source": "web/app.py:2783"
+      "source": "web/app.py:2820"
     },
     {
       "method": "PUT",
       "path": "/api/personas/{pid}",
-      "source": "web/app.py:2774"
+      "source": "web/app.py:2811"
     },
     {
       "method": "GET",
       "path": "/api/personas/{pid}/export",
-      "source": "web/app.py:2765"
+      "source": "web/app.py:2802"
     },
     {
       "method": "POST",
       "path": "/api/personas/{pid}/fill_appearance",
-      "source": "web/app.py:2679"
+      "source": "web/app.py:2716"
     },
     {
       "method": "PUT",
       "path": "/api/prompt_presets",
-      "source": "web/app.py:1697"
+      "source": "web/app.py:1734"
     },
     {
       "method": "POST",
       "path": "/api/prompt_presets/import",
-      "source": "web/app.py:1733"
+      "source": "web/app.py:1770"
     },
     {
       "method": "DELETE",
       "path": "/api/prompt_presets/{name}",
-      "source": "web/app.py:1747"
+      "source": "web/app.py:1784"
     },
     {
       "method": "GET",
       "path": "/api/prompt_presets/{name}/export",
-      "source": "web/app.py:1724"
+      "source": "web/app.py:1761"
     },
     {
       "method": "POST",
       "path": "/api/providers",
-      "source": "web/app.py:2427"
+      "source": "web/app.py:2464"
     },
     {
       "method": "DELETE",
       "path": "/api/providers/{pid}",
-      "source": "web/app.py:2506"
+      "source": "web/app.py:2543"
     },
     {
       "method": "PUT",
       "path": "/api/providers/{pid}",
-      "source": "web/app.py:2434"
+      "source": "web/app.py:2471"
     },
     {
       "method": "GET",
       "path": "/api/providers/{pid}/image_models",
-      "source": "web/app.py:2518"
+      "source": "web/app.py:2555"
     },
     {
       "method": "GET",
       "path": "/api/providers/{pid}/models",
-      "source": "web/app.py:2511"
+      "source": "web/app.py:2548"
     },
     {
       "method": "PUT",
       "path": "/api/providers/{pid}/prompt_cache",
-      "source": "web/app.py:2461"
+      "source": "web/app.py:2498"
     },
     {
       "method": "PUT",
       "path": "/api/reasoning_effort",
-      "source": "web/app.py:1623"
+      "source": "web/app.py:1660"
     },
     {
       "method": "POST",
       "path": "/api/steps/{sid}/activate",
-      "source": "web/app.py:5780"
+      "source": "web/app.py:5817"
     },
     {
       "method": "POST",
       "path": "/api/steps/{sid}/edit",
-      "source": "web/app.py:5770"
+      "source": "web/app.py:5807"
     },
     {
       "method": "POST",
       "path": "/api/steps/{sid}/reroll",
-      "source": "web/app.py:5723"
+      "source": "web/app.py:5760"
     },
     {
       "method": "DELETE",
       "path": "/api/turns/{tid}",
-      "source": "web/app.py:5793"
+      "source": "web/app.py:5830"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/ambience",
-      "source": "web/app.py:6083"
+      "source": "web/app.py:6120"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/ambience",
-      "source": "web/app.py:6100"
+      "source": "web/app.py:6137"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/backdrop",
-      "source": "web/app.py:5930"
+      "source": "web/app.py:5967"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/backdrop",
-      "source": "web/app.py:5945"
+      "source": "web/app.py:5982"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/branch",
-      "source": "web/app.py:5047"
+      "source": "web/app.py:5084"
     },
     {
       "method": "PUT",
       "path": "/api/turns/{tid}/input",
-      "source": "web/app.py:5455"
+      "source": "web/app.py:5492"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/narration",
-      "source": "web/app.py:5540"
+      "source": "web/app.py:5577"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/narration",
-      "source": "web/app.py:5561"
+      "source": "web/app.py:5598"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/pipeline",
-      "source": "web/app.py:5585"
+      "source": "web/app.py:5622"
     },
     {
       "method": "PUT",
       "path": "/api/turns/{tid}/prose",
-      "source": "web/app.py:5470"
+      "source": "web/app.py:5507"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/reroll",
-      "source": "web/app.py:5654"
+      "source": "web/app.py:5691"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/rerun",
-      "source": "web/app.py:5664"
+      "source": "web/app.py:5701"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/resume",
-      "source": "web/app.py:5691"
+      "source": "web/app.py:5728"
     },
     {
       "method": "GET",
       "path": "/api/ui",
-      "source": "web/app.py:3088"
+      "source": "web/app.py:3125"
     },
     {
       "method": "PUT",
       "path": "/api/ui-language",
-      "source": "web/app.py:3113"
+      "source": "web/app.py:3150"
     },
     {
       "method": "GET",
       "path": "/api/updates/check",
-      "source": "web/app.py:2110"
+      "source": "web/app.py:2147"
     },
     {
       "method": "POST",
       "path": "/api/updates/install",
-      "source": "web/app.py:2114"
+      "source": "web/app.py:2151"
     },
     {
       "method": "GET",
       "path": "/guest",
-      "source": "web/app.py:510"
+      "source": "web/app.py:547"
     },
     {
       "method": "GET",
       "path": "/login",
-      "source": "web/app.py:536"
+      "source": "web/app.py:573"
     },
     {
       "method": "POST",
@@ -3336,7 +3336,7 @@
     {
       "method": "GET",
       "path": "/ui-next",
-      "source": "web/app.py:523"
+      "source": "web/app.py:560"
     }
   ],
   "themes": [

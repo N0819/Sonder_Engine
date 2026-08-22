@@ -14,10 +14,10 @@ the requirement or visual reference but not the mechanism.
 | `docs/design/sonder-ui-remaster/13_REQUIREMENTS_TRACEABILITY.md` | adapt | WP-00 | 170 unique rows, 15 families, current work-package ownership, audit corrections |
 | other `docs/design/sonder-ui-remaster/**` | reference | applicable WP | Claims checked against current source; no historical status copied |
 | `static/assets/icons/sonder-icons.svg` | accept into component laboratory | WP-01 | Provenance, SVG lint, accessible consumers, complete inventory |
-| `static/css/remaster-tokens.css` | adapt | WP-01 | Semantic-token inventory, contrast, all component states, no duplicate theme truth |
-| `static/css/remaster-components.css` | adapt | WP-01 | State laboratory, keyboard/touch behavior, reduced compatibility specificity |
-| `static/css/remaster-shell.css` | adapt substantially | WP-03 | No hidden focusables/mobile capability loss/private-ID steady state |
-| `static/css/remaster-entry.css` | adapt | WP-10, WP-11 | Current auth/guest behavior, localization, keyboard/mobile evidence |
+| `candidate/static/css/remaster-tokens.css` | adapt | WP-01 | Semantic-token inventory, contrast, all component states, no duplicate theme truth |
+| `candidate/static/css/remaster-components.css` | adapt | WP-01 | State laboratory, keyboard/touch behavior, reduced compatibility specificity |
+| `candidate/static/css/remaster-shell.css` | adapt substantially | WP-03 | No hidden focusables/mobile capability loss/private-ID steady state |
+| `candidate/static/css/remaster-entry.css` | adapt | WP-10, WP-11 | Current auth/guest behavior, localization, keyboard/mobile evidence |
 | `static/js/remaster/icons.js` | adapt | WP-01 | Explicit icon consumers; bounded heuristic enhancement with retirement owner |
 | `static/js/remaster/accessibility.js` | adapt | WP-01, WP-08 | Reversible preferences and complete component integration |
 | `static/js/remaster/main.js` | adapt | WP-02 | Native bootstrap, explicit teardown, no implicit global/polling dependency |
@@ -35,9 +35,9 @@ the requirement or visual reference but not the mechanism.
 | candidate `static/login.html` | adapt presentation only | WP-10 | Trusted-event, cooldown, lockout, autocomplete, session tests |
 | candidate `static/guest.html` | adapt presentation only | WP-11 | Lightweight entry, join/resume/error/visibility/session behavior |
 | candidate `language_packs/*/ui.json` | merge keys, never replace | every surface WP | Catalog integrity, long/non-English strings, user-data translation boundary |
-| `tests/test_ui_remaster_delivery.py` | reference; adapt only real tripwires | applicable WP | Behavioral tests lead; source checks cannot close workflows |
-| `browser_tests/ui_helpers.py` | adapt | applicable WP | Visible, current-page helpers without hidden-control shortcuts |
-| `browser_tests/test_ui_remaster_layout.py` | adapt | WP-03, WP-14 | Continuous width/zoom/capability evidence beyond selected screenshots |
+| `candidate/tests/test_ui_remaster_delivery.py` | reference; adapt only real tripwires | applicable WP | Behavioral tests lead; source checks cannot close workflows |
+| `candidate/browser_tests/ui_helpers.py` | adapt | applicable WP | Visible, current-page helpers without hidden-control shortcuts |
+| `candidate/browser_tests/test_ui_remaster_layout.py` | adapt | WP-03, WP-14 | Continuous width/zoom/capability evidence beyond selected screenshots |
 | deletion of `static/fonts/*.woff2` | reject | WP-12 | Existing licensed local fonts remain present and usable |
 | candidate extension slot API | reject and redesign | WP-12 | Page-load/hot-load registration, consumers, attribution, permissions, failure, teardown |
 | candidate 500 ms state polling | reject | WP-02 | Zero replacement idle polling; explicit subscription and stale-result tests |

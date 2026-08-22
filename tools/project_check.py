@@ -1930,7 +1930,13 @@ def authority_doc_paths() -> list[Path]:
     advice whenever it was written.
     """
     return [p for p in live_doc_paths()
-            if "experiments" not in p.relative_to(ROOT).parts]
+            if "experiments" not in p.relative_to(ROOT).parts
+            # This is a byte-for-byte vendored design-bible package. Its
+            # manifest paths are intentionally relative to that package's
+            # original root, and rewriting them would falsify the recorded
+            # hashes. Maintained Sonder guidance links into the vendored tree
+            # with repository-relative paths and remains checked normally.
+            and "sonder-ui-bible" not in p.relative_to(ROOT).parts]
 
 
 _BACKTICKED = re.compile(r"`([^`\n]+)`")
