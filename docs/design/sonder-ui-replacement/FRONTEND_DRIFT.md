@@ -1,0 +1,126 @@
+# Frontend drift record
+
+**From candidate baseline:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
+**To current program baseline:** `c99173dd8b7544d6ef7c53e9ed837fc0f841bbcc`  
+**Changed frontend-adjacent paths:** 115  
+**Review classes:** api-contract: 1, engine-or-test-context: 83, frontend-behavior: 2, localization-contract: 2, security-contract: 2, tooling: 25
+
+A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.
+
+| Status | Path | Review class | Candidate collision | Rebase rule |
+|---|---|---|---|---|
+| M | `language_packs/en/cards/linguistics.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `language_packs/en/cards/system_prompts.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `language_packs/en/ui.json` | localization-contract | yes | preserve current behavior; port scoped candidate intent only |
+| M | `language_packs/ja/cards/linguistics.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `language_packs/ja/cards/system_prompts.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `language_packs/ja/ui.json` | localization-contract | yes | preserve current behavior; port scoped candidate intent only |
+| M | `static/js/lorebooks.js` | frontend-behavior | yes | preserve current behavior; port scoped candidate intent only |
+| M | `static/js/settings.js` | frontend-behavior | yes | preserve current behavior; port scoped candidate intent only |
+| A | `tests/charter_fixtures.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/charter_worlds.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/helpers.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_archive_fidelity.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_attire_commit_stored_shape.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_attire_coverage_is_the_partial_axis.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_attire_folds_the_players_keys_too.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_attire_write_gate.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_background_presence_channels.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_background_work_lifecycle.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_author.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_feel.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_figure.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_genre.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_mind.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_move.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_needs.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_practice.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_promote.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_run.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_scale.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_charter_supply.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_checkpoint_restore.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_ckpt_audit_atomicity.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_ckpt_audit_embeddings.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_director_orchestration.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_dispute_addendum.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_dispute_reachability.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_embedding_rebuild.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_embedding_request_chunking.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_embedding_write_repair.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_exact_cue_boundary.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_fable_audit_memory_consolidation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_greetings.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_host_surface_bootstrap.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_host_surface_credentials.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_host_surface_lifecycle.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_host_surface_transport.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_lore_blind_scoring.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_lore_stability.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_lore_write_path_atomicity.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_lore_write_path_plan_scope.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_lore_write_path_png_cap.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_lore_write_path_promotion_firewall.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_lore_write_path_truncation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_lore_write_path_vector_restore.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_lorebook_restore.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_memory_consolidation_scope.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_memory_cue_repair.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_memory_helpers.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_memory_import_firewall.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_memory_restore.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_memory_summary_windows.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_narrator_world_fidelity.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_no_provider_retrieval.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_orientation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ponder_budget.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_project_check_matchers.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_provenance_survives_consolidation.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_recall_confidence.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_recall_depth.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_recall_review.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_repo_hygiene_source_roots.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_schema_integrity_archive_version.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_schema_integrity_fresh_vs_migrated.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_schema_integrity_presence_entity_key.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_schema_integrity_version_guards.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_summary_backfill.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_summary_window_recall.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_time_travel_memory.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_unbidden_memory.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| M | `tests/test_voice_register_stability.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_action_stage.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_carried_reports.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_minted_edges.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_position_floor.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_route_memory.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_sleep_recovery.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_world_model_transient_state.py` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/benchmark_memory_rationality.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| M | `tools/benchmark_memory_temporal.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/benchmark_recall_review.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/cheap_embed_width_sweep.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/fetch_longmemeval.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| M | `tools/generate_code_map.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/generate_synthetic_bank.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/longmemeval_to_bank.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probe_harness.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/baseline_2026-08-19_heldout.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/baseline_2026-08-19_tuned.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/behavioral_chat63_char35.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/heldout_chat44_char42.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/longmemeval_merged.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/synthetic_world1.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/synthetic_world2.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/synthetic_world3.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/synthetic_world4.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/synthetic_world5.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/synthetic_world6.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/memory_probes/tuned_chat63_char35.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/package_edges.json` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| M | `tools/project_check.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/recall_depth.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/repair_memory_cues.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| M | `web/app.py` | api-contract | no | preserve current behavior; port scoped candidate intent only |
+| M | `web/auth_routes.py` | security-contract | no | preserve current behavior; port scoped candidate intent only |
+| M | `web/guest_access.py` | security-contract | no | preserve current behavior; port scoped candidate intent only |

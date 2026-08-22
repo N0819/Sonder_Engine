@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable
@@ -30,6 +31,23 @@ DOM_REFERENCE = re.compile(
 THEME = re.compile(r"data-theme\s*=\s*[\"']([^\"']+)[\"']")
 CUSTOM_PROPERTY = re.compile(r"(?<![\w-])(--[A-Za-z0-9_-]+)\s*:")
 
+DRIFT_PATHS = (
+    "static",
+    "web",
+    "language_packs",
+    "extension_runtime",
+    "extensions",
+    "browser_tests",
+    "tests",
+    "tools",
+)
+CANDIDATE_DIRECT_COLLISIONS = frozenset({
+    "language_packs/en/ui.json",
+    "language_packs/ja/ui.json",
+    "static/js/lorebooks.js",
+    "static/js/settings.js",
+})
+
 
 CAPABILITIES = (
     ("CAP-PLAY-OPEN", "Open and switch stories", "static/js/app.js; /api/chats/{cid}", "WP-04", "required", "replace"),
@@ -39,14 +57,14 @@ CAPABILITIES = (
     ("CAP-PLAY-SCROLLBACK", "Load long transcript scrollback", "static/js/chat.js; scrollback browser tests", "WP-04", "required", "adapt"),
     ("CAP-PLAY-REROLL", "Reroll and select narration variants", "static/js/chat.js; narration variant routes", "WP-04", "required", "adapt"),
     ("CAP-PLAY-FRAMES", "Inspect and select story frames", "frame routes and current dialogs", "WP-05", "required", "adapt"),
-    ("CAP-PLAY-CONDITION", "View player and NPC condition/vitals", "static/js/settings.js; vitals routes", "WP-05", "required", "rebuild"),
+    ("CAP-PLAY-CONDITION", "View player and NPC condition/vitals", "static/js/settings.js; vitals routes; UNBUILT §1.66", "WP-05", "required", "rebuild"),
     ("CAP-PLAY-WORLD", "Inspect world and positions", "world/position routes and dialogs", "WP-05", "required", "replace"),
     ("CAP-PLAY-CAST", "Manage current story cast", "character association routes and dialogs", "WP-05", "required", "replace"),
     ("CAP-PLAY-STYLE", "Edit style guide and dialogue configuration", "style/dialogue routes", "WP-05", "required", "replace"),
     ("CAP-PLAY-ATTIRE", "Inspect and author attire", "attire route and authoring dialog", "WP-05", "required", "replace"),
     ("CAP-PLAY-BACKDROP", "Commission, select, and display backdrops", "static/js/backdrops.js", "WP-05", "required", "adapt"),
     ("CAP-PLAY-AMBIENCE", "Search, pin, play, mute, and stop ambience", "static/js/ambience.js", "WP-05", "required", "adapt"),
-    ("CAP-PLAY-WEATHER", "Render and configure weather effects", "static/js/weather-fx.js", "WP-05", "required", "adapt"),
+    ("CAP-PLAY-WEATHER", "Render and configure weather effects", "static/js/weather-fx.js; UNBUILT §2.11", "WP-05", "required", "adapt"),
     ("CAP-LIB-STORIES", "List, search, create, rename, archive, import, and export stories", "static/js/app.js; chat routes", "WP-06", "required", "rebuild"),
     ("CAP-LIB-CHARACTERS", "List, import, export, edit, and reuse characters", "static/js/editors.js", "WP-06", "required", "rebuild"),
     ("CAP-LIB-PERSONAS", "List, import, export, edit, and reuse personas", "static/js/editors.js", "WP-06", "required", "rebuild"),
@@ -57,7 +75,7 @@ CAPABILITIES = (
     ("CAP-SET-AI", "Configure providers, models, roles, credentials, and generation defaults", "settings.js; provider routes", "WP-08", "required", "replace"),
     ("CAP-SET-CONTENT", "Configure content/data handling and imports/exports", "settings.js", "WP-08", "required", "replace"),
     ("CAP-SET-ADDONS", "Install, configure, enable, disable, update, and retire extensions", "extensions.js; extension routes", "WP-08", "required", "replace"),
-    ("CAP-SET-MAINT", "Run updates, backups, repairs, logs, and maintenance", "settings.js; maintenance routes", "WP-08", "required", "replace"),
+    ("CAP-SET-MAINT", "Run updates, backups, repairs, logs, and maintenance", "settings.js; maintenance routes; UNBUILT §1.58", "WP-08", "required", "replace"),
     ("CAP-SET-ADVANCED", "Edit prompts, parameters, diagnostics, and raw story data", "settings.js", "WP-08", "required", "replace"),
     ("CAP-NEW-DESCRIBE", "Create a generated story from a description", "newChatWizard and chat creation routes", "WP-09", "required", "adapt"),
     ("CAP-NEW-LIBRARY", "Create a story from reusable Library assets", "current creation and association routes", "WP-09", "required", "replace"),
@@ -70,15 +88,31 @@ CAPABILITIES = (
     ("CAP-THEME-CURATED", "Use curated semantic themes without layout changes", "themes.css; themes.js", "WP-12", "required", "replace"),
     ("CAP-THEME-LEGACY", "Retain usable Legacy theme mappings", "themes.css", "WP-12", "required", "adapt"),
     ("CAP-A11Y", "Use keyboard, screen reader, zoom, contrast, motion, and target preferences", "HTML/CSS/browser behavior", "WP-01", "required", "replace"),
-    ("CAP-I18N", "Render UI copy through language packs without translating user data", "static/js/i18n.js; language_packs", "WP-02", "required", "replace"),
+    ("CAP-I18N", "Render UI copy through language packs without translating user data", "static/js/i18n.js; language_packs; UNBUILT §1.48", "WP-02", "required", "replace"),
     ("CAP-EXT-V1", "Run supported extension v1 UI and lifecycle", "static/js/extensions.js; /api/extensions", "WP-12", "required", "preserve"),
-    ("CAP-EXT-V2", "Register versioned routes, slots, tasks, permissions, and teardown", "not currently built", "WP-12", "required", "rebuild"),
+    ("CAP-EXT-V2", "Register versioned routes, slots, tasks, permissions, and teardown", "not currently built; UNBUILT §6.2", "WP-12", "required", "rebuild"),
+    ("CAP-LIVING-WORLD", "Configure built living-world floors without overstating ceilings", "settings.js; LIVING_WORLD_BUILT; UNBUILT §6.8", "WP-08", "required", "replace"),
+    ("CAP-ENGINE-NOTES", "Inspect per-turn engine notes and warnings", "pipeline drawer; UNBUILT §1.11", "WP-04", "required", "adapt"),
     ("CAP-TASKS", "Show persistent async tasks, progress, cancellation, and recovery", "components.js and route-specific surfaces", "WP-02", "required", "rebuild"),
     ("CAP-NOTICES", "Show contextual errors and persistent extension notices", "components.js; extensions.js", "WP-02", "required", "rebuild"),
     ("CAP-ARCHIVE", "Archive, restore, branch, and checkpoint without semantic drift", "server routes and persistence", "WP-07", "required", "preserve"),
     ("CAP-IMPORT-EXPORT", "Round-trip all supported authored records", "route-specific import/export", "WP-07", "required", "preserve"),
     ("CAP-DEFAULT-CUTOVER", "Replace the root entry and delete classic host code", "static/index.html and classic scripts", "WP-13", "required", "remove-at-cutover"),
     ("CAP-RESPONSIVE", "Keep all capabilities through desktop, tablet, phone, landscape, and zoom", "styles.css; browser tests", "WP-14", "required", "rebuild"),
+)
+
+UNBUILT_UI_OWNERSHIP = (
+    ("1.11", "Aggregate/live engine-warning visibility", "WP-04", "Preserve per-turn notes; replacement may add an aggregate reader but does not change warning production."),
+    ("1.48", "Language-pack unfinished work and UI catalog boundary", "WP-02, WP-14", "All replacement copy uses catalogs; Japanese quality and story-language persistence remain their existing engine/product debts."),
+    ("1.58", "Four dead settings keys awaiting live-data migration decision", "WP-08", "Do not expose dead controls or delete stored values; replacement follows the eventual server decision."),
+    ("1.60", "Editable generalization tags overpromise runtime behavior", "WP-07", "Preserve authored values and label truthfully; UI replacement does not invent the missing psychology mechanism."),
+    ("1.66", "Story-column floor can defeat vitals/utility reservation", "WP-05", "Story content, conditions, utilities, and composer never overlap continuously across supported width and zoom states."),
+    ("2.8", "Off-screen life presentation must match built authority", "WP-08", "Read the server ladder and LIVING_WORLD_BUILT; never mark an unbuilt ceiling as operational."),
+    ("2.10", "Session digest is not built", "WP-04", "No replacement control implies a digest exists; add presentation only if an authoritative backend lands separately."),
+    ("2.11", "Weather rendering has bounded visual gaps", "WP-05", "Preserve current rain/snow/lightning behavior and state the limits; do not enlarge engine scope inside UI work."),
+    ("6.2", "Extension residuals include untranslated errors and incomplete teardown", "WP-12", "Own UI catalog reach, v1 adapter, v2 lifecycle, permissions, containment, and teardown; unrelated storage/model-lane debt stays separate."),
+    ("6.8", "Living-world settings can overstate requested ceilings", "WP-08", "Render built floors and effective depth from server authority, including unavailable/partial explanations."),
+    ("6.10", "Extra-body-part editor menus carry deliberately open mechanics", "WP-07", "Preserve all current fields and menus without presenting residual simulation mechanics as built."),
 )
 
 
@@ -178,6 +212,78 @@ def collect_inventory(root: Path) -> dict[str, object]:
         "themes": sorted(themes),
         "ui_catalog_keys": sorted(catalog_keys),
     }
+
+
+def classify_drift_path(path: str) -> str:
+    """Return the review boundary a changed frontend-adjacent path belongs to."""
+
+    path = path.replace("\\", "/")
+    if path.startswith("language_packs/") and path.endswith("/ui.json"):
+        return "localization-contract"
+    if path.startswith("extension_runtime/") or path.startswith("extensions/"):
+        return "extension-contract"
+    if path.startswith("web/auth") or path.startswith("web/guest"):
+        return "security-contract"
+    if path.startswith("web/"):
+        return "api-contract"
+    if path.startswith("static/js/"):
+        return "frontend-behavior"
+    if path.startswith("static/"):
+        return "presentation"
+    if path.startswith("browser_tests/") or path.startswith("tests/test_frontend") or path.startswith("tests/test_ui"):
+        return "behavioral-test"
+    if path.startswith("tools/"):
+        return "tooling"
+    return "engine-or-test-context"
+
+
+def collect_drift(root: Path, from_ref: str, to_ref: str) -> list[dict[str, str]]:
+    command = [
+        "git", "-C", str(root), "diff", "--name-status",
+        f"{from_ref}..{to_ref}", "--", *DRIFT_PATHS,
+    ]
+    output = subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout
+    rows: list[dict[str, str]] = []
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        status = parts[0]
+        path = parts[-1].replace("\\", "/")
+        rows.append({
+            "status": status,
+            "path": path,
+            "classification": classify_drift_path(path),
+            "candidate_collision": "yes" if path in CANDIDATE_DIRECT_COLLISIONS else "no",
+        })
+    return sorted(rows, key=lambda row: row["path"])
+
+
+def write_drift_artifact(output: Path, root: Path, from_ref: str, to_ref: str) -> None:
+    rows = collect_drift(root, from_ref, to_ref)
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["classification"]] = counts.get(row["classification"], 0) + 1
+    summary = ", ".join(f"{name}: {counts[name]}" for name in sorted(counts))
+    _write(
+        output / "FRONTEND_DRIFT.md",
+        "# Frontend drift record\n\n"
+        f"**From candidate baseline:** `{from_ref}`  \n"
+        f"**To current program baseline:** `{to_ref}`  \n"
+        f"**Changed frontend-adjacent paths:** {len(rows)}  \n"
+        f"**Review classes:** {summary}\n\n"
+        "A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.\n\n"
+        + _table(
+            ("Status", "Path", "Review class", "Candidate collision", "Rebase rule"),
+            ((row["status"], f"`{row['path']}`", row["classification"], row["candidate_collision"], "preserve current behavior; port scoped candidate intent only") for row in rows),
+        ),
+    )
 
 
 def _write(path: Path, content: str) -> None:
@@ -285,6 +391,16 @@ def write_artifacts(
         + _table(("Method", "Route", "Source"), ((row["method"], f"`{row['path']}`", f"`{row['source']}`") for row in inventory["extension_routes"])),
     )
 
+    _write(
+        output / "UNBUILT_UI_OWNERSHIP.md",
+        "# UI-related unfinished-work ownership\n\n"
+        "This is a cross-reference only. The cited sections in `docs/UNBUILT.md` remain the authority and are not closed by receiving a UI work-package owner.\n\n"
+        + _table(
+            ("UNBUILT", "Player-facing concern", "Replacement owner", "Replacement boundary"),
+            ((f"`{section}`", concern, owner, boundary) for section, concern, owner, boundary in UNBUILT_UI_OWNERSHIP),
+        ),
+    )
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -292,6 +408,8 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--baseline-head", required=True)
     parser.add_argument("--candidate-head", required=True)
+    parser.add_argument("--drift-from")
+    parser.add_argument("--drift-to")
     args = parser.parse_args()
     output = args.output or args.root / "docs" / "design" / "sonder-ui-replacement"
     write_artifacts(
@@ -300,6 +418,10 @@ def main() -> int:
         baseline_head=args.baseline_head,
         candidate_head=args.candidate_head,
     )
+    if bool(args.drift_from) != bool(args.drift_to):
+        parser.error("--drift-from and --drift-to must be supplied together")
+    if args.drift_from and args.drift_to:
+        write_drift_artifact(output, args.root, args.drift_from, args.drift_to)
     return 0
 
 
