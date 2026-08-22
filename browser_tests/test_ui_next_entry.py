@@ -1,4 +1,4 @@
-"""Browser contract for the isolated replacement development shell."""
+"""Browser contract for the isolated replacement application entry."""
 
 from __future__ import annotations
 
@@ -40,7 +40,8 @@ def test_ui_next_boots_as_an_isolated_native_module(
     assert response is not None and response.ok
     expect(page.locator("html")).to_have_attribute("data-ui-next-ready", "true")
     expect(page.get_by_role("main")).to_be_visible()
-    expect(page.get_by_role("heading", name="Sonder Engine", level=1)).to_be_visible()
+    expect(page.get_by_role("heading", name="Play", level=1)).to_be_visible()
+    expect(page.get_by_role("navigation", name="Primary")).to_be_visible()
     assert page.locator("script[type=module]").count() == 1
     assert page.evaluate("window.__uiNextIntervals") == 0
     assert page.evaluate("Object.hasOwn(window, 'S')") is False

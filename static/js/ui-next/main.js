@@ -3,7 +3,7 @@ import { bootRuntime } from "./bootstrap.js?release=wp03.1";
 
 const root = document.documentElement;
 
-if (!new Set(["development", "runtime-harness"]).has(root.dataset.uiNextEntry)) {
+if (!new Set(["application", "runtime-harness"]).has(root.dataset.uiNextEntry)) {
   throw new Error("Replacement interface entry marker is missing.");
 }
 
