@@ -117,6 +117,9 @@ function settingsProjection(bootstrap) {
     "ui_language",
     "ui_direction",
     "language_error",
+    "default_prompts",
+    "prompt_presets",
+    "active_preset",
   ];
   return Object.fromEntries(
     allowed.filter(key => Object.hasOwn(bootstrap, key)).map(key => [key, bootstrap[key]]),

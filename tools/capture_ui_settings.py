@@ -28,7 +28,7 @@ BOOTSTRAP = {
     "characters": [],
     "personas": [],
     "lorebooks": [],
-    "language_packs": [],
+    "language_packs": [{"id": "en", "name": "English"}],
     "extensions": [],
     "extension_errors": [],
     "extension_lanes": [],
@@ -83,6 +83,14 @@ BOOTSTRAP = {
         "Attribution",
         "Attribution NonCommercial",
     ],
+    "default_prompts": {"director": "Adjudicate the player's action against established world state."},
+    "prompt_presets": {
+        "Measured": {
+            "language": "en",
+            "prompts": {"director": "Resolve only what this beat establishes. Preserve uncertainty."},
+        }
+    },
+    "active_preset": "Measured",
 }
 
 
@@ -149,6 +157,21 @@ def main() -> None:
                     ),
                 ),
             )
+            page.route(
+                "**/api/memory/embeddings",
+                lambda route: route.fulfill(
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "model_key": "openai:text-embedding-3-small",
+                            "total": 263,
+                            "current": 252,
+                            "stale": 11,
+                            "progress": {"running": False},
+                        }
+                    ),
+                ),
+            )
             page.goto(
                 f"http://{host}:{port}/static/ui-next.html#/settings/ai-connections"
             )
@@ -177,6 +200,17 @@ def main() -> None:
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
             page.get_by_text("7 of 128 checkpoints use the legacy format.", exact=True).wait_for()
             page.screenshot(path=OUTPUT / "settings-maintenance-1440.png")
+
+            page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/advanced?tool=prompts")
+            page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+            page.get_by_role("textbox", name="Director prompt").wait_for()
+            page.screenshot(path=OUTPUT / "settings-advanced-prompts-1440.png")
+
+            page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/experience")
+            page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+            page.get_by_role("searchbox", name="Search settings").fill("api key")
+            page.get_by_role("button", name="Provider credentials · AI Connections").wait_for()
+            page.screenshot(path=OUTPUT / "settings-search-1440.png")
             browser.close()
     finally:
         server.shutdown()
