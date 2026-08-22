@@ -1594,6 +1594,9 @@ CREATE INDEX IF NOT EXISTS idx_lorebooks_anchor ON lorebooks(anchor_entity_id)
 
 _local = threading.local()
 _write_lock = threading.RLock()
+_connections_lock = threading.Lock()
+_connections = {}
+_connection_generation = 0
 
 _LOCK_MESSAGES = (
     "database is locked",
@@ -1625,20 +1628,53 @@ def close_connection():
         try:
             c.close()
         finally:
+            with _connections_lock:
+                _connections.pop(id(c), None)
             _local.conn = None
             _local.db_path = None
             _local.tx_depth = 0
 
+
+def close_all_connections():
+    """Close every thread-local handle after request/background work drains.
+
+    SQLite is opened with ``check_same_thread=False``, so the lifespan thread
+    may close idle handles created by Starlette's synchronous-route workers.
+    Advancing the generation makes a reused worker discard its now-closed
+    thread-local object before its next query.
+    """
+    global _connection_generation
+    with _connections_lock:
+        connections = list(_connections.values())
+        _connections.clear()
+        _connection_generation += 1
+    for connection in connections:
+        try:
+            connection.close()
+        except sqlite3.Error:
+            pass
+    _local.conn = None
+    _local.db_path = None
+    _local.tx_depth = 0
+    _local.connection_generation = _connection_generation
+
 def configure(path: str):
-    """Change databases safely, primarily for tests."""
+    """Change databases safely across every thread, primarily for tests."""
     global DB
 
-    close_connection()
     DB = path
+    close_all_connections()
 
 def conn():
     c = getattr(_local, "conn", None)
     current_path = getattr(_local, "db_path", None)
+    local_generation = getattr(_local, "connection_generation", -1)
+
+    if c is not None and local_generation != _connection_generation:
+        c = None
+        _local.conn = None
+        _local.db_path = None
+        _local.tx_depth = 0
 
     if c is not None and current_path != DB:
         close_connection()
@@ -1672,6 +1708,9 @@ def conn():
         _local.conn = c
         _local.db_path = DB
         _local.tx_depth = 0
+        _local.connection_generation = _connection_generation
+        with _connections_lock:
+            _connections[id(c)] = c
 
     return c
 
@@ -1846,6 +1885,8 @@ def _backfill_resource_uids(c):
 
 def init():
     c = sqlite3.connect(DB, timeout=30)
+    with _connections_lock:
+        _connections[id(c)] = c
     c.row_factory = sqlite3.Row
 
     # Checked BEFORE executescript creates schema_meta (CREATE TABLE IF
@@ -1875,6 +1916,8 @@ def init():
         ]
         if preexisting:
             c.close()
+            with _connections_lock:
+                _connections.pop(id(c), None)
             raise UnstampedDatabaseError(
                 f"{DB!r} already contains tables ({', '.join(preexisting[:8])}"
                 f"{', ...' if len(preexisting) > 8 else ''}) but no "
@@ -1887,6 +1930,8 @@ def init():
         current = _get_schema_version(c)
         if current > SCHEMA_VERSION:
             c.close()
+            with _connections_lock:
+                _connections.pop(id(c), None)
             raise SchemaVersionTooNew(
                 f"{DB!r} is at schema version {current}, but this engine "
                 f"only understands up to {SCHEMA_VERSION}. It was written "
@@ -1949,6 +1994,8 @@ def init():
     _backfill_resource_uids(c)
     c.commit()
     c.close()
+    with _connections_lock:
+        _connections.pop(id(c), None)
 
 def get_setting(k, d=None):
     r = q("SELECT value FROM settings WHERE key=?", (k,), one=True)

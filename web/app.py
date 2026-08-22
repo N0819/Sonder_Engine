@@ -152,6 +152,10 @@ from web.auth_routes import (
 # drive-by. Add a specific allow_origins list back only if a real
 # cross-origin caller (a separate dev server on another port, say) is
 # ever actually needed.
+_STARTUP_MAINTENANCE_LOCK = threading.Lock()
+_STARTUP_MAINTENANCE_THREADS: set[threading.Thread] = set()
+
+
 def _reconcile_embedding_bank():
     """Hand the memory bank back to the reconciler, off the startup path.
 
@@ -185,8 +189,32 @@ def _reconcile_embedding_bank():
         except Exception as exc:                     # never fail startup
             print("Sonder Engine: embedding reconcile skipped (%s)." % exc,
                   flush=True)
-    threading.Thread(target=_go, name="startup-embedding-reconcile",
-                     daemon=True).start()
+        finally:
+            # SQLite connections are thread-local. The worker must release its
+            # own handle before shutdown (especially on Windows, where an open
+            # handle prevents the database file from being removed).
+            db.close_connection()
+            with _STARTUP_MAINTENANCE_LOCK:
+                _STARTUP_MAINTENANCE_THREADS.discard(threading.current_thread())
+
+    worker = threading.Thread(
+        target=_go,
+        name="startup-embedding-reconcile",
+        daemon=True,
+    )
+    with _STARTUP_MAINTENANCE_LOCK:
+        _STARTUP_MAINTENANCE_THREADS.add(worker)
+    worker.start()
+
+
+def _drain_startup_maintenance(timeout: float) -> list[str]:
+    """Wait up to ``timeout`` seconds for startup-owned maintenance workers."""
+    deadline = time.monotonic() + max(0.0, timeout)
+    with _STARTUP_MAINTENANCE_LOCK:
+        workers = list(_STARTUP_MAINTENANCE_THREADS)
+    for worker in workers:
+        worker.join(max(0.0, deadline - time.monotonic()))
+    return [worker.name for worker in workers if worker.is_alive()]
 
 
 def _bind_address():
@@ -309,8 +337,10 @@ def _shutdown_engine():
     nothing HANGS; what it costs is a write that was halfway done when the
     interpreter went away.
 
-    Both drains cancel first and wait afterwards, and both REPORT what is still
-    in flight rather than joining it -- a non-empty answer is the ordinary
+    Both scheduler drains cancel first and wait afterwards. Startup maintenance
+    has no repeating queue to cancel, so shutdown joins its tracked worker for
+    the same bounded interval. All three REPORT what is still in flight rather
+    than waiting without a bound -- a non-empty answer is the ordinary
     outcome of a bounded wait, not an error, so it is said at info volume and
     the shutdown continues. `outofband` is reached through its own module-level
     entry point rather than by importing the two modules that own the queues:
@@ -318,14 +348,21 @@ def _shutdown_engine():
     """
     from core import jobs, outofband
 
-    left = list(jobs.drain(timeout=SHUTDOWN_DRAIN_SECONDS))
-    left += list(outofband.drain_all(timeout=SHUTDOWN_DRAIN_SECONDS))
-    if left:
-        print(
-            f"Sonder Engine: {len(left)} background task(s) were still "
-            "finishing at shutdown and were left to their daemon threads.",
-            flush=True,
-        )
+    try:
+        left = list(jobs.drain(timeout=SHUTDOWN_DRAIN_SECONDS))
+        left += list(outofband.drain_all(timeout=SHUTDOWN_DRAIN_SECONDS))
+        left += _drain_startup_maintenance(timeout=SHUTDOWN_DRAIN_SECONDS)
+        if left:
+            print(
+                f"Sonder Engine: {len(left)} background task(s) were still "
+                "finishing at shutdown and were left to their daemon threads.",
+                flush=True,
+            )
+    finally:
+        # Lifespan startup and synchronous request handlers use different
+        # threads. Windows will not release the database file until every one
+        # of those thread-local handles is closed.
+        db.close_all_connections()
 
 
 @asynccontextmanager

@@ -196,6 +196,9 @@ class TestRecomputeEndpointsUseTheTurnsOwnFrame:
             return iter(())
 
         monkeypatch.setattr(app_module, "run_pipeline", fake_run_pipeline)
+        # These are direct route-function tests. Drain inline because there is
+        # no ASGI response consumer to own and join `_stream`'s worker.
+        monkeypatch.setattr(app_module, "_stream", lambda gen: list(gen))
         return calls
 
     def test_reroll_registers_under_the_turns_frame(self, temp_db, monkeypatch):

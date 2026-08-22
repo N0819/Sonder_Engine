@@ -32,6 +32,7 @@ from web import guest_access as guest
 
 
 DAY = 60 * 60 * 24
+_REAL_RECONCILE_EMBEDDING_BANK = app_module._reconcile_embedding_bank
 
 
 @pytest.fixture(autouse=True)
@@ -198,6 +199,36 @@ class TestShutdownStopsBackgroundWork:
         assert "jobs" in called and "outofband" in called
         # A shutdown budget a person will wait through.
         assert called["jobs"] + called["outofband"] <= 5.0
+
+    def test_shutdown_waits_for_startup_maintenance(self, temp_db, monkeypatch):
+        """A startup worker must release its database before lifespan exits."""
+        from mind import memory
+
+        started = threading.Event()
+        shutdown_started = threading.Event()
+        finished = threading.Event()
+
+        def reconcile():
+            started.set()
+            assert shutdown_started.wait(2.0)
+            time.sleep(0.1)
+            finished.set()
+            return {"started": False}
+
+        monkeypatch.setattr(memory, "start_rebuild_if_needed", reconcile)
+        monkeypatch.setattr(
+            app_module, "_reconcile_embedding_bank", _REAL_RECONCILE_EMBEDDING_BANK
+        )
+        monkeypatch.setattr(
+            jobs,
+            "drain",
+            lambda timeout=2.0: shutdown_started.set() or [],
+        )
+
+        with TestClient(app_module.app):
+            assert started.wait(2.0)
+
+        assert finished.is_set(), "shutdown left startup maintenance running"
 
     def test_work_that_will_not_stop_does_not_block_the_exit(
         self, temp_db, monkeypatch
