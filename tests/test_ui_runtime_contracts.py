@@ -79,3 +79,11 @@ def test_catalog_excludes_only_named_replacement_laboratories():
     assert '"ui-next-runtime.html"' in source
     assert '"ui-next/lab.js"' in source
     assert "rglob(\"*.js\")" in source
+
+
+def test_credential_helper_has_no_persistence_or_navigation_surface():
+    source = (RUNTIME / "credentials.js").read_text(encoding="utf-8")
+    assert "localStorage" not in source
+    assert "sessionStorage" not in source
+    assert "location." not in source
+    assert "history." not in source
