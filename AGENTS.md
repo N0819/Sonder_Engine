@@ -15,6 +15,60 @@ Before editing behavior:
 6. Read the corresponding commit function before adding fields that should persist.
 7. Read `docs/guides/TESTING.md`, find the nearest regression test, and run the narrow test first.
 
+### UI replacement orientation
+
+Before changing any player- or host-facing presentation, layout, navigation,
+component geometry, responsive behavior, or frontend interaction:
+
+1. Read [`docs/guides/INTERFACE.md`](docs/guides/INTERFACE.md), the maintained
+   implementation contract.
+2. Read [`docs/guides/UI_REFERENCE.md`](docs/guides/UI_REFERENCE.md), which
+   identifies the approved Design Bible, reference screenshots, reference
+   implementation snapshot, provenance, and the port-versus-adapt rules.
+3. Read the Design Bible foundation chapters and the chapter for the surface
+   being changed. The package index is
+   [`docs/design/sonder-ui-bible/README.md`](docs/design/sonder-ui-bible/README.md).
+4. Open the matching supplied reference screenshots at every applicable
+   desktop, tablet, mobile, narrow, landscape, and short-height state. Do not
+   substitute screenshots of the work in progress for the supplied reference.
+5. Inspect the matching frontend files in the supplied implementation snapshot
+   before writing replacement markup or CSS. Port its visual structure and
+   styling where they satisfy current contracts; preserve current engine-owned
+   behavior through explicit adapters and services.
+6. Read the
+   [`candidate salvage ledger`](docs/design/sonder-ui-replacement/CANDIDATE_SALVAGE_LEDGER.md)
+   for known reusable files and rejected legacy mechanisms, then read the
+   applicable work-package plan and review record.
+
+The supplied screenshot set is the visual composition reference for this full
+replacement. Its shell geometry, region order, density, hierarchy, spacing,
+control grouping, typography, and responsive staging are not suggestions to be
+reinterpreted. The Design Bible explains and generalizes that reference. When
+the two appear ambiguous, reproduce the screenshot and candidate-source
+behavior first, then resolve the ambiguity through the Bible and recorded
+change control.
+
+Do not invent a parallel visual language, change the information architecture,
+or replace a reference composition with a generic dashboard, three-pane CRUD
+layout, card grid, or inspector pattern merely because existing primitives make
+that easier. Reuse includes DOM hierarchy, CSS measurements, responsive
+breakpoints, and interaction staging—not just colors and tokens. A deliberate
+departure requires an approved feature specification or a deviation record
+under the Design Bible change-control process; implementation convenience is
+not a deviation reason.
+
+Reference frontend code is a porting source, not runtime authority. Do not copy
+its stale `window.S` access, polling, synthetic legacy clicks, hidden duplicate
+controls, unsafe HTML insertion, or obsolete server assumptions. Current
+routes, persistence, security, localization, async ownership, accessibility,
+and extension contracts remain authoritative. Adapt those seams without
+redesigning the visible result.
+
+No UI surface is review-ready until a real browser render has been compared
+side by side with its matching supplied screenshot at the same viewport.
+Record both the comparison and any approved differences. Behavioral tests do
+not prove visual conformance; screenshots do not prove behavior.
+
 `docs/CODE_MAP.md` is generated; never hand-edit it. Regenerate and verify it
 after moving or adding functions:
 

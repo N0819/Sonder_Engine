@@ -13,11 +13,20 @@ For interface work, resolve disagreements in this order:
 1. Engine behavior, persistence, security, information-firewall, archive,
    checkpoint, authentication, guest, and extension contracts in current
    source and maintained guides.
-2. This guide and an approved feature-specific interface specification.
-3. The Design Bible's visual, responsive, accessibility, terminology, and
-   interaction rules.
-4. Existing interface presentation.
-5. Historical candidate implementation and screenshots.
+2. This guide, [`UI_REFERENCE.md`](UI_REFERENCE.md), and an approved
+   feature-specific interface specification.
+3. For presentation covered by the supplied evidence, the matching reference
+   screenshots and candidate visual source, interpreted through the Design
+   Bible.
+4. For general and uncovered presentation, the Design Bible's visual,
+   responsive, accessibility, terminology, and interaction rules.
+5. Existing interface presentation.
+
+The current replacement's appearance gains no authority merely by being newer.
+It must reproduce the supplied visual composition unless an approved
+specification or recorded Design Bible deviation says otherwise. Candidate
+behavior is never runtime authority: current server and engine contracts still
+own data and effects.
 
 The approved outcome is a **full replacement** of the classic host and player
 interface. The finished product has one host application, not a permanent
