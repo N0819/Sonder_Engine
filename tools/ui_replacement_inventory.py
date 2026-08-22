@@ -303,6 +303,7 @@ def _storage_for_route(path: str) -> str:
         ("/api/characters", "reusable character records"),
         ("/api/personas", "reusable persona records"),
         ("/api/lorebooks", "lorebook/entry/link records"),
+        ("/api/library", "Library projection and reversible lifecycle metadata"),
         ("/api/extensions", "extension runtime/config/state/documents"),
         ("/api/providers", "provider/model configuration"),
         ("/api/ui", "UI language-pack projection"),

@@ -80,6 +80,16 @@ matrix](../design/sonder-ui-replacement/G3_STORY_TOOLS_REVIEW.md) qualify all
 current-story surfaces without claiming Library lifecycle or later global
 Settings/editor packages.
 
+WP-06 completes Library discovery and lifecycle. One server projection joins
+Stories, reusable Characters, Personas, and Lore with their real story
+associations; archive metadata remains separate from story state. Native
+Library routes own scope, type, search, sort, visibility, selection, and
+responsive detail staging. Existing guarded association routes remain the
+only mutation authority. The [WP-06 review and deterministic browser
+matrix](../design/sonder-ui-replacement/WP06_LIBRARY_REVIEW.md) qualify these
+surfaces without claiming the long-form editors and complete action parity
+owned by WP-07 or the later product-surface gate.
+
 ## Runtime boundary
 
 - The replacement is delivered by the existing FastAPI process, same-origin.
@@ -235,6 +245,36 @@ do not carry persistent work, failures, or choices.
   check and never an idle interval.
 - Mute and Volume remain beside the composer. Provider/source configuration,
   pins, reroll, credits, unlock, and chime stay in the contextual tool.
+
+### Library ownership
+
+- `web/library.py` is the public Library projection. It exposes bounded,
+  public summaries and real story associations without returning authored
+  sheets, private history, runtime state, credentials, or model output.
+- A story scope is a filter over associations. It never relocates a reusable
+  Character, Persona, or Lore source into a story-owned client record.
+  Story-owned lore remains distinguishable from reusable lore and appears only
+  in the relevant story projection.
+- `library-runtime.js` owns route/query requests and mutation receipts. Every
+  result is checked against the captured route and item/story owner; accepted
+  writes refresh the server projection instead of patching a second client
+  association model.
+- Archive and restore use `library_item_state`. Archive changes discovery only;
+  it does not change story membership or enter checkpoints and exports. Delete
+  is a separate explicit operation and has no optimistic undo.
+- Character removal means dormant, not erased. A primary Persona cannot be
+  detached through Library. Lore detach targets the story copy and preserves
+  the reusable origin. The existing running-story guard owns mutation refusal.
+- Undo is in-memory, owner-bound, exact-operation, and expires after twelve
+  seconds. It is offered only for sound inverses; no receipt or story data is
+  persisted in browser-local presentation state.
+- Wide/expansive layouts use category/scope navigation, ledger, and contextual
+  detail. Medium/compact layouts stage the same detail in the Back-owned
+  inspector sheet. Direct selected-item links stage that sheet once; Back
+  returns to the retained ledger rather than reopening it.
+- Only favorites, recents, per-route scroll, and the last safe route enter the
+  versioned local presentation envelope, each with a hard bound. They never
+  make an archived, missing, or server-rejected item appear available.
 
 ## Design-system boundary
 

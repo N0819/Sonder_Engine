@@ -1,7 +1,7 @@
 # Candidate salvage ledger
 
 **Candidate:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
-**Current program baseline:** `c99173dd8b7544d6ef7c53e9ed837fc0f841bbcc`
+**Current program baseline:** `c1efafabee972be40f277b5f23f36e138d2a1d04`
 
 This is a file-level evidence map, not work status. No row authorizes replacing
 a current file with the older candidate snapshot. “Adapt” means port the named
@@ -25,7 +25,7 @@ the requirement or visual reference but not the mechanism.
 | `static/js/remaster/bridge.js` | reject mechanism | WP-02 | Explicit state/actions/events; no `window.S`, polling, DOM clicks, or embedded v2 API |
 | `static/js/remaster/shell.js` | adapt interaction ideas | WP-03, WP-04 | Imported state contracts, draft isolation, no inline layout ownership |
 | `static/js/remaster/inspector.js` | adapted shell; rebuilt hosting complete | WP-03, WP-05 | [G3 Story Tools review](G3_STORY_TOOLS_REVIEW.md): real mounts, route/history lifecycle, pin/resize/focus, staged mobile, and state preservation |
-| `static/js/remaster/library.js` | rebuild behavior, reuse visual reference | WP-06 | Authoritative scopes, search, associations, states, routes, scale behavior |
+| `static/js/remaster/library.js` | rebuilt; visual hierarchy selectively adapted | WP-06 | [WP-06 Library review](WP06_LIBRARY_REVIEW.md): authoritative projection, scopes, search, associations, lifecycle, deep links, responsive detail, and 1,000-item bound |
 | `static/js/remaster/settings.js` | adapt IA, rebuild registry | WP-08 | Global localized search/aliases, control routes, real mounts and save states |
 | candidate `static/index.html` | reference and scoped adaptation only | WP-03, WP-04 | Current script/ID/API/extension behavior preserved; no whole-file copy |
 | candidate `static/js/app.js` New Story changes | adapt | WP-09 | Current warnings/language/provider behavior plus all three journeys |

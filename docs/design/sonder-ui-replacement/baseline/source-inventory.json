@@ -1,5 +1,5 @@
 {
-  "baseline_head": "4e840c3",
+  "baseline_head": "c1efafabee972be40f277b5f23f36e138d2a1d04",
   "browser_globals": [
     {
       "kind": "classic-function",
@@ -2371,20 +2371,20 @@
       ],
       "path": "static/ui-next-lab.html",
       "scripts": [
-        "/static/js/ui/appearance-preflight.js?release=wp05.1",
-        "/static/js/ui/lab.js?release=wp05.1"
+        "/static/js/ui/appearance-preflight.js?release=wp06.1",
+        "/static/js/ui/lab.js?release=wp06.1"
       ],
       "styles": [
-        "/static/css/ui/components.css?release=wp05.1",
-        "/static/css/ui/lab.css?release=wp05.1",
-        "/static/css/ui/reset.css?release=wp05.1",
-        "/static/css/ui/themes/ash-brass.css?release=wp05.1",
-        "/static/css/ui/themes/carbon-signal.css?release=wp05.1",
-        "/static/css/ui/themes/midnight-ink.css?release=wp05.1",
-        "/static/css/ui/themes/parchment-night.css?release=wp05.1",
-        "/static/css/ui/tokens.css?release=wp05.1",
-        "/static/css/ui/typography.css?release=wp05.1",
-        "/static/css/ui/utilities.css?release=wp05.1"
+        "/static/css/ui/components.css?release=wp06.1",
+        "/static/css/ui/lab.css?release=wp06.1",
+        "/static/css/ui/reset.css?release=wp06.1",
+        "/static/css/ui/themes/ash-brass.css?release=wp06.1",
+        "/static/css/ui/themes/carbon-signal.css?release=wp06.1",
+        "/static/css/ui/themes/midnight-ink.css?release=wp06.1",
+        "/static/css/ui/themes/parchment-night.css?release=wp06.1",
+        "/static/css/ui/tokens.css?release=wp06.1",
+        "/static/css/ui/typography.css?release=wp06.1",
+        "/static/css/ui/utilities.css?release=wp06.1"
       ]
     },
     {
@@ -2393,20 +2393,20 @@
       ],
       "path": "static/ui-next-runtime.html",
       "scripts": [
-        "/static/js/ui-next/main.js?release=wp05.1",
-        "/static/js/ui/appearance-preflight.js?release=wp05.1"
+        "/static/js/ui-next/main.js?release=wp06.1",
+        "/static/js/ui/appearance-preflight.js?release=wp06.1"
       ],
       "styles": [
-        "/static/css/ui/components.css?release=wp05.1",
-        "/static/css/ui/reset.css?release=wp05.1",
-        "/static/css/ui/runtime.css?release=wp05.1",
-        "/static/css/ui/themes/ash-brass.css?release=wp05.1",
-        "/static/css/ui/themes/carbon-signal.css?release=wp05.1",
-        "/static/css/ui/themes/midnight-ink.css?release=wp05.1",
-        "/static/css/ui/themes/parchment-night.css?release=wp05.1",
-        "/static/css/ui/tokens.css?release=wp05.1",
-        "/static/css/ui/typography.css?release=wp05.1",
-        "/static/css/ui/utilities.css?release=wp05.1"
+        "/static/css/ui/components.css?release=wp06.1",
+        "/static/css/ui/reset.css?release=wp06.1",
+        "/static/css/ui/runtime.css?release=wp06.1",
+        "/static/css/ui/themes/ash-brass.css?release=wp06.1",
+        "/static/css/ui/themes/carbon-signal.css?release=wp06.1",
+        "/static/css/ui/themes/midnight-ink.css?release=wp06.1",
+        "/static/css/ui/themes/parchment-night.css?release=wp06.1",
+        "/static/css/ui/tokens.css?release=wp06.1",
+        "/static/css/ui/typography.css?release=wp06.1",
+        "/static/css/ui/utilities.css?release=wp06.1"
       ]
     },
     {
@@ -2416,22 +2416,23 @@
       ],
       "path": "static/ui-next.html",
       "scripts": [
-        "/static/js/ui-next/main.js?release=wp05.1",
-        "/static/js/ui/appearance-preflight.js?release=wp05.1"
+        "/static/js/ui-next/main.js?release=wp06.1",
+        "/static/js/ui/appearance-preflight.js?release=wp06.1"
       ],
       "styles": [
-        "/static/css/ui/components.css?release=wp05.1",
-        "/static/css/ui/play.css?release=wp05.1",
-        "/static/css/ui/reset.css?release=wp05.1",
-        "/static/css/ui/shell.css?release=wp05.1",
-        "/static/css/ui/story-tools.css?release=wp05.1",
-        "/static/css/ui/themes/ash-brass.css?release=wp05.1",
-        "/static/css/ui/themes/carbon-signal.css?release=wp05.1",
-        "/static/css/ui/themes/midnight-ink.css?release=wp05.1",
-        "/static/css/ui/themes/parchment-night.css?release=wp05.1",
-        "/static/css/ui/tokens.css?release=wp05.1",
-        "/static/css/ui/typography.css?release=wp05.1",
-        "/static/css/ui/utilities.css?release=wp05.1"
+        "/static/css/ui/components.css?release=wp06.1",
+        "/static/css/ui/library.css?release=wp06.1",
+        "/static/css/ui/play.css?release=wp06.1",
+        "/static/css/ui/reset.css?release=wp06.1",
+        "/static/css/ui/shell.css?release=wp06.1",
+        "/static/css/ui/story-tools.css?release=wp06.1",
+        "/static/css/ui/themes/ash-brass.css?release=wp06.1",
+        "/static/css/ui/themes/carbon-signal.css?release=wp06.1",
+        "/static/css/ui/themes/midnight-ink.css?release=wp06.1",
+        "/static/css/ui/themes/parchment-night.css?release=wp06.1",
+        "/static/css/ui/tokens.css?release=wp06.1",
+        "/static/css/ui/typography.css?release=wp06.1",
+        "/static/css/ui/utilities.css?release=wp06.1"
       ]
     }
   ],
@@ -2439,1124 +2440,1139 @@
     {
       "method": "GET",
       "path": "/api/extensions",
-      "source": "web/app.py:1860"
+      "source": "web/app.py:1862"
     },
     {
       "method": "POST",
       "path": "/api/extensions/install",
-      "source": "web/app.py:1882"
+      "source": "web/app.py:1884"
     },
     {
       "method": "GET",
       "path": "/api/extensions/ui.css",
-      "source": "web/app.py:2060"
+      "source": "web/app.py:2062"
     },
     {
       "method": "GET",
       "path": "/api/extensions/ui.js",
-      "source": "web/app.py:2051"
+      "source": "web/app.py:2053"
     },
     {
       "method": "GET",
       "path": "/api/extensions/updates",
-      "source": "web/app.py:1903"
+      "source": "web/app.py:1905"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}",
-      "source": "web/app.py:1924"
+      "source": "web/app.py:1926"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/asset/{path:path}",
-      "source": "web/app.py:2115"
+      "source": "web/app.py:2117"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/disable",
-      "source": "web/app.py:1932"
+      "source": "web/app.py:1934"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:2028"
+      "source": "web/app.py:2030"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1996"
+      "source": "web/app.py:1998"
     },
     {
       "method": "PUT",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:2008"
+      "source": "web/app.py:2010"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:2038"
+      "source": "web/app.py:2040"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:1975"
+      "source": "web/app.py:1977"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/documents/verify",
-      "source": "web/app.py:1986"
+      "source": "web/app.py:1988"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/enable",
-      "source": "web/app.py:1874"
+      "source": "web/app.py:1876"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/state",
-      "source": "web/app.py:1937"
+      "source": "web/app.py:1939"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/ui.css",
-      "source": "web/app.py:2082"
+      "source": "web/app.py:2084"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/ui.js",
-      "source": "web/app.py:2070"
+      "source": "web/app.py:2072"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/update",
-      "source": "web/app.py:1914"
+      "source": "web/app.py:1916"
     }
   ],
   "routes": [
     {
       "method": "GET",
       "path": "/",
-      "source": "web/app.py:555"
+      "source": "web/app.py:556"
     },
     {
       "method": "PUT",
       "path": "/api/active_preset",
-      "source": "web/app.py:1843"
+      "source": "web/app.py:1845"
     },
     {
       "method": "PUT",
       "path": "/api/affect_habituation",
-      "source": "web/app.py:2163"
+      "source": "web/app.py:2165"
     },
     {
       "method": "PUT",
       "path": "/api/agent_models",
-      "source": "web/app.py:1533"
+      "source": "web/app.py:1535"
     },
     {
       "method": "PUT",
       "path": "/api/ambience",
-      "source": "web/app.py:1654"
+      "source": "web/app.py:1656"
     },
     {
       "method": "GET",
       "path": "/api/ambience/library",
-      "source": "web/app.py:6257"
+      "source": "web/app.py:6267"
     },
     {
       "method": "GET",
       "path": "/api/ambience/search",
-      "source": "web/app.py:6236"
+      "source": "web/app.py:6246"
     },
     {
       "method": "PUT",
       "path": "/api/attire_beneath",
-      "source": "web/app.py:2182"
+      "source": "web/app.py:2184"
     },
     {
       "method": "GET",
       "path": "/api/auto_promote",
-      "source": "web/app.py:3743"
+      "source": "web/app.py:3749"
     },
     {
       "method": "PUT",
       "path": "/api/auto_promote",
-      "source": "web/app.py:3756"
+      "source": "web/app.py:3762"
     },
     {
       "method": "PUT",
       "path": "/api/backdrops",
-      "source": "web/app.py:1644"
+      "source": "web/app.py:1646"
     },
     {
       "method": "GET",
       "path": "/api/bootstrap",
-      "source": "web/app.py:1427"
+      "source": "web/app.py:1429"
     },
     {
       "method": "POST",
       "path": "/api/characters",
-      "source": "web/app.py:2638"
+      "source": "web/app.py:2640"
     },
     {
       "method": "POST",
       "path": "/api/characters/generate",
-      "source": "web/app.py:2615"
+      "source": "web/app.py:2617"
     },
     {
       "method": "POST",
       "path": "/api/characters/import",
-      "source": "web/app.py:2663"
+      "source": "web/app.py:2665"
     },
     {
       "method": "DELETE",
       "path": "/api/characters/{cid}",
-      "source": "web/app.py:2789"
+      "source": "web/app.py:2791"
     },
     {
       "method": "PUT",
       "path": "/api/characters/{cid}",
-      "source": "web/app.py:2779"
+      "source": "web/app.py:2781"
     },
     {
       "method": "GET",
       "path": "/api/characters/{cid}/export",
-      "source": "web/app.py:2771"
+      "source": "web/app.py:2773"
     },
     {
       "method": "POST",
       "path": "/api/characters/{cid}/fill_appearance",
-      "source": "web/app.py:2759"
+      "source": "web/app.py:2761"
     },
     {
       "method": "POST",
       "path": "/api/characters/{cid}/fill_psychology",
-      "source": "web/app.py:2730"
+      "source": "web/app.py:2732"
     },
     {
       "method": "POST",
       "path": "/api/characters/{cid}/generate_greeting",
-      "source": "web/app.py:2714"
+      "source": "web/app.py:2716"
     },
     {
       "method": "POST",
       "path": "/api/characters/{cid}/recover_greetings",
-      "source": "web/app.py:2704"
+      "source": "web/app.py:2706"
     },
     {
       "method": "POST",
       "path": "/api/characters/{cid}/start",
-      "source": "web/app.py:2678"
+      "source": "web/app.py:2680"
     },
     {
       "method": "POST",
       "path": "/api/chats",
-      "source": "web/app.py:3146"
+      "source": "web/app.py:3150"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}",
-      "source": "web/app.py:3381"
+      "source": "web/app.py:3385"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}",
-      "source": "web/app.py:3411"
+      "source": "web/app.py:3416"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}",
-      "source": "web/app.py:3244"
+      "source": "web/app.py:3248"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/abort",
-      "source": "web/app.py:5130"
+      "source": "web/app.py:5140"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/ambience/oneshot/{name}",
-      "source": "web/app.py:6266"
+      "source": "web/app.py:6276"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/ambience/pin",
-      "source": "web/app.py:6314"
+      "source": "web/app.py:6324"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/ambience/pin",
-      "source": "web/app.py:6295"
+      "source": "web/app.py:6305"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/ambience/pins",
-      "source": "web/app.py:6290"
+      "source": "web/app.py:6300"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/ambience/{signature}.audio",
-      "source": "web/app.py:6220"
+      "source": "web/app.py:6230"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/attire",
-      "source": "web/app.py:4466"
+      "source": "web/app.py:4475"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/attire",
-      "source": "web/app.py:4477"
+      "source": "web/app.py:4486"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/backdrop/{signature}.png",
-      "source": "web/app.py:6060"
+      "source": "web/app.py:6070"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/background_config",
-      "source": "web/app.py:4649"
+      "source": "web/app.py:4658"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/background_config",
-      "source": "web/app.py:4653"
+      "source": "web/app.py:4662"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/characters",
-      "source": "web/app.py:3647"
+      "source": "web/app.py:3652"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/characters/{ch}",
-      "source": "web/app.py:4035"
+      "source": "web/app.py:4043"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/characters/{ch}/card",
-      "source": "web/app.py:4045"
+      "source": "web/app.py:4054"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/characters/{ch}/dialogue_color",
-      "source": "web/app.py:4350"
+      "source": "web/app.py:4359"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/memories",
-      "source": "web/app.py:4870"
+      "source": "web/app.py:4880"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/characters/{ch}/memories",
-      "source": "web/app.py:5017"
+      "source": "web/app.py:5027"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/characters/{ch}/memories/backfill",
-      "source": "web/app.py:4987"
+      "source": "web/app.py:4997"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/characters/{ch}/memories/consolidate",
-      "source": "web/app.py:4972"
+      "source": "web/app.py:4982"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/memories/coverage",
-      "source": "web/app.py:5008"
+      "source": "web/app.py:5018"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/memories/export",
-      "source": "web/app.py:4916"
+      "source": "web/app.py:4926"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/characters/{ch}/memories/import",
-      "source": "web/app.py:4927"
+      "source": "web/app.py:4937"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/memories/search",
-      "source": "web/app.py:4891"
+      "source": "web/app.py:4901"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/memory-context",
-      "source": "web/app.py:4948"
+      "source": "web/app.py:4958"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/characters/{ch}/position",
-      "source": "web/app.py:4262"
+      "source": "web/app.py:4271"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/private_history",
-      "source": "web/app.py:4331"
+      "source": "web/app.py:4340"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/characters/{ch}/private_history",
-      "source": "web/app.py:4341"
+      "source": "web/app.py:4350"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/characters/{ch}/relationships",
-      "source": "web/app.py:4961"
+      "source": "web/app.py:4971"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/dialogue_config",
-      "source": "web/app.py:4516"
+      "source": "web/app.py:4525"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/dialogue_config",
-      "source": "web/app.py:4533"
+      "source": "web/app.py:4542"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/dramatic_irony",
-      "source": "web/app.py:3701"
+      "source": "web/app.py:3707"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/fixed_points",
-      "source": "web/app.py:4816"
+      "source": "web/app.py:4825"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/fixed_points",
-      "source": "web/app.py:4826"
+      "source": "web/app.py:4835"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/fixed_points/{anchor_id}",
-      "source": "web/app.py:4848"
+      "source": "web/app.py:4857"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/frames",
-      "source": "web/app.py:4770"
+      "source": "web/app.py:4779"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/frames",
-      "source": "web/app.py:4774"
+      "source": "web/app.py:4783"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/guest_invites",
-      "source": "web/app.py:3916"
+      "source": "web/app.py:3924"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/guest_invites",
-      "source": "web/app.py:3896"
+      "source": "web/app.py:3904"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/guest_invites/{gid}",
-      "source": "web/app.py:3920"
+      "source": "web/app.py:3928"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/language",
-      "source": "web/app.py:3211"
+      "source": "web/app.py:3215"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/language",
-      "source": "web/app.py:3228"
+      "source": "web/app.py:3232"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/living_world",
-      "source": "web/app.py:4614"
+      "source": "web/app.py:4623"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/living_world",
-      "source": "web/app.py:4637"
+      "source": "web/app.py:4646"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/lorebook",
-      "source": "web/app.py:3372"
+      "source": "web/app.py:3376"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/lorebook",
-      "source": "web/app.py:3351"
+      "source": "web/app.py:3355"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/lorebooks",
-      "source": "web/app.py:2266"
+      "source": "web/app.py:2268"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/lorebooks",
-      "source": "web/app.py:3275"
+      "source": "web/app.py:3279"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/lorebooks/{lid}",
-      "source": "web/app.py:3336"
+      "source": "web/app.py:3340"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/lorebooks/{lid}",
-      "source": "web/app.py:3300"
+      "source": "web/app.py:3304"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/paradox_policy",
-      "source": "web/app.py:4801"
+      "source": "web/app.py:4810"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/paradox_policy",
-      "source": "web/app.py:4805"
+      "source": "web/app.py:4814"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/persona_private_history",
-      "source": "web/app.py:4402"
+      "source": "web/app.py:4411"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/persona_private_history",
-      "source": "web/app.py:4415"
+      "source": "web/app.py:4424"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/personas",
-      "source": "web/app.py:3761"
+      "source": "web/app.py:3767"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/personas",
-      "source": "web/app.py:3806"
+      "source": "web/app.py:3812"
     },
     {
       "method": "DELETE",
       "path": "/api/chats/{cid}/personas/{pid}",
-      "source": "web/app.py:3832"
+      "source": "web/app.py:3839"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/personas/{pid}/station",
-      "source": "web/app.py:3771"
+      "source": "web/app.py:3777"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/player_authority",
-      "source": "web/app.py:4733"
+      "source": "web/app.py:4742"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/player_authority",
-      "source": "web/app.py:4748"
+      "source": "web/app.py:4757"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/player_view",
-      "source": "web/app.py:4710"
+      "source": "web/app.py:4719"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/positions",
-      "source": "web/app.py:4195"
+      "source": "web/app.py:4204"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/promises",
-      "source": "web/app.py:3705"
+      "source": "web/app.py:3711"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/promotable",
-      "source": "web/app.py:3697"
+      "source": "web/app.py:3703"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/promotions/confirm",
-      "source": "web/app.py:3723"
+      "source": "web/app.py:3729"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/promotions/draft",
-      "source": "web/app.py:3709"
+      "source": "web/app.py:3715"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/story_view",
-      "source": "web/app.py:4679"
+      "source": "web/app.py:4688"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/style_guide",
-      "source": "web/app.py:4499"
+      "source": "web/app.py:4508"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/style_guide",
-      "source": "web/app.py:4505"
+      "source": "web/app.py:4514"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/survival",
-      "source": "web/app.py:4103"
+      "source": "web/app.py:4112"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/survival",
-      "source": "web/app.py:4108"
+      "source": "web/app.py:4117"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/turns",
-      "source": "web/app.py:5070"
+      "source": "web/app.py:5080"
     },
     {
       "method": "POST",
       "path": "/api/chats/{cid}/turns/{idx}/player_input",
-      "source": "web/app.py:3846"
+      "source": "web/app.py:3854"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/viewers",
-      "source": "web/app.py:4725"
+      "source": "web/app.py:4734"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/vitals",
-      "source": "web/app.py:4160"
+      "source": "web/app.py:4169"
     },
     {
       "method": "GET",
       "path": "/api/chats/{cid}/world",
-      "source": "web/app.py:4420"
+      "source": "web/app.py:4429"
     },
     {
       "method": "PUT",
       "path": "/api/chats/{cid}/world",
-      "source": "web/app.py:4430"
+      "source": "web/app.py:4439"
     },
     {
       "method": "GET",
       "path": "/api/default_prompts",
-      "source": "web/app.py:1773"
+      "source": "web/app.py:1775"
     },
     {
       "method": "PUT",
       "path": "/api/director_fanout_mode",
-      "source": "web/app.py:2139"
+      "source": "web/app.py:2141"
     },
     {
       "method": "PUT",
       "path": "/api/exemplars",
-      "source": "web/app.py:1613"
+      "source": "web/app.py:1615"
     },
     {
       "method": "GET",
       "path": "/api/extensions",
-      "source": "web/app.py:1860"
+      "source": "web/app.py:1862"
     },
     {
       "method": "POST",
       "path": "/api/extensions/install",
-      "source": "web/app.py:1882"
+      "source": "web/app.py:1884"
     },
     {
       "method": "GET",
       "path": "/api/extensions/ui.css",
-      "source": "web/app.py:2060"
+      "source": "web/app.py:2062"
     },
     {
       "method": "GET",
       "path": "/api/extensions/ui.js",
-      "source": "web/app.py:2051"
+      "source": "web/app.py:2053"
     },
     {
       "method": "GET",
       "path": "/api/extensions/updates",
-      "source": "web/app.py:1903"
+      "source": "web/app.py:1905"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}",
-      "source": "web/app.py:1924"
+      "source": "web/app.py:1926"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/asset/{path:path}",
-      "source": "web/app.py:2115"
+      "source": "web/app.py:2117"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/disable",
-      "source": "web/app.py:1932"
+      "source": "web/app.py:1934"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:2028"
+      "source": "web/app.py:2030"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:1996"
+      "source": "web/app.py:1998"
     },
     {
       "method": "PUT",
       "path": "/api/extensions/{eid}/document",
-      "source": "web/app.py:2008"
+      "source": "web/app.py:2010"
     },
     {
       "method": "DELETE",
       "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:2038"
+      "source": "web/app.py:2040"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/documents",
-      "source": "web/app.py:1975"
+      "source": "web/app.py:1977"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/documents/verify",
-      "source": "web/app.py:1986"
+      "source": "web/app.py:1988"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/enable",
-      "source": "web/app.py:1874"
+      "source": "web/app.py:1876"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/state",
-      "source": "web/app.py:1937"
+      "source": "web/app.py:1939"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/ui.css",
-      "source": "web/app.py:2082"
+      "source": "web/app.py:2084"
     },
     {
       "method": "GET",
       "path": "/api/extensions/{eid}/ui.js",
-      "source": "web/app.py:2070"
+      "source": "web/app.py:2072"
     },
     {
       "method": "POST",
       "path": "/api/extensions/{eid}/update",
-      "source": "web/app.py:1914"
+      "source": "web/app.py:1916"
     },
     {
       "method": "POST",
       "path": "/api/guest/input",
-      "source": "web/app.py:4010"
+      "source": "web/app.py:4018"
     },
     {
       "method": "GET",
       "path": "/api/guest/state",
-      "source": "web/app.py:3942"
+      "source": "web/app.py:3950"
     },
     {
       "method": "PUT",
       "path": "/api/image_model",
-      "source": "web/app.py:1591"
+      "source": "web/app.py:1593"
     },
     {
       "method": "POST",
       "path": "/api/join",
-      "source": "web/app.py:3926"
+      "source": "web/app.py:3934"
     },
     {
       "method": "GET",
       "path": "/api/language-packs",
-      "source": "web/app.py:3164"
+      "source": "web/app.py:3168"
     },
     {
       "method": "GET",
       "path": "/api/language-packs/{language_id}/ui",
-      "source": "web/app.py:3185"
+      "source": "web/app.py:3189"
+    },
+    {
+      "method": "GET",
+      "path": "/api/library",
+      "source": "web/library.py:285"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/library/{kind}/{item_id}/archive",
+      "source": "web/library.py:382"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/library/{kind}/{item_id}/archive",
+      "source": "web/library.py:363"
     },
     {
       "method": "DELETE",
       "path": "/api/lore_entries/{eid}",
-      "source": "web/app.py:3139"
+      "source": "web/app.py:3143"
     },
     {
       "method": "PUT",
       "path": "/api/lore_entries/{eid}",
-      "source": "web/app.py:3067"
+      "source": "web/app.py:3071"
     },
     {
       "method": "DELETE",
       "path": "/api/lore_gen_jobs/{job_id}",
-      "source": "web/app.py:2422"
+      "source": "web/app.py:2424"
     },
     {
       "method": "POST",
       "path": "/api/lore_gen_jobs/{job_id}/resume",
-      "source": "web/app.py:2404"
+      "source": "web/app.py:2406"
     },
     {
       "method": "DELETE",
       "path": "/api/lorebook_links/{link_id}",
-      "source": "web/app.py:2362"
+      "source": "web/app.py:2364"
     },
     {
       "method": "PUT",
       "path": "/api/lorebook_links/{link_id}",
-      "source": "web/app.py:2348"
+      "source": "web/app.py:2350"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks",
-      "source": "web/app.py:2895"
+      "source": "web/app.py:2899"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/import",
-      "source": "web/app.py:2458"
+      "source": "web/app.py:2460"
     },
     {
       "method": "DELETE",
       "path": "/api/lorebooks/{lid}",
-      "source": "web/app.py:2988"
+      "source": "web/app.py:2992"
     },
     {
       "method": "GET",
       "path": "/api/lorebooks/{lid}",
-      "source": "web/app.py:2876"
+      "source": "web/app.py:2880"
     },
     {
       "method": "PUT",
       "path": "/api/lorebooks/{lid}",
-      "source": "web/app.py:2918"
+      "source": "web/app.py:2922"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/apply_plan",
-      "source": "web/app.py:2431"
+      "source": "web/app.py:2433"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/entries",
-      "source": "web/app.py:3038"
+      "source": "web/app.py:3042"
     },
     {
       "method": "GET",
       "path": "/api/lorebooks/{lid}/export",
-      "source": "web/app.py:2994"
+      "source": "web/app.py:2998"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/generate",
-      "source": "web/app.py:3024"
+      "source": "web/app.py:3028"
     },
     {
       "method": "GET",
       "path": "/api/lorebooks/{lid}/generate_job",
-      "source": "web/app.py:2393"
+      "source": "web/app.py:2395"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/generate_plan",
-      "source": "web/app.py:2367"
+      "source": "web/app.py:2369"
     },
     {
       "method": "GET",
       "path": "/api/lorebooks/{lid}/links",
-      "source": "web/app.py:2321"
+      "source": "web/app.py:2323"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/links",
-      "source": "web/app.py:2326"
+      "source": "web/app.py:2328"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/move",
-      "source": "web/app.py:2248"
+      "source": "web/app.py:2250"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/reinterpret",
-      "source": "web/app.py:3011"
+      "source": "web/app.py:3015"
     },
     {
       "method": "POST",
       "path": "/api/lorebooks/{lid}/reorder",
-      "source": "web/app.py:2257"
+      "source": "web/app.py:2259"
     },
     {
       "method": "GET",
       "path": "/api/maintenance/checkpoints",
-      "source": "web/app.py:2205"
+      "source": "web/app.py:2207"
     },
     {
       "method": "POST",
       "path": "/api/maintenance/checkpoints/compact",
-      "source": "web/app.py:2221"
+      "source": "web/app.py:2223"
     },
     {
       "method": "PUT",
       "path": "/api/max_output_tokens",
-      "source": "web/app.py:1740"
+      "source": "web/app.py:1742"
     },
     {
       "method": "DELETE",
       "path": "/api/memories/{mid}",
-      "source": "web/app.py:5064"
+      "source": "web/app.py:5074"
     },
     {
       "method": "PUT",
       "path": "/api/memories/{mid}",
-      "source": "web/app.py:5043"
+      "source": "web/app.py:5053"
     },
     {
       "method": "GET",
       "path": "/api/memory/embeddings",
-      "source": "web/app.py:1564"
+      "source": "web/app.py:1566"
     },
     {
       "method": "POST",
       "path": "/api/memory/embeddings/rebuild",
-      "source": "web/app.py:1579"
+      "source": "web/app.py:1581"
     },
     {
       "method": "GET",
       "path": "/api/nsfw",
-      "source": "web/app.py:2130"
+      "source": "web/app.py:2132"
     },
     {
       "method": "PUT",
       "path": "/api/nsfw",
-      "source": "web/app.py:2134"
+      "source": "web/app.py:2136"
     },
     {
       "method": "GET",
       "path": "/api/openrouter/endpoints",
-      "source": "web/app.py:1698"
+      "source": "web/app.py:1700"
     },
     {
       "method": "PUT",
       "path": "/api/openrouter_routing",
-      "source": "web/app.py:1684"
+      "source": "web/app.py:1686"
     },
     {
       "method": "POST",
       "path": "/api/personas",
-      "source": "web/app.py:2818"
+      "source": "web/app.py:2821"
     },
     {
       "method": "POST",
       "path": "/api/personas/generate",
-      "source": "web/app.py:2796"
+      "source": "web/app.py:2799"
     },
     {
       "method": "POST",
       "path": "/api/personas/import",
-      "source": "web/app.py:2838"
+      "source": "web/app.py:2841"
     },
     {
       "method": "DELETE",
       "path": "/api/personas/{pid}",
-      "source": "web/app.py:2870"
+      "source": "web/app.py:2873"
     },
     {
       "method": "PUT",
       "path": "/api/personas/{pid}",
-      "source": "web/app.py:2861"
+      "source": "web/app.py:2864"
     },
     {
       "method": "GET",
       "path": "/api/personas/{pid}/export",
-      "source": "web/app.py:2852"
+      "source": "web/app.py:2855"
     },
     {
       "method": "POST",
       "path": "/api/personas/{pid}/fill_appearance",
-      "source": "web/app.py:2766"
+      "source": "web/app.py:2768"
     },
     {
       "method": "PUT",
       "path": "/api/prompt_presets",
-      "source": "web/app.py:1784"
+      "source": "web/app.py:1786"
     },
     {
       "method": "POST",
       "path": "/api/prompt_presets/import",
-      "source": "web/app.py:1820"
+      "source": "web/app.py:1822"
     },
     {
       "method": "DELETE",
       "path": "/api/prompt_presets/{name}",
-      "source": "web/app.py:1834"
+      "source": "web/app.py:1836"
     },
     {
       "method": "GET",
       "path": "/api/prompt_presets/{name}/export",
-      "source": "web/app.py:1811"
+      "source": "web/app.py:1813"
     },
     {
       "method": "POST",
       "path": "/api/providers",
-      "source": "web/app.py:2514"
+      "source": "web/app.py:2516"
     },
     {
       "method": "DELETE",
       "path": "/api/providers/{pid}",
-      "source": "web/app.py:2593"
+      "source": "web/app.py:2595"
     },
     {
       "method": "PUT",
       "path": "/api/providers/{pid}",
-      "source": "web/app.py:2521"
+      "source": "web/app.py:2523"
     },
     {
       "method": "GET",
       "path": "/api/providers/{pid}/image_models",
-      "source": "web/app.py:2605"
+      "source": "web/app.py:2607"
     },
     {
       "method": "GET",
       "path": "/api/providers/{pid}/models",
-      "source": "web/app.py:2598"
+      "source": "web/app.py:2600"
     },
     {
       "method": "PUT",
       "path": "/api/providers/{pid}/prompt_cache",
-      "source": "web/app.py:2548"
+      "source": "web/app.py:2550"
     },
     {
       "method": "PUT",
       "path": "/api/reasoning_effort",
-      "source": "web/app.py:1710"
+      "source": "web/app.py:1712"
     },
     {
       "method": "POST",
       "path": "/api/steps/{sid}/activate",
-      "source": "web/app.py:5867"
+      "source": "web/app.py:5877"
     },
     {
       "method": "POST",
       "path": "/api/steps/{sid}/edit",
-      "source": "web/app.py:5857"
+      "source": "web/app.py:5867"
     },
     {
       "method": "POST",
       "path": "/api/steps/{sid}/reroll",
-      "source": "web/app.py:5810"
+      "source": "web/app.py:5820"
     },
     {
       "method": "DELETE",
       "path": "/api/turns/{tid}",
-      "source": "web/app.py:5880"
+      "source": "web/app.py:5890"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/ambience",
-      "source": "web/app.py:6170"
+      "source": "web/app.py:6180"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/ambience",
-      "source": "web/app.py:6187"
+      "source": "web/app.py:6197"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/backdrop",
-      "source": "web/app.py:6017"
+      "source": "web/app.py:6027"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/backdrop",
-      "source": "web/app.py:6032"
+      "source": "web/app.py:6042"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/branch",
-      "source": "web/app.py:5134"
+      "source": "web/app.py:5144"
     },
     {
       "method": "PUT",
       "path": "/api/turns/{tid}/input",
-      "source": "web/app.py:5542"
+      "source": "web/app.py:5552"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/narration",
-      "source": "web/app.py:5627"
+      "source": "web/app.py:5637"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/narration",
-      "source": "web/app.py:5648"
+      "source": "web/app.py:5658"
     },
     {
       "method": "GET",
       "path": "/api/turns/{tid}/pipeline",
-      "source": "web/app.py:5672"
+      "source": "web/app.py:5682"
     },
     {
       "method": "PUT",
       "path": "/api/turns/{tid}/prose",
-      "source": "web/app.py:5557"
+      "source": "web/app.py:5567"
     },
     {
       "method": "POST",
       "path": "/api/turns/{tid}/reroll",
-      "source": "web/app.py:5741"
-    },
-    {
-      "method": "POST",
-      "path": "/api/turns/{tid}/rerun",
       "source": "web/app.py:5751"
     },
     {
       "method": "POST",
+      "path": "/api/turns/{tid}/rerun",
+      "source": "web/app.py:5761"
+    },
+    {
+      "method": "POST",
       "path": "/api/turns/{tid}/resume",
-      "source": "web/app.py:5778"
+      "source": "web/app.py:5788"
     },
     {
       "method": "GET",
       "path": "/api/ui",
-      "source": "web/app.py:3175"
+      "source": "web/app.py:3179"
     },
     {
       "method": "PUT",
       "path": "/api/ui-language",
-      "source": "web/app.py:3200"
+      "source": "web/app.py:3204"
     },
     {
       "method": "GET",
       "path": "/api/updates/check",
-      "source": "web/app.py:2197"
+      "source": "web/app.py:2199"
     },
     {
       "method": "POST",
       "path": "/api/updates/install",
-      "source": "web/app.py:2201"
+      "source": "web/app.py:2203"
     },
     {
       "method": "GET",
       "path": "/guest",
-      "source": "web/app.py:547"
+      "source": "web/app.py:548"
     },
     {
       "method": "GET",
       "path": "/login",
-      "source": "web/app.py:589"
+      "source": "web/app.py:590"
     },
     {
       "method": "POST",
@@ -3581,17 +3597,17 @@
     {
       "method": "GET",
       "path": "/ui-next",
-      "source": "web/app.py:560"
+      "source": "web/app.py:561"
     },
     {
       "method": "GET",
       "path": "/ui-next/lab",
-      "source": "web/app.py:574"
+      "source": "web/app.py:575"
     },
     {
       "method": "GET",
       "path": "/ui-next/runtime",
-      "source": "web/app.py:582"
+      "source": "web/app.py:583"
     }
   ],
   "themes": [
@@ -3647,6 +3663,8 @@
     "${mems.length}",
     "${name} (${id})",
     "${name} (player)",
+    "${name} archived.",
+    "${name} restored.",
     "${name}: ${exc}",
     "${n} of this story's memories were written with a different embedding model, so they can only be found by keyword. Set an embeddings provider in API Connections to restore search by meaning.",
     "${operation.op || \"create\"}:",
@@ -3789,17 +3807,23 @@
     "Activate",
     "Active",
     "Active concerns",
+    "Active items",
     "Add a greeting",
     "Add a greeting first.",
     "Add a passage",
     "Add memories from a previously exported file",
     "Add memory",
+    "Add to a story",
+    "Add to favorites",
     "Add to story",
     "Add-on",
     "Add-on View",
     "Add-on Views",
     "Add-ons",
     "Adding\u2026",
+    "Additional player added to the story.",
+    "Additional player removed from the story.",
+    "Additional player restored.",
     "Adds to",
     "Adjust how Sonder Engine works for you.",
     "Adjusts the fiction transcript without enlarging the controls.",
@@ -3816,6 +3840,8 @@
     "Aggregates most providers above under one key -- the same per-role sizing logic applies; OpenRouter's model list shows context length and price per model to help compare.",
     "Air",
     "Aliases",
+    "All",
+    "All Library items",
     "All categories",
     "All sources",
     "Allow only",
@@ -3851,6 +3877,11 @@
     "Applying update\u2026",
     "Applying\u2026",
     "Archive",
+    "Archive character",
+    "Archive lore",
+    "Archive persona",
+    "Archive story",
+    "Archived items",
     "ArrowLeft",
     "ArrowRight",
     "Assumptions",
@@ -3858,6 +3889,7 @@
     "Attach another player:",
     "Attach player",
     "Attach this persona to the chat as an extra player first",
+    "Attached",
     "Attached books are story-local duplicates; updating them changes this story's world, not the global library. The canon book is updated by the mapping agent.",
     "Attention under stress",
     "Attentional capacity (wants / commitments held at once)",
@@ -3920,6 +3952,7 @@
     "Cannot link a lorebook to itself",
     "Cannot move lorebook: would create a cycle",
     "Cannot parent a lorebook to one in a different chat scope",
+    "Canon",
     "Canon lock",
     "Card not found",
     "Cast",
@@ -3933,6 +3966,8 @@
     "Changes saved.",
     "Changing the embeddings model means every memory already ${\"stored has to be re-read through it \u2014 until then those \" + \"memories are found by keyword only. Save, and the engine \" + \"will offer to rebuild.\"}",
     "Changing this one has a consequence the others do not.",
+    "Character",
+    "Character added to the story.",
     "Character created.",
     "Character exported.",
     "Character generation failed: ${exc}",
@@ -3940,6 +3975,8 @@
     "Character memory context",
     "Character not found",
     "Character reinterpretation returned no object",
+    "Character removed from the active cast. Their story history remains.",
+    "Character restored to the active cast.",
     "Character saved.",
     "Character sheet (JSON)",
     "Character \u00b7 {name}",
@@ -3983,9 +4020,11 @@
     "Choose a valid story JSON file first.",
     "Choose an ambience source in Settings before finding room sound.",
     "Choose an image model in Settings before generating backdrops.",
+    "Choose an item",
     "Choose an item when the Library replacement arrives to see its details here.",
     "Choose different ambience",
     "Choose the sound for \u201c${roomName}\u201d",
+    "Chosen story",
     "Clear",
     "Clear all",
     "Clear canon",
@@ -4094,6 +4133,7 @@
     "Create lorebook",
     "Create story",
     "Create your host account",
+    "Created",
     "Creating story branch",
     "Creating\u2026",
     "Creative Commons 0",
@@ -4131,11 +4171,13 @@
     "Delete preset",
     "Delete provider?",
     "Delete story?",
+    "Delete story\u2026",
     "Delete the latest turn?",
     "Delete this lore entry?",
     "Delete this lorebook?",
     "Delete this preset?",
     "Delete this relationship?",
+    "Delete this story",
     "Delete turn",
     "Describe a character in this story \u2014 e.g. \"Yusuf Kessler, a jumpy station engineer hiding what he did during the breach.\"",
     "Describe the",
@@ -4170,6 +4212,7 @@
     "Director \u00b7 interpret & flow plan",
     "Director \u00b7 resolve",
     "Disable",
+    "Disabled",
     "Discard",
     "Discard draft",
     "Discarding\u2026",
@@ -4245,6 +4288,7 @@
     "Export archive",
     "Export failed: ${e.message}",
     "Export selected book",
+    "Export story",
     "Extension \"${owner}\" was disabled after repeated errors.",
     "Extension disabled.",
     "Extension enabled.",
@@ -4435,6 +4479,7 @@
     "Join story",
     "Keep body appearance separate from clothing. Initial outfit seeds the story's live attire state and can change during play.",
     "Keep rooms consistent by revising the room's first image",
+    "Keep story",
     "Keep this book but stop retrieving from it",
     "Keep this role in sync with Default until you edit it directly",
     "Key phrases",
@@ -4465,8 +4510,17 @@
     "Level for the ${AMB_ROLE_LABEL[layer.role] || layer.role} layer",
     "Levels apply straight away. Saving the mix keeps this arrangement for this room \u2014 including through weather and time changes, which the automatic pick follows.",
     "Library",
+    "Library categories and scopes",
+    "Library change saved.",
+    "Library change was not saved",
+    "Library could not be refreshed",
     "Library details",
+    "Library information is temporarily unavailable.",
     "Library inventory",
+    "Library is offline",
+    "Library item",
+    "Library item not found",
+    "Library visibility",
     "Links",
     "Links may cross tree boundaries.",
     "List every file in the local library",
@@ -4497,6 +4551,8 @@
     "Locations and layouts",
     "Long-term autobiographical summary",
     "Lore",
+    "Lore attached to the story.",
+    "Lore detached from the story; the reusable original remains in Library.",
     "Lore embedding provider returned an unexpected vector count",
     "Lore entry content is required",
     "Lore entry generation failed",
@@ -4574,6 +4630,7 @@
     "Move beside current parent",
     "Moved ${person?.name || \"character\"} to ${room ? castRoomLabel(room) : target}.",
     "Multiplayer",
+    "Multiple stories",
     "Mute",
     "Mute ambience",
     "Mute ambience everywhere",
@@ -4614,6 +4671,7 @@
     "Next version of this beat (\u2192)",
     "Next \u2192",
     "No Freesound API key configured.",
+    "No Library items match",
     "No additional players are attached to this story.",
     "No additional players are attached.",
     "No ambience for that signature",
@@ -4651,6 +4709,7 @@
     "No plan operations are selected.",
     "No promises tracked yet.",
     "No prompt preset named ${name}.",
+    "No public summary has been added.",
     "No recorded turns mention ${name} in this chat's events",
     "No relationships yet.",
     "No response stream.",
@@ -4671,6 +4730,8 @@
     "Not consolidated",
     "Not now",
     "Not started: ${r.reason || \"unknown reason\"}",
+    "Not used",
+    "Not used by a story.",
     "Not yet existing",
     "Notes",
     "Nothing happens off screen",
@@ -4717,6 +4778,7 @@
     "Open backdrop settings",
     "Open context panel",
     "Open frame",
+    "Open in Play",
     "Open in workspace",
     "Open one of your recent stories, or browse the Library.",
     "Open the advanced generator after returning to the lorebook workspace",
@@ -4730,6 +4792,7 @@
     "Others",
     "Out-of-date memories ${n} of this story's memories were written with a different embedding model than the one configured now (${bank.model}). Until they are rebuilt they can only be found by keyword and exact phrase \u2014 not by meaning. Rebuilding re-reads them through the current model. It runs in the background, you can keep playing, and it resumes where it left off if it is interrupted.",
     "Overload threshold (0..1)",
+    "Owned",
     "POST",
     "PUT",
     "Pain sensitivity (0..1)",
@@ -4752,6 +4815,7 @@
     "Perception \u00b7 pass 1 \u2014 the act",
     "Perception \u00b7 pass 2 \u2014 the outcome",
     "Permanently delete this memory?",
+    "Persona",
     "Persona created.",
     "Persona exported.",
     "Persona generation failed: ${exc}",
@@ -4810,6 +4874,7 @@
     "Previous version of this beat (\u2190)",
     "Pride triggers",
     "Primary",
+    "Primary persona \u00b7 change in Story setup",
     "Private history",
     "Private history (this story) \u2014 ${p.name}",
     "Private history saved.",
@@ -4842,6 +4907,7 @@
     "Raw plan JSON",
     "Re-reading ${total.toLocaleString()} memories so older ones can be found by meaning again. ${(p.done || 0).toLocaleString()} done \u2014 you can keep playing.",
     "Reading",
+    "Reading the current Library index.",
     "Reading the current engine state.",
     "Reading the library\u2026",
     "Reading what you did",
@@ -4880,7 +4946,10 @@
     "Release notes",
     "Remove",
     "Remove ${ext.name || ext.id}? Its files are deleted. Anything it stored in your stories is KEPT, so reinstalling picks them back up where they left off.",
+    "Remove additional player",
     "Remove backup model",
+    "Remove from active cast",
+    "Remove from favorites",
     "Remove the spaces to send an empty continue turn.",
     "Remove this greeting",
     "Rename",
@@ -4895,7 +4964,13 @@
     "Response limit",
     "Response limit saved: ${r.value + \" tokens.\"}",
     "Restore",
+    "Restore additional player",
+    "Restore character",
+    "Restore lore",
+    "Restore persona",
     "Restore plan",
+    "Restore story",
+    "Restore to active cast",
     "Restoring\u2026",
     "Resume first to finish the rest \u2014 applying this plan retires the run, and the missing entries would then need a fresh generation.",
     "Resume generation",
@@ -4936,6 +5011,7 @@
     "Save preset",
     "Save routing",
     "Saved.",
+    "Saving Library change\u2026",
     "Saving changes\u2026",
     "Saving the story",
     "Saving this turn\u2026",
@@ -4951,7 +5027,9 @@
     "Scene life \u00b7 manager (full)",
     "Scheduled consequence",
     "Scheduled effects only \u2014 arrivals, expiry, news latency",
+    "Scope",
     "Search",
+    "Search Library",
     "Search error:",
     "Search failed.",
     "Search failed:",
@@ -4961,6 +5039,7 @@
     "Seasonal \u2014 real weather, and ground that answers to it",
     "Secrets only this character (and anyone tagged in known_by) knows.",
     "Seen by",
+    "Select a Library row to see its usage and details.",
     "Select or create a story to begin.",
     "Selected",
     "Selected book",
@@ -4999,6 +5078,7 @@
     "Social & Voice",
     "Software updates",
     "Solid tree containment is edited in the tree. These links connect books without making either one a parent.",
+    "Some Library link options were invalid and were safely ignored.",
     "Some information needs your attention.",
     "Something went wrong",
     "Somewhere you have never been still accrues what happened there; first arrival finds the aftermath already in place, in the present tense.",
@@ -5011,6 +5091,7 @@
     "Sonder could not reach the engine. Your work is still here.",
     "Sonder is offline",
     "Sonder received an unreadable response.",
+    "Sort Library",
     "Sound is chosen from the room's spatial description only \u2014 never from who is standing in it. It follows the room, the hour, the weather and any damage; each distinct state is fetched once and cached.",
     "Sound layers",
     "Source",
@@ -5046,13 +5127,16 @@
     "Stored memory vectors",
     "Stories",
     "Stories and play material",
+    "Stories and reusable play material will appear here when they exist.",
     "Stories may promote an extra into a full character on their own.",
+    "Story",
     "Story actions",
     "Story branch created.",
     "Story cast",
     "Story character card saved.",
     "Story eras and participant stationing.",
     "Story exported.",
+    "Story for ${name}",
     "Story frames could not be loaded.",
     "Story import failed",
     "Story imported.",
@@ -5060,13 +5144,16 @@
     "Story language",
     "Story name",
     "Story name?",
+    "Story not found",
     "Story order",
     "Story ready.",
+    "Story scope",
     "Story started.",
     "Story text size",
     "Story threads",
     "Story tools",
     "Story transcript",
+    "Story use",
     "Story workspace is coming next",
     "Story-local lorebook for story ${book.chat_id}",
     "Stress recovery rate (0..1)",
@@ -5095,6 +5182,7 @@
     "That generation was already ${row['status']} and cannot be resumed.",
     "That is the limit \u2014 ${maxCount} passages.",
     "That item is no longer available.",
+    "That item no longer exists or is outside the current Library view.",
     "That link contained an unsafe option. It was not opened.",
     "That link contained too much information. It was not opened.",
     "That link could not be read. Its nearest safe area was opened.",
@@ -5104,6 +5192,8 @@
     "The Director works as a writer plus specialists: one call writes the beat's account, and the six roles below encode only the kinds of change the beat actually contains \u2014 a scene with no clothing change never loads the clothing rules at all. Most beats need about two of the six.",
     "The Director's specialists will run at once.",
     "The Director's specialists will run one at a time.",
+    "The Library change can be undone briefly.",
+    "The Library change was not saved.",
     "The beat's account, and the state_diff channels no specialist owns.",
     "The cap on how much any single call may generate \u2014 not your context window.",
     "The configured embeddings model did not answer.",
@@ -5115,6 +5205,7 @@
     "The earlier request was replaced.",
     "The interface could not start.",
     "The interface stopped unexpectedly. Your saved stories were not changed.",
+    "The last confirmed results remain below.",
     "The latest turn in this frame has an edited or incomplete step. Resume or reroll it before starting a new turn.",
     "The lorebook this generation targeted no longer exists.",
     "The mix",
@@ -5160,6 +5251,7 @@
     "This is a story-specific card. Changes affect this story only. Live mood, stress, memories, relationships, and physical state are preserved. Name and identity are locked because scene history uses them as stable keys.",
     "This is the global permission. Each story also sets how many turns of deliberate interaction it takes, under \ud83d\udcac Dialogue \u2014 0 there means never, whatever this switch says.",
     "This link works once, expires in 30 minutes, and only lets them play as",
+    "This permanently removes the complete story, its history, and story-owned lore. Reusable Characters, Personas, and original Lore remain.",
     "This provider caches the repeated system prompt by default (~90% cheaper on a cache hit). Untick to send it in full every call.",
     "This restores world state, memories, and lorebooks back to how they were at the start of this turn -- including any changes you've made since (world-state edits, lorebook edits, characters added to the cast). Continue?",
     "This restores world state, memories, and lorebooks to the start of this turn, including changes made since then.",
@@ -5198,7 +5290,9 @@
     "Travelers who keep memory continuity",
     "Treat this book as the story's settled truth",
     "Tree depth",
+    "Try a different search, category, or scope.",
     "Try again",
+    "Try again when the engine is available.",
     "Turn",
     "Turn ambience on first (\ud83c\udfa7 beside the input box).",
     "Turn details",
@@ -5211,9 +5305,13 @@
     "Type a destination",
     "Type to search the provider's model list. Open 'advanced' for samplers and backup models.",
     "Unauthorized",
+    "Unavailable item",
     "Underneath descriptions will be left out.",
     "Underneath descriptions will be used.",
     "Underneath, by region",
+    "Undo",
+    "Undo was not accepted.",
+    "Unknown Library type",
     "Unknown lorebook tab.",
     "Unmute",
     "Unmute ambience",
@@ -5221,6 +5319,7 @@
     "Unreachable: not attached to this chat and not under a book that is, so lore retrieval never reads it. Drag it onto a parent book to connect it.",
     "Unresolved threads",
     "Unsaved draft restored from this browser.",
+    "Untitled",
     "Untitled story",
     "Up to ${maxCount} short passages the narrator studies for voice, rhythm and restraint. This is the one part of a turn the narrator is told to IMITATE, so keep them to style: a passage that names people, places or events will be read as facts about your story. Each is capped at ${maxChars} characters, because every passage rides every narrator call for the life of the install.",
     "Up to date.",
@@ -5238,6 +5337,9 @@
     "Use the \u201cunderneath\u201d descriptions authored on cards",
     "Use theme",
     "Use this model \u2014 start writing",
+    "Used by stories",
+    "Used in ${count} stories",
+    "Used in one story",
     "Username",
     "Username is required",
     "Values outside",
@@ -5254,6 +5356,7 @@
     "Voice setting (PRIVATE \u2014 narrator only)",
     "Voice verbosity",
     "Voicing the room",
+    "Waiting for the engine to accept it.",
     "Wearing",
     "Weather",
     "Weather effect",
@@ -5303,6 +5406,7 @@
     "Write the first turn before creating a scene backdrop.",
     "Writing the scene",
     "Written by",
+    "Your Library is empty",
     "Your Sonder session ended. Sign in to continue.",
     "Your action or speech",
     "Your active story",
@@ -5642,6 +5746,7 @@
     "story ${state.selected.chat_id}",
     "story card",
     "storyLanguage",
+    "story_id is required for story scope",
     "taking longer than usual \u2014 it keeps loading and plays when you next settle here",
     "target_book_id is required",
     "technical detail",
