@@ -308,7 +308,7 @@ def capture() -> dict[str, object]:
         session_expiry = page.evaluate(
             """async (base) => {
               const { bootRuntime } = await import(
-                `${base}/static/js/ui-next/bootstrap.js?release=wp05.1`
+                `${base}/static/js/ui-next/bootstrap.js?release=wp06.1`
               );
               const destinations = [];
               let kind = null;

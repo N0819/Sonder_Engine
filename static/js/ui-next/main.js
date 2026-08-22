@@ -1,5 +1,5 @@
-import { initAccessibility } from "../ui/accessibility.js?release=wp05.1";
-import { bootRuntime } from "./bootstrap.js?release=wp05.1";
+import { initAccessibility } from "../ui/accessibility.js?release=wp06.1";
+import { bootRuntime } from "./bootstrap.js?release=wp06.1";
 
 // UI_CATALOG_START: application-start fallback copy used before localization is available.
 const APPLICATION_FAILURE_COPY = Object.freeze({

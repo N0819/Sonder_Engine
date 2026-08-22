@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
 export const CORE_DESTINATIONS = Object.freeze(["play", "library", "settings"]);
 
@@ -88,44 +88,6 @@ function playView(documentRef, state, t, services, modules) {
   });
 }
 
-function libraryView(documentRef, state, t) {
-  const library = state.library || {};
-  if (library.status === "unrequested" || library.status === "loading") {
-    return emptyState(
-      documentRef,
-      t(PLACEHOLDER_COPY.loadingLibrary),
-      t(PLACEHOLDER_COPY.readingEngine),
-    );
-  }
-  const counts = [
-    [PLACEHOLDER_COPY.stories, library.chats],
-    [PLACEHOLDER_COPY.characters, library.characters],
-    [PLACEHOLDER_COPY.personas, library.personas],
-    [PLACEHOLDER_COPY.lore, library.lorebooks],
-  ];
-  const section = element(documentRef, "section", "ui-shell-placeholder");
-  section.append(
-    element(documentRef, "h2", "ui-heading ui-heading--2", t(PLACEHOLDER_COPY.inventory)),
-    element(
-      documentRef,
-      "p",
-      "ui-muted",
-      t(PLACEHOLDER_COPY.inventoryDetail),
-    ),
-  );
-  const list = element(documentRef, "dl", "ui-shell-counts");
-  for (const [label, items] of counts) {
-    const item = element(documentRef, "div", "ui-shell-count");
-    item.append(
-      element(documentRef, "dt", "ui-shell-count__label", t(label)),
-      element(documentRef, "dd", "ui-shell-count__value", String(Array.isArray(items) ? items.length : 0)),
-    );
-    list.append(item);
-  }
-  section.append(list);
-  return section;
-}
-
 function settingsView(documentRef, _state, t) {
   const section = element(documentRef, "section", "ui-shell-placeholder");
   section.append(
@@ -172,7 +134,12 @@ export function renderDestination({
   modules,
 }) {
   const safe = CORE_DESTINATIONS.includes(destination) ? destination : "play";
-  if (safe === "library") return libraryView(documentRef, state, t);
+  if (safe === "library") return modules.libraryView.createLibraryView({
+    document: documentRef,
+    state,
+    t,
+    services,
+  });
   if (safe === "settings") return settingsView(documentRef, state, t);
   return playView(documentRef, state, t, services, modules);
 }

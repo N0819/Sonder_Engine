@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
-import { button, element, replaceLocalized, stateMessage } from "./shared.js?release=wp05.1";
+import { button, element, replaceLocalized, stateMessage } from "./shared.js?release=wp06.1";
 
 // UI_CATALOG_START: shared explicit-save document controls.
 const COPY = Object.freeze({

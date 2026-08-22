@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
-import { element, errorState, fieldLabel, frameQuery, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
-import { mountDocumentEditor } from "./document-editor.js?release=wp05.1";
+import { element, errorState, fieldLabel, frameQuery, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp06.1";
+import { mountDocumentEditor } from "./document-editor.js?release=wp06.1";
 
 // UI_CATALOG_START: Style tool copy and field labels.
 const COPY = Object.freeze({

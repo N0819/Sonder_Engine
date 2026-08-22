@@ -27,6 +27,8 @@ MODULES = (
     "extensions-v1.js",
     "destinations.js",
     "inspector-host.js",
+    "library-runtime.js",
+    "library-view.js",
     "navigation-state.js",
     "shortcuts.js",
     "go-to.js",
@@ -55,7 +57,7 @@ def test_runtime_modules_have_one_literal_release_and_no_classic_bridge():
         assert match, name
         releases.add(match.group(1))
 
-    assert releases == {"wp05.1"}
+    assert releases == {"wp06.1"}
     assert "setInterval(" not in combined
     assert "MutationObserver" not in combined
     assert "window.S " not in combined
@@ -79,8 +81,8 @@ def test_v1_adapter_is_the_only_runtime_global_assignment():
 
 def test_runtime_entry_names_the_versioned_graph_and_no_classic_assets():
     html = (ROOT / "static" / "ui-next.html").read_text(encoding="utf-8")
-    assert "?release=wp05.1" in html
-    assert 'data-ui-next-version="wp05.1"' in html
+    assert "?release=wp06.1" in html
+    assert 'data-ui-next-version="wp06.1"' in html
     assert "/static/js/app.js" not in html
     assert "/static/js/utils.js" not in html
     assert "/static/js/extensions.js" not in html

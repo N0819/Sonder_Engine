@@ -41,7 +41,7 @@ def test_library_runtime_owns_projection_requests_and_bounded_local_state():
 def test_library_view_is_semantic_bounded_and_classic_independent():
     source = (RUNTIME / "library-view.js").read_text(encoding="utf-8")
     assert "slice(0, 100)" in source
-    assert "dataLibraryLedger" in source
+    assert "dataset.libraryLedger" in source
     assert "aria-current" in source
     assert "Not used" in source
     assert "Used in" in source

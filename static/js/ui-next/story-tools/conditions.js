@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
-import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp05.1";
+import { element, errorState, frameQuery, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=wp06.1";
 
 const VITALS = Object.freeze([
   Object.freeze({ key: "air", label: "Air", invert: false }),
