@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
 // UI_CATALOG_START: player-facing Play workflow copy.
 const COPY = Object.freeze({

@@ -1,0 +1,90 @@
+export const MODULE_RELEASE = "wp05.1";
+
+// UI_CATALOG_START: Story Tool platform states shown before family modules land.
+const COPY = Object.freeze({
+  list: "Story tools",
+  chooseStory: "Choose a story to use Story Tools.",
+  platformReady: "This current-story tool is ready for its dedicated controls.",
+});
+// UI_CATALOG_END
+
+function element(documentRef, tag, className = "", text = "") {
+  const node = documentRef.createElement(tag);
+  if (className) node.className = className;
+  if (text) node.textContent = text;
+  return node;
+}
+
+function button(documentRef, label) {
+  const node = element(documentRef, "button", "ui-story-tools__item ui-button ui-button--quiet");
+  node.type = "button";
+  node.setAttribute("aria-label", label);
+  return node;
+}
+
+export function mountStoryTools(options = {}) {
+  const { services, registry, target } = options;
+  const documentRef = options.document || document;
+  if (!services?.store || !services?.storyTools || !registry || !target) {
+    throw new TypeError("Story Tool presentation requires a target and runtime.");
+  }
+  const t = services.localizer.t;
+  const root = element(documentRef, "section", "ui-story-tools");
+  root.dataset.storyTools = "true";
+  const list = element(documentRef, "nav", "ui-story-tools__list");
+  list.dataset.storyToolList = "true";
+  list.setAttribute("aria-label", t(COPY.list));
+  const panel = element(documentRef, "section", "ui-story-tools__panel");
+  panel.dataset.storyToolPanel = "true";
+  const controls = new Map();
+
+  for (const tool of registry.STORY_TOOLS) {
+    const control = button(documentRef, t(tool.label));
+    control.dataset.storyTool = tool.id;
+    const index = element(documentRef, "span", "ui-story-tools__index", String(tool.index).padStart(2, "0"));
+    index.setAttribute("aria-hidden", "true");
+    control.append(index, element(documentRef, "span", "ui-story-tools__label", t(tool.label)));
+    control.addEventListener("click", () => services.storyTools.open(tool.id, {
+      preserveLayers: true,
+    }));
+    controls.set(tool.id, control);
+    list.append(control);
+  }
+
+  const render = state => {
+    const active = registry.resolveStoryTool(state.inspector?.toolId);
+    for (const [id, control] of controls) {
+      if (id === active.id) control.setAttribute("aria-current", "page");
+      else control.removeAttribute("aria-current");
+    }
+    const heading = element(documentRef, "h3", "ui-heading ui-heading--3", t(active.label));
+    heading.tabIndex = -1;
+    const detail = element(documentRef, "p", "ui-muted", t(active.detail));
+    const status = element(
+      documentRef,
+      "p",
+      "ui-story-tools__state",
+      state.story?.status === "ready" ? t(COPY.platformReady) : t(COPY.chooseStory),
+    );
+    status.dataset.state = state.inspector?.status || "empty";
+    panel.replaceChildren(heading, detail, status);
+  };
+
+  root.append(list, panel);
+  target.replaceChildren(root);
+  const select = state => ({ story: state.story, inspector: state.inspector });
+  const unsubscribe = services.store.subscribe(select, render, {
+    equality: (left, right) => left.story === right.story && left.inspector === right.inspector,
+  });
+  render(select(services.store.getSnapshot()));
+  services.localizer.localize(root);
+
+  return Object.freeze({
+    element: root,
+    teardown() {
+      unsubscribe();
+      root.remove();
+    },
+  });
+}
+

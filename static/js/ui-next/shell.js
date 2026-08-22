@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
 export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
 
@@ -42,7 +42,8 @@ export function createApplicationShell(options = {}) {
   }
   if (!modules?.destinations || !modules?.inspectorHost
       || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost
-      || !modules?.playView || !modules?.prose) {
+      || !modules?.playView || !modules?.prose || !modules?.storyToolsRegistry
+      || !modules?.storyToolsView) {
     throw new Error("The application shell presentation modules are missing.");
   }
 
@@ -58,6 +59,8 @@ export function createApplicationShell(options = {}) {
   let goTo = null;
   let extensionHost = null;
   let destinationTeardown = null;
+  let renderedData = null;
+  let renderedRouteIdentity = null;
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
@@ -82,33 +85,44 @@ export function createApplicationShell(options = {}) {
         link.removeAttribute("aria-current");
       }
     }
-    const destinationMount = modules.destinations.renderDestination({
-      document: documentRef,
-      destination,
-      state: services.store.getSnapshot(),
-      t,
-      services,
-      modules,
-    });
-    const destinationView = destinationMount?.element || destinationMount;
-    destinationTeardown?.();
-    destinationTeardown = typeof destinationMount?.teardown === "function"
-      ? destinationMount.teardown : null;
-    if (shellState.route?.explanation) {
-      const notice = documentRef.createElement("div");
-      notice.className = "ui-notice ui-shell__route-notice";
-      notice.dataset.tone = "warning";
-      notice.dataset.marker = "!";
-      notice.setAttribute("role", "status");
-      const message = documentRef.createElement("p");
-      message.textContent = shellState.route.explanation;
-      notice.append(message);
-      view.replaceChildren(notice, destinationView);
-    } else {
-      view.replaceChildren(destinationView);
+    const data = destination === "play"
+      ? shellState.story
+      : (destination === "library" ? shellState.library : shellState.settings);
+    const routeIdentity = destination === "play"
+      ? String(shellState.route?.explanation || "")
+      : String(shellState.route?.canonicalHash || "");
+    if (renderedDestination !== destination || renderedData !== data
+        || renderedRouteIdentity !== routeIdentity) {
+      const destinationMount = modules.destinations.renderDestination({
+        document: documentRef,
+        destination,
+        state: services.store.getSnapshot(),
+        t,
+        services,
+        modules,
+      });
+      const destinationView = destinationMount?.element || destinationMount;
+      destinationTeardown?.();
+      destinationTeardown = typeof destinationMount?.teardown === "function"
+        ? destinationMount.teardown : null;
+      if (shellState.route?.explanation) {
+        const notice = documentRef.createElement("div");
+        notice.className = "ui-notice ui-shell__route-notice";
+        notice.dataset.tone = "warning";
+        notice.dataset.marker = "!";
+        notice.setAttribute("role", "status");
+        const message = documentRef.createElement("p");
+        message.textContent = shellState.route.explanation;
+        notice.append(message);
+        view.replaceChildren(notice, destinationView);
+      } else {
+        view.replaceChildren(destinationView);
+      }
+      extensionHost?.decorate({ route: shellState.route, view });
+      services.localizer.localize(view);
+      renderedData = data;
+      renderedRouteIdentity = routeIdentity;
     }
-    extensionHost?.decorate({ route: shellState.route, view });
-    services.localizer.localize(view);
     inspectorHost?.sync(shellState.route);
     goTo?.sync(shellState.route);
     if (renderedDestination !== destination) {
@@ -119,6 +133,7 @@ export function createApplicationShell(options = {}) {
 
   inspectorHost = modules.inspectorHost.createInspectorHost({
     services,
+    modules,
     document: documentRef,
     root,
   });
