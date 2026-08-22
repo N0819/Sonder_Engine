@@ -283,6 +283,21 @@ def test_conduct_routes_to_its_own_presence():
     assert presences["Thin Local"]["recent"][0]["turn"] == 7
 
 
+def test_a_verified_address_is_kept_beside_the_presence_reply():
+    presences = {"Captain Ysra Vale": {}}
+    _append_manager_conduct({"reactions": [{
+        "name": "Captain Ysra Vale",
+        "heard_address": {
+            "speaker": "Rowan Hale",
+            "exact_quote": "Meals and a bed while I work.",
+        },
+        "dialogue_log_entry": {"exact_quote": "Agreed."},
+    }]}, presences, turn_idx=4)
+    text = presences["Captain Ysra Vale"]["recent"][0]["text"]
+    assert 'heard Rowan Hale say "Meals and a bed while I work."' in text
+    assert 'said "Agreed."' in text
+
+
 def test_conduct_for_untracked_name_is_dropped():
     presences = {"The Barkeep": {}}
     _append_manager_conduct(

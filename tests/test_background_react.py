@@ -21,6 +21,8 @@ import time
 from story.character_schema import default_character_data
 from persist.commit import pick_background_reactor
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from world.charter import normalize_charter, seed_needs, seed_roster
+from world.charter_runtime import save_registry
 
 
 def _make_ctx(temp_db, background_presences=None, cast_names=None, player_input=""):
@@ -219,6 +221,40 @@ def test_payload_role_hint_empty_when_no_sketch(temp_db, monkeypatch):
     # No sketch on the record -> empty strings, never a KeyError.
     assert captured["payload"]["entity"]["role_hint"] == ""
     assert captured["payload"]["entity"]["station_room"] == ""
+
+
+def test_payload_carries_only_the_presence_own_bounded_interaction_tail(
+        temp_db, monkeypatch):
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={
+        "Captain Ysra Vale": {
+            "first_turn": 1, "last_turn": 4, "dialogue_turns": [1, 2],
+            "mention_turns": [], "sketch": {"station_room": "gate"},
+            "recent": [
+                {"turn": 1, "text": "oldest and outside the bound"},
+                {"turn": 2, "text": 'heard Rowan say "I am Rowan Hale."'},
+                {"turn": 3, "text": 'said "What is your rate?"'},
+                {"turn": 4, "text": 'heard Rowan say "Meals and a bed."'},
+            ],
+        },
+    })
+    ctx.director_resolve = {
+        "resolved_event": "The exchange continues.", "dialogue_log": []}
+    captured = {}
+
+    def capture(role, name, system, payload, **kw):
+        captured["payload"] = payload
+        return {"reacts": False, "dialogue_log_entry": None, "action": ""}
+
+    monkeypatch.setattr(background, "_agent_json", capture)
+    background.background_react(ctx, nonce=0)
+
+    assert captured["payload"]["beat"]["recent_interaction"] == [
+        'heard Rowan say "I am Rowan Hale."',
+        'said "What is your rate?"',
+        'heard Rowan say "Meals and a bed."',
+    ]
 
 
 def test_background_react_stage_handles_reacts_false(temp_db, monkeypatch):
@@ -556,3 +592,52 @@ def test_the_managers_work_survives_somebody_elses_unpaid_debt(temp_db,
     assert out["blurbs"] == {"porter": {"manner": "brisk"}}
     assert out["claims"] == [{"by": "porter", "refs": ["the east stair"]}]
     assert "blurb_mint" in out["agent_calls"]
+
+
+def test_scene_life_voices_nearby_charter_person_in_an_isolated_call(
+        temp_db, monkeypatch):
+    import agents.background as background
+
+    ctx = _make_ctx(temp_db, background_presences={})
+    state = normalize_charter({
+        "key": "inn", "upkeeps": {}, "posts": {},
+        "bodies": {"mara_ledger": {
+            "name": "Mara", "place": "taproom",
+            "competence": {"hospitality": 2},
+            "temperament": {"baseline_reactivity": 0.73},
+        }},
+    })
+    state["roster"] = seed_roster(state["bodies"])
+    state["needs"] = seed_needs(state["bodies"])
+    save_registry(ctx.chat.id, {"inn": state})
+    temp_db.wset(ctx.chat.id, "scene", {
+        "location": "Inn", "time": "night", "player_room": "taproom",
+        "rooms": {"taproom": {"name": "Taproom"}},
+        "positions": {}, "entities": {}, "attire": {}, "overlays": {},
+    })
+    temp_db.wset(ctx.chat.id, "background_config", {
+        "scene_life": "full", "max_reactors": 1})
+    ctx.director_resolve = {
+        "resolved_event": "Mara checks the fire as rain ticks against the shutters.",
+        "dialogue_log": [], "state_diff": {}}
+    captured = []
+
+    def answer(role, name, system, payload, **kwargs):
+        captured.append((name, payload))
+        return {"reacts": True, "dialogue_log_entry": {
+            "speaker": "wrong", "exact_quote": "Fire's low.",
+            "volume": "normal", "intended_target": None,
+            "tone": "matter-of-fact", "visibility": "overt",
+            "conceal_from": []}, "action": "adds a split log",
+            "charter_act": None}
+
+    monkeypatch.setattr(background, "_agent_json", answer)
+
+    result = background.background_react(ctx, nonce=0)
+
+    assert result["fired"] is True
+    assert result["reactions"][0]["name"] == "Mara"
+    assert len(captured) == 1
+    packet = captured[0][1]["institutional_context"][0]
+    assert packet["body"] == "mara_ledger"
+    assert packet["presence"]["temperament"]["baseline_reactivity"] == 0.73

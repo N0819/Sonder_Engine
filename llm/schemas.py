@@ -1649,10 +1649,49 @@ class DialogueLogEntry(LenientModel):
         "articulation", pre=True, allow_reuse=True)(
         lambda cls, v: v if v in ("slurred", "stifled") else "")
 
+
+class PublicSpeechAct(LenientModel):
+    """What a witnessed utterance publicly DOES, never what its speaker
+    privately means or whether its proposition is true.
+
+    ``kind`` is actor-directed (``request`` means the actor requests;
+    ``offer`` means the actor offers).  Keeping that direction in the record
+    is what prevents an exchange such as "meals and a bed while I work" from
+    turning into the speaker offering somebody else lodging on recall.
+    """
+    kind: str = "other"
+    content: str = ""
+    about: str = ""
+    condition: str = ""
+
+
+class CharterPublicEvidence(LenientModel):
+    """A semantic annotation over one engine-authored public source.
+
+    The model may classify only ``source_id`` rows the payload supplied.  The
+    engine reattaches actor, target, exact quote/action surface and sensory
+    metadata from that source after validation, so none of those facts are
+    model-authoritative here.
+    """
+    source_id: str = ""
+    speech_acts: list[PublicSpeechAct] = Field(default_factory=list)
+    salience: float = 0.5
+
+    _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
+
+class CharterConduct(LenientModel):
+    """Exact Charter affordance echoed by one isolated presence call."""
+    act: str
+    other: str
+
+
 class BackgroundReactOutput(LenientModel):
     reacts: bool = False
     dialogue_log_entry: Optional[DialogueLogEntry] = None
     action: str = ""
+    charter_act: Optional[CharterConduct] = None
 
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
@@ -2051,6 +2090,11 @@ class DirectorResolve(LenientModel):
     summary: str = ""
     dialogue_order: list[str] = Field(default_factory=list)
     dialogue_log: list[DialogueLogEntry] = Field(default_factory=list)
+    # Model-classified, then deterministically re-grounded against exact
+    # player/major-character sources before the step returns.  This is
+    # evidence offered to observer-scoped Charter minds, not objective scene
+    # state and never a replacement for dialogue_log/state_diff.
+    public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
     # The manifest's counterpart: what the beat deliberately did NOT list,
@@ -2226,6 +2270,7 @@ class DirectorSocialSpecialist(LenientModel):
     cast_changes: list[dict] = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
+    public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -3492,7 +3537,8 @@ _STATE_DIFF_DICT_FIELDS = (
 #: agents/director.SPECIALISTS level with this map.
 SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
-    "director_social": ("cast_changes", "introductions", "world_facts"),
+    "director_social": ("cast_changes", "introductions", "world_facts",
+                        "public_evidence"),
     "director_contact": ("contact_ops", "substance_ops", "containment",
                          "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
@@ -4635,6 +4681,20 @@ OUTPUT_EXAMPLES = {
         ],
         "introductions": [{"who": "Mara", "learns": "Sable"}],
         "world_facts": [],
+        # SHOWN POPULATED, for the reason the contact example gives below: an
+        # empty list teaches the shape of nothing, and this channel's shape is
+        # the part most easily got wrong. `source_id` must name a row the
+        # payload supplied -- actor, target, exact quote and sensory metadata
+        # are reattached by the engine after validation and are not
+        # model-authoritative -- and `kind` is ACTOR-DIRECTED: `request` means
+        # the actor requests.
+        "public_evidence": [
+            {"source_id": "sp_2", "salience": 0.6,
+             "speech_acts": [
+                 {"kind": "request", "content": "shelter until the thaw",
+                  "about": "Sable", "condition": "while she works"},
+             ]},
+        ],
         "notes": [],
     },
     "director_contact": {
@@ -4794,6 +4854,7 @@ OUTPUT_EXAMPLES = {
             "tone": "gruff",
         },
         "action": "wipes down the counter",
+        "charter_act": None,
     },
     "scene_life": {
         "entries": [

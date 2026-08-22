@@ -118,6 +118,10 @@ def normalize_post(key, entry):
         "place": str(entry.get("place") or ""),
         "serves": [str(s) for s in serves if str(s or "").strip()],
         "requires": _tags(entry.get("requires")),
+        # An optional authored reporting line names another POST, not a
+        # person. Reassignment changes who briefs whom without rewriting
+        # identity or history.
+        "reports_to": str(entry.get("reports_to") or "").strip(),
     }
 
 
@@ -131,6 +135,9 @@ def normalize_body(key, entry):
     entry = entry if isinstance(entry, dict) else {}
     body = {
         "key": str(key),
+        # Durable institutional id (`key`) and scene-facing identity (`name`)
+        # are separate so a promotion/rename does not rewrite past claims.
+        "name": str(entry.get("name") or key),
         "competence": _tags(entry.get("competence")),
         "available": bool(entry.get("available", True)),
         # Set only when NEEDS put this body down, so needs may pick it up
@@ -149,6 +156,14 @@ def normalize_body(key, entry):
     # be state that says nothing.
     if isinstance(entry.get("temperament"), dict):
         body["temperament"] = dict(entry["temperament"])
+    # Presentation metadata never participates in planning.  The body key is
+    # identity; these fields may change how that identity is addressed without
+    # rewriting watches, memories or institutional history.
+    for field in ("title", "rank", "given_name", "family_name",
+                  "dialogue_color"):
+        value = str(entry.get(field) or "").strip()
+        if value:
+            body[field] = value
     return body
 
 
@@ -167,9 +182,15 @@ def normalize_charter(stored):
     posts = {
         str(k): normalize_post(k, v)
         for k, v in (stored.get("posts") or {}).items()}
+    from .charter_identity import (
+        materialize_body_names, normalize_naming_profile)
+    naming = normalize_naming_profile(stored.get("naming"))
+    raw_bodies = materialize_body_names(
+        str(stored.get("key") or "charter"), stored.get("bodies") or {},
+        naming)
     bodies = {
         str(k): normalize_body(k, v)
-        for k, v in (stored.get("bodies") or {}).items()}
+        for k, v in raw_bodies.items()}
 
     priority = [str(p) for p in (stored.get("priority") or [])
                 if str(p) in upkeeps]
@@ -182,8 +203,17 @@ def normalize_charter(stored):
         "upkeeps": upkeeps,
         "posts": posts,
         "bodies": bodies,
+        "naming": naming,
         "priority": priority,
         "roster": dict(stored.get("roster") or {}),
+        # Last planned watch is present institutional state: it tells a scene
+        # which duty this body is actually standing.  Dropping it during
+        # normalization erased role continuity at every persistence boundary.
+        "watch": {
+            str(post): str(body)
+            for post, body in (stored.get("watch") or {}).items()
+            if str(post) in posts and str(body) in bodies
+        },
         "clock_hours": float(stored.get("clock_hours") or 0.0),
         # Standing conditions already written down, so a fact that persists
         # across windows is reported once rather than every window. Carried on
@@ -215,6 +245,19 @@ def normalize_charter(stored):
         # bodies — never rostered, never planned, never blamed, and holding
         # no mind here. See `charter_figure`.
         "figures": normalize_figures(stored.get("figures")),
+        # A promoted body remains an institutional projection: Charter may
+        # try to roster it, but registered-character cognition and movement
+        # own the person from this point forward.
+        "bindings": {
+            str(key): {
+                "char_id": value.get("char_id"),
+                "entity_id": str(value.get("entity_id") or ""),
+                "name": str(value.get("name") or key),
+                "promoted_turn": value.get("promoted_turn"),
+            }
+            for key, value in (stored.get("bindings") or {}).items()
+            if str(key) in bodies and isinstance(value, dict)
+            and value.get("char_id") is not None},
         # Per-body needs, and the ground each body has covered. Needs are the
         # reason `available` can stop being an authored flag; `travelled` is a
         # diagnostic carried beside the bodies rather than on them.

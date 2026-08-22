@@ -1,11 +1,11 @@
-"""Physical information carriers for living-world approach C.
+"""Physical information carriers shared by full characters and Charter.
 
 Truth in ``world_events`` is not knowledge. This module creates the first
 legitimate bridge: when a mechanically fired event has a non-empty public
-``witnessed`` surface, only registered characters physically at that location
-acquire that surface. The report then travels because its holder travels; it is
-stored in that character's frame-specific state and exposed only to that
-character's private agent payload.
+``witnessed`` surface, only physical holders at that location acquire it.
+Registered characters use frame-specific character state; unpromoted Charter
+people use that body's own sparse mind through ``charter_runtime``'s projection.
+The report then travels because its holder or its explicit carrier travels.
 
 No timer grants knowledge, no prose is generated, and no other mind reads the
 envelope. A listener learns later through the ordinary speech -> perception ->
@@ -40,7 +40,6 @@ from world import crowds as crowds_model
 from world import degradation
 from story.character_schema import normalize_character_data
 from core.db import q
-from world.living_world import living_world_allows, living_world_config
 from story.scene import extant_cast, set_char_state
 from world.spatial import room_of
 
@@ -130,13 +129,6 @@ def advance_carriers(ctx, scene, world_event_result):
     a prepared state update. All writes share the turn transaction.
     """
     cid = ctx.chat.id
-    if not living_world_allows(
-            living_world_config(cid), "rumor_ledger", "floor"):
-        offered = len((world_event_result or {}).get("events") or [])
-        return {"enabled": False, "events_offered": offered,
-                "public_surfaces": 0, "carrier_opportunities": 0,
-                "acquired": 0, "carriers_moved": 0}
-
     event_ids = [str(e.get("event_id")) for e in
                  (world_event_result or {}).get("events") or []
                  if isinstance(e, dict) and e.get("event_id")]
@@ -209,16 +201,16 @@ def advance_carriers(ctx, scene, world_event_result):
                 moved += 1
                 changed = True
 
-        known = {str(r.get("world_event_id")) for r in reports}
+        known = {str(r.get("world_event_id")): r for r in reports}
         here = [r for r in standing_rows
                 if str(r[0]["location_id"]) == current_room][:ARRIVAL_SURFACES]
         for row, payload, witnessed in event_rows + here:
             if str(row["location_id"]) != current_room:
                 continue
             carrier_opportunities += 1
-            if str(row["event_id"]) in known:
-                continue
-            reports.append({
+            event_id = str(row["event_id"])
+            existing = known.get(event_id)
+            firsthand = {
                 "world_event_id": str(row["event_id"]),
                 "source_event_id": str(payload.get("source_event_id") or ""),
                 "claim": witnessed,
@@ -235,8 +227,21 @@ def advance_carriers(ctx, scene, world_event_result):
                 "retellings": 0,
                 "told_by": "",
                 "provenance": "witnessed_surface",
-            })
-            known.add(str(row["event_id"]))
+            }
+            if existing is not None:
+                if str(existing.get("provenance") or "") \
+                        == "witnessed_surface" \
+                        and int(existing.get("retellings") or 0) == 0:
+                    continue
+                # Seeing beats hearsay. Replace in place so chronology and the
+                # report cap do not change merely because confidence improved.
+                reports[reports.index(existing)] = firsthand
+                known[event_id] = firsthand
+                acquired += 1
+                changed = True
+                continue
+            reports.append(firsthand)
+            known[event_id] = firsthand
             acquired += 1
             changed = True
 
@@ -363,6 +368,11 @@ def save_state(cid, entry, state, *, frame_id=None):
     every writer had to remember, and this project's history is unambiguous
     about what happens to those.
     """
+    if entry.get("charter"):
+        from world.charter_runtime import save_carrier_state
+
+        save_carrier_state(cid, entry, state, frame_id=frame_id)
+        return
     if entry.get("persona"):
         from core.db import wset, wset_for_frame
 
@@ -440,6 +450,20 @@ def _carriers(cid, frame_id, scene, chat=None):
     player = persona_entry(cid, chat, scene, frame_id=frame_id)
     if player and not (set(_keys_of(player)) & taken):
         entries.append(player)
+        taken.update(_keys_of(player))
+
+    # Charter people join last: a promoted/full character or the persona is
+    # the more specific owner of a colliding name. Unbound bodies expose this
+    # same bounded interface, so every existing physical handoff can address
+    # them without teaching each delivery mechanism about Charter.
+    from world.charter_runtime import carrier_entries
+
+    for entry in carrier_entries(cid, frame_id):
+        keys = set(_keys_of(entry))
+        if not keys or keys & taken:
+            continue
+        entries.append(entry)
+        taken.update(keys)
     return entries
 
 

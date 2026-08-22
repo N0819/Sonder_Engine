@@ -16,7 +16,7 @@ from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
 
-from .common import scene_compact_attire
+from .common import observable_action_text, scene_compact_attire
 from .director_evidence import _manifest_items
 from .director_scopes import (
     SPECIALISTS,
@@ -65,6 +65,79 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
     ]
     if player_attempts:
         declared[p_name] = player_attempts
+    public_sources = []
+
+    def speech_body(value):
+        return str(value or "").strip().strip('"\'“”').strip().casefold()
+
+    final_by_declaration = {}
+    for line in out.get("dialogue_log") or []:
+        if not isinstance(line, dict):
+            continue
+        key = (str(line.get("speaker") or "").strip().casefold(),
+               speech_body(line.get("exact_quote")))
+        final_by_declaration.setdefault(key, line)
+
+    # Declarations are the authority for who spoke and for the exact words.
+    # The prose author can omit a dialogue_log row; a later deterministic
+    # backstop restores it, so sourcing evidence from the draft log here would
+    # make the one omitted line Charter can never remember.  The draft is used
+    # only to recover its addressee/medium when it did preserve them.
+    speech_groups = [(str(p_name), interp.get("sequence") or [])]
+    speech_groups.extend(
+        (str(d.get("name") or ""), d.get("sequence") or [])
+        for d in decls if str(d.get("name") or "").strip())
+    for actor, sequence in speech_groups:
+        ordinal = 0
+        for spoken in sequence:
+            if not isinstance(spoken, dict) or spoken.get("type") != "speech" \
+                    or not str(spoken.get("text") or "").strip():
+                continue
+            quote = str(spoken["text"]).strip()
+            final = final_by_declaration.get(
+                (actor.casefold(), speech_body(quote))) or {}
+            public_sources.append({
+                "source_id": f"speech:{actor}:{ordinal}", "kind": "speech",
+                "actor": actor, "exact_quote": quote,
+                "target": str(final.get("intended_target") or "").strip(),
+                "volume": str(spoken.get("volume") or "normal"),
+                "tone": str(spoken.get("tone") or ""),
+                "visibility": str(spoken.get("visibility") or "overt"),
+                "conceal_from": list(spoken.get("conceal_from") or []),
+                **({"medium": str(final.get("medium"))}
+                   if final.get("medium") else {}),
+            })
+            ordinal += 1
+
+    action_groups = [(str(p_name), interp.get("sequence") or [])]
+    action_groups.extend(
+        (str(actor), actions) for actor, actions in (char_actions or {}).items())
+    for actor, actions in action_groups:
+        ordinal = 0
+        for action in actions or []:
+            if not isinstance(action, dict) or action.get("type") != "action":
+                continue
+            # New normalized declarations always carry `observable`.  An old
+            # unnormalised action with only `attempt` can contain private
+            # purpose; it is safer to omit than to hand that purpose to a
+            # bystander as an outward fact.
+            if "observable" not in action:
+                continue
+            surface = observable_action_text(action).strip()
+            if not surface:
+                continue
+            public_sources.append({
+                "source_id": f"action:{actor}:{ordinal}", "kind": "action",
+                "actor": actor, "surface": surface,
+                "target": str((action.get("targets") or [""])[0] or ""),
+                "visibility": str(action.get("visibility") or "overt"),
+                "conceal_from": list(action.get("conceal_from") or []),
+                # It is a witnessed declaration of conduct, not a claim that
+                # every intended effect succeeded.
+                "status": "attempted",
+            })
+            ordinal += 1
+
     return {
         "source": "resolved_beat",
         "prose": out.get("resolved_event") or "",
@@ -78,6 +151,7 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
         "cast": [str(d.get("name") or "") for d in decls if d.get("name")],
+        "public_sources": public_sources[:20],
     }
 
 
@@ -229,6 +303,8 @@ def _specialist_payload(name, ctx, sc, view, extras):
     elif name == "social":
         payload["background_presences"] = sorted(
             (wget(ctx.chat["id"], "background_presences", {}) or {}).keys())
+        if view.get("public_sources"):
+            payload["public_sources"] = list(view.get("public_sources") or [])
     elif name == "contact":
         payload.update({
             "contacts": extras.get("contacts")
@@ -296,6 +372,8 @@ def _stage_container(out, stage, channel):
     which the interpret contract spells `contact_assertions` (the same ops,
     validated by `_validated_player_contact_assertions` downstream exactly
     as a model-authored copy would be)."""
+    if stage == "resolve" and channel == "public_evidence":
+        return out, "public_evidence"
     if stage == "interpret" and channel == "contact_ops":
         return out, "contact_assertions"
     key = "state_diff" if stage == "resolve" else "state_assertions"

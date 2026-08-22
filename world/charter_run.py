@@ -28,7 +28,8 @@ from .charter_drift import advance_level, starving_input, supply_factor
 from .charter_model import normalize_charter, out_of_band
 from .charter_plan import plan_watch, tended_upkeeps
 from .charter_politics import (
-    attribute_blame, normalize_politics, regard_map, spend_reluctance)
+    attribute_blame, normalize_politics, regard_map, regard_pair,
+    spend_reluctance)
 from .charter_roster import decay_roster, observe
 from .charter_space import charter_places, reach_map, refresh_reach
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
@@ -40,7 +41,7 @@ from .charter_news import decay_news, news_keys_in, witness
 from .charter_practice import (
     close_stale, enact, normalize_practices, opportunities)
 from .charter_needs import advance_needs, mood, pressure, unmet
-from .charter_talk import converse, report_up
+from .charter_talk import converse, report_to_superiors, report_up
 
 
 def _event(kind, at_hours, place, **payload):
@@ -66,6 +67,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # people in one hull and the wrong one for five hundred across ninety
     # compartments.
     scene = charter.get("scene")
+    # Promotion delegates cognition and motion to the registered character.
+    # Charter keeps only an institutional projection: it may put their name
+    # on a watch bill, but may not walk, tire, feel, or speak for them.
+    external = set((charter.get("bindings") or {}).keys())
     if reach is None and scene:
         # Recomputed here when a caller steps directly, and hoisted out by
         # `run` when it does not. Measured on the 500-hand fixture: 500 bodies
@@ -86,8 +91,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     blame = (politics.get("blame") or {})
     regard_of = {}
     if mood_weight:
-        for (listener, speaker), weight in (politics.get("regard") or {}).items():
-            regard_of.setdefault(speaker, []).append(weight)
+        for pair_key, weight in (politics.get("regard") or {}).items():
+            pair = regard_pair(pair_key)
+            if pair is not None:
+                regard_of.setdefault(pair[1], []).append(weight)
     reluctance = {}
     for key in charter["bodies"]:
         held = needs.get(key) or {}
@@ -104,7 +111,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
 
     plan = plan_watch(charter, horizon_hours=hours, seed=seed, reach=reach,
                       reluctance=reluctance)
-    served = tended_upkeeps(charter, plan["watch"])
+    served = tended_upkeeps(charter, plan["watch"], fixed_bodies=external)
 
     # ONLY THE CHANGE IS AN EVENT, for posts exactly as for upkeeps. The rule
     # was written for upkeeps and not applied here, and the cost model went
@@ -138,8 +145,12 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     now_absent = {}
     for post_key, body_key in plan["watch"].items():
         body = charter["bodies"].get(body_key)
-        if body is None or not body["available"]:
-            post = charter["posts"][post_key]
+        post = charter["posts"][post_key]
+        externally_absent = (
+            body_key in external and body is not None
+            and str(body.get("place") or "") != str(post.get("place") or "")
+        )
+        if body is None or not body["available"] or externally_absent:
             # Keyed on the POST, not on who was sent. The standing fact is
             # that this post is believed covered and is not; which name the
             # charter tried this window is detail. Keying on the body wrote a
@@ -164,8 +175,11 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # ground they covered is part of what this window cost them, and before
     # the talking, because who is in a room with whom is the result of the
     # watch rather than of last window's berthing.
+    movable_watch = (plan["watch"] if not external else
+                     {post: body for post, body in plan["watch"].items()
+                      if body not in external})
     bodies, travelled = relocate(
-        charter["bodies"], plan["watch"], charter["posts"], scene,
+        charter["bodies"], movable_watch, charter["posts"], scene,
         charter.get("travelled"))
 
     # THEN EVERYBODY ELSE'S DAY. Errands are the circulation without which
@@ -182,6 +196,9 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
                          charter_places(charter), reach, seed=seed,
                          rate=rate, hours=hours)
         moves = dict(homecomings(bodies, plan["watch"], visits), **visits)
+        if external:
+            moves = {body: place for body, place in moves.items()
+                     if body not in external}
         if moves:
             bodies, travelled = walk(bodies, moves, scene, travelled,
                                      cache=paths)
@@ -238,7 +255,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     roster = decay_roster(charter["roster"], hours)
     for post_key, body_key in plan["watch"].items():
         body = charter["bodies"].get(body_key)
-        if body is not None and body["available"]:
+        actually_there = (body_key not in external or (
+            body is not None and str(body.get("place") or "")
+            == str((charter["posts"].get(post_key) or {}).get("place") or "")))
+        if body is not None and body["available"] and actually_there:
             roster = observe(roster, body, at + hours)
 
     # THEN THEY TALK, and knowing now happens in three distinct places rather
@@ -261,8 +281,14 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # control arm still.
     toll = charter.get("strain_toll")
     toll = STRAIN_REST_TOLL if toll is None else float(toll)
+    owned_needs = (needs if not external else
+                   {key: held for key, held in needs.items()
+                    if key not in external})
+    owned_bodies = (bodies if not external else
+                    {key: body for key, body in bodies.items()
+                     if key not in external})
     needs_after, unable, recovered = advance_needs(
-        needs, bodies, plan["watch"], upkeeps, hours,
+        owned_needs, owned_bodies, movable_watch, upkeeps, hours,
         strain=strain_of(charter.get("feel")), toll=toll)
     for key in unable:
         bodies[key] = dict(bodies[key], available=False, stood_down=True)
@@ -274,26 +300,45 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
         events.append(_event("body_recovered", at + hours,
                              bodies[key].get("place", ""), body=key))
 
+    # A promoted body's mind has one owner: character_step.  Drop any stale
+    # Charter-held copy before decay/talk, and expose the institutional
+    # projection to the remaining bodies as a FIGURE instead.  They may see
+    # and talk about the person; Charter may never recreate a mind for them.
     minds = decay_minds(charter.get("minds") or {}, hours)
+    if external:
+        minds = {holder: claims for holder, claims in minds.items()
+                 if holder not in external}
     news_keys = set(charter.get("news_keys") or ())
     minds = decay_news(minds, hours, news_keys)
     # WITNESSED BEFORE ANYBODY TALKS, so this beat's news can travel in this
     # beat. Presence is the whole test -- a body standing where something
     # happened knows it, nobody else does, and it spreads only by being told.
-    minds, witnessed = witness(minds, bodies, events, at + hours)
+    minds, witnessed = witness(minds, owned_bodies, events, at + hours)
     # Figures are seen wherever they stand, active place or not: laying eyes
     # on the traveller is perception, not beat-scale social detail, and it is
     # the same rule witnessing an event follows -- presence is the whole
     # test. What a body DOES about the sighting still waits for a scene.
-    figures = charter.get("figures") or {}
+    figures = dict(charter.get("figures") or {})
+    for body_key in external:
+        body = bodies.get(body_key) or {}
+        figures[body_key] = {
+            "key": body_key,
+            "place": str(body.get("place") or ""),
+            "surface": {"name": str(body.get("name") or body_key),
+                        "institutional_role": True},
+        }
     if figures:
-        minds = sight_figures(minds, bodies, figures, at + hours)
+        minds = sight_figures(minds, owned_bodies, figures, at + hours)
     if witnessed or news_keys:
         news_keys = news_keys_in(minds)
-    minds, told = converse(minds, bodies, seed=seed,
+    minds, told = converse(minds, owned_bodies, seed=seed,
                            regard=regard_map(politics), at_hours=at + hours,
                            figures=figures)
-    roster = report_up(roster, minds, plan["watch"], bodies,
+    minds, formally_reported = report_to_superiors(
+        minds, plan["watch"], charter["posts"], owned_bodies,
+        naming=charter.get("naming"), at_hours=at + hours)
+    told += formally_reported
+    roster = report_up(roster, minds, plan["watch"], owned_bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
 
     # SITUATIONS, AND WHAT THEY MAKE AVAILABLE. Gossip alone saturates: a
@@ -322,7 +367,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
         normalize_practices(charter.get("practices")), at + hours)
     if active:
         in_focus = {k: b for k, b in bodies.items()
-                    if str(b.get("place") or "") in active}
+                    if k not in external
+                    and str(b.get("place") or "") in active}
         figs_in_focus = {k: f for k, f in figures.items()
                          if str(f.get("place") or "") in active}
         practices.update(opportunities(
@@ -361,8 +407,12 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # affect model across both tiers — and it reads only channelled inputs:
     # own needs, the state of the body's own place, and the transient
     # events there.
-    feel = advance_feel(charter.get("feel"), bodies, needs_after,
-                        plan["watch"], charter["posts"], upkeeps, events,
+    owned_feel = (charter.get("feel") or {})
+    if external:
+        owned_feel = {key: value for key, value in owned_feel.items()
+                      if key not in external}
+    feel = advance_feel(owned_feel, owned_bodies, needs_after,
+                        movable_watch, charter["posts"], upkeeps, events,
                         hours)
 
     # The service record: a window actually stood is a window remembered.
@@ -371,7 +421,10 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     stood = {k: dict(v) for k, v in (charter.get("stood") or {}).items()}
     for post_key, body_key in plan["watch"].items():
         body = bodies.get(body_key)
-        if body is not None and body.get("available"):
+        actually_there = (body_key not in external or (
+            body is not None and str(body.get("place") or "")
+            == str((charter["posts"].get(post_key) or {}).get("place") or "")))
+        if body is not None and body.get("available") and actually_there:
             held = stood.setdefault(body_key, {})
             held[post_key] = held.get(post_key, 0) + 1
 
@@ -406,7 +459,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     # were on it, the thing failed, and the institution now knows who to be
     # angry with. Correcting that is somebody else's job and may never happen.
     after_charter["politics"] = attribute_blame(
-        politics, events, plan["watch"])
+        politics, events, plan["watch"], charter["posts"])
     return after_charter, events
 
 

@@ -620,7 +620,17 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
             name, recognized, info.get("appearance"), info.get("aliases"))
         ev = {"n": len(events) + 1, "actor": display, "kind": kind}
         if kind == "speech":
-            ev["quote"] = text
+            if name == p_name:
+                # The narrator needs the causal fact that the player spoke,
+                # not a second copy of words the player has just supplied.
+                # With the quote in both player_declared and event_order, the
+                # model paraphrased a requested fee ("meals and a bed") as an
+                # offer by the player to provide those things.  Redaction is
+                # structural: no prompt has to preserve transaction direction
+                # in text it never receives.
+                ev["declared"] = True
+            else:
+                ev["quote"] = text
         else:
             # The same identity floor the composer puts under the player's
             # view, applied to the second copy of this beat's prose that
@@ -873,6 +883,39 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         portal_states=facts.get("portal_states"))
     return out, warnings, fidelity_warnings
 
+
+def _narrator_player_declared(interpreted):
+    """Player conduct for prose, with spoken CONTENT structurally absent.
+
+    The Director has already interpreted the raw input and perception has
+    already delivered its consequences.  Narration needs ordering, delivery,
+    targets, visible action and explicitly authored private thought.  It does
+    not need a third copy of the player's quote, whose only observed use was
+    semantic drift while trying not to echo it.
+    """
+    interpreted = interpreted if isinstance(interpreted, dict) else {}
+    sequence = []
+    spoke = False
+    for event in interpreted.get("sequence") or []:
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "speech":
+            spoke = True
+            sequence.append({
+                key: event[key] for key in (
+                    "type", "volume", "intended_target", "targets",
+                    "visibility", "conceal_from")
+                if key in event
+            })
+        else:
+            sequence.append(dict(event))
+    return {
+        "sequence": sequence,
+        "spoke": spoke or bool(interpreted.get("speech")),
+        "action": (interpreted.get("action") or {}).get("attempt"),
+        "private_thought": interpreted.get("private_thought"),
+    }
+
 def narrator(ctx, nonce):
     chat = ctx.chat
     pers = persona_of(chat)
@@ -905,13 +948,7 @@ def narrator(ctx, nonce):
     di = ctx.get("director_interpret") or {}
     p_lines = player_speech_lines(di)
 
-    player_declared = {
-        "sequence": di.get("sequence") or [],
-        "speech": di.get("speech"),
-        "action": (di.get("action") or {}).get("attempt"),
-        "private_thought": di.get("private_thought"),
-        "raw_input": ctx.input or "",
-    }
+    player_declared = _narrator_player_declared(di)
 
     # (x or {}) rather than .get(key, {}): a hand-edited sheet with an
     # explicit "identity": null defeats the .get default and would crash
@@ -1165,13 +1202,7 @@ def narrator_extra(ctx, nonce):
 
         prev = [d.get(pid_key, {}).get("prose", "") for d in per_persona_prev]
 
-        player_declared = {
-            "sequence": entry.get("sequence") or [],
-            "speech": entry.get("speech"),
-            "action": (entry.get("action") or {}).get("attempt"),
-            "private_thought": entry.get("private_thought"),
-            "raw_input": extra.get("input") or "",
-        }
+        player_declared = _narrator_player_declared(entry)
 
         # Deferred to commit exactly like narrator() above -- each pending
         # write rides this persona's own returned entry.

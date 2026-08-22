@@ -1,0 +1,574 @@
+{
+  "chat_id_in_disposable_copy": 79,
+  "initial": {
+    "charters": {
+      "aldermere_commons": {
+        "clock_hours": 0.0,
+        "levels": {
+          "water_drawn": 0.56,
+          "grain_milled": 0.62,
+          "bread_baked": 0.47,
+          "market_stocked": 0.42,
+          "cart_roads": 0.58
+        },
+        "watch": {
+          "well_watch": "toma",
+          "mill_watch": "edrin",
+          "oven_watch": "mara",
+          "market_clerk": "sable",
+          "cart_warden": "orin"
+        },
+        "blame": {},
+        "bindings": {},
+        "places": {
+          "toma": "well_house",
+          "edrin": "mill",
+          "mara": "bakehouse",
+          "sable": "market_square",
+          "orin": "market_square"
+        },
+        "available": {
+          "toma": true,
+          "edrin": true,
+          "mara": true,
+          "sable": true,
+          "orin": true
+        }
+      },
+      "aldermere_civic_watch": {
+        "clock_hours": 0.0,
+        "levels": {
+          "gate_watch": 0.76,
+          "night_lamps": 0.34,
+          "infirmary_ready": 0.7,
+          "bridge_sound": 0.36,
+          "petitions_sorted": 0.55
+        },
+        "watch": {
+          "gate_captain": "ysra",
+          "gate_guard": "jory",
+          "lamp_round": "nella",
+          "healer_watch": "iven",
+          "petition_clerk": "pell"
+        },
+        "blame": {},
+        "bindings": {},
+        "places": {
+          "ysra": "north_gate",
+          "jory": "north_gate",
+          "nella": "infirmary",
+          "iven": "infirmary",
+          "pell": "council_hall"
+        },
+        "available": {
+          "ysra": true,
+          "jory": true,
+          "nella": false,
+          "iven": true,
+          "pell": true
+        }
+      }
+    },
+    "cast": [],
+    "world_events": 0
+  },
+  "final": {
+    "charters": {
+      "aldermere_commons": {
+        "clock_hours": 0.0,
+        "levels": {
+          "water_drawn": 0.56,
+          "grain_milled": 0.62,
+          "bread_baked": 0.47,
+          "market_stocked": 0.42,
+          "cart_roads": 0.58
+        },
+        "watch": {
+          "well_watch": "toma",
+          "mill_watch": "edrin",
+          "oven_watch": "mara",
+          "market_clerk": "sable",
+          "cart_warden": "orin"
+        },
+        "blame": {},
+        "bindings": {},
+        "places": {
+          "toma": "well_house",
+          "edrin": "mill",
+          "mara": "bakehouse",
+          "sable": "market_square",
+          "orin": "market_square"
+        },
+        "available": {
+          "toma": true,
+          "edrin": true,
+          "mara": true,
+          "sable": true,
+          "orin": true
+        }
+      },
+      "aldermere_civic_watch": {
+        "clock_hours": 0.0,
+        "levels": {
+          "gate_watch": 0.76,
+          "night_lamps": 0.34,
+          "infirmary_ready": 0.7,
+          "bridge_sound": 0.36,
+          "petitions_sorted": 0.55
+        },
+        "watch": {
+          "gate_captain": "ysra",
+          "gate_guard": "jory",
+          "lamp_round": "nella",
+          "healer_watch": "iven",
+          "petition_clerk": "pell"
+        },
+        "blame": {},
+        "bindings": {},
+        "places": {
+          "ysra": "north_gate",
+          "jory": "north_gate",
+          "nella": "infirmary",
+          "iven": "infirmary",
+          "pell": "council_hall"
+        },
+        "available": {
+          "ysra": true,
+          "jory": true,
+          "nella": false,
+          "iven": true,
+          "pell": true
+        }
+      }
+    },
+    "cast": [],
+    "world_events": 0
+  },
+  "turns": [
+    {
+      "turn": 1,
+      "turn_id": 2559,
+      "input": "I pause beneath the North Gate and take in the gatehouse, the people on duty, and the town beyond before I speak.",
+      "output": "The North Gate arches over me, its stonework weathered by centuries of wind and foot traffic. I pause, eyes sweeping across the gatehouse with its heavy timbers and iron fittings, the handful of guards on duty in their worn leather and steel, and the bustling Market Square that opens beyond the open doorway.\n\nNoise spills through from the square, voices and cart wheels and the clatter of goods. The air carries a faint tang of woodsmoke and damp earth. I stand there a moment longer, then speak.",
+      "seconds": 5.89,
+      "error": "",
+      "warnings": [],
+      "calls": [
+        {
+          "role": "mapping",
+          "model": "inception/mercury-2",
+          "sys": 4905,
+          "out": 204,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.34,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6436,
+          "out": 113,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.99,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6484,
+          "out": 139,
+          "cached": 6400,
+          "cwrite": 0,
+          "sec": 2.38,
+          "ok": true
+        }
+      ],
+      "background": {},
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 0.0,
+          "levels": {
+            "water_drawn": 0.56,
+            "grain_milled": 0.62,
+            "bread_baked": 0.47,
+            "market_stocked": 0.42,
+            "cart_roads": 0.58
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "mara",
+            "market_clerk": "sable",
+            "cart_warden": "orin"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 0.0,
+          "levels": {
+            "gate_watch": 0.76,
+            "night_lamps": 0.34,
+            "infirmary_ready": 0.7,
+            "bridge_sound": 0.36,
+            "petitions_sorted": 0.55
+          },
+          "watch": {
+            "gate_captain": "ysra",
+            "gate_guard": "jory",
+            "lamp_round": "nella",
+            "healer_watch": "iven",
+            "petition_clerk": "pell"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 0,
+      "pending_jobs": []
+    },
+    {
+      "turn": 2,
+      "turn_id": 2560,
+      "input": "\"Which of you is captain here?\" I ask the guards, looking from one face to the other.",
+      "output": "The North Gate arches over me, its stonework weathered by centuries of wind and foot traffic. I pause, eyes sweeping across the gatehouse with its heavy timbers and iron fittings, the handful of guards on duty in their worn leather and steel, and the bustling Market Square that opens beyond the open doorway.\n\nNoise spills through from the square, voices and cart wheels and the clatter of goods. The air carries a faint tang of woodsmoke and damp earth. I stand there a moment longer, then speak it.\n\nThe words cut across the guards. One meets my gaze squarely while the other glances aside; my look travels from one face to the other and finds only guarded silence in return.",
+      "seconds": 24.024,
+      "error": "",
+      "warnings": [
+        "orchestration scope: the offscreen specialist emitted telling_ops outside its granted scope (['offscreen_plan_ops']). Content was kept (fail-open); the scope gate under-granted and should be widened if this recurs.",
+        "offscreen specialist: No crowd, courier, or offscreen plans were declared.",
+        "offscreen specialist: The speech is recorded as a telling operation.",
+        "orchestration gate: content shipped for channels or prose duties outside any served scope -- the scope gate read the scene as having no such work -- telling_ops carries content for 'telling_ops'. Nothing was dropped (fail-open); the stage model's encoding and the reconciliation seam stand. The scope gate mispredicted.",
+        "orchestration gate: content shipped for channels or prose duties outside any served scope -- the scope gate read the scene as having no such work -- telling_ops carries content for 'telling_ops'. Nothing was dropped (fail-open); the stage model's encoding and the reconciliation seam stand. The scope gate mispredicted.",
+        "Narrator prose appears to reuse a previous turn's content instead of describing this turn's view (shared phrase: 'guards on duty in their worn...').",
+        "telling refused: telling names someone unregistered: 'Rowan Hale' -> ''"
+      ],
+      "calls": [
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 7783,
+          "out": 370,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 5.37,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3616,
+          "out": 134,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.77,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2542,
+          "out": 42,
+          "cached": 6,
+          "cwrite": 0,
+          "sec": 0.77,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5298,
+          "out": 45,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.78,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3847,
+          "out": 48,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.85,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4947,
+          "out": 44,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 0.89,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6040,
+          "out": 75,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.82,
+          "ok": true
+        },
+        {
+          "role": "director",
+          "model": "x-ai/grok-4.20",
+          "sys": 9930,
+          "out": 410,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 6.04,
+          "ok": true
+        },
+        {
+          "role": "director_social",
+          "model": "inception/mercury-2",
+          "sys": 2509,
+          "out": 39,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 0.79,
+          "ok": true
+        },
+        {
+          "role": "director_objects",
+          "model": "inception/mercury-2",
+          "sys": 3997,
+          "out": 52,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 0.83,
+          "ok": true
+        },
+        {
+          "role": "director_contact",
+          "model": "inception/mercury-2",
+          "sys": 5469,
+          "out": 48,
+          "cached": 4699,
+          "cwrite": 0,
+          "sec": 1.11,
+          "ok": true
+        },
+        {
+          "role": "director_body",
+          "model": "inception/mercury-2",
+          "sys": 4914,
+          "out": 43,
+          "cached": 2,
+          "cwrite": 0,
+          "sec": 1.12,
+          "ok": true
+        },
+        {
+          "role": "director_offscreen",
+          "model": "inception/mercury-2",
+          "sys": 3581,
+          "out": 65,
+          "cached": 4,
+          "cwrite": 0,
+          "sec": 1.15,
+          "ok": true
+        },
+        {
+          "role": "director_spatial",
+          "model": "inception/mercury-2",
+          "sys": 6077,
+          "out": 57,
+          "cached": 3,
+          "cwrite": 0,
+          "sec": 1.6,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1346,
+          "out": 89,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.63,
+          "ok": true
+        },
+        {
+          "role": "character_bg",
+          "model": "x-ai/grok-4.20",
+          "sys": 1346,
+          "out": 82,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.8,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6927,
+          "out": 63,
+          "cached": 128,
+          "cwrite": 0,
+          "sec": 1.66,
+          "ok": true
+        },
+        {
+          "role": "narrator",
+          "model": "x-ai/grok-4.20",
+          "sys": 6967,
+          "out": 332,
+          "cached": 6912,
+          "cwrite": 0,
+          "sec": 3.67,
+          "ok": true
+        }
+      ],
+      "background": {
+        "fired": false,
+        "name": "Sable Hart",
+        "dialogue_log_entry": null,
+        "action": "",
+        "room": "",
+        "reactions": [],
+        "selected": [
+          "Sable Hart",
+          "Orin Pike"
+        ],
+        "mode": "background_react+background_react",
+        "agent_calls": [],
+        "_engine_notes": {
+          "llm_calls": [
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1346,
+              "out": 89,
+              "cached": 128,
+              "duration": 1.634,
+              "kind": "stream"
+            },
+            {
+              "step_key": "background_react",
+              "role": "character_bg",
+              "requested": "x-ai/grok-4.20",
+              "served": "x-ai/grok-4.20",
+              "in": 1346,
+              "out": 82,
+              "cached": 128,
+              "duration": 1.801,
+              "kind": "stream"
+            }
+          ]
+        }
+      },
+      "promotions_this_turn": [],
+      "charters": {
+        "aldermere_commons": {
+          "clock_hours": 0.0,
+          "levels": {
+            "water_drawn": 0.56,
+            "grain_milled": 0.62,
+            "bread_baked": 0.47,
+            "market_stocked": 0.42,
+            "cart_roads": 0.58
+          },
+          "watch": {
+            "well_watch": "toma",
+            "mill_watch": "edrin",
+            "oven_watch": "mara",
+            "market_clerk": "sable",
+            "cart_warden": "orin"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "toma": "well_house",
+            "edrin": "mill",
+            "mara": "bakehouse",
+            "sable": "market_square",
+            "orin": "market_square"
+          },
+          "available": {
+            "toma": true,
+            "edrin": true,
+            "mara": true,
+            "sable": true,
+            "orin": true
+          }
+        },
+        "aldermere_civic_watch": {
+          "clock_hours": 0.0,
+          "levels": {
+            "gate_watch": 0.76,
+            "night_lamps": 0.34,
+            "infirmary_ready": 0.7,
+            "bridge_sound": 0.36,
+            "petitions_sorted": 0.55
+          },
+          "watch": {
+            "gate_captain": "ysra",
+            "gate_guard": "jory",
+            "lamp_round": "nella",
+            "healer_watch": "iven",
+            "petition_clerk": "pell"
+          },
+          "blame": {},
+          "bindings": {},
+          "places": {
+            "ysra": "north_gate",
+            "jory": "north_gate",
+            "nella": "infirmary",
+            "iven": "infirmary",
+            "pell": "council_hall"
+          },
+          "available": {
+            "ysra": true,
+            "jory": true,
+            "nella": false,
+            "iven": true,
+            "pell": true
+          }
+        }
+      },
+      "cast": [],
+      "world_events": 0,
+      "pending_jobs": []
+    }
+  ]
+}

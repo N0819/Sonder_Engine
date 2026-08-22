@@ -100,15 +100,57 @@ Authority model (Phase 3a): the frame-scoped `world.scene` blob is the single ru
   use these when the era matters, which for live world state it almost always
   does.
 
-`offscreen_epoch`, `offscreen_plans`, and `offscreen_log` are frame-scoped world
-keys. The epoch and reactive plans are primary diegetic state; the log is
-provisional diegetic history. All three therefore
+`offscreen_epoch`, `offscreen_plans`, `offscreen_log`, and `charters` are
+frame-scoped world keys. The epoch, reactive plans, and Charter registry are
+primary diegetic state; the log is
+provisional diegetic history. All four therefore
 ride the existing whole-`world` checkpoint/archive/branch path and roll back
 together. A plan stores its current stage and bounded history, so restore never
 replays a discarded plan advance. Background jobs carry an epoch id in addition to `base_turn`: the
 turn check catches rollback behind the producer, while the epoch check catches
 a restore/branch at the same numeric turn but on a different world edge. Stable
 epoch+rung batch identity makes landing idempotent.
+
+`charters` stores `{version, items}`. Each item separates its
+normalized pure `state` from runtime markers (`last_elapsed_seconds`,
+`last_epoch_id`, `window_hours`). Directed regard keys are JSON strings
+(`listener->speaker`), never tuple keys. Charter jobs write this blob and their
+stable scheduled consequences in one transaction after checking the epoch,
+base turn, and source-registry revision under that same write lock; do not
+persist a Charter
+event list in the blob or a second table. Incidents live only on the existing
+`scheduled_events` -> `world_events` spine.
+
+Within a Charter state, `bodies.<key>.name` is the scene-facing display name;
+the dict key remains the durable institutional identity. An authored `naming`
+profile supplies bounded cultural name pools/parts, formatting, rank titles
+and post titles. Normalization deterministically generates an unnamed body's
+name from `{profile seed, charter key, body key}` and materializes it into the
+body exactly once: changing the profile or inserting another body never
+renames an existing person. Titles are presentation aliases, not identity.
+`dialogue_color`, when authored, is a normalized override; otherwise rendering
+derives it from `charter:<charter>:<body>`, so renames, title changes and
+promotion cannot repaint that speaker. `bindings.<body>` is
+written once at background-to-character promotion and carries `char_id`,
+character/entity identity, display name and promotion turn. A bound body is an
+institutional projection only: scene position is copied into it before a tick,
+while Charter-held `minds`, `needs`, `feel` and `heard_blame` for that body are
+removed. Do not delete the body itself—rosters, watches, standing and service
+history still refer to its durable key, and the character may continue to hold
+office. `background_presences[].charter_refs` contains only stable
+`{charter,body}` references; the Charter registry remains the identity and
+state authority.
+
+Witnessed player/major-character conduct is not a second event table. A
+grounded `scene:<turn_id>:<source_id>` claim lives in the receiving body's
+existing `minds` map as `kind: news`, with `public_evidence` carrying the exact
+licensed action/quote and speech-act direction only for a firsthand witness.
+The source id deduplicates a replayed commit; the mind cap and ordinary news
+decay bound it. Body-to-body retelling replaces that firsthand packet with a
+secondhand act-kind summary and degrades `claim_text`, so no listener stores a
+pristine transcript it did not hear. Because the claim remains ordinary
+Charter state, checkpoint/archive/branch/restore and promotion need no new
+durable store.
 
 `world_events` joined `snapshot_state`/`insert_world_tables`, portable
 export/import, branch remapping, deletion, and fidelity tests with its first

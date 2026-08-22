@@ -429,6 +429,27 @@ seeded draw (both sealed and driven), `test_perception_has_no_model.py`,
 `test_story_view.py`'s layering rule and
 `test_offscreen_agent_context.py`'s fail-closed allowlist (all four to AST).
 
+Institutions/upkeep has a separate narrow seam in
+`tests/test_charter_runtime.py`: run it with the nearest pure Charter tests
+before the broader off-screen suite. It pins JSON-safe politics, exact blame
+ownership, frame isolation, epoch/rewind-safe landing, the scheduled-
+consequence handoff, and the per-presence knowledge aperture. The longer
+population/month simulations are deliberately **not** pytest tests. Run
+`make charter-audit` when investigating Charter realism, scale, convergence,
+famine/recovery, or replay under load; its 49 scenarios live under
+`tools/charter_audit_*.py` and take roughly six minutes serially. Default
+pytest uses `tests/test_charter_simulation_smoke.py` to prove that a small
+institution advances, reports failure and replays deterministically. Measured
+at the split: the Charter pytest family fell from 342 seconds to 8.1 seconds.
+Do not move a population experiment back under `tests/` merely because it has
+assertions—an executable audit can and should fail too.
+`tests/test_charter_identity.py` pins thousand-body deterministic naming,
+non-renaming after profile edits/insertion, title aliases and permanent color
+seeds. `tests/test_charter_name_learning.py` pins the delivered-view and
+co-location firewall for players and characters, including an indexed
+five-thousand-person lookup. Dialogue-color and promotion coverage pins the
+same color before and after a Charter body becomes registered cast.
+
 **Left, and left honestly.** A source assertion that is the only available
 instrument is a different thing from one that was merely easier, and both
 kinds remain:

@@ -49,6 +49,7 @@ has already been wrong once in this package.
 from __future__ import annotations
 
 from .charter_feel import felt_handoff
+from .charter_politics import regard_value
 
 #: Memories a promotion mints, total. A budget, not a target: a quiet life
 #: promotes with two or three rows, and that is a correct answer.
@@ -81,6 +82,8 @@ _NEWS_PHRASES = {
 
 
 def _news_phrase(claim):
+    if str(claim.get("claim_text") or "").strip():
+        return " ".join(str(claim["claim_text"]).split())
     template = _NEWS_PHRASES.get(str(claim.get("event_kind") or ""))
     if template is None:
         template = "{about} at {place}"
@@ -123,13 +126,19 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     news.sort(key=lambda c: (-float(c.get("strength") or 0.0),
                              str(c.get("body") or "")))
     for claim in news:
-        firsthand = claim.get("heard_from") is None
+        provenance = str(claim.get("provenance") or "")
+        firsthand = claim.get("heard_from") is None and provenance not in {
+            "read", "letter", "told"}
         strength = float(claim.get("strength") or 0.0)
         phrase = _news_phrase(claim)
-        content = f"saw {phrase}" if firsthand \
-            else f"heard from {claim['heard_from']} of {phrase}"
+        if firsthand:
+            content = f"saw {phrase}"
+        elif claim.get("heard_from"):
+            content = f"heard from {claim['heard_from']} that {phrase}"
+        else:
+            content = f"learned that {phrase}"
         entities = [str(claim.get("about") or "")]
-        if not firsthand:
+        if claim.get("heard_from"):
             entities.append(str(claim["heard_from"]))
         out.append({
             "kind": "episodic",
@@ -162,7 +171,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
 
     def _salience(claim):
         other = str(claim["body"])
-        return (abs(1.0 - float(regard.get((key, other), 1.0))),
+        return (abs(1.0 - regard_value(regard, key, other)),
                 0.0 if claim.get("kind") == "figure"
                 or claim.get("believed_available") else 1.0,
                 float(claim.get("strength") or 0.0))
@@ -171,7 +180,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     for claim in people[:RELATIONSHIP_CAP]:
         other = str(claim["body"])
         firsthand = claim.get("heard_from") is None
-        view = float(regard.get((key, other), 1.0))
+        view = regard_value(regard, key, other)
         if view < 1.0:
             standing = " and thinks less of them"
         elif view > 1.0:

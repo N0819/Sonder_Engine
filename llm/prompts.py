@@ -405,7 +405,41 @@ def _payload_node(payload, path):
     return node
 
 
-def character_prompt(payload, base=None, language=None):
+def _relocate_character_identity(text):
+    """Move the name-bearing line behind the stable character contract.
+
+    The authored sentence is preserved byte-for-byte.  Only its position
+    changes: a character name 32 characters into a 62 KB system message made
+    the reusable prefix unique per character.  Put it immediately before the
+    output contract so the schema-shaped final instruction remains final.
+    This works for every language pack without adding an English replacement
+    sentence to translated text.
+    """
+    lines = text.split("\n")
+    try:
+        identity_index = next(
+            index for index, line in enumerate(lines) if "{name}" in line)
+    except StopIteration:
+        return text
+    identity = lines.pop(identity_index)
+    # Protocol keys stay English in every translated pack.  Detect the output
+    # contract by its shape rather than by an authored-language heading.
+    output_index = next(
+        (index for index, line in enumerate(lines)
+         if '"present_evidence_used"' in line
+         and '"response_candidates"' in line),
+        len(lines),
+    )
+    lines.insert(output_index, identity)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip("\n")
+
+
+def _compact_character_wire_prompt(text):
+    """Remove only the experimental deliberation scratch output example."""
+    return text.replace('"considered_responses":[],', "", 1)
+
+
+def character_prompt(payload, base=None, language=None, wire_variant=None):
     """Subtract inapplicable paragraphs from the localized character sheet."""
     text = get_prompt("character", language=language) if base is None else base
     if not isinstance(payload, dict) or payload_legacy("prompt"):
@@ -423,9 +457,16 @@ def character_prompt(payload, base=None, language=None):
         if entry and not any(_payload_has(payload, key) for key in entry[1]):
             continue
         keep.append(line)
-    if not keep:
-        return text
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(keep))
+    if keep:
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(keep))
+    # Custom ``base`` callers use this function to test structural subtraction
+    # against a byte-exact fixture.  The cache layout is a production prompt
+    # concern, so it applies only to a real language-pack/preset prompt.
+    if base is None:
+        text = _relocate_character_identity(text)
+    if wire_variant == "compact":
+        text = _compact_character_wire_prompt(text)
+    return text
 
 
 def get_prompt_body(pid, language=None):

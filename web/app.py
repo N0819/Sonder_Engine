@@ -3349,6 +3349,25 @@ def chat_get(cid: int):
     # deterministic -- the same cast must resolve to the same colours on every
     # read, or a reload would repaint the story.
     dialogue_colors = resolve_cast_colors(color_cast)
+    # Charter speakers are not registered cast yet, but their exact quotes
+    # live in the same dialogue_log and should render by the same mechanism.
+    # Derive independently from permanent Charter/body ids: resolving a
+    # thousand-body institution as one simultaneous cast would be O(n^2),
+    # would fill the hue circle, and would let an off-screen hire repaint the
+    # two people currently speaking.  An authored override still wins.
+    try:
+        from story.dialogue_colors import auto_dialogue_color, normalize_color
+        from world.charter_runtime import charter_speaker_records
+        for speaker in charter_speaker_records(cid):
+            color = (normalize_color(speaker.get("color"))
+                     or auto_dialogue_color(speaker.get("seed")))
+            for alias in speaker.get("aliases") or [speaker["name"]]:
+                dialogue_colors.setdefault(alias, color)
+    except Exception:
+        # Rendering an otherwise healthy story must not fail because an
+        # optional Charter registry is malformed; its authoring route reports
+        # validation warnings separately.
+        pass
 
     # Who said which line, per turn -- the index the transcript colours from.
     # NOT a new persisted thing: `dialogue_log` has always been committed here,
@@ -3632,8 +3651,12 @@ def confirm_promotion(cid: int, body: dict = Body(...)):
         raise HTTPException(400, "Missing name or sheet")
 
     memory_seeds = [str(m) for m in (body.get("memory_seeds") or []) if str(m).strip()]
-    char_id = promote_background_character(
-        cid, name, sheet=sheet, memory_seeds=memory_seeds)
+    frame_id = body.get("frame_id")
+    frame_id = int(frame_id) if frame_id is not None else None
+    with _era(cid, frame_id):
+        char_id = promote_background_character(
+            cid, name, sheet=sheet, memory_seeds=memory_seeds,
+            frame_id=frame_id)
     # The confirm route takes whatever sheet the host approved, which may not
     # be the draft `draft_promoted_character` warned about.
     return {"ok": True, "char_id": char_id,
@@ -4295,7 +4318,18 @@ def _resolved_dialogue_colors(cid: int):
         sheet = normalize_character_data(json.loads(row["sheet"] or "{}"))
         cast.append({"uid": character_name(sheet), "sheet": sheet,
                      "color": row["dialogue_color"] or ""})
-    return resolve_cast_colors(cast)
+    colors = resolve_cast_colors(cast)
+    try:
+        from story.dialogue_colors import auto_dialogue_color, normalize_color
+        from world.charter_runtime import charter_speaker_records
+        for speaker in charter_speaker_records(cid):
+            color = (normalize_color(speaker.get("color"))
+                     or auto_dialogue_color(speaker.get("seed")))
+            for alias in speaker.get("aliases") or [speaker["name"]]:
+                colors.setdefault(alias, color)
+    except Exception:
+        pass
+    return colors
 
 
 @app.get("/api/chats/{cid}/persona_private_history")
@@ -4543,6 +4577,38 @@ def living_world_put(cid: int, body: dict = Body(...)):
     config = normalize_living_world(body.get("living_world", body))
     wset(cid, LIVING_WORLD_KEY, config)
     return {"ok": True, "living_world": config}
+
+
+@app.get("/api/chats/{cid}/charters")
+def charters_get(cid: int, frame_id: int | None = None):
+    """Structured institution definitions plus their frame-scoped state."""
+    from world.charter_runtime import registry_for, registry_warnings
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    with _era(cid, frame_id):
+        scene = get_scene(cid, dict(chat))
+    registry = registry_for(cid, frame_id)
+    return {"charters": registry,
+            "warnings": registry_warnings(registry, scene=scene)}
+
+
+@app.put("/api/chats/{cid}/charters")
+def charters_put(cid: int, body: dict = Body(...),
+                 frame_id: int | None = None):
+    """Author Charter state explicitly; normalization and warnings are visible."""
+    from world.charter_runtime import (registry_warnings, save_registry)
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    _require_frame_idle(cid, frame_id)
+    with _era(cid, frame_id):
+        scene = get_scene(cid, dict(chat))
+    registry = save_registry(cid, body.get("charters", body), frame_id)
+    return {"ok": True, "charters": registry,
+            "warnings": registry_warnings(registry, scene=scene)}
 
 
 @app.get("/api/chats/{cid}/background_config")

@@ -2254,21 +2254,26 @@ bodies × 100 belief facets is 193 ms in plain Python, 500,000 facets is 845 ms,
 off the critical path against a ~22.5 s character call. Recorded at
 `design/DESIGN_LIVING_WORLD.md` §8.1 and
 `design/OFFSCREEN_WORLD_ARCHITECTURE.md` §1.1; the worked case is
-`design/DESIGN_INSTITUTIONS_AND_UPKEEP.md` (draft, nothing built).
+`design/DESIGN_INSTITUTIONS_AND_UPKEEP.md` (deterministic vertical slice built).
 
-What that adds to this register, none of it started:
+What remains in this register:
 
-- **The `offscreen_log` migration above is now BLOCKING, not deferred.** A
-  simulation that reads its own past is exactly "the first thing that computes
-  over the history." Nothing else here should start before it.
-- **Institutions and upkeep** — five genre-neutral primitives (upkeep, post,
-  competence, watch, charter) so a crew, a ward, a kitchen or a monastery can
-  hold a functioning institution together off screen. Deliberately NOT called
-  `stations`: that word already means a body's within-room position.
-  Charters mint through the existing consequence-fuse path
-  (`world/living_world.py`), so this adds a producer and no delivery
-  machinery. Open questions are listed in the design note; §14.2 (how a
-  charter is authored) is the one most likely to fail silently.
+- **The `offscreen_log` migration above still blocks any consumer of that
+  legacy history, but no longer blocks Charter's current-state slice.** Charter
+  owns a new typed, frame-scoped registry and writes incidents through
+  `scheduled_events` -> `world_events`; it never reads `offscreen_log`.
+  Backfilling Charter history from older play, or building any cross-system
+  retrospective over the legacy log, must migrate the four shapes first.
+- **Institutions and upkeep — deeper realism and product authoring.** The five
+  genre-neutral primitives, pure simulator, frame-scoped epoch job, guarded
+  persistence, consequence mint, destination aftermath and per-presence slice
+  are built. The current `/api/chats/{cid}/charters` surface is structured but
+  raw. Still open: upkeep readings as beliefs rather than ground truth,
+  fractional labor/service, travel and handover time, body refusal/projects,
+  recovery-place requirements, nested charters, adaptive safe ensemble
+  batching for Charter people, and a
+  guided authoring UI with templates. Deliberately NOT called `stations`:
+  that word already means a body's within-room position.
 - **Typed belief facets for what travels off screen.** Contradiction over
   prose is semantic, which is why deterministic dispute detection was refuted;
   over `(owner, subject, facet_type, value)` it is a key comparison. Scope it

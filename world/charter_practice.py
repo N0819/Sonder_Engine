@@ -56,6 +56,7 @@ import zlib
 
 from .charter_figure import figure_claim
 from .charter_mind import PERSONAL_FLOOR, hear, see
+from .charter_politics import regard_key, regard_value
 from .charter_talk import RETOLD_RETENTION, co_present, tellable
 
 #: Practices one body may hold at once. Past this the oldest is dropped: a
@@ -206,7 +207,7 @@ def _afford_ask(actor, other, practice, state):
         if other in (state.get("figures") or {}):
             return f"{actor} asked {other} about {subject}"
         if hear(state["minds"], actor, other, subject, ASKED_RETENTION,
-                state["regard"].get((actor, other), 1.0)):
+                regard_value(state["regard"], actor, other)):
             return f"{actor} asked {other} about {subject}"
         return ""
 
@@ -238,7 +239,7 @@ def _afford_tell(actor, other, practice, state):
             # the act a player experiences from a background NPC.
             return f"{actor} told {other} about {subject}"
         if hear(state["minds"], other, actor, subject, RETOLD_RETENTION,
-                state["regard"].get((other, actor), 1.0)):
+                regard_value(state["regard"], other, actor)):
             return f"{actor} told {other} about {subject}"
         return ""
 
@@ -281,12 +282,13 @@ def _afford_accuse(actor, other, practice, state):
         return None
     if int(state["blame"].get(other, 0)) <= 0:
         return None
-    pair = (actor, other)
-    if state["regard"].get(pair, 1.0) < 0.45:
+    pair = regard_key(actor, other)
+    if regard_value(state["regard"], actor, other) < 0.45:
         return None
 
     def effect():
-        state["regard"][pair] = max(0.3, state["regard"].get(pair, 1.0) - 0.1)
+        state["regard"][pair] = max(
+            0.3, regard_value(state["regard"], actor, other) - 0.1)
         state["heard_blame"].setdefault(other, set()).add(actor)
         spawn = _open("quarrel", practice["place"],
                       {"a": actor, "b": other}, state["at"], about=other)
@@ -299,14 +301,15 @@ def _afford_accuse(actor, other, practice, state):
 def _afford_reconcile(actor, other, practice, state):
     if not _within_speech(actor, other, state):
         return None
-    pair = (actor, other)
-    if state["regard"].get(pair, 1.0) >= 1.0:
+    pair = regard_key(actor, other)
+    if regard_value(state["regard"], actor, other) >= 1.0:
         return None
     if state["at"] - float(practice["opened_at"]) < 12.0:
         return None
 
     def effect():
-        state["regard"][pair] = min(1.0, state["regard"].get(pair, 1.0) + 0.08)
+        state["regard"][pair] = min(
+            1.0, regard_value(state["regard"], actor, other) + 0.08)
         state["closed"].append(practice["key"])
         return f"{actor} made peace with {other}"
 

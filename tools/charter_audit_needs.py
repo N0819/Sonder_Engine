@@ -1,4 +1,4 @@
-"""Needs, movement, and two towns that cannot feed themselves alone.
+"""Optional audit: needs, movement, and two interdependent towns.
 
 A need is an upkeep whose place is a body, so `available` stops being an
 authored flag and becomes a consequence. That closes the loop the simulation

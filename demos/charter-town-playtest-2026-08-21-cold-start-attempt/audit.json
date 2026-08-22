@@ -1,0 +1,148 @@
+{
+  "turns": 2,
+  "failed": 0,
+  "median_turn_seconds": 14.957,
+  "total_turn_seconds": 29.914,
+  "warnings": 7,
+  "llm_calls": 21,
+  "llm_seconds": 38.36,
+  "background_reactions": 0,
+  "promoted": [],
+  "world_events": 0,
+  "charter_initial": {
+    "aldermere_commons": {
+      "clock_hours": 0.0,
+      "levels": {
+        "water_drawn": 0.56,
+        "grain_milled": 0.62,
+        "bread_baked": 0.47,
+        "market_stocked": 0.42,
+        "cart_roads": 0.58
+      },
+      "watch": {
+        "well_watch": "toma",
+        "mill_watch": "edrin",
+        "oven_watch": "mara",
+        "market_clerk": "sable",
+        "cart_warden": "orin"
+      },
+      "blame": {},
+      "bindings": {},
+      "places": {
+        "toma": "well_house",
+        "edrin": "mill",
+        "mara": "bakehouse",
+        "sable": "market_square",
+        "orin": "market_square"
+      },
+      "available": {
+        "toma": true,
+        "edrin": true,
+        "mara": true,
+        "sable": true,
+        "orin": true
+      }
+    },
+    "aldermere_civic_watch": {
+      "clock_hours": 0.0,
+      "levels": {
+        "gate_watch": 0.76,
+        "night_lamps": 0.34,
+        "infirmary_ready": 0.7,
+        "bridge_sound": 0.36,
+        "petitions_sorted": 0.55
+      },
+      "watch": {
+        "gate_captain": "ysra",
+        "gate_guard": "jory",
+        "lamp_round": "nella",
+        "healer_watch": "iven",
+        "petition_clerk": "pell"
+      },
+      "blame": {},
+      "bindings": {},
+      "places": {
+        "ysra": "north_gate",
+        "jory": "north_gate",
+        "nella": "infirmary",
+        "iven": "infirmary",
+        "pell": "council_hall"
+      },
+      "available": {
+        "ysra": true,
+        "jory": true,
+        "nella": false,
+        "iven": true,
+        "pell": true
+      }
+    }
+  },
+  "charter_final": {
+    "aldermere_commons": {
+      "clock_hours": 0.0,
+      "levels": {
+        "water_drawn": 0.56,
+        "grain_milled": 0.62,
+        "bread_baked": 0.47,
+        "market_stocked": 0.42,
+        "cart_roads": 0.58
+      },
+      "watch": {
+        "well_watch": "toma",
+        "mill_watch": "edrin",
+        "oven_watch": "mara",
+        "market_clerk": "sable",
+        "cart_warden": "orin"
+      },
+      "blame": {},
+      "bindings": {},
+      "places": {
+        "toma": "well_house",
+        "edrin": "mill",
+        "mara": "bakehouse",
+        "sable": "market_square",
+        "orin": "market_square"
+      },
+      "available": {
+        "toma": true,
+        "edrin": true,
+        "mara": true,
+        "sable": true,
+        "orin": true
+      }
+    },
+    "aldermere_civic_watch": {
+      "clock_hours": 0.0,
+      "levels": {
+        "gate_watch": 0.76,
+        "night_lamps": 0.34,
+        "infirmary_ready": 0.7,
+        "bridge_sound": 0.36,
+        "petitions_sorted": 0.55
+      },
+      "watch": {
+        "gate_captain": "ysra",
+        "gate_guard": "jory",
+        "lamp_round": "nella",
+        "healer_watch": "iven",
+        "petition_clerk": "pell"
+      },
+      "blame": {},
+      "bindings": {},
+      "places": {
+        "ysra": "north_gate",
+        "jory": "north_gate",
+        "nella": "infirmary",
+        "iven": "infirmary",
+        "pell": "council_hall"
+      },
+      "available": {
+        "ysra": true,
+        "jory": true,
+        "nella": false,
+        "iven": true,
+        "pell": true
+      }
+    }
+  }
+}

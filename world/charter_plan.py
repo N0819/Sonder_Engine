@@ -165,7 +165,7 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
     return {"watch": watch, "unfilled": unfilled}
 
 
-def tended_upkeeps(charter, watch):
+def tended_upkeeps(charter, watch, fixed_bodies=()):
     """Which upkeeps actually get service under this watch.
 
     THE POINT AT WHICH BELIEF MEETS THE WORLD. The charter assigned from its
@@ -174,12 +174,16 @@ def tended_upkeeps(charter, watch):
     tends nothing, and the charter does not find out until somebody looks.
     """
     served = set()
+    fixed_bodies = {str(body) for body in (fixed_bodies or ())}
     for post_key, body_key in (watch or {}).items():
         body = charter["bodies"].get(body_key)
         if body is None or not body["available"]:
             continue
         post = charter["posts"].get(post_key)
         if post is None:
+            continue
+        if body_key in fixed_bodies \
+                and str(body.get("place") or "") != str(post.get("place") or ""):
             continue
         for key in post["serves"]:
             if key in charter["upkeeps"]:
