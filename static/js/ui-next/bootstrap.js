@@ -26,6 +26,7 @@ const SERVICE_PATHS = Object.freeze({
   navigationState: "./navigation-state.js?release=wp03.1",
   shortcuts: "./shortcuts.js?release=wp03.1",
   goTo: "./go-to.js?release=wp03.1",
+  extensionHost: "./extension-host.js?release=wp03.1",
   shell: "./shell.js?release=wp03.1",
 });
 

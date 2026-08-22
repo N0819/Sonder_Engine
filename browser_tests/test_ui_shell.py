@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import Page, expect
+
+
+FIXTURES = Path(__file__).with_name("fixtures")
 
 
 BOOTSTRAP = {
@@ -344,6 +348,85 @@ def test_go_to_remains_touch_reachable_on_compact_shell(
     assert opener.evaluate("node => node.getBoundingClientRect().height") >= 44
     opener.click()
     expect(page.get_by_role("dialog", name="Go To")).to_be_visible()
+
+
+def test_v1_extension_mounts_navigates_calls_fails_safely_and_unmounts(
+    page: Page, ui_base_url: str
+) -> None:
+    calls: list[dict[str, object]] = []
+    page.route(
+        "**/api/chats",
+        lambda route: route.fulfill(content_type="application/json", body="[]"),
+    )
+
+    def serve_extension_call(route):
+        calls.append(
+            {
+                "method": route.request.method,
+                "url": route.request.url,
+                "body": route.request.post_data_json,
+            }
+        )
+        route.fulfill(content_type="application/json", body='{"ok":true}')
+
+    page.route("**/api/extensions/fixture-v1/x/seen", serve_extension_call)
+    _open_shell(page, ui_base_url)
+    source = (FIXTURES / "ui_v1_extension.js").read_text(encoding="utf-8")
+    page.evaluate(
+        """source => {
+          window.Sonder._begin("fixture-v1");
+          (0, eval)(source);
+          window.Sonder._end();
+        }""",
+        source,
+    )
+
+    page.get_by_role("button", name="Go To", exact=True).click()
+    search = page.get_by_role("searchbox", name="Find a destination")
+    search.fill("Fixture view")
+    search.press("Enter")
+    expect(page).to_have_url(
+        re.compile(
+            r"#/settings/add-ons\?extension=fixture-v1&kind=legacy-view&view=fixture-view$"
+        )
+    )
+    mounted = page.get_by_role("region", name="Fixture view")
+    expect(mounted).to_have_text("Fixture view mounted")
+
+    page.evaluate("async () => window.Sonder.emit('turn:done', { turn: 9 })")
+    assert calls == [
+        {
+            "method": "POST",
+            "url": f"{ui_base_url}/api/extensions/fixture-v1/x/seen",
+            "body": {"turn": 9},
+        }
+    ]
+
+    page.evaluate(
+        """() => {
+          window.Sonder._begin("broken-view");
+          window.Sonder.registerView({
+            id: "broken",
+            label: "Broken view",
+            render() { throw new Error("fixture render failure"); },
+          });
+          window.Sonder._end();
+        }"""
+    )
+    page.get_by_role("button", name="Go To", exact=True).click()
+    search = page.get_by_role("searchbox", name="Find a destination")
+    search.fill("Broken view")
+    search.press("Enter")
+    expect(page.get_by_text(
+        "This add-on view is unavailable. The rest of Sonder Engine is still ready.",
+        exact=True,
+    )).to_be_visible()
+    expect(page.locator("html")).to_have_attribute("data-ui-next-state", "ready")
+
+    page.evaluate("() => window.Sonder._unload('broken-view')")
+    expect(page).to_have_url(re.compile(r"#/settings/add-ons$"))
+    expect(page.get_by_text("Broken view", exact=True)).to_have_count(0)
+    expect(page.get_by_role("link", name="Play", exact=True)).to_be_visible()
 
 
 @pytest.mark.parametrize(

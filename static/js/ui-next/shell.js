@@ -32,7 +32,7 @@ export function createApplicationShell(options = {}) {
     throw new Error("The application shell requires the coherent host runtime.");
   }
   if (!modules?.destinations || !modules?.inspectorHost
-      || !modules?.shortcuts || !modules?.goTo) {
+      || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost) {
     throw new Error("The application shell presentation modules are missing.");
   }
 
@@ -46,6 +46,7 @@ export function createApplicationShell(options = {}) {
   let renderedDestination = null;
   let inspectorHost = null;
   let goTo = null;
+  let extensionHost = null;
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
@@ -89,6 +90,7 @@ export function createApplicationShell(options = {}) {
     } else {
       view.replaceChildren(destinationView);
     }
+    extensionHost?.decorate({ route: shellState.route, view });
     services.localizer.localize(view);
     inspectorHost?.sync(shellState.route);
     goTo?.sync(shellState.route);
@@ -108,11 +110,19 @@ export function createApplicationShell(options = {}) {
     onCollision: entry => services.diagnostics.record({ kind: "shortcut-collision", ...entry }),
   });
   shortcutRegistry.start();
+  extensionHost = modules.extensionHost.createExtensionHost({
+    services,
+    modules,
+    shortcutRegistry,
+    document: documentRef,
+    onChange: () => render(selectShellState(services.store.getSnapshot())),
+  });
   goTo = modules.goTo.createGoTo({
     services,
     modules,
     shortcutRegistry,
     document: documentRef,
+    resultProviders: [extensionHost.goToResults],
   });
   const unregisterSettings = shortcutRegistry.register({
     owner: "core-shell",
@@ -153,6 +163,7 @@ export function createApplicationShell(options = {}) {
     unregisterEscape();
     unregisterSettings();
     goTo.teardown();
+    extensionHost.teardown();
     shortcutRegistry.stop();
     inspectorHost.teardown();
     view.replaceChildren();
@@ -163,5 +174,6 @@ export function createApplicationShell(options = {}) {
     layoutState: () => root.dataset.layoutState,
     shortcuts: shortcutRegistry,
     goTo,
+    extensionHost,
   });
 }
