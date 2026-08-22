@@ -1,0 +1,181 @@
+{
+  "browser": {
+    "name": "chromium",
+    "version": "149.0.7827.55"
+  },
+  "budgets": {
+    "boot_interactive_p95_ms": 133.91,
+    "effects_frame_p95_ms": 20.04,
+    "idle_api_requests": 0,
+    "library_1000_render_p95_ms": 442.66,
+    "navigation_dom_growth_after_50": 45,
+    "replacement_long_task_ms": 200,
+    "transcript_500_render_p95_ms": 198.73
+  },
+  "commit": "c99173dd8b7544d6ef7c53e9ed837fc0f841bbcc",
+  "fixture_sizes": {
+    "library_records": 1000,
+    "navigation_cycles": 50,
+    "transcript_turns": 500
+  },
+  "journeys": {
+    "extensions": {
+      "screenshot": "desktop_extensions.png",
+      "screenshot_sha256": "9ffefb8f58b08537bad25a1051d8678a2309d28a81e316c7dc001bab5f6486bf",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    "guest-join": {
+      "screenshot": "mobile_guest_join.png",
+      "screenshot_sha256": "692531609a69309b7767323e315a3ea149f692dc27004d1594c93b14cb0a3b61",
+      "viewport": [
+        390,
+        844
+      ]
+    },
+    "library-scale": {
+      "screenshot": "desktop_library_scale.png",
+      "screenshot_sha256": "b886fadc803f72d37063b7927e2984f18aedf930c39543c6e9f40e413742c1e1",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    "login": {
+      "screenshot": "mobile_login.png",
+      "screenshot_sha256": "f05598b4e14afc4ab1813ba3f55cb58b7aaa3c5b5f259e1f118586ee4c505d30",
+      "viewport": [
+        390,
+        844
+      ]
+    },
+    "new-story": {
+      "screenshot": "mobile_new_story.png",
+      "screenshot_sha256": "8bd8b8f586c2366081d3f7f3cc09bc6a0617738f53588a1baf02668dcc05cead",
+      "viewport": [
+        390,
+        844
+      ]
+    },
+    "play-500": {
+      "screenshot": "desktop_500_turns.png",
+      "screenshot_sha256": "92cb41d8902baf57a4bf13534b99c189d6e2c0bb694a7341d6e2c683a041e56b",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    "play-empty": {
+      "screenshot": "desktop_empty_play.png",
+      "screenshot_sha256": "359f18f7c3b6fe3386e3d2d356d0285e432ee5031714a4fa44cd49fb57afea68",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    "play-landscape": {
+      "observed_limitation": {
+        "aria_current": "false",
+        "chat_request_count": 0,
+        "chatname": "No story selected",
+        "finding": "story selection did not settle at 844x390",
+        "item_box": {
+          "height": 46,
+          "width": 211,
+          "x": 9,
+          "y": 47
+        },
+        "modal_title": ""
+      },
+      "screenshot": "mobile_landscape_play.png",
+      "screenshot_sha256": "2fe8033fb5c803cf0be61cc985219856b20778518d93a254f6aade1fb7131811",
+      "viewport": [
+        844,
+        390
+      ]
+    },
+    "play-mobile": {
+      "screenshot": "mobile_play.png",
+      "screenshot_sha256": "d6124a69ebb5beaece0e962d4dfb3d6c8542b26800fcd6c6e2e06dfeec22144f",
+      "viewport": [
+        390,
+        844
+      ]
+    },
+    "play-narrow": {
+      "screenshot": "mobile_narrow_play.png",
+      "screenshot_sha256": "d2e05a4395d53d004ca9202d50cca226d6c231e819cae0fe7de9d03987b2d7aa",
+      "viewport": [
+        360,
+        640
+      ]
+    },
+    "play-populated": {
+      "screenshot": "desktop_play.png",
+      "screenshot_sha256": "55d447d5f0e7886b68357433d5a28ef1f9a2211b0a29dd3db7b4d6e6a2b4f988",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    "play-tablet": {
+      "screenshot": "tablet_play.png",
+      "screenshot_sha256": "828e850983836920d707e6c3b6e95e24a9bf47cee2db1a63ce7e1167cad95059",
+      "viewport": [
+        1024,
+        768
+      ]
+    },
+    "settings": {
+      "screenshot": "desktop_settings_appearance.png",
+      "screenshot_sha256": "83ae1f31e43a65afa87f296218c590723d5261a744831d179f29bbc3da896e7a",
+      "viewport": [
+        1440,
+        900
+      ]
+    },
+    "settings-short": {
+      "screenshot": "short_settings_appearance.png",
+      "screenshot_sha256": "e6ef7f6b838dfb1d41c212f039051fd6babc0865345bf0e85422011455e69f76",
+      "viewport": [
+        1280,
+        640
+      ]
+    }
+  },
+  "metrics": {
+    "boot_interactive_ms": {
+      "median": 110.01,
+      "p95": 111.59,
+      "runs": 3
+    },
+    "effects_frame_ms": {
+      "median": 16.7,
+      "p95": 16.7,
+      "runs": 60
+    },
+    "idle_api_requests": {
+      "median": 0.0,
+      "p95": 0.0,
+      "runs": 1
+    },
+    "library_1000_render_ms": {
+      "median": 359.52,
+      "p95": 368.88,
+      "runs": 3
+    },
+    "navigation_dom_growth": {
+      "median": 37.0,
+      "p95": 37.0,
+      "runs": 50
+    },
+    "transcript_500_render_ms": {
+      "median": 164.41,
+      "p95": 165.61,
+      "runs": 3
+    }
+  },
+  "platform": "Windows-10-10.0.19045-SP0"
+}
