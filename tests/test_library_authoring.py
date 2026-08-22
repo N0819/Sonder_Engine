@@ -64,12 +64,16 @@ def _seed_story(db):
         "VALUES(?,?,?,0)",
         (story, lore, 999999),
     )
+    turn_ids = []
     for index in range(4):
-        db.qi(
+        turn_ids.append(db.qi(
             "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
             (story, index, f"private player input {index}", time.time() - 10 + index),
-        )
-    return {"story": story, "persona": persona, "character": character, "lore": lore}
+        ))
+    return {
+        "story": story, "persona": persona, "character": character,
+        "lore": lore, "turn_ids": turn_ids,
+    }
 
 
 def test_story_authoring_projection_is_bounded_and_reports_real_overview(
@@ -111,6 +115,9 @@ def test_story_authoring_projection_is_bounded_and_reports_real_overview(
     }]
     assert payload["overview"]["activity"]["turn_count"] == 4
     assert [row["idx"] for row in payload["overview"]["activity"]["recent"]] == [3, 2, 1]
+    assert [row["id"] for row in payload["overview"]["activity"]["recent"]] == [
+        seeded["turn_ids"][3], seeded["turn_ids"][2], seeded["turn_ids"][1],
+    ]
     assert payload["overview"]["issues"] == [{
         "code": "missing-lore-origin",
         "item_id": seeded["lore"],

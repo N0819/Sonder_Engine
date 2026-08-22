@@ -24,6 +24,21 @@ function selectedOwner(route) {
   });
 }
 
+function importOwner(route) {
+  if (route?.destination !== "library" || route.query?.mode !== "import") return null;
+  const kind = ({ stories: "story", characters: "character", personas: "persona", lore: "lore" })[
+    route.segments?.[0]
+  ] || "story";
+  return Object.freeze({
+    kind, id: null, owner: `${kind}:import`, mode: "import",
+    route: String(route.canonicalHash || ""),
+  });
+}
+
+function routeOwner(route) {
+  return selectedOwner(route) || importOwner(route);
+}
+
 function writeSpec(owner, draft, revision) {
   const paths = {
     story: `/api/chats/${owner.id}`,
@@ -62,12 +77,13 @@ export function createLibraryAuthoringRuntime(options = {}) {
   let stopped = false;
   let generation = 0;
   let active = null;
+  let importDraft = null;
 
   const patch = value => store.dispatch({
     type: "server/patch", slice: "library", value,
   });
   const isOwnerCurrent = captured => {
-    const now = selectedOwner(router.current());
+    const now = routeOwner(router.current());
     return !stopped && now?.owner === captured.owner && active?.owner === captured.owner;
   };
 
@@ -89,7 +105,7 @@ export function createLibraryAuthoringRuntime(options = {}) {
           isCurrent: identity => !stopped
             && identity.owner === active?.owner
             && requestGeneration === generation
-            && selectedOwner(router.current())?.owner === owner.owner,
+            && routeOwner(router.current())?.owner === owner.owner,
         },
       );
       if (!isOwnerCurrent(owner) || requestGeneration !== generation) return false;
@@ -126,6 +142,18 @@ export function createLibraryAuthoringRuntime(options = {}) {
 
   const onRoute = route => {
     const owner = selectedOwner(route);
+    const workflow = importOwner(route);
+    if (!owner && workflow) {
+      generation += 1;
+      active = workflow;
+      patch({ authoring: {
+        status: "import-ready", owner: workflow.owner, kind: workflow.kind,
+        id: null, mode: "import", route: workflow.route,
+        document: null, draft: null, revision: "", overview: null,
+        restored: false, error: "", retryAvailable: Boolean(importDraft),
+      } });
+      return;
+    }
     if (!owner) {
       active = null;
       generation += 1;
@@ -204,6 +232,83 @@ export function createLibraryAuthoringRuntime(options = {}) {
     return true;
   };
 
+  const importStory = async data => {
+    if (active?.kind !== "story" || active?.mode !== "import") return false;
+    importDraft = clone(data);
+    const captured = Object.freeze({ ...active, generation });
+    patch({ authoring: {
+      ...store.getSnapshot().library.authoring,
+      status: "importing", error: "", retryAvailable: true,
+    } });
+    try {
+      const result = await apiClient.request("POST", "/api/chats/import", {
+        body: { data: importDraft },
+        channel: "library-authoring-import",
+        owner: captured.owner,
+        isCurrent: identity => identity.owner === captured.owner
+          && isOwnerCurrent(captured) && generation === captured.generation,
+      });
+      if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
+      const id = Number(result.data?.id);
+      if (!Number.isSafeInteger(id) || id < 1) {
+        throw new Error("The imported Story response was incomplete.");
+      }
+      importDraft = null;
+      servicesNavigateToStory(id);
+      return true;
+    } catch (error) {
+      if (!isOwnerCurrent(captured) || generation !== captured.generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        ...store.getSnapshot().library.authoring,
+        status: error?.kind === "forbidden" ? "permission-error" : "import-error",
+        error: String(error?.userMessage || error?.message || "The Story could not be imported."),
+        retryAvailable: true,
+      } });
+      return false;
+    }
+  };
+
+  const servicesNavigateToStory = id => router.navigate({
+    destination: "library", segments: ["stories"],
+    query: { item: `story:${id}` },
+  });
+
+  const branchStory = async turnIdValue => {
+    const state = store.getSnapshot().library.authoring;
+    const turnId = Number(turnIdValue);
+    if (active?.kind !== "story" || active.id === null
+        || !Number.isSafeInteger(turnId) || turnId < 1 || state?.status === "branching") {
+      return false;
+    }
+    const captured = Object.freeze({ ...active, generation });
+    patch({ authoring: { ...state, status: "branching", error: "" } });
+    try {
+      const result = await apiClient.request("POST", `/api/turns/${turnId}/branch`, {
+        channel: "library-authoring-branch",
+        owner: captured.owner,
+        isCurrent: identity => identity.owner === captured.owner
+          && isOwnerCurrent(captured) && generation === captured.generation,
+      });
+      if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
+      const id = Number(result.data?.id);
+      if (!Number.isSafeInteger(id) || id < 1) {
+        throw new Error("The branched Story response was incomplete.");
+      }
+      servicesNavigateToStory(id);
+      return true;
+    } catch (error) {
+      if (!isOwnerCurrent(captured) || generation !== captured.generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        ...store.getSnapshot().library.authoring,
+        status: "recoverable-error",
+        error: String(error?.userMessage || error?.message || "The Story could not be branched."),
+      } });
+      return false;
+    }
+  };
+
   const beforeUnload = event => {
     const state = store.getSnapshot().library.authoring;
     if (!state || !DIRTY_STATES.has(state.status)) return;
@@ -219,8 +324,19 @@ export function createLibraryAuthoringRuntime(options = {}) {
     unsubscribe();
     apiClient.cancel?.("library-authoring-load", "runtime-stop");
     apiClient.cancel?.("library-authoring-save", "runtime-stop");
+    apiClient.cancel?.("library-authoring-import", "runtime-stop");
+    apiClient.cancel?.("library-authoring-branch", "runtime-stop");
     target.removeEventListener("beforeunload", beforeUnload);
   };
 
-  return Object.freeze({ stage, save, discard, reload: () => active && load(active), teardown });
+  return Object.freeze({
+    stage,
+    save,
+    discard,
+    importStory,
+    retryImport: () => importDraft && importStory(importDraft),
+    branchStory,
+    reload: () => active?.id && load(active),
+    teardown,
+  });
 }

@@ -14,7 +14,7 @@ const SEGMENT_BY_TYPE = Object.freeze({
   lore: "lore",
 });
 const SCOPES = new Set(["all", "story", "unassigned", "multiple"]);
-const SORTS = new Set(["name", "type", "created", "usage"]);
+const SORTS = new Set(["name", "type", "created", "usage", "recent"]);
 const VISIBILITIES = new Set(["active", "archived"]);
 const MODES = new Set(["view", "edit", "create", "import"]);
 const ITEM_ID = /^(story|character|persona|lore):([1-9][0-9]*)$/;
@@ -590,6 +590,14 @@ export function createLibraryRuntime(options = {}) {
     deleteStory,
     runUndo,
     currentRoute: () => currentRoute,
+    homeState: () => {
+      const drafts = localState.snapshot().drafts?.["library-authoring"] || {};
+      return Object.freeze({
+        recents: presentation.recents.slice(0, 8),
+        favorites: presentation.favorites.slice(0, 8),
+        drafts: Object.keys(drafts).map(cleanItemId).filter(Boolean).slice(0, 8),
+      });
+    },
     teardown,
   });
 }

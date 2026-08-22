@@ -9,6 +9,13 @@ const COPY = Object.freeze({
   save: "Save story",
   discard: "Discard draft",
   restored: "Recovered local draft",
+  importTitle: "Import story archive",
+  importFile: "Story archive JSON",
+  importHelp: "A new Story will be created. The selected archive is checked before it is sent.",
+  importAction: "Import story",
+  importing: "Importing story…",
+  retryImport: "Retry import",
+  invalidArchive: "Choose a valid Story JSON archive.",
 });
 // UI_CATALOG_END
 
@@ -95,6 +102,72 @@ export function createStoryEditor(options = {}) {
     }
     await services.authoring.save();
     onRender?.();
+  });
+  return form;
+}
+
+export function createStoryImporter(options = {}) {
+  const { document: documentRef, services, state } = options;
+  const form = node(documentRef, "form", "ui-authoring-form");
+  form.dataset.storyImporter = "true";
+  form.append(
+    node(documentRef, "h3", "ui-heading ui-heading--2", services.localizer.t(COPY.importTitle)),
+    node(documentRef, "p", "ui-muted", services.localizer.t(COPY.importHelp)),
+  );
+  const archive = node(documentRef, "input", "ui-input");
+  archive.type = "file";
+  archive.id = "ui-story-import-archive";
+  archive.name = "story_archive";
+  archive.accept = "application/json,.json";
+  const archiveField = field(documentRef, services.localizer.t(COPY.importFile), archive);
+  const feedback = node(documentRef, "p", "ui-authoring__status", state.error || "");
+  feedback.setAttribute("role", "status");
+  if (state.error) feedback.dataset.tone = "danger";
+  let parsed = null;
+  archive.addEventListener("change", async () => {
+    parsed = null;
+    feedback.textContent = "";
+    archive.removeAttribute("aria-invalid");
+    const file = archive.files?.[0];
+    if (!file) return;
+    try {
+      const value = JSON.parse(await file.text());
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
+      parsed = value;
+    } catch {
+      archive.setAttribute("aria-invalid", "true");
+      feedback.textContent = services.localizer.t(COPY.invalidArchive);
+      feedback.dataset.tone = "danger";
+    }
+  });
+  const actions = node(documentRef, "div", "ui-authoring-form__actions");
+  const submit = node(
+    documentRef, "button", "ui-button ui-button--primary",
+    services.localizer.t(state.status === "importing" ? COPY.importing : COPY.importAction),
+  );
+  submit.type = "submit";
+  submit.disabled = state.status === "importing";
+  actions.append(submit);
+  if (state.retryAvailable && state.status === "import-error") {
+    const retry = node(
+      documentRef, "button", "ui-button ui-button--quiet",
+      services.localizer.t(COPY.retryImport),
+    );
+    retry.type = "button";
+    retry.addEventListener("click", () => services.authoring.retryImport());
+    actions.append(retry);
+  }
+  form.append(archiveField, feedback, actions);
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!parsed) {
+      archive.setAttribute("aria-invalid", "true");
+      feedback.textContent = services.localizer.t(COPY.invalidArchive);
+      feedback.dataset.tone = "danger";
+      archive.focus();
+      return;
+    }
+    await services.authoring.importStory(parsed);
   });
   return form;
 }

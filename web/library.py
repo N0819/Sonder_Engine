@@ -81,6 +81,17 @@ def _archive_map():
     }
 
 
+def _story_recent_use():
+    """Return the latest defensible activity timestamp for each Story."""
+    return {
+        int(row["chat_id"]): row["recent_use"]
+        for row in q(
+            "SELECT chat_id,MAX(created) AS recent_use FROM turns GROUP BY chat_id"
+        )
+        if row["recent_use"] is not None
+    }
+
+
 def _character_associations():
     result = defaultdict(list)
     for row in q(
@@ -167,7 +178,13 @@ def _base_items(story_id=None):
     char_use = _character_associations()
     persona_use = _persona_associations()
     lore_use = _lore_associations()
+    story_recent = _story_recent_use()
     items = []
+
+    def associated_recent(associations):
+        values = [story_recent.get(int(row["story_id"])) for row in associations]
+        values = [value for value in values if value is not None]
+        return max(values) if values else None
 
     for row in q("SELECT id,name,scenario,created FROM chats ORDER BY id"):
         item_id = int(row["id"])
@@ -176,6 +193,7 @@ def _base_items(story_id=None):
             "name": row["name"] or "Untitled story",
             "summary": str(row["scenario"] or "")[:500],
             "subtype": "", "created": row["created"], "reusable": False,
+            "recent_use": story_recent.get(item_id, row["created"]),
             "archived": archived.get(("story", item_id), False),
             "use_count": 0, "associations": [],
         })
@@ -187,6 +205,7 @@ def _base_items(story_id=None):
             "key": f"character:{item_id}", "name": row["name"],
             "summary": _summary(_json(row["sheet"], {})),
             "subtype": "", "created": row["created"], "reusable": True,
+            "recent_use": associated_recent(associations),
             "archived": archived.get(("character", item_id), False),
             "use_count": len(associations), "associations": associations,
         })
@@ -198,6 +217,7 @@ def _base_items(story_id=None):
             "key": f"persona:{item_id}", "name": row["name"],
             "summary": _summary(_json(row["sheet"], {})),
             "subtype": "", "created": None, "reusable": True,
+            "recent_use": associated_recent(associations),
             "archived": archived.get(("persona", item_id), False),
             "use_count": len(associations), "associations": associations,
         })
@@ -211,6 +231,7 @@ def _base_items(story_id=None):
             "kind": "lore", "id": item_id, "key": f"lore:{item_id}",
             "name": row["name"], "summary": str(row["summary"] or "")[:500],
             "subtype": row["book_type"] or "general", "created": None,
+            "recent_use": associated_recent(associations),
             "reusable": True,
             "archived": archived.get(("lore", item_id), False),
             "use_count": len(associations), "associations": associations,
@@ -231,6 +252,7 @@ def _base_items(story_id=None):
                 "name": row["name"],
                 "summary": str(row["summary"] or "")[:500],
                 "subtype": row["book_type"] or "general", "created": None,
+                "recent_use": story_recent.get(story_id),
                 "reusable": False,
                 "archived": archived.get(("lore", item_id), False),
                 "use_count": 1,
@@ -272,6 +294,9 @@ def _sort_key(item, selected_sort):
     if selected_sort == "created":
         created = item["created"]
         return (created is None, -(created if created is not None else -math.inf), *identity)
+    if selected_sort == "recent":
+        recent = item["recent_use"]
+        return (recent is None, -(recent if recent is not None else -math.inf), *identity)
     return identity
 
 
@@ -288,7 +313,7 @@ def library_projection(
     story_id: int | None = Query(default=None, gt=0),
     types: list[str] | None = Query(default=None, max_length=80),
     q_text: str = Query(default="", alias="q", max_length=240),
-    sort: Literal["name", "type", "created", "usage"] = "name",
+    sort: Literal["name", "type", "created", "usage", "recent"] = "name",
     visibility: Literal["active", "archived"] = "active",
     offset: int = Query(default=0, ge=0, le=100_000),
     limit: int = Query(default=100, ge=1, le=200),

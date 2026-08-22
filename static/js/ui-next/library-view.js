@@ -110,6 +110,16 @@ const COPY = Object.freeze({
   recentActivity: "Recent activity",
   turnsRecorded: "${count} turns recorded",
   setupIssues: "Needs attention",
+  importStory: "Import story",
+  branchLatest: "Branch from latest turn",
+  branching: "Creating story branch…",
+  branchHelp: "Creates a new Story at the latest recorded turn. The current Story is unchanged.",
+  recentUse: "Recent use",
+  recent: "Recent",
+  favorites: "Favorites",
+  drafts: "Drafts",
+  noneYet: "None yet.",
+  localDraft: "Local draft",
 });
 // UI_CATALOG_END
 
@@ -276,7 +286,8 @@ function toolbar(documentRef, services, state) {
   const sort = node(documentRef, "select", "ui-input");
   sort.setAttribute("aria-label", COPY.sort);
   for (const [value, text] of [
-    ["name", COPY.name], ["type", COPY.type], ["created", COPY.created], ["usage", COPY.storyUse],
+    ["name", COPY.name], ["recent", COPY.recentUse], ["type", COPY.type],
+    ["created", COPY.created], ["usage", COPY.storyUse],
   ]) {
     const option = node(documentRef, "option", "", text);
     option.value = value;
@@ -310,6 +321,16 @@ function toolbar(documentRef, services, state) {
     navigate(services, activeType, { ...query, item: "", q: input.value.trim() });
   });
   form.append(label, submit, sortLabel, visibilityLabel);
+  if (!activeType || activeType === "story") {
+    const importStory = button(documentRef, COPY.importStory);
+    importStory.addEventListener("click", () => {
+      navigate(services, "story", { mode: "import" });
+      documentRef.dispatchEvent(new CustomEvent("sonder:library-select", {
+        detail: { workflow: "story-import" },
+      }));
+    });
+    form.append(importStory);
+  }
   return form;
 }
 
@@ -369,6 +390,48 @@ function resultState(documentRef, library) {
   return null;
 }
 
+function libraryHome(documentRef, services, library) {
+  const route = library?.route || {};
+  if (route.type || route.item || route.q || route.scope !== "all"
+      || route.visibility !== "active") return null;
+  const home = services.library.homeState();
+  const byKey = new Map((library.items || []).map(item => [item.key, item]));
+  const section = node(documentRef, "section", "ui-library-home");
+  section.dataset.libraryHome = "true";
+  for (const [title, keys] of [
+    [COPY.recent, home.recents],
+    [COPY.favorites, home.favorites],
+    [COPY.drafts, home.drafts],
+  ]) {
+    const group = node(documentRef, "section", "ui-library-home__group");
+    group.append(node(documentRef, "h2", "ui-heading ui-heading--3", title));
+    const available = keys.map(key => byKey.get(key)).filter(Boolean);
+    if (!available.length) {
+      group.append(node(documentRef, "p", "ui-muted", COPY.noneYet));
+    } else {
+      const list = node(documentRef, "ul", "ui-library-home__list");
+      for (const item of available) {
+        const row = node(documentRef, "li");
+        const control = button(documentRef, item.name || COPY.untitled);
+        if (title === COPY.drafts) {
+          control.setAttribute("aria-label", `${item.name || COPY.untitled} · ${COPY.localDraft}`);
+        }
+        control.addEventListener("click", () => {
+          navigate(services, item.kind, { item: item.key });
+          documentRef.dispatchEvent(new CustomEvent("sonder:library-select", {
+            detail: { item: item.key },
+          }));
+        });
+        row.append(control);
+        list.append(row);
+      }
+      group.append(list);
+    }
+    section.append(group);
+  }
+  return section;
+}
+
 export function createLibraryView(options = {}) {
   const documentRef = options.document || document;
   const { services, state } = options;
@@ -378,6 +441,8 @@ export function createLibraryView(options = {}) {
   const content = node(documentRef, "div", "ui-library__content");
   content.append(toolbar(documentRef, services, state));
   const library = state.library || {};
+  const home = libraryHome(documentRef, services, library);
+  if (home) content.append(home);
   if (library.notice) {
     const notice = node(documentRef, "p", "ui-notice ui-library__notice", library.notice);
     notice.setAttribute("role", "status");
@@ -506,7 +571,7 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
   return section;
 }
 
-function storyOverview(documentRef, library, item) {
+function storyOverview(documentRef, services, library, item) {
   const authoring = library?.authoring;
   if (item.kind !== "story" || authoring?.owner !== item.key
       || !authoring.overview) return null;
@@ -528,6 +593,18 @@ function storyOverview(documentRef, library, item) {
     );
   }
   section.append(ledger);
+  const latest = overview.activity?.recent?.[0];
+  if (latest?.id) {
+    const help = node(documentRef, "p", "ui-muted", COPY.branchHelp);
+    const branch = button(
+      documentRef,
+      authoring.status === "branching" ? COPY.branching : COPY.branchLatest,
+      "ui-button ui-button--quiet",
+    );
+    branch.disabled = authoring.status === "branching";
+    branch.addEventListener("click", () => services.authoring.branchStory(latest.id));
+    section.append(help, branch);
+  }
   if (overview.issues?.length) {
     const warning = node(documentRef, "div", "ui-notice");
     warning.dataset.tone = "warning";
@@ -601,7 +678,7 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
     associations.append(list);
   }
   article.append(associations);
-  const overview = storyOverview(documentRef, library, item);
+  const overview = storyOverview(documentRef, services, library, item);
   if (overview) article.append(overview);
   const add = addToStory(documentRef, services, library, item);
   if (add) article.append(add);

@@ -159,9 +159,10 @@ export function createInspectorHost(options = {}) {
     }
     if (destination === "library") {
       body.dataset.libraryContext = "true";
-      const libraryModule = route.query?.mode === "edit"
+      const authoringMode = route.query?.mode === "edit" || route.query?.mode === "import";
+      const libraryModule = authoringMode
         ? modules.libraryAuthoringView : modules.libraryView;
-      const mount = route.query?.mode === "edit"
+      const mount = authoringMode
         ? libraryModule.mountLibraryAuthoring : libraryModule.mountLibraryDetail;
       desktopLibrary = mount({
         document: documentRef,
