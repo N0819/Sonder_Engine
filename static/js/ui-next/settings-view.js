@@ -211,6 +211,285 @@ function advanced(documentRef) {
   return section;
 }
 
+function aiConnections(documentRef, services, state) {
+  const data = state.settings?.data || {};
+  const providers = Array.isArray(data.providers) ? data.providers : [];
+  const defaultModel = data.agent_models?.default || {};
+  const section = el(documentRef, "section", "ui-settings__section ui-settings__section--ai");
+  const head = el(documentRef, "header", "ui-settings__section-head");
+  head.append(
+    el(documentRef, "p", "ui-settings__crumb", "Settings / 02"),
+    el(documentRef, "h2", "ui-heading ui-heading--2", "AI Connections"),
+    el(documentRef, "p", "ui-muted", "Providers, credentials, models, and generation defaults"),
+  );
+
+  const connections = el(documentRef, "section", "ui-settings__group ui-settings__provider-group");
+  const connectionsHead = el(documentRef, "div", "ui-settings__field-head");
+  const connectionsCopy = el(documentRef, "span", "ui-settings__field-copy");
+  connectionsCopy.append(
+    el(documentRef, "strong", "", "Connections"),
+    el(documentRef, "small", "", "Sonder only shows whether a credential is stored. Secret values are never read back."),
+  );
+  const connectionActions = el(documentRef, "span", "ui-settings__connection-actions");
+  const addProvider = el(documentRef, "button", "ui-button ui-button--quiet", "Add provider");
+  addProvider.type = "button";
+  connectionActions.append(
+    el(documentRef, "code", "ui-settings__theme-readout", `${providers.length} connected`),
+    addProvider,
+  );
+  connectionsHead.append(connectionsCopy, connectionActions);
+  connections.append(connectionsHead);
+
+  const setup = el(documentRef, "form", "ui-settings__connection-form");
+  setup.hidden = true;
+  setup.setAttribute("aria-label", "Add AI provider");
+  const setupFields = el(documentRef, "div", "ui-settings__connection-fields");
+  const kindField = el(documentRef, "label", "ui-field");
+  kindField.append(el(documentRef, "span", "ui-field__label", "Provider"));
+  const kind = documentRef.createElement("select");
+  kind.setAttribute("aria-label", "Provider");
+  const presets = data.provider_presets && typeof data.provider_presets === "object"
+    ? data.provider_presets : {};
+  Object.keys(presets).sort().forEach(id => {
+    const label = id.charAt(0).toUpperCase() + id.slice(1);
+    const option = el(documentRef, "option", "", label);
+    option.value = id;
+    kind.append(option);
+  });
+  kindField.append(kind);
+  const nameField = el(documentRef, "label", "ui-field");
+  nameField.append(el(documentRef, "span", "ui-field__label", "Connection name"));
+  const name = documentRef.createElement("input");
+  name.type = "text";
+  name.setAttribute("aria-label", "Connection name");
+  nameField.append(name);
+  const endpointField = el(documentRef, "label", "ui-field");
+  endpointField.append(el(documentRef, "span", "ui-field__label", "Endpoint"));
+  const endpoint = documentRef.createElement("input");
+  endpoint.type = "url";
+  endpoint.setAttribute("aria-label", "Endpoint");
+  endpointField.append(endpoint);
+  const keyField = el(documentRef, "label", "ui-field");
+  keyField.append(el(documentRef, "span", "ui-field__label", "API key"));
+  const apiKey = documentRef.createElement("input");
+  apiKey.type = "password";
+  apiKey.autocomplete = "new-password";
+  apiKey.setAttribute("aria-label", "API key");
+  keyField.append(apiKey);
+  setupFields.append(kindField, nameField, endpointField, keyField);
+  const setupStatus = el(documentRef, "p", "ui-settings__connection-status");
+  setupStatus.setAttribute("role", "status");
+  const setupActions = el(documentRef, "div", "ui-settings__connection-footer");
+  const cancelSetup = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+  cancelSetup.type = "button";
+  const connect = el(documentRef, "button", "ui-button ui-button--primary", "Connect and test");
+  connect.type = "submit";
+  setupActions.append(cancelSetup, connect);
+  const modelStage = el(documentRef, "div", "ui-settings__model-stage");
+  modelStage.hidden = true;
+  const modelField = el(documentRef, "label", "ui-field");
+  modelField.append(el(documentRef, "span", "ui-field__label", "Default model"));
+  const modelSelect = documentRef.createElement("select");
+  modelSelect.setAttribute("aria-label", "Default model");
+  modelField.append(modelSelect);
+  const saveDefault = el(documentRef, "button", "ui-button ui-button--primary", "Save default model");
+  saveDefault.type = "button";
+  modelStage.append(modelField, saveDefault);
+  setup.append(setupFields, setupStatus, setupActions, modelStage);
+  connections.append(setup);
+
+  const syncPreset = () => {
+    const id = kind.value;
+    name.value = id ? id.charAt(0).toUpperCase() + id.slice(1) : "";
+    endpoint.value = presets[id] || "";
+  };
+  kind.addEventListener("change", syncPreset);
+  syncPreset();
+  let providerEmpty = null;
+  let editingProvider = null;
+  let createdProvider = null;
+  const openProviderForm = (provider = null) => {
+    editingProvider = provider;
+    createdProvider = provider;
+    if (provider) {
+      kind.value = provider.kind || "generic";
+      name.value = provider.name || provider.kind || "";
+      endpoint.value = provider.base_url || "";
+      apiKey.value = "";
+      apiKey.placeholder = provider.has_key ? "Leave blank to keep saved key" : "";
+      connect.textContent = "Save and test";
+      setup.setAttribute("aria-label", `Edit ${provider.name || provider.kind || "AI"} provider`);
+    } else {
+      syncPreset();
+      apiKey.value = "";
+      apiKey.placeholder = "";
+      connect.textContent = "Connect and test";
+      setup.setAttribute("aria-label", "Add AI provider");
+    }
+    setup.hidden = false;
+    if (providerEmpty) providerEmpty.hidden = true;
+    defaults.hidden = true;
+    addProvider.setAttribute("aria-expanded", "true");
+    kind.focus();
+  };
+  addProvider.addEventListener("click", () => openProviderForm());
+  cancelSetup.addEventListener("click", () => {
+    setup.hidden = true;
+    if (providerEmpty) providerEmpty.hidden = false;
+    defaults.hidden = false;
+    addProvider.setAttribute("aria-expanded", "false");
+    setupStatus.textContent = "";
+    modelStage.hidden = true;
+    editingProvider = null;
+    createdProvider = null;
+    addProvider.focus();
+  });
+
+  setup.addEventListener("submit", async event => {
+    event.preventDefault();
+    connect.disabled = true;
+    setupStatus.textContent = "Saving the connection and checking its model list…";
+    try {
+      const payload = {
+        name: name.value.trim(),
+        kind: kind.value,
+        base_url: endpoint.value.trim(),
+        api_key: apiKey.value,
+      };
+      const saved = editingProvider
+        ? await services.apiClient.put(`/api/providers/${editingProvider.id}`, payload, {
+            channel: `settings-provider-save:${editingProvider.id}`,
+            owner: `settings-provider:${editingProvider.id}`,
+          })
+        : await services.apiClient.post("/api/providers", payload, {
+            channel: "settings-provider-create",
+            owner: "settings-provider:new",
+          });
+      createdProvider = saved.data;
+      const result = await services.apiClient.get(`/api/providers/${createdProvider.id}/models`, {
+        channel: `settings-provider-test:${createdProvider.id}`,
+        owner: `settings-provider:${createdProvider.id}`,
+      });
+      if (!connect.isConnected) return;
+      const models = (Array.isArray(result.data?.models) ? result.data.models : [])
+        .map(item => typeof item === "string" ? item : item?.id || item?.name)
+        .filter(Boolean);
+      modelSelect.replaceChildren();
+      models.forEach(id => {
+        const option = el(documentRef, "option", "", id);
+        option.value = id;
+        modelSelect.append(option);
+      });
+      setupStatus.textContent = models.length
+        ? `Connection works. ${models.length} ${models.length === 1 ? "model" : "models"} available.`
+        : "Connection works, but this provider returned no models.";
+      modelStage.hidden = !models.length;
+      if (models.length) modelSelect.focus();
+    } catch (error) {
+      if (!connect.isConnected) return;
+      setupStatus.textContent = error?.userMessage || error?.message || "Sonder could not connect to this provider.";
+    } finally {
+      if (connect.isConnected) connect.disabled = false;
+    }
+  });
+  saveDefault.addEventListener("click", async () => {
+    if (!createdProvider || !modelSelect.value) return;
+    saveDefault.disabled = true;
+    const agentModels = {
+      ...(data.agent_models || {}),
+      default: { provider: createdProvider.id, model: modelSelect.value },
+    };
+    try {
+      await services.apiClient.put("/api/agent_models", agentModels, {
+        channel: "settings-agent-models-save",
+        owner: "settings-agent-models",
+      });
+      services.store.dispatch({
+        type: "server/replace",
+        slice: "settings",
+        value: {
+          ...state.settings,
+          data: {
+            ...data,
+            providers: providers.some(provider => provider.id === createdProvider.id)
+              ? providers.map(provider => provider.id === createdProvider.id ? createdProvider : provider)
+              : [...providers, createdProvider],
+            agent_models: agentModels,
+          },
+        },
+      });
+    } catch (error) {
+      if (!saveDefault.isConnected) return;
+      setupStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the default model.";
+      saveDefault.disabled = false;
+    }
+  });
+
+  if (!providers.length) {
+    providerEmpty = el(documentRef, "p", "ui-settings__provider-empty", "No AI provider is connected.");
+    connections.append(providerEmpty);
+  }
+  providers.forEach(provider => {
+    const row = el(documentRef, "div", "ui-settings__provider-row");
+    const copy = el(documentRef, "span", "ui-settings__launcher-copy");
+    const detail = [provider.kind, provider.base_url].filter(Boolean).join(" · ");
+    copy.append(
+      el(documentRef, "strong", "", provider.name || provider.kind || "Provider"),
+      el(documentRef, "small", "", detail),
+    );
+    const credential = el(
+      documentRef,
+      "span",
+      "ui-settings__provider-credential",
+      provider.has_key ? "Key saved" : "No key",
+    );
+    const test = el(documentRef, "button", "ui-button ui-button--quiet", "Test");
+    test.type = "button";
+    test.setAttribute("aria-label", `Test ${provider.name || provider.kind || "provider"} connection`);
+    const edit = el(documentRef, "button", "ui-button ui-button--quiet", "Edit");
+    edit.type = "button";
+    edit.setAttribute("aria-label", `Edit ${provider.name || provider.kind || "provider"} connection`);
+    edit.addEventListener("click", () => openProviderForm(provider));
+    const status = el(documentRef, "p", "ui-settings__provider-status");
+    status.setAttribute("role", "status");
+    test.addEventListener("click", async () => {
+      test.disabled = true;
+      status.textContent = "Testing connection…";
+      try {
+        const result = await services.apiClient.get(`/api/providers/${provider.id}/models`, {
+          channel: `settings-provider-test:${provider.id}`,
+          owner: `settings-provider:${provider.id}`,
+        });
+        if (!test.isConnected) return;
+        const models = Array.isArray(result.data?.models) ? result.data.models : [];
+        status.textContent = `Connection works. ${models.length} ${models.length === 1 ? "model" : "models"} available.`;
+      } catch (error) {
+        if (!test.isConnected) return;
+        status.textContent = error?.userMessage || error?.message || "Sonder could not reach this provider.";
+      } finally {
+        if (test.isConnected) test.disabled = false;
+      }
+    });
+    row.append(icon(documentRef, "api"), copy, credential, edit, test, status);
+    connections.append(row);
+  });
+
+  const defaults = el(documentRef, "section", "ui-settings__group");
+  const defaultRow = el(documentRef, "div", "ui-settings__field-head");
+  const defaultCopy = el(documentRef, "span", "ui-settings__field-copy");
+  defaultCopy.append(
+    el(documentRef, "strong", "", "Default model"),
+    el(documentRef, "small", "", "Used when a specialized engine role does not name its own model."),
+  );
+  defaultRow.append(
+    defaultCopy,
+    el(documentRef, "code", "ui-settings__theme-readout", defaultModel.model || "Not selected"),
+  );
+  defaults.append(defaultRow);
+  section.append(head, connections, defaults);
+  return section;
+}
+
 export function createSettingsView(options = {}) {
   const documentRef = options.document || document;
   const { services, state } = options;
@@ -236,6 +515,8 @@ export function createSettingsView(options = {}) {
   content.append(
     active === "experience"
       ? experience(documentRef, services)
+      : active === "ai-connections"
+        ? aiConnections(documentRef, services, state)
       : active === "advanced"
         ? advanced(documentRef)
         : placeholder(documentRef, active),

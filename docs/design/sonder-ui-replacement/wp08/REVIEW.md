@@ -19,12 +19,17 @@ current UI runtime instead of inventing a substitute runtime contract.
 - Kept appearance preferences browser-local and immediate.
 - Synchronized the Accessibility Mode master control with every visible preference.
 - Ported the Advanced launcher ledger and warning at its supplied short-desktop breakpoint.
+- Ported the AI Connections provider ledger into the same reference field-grid treatment.
+- Connected provider creation, existing-provider edits, credential-safe saves, connection tests,
+  model discovery, and default-model saves to the current runtime APIs.
 - Added the reference terminal glyph used by Advanced and Turn details.
 - Preserved safe fallback behavior for invalid Settings deep links.
 
 ## Deliberately incomplete
 
-- AI Connections, Content, Add-ons, and Maintenance still need their reference panels.
+- AI Connections still needs prompt-cache, generation-limit, image/ambience model, embedding,
+  and advanced per-role controls from the current provider surface.
+- Content, Add-ons, and Maintenance still need their reference panels.
 - Settings search and legacy theme selection are not connected yet.
 - The four Advanced launchers are visual ports only until their replacement editors are
   connected to current engine owners. They do not bridge to the legacy DOM.
@@ -34,6 +39,8 @@ current UI runtime instead of inventing a substitute runtime contract.
 - `screenshots/settings-1440.png`
 - `screenshots/settings-390.png`
 - `screenshots/settings-advanced-1024.png`
+- `screenshots/settings-ai-1440.png`
+- `screenshots/settings-ai-connect-1440.png`
 - `57 passed` across Settings, shell, Play, and Library browser contracts.
 - `node --check static/js/ui-next/settings-view.js`
 - `git diff --check`
