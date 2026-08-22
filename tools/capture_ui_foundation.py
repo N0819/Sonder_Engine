@@ -33,6 +33,7 @@ CASES = (
     ("tablet-long-copy", 1024, 768, "carbon-signal", ("long-copy",)),
     ("mobile", 390, 844, "carbon-signal", ("long-copy",)),
     ("narrow", 360, 640, "carbon-signal", ("accessibility-mode", "long-copy")),
+    ("zoom-200-equivalent", 640, 360, "carbon-signal", ("long-copy",)),
     ("landscape", 844, 390, "midnight-ink", ("long-copy",)),
     ("desktop", 1440, 900, "carbon-signal", ("long-copy",)),
 )

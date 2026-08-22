@@ -125,6 +125,16 @@ def test_lab_has_no_horizontal_page_overflow(page: Page, ui_base_url: str, viewp
     expect(page.get_by_role("button", name="Review connected characters")).to_be_visible()
 
 
+def test_200_percent_zoom_equivalent_keeps_primary_actions_reachable(page: Page, ui_base_url: str):
+    # A 1280x720 display at 200% browser zoom exposes a 640x360 CSS-pixel viewport.
+    page.set_viewport_size({"width": 640, "height": 360})
+    _open_lab(page, ui_base_url)
+    overflow = page.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
+    assert overflow <= 1
+    expect(page.get_by_role("button", name="Review connected characters")).to_be_visible()
+    expect(page.get_by_role("button", name="Open confirmation dialog")).to_be_visible()
+
+
 def test_mobile_targets_are_at_least_44_css_pixels(page: Page, ui_base_url: str):
     page.set_viewport_size({"width": 390, "height": 844})
     _open_lab(page, ui_base_url)
