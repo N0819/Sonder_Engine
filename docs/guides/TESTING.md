@@ -136,7 +136,7 @@ make test-browser
 ```
 
 The browser layer uses Playwright against the repository's actual unbundled
-HTML and script order. API requests are intercepted in focused UI tests, so
+ES-module entry and import graph. API requests are intercepted in focused UI tests, so
 tests can exercise DOM behavior without provider credentials or a populated
 database. Add tests here for behavior that static source assertions cannot
 prove: event wiring, modal state, navigation races, persistence in browser

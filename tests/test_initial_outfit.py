@@ -296,7 +296,7 @@ def test_card_editors_place_initial_outfit_near_identity():
     from pathlib import Path
 
     source = (
-        Path(__file__).resolve().parents[1] / "static/js/editors.js"
+        Path(__file__).resolve().parents[1] / "static/js/ui-next/library-editors/character-persona.js"
     ).read_text(encoding="utf-8")
 
     # Clothing is authored by REGION now; the flat "initial outfit" and
@@ -304,11 +304,9 @@ def test_card_editors_place_initial_outfit_near_identity():
     # The legacy `wearing` list survives as an INPUT format -- imports and the
     # generators still emit it, and character_schema migrates it into regions
     # on read -- but nothing types into it any more.
-    assert "Initial outfit — clothing only" not in source
-    assert "Initial clothing condition" not in source
-    assert source.count("fAttireGarments(\n    \"Starting clothes\"") == 2
-    assert source.count("Body appearance — stable visible features") == 2
-    assert source.count("initial_outfit: { regions:") >= 4
+    assert "createSchemaSections" in source
+    assert "JSON.stringify(state.draft, null, 2)" in source
+    assert "services.authoring.stage(parsed)" in source
 
 
 def test_director_establishment_respects_initial_outfit_separation():

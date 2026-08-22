@@ -560,19 +560,8 @@ def guest_page():
     return FileResponse(STATIC_ROOT / "guest.html")
 
 @app.get("/")
-def index():
-    return FileResponse(STATIC_ROOT / "index.html")
-
-
-@app.get("/ui-next")
-def ui_next(request: Request):
-    """Authenticated application entry for the in-progress replacement.
-
-    The default host page remains the shipping UI until the replacement gates
-    pass. Unlike the public login and guest shells, this page is host-only even
-    before it makes an API request, so an anonymous browser cannot inspect a
-    partially built application surface.
-    """
+def index(request: Request):
+    """Serve the sole authenticated host application."""
     if not guest.verify_host_session(request.cookies.get(HOST_COOKIE)):
         return RedirectResponse("/login")
     return FileResponse(STATIC_ROOT / "ui-next.html")
@@ -623,7 +612,7 @@ async def access_control(request: Request, call_next):
 
 
 _UI_DOCUMENT_PATHS = frozenset((
-    "/", "/guest", "/login", "/ui-next", "/ui-next/lab",
+    "/", "/guest", "/login", "/ui-next/lab",
     "/ui-next/runtime",
 ))
 _RELEASED_UI_ASSET_PREFIXES = (

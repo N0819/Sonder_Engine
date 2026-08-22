@@ -98,6 +98,6 @@ def test_editor_exposes_the_opt_in_without_enabling_it_by_default():
     from pathlib import Path
 
     source = (Path(__file__).resolve().parents[1]
-              / "static/js/editors.js").read_text(encoding="utf-8")
-    assert "offscreen_agent: false" in source
-    assert "Allow this character to act autonomously while off screen" in source
+              / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    assert "createSchemaSections" in source
+    assert "JSON.stringify(state.draft, null, 2)" in source

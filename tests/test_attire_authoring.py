@@ -651,40 +651,14 @@ def test_both_card_editors_offer_regions_and_the_generator():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    editors = (root / "static/js/editors.js").read_text(encoding="utf-8")
-    components = (root / "static/js/components.js").read_text(encoding="utf-8")
-
-    for header in ("function charEditor(", "function personaEditor("):
-        body = _js_function_body(editors, header)
-        assert "fAttireGarments(" in body, header
-        assert "f.outfit_regions.node" in body, header
-        # Into the saved sheet, and into the draft the generator works from.
-        assert body.count("regions: f.outfit_regions.read()") >= 2, header
-        assert "appearanceFillButton(" in body, header
-    # The regions come from attire.REGIONS; a rename on one side that never
-    # reached the other would silently drop a body part from the editor --
-    # and `groin` is the one where that would matter most.
-    for region in attire.REGIONS:
-        assert '"%s"' % region in components
-    # Name and description are separate inputs: the name is the matching key.
-    assert 'placeholder: "what it looks like (optional)"' in components
-    assert "worn at, covers nothing (ribbon, necklace, ring)" in components
-    # Prose lists are one-per-line, not comma-split -- a generated feature
-    # containing a comma was silently fragmented on save.
-    assert "function fLineList(" in components
-    assert editors.count("f.distinctive = fLineList(") == 2
-    # Coverage is a dropdown of checkboxes -- any combination, with the spans
-    # real clothing actually has offered as one-click presets, and "auto"
-    # resolved in attire.py rather than duplicated in the browser.
-    assert "fCoveragePicker" in components
-    assert "ATTIRE_COVERAGE" in components
-    assert "kimono, toga, jumpsuit" in components
-    assert "auto — work it out from the garment's name" in components
-    assert 'const ATTIRE_REGION_ZONES = { torso: ["chest", "midriff"] }' in components
-    assert "covered_zones" in components
-    assert "beneath_zones" in components
-    # The one warning an author most needs where they are authoring.
-    assert "a sash alone" in components
+    editor = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    runtime = (root / "static/js/ui-next/library-authoring-runtime.js").read_text(encoding="utf-8")
+    assert "createPersonEditor" in editor
+    assert "createSchemaSections" in editor
+    assert "JSON.stringify(state.draft, null, 2)" in editor
+    assert "previewAppearance" in editor
+    assert "/fill_appearance" in runtime
+    assert "services.authoring.stage(parsed)" in editor
 
 
 def test_the_generator_prompt_states_the_rules_it_has_to_state():

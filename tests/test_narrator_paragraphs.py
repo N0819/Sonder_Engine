@@ -172,7 +172,7 @@ def test_the_repair_example_matches_the_live_contract():
 def test_the_display_already_honours_a_break_the_narrator_writes():
     """The other half, needing no change: a break that reaches the string
     reaches the reader. Losing `pre-wrap` would silently undo all of it."""
-    css = (Path(__file__).resolve().parents[1] / "static" / "styles.css"
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "ui" / "play.css"
            ).read_text(encoding="utf-8")
     assert "white-space:pre-wrap" in css.replace(" ", "")
 

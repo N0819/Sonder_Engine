@@ -118,7 +118,7 @@ The hybrid memory retriever names and implements four standard IR techniques.
 
 - **SillyTavern character-card spec V2/V3** — PNG cards with base64 JSON in
   `chara`/`ccv3` tEXt chunks (`story/importers.py`), plus World Info import
-  (`static/js/editors.js`).
+  (`static/js/ui-next/library-editors/character-persona.js`).
   [V2](https://github.com/malfoyslastname/character-card-spec-v2) ·
   [V3](https://github.com/kwaroran/character-card-spec-v3).
 - **No ANN index — dense retrieval is an exhaustive in-process scan.**

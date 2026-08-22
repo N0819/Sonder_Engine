@@ -850,6 +850,7 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
         "nsfw_enabled": False,
         "attire_beneath": False,
         "auto_promote": False,
+        "affect_habituation": False,
     }
     writes: dict[str, object] = {}
 
@@ -866,6 +867,7 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
     page.route("**/api/nsfw", record("nsfw"))
     page.route("**/api/attire_beneath", record("attire"))
     page.route("**/api/auto_promote", record("promote"))
+    page.route("**/api/affect_habituation", record("habituation"))
     _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
 
     expect(page.get_by_role("heading", name="Content", level=2)).to_be_visible()
@@ -873,6 +875,7 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
     page.get_by_role("checkbox", name="Allow adult story content").check()
     page.get_by_role("checkbox", name="Use underneath descriptions from cards").check()
     page.get_by_role("checkbox", name="Allow stories to promote recurring extras").check()
+    page.get_by_role("checkbox", name="Let sustained peak emotion settle").check()
     page.get_by_role("button", name="Save content preferences").click()
 
     expect(page.get_by_text("Content preferences saved.", exact=True)).to_be_visible()
@@ -883,6 +886,7 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
         "nsfw": {"enabled": True},
         "attire": {"enabled": True},
         "promote": {"enabled": True},
+        "habituation": {"enabled": True},
     }
 
 

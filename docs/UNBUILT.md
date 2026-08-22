@@ -258,7 +258,7 @@ copied, silence is never an erasure.
 with the step that raised it (`pipeline_context.StepTaggedWarnings`, keyed off a
 contextvar set in `compute_step`), persisted onto that step's saved content
 under `_engine_notes`, and rendered above the step in the pipeline drawer
-(`static/js/chat.js`). The tagging lives in the list rather than at the ~40 call
+(`static/js/ui-next/pipeline-inspector.js`). The tagging lives in the list rather than at the ~40 call
 sites, so both spellings are caught including ones not written yet.
 
 Why it was worth landing, on the record: perception dropped both sight sentences
@@ -1637,7 +1637,7 @@ accident**, so every read site has to be re-examined for whether it wants
 ### 1.60 `generalization_tags` promises a mechanism that does not exist
 
 `AssociationProfile.generalization_tags` (`story/character_schema.py:225`) is
-normalized, editable (`static/js/components.js:745`), archived with the sheet,
+normalized, editable (`static/js/ui-next/library-editors/character-persona.js`), archived with the sheet,
 and serialised to the character as prose inside `learned_associations`. What it
 is NOT is a generaliser: nothing deterministic reads it, and
 `psychology_runtime.apply_association_updates` moves `appraisal_bias`,
@@ -1650,7 +1650,7 @@ live database 2026-08-18, **all 78 authored associations carry tags, and 87 of
 the 152 in the interior ledgers do**. Deleting the field discards authored work
 in three quarters of the places it exists. The choice — build the generaliser,
 or withdraw the promise the field's NAME makes — is an owner's, and either way
-`static/js/components.js` is the other half of whichever answer wins. Audit
+`static/js/ui-next/library-editors/character-persona.js` is the other half of whichever answer wins. Audit
 MIND-F16.
 
 ### 1.61 Half the prompt ids are outside the prompt/schema drift check
@@ -1740,7 +1740,7 @@ Three smaller residuals from the same note, deliberately not landed with it:
 
 ### 1.66 The story column's floor overrides the room it reserved
 
-`syncVitalsGutter` (`static/js/settings.js`) computes `--story-width` as
+The retired classic `syncVitalsGutter` calculation reserved `--story-width` as
 `clamp(STORY_MIN_WIDTH, shellWidth - 2*reserve, STORY_MAX_WIDTH)`, where
 `reserve` is the widest float that has to sit beside the column. The
 reservation is correct and the clamp silently defeats it: when
@@ -1754,7 +1754,7 @@ over the right-hand end of the field being typed into.
 
 **The instance is fixed and the class is not.** The container queries that shed
 the slider and then stop floating are now derived from the cluster's measured
-widths (`static/styles.css`, `@container composer`). The same hole is open on
+widths (now owned by `static/css/ui/play.css`). The same hole is open on
 the LEFT: `VITALS_MIN_GUTTER + 12` is 198, so a shell narrower than
 `720 + 396 = 1116` with the tracker visible reserves room the clamp then
 refuses to give, **and nothing reports it**.
@@ -1764,7 +1764,7 @@ Two shapes of real fix, neither taken: let the column go below
 not-overlapping), or make the floats' own container queries the single
 mechanism and drop the JS reservation (one mechanism instead of two that can
 disagree). The second is closer to how the ambience cluster already behaves.
-Whichever wins, `browser_tests/test_ui_smoke.py` holds the invariant and should
+Whichever wins, `browser_tests/test_ui_play.py` holds the invariant and should
 gain a tracker-side case.
 
 
@@ -2220,8 +2220,10 @@ themes, Legacy mapping, installed v1/v2 corpus, versioned native extension UI
 facade, destination-specific slot consumers, lifecycle cleanup, CSS contract,
 screenshots, and 296-test qualification are recorded in
 [`design/sonder-ui-replacement/wp12/REVIEW.md`](design/sonder-ui-replacement/wp12/REVIEW.md).
-G5 is locked. WP-13 cutover and deletion, then WP-14 exact-head final
-qualification, remain; this roadmap entry therefore stays open.
+G5 is locked. WP-13 cutover and classic deletion are complete and recorded in
+[`design/sonder-ui-replacement/wp13/REVIEW.md`](design/sonder-ui-replacement/wp13/REVIEW.md).
+WP-14 exact-head final qualification remains; this roadmap entry therefore
+stays open.
 
 ### 2.2 Make stance auditable
 
@@ -2391,7 +2393,7 @@ directly addresses the "coming back after a week" experience.
 
 ### 2.11 Weather rendering is rain, snow and lightning only
 
-`static/js/weather-fx.js` draws falling precipitation and storm flashes for
+`static/js/ui-next/play-view.js` renders precipitation and storm flashes for
 rooms whose `weather_for_room(...)["weather_visible"]` is true, scaled by
 `visible_reach`, and thunder follows each flash on a distance-shaped delay.
 Not built:

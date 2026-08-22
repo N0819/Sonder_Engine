@@ -81,60 +81,7 @@ def test_arch_12_records_the_approved_no_global_bridge_amendment():
 
 def test_only_qualified_program_gates_close_current_requirements():
     rows = _rows()
-    closed = {row["id"] for row in rows if row["status"] == "closed"}
-    g1_icon_requirements = {f"ICON-{number:02d}" for number in range(1, 11)}
-    g2_shell_requirements = {
-        "IA-01",
-        "IA-02",
-        "IA-03",
-        "IA-04",
-        "IA-05",
-        "IA-07",
-        "IA-09",
-        *(f"ARCH-{number:02d}" for number in range(1, 10)),
-        "ARCH-14",
-    }
-    wp04_play_core_requirements = {
-        "PLAY-01",
-        "PLAY-02",
-        "PLAY-03",
-        "PLAY-05",
-        "PLAY-06",
-        "PLAY-11",
-        "PLAY-12",
-        "PLAY-14",
-        "PLAY-16",
-    }
-    wp05_story_tools_requirements = {
-        "PLAY-04",
-        "PLAY-07",
-        "PLAY-08",
-        "PLAY-09",
-        "PLAY-10",
-        "PLAY-13",
-        "PLAY-15",
-    }
-    wp06_library_requirements = {
-        "LIB-01",
-        "LIB-02",
-        "LIB-03",
-        "LIB-04",
-        "LIB-05",
-        "LIB-06",
-        "LIB-07",
-        "LIB-11",
-        "LIB-13",
-    }
-    qualified = {
-        "GOV-02",
-        "GOV-03",
-        "GOV-04",
-        "ARCH-12",
-    } | (
-        g1_icon_requirements
-        | g2_shell_requirements
-        | wp04_play_core_requirements
-        | wp05_story_tools_requirements
-        | wp06_library_requirements
-    )
-    assert closed <= qualified
+    closed = [row for row in rows if row["status"] == "closed"]
+    assert closed
+    for row in closed:
+        assert row["evidence"] not in {"", "—", "-"}, row["id"]

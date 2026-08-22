@@ -583,7 +583,13 @@ function contentSettings(documentRef, services, state) {
     "Permits a story to turn a recurring extra into a full cast member after its own story-level threshold is met.",
     data.auto_promote,
   );
-  permissions.append(adult.row, beneath.row, promote.row);
+  const habituation = settingToggle(
+    documentRef,
+    "Let sustained peak emotion settle",
+    "Applies to future beats only. Turning it on will not reach backward and rewrite earlier emotional state.",
+    data.affect_habituation,
+  );
+  permissions.append(adult.row, beneath.row, promote.row, habituation.row);
   const actions = el(documentRef, "div", "ui-settings__connection-footer");
   const status = el(documentRef, "p", "ui-settings__connection-status");
   status.setAttribute("role", "status");
@@ -592,7 +598,7 @@ function contentSettings(documentRef, services, state) {
   const resetContent = el(documentRef, "button", "ui-button ui-button--quiet", "Reset content form");
   resetContent.type = "button";
   resetContent.addEventListener("click", () => {
-    [adult, beneath, promote].forEach(control => {
+    [adult, beneath, promote, habituation].forEach(control => {
       control.input.checked = false;
       control.row.querySelector(".ui-settings__toggle-state").textContent = "Off";
     });
@@ -612,6 +618,9 @@ function contentSettings(documentRef, services, state) {
       await services.apiClient.put("/api/auto_promote", { enabled: promote.input.checked }, {
         channel: "settings-content-promotion", owner: "settings-content",
       });
+      await services.apiClient.put("/api/affect_habituation", { enabled: habituation.input.checked }, {
+        channel: "settings-content-affect-habituation", owner: "settings-content",
+      });
       if (save.isConnected) status.textContent = "Content preferences saved.";
     } catch (error) {
       if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save content preferences.";
@@ -620,6 +629,49 @@ function contentSettings(documentRef, services, state) {
     }
   });
   permissions.append(status, actions);
+
+  const exemplars = el(documentRef, "section", "ui-settings__group");
+  exemplars.id = "settings-control-exemplars";
+  const exemplarCopy = el(documentRef, "span", "ui-settings__field-copy");
+  exemplarCopy.append(
+    el(documentRef, "strong", "", "Narrator voice examples"),
+    el(documentRef, "small", "", "Short passages that demonstrate the voice you want Sonder's narrator to follow."),
+  );
+  const bounds = data.exemplar_bounds || {};
+  const maxCount = Math.max(1, Number(bounds.max_count) || 4);
+  const maxChars = Math.max(1, Number(bounds.max_chars) || 2000);
+  const exemplarFields = el(documentRef, "div", "ui-settings__exemplars");
+  const existing = Array.isArray(data.exemplars) ? data.exemplars : [];
+  const inputs = [];
+  for (let index = 0; index < maxCount; index += 1) {
+    const input = documentRef.createElement("textarea");
+    input.maxLength = maxChars;
+    input.rows = 3;
+    input.value = existing[index] || "";
+    input.placeholder = index ? "Another optional passage" : "Paste a short representative passage";
+    input.setAttribute("aria-label", `Narrator voice example ${index + 1}`);
+    inputs.push(input);
+    exemplarFields.append(input);
+  }
+  const exemplarStatus = el(documentRef, "p", "ui-settings__connection-status");
+  exemplarStatus.setAttribute("role", "status");
+  const saveExemplars = el(documentRef, "button", "ui-button ui-button--primary", "Save narrator voice");
+  saveExemplars.type = "button";
+  saveExemplars.addEventListener("click", async () => {
+    saveExemplars.disabled = true;
+    exemplarStatus.textContent = "Saving narrator voice…";
+    try {
+      await services.apiClient.put("/api/exemplars", {
+        exemplars: inputs.map(input => input.value.trim()).filter(Boolean),
+      }, { channel: "settings-content-exemplars", owner: "settings-content" });
+      if (saveExemplars.isConnected) exemplarStatus.textContent = "Narrator voice saved.";
+    } catch (error) {
+      if (saveExemplars.isConnected) exemplarStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the narrator voice.";
+    } finally {
+      if (saveExemplars.isConnected) saveExemplars.disabled = false;
+    }
+  });
+  exemplars.append(exemplarCopy, exemplarFields, saveExemplars, exemplarStatus);
 
   const localData = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
   const dataCopy = el(documentRef, "span", "ui-settings__field-copy");
@@ -630,7 +682,7 @@ function contentSettings(documentRef, services, state) {
   const manage = el(documentRef, "a", "ui-button ui-button--quiet", "Manage story exports and deletion");
   manage.href = "#/library/stories";
   localData.append(dataCopy, manage);
-  section.append(head, permissions, localData, livingWorldSettings(documentRef, services, state));
+  section.append(head, permissions, exemplars, localData, livingWorldSettings(documentRef, services, state));
   return section;
 }
 
@@ -2039,13 +2091,15 @@ function aiConnections(documentRef, services, state) {
   orderedRoles.forEach(role => {
     const label = humanizeSettingKey(role);
     const existing = data.agent_models?.[role] || {};
+    const parentRole = data.role_fallbacks?.[role] || "default";
+    const inheritedLabel = `Follow ${humanizeSettingKey(parentRole)}`;
     const row = el(documentRef, "fieldset", "ui-settings__assignment-row");
     row.append(el(documentRef, "legend", "", label));
     const providerField = el(documentRef, "label", "ui-field");
     providerField.append(el(documentRef, "span", "ui-field__label", "Provider"));
     const providerSelect = documentRef.createElement("select");
     providerSelect.setAttribute("aria-label", `Provider for ${label}`);
-    const emptyProvider = el(documentRef, "option", "", role === "default" || role === "embeddings" ? "Not configured" : "Follow Default");
+    const emptyProvider = el(documentRef, "option", "", role === "default" || role === "embeddings" ? "Not configured" : inheritedLabel);
     emptyProvider.value = "";
     providerSelect.append(emptyProvider);
     providers.forEach(provider => {
@@ -2067,7 +2121,7 @@ function aiConnections(documentRef, services, state) {
     effortField.append(el(documentRef, "span", "ui-field__label", "Reasoning"));
     const effort = documentRef.createElement("select");
     effort.setAttribute("aria-label", `Reasoning effort for ${label}`);
-    const inherited = el(documentRef, "option", "", role === "default" ? "Model default" : "Follow Default");
+    const inherited = el(documentRef, "option", "", role === "default" ? "Model default" : inheritedLabel);
     inherited.value = "";
     effort.append(inherited);
     effortLevels.forEach(level => {

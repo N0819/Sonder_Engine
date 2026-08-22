@@ -252,6 +252,6 @@ class TestTheSwitchIsFindable:
         does not reach back over the plateau that prompted it. A host not
         told that reads the first few unchanged beats as it not working --
         which is exactly what happened."""
-        js = open("static/js/settings.js", encoding="utf-8").read()
+        js = open("static/js/ui-next/settings-view.js", encoding="utf-8").read()
         assert "/api/affect_habituation" in js
         assert "will not reach" in js

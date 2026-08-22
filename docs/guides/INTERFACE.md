@@ -29,9 +29,9 @@ behavior is never runtime authority: current server and engine contracts still
 own data and effects.
 
 The approved outcome is a **full replacement** of the classic host and player
-interface. The finished product has one host application, not a permanent
-legacy/replacement selector. The legacy shell remains the current production
-entry only until the replacement closes every capability and passes cutover.
+interface. The product has one host application, not a legacy/replacement
+selector. The replacement is now the authenticated production root; the
+classic entry, scripts, and styles were removed in WP-13.
 The program and gates are in
 [`2026-08-21-sonder-ui-full-replacement-design.md`](../superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md),
 while [`UNBUILT.md`](../UNBUILT.md) §2.26 is the sole status authority.
@@ -62,7 +62,7 @@ extension adapter. Its [runtime review and browser
 matrix](../design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md) qualify those
 boundaries without claiming a product shell.
 
-WP-03 closes G2 with the authenticated `/ui-next` application frame. It owns
+WP-03 closed G2 with the replacement application frame, now served at `/`. It owns
 exactly three primary destinations (Play, Library, and Settings), four explicit
 layout states, versioned route/focus/scroll restoration, the desktop and mobile
 inspector frame, Go To, overlay/notice/task hosts, and the first visible
@@ -105,7 +105,14 @@ installed extension corpus prove the native UI API 2 facade, explicit v1
 adapter, destination-specific consumers, owner teardown, plain-language
 capability disclosure, and contained semantic-token CSS. The [WP12
 review](../design/sonder-ui-replacement/wp12/REVIEW.md) records the visual and
-296-test qualification. Production entry cutover remains WP-13.
+296-test qualification.
+
+WP-13 makes that replacement the only production host surface. `/` serves
+`static/ui-next.html` behind the existing host-session gate; the classic entry,
+global scripts, and classic styles no longer ship. `/ui-next/lab` and
+`/ui-next/runtime` remain authenticated development fixtures, not product
+alternatives. The [WP-13 review](../design/sonder-ui-replacement/wp13/REVIEW.md)
+records capability reconciliation and deletion evidence.
 
 ## Runtime boundary
 
@@ -118,10 +125,11 @@ review](../design/sonder-ui-replacement/wp12/REVIEW.md) records the visual and
 - Client state is an explicit projection of server state plus bounded UI-only
   state. Every async result carries enough request/story/record identity to be
   rejected when stale.
-- Development uses `/ui-next`, a separate host-session-authenticated native
-  module entry. Anonymous requests redirect to `/login`; the entry loads the
-  replacement graph and one `/api/bootstrap` projection, but no classic host
-  asset or idle polling. It does not alter `/` before the cutover gate passes.
+- Production uses `/`, a host-session-authenticated native module entry.
+  Anonymous requests redirect to `/login`; the entry loads the replacement
+  graph and one `/api/bootstrap` projection, with no classic host asset or idle
+  polling. Component and runtime fixtures remain under `/ui-next/lab` and
+  `/ui-next/runtime`.
 - Browser-local migrations are versioned and idempotent. Consequential drafts
   are scoped to their real story or record, recoverable, and never silently
   moved between owners.

@@ -1,5 +1,7 @@
 export const MODULE_RELEASE = "wp07.1";
 
+import { renderPipelineInspector } from "./pipeline-inspector.js?release=wp13.0";
+
 // UI_CATALOG_START: player-facing Play workflow copy.
 const COPY = Object.freeze({
   chooseStory: "Choose a story to begin",
@@ -274,17 +276,7 @@ function turnDetailsDialog(documentRef, services, turn) {
   host.body.append(loading);
   localize(services, host.body);
   void services.play.pipeline(turn.id).then(payload => {
-    const steps = Array.isArray(payload?.steps) ? payload.steps : [];
-    const list = element(documentRef, "ol", "ui-play__step-list");
-    for (const step of steps) {
-      list.append(element(documentRef, "li", "", step.label || step.key || "Step"));
-    }
-    const advanced = element(documentRef, "details", "ui-play__advanced");
-    advanced.append(
-      element(documentRef, "summary", "", COPY.advanced),
-      markData(element(documentRef, "pre", "ui-play__technical", JSON.stringify(payload, null, 2))),
-    );
-    host.body.replaceChildren(list, advanced);
+    host.body.replaceChildren(renderPipelineInspector(documentRef, payload));
     localize(services, host.body);
   }).catch(error => {
     loading.textContent = error?.userMessage || error?.message || COPY.detailsUnavailable;

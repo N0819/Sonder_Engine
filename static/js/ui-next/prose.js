@@ -58,24 +58,59 @@ function speechLine(entry) {
 
 export function speechSpans(prose, speech = []) {
   const haystack = foldTypography(prose);
-  const occupied = [];
+  const regions = quotedRegions(haystack);
+  const claimed = new Map();
+  const loose = [];
   for (const raw of Array.isArray(speech) ? speech : []) {
     const line = speechLine(raw);
-    const needle = foldTypography(line.text).trim();
-    if (!needle) continue;
+    const needle = foldTypography(quoteBody(line.text));
+    if (needle.length < 2) continue;
     let from = 0;
     while (from <= haystack.length - needle.length) {
       const start = haystack.indexOf(needle, from);
       if (start < 0) break;
       const end = start + needle.length;
-      if (!occupied.some(span => start < span.end && end > span.start)) {
-        occupied.push({ start, end, speaker: line.speaker });
+      const region = regions.findIndex(item => item.start <= start && end <= item.end);
+      if (region >= 0) {
+        const held = claimed.get(region);
+        if (held === undefined) claimed.set(region, line.speaker);
+        else if (held !== line.speaker) claimed.set(region, null);
+        break;
+      }
+      if (!loose.some(span => start < span.end && end > span.start)) {
+        loose.push({ start, end, speaker: line.speaker });
         break;
       }
       from = start + 1;
     }
   }
-  return occupied.sort((left, right) => left.start - right.start);
+  const spans = loose.slice();
+  for (const [index, speaker] of claimed) {
+    if (!speaker) continue;
+    spans.push({ ...regions[index], speaker });
+  }
+  return spans.sort((left, right) => left.start - right.start)
+    .filter((span, index, all) => index === 0 || span.start >= all[index - 1].end);
+}
+
+function quoteBody(quote) {
+  return String(quote || "").trim()
+    .replace(/^["'“”‘’]+/, "")
+    .replace(/["'“”‘’]+$/, "")
+    .trim()
+    .replace(/[.,!?…;:]+$/, "")
+    .trim();
+}
+
+function quotedRegions(haystack) {
+  const regions = [];
+  let open = -1;
+  for (let index = 0; index < haystack.length; index += 1) {
+    if (haystack[index] !== '"') continue;
+    if (open < 0) open = index;
+    else { regions.push({ start: open, end: index + 1 }); open = -1; }
+  }
+  return regions; // An unclosed final quote is dropped rather than guessed at.
 }
 
 function speakerColor(colors, speaker) {
@@ -100,6 +135,23 @@ function appendSegment(documentRef, host, text, emphasis, speaker, colors) {
     node = said;
   }
   host.append(node);
+}
+
+function mergeAdjacentSpeakerSpans(host) {
+  for (const said of [...host.querySelectorAll(".ui-play__said")]) {
+    let next = said.nextSibling;
+    while (
+      next?.nodeType === 1
+      && next.classList.contains("ui-play__said")
+      && next.title === said.title
+      && next.getAttribute("style") === said.getAttribute("style")
+    ) {
+      const following = next.nextSibling;
+      while (next.firstChild) said.append(next.firstChild);
+      next.remove();
+      next = following;
+    }
+  }
 }
 
 export function renderProse(host, value, options = {}) {
@@ -133,6 +185,7 @@ export function renderProse(host, value, options = {}) {
       options.colors,
     );
   }
+  mergeAdjacentSpeakerSpans(fragment);
   host.replaceChildren(fragment);
   host.setAttribute("translate", "no");
   return host;

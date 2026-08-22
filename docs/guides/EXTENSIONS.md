@@ -1624,8 +1624,8 @@ disable, retirement, third fault, or module teardown removes every owned
 registration, notice, listener and asset and returns a selected route to its
 safe parent. The bundled corpus proves one classic v1 extension and two ES
 module v2 extensions without private host helpers. An extension that depends
-on `S`, `el`, `txt`, a private DOM id, or global CSS remains a classic-host-only
-extension until its author migrates it.
+on `S`, `el`, `txt`, a private DOM id, or global CSS is unsupported by the
+production host until its author migrates it to the documented facade.
 
 ---
 
@@ -1794,7 +1794,7 @@ domains, routing hooks, routes, specialists, hot-loadable assets),
 (narration blocks and hooks, and `overlay-demo` end to end),
 [`tests/test_extension_modules.py`](../../tests/test_extension_modules.py) (the
 module loading contract),
-[`tests/test_extension_ui_surface.py`](../../tests/test_extension_ui_surface.py)
+[`tests/test_ui_wp12_contracts.py`](../../tests/test_ui_wp12_contracts.py)
 (the browser registries and their teardown), and
 [`tests/test_extension_install.py`](../../tests/test_extension_install.py)
 (zip-slip, symlinks, atomicity, size cap), and

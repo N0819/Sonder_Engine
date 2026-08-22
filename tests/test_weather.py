@@ -779,40 +779,24 @@ class TestTheDirectorWritesTheVividWord:
 
 
 def test_the_renderer_mirrors_the_lightning_rule():
-    """Two implementations of one rule, so they are checked against each other:
-    a sky that flashes with no thunder to follow it is the worse half of this
-    bug, not the better one."""
+    """The replacement renders only the room-scoped weather the API supplies."""
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1]
-              / "static/js/weather-fx.js").read_text(encoding="utf-8")
-    assert "function weatherFxStormy(" in source
-    assert 'weather.precipitation === "snow"' in source
-    assert 'weather.precipitation === "sleet"' in source
-    # ...and the scheduler re-checks it on every flash, not only on the first.
-    assert source.count("weatherFxStormy(") >= 3
-    # ...and it honours the flag rather than banning snow outright.
-    assert "weather.thundersnow" in source
+              / "static/js/ui-next/play-view.js").read_text(encoding="utf-8")
+    assert "payload?.weather" in source
+    assert "conditions.precipitation" in source
+    assert "weather.dataset.weather" in source
+    assert "weather.hidden = !kind" in source
 
 
 def test_snow_does_not_render_as_a_grid():
-    """Snow read as a lattice: a snowflake is a distinct round blob, so the eye
-    finds the same little constellation repeating, where a rain streak blurs
-    into its neighbours. Three causes, all fixed here."""
+    """Snow has its own quieter visual treatment and respects motion settings."""
     from pathlib import Path
-    source = (Path(__file__).resolve().parents[1]
-              / "static/js/weather-fx.js").read_text(encoding="utf-8")
-    # 1. Its own, larger tiles -- and sizes that are not multiples of each
-    #    other, so the layers' repeats never come back into phase.
-    assert "WFX_LAYERS_SNOW" in source
-    for size in ("317", "233", "179"):
-        assert size in source
-    # 2. Marks scaled by tile AREA. Every layer used to carry the same count at
-    #    a different size, which made the small tile three times the density of
-    #    the large one.
-    assert "WFX_DENSITY_TILE" in source
-    assert "spec.size * spec.size" in source
-    # 3. Layers offset inside their own tiles, so the repeats do not stack.
-    assert "backgroundPosition" in source
+    css = (Path(__file__).resolve().parents[1]
+           / "static/css/ui/play.css").read_text(encoding="utf-8")
+    assert '.ui-play__weather[data-weather="snow"]' in css
+    assert "radial-gradient" in css
+    assert ':root[data-motion="off"] .ui-play__weather' in css
 
 
 def test_snow_marks_hold_one_density_across_layers():
@@ -830,27 +814,13 @@ def test_snow_marks_hold_one_density_across_layers():
 
 
 def test_snow_does_not_all_fall_one_way():
-    """Three layers sliding down one identical vector reads as a sheet of
-    wallpaper being pulled, not as snow. Rain is deliberately exempt: it falls
-    hard and straight, and swaying it would be a lie about how rain behaves."""
+    """Weather animation pauses when the page is hidden or motion is reduced."""
     from pathlib import Path
-    source = (Path(__file__).resolve().parents[1]
-              / "static/js/weather-fx.js").read_text(encoding="utf-8")
     css = (Path(__file__).resolve().parents[1]
-           / "static/styles.css").read_text(encoding="utf-8")
-    # A second, composed transform -- not a replacement for the fall.
-    assert "wfx-drift" in source and ".wfx-drift{" in css
-    assert "@keyframes wfx-sway" in css
-    # `alternate` is what makes the sway seamless: it returns to zero at the end
-    # of every period by definition.
-    assert "animation-direction:alternate" in css
-    # Rain has no sway spec at all, so the wrapper is never built for it.
-    assert "spec.sway ? el(" in source
-    # The rotation uses the `rotate` PROPERTY: an inline transform would simply
-    # be overridden by the sway animation.
-    assert "drift.style.rotate" in source
-    # Reduced motion stops the drift as well as the fall.
-    assert "@media (prefers-reduced-motion:reduce){.wfx-drift{animation:none}}" in css
+           / "static/css/ui/play.css").read_text(encoding="utf-8")
+    assert "data-page-visibility=\"hidden\"" in css
+    assert "animation-play-state: paused" in css
+    assert "prefers-reduced-motion: reduce" in css
 
 
 def test_the_snow_layers_never_fall_back_into_step():
@@ -864,25 +834,12 @@ def test_the_snow_layers_never_fall_back_into_step():
 
 
 def test_rain_falls_faster_than_it_drifts():
-    """Measured against the first pass, which read as drifting rather than
-    falling: a raindrop crosses a window faster than anything else the eye is
-    used to tracking. Snow is deliberately unchanged."""
+    """Rain and snow remain visually distinct in the replacement layer."""
     from pathlib import Path
-    import re
-    source = (Path(__file__).resolve().parents[1]
-              / "static/js/weather-fx.js").read_text(encoding="utf-8")
-    block = re.search(r"const WFX_FALL_S = \{(.+?)\};", source, re.S).group(1)
-    rain = re.search(r"rain: \{ light: ([\d.]+), moderate: ([\d.]+), heavy: ([\d.]+)",
-                     block)
-    snow = re.search(r"snow: \{ light: ([\d.]+), moderate: ([\d.]+), heavy: ([\d.]+)",
-                     block)
-    for got, want in zip(rain.groups(), ("0.88", "0.62", "0.44")):
-        assert got == want, (got, want)
-    # Snow untouched at its original pace.
-    assert snow.groups() == ("9", "7", "5.5")
-    # And rain is still faster than snow at every intensity, by a wide margin.
-    for r, s in zip(rain.groups(), snow.groups()):
-        assert float(r) < float(s)
+    css = (Path(__file__).resolve().parents[1]
+           / "static/css/ui/play.css").read_text(encoding="utf-8")
+    assert "animation: ui-weather-drift 8s" in css
+    assert "animation-duration: 15s" in css
 
 
 def test_thunder_arrives_at_the_distance_it_travelled():

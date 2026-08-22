@@ -200,8 +200,8 @@ class TestTheTintedUnitIsTheQuotedRegion:
     @staticmethod
     def _chat_js():
         from pathlib import Path
-        return (Path(__file__).resolve().parents[1] / "static" / "js"
-                / "chat.js").read_text(encoding="utf-8")
+        return (Path(__file__).resolve().parents[1] / "static" / "js" / "ui-next"
+                / "prose.js").read_text(encoding="utf-8")
 
     def test_regions_are_scanned_and_include_both_marks(self):
         js = self._chat_js()
@@ -210,12 +210,12 @@ class TestTheTintedUnitIsTheQuotedRegion:
         block = block[:block.index("\n}")]
         # end is the closing mark's index PLUS ONE, or the span stops just
         # short of the quote it is supposed to include.
-        assert "end: i + 1" in block
+        assert "end: index + 1" in block
 
     def test_an_unclosed_quote_is_dropped_rather_than_guessed_at(self):
         js = self._chat_js()
         block = js[js.index("function quotedRegions("):]
-        assert "unclosed final quote is dropped" in block[:block.index("\n}") + 400]
+        assert "unclosed final quote is dropped" in block[:block.index("\n}") + 400].lower()
 
     def test_two_speakers_in_one_region_leaves_it_uncoloured(self):
         """Uncoloured beats coloured-as-the-wrong-person. Same rule as a quote
@@ -223,7 +223,7 @@ class TestTheTintedUnitIsTheQuotedRegion:
         js = self._chat_js()
         block = js[js.index("function speechSpans("):]
         block = block[:block.index("\n}\n")]
-        assert "claimed.set(idx, null)" in block
+        assert "claimed.set(region, null)" in block
         assert "if (!speaker) continue;" in js
 
     def test_terminal_punctuation_is_stripped_before_matching(self):
@@ -246,8 +246,8 @@ class TestTheTintedUnitIsTheQuotedRegion:
         often enough to expect.
         """
         js = self._chat_js()
-        block = js[js.index("function appendEmphasized("):]
-        block = block[:block.index("function proseEl(")]
+        block = js[js.index("function appendSegment("):]
+        block = block[:block.index("export function renderProse(")]
         assert "createTextNode" in block
         for parser_door in ("innerHTML", "outerHTML", "insertAdjacentHTML",
                             "document.write", "DOMParser"):

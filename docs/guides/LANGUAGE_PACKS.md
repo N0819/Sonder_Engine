@@ -224,7 +224,7 @@ name. Adding visible replacement copy therefore requires both an owning block
 and regenerated `language_packs/en/ui.json`; technical strings elsewhere in a
 module are not silently promoted into translator work.
 
-The WP-03 application shell is the first complete product consumer of this
+The production application shell is the complete product consumer of this
 boundary. Static shell labels are catalogued from `static/ui-next.html` and
 dynamic navigation, inspector, Go To, fallback, and extension-host wording is
 catalogued from the owning modules. English extraction is exact; Japanese has

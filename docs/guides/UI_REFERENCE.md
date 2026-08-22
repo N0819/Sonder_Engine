@@ -59,18 +59,11 @@ The candidate audit identifies its implementation baseline as
 
 On the project owner's workstation the archive was supplied at
 `C:\Users\Keptin\Downloads\Sonder_Engine_UI_Design_Bible_Revision-main.zip`.
-The highest-value visual source begins with:
-
-- `static/index.html`
-- `static/css/remaster-tokens.css`
-- `static/css/remaster-components.css`
-- `static/css/remaster-shell.css`
-- `static/css/remaster-entry.css`
-- `static/assets/icons/sonder-icons.svg`
-- `static/js/remaster/library.js`
-- `static/js/remaster/shell.js`
-- `static/js/remaster/inspector.js`
-- `static/js/remaster/settings.js`
+The archive's highest-value visual source was the candidate entry document,
+its remaster token/component/shell/entry styles, icon sprite, and Library,
+shell, inspector, and Settings modules. Their current in-tree counterparts are
+`static/ui-next.html`, `static/css/ui/`, `static/assets/icons/sonder-icons.svg`,
+and `static/js/ui-next/`.
 
 The file-level disposition and current target for each candidate artifact is in
 [`CANDIDATE_SALVAGE_LEDGER.md`](../design/sonder-ui-replacement/CANDIDATE_SALVAGE_LEDGER.md).

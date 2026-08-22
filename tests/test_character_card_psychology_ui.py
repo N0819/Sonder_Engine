@@ -8,21 +8,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_character_editor_exposes_v3_psychology_and_hedonics():
-    source = (ROOT / "static/js/editors.js").read_text(encoding="utf-8")
-    components = (ROOT / "static/js/components.js").read_text(encoding="utf-8")
-
-    for token in (
-        "Fill psychology gaps",
-        "pain_sensitivity",
-        "pleasure_sensitivity",
-        "stress_profile",
-        "coping_strategies",
-        "associations",
-        "initial_pleasure",
-    ):
-        assert token in source
-    for helper in ("fBeliefs", "fCopingStrategies", "fAssociations"):
-        assert f"function {helper}" in components
+    source = (ROOT / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    runtime = (ROOT / "static/js/ui-next/library-authoring-runtime.js").read_text(encoding="utf-8")
+    assert "Fill psychology" in source
+    assert "createSchemaSections" in source
+    assert "JSON.stringify(state.draft, null, 2)" in source
+    assert "previewPsychology" in source
+    assert "/fill_psychology" in runtime
 
 
 def test_generation_and_import_prompts_emit_v3_fields():

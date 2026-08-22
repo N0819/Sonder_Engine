@@ -344,6 +344,15 @@
   .ui-play__variant-count { color: var(--ui-color-text-muted); font: 600 .75rem var(--ui-font-mono); }
   .ui-play__step-list { display: grid; gap: var(--ui-space-3); }
 
+  .ui-play__pipeline { display: grid; gap: var(--ui-space-4); }
+  .ui-play__pipeline-step { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); padding: var(--ui-space-3); }
+  .ui-play__pipeline-step h3 { margin-block: 0 var(--ui-space-2); font: var(--ui-font-label); }
+  .ui-play__pipeline-facets, .ui-play__pipeline-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); margin-block: var(--ui-space-2); }
+  .ui-play__pipeline-facets .is-active { border-color: var(--ui-accent); color: var(--ui-accent); }
+  .ui-play__engine-notes { font-size: var(--ui-font-size-xs); }
+  .ui-play__engine-notes p { margin-block: var(--ui-space-1); }
+  .ui-play__engine-warning { border-inline-start: 2px solid var(--ui-warning); color: var(--ui-warning); padding-inline-start: var(--ui-space-2); }
+
   @container (max-width: 40rem) {
     .ui-play__story-header { grid-template-columns: minmax(0, 1fr); }
     .ui-play__story-actions { justify-content: space-between; }

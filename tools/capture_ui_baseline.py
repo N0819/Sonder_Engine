@@ -212,7 +212,7 @@ def _open_host_page(browser, base_url: str, viewport: tuple[int, int], bootstrap
     page = browser.new_page(viewport={"width": viewport[0], "height": viewport[1]})
     counter: dict[str, int] = {}
     _install_api(page, bootstrap, chats, counter)
-    page.goto(f"{base_url}/static/index.html")
+    page.goto(f"{base_url}/")
     page.locator("#send").wait_for(state="visible")
     return page, counter
 

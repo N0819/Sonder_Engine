@@ -111,5 +111,5 @@ def test_the_reader_can_actually_get_at_it():
     root = pathlib.Path(__file__).resolve().parents[1]
     assert "reasoning FROM variants" in (root / "web" / "app.py").read_text(
         encoding="utf-8")
-    chat_js = (root / "static" / "js" / "chat.js").read_text(encoding="utf-8")
+    chat_js = (root / "static" / "js" / "ui-next" / "pipeline-inspector.js").read_text(encoding="utf-8")
     assert "variant.reasoning" in chat_js
