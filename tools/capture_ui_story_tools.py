@@ -146,14 +146,15 @@ def inspect(page: Page, requests: list[str]) -> dict:
       const rects = controls.map(node => { const r = effective(node); return {label: node.getAttribute('aria-label') || node.textContent.trim(), width: r.width, height: r.height}; });
       const transcript = document.querySelector('[data-play-transcript]')?.getBoundingClientRect();
       const composer = document.querySelector('[data-play-composer]')?.getBoundingClientRect();
-      const panel = document.querySelector('[data-story-tool-panel]')?.getBoundingClientRect();
+      const panelNode = [...document.querySelectorAll('[data-story-tool-panel]')].find(visible);
+      const panel = panelNode?.getBoundingClientRect();
       const overlap = (a, b) => a && b && Math.max(0, Math.min(a.right,b.right)-Math.max(a.left,b.left)) * Math.max(0, Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
       return {
         layout_state: document.documentElement.dataset.layoutState,
         horizontal_overflow_px: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         undersized_compact_targets: document.documentElement.dataset.layoutState === 'compact' ? rects.filter(row => Math.min(row.width,row.height) < 44) : [],
         tool_id: new URLSearchParams(location.hash.split('?')[1] || '').get('tool'),
-        tool_visible: Boolean(document.querySelector('[data-story-tool-panel]') && visible(document.querySelector('[data-story-tool-panel]'))),
+        tool_visible: Boolean(panelNode),
         transcript_composer_overlap_px2: overlap(transcript, composer),
         panel_composer_overlap_px2: overlap(panel, composer),
         classic_global: Object.hasOwn(window, 'S'),
@@ -185,7 +186,7 @@ def capture() -> dict:
             response = page.goto(f"{base_url}/static/ui-next.html#/play/story-tools?chat=1&tool={tool}")
             if response is None or not response.ok: raise RuntimeError(case_id)
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-            page.wait_for_selector("[data-story-tool-panel]")
+            page.wait_for_function("[...document.querySelectorAll('[data-story-tool-panel]')].some(node => { const r = node.getBoundingClientRect(); return r.width > 1 && r.height > 1; })")
             page.wait_for_function("document.fonts.status === 'loaded'")
             page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
             screenshot = SCREENSHOTS / f"{case_id}.png"
