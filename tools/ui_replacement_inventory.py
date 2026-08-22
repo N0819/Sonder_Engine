@@ -278,8 +278,8 @@ def write_drift_artifact(output: Path, root: Path, from_ref: str, to_ref: str) -
         output / "FRONTEND_DRIFT.md",
         "# Frontend drift record\n\n"
         f"**From candidate baseline:** `{from_ref}`  \n"
-        f"**To current program baseline:** `{to_ref}`  \n"
-        f"**Changed frontend-adjacent paths:** {len(rows)}  \n"
+        f"**To current program baseline:** `{to_ref}`\n\n"
+        f"**Changed frontend-adjacent paths:** {len(rows)}\n\n"
         f"**Review classes:** {summary}\n\n"
         "A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.\n\n"
         + _table(
@@ -388,8 +388,8 @@ def write_artifacts(
         output / "THEME_EXTENSION_INVENTORY.md",
         "# Current theme, localization, and extension inventory\n\n"
         f"**Themes:** {', '.join(f'`{item}`' for item in inventory['themes']) or 'none detected'}  \n"
-        f"**CSS custom properties:** {len(inventory['css_custom_properties'])}  \n"
-        f"**UI catalog keys:** {len(inventory['ui_catalog_keys'])}  \n\n"
+        f"**CSS custom properties:** {len(inventory['css_custom_properties'])}\n\n"
+        f"**UI catalog keys:** {len(inventory['ui_catalog_keys'])}\n\n"
         "## Extension routes\n\n"
         + _table(("Method", "Route", "Source"), ((row["method"], f"`{row['path']}`", f"`{row['source']}`") for row in inventory["extension_routes"])),
     )

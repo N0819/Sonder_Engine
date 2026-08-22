@@ -105,10 +105,24 @@ def test_only_qualified_program_gates_close_current_requirements():
         "PLAY-14",
         "PLAY-16",
     }
+    wp05_story_tools_requirements = {
+        "PLAY-04",
+        "PLAY-07",
+        "PLAY-08",
+        "PLAY-09",
+        "PLAY-10",
+        "PLAY-13",
+        "PLAY-15",
+    }
     qualified = {
         "GOV-02",
         "GOV-03",
         "GOV-04",
         "ARCH-12",
-    } | g1_icon_requirements | g2_shell_requirements | wp04_play_core_requirements
+    } | (
+        g1_icon_requirements
+        | g2_shell_requirements
+        | wp04_play_core_requirements
+        | wp05_story_tools_requirements
+    )
     assert closed <= qualified
