@@ -118,8 +118,17 @@ def test_the_button_cannot_be_clicked_twice(
     """Starting a conversion twice is exactly what a host does when a slow
     request makes the button look dead."""
     _open_card(page, ui_base_url, [IDLE_LEGACY])
-    page.get_by_role("button", name="Convert now").click()
-    expect(page.get_by_role("button", name="Starting…")).to_be_disabled()
+    expect(page.get_by_role("button", name="Convert now")).to_be_visible()
+    # Read the state in the same browser task as click(): the mocked POST is
+    # intentionally instantaneous, so a later locator can observe the next
+    # render and miss the guarded in-flight state entirely.
+    state = page.evaluate("""() => {
+      const button = [...document.querySelectorAll('button')]
+        .find(node => node.textContent === 'Convert now');
+      button.click();
+      return { disabled: button.disabled, label: button.textContent };
+    }""")
+    assert state == {"disabled": True, "label": "Starting…"}
 
 
 def test_a_failed_run_says_what_survived(page: Page, ui_base_url: str) -> None:

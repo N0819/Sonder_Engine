@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import Page
 
-from test_backdrop_commission import BOOTSTRAP
+from .test_backdrop_commission import BOOTSTRAP
 
 TURN_ID = 5
 SIG = "d" * 24

@@ -466,7 +466,9 @@ class TestGitSources:
         ext.reload()
         origin, _git = self._repo(tmp_path)
         ext.install_extension(f"file://{origin}")
-        shutil.rmtree(origin)
+        # Renaming makes the recorded file:// remote unreachable without
+        # asking Windows to unlink Git's read-only object files mid-test.
+        origin.rename(tmp_path / "origin-unreachable")
 
         report = ext.check_update("repo-ext")
         assert report["checkable"] is False

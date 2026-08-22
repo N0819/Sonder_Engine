@@ -65,7 +65,7 @@ STORED = {
 
 _HARNESS = r"""
 const fs = require("fs");
-const src = fs.readFileSync(process.argv[2], "utf8");
+const src = fs.readFileSync(process.argv[2], "utf8").replace(/\r\n/g, "\n");
 const stored = JSON.parse(process.argv[3]);
 
 // The helper, sliced by its own name so a rename fails loudly here.
