@@ -29,6 +29,8 @@ const LEGACY_THEMES = Object.freeze([
 
 const SETTINGS_INDEX = Object.freeze([
   ["experience", "themes", "Themes", "appearance palette colors legacy skin"],
+  ["experience", "reading", "Reading and effects", "story text prose size density spacing motion visual effects"],
+  ["experience", "sound", "Sound, notifications, and language", "volume mute chime notify interface translation locale"],
   ["experience", "accessibility", "Accessibility", "contrast motion focus large text roomy controls"],
   ["ai-connections", "providers", "Provider credentials", "api key token endpoint connection provider"],
   ["ai-connections", "models", "Models and roles", "model defaults backup sampler reasoning openrouter routing"],
@@ -506,7 +508,48 @@ function experience(documentRef, services) {
   ACCESSIBILITY.forEach(([key, label, detail]) => accessibilityGroup.append(
     toggleRow(documentRef, key, label, detail, preferences, syncAccessibility),
   ));
-  section.append(head, themeGroup, readingGroup, soundGroup, accessibilityGroup);
+  const resetGroup = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
+  const resetCopy = el(documentRef, "span", "ui-settings__field-copy");
+  resetCopy.append(
+    el(documentRef, "strong", "", "Reset Experience on this device"),
+    el(documentRef, "small", "", "Restores Carbon Signal, standard story text, comfortable spacing, full effects, sound defaults, and accessibility controls. Stories and host settings are unchanged."),
+  );
+  const reset = el(documentRef, "button", "ui-button ui-button--quiet", "Reset Experience");
+  reset.type = "button";
+  const resetConsent = el(documentRef, "div", "ui-settings__extension-consent");
+  resetConsent.hidden = true;
+  reset.addEventListener("click", () => {
+    resetConsent.replaceChildren(
+      el(documentRef, "strong", "", "Reset Experience on this device?"),
+      el(documentRef, "p", "", "This is reversible by choosing the preferences again. Stories are not changed."),
+    );
+    const confirm = el(documentRef, "button", "ui-button ui-button--primary", "Confirm reset Experience");
+    confirm.type = "button";
+    const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+    cancel.type = "button";
+    resetConsent.append(confirm, cancel);
+    resetConsent.hidden = false;
+    confirm.addEventListener("click", () => {
+      appearance.setTheme("carbon-signal");
+      appearance.setProseSize("17");
+      appearance.setEffects("full");
+      documentRef.documentElement.dataset.density = "comfortable";
+      delete documentRef.documentElement.dataset.legacyTheme;
+      services.atmosphere.setMuted(false);
+      services.atmosphere.setVolume(0.7);
+      services.atmosphere.setChime(false);
+      services.localState.setRecord("appearance", { theme: "carbon-signal", proseSize: "17", effects: "full", density: "comfortable" });
+      const resetAccessibility = Object.fromEntries(ACCESSIBILITY.map(([key]) => [key, false]));
+      syncAccessibility(updateAccessibility(resetAccessibility));
+      resetConsent.replaceChildren(el(documentRef, "p", "", "Experience settings reset on this device."));
+    });
+    cancel.addEventListener("click", () => {
+      resetConsent.hidden = true;
+      reset.focus();
+    });
+  });
+  resetGroup.append(resetCopy, reset, resetConsent);
+  section.append(head, themeGroup, readingGroup, soundGroup, accessibilityGroup, resetGroup);
   return section;
 }
 
@@ -546,7 +589,16 @@ function contentSettings(documentRef, services, state) {
   status.setAttribute("role", "status");
   const save = el(documentRef, "button", "ui-button ui-button--primary", "Save content preferences");
   save.type = "button";
-  actions.append(save);
+  const resetContent = el(documentRef, "button", "ui-button ui-button--quiet", "Reset content form");
+  resetContent.type = "button";
+  resetContent.addEventListener("click", () => {
+    [adult, beneath, promote].forEach(control => {
+      control.input.checked = false;
+      control.row.querySelector(".ui-settings__toggle-state").textContent = "Off";
+    });
+    status.textContent = "Content form reset to the safest defaults. Choose Save content preferences to apply it.";
+  });
+  actions.append(resetContent, save);
   save.addEventListener("click", async () => {
     save.disabled = true;
     status.textContent = "Saving content preferences…";
@@ -573,7 +625,7 @@ function contentSettings(documentRef, services, state) {
   const dataCopy = el(documentRef, "span", "ui-settings__field-copy");
   dataCopy.append(
     el(documentRef, "strong", "", "Your stories stay on this Sonder host."),
-    el(documentRef, "small", "", "Story exports and permanent deletion remain attached to the specific story or Library item, so a broad control cannot erase the wrong data."),
+    el(documentRef, "small", "", "Imports, portable exports, and permanent deletion remain attached to the specific story or Library item, so a broad control cannot overwrite or erase the wrong data."),
   );
   const manage = el(documentRef, "a", "ui-button ui-button--quiet", "Manage story exports and deletion");
   manage.href = "#/library/stories";
@@ -1157,7 +1209,18 @@ function maintenanceSettings(documentRef, services) {
   diagnosticHead.append(diagnosticCopy, download);
   diagnostics.append(diagnosticHead);
 
-  section.append(head, updates, checkpoints, memorySearch, diagnostics);
+  const backups = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
+  backups.id = "settings-control-backups";
+  const backupCopy = el(documentRef, "span", "ui-settings__field-copy");
+  backupCopy.append(
+    el(documentRef, "strong", "", "Portable story backups"),
+    el(documentRef, "small", "", "A story export is a portable backup of that story and its owned data. Exports stay per story so one maintenance action cannot silently expose or overwrite every story."),
+  );
+  const manageBackups = el(documentRef, "a", "ui-button ui-button--quiet", "Manage portable story backups");
+  manageBackups.href = "#/library/stories";
+  backups.append(backupCopy, manageBackups);
+
+  section.append(head, updates, checkpoints, memorySearch, diagnostics, backups);
   queueMicrotask(loadCheckpoints);
   queueMicrotask(loadMemory);
   return section;
@@ -1175,12 +1238,13 @@ function placeholder(documentRef, active) {
   return section;
 }
 
-function promptEditor(documentRef, services, state) {
+function promptEditor(documentRef, services, state, route) {
   const data = state.settings?.data || {};
   const presets = data.prompt_presets && typeof data.prompt_presets === "object" ? data.prompt_presets : {};
   const activeName = String(data.active_preset || "Default");
-  const active = activeName === "Default" ? null : presets[activeName];
-  const prompts = { ...(active?.prompts || data.default_prompts || {}) };
+  const selectedName = String(route?.query?.preset || activeName);
+  const selected = selectedName === "Default" ? null : presets[selectedName];
+  const prompts = { ...(selected?.prompts || data.default_prompts || {}) };
   const editor = el(documentRef, "section", "ui-settings__group ui-settings__prompt-editor");
   editor.id = "settings-control-prompts";
   const header = el(documentRef, "div", "ui-settings__field-head");
@@ -1194,11 +1258,25 @@ function promptEditor(documentRef, services, state) {
   back.addEventListener("click", () => services.router.navigate({ destination: "settings", segments: ["advanced"] }));
   header.append(copy, back);
   const controls = el(documentRef, "div", "ui-settings__prompt-controls");
+  const presetField = el(documentRef, "label", "ui-field");
+  presetField.append(el(documentRef, "span", "ui-field__label", "Preset"));
+  const preset = documentRef.createElement("select");
+  preset.setAttribute("aria-label", "Prompt preset");
+  ["Default", ...Object.keys(presets).sort()].forEach(presetName => {
+    const option = el(documentRef, "option", "", presetName === activeName ? `${presetName} · active` : presetName);
+    option.value = presetName;
+    option.selected = presetName === selectedName;
+    preset.append(option);
+  });
+  preset.addEventListener("change", () => services.router.navigate({
+    destination: "settings", segments: ["advanced"], query: { tool: "prompts", preset: preset.value },
+  }, { replace: true }));
+  presetField.append(preset);
   const nameField = el(documentRef, "label", "ui-field");
   nameField.append(el(documentRef, "span", "ui-field__label", "Preset name"));
   const name = documentRef.createElement("input");
   name.type = "text";
-  name.value = activeName === "Default" ? "" : activeName;
+  name.value = selectedName === "Default" ? "" : selectedName;
   name.setAttribute("aria-label", "Prompt preset name");
   nameField.append(name);
   const languageField = el(documentRef, "label", "ui-field");
@@ -1206,15 +1284,15 @@ function promptEditor(documentRef, services, state) {
   const language = documentRef.createElement("select");
   language.setAttribute("aria-label", "Prompt preset language");
   const packs = Array.isArray(data.language_packs) && data.language_packs.length
-    ? data.language_packs : [{ id: active?.language || "en", name: active?.language || "English" }];
+    ? data.language_packs : [{ id: selected?.language || "en", name: selected?.language || "English" }];
   packs.forEach(pack => {
     const option = el(documentRef, "option", "", pack.name || pack.id);
     option.value = pack.id;
-    option.selected = pack.id === (active?.language || "en");
+    option.selected = pack.id === (selected?.language || "en");
     language.append(option);
   });
   languageField.append(language);
-  controls.append(nameField, languageField);
+  controls.append(presetField, nameField, languageField);
   const fields = el(documentRef, "div", "ui-settings__prompt-fields");
   const promptInputs = new Map();
   Object.entries(prompts).sort(([left], [right]) => left.localeCompare(right)).forEach(([id, value]) => {
@@ -1254,7 +1332,101 @@ function promptEditor(documentRef, services, state) {
       if (save.isConnected) save.disabled = false;
     }
   });
-  editor.append(header, controls, fields, status, save);
+  const actions = el(documentRef, "div", "ui-settings__prompt-actions");
+  const activate = el(documentRef, "button", "ui-button ui-button--quiet", "Use selected preset");
+  activate.type = "button";
+  activate.disabled = selectedName === activeName;
+  activate.addEventListener("click", async () => {
+    activate.disabled = true;
+    status.textContent = "Changing active prompt preset…";
+    try {
+      await services.apiClient.put("/api/active_preset", { name: selectedName }, {
+        channel: "settings-active-prompt-preset", owner: "settings-prompts",
+      });
+      if (activate.isConnected) status.textContent = `${selectedName} is now the active prompt preset.`;
+    } catch (error) {
+      if (activate.isConnected) {
+        activate.disabled = false;
+        status.textContent = error?.userMessage || error?.message || "Sonder could not change the active prompt preset.";
+      }
+    }
+  });
+  const exportPreset = el(documentRef, "button", "ui-button ui-button--quiet", "Export selected preset");
+  exportPreset.type = "button";
+  exportPreset.disabled = selectedName === "Default";
+  exportPreset.addEventListener("click", async () => {
+    try {
+      const result = await services.apiClient.get(`/api/prompt_presets/${encodeURIComponent(selectedName)}/export`, {
+        channel: `settings-prompt-export:${selectedName}`, owner: "settings-prompts",
+      });
+      const href = URL.createObjectURL(new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" }));
+      const link = documentRef.createElement("a");
+      link.href = href;
+      link.download = `${selectedName}.sonder-prompts.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(href), 0);
+      status.textContent = "Prompt preset exported.";
+    } catch (error) {
+      status.textContent = error?.userMessage || error?.message || "Sonder could not export the prompt preset.";
+    }
+  });
+  const importInput = documentRef.createElement("input");
+  importInput.type = "file";
+  importInput.accept = "application/json,.json";
+  importInput.hidden = true;
+  const importPreset = el(documentRef, "button", "ui-button ui-button--quiet", "Import prompt preset");
+  importPreset.type = "button";
+  importPreset.addEventListener("click", () => importInput.click());
+  importInput.addEventListener("change", async () => {
+    const file = importInput.files?.[0];
+    if (!file) return;
+    try {
+      const document = JSON.parse(await file.text());
+      const result = await services.apiClient.post("/api/prompt_presets/import", { preset: document }, {
+        channel: "settings-prompt-import", owner: "settings-prompts",
+      });
+      status.textContent = `Imported prompt preset ${result.data?.name || "successfully"}.`;
+    } catch (error) {
+      status.textContent = error?.userMessage || error?.message || "Sonder could not import that prompt preset.";
+    }
+  });
+  const remove = el(documentRef, "button", "ui-button ui-button--danger", "Delete selected preset");
+  remove.type = "button";
+  remove.disabled = selectedName === "Default";
+  const removeConsent = el(documentRef, "div", "ui-settings__extension-consent");
+  removeConsent.hidden = true;
+  remove.addEventListener("click", () => {
+    removeConsent.replaceChildren(
+      el(documentRef, "strong", "", `Delete ${selectedName}?`),
+      el(documentRef, "p", "", "This removes the saved preset. The engine's built-in Default remains available."),
+    );
+    const confirm = el(documentRef, "button", "ui-button ui-button--danger", `Confirm delete ${selectedName}`);
+    confirm.type = "button";
+    const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+    cancel.type = "button";
+    removeConsent.append(confirm, cancel);
+    removeConsent.hidden = false;
+    confirm.addEventListener("click", async () => {
+      confirm.disabled = true;
+      try {
+        await services.apiClient.delete(`/api/prompt_presets/${encodeURIComponent(selectedName)}`, {
+          channel: `settings-prompt-delete:${selectedName}`, owner: "settings-prompts",
+        });
+        services.router.navigate({ destination: "settings", segments: ["advanced"], query: { tool: "prompts", preset: "Default" } }, { replace: true });
+      } catch (error) {
+        if (confirm.isConnected) {
+          confirm.disabled = false;
+          removeConsent.append(el(documentRef, "p", "ui-settings__extension-error", error?.userMessage || error?.message || "Sonder could not delete the prompt preset."));
+        }
+      }
+    });
+    cancel.addEventListener("click", () => {
+      removeConsent.hidden = true;
+      remove.focus();
+    });
+  });
+  actions.append(save, activate, exportPreset, importPreset, importInput, remove);
+  editor.append(header, controls, fields, status, actions, removeConsent);
   return editor;
 }
 
@@ -1364,7 +1536,7 @@ function advanced(documentRef, services, state, route) {
   warning.append(icon(documentRef, "warning"), warningCopy);
   const tool = String(route?.query?.tool || "");
   section.append(head);
-  if (tool === "prompts") section.append(promptEditor(documentRef, services, state));
+  if (tool === "prompts") section.append(promptEditor(documentRef, services, state, route));
   else if (tool === "story-data" || tool === "clothing-data") section.append(rawDataEditor(documentRef, services, state, tool));
   else section.append(launchers, warning);
   return section;
@@ -2012,7 +2184,12 @@ function aiConnections(documentRef, services, state) {
   backdropModel.type = "text";
   backdropModel.value = backdropConfig.model || "";
   backdropModel.setAttribute("aria-label", "Backdrop image model");
+  const backdropModelsId = "settings-backdrop-models";
+  backdropModel.setAttribute("list", backdropModelsId);
+  const backdropModels = documentRef.createElement("datalist");
+  backdropModels.id = backdropModelsId;
   backdropModelField.append(backdropModel);
+  backdropModelField.append(backdropModels);
   const backdropSizeField = el(documentRef, "label", "ui-field");
   backdropSizeField.append(el(documentRef, "span", "ui-field__label", "Landscape size"));
   const backdropSize = documentRef.createElement("input");
@@ -2041,7 +2218,40 @@ function aiConnections(documentRef, services, state) {
   backdropStatus.setAttribute("role", "status");
   const saveBackdrops = el(documentRef, "button", "ui-button ui-button--quiet", "Save backdrop settings");
   saveBackdrops.type = "button";
-  backdropFooter.append(saveBackdrops);
+  const discoverBackdrops = el(documentRef, "button", "ui-button ui-button--quiet", "Discover image models");
+  discoverBackdrops.type = "button";
+  discoverBackdrops.addEventListener("click", async () => {
+    if (!backdropProvider.value) {
+      backdropStatus.textContent = "Choose an image provider first.";
+      backdropProvider.focus();
+      return;
+    }
+    discoverBackdrops.disabled = true;
+    backdropStatus.textContent = "Checking image models…";
+    try {
+      const result = await services.apiClient.get(`/api/providers/${encodeURIComponent(backdropProvider.value)}/image_models`, {
+        channel: `settings-image-models:${backdropProvider.value}`, owner: "settings-backdrops",
+      });
+      if (!discoverBackdrops.isConnected) return;
+      const models = Array.isArray(result.data?.models) ? result.data.models : [];
+      backdropModels.replaceChildren();
+      models.forEach(item => {
+        const id = typeof item === "string" ? item : item?.id || item?.name;
+        if (!id) return;
+        const option = el(documentRef, "option", "", typeof item === "object" ? item.description || "" : "");
+        option.value = id;
+        backdropModels.append(option);
+      });
+      backdropStatus.textContent = models.length
+        ? `${models.length} ${models.length === 1 ? "image model" : "image models"} available. Type to filter the list.`
+        : "This provider returned no text-to-image models.";
+    } catch (error) {
+      if (discoverBackdrops.isConnected) backdropStatus.textContent = error?.userMessage || error?.message || "Sonder could not discover image models.";
+    } finally {
+      if (discoverBackdrops.isConnected) discoverBackdrops.disabled = false;
+    }
+  });
+  backdropFooter.append(discoverBackdrops, saveBackdrops);
   saveBackdrops.addEventListener("click", async () => {
     saveBackdrops.disabled = true;
     backdropStatus.textContent = "Saving backdrop settings…";

@@ -262,6 +262,45 @@ def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
     }
 
 
+def test_advanced_prompt_editor_activates_and_stages_preset_deletion(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches loss of the current preset lifecycle during modal replacement."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "default_prompts": {"director": "Default director sheet"},
+        "prompt_presets": {
+            "Focused": {"language": "en", "prompts": {"director": "Focused sheet"}},
+            "Spare": {"language": "en", "prompts": {"director": "Spare sheet"}},
+        },
+        "active_preset": "Focused",
+        "language_packs": [{"id": "en", "name": "English"}],
+    }
+    writes: list[tuple[str, object]] = []
+
+    def active(route) -> None:
+        writes.append(("active", route.request.post_data_json))
+        route.fulfill(content_type="application/json", body=json.dumps({"ok": True}))
+
+    def remove(route) -> None:
+        writes.append(("delete", route.request.method))
+        route.fulfill(content_type="application/json", body=json.dumps({"ok": True}))
+
+    page.route("**/api/active_preset", active)
+    page.route("**/api/prompt_presets/Spare", remove)
+    _open_settings(page, ui_base_url, category="advanced", bootstrap=bootstrap)
+    page.get_by_role("button", name=re.compile("^Prompt editor")).click()
+
+    page.get_by_role("combobox", name="Prompt preset", exact=True).select_option("Spare")
+    page.get_by_role("button", name="Use selected preset").click()
+    expect(page.get_by_text("Spare is now the active prompt preset.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Delete selected preset").click()
+    expect(page.get_by_text("The engine's built-in Default remains available.", exact=False)).to_be_visible()
+    page.get_by_role("button", name="Confirm delete Spare").click()
+    expect(page).to_have_url(re.compile(r"preset=Default"))
+    assert writes == [("active", {"name": "Spare"}), ("delete", "DELETE")]
+
+
 def test_advanced_raw_story_editor_validates_and_saves_the_current_story(
     page: Page, ui_base_url: str
 ) -> None:
@@ -766,11 +805,20 @@ def test_ai_connections_saves_backdrop_and_ambience_sources(
         return route_handler
 
     page.route("**/api/image_model", record("image", {"ok": True}))
+    page.route(
+        "**/api/providers/8/image_models",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"models": [{"id": "flux-ultra"}, {"id": "flux-pro"}]}),
+        ),
+    )
     page.route("**/api/backdrops", record("backdrops", {"enabled": True, "continuity": True}))
     page.route("**/api/ambience", record("ambience", bootstrap["ambience"]))
     _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
 
-    page.get_by_role("textbox", name="Backdrop image model").fill("flux-ultra")
+    page.get_by_role("button", name="Discover image models").click()
+    expect(page.get_by_text("2 image models available. Type to filter the list.", exact=True)).to_be_visible()
+    page.get_by_role("combobox", name="Backdrop image model").fill("flux-ultra")
     page.get_by_role("checkbox", name="Keep room images visually consistent").check()
     page.get_by_role("button", name="Save backdrop settings").click()
     expect(page.get_by_text("Backdrop settings saved.", exact=True)).to_be_visible()
@@ -1157,3 +1205,36 @@ def test_maintenance_exposes_redacted_diagnostics_and_stages_embedding_rebuild(
     expect(page.get_by_text("Memory search rebuild started for 11 memories.", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Download redacted diagnostics")).to_be_visible()
     assert writes == [{}]
+
+
+def test_maintenance_routes_portable_backups_to_owned_story_exports(
+    page: Page, ui_base_url: str
+) -> None:
+    """Keeps backup promises attached to the per-story export that actually owns them."""
+    _open_settings(page, ui_base_url, category="maintenance")
+
+    expect(page.get_by_text("Portable story backups", exact=True)).to_be_visible()
+    backup = page.get_by_role("link", name="Manage portable story backups")
+    expect(backup).to_have_attribute("href", "#/library/stories")
+
+
+def test_mobile_advanced_keeps_prompt_tools_without_horizontal_overflow(
+    page: Page, ui_base_url: str
+) -> None:
+    """Protects compact Settings from dropping or clipping Advanced functionality."""
+    _open_settings(page, ui_base_url, width=390, height=844, category="advanced")
+
+    page.get_by_role("button", name="Prompt editor").click()
+    expect(page.get_by_role("heading", name="Advanced", level=2)).to_be_visible()
+    expect(page.get_by_role("combobox", name="Prompt preset", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Save prompt preset")).to_be_visible()
+    geometry = page.evaluate(
+        """() => ({
+          viewport: document.documentElement.clientWidth,
+          scroll: document.documentElement.scrollWidth,
+          main: document.querySelector('.ui-settings__content')?.getBoundingClientRect().width,
+        })"""
+    )
+    assert geometry["viewport"] == 390
+    assert geometry["scroll"] <= geometry["viewport"]
+    assert geometry["main"] <= geometry["viewport"]
