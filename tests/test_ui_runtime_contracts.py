@@ -87,3 +87,13 @@ def test_credential_helper_has_no_persistence_or_navigation_surface():
     assert "sessionStorage" not in source
     assert "location." not in source
     assert "history." not in source
+
+
+def test_v1_fixture_uses_only_the_public_registry_contract():
+    source = (
+        ROOT / "browser_tests/fixtures/ui_v1_extension.js"
+    ).read_text(encoding="utf-8")
+    assert "window.Sonder" in source
+    assert "querySelector" not in source
+    assert "getElementById" not in source
+    assert "window.S " not in source

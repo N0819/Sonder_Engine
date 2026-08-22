@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from playwright.sync_api import Page
+
+
+FIXTURES = Path(__file__).with_name("fixtures")
 
 
 def test_release_module_is_importable_without_classic_host_scripts(
@@ -1464,3 +1469,221 @@ def test_undo_policy_accepts_only_bounded_matching_server_receipts(
         "tooLong": "undo-expiry",
         "absent": "undo-missing",
     }
+
+
+def test_v1_extension_registers_calls_events_faults_and_fully_unloads(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    source = (FIXTURES / "ui_v1_extension.js").read_text(encoding="utf-8")
+    result = page.evaluate(
+        """async ({ base, source }) => {
+          const { createExtensionRegistry } = await import(
+            `${base}/static/js/ui-next/extensions.js?release=wp02.1`
+          );
+          const { createV1Adapter, installV1Adapter } = await import(
+            `${base}/static/js/ui-next/extensions-v1.js?release=wp02.1`
+          );
+          const calls = [];
+          const hostState = {
+            boot: { extensions: [] },
+            chat: { id: 17, name: "Current story" },
+            chatId: 17,
+          };
+          const registry = createExtensionRegistry({
+            apiClient: {
+              request: async (method, path, options = {}) => {
+                calls.push({ method, path, body: options.body ?? null });
+                return { data: { method, path }, status: 200 };
+              },
+            },
+            stateProvider: () => hostState,
+          });
+          const adapter = createV1Adapter(registry);
+          const uninstall = installV1Adapter(adapter);
+          adapter._begin("fixture-v1");
+          (0, eval)(source);
+          adapter._end();
+          await Promise.resolve();
+          const copiedState = adapter.state();
+          copiedState.chat.name = "Mutated";
+          adapter.emit("turn:done", { turn: 9 });
+          await Promise.resolve();
+          const view = registry.entries("legacy-view")[0];
+          const mount = document.createElement("section");
+          await registry.run(view, "render", mount);
+          adapter.openView("fixture-view");
+          const beforeUnload = registry.snapshot();
+
+          const broken = registry.facade("broken-extension");
+          let brokenAttempts = 0;
+          broken.registerView({
+            id: "broken-view",
+            label: "Broken",
+            render() {
+              brokenAttempts += 1;
+              if (brokenAttempts === 1) throw new Error("broken render");
+              return Promise.reject(new Error("broken async render"));
+            },
+          });
+          broken.openView("broken-view");
+          const brokenView = registry.entries("legacy-view")
+            .find(entry => entry.owner === "broken-extension");
+          await registry.run(brokenView, "render", mount);
+          await registry.run(brokenView, "render", mount);
+          await registry.run(brokenView, "render", mount);
+
+          adapter._unload("fixture-v1");
+          const afterUnload = registry.snapshot();
+          const openAfterUnload = registry.openView();
+          const brokenRetired = registry.isRetired("broken-extension");
+          uninstall();
+          return {
+            beforeKinds: Object.fromEntries(
+              Object.entries(beforeUnload).map(([kind, rows]) => [
+                kind,
+                rows.map(row => `${row.owner}:${row.id}`),
+              ]),
+            ),
+            calls,
+            copiedStateFrozen: Object.isFrozen(copiedState)
+              && Object.isFrozen(copiedState.chat),
+            hostStateName: hostState.chat.name,
+            mountText: mount.textContent,
+            afterCounts: Object.fromEntries(
+              Object.entries(afterUnload).map(([kind, rows]) => [kind, rows.length]),
+            ),
+            openAfterUnload,
+            brokenRetired,
+            globalRemoved: !Object.hasOwn(window, "Sonder"),
+          };
+        }""",
+        {"base": ui_base_url, "source": source},
+    )
+    assert result["beforeKinds"] == {
+        "destination": [],
+        "library-type": [],
+        "play-tool": [],
+        "addon-settings": ["fixture-v1:fixture-settings"],
+        "task-provider": [],
+        "legacy-sidebar": ["fixture-v1:fixture-sidebar"],
+        "legacy-topbar": ["fixture-v1:fixture-action"],
+        "legacy-composer": ["fixture-v1:fixture-composer"],
+        "legacy-view": ["fixture-v1:fixture-view"],
+        "legacy-step": ["fixture-v1:ext:fixture-v1:step"],
+        "notice": ["fixture-v1:notice-1"],
+        "event": ["fixture-v1:turn:done:1"],
+    }
+    assert result["calls"] == [
+        {"method": "GET", "path": "/api/chats", "body": None},
+        {
+            "method": "POST",
+            "path": "/api/extensions/fixture-v1/x/seen",
+            "body": {"turn": 9},
+        },
+    ]
+    assert result["copiedStateFrozen"] is True
+    assert result["hostStateName"] == "Current story"
+    assert result["mountText"] == "Fixture view mounted"
+    assert all(count == 0 for count in result["afterCounts"].values())
+    assert result["openAfterUnload"] is None
+    assert result["brokenRetired"] is True
+    assert result["globalRemoved"] is True
+
+
+def test_extension_assets_use_authenticated_routes_and_fail_independently(
+    page: Page, ui_base_url: str
+) -> None:
+    requested: list[str] = []
+
+    def serve_asset(route):
+        path = route.request.url.split(ui_base_url, 1)[-1]
+        requested.append(path)
+        if path == "/api/extensions/asset-fixture/ui.js":
+            route.fulfill(
+                content_type="application/javascript",
+                body=(
+                    'window.Sonder && Sonder._begin("asset-fixture");'
+                    'Sonder.registerView({id:"classic",label:"Classic",render(){}});'
+                    'window.Sonder && Sonder._end();'
+                    'window.Sonder && Sonder._loadModule("asset-fixture",'
+                    '"/api/extensions/asset-fixture/asset/index.js");'
+                ),
+            )
+        elif path == "/api/extensions/asset-fixture/asset/index.js":
+            route.fulfill(
+                content_type="application/javascript",
+                body=(
+                    'export async function register(sonder){'
+                    'await Promise.resolve();'
+                    'sonder.registerComposerControl({id:"module",render(){}});'
+                    'return () => window.dispatchEvent(new Event("module-torn-down"));'
+                    '}'
+                ),
+            )
+        elif path == "/api/extensions/asset-fixture/ui.css":
+            route.fulfill(content_type="text/css", body=".fixture { color: inherit; }")
+        else:
+            route.abort()
+
+    page.route("**/api/extensions/**", serve_asset)
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createExtensionRegistry } = await import(
+            `${base}/static/js/ui-next/extensions.js?release=wp02.1`
+          );
+          const { createV1Adapter, installV1Adapter } = await import(
+            `${base}/static/js/ui-next/extensions-v1.js?release=wp02.1`
+          );
+          let tornDown = 0;
+          window.addEventListener("module-torn-down", () => { tornDown += 1; });
+          const registry = createExtensionRegistry({
+            apiClient: { request: async () => ({ data: null, status: 200 }) },
+          });
+          const uninstall = installV1Adapter(createV1Adapter(registry));
+          const loaded = await registry.loadEnabled([
+            {
+              id: "asset-fixture",
+              enabled: true,
+              capabilities: { ui: { js: "ui.js", module: "index.js", css: "ui.css" } },
+            },
+            {
+              id: "failed-fixture",
+              enabled: true,
+              capabilities: { ui: { js: "ui.js" } },
+            },
+          ]);
+          await Promise.resolve();
+          const before = registry.snapshot();
+          registry.unregisterOwner("asset-fixture");
+          await Promise.resolve();
+          const assetsLeft = document.querySelectorAll("[data-sonder-extension-asset]").length;
+          uninstall();
+          return {
+            loaded,
+            classic: before["legacy-view"].map(row => row.id),
+            module: before["legacy-composer"].map(row => row.id),
+            failedFaults: registry.faultCount("failed-fixture"),
+            tornDown,
+            assetsLeft,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "loaded": [
+            {"id": "asset-fixture", "loaded": True},
+            {"id": "failed-fixture", "loaded": False},
+        ],
+        "classic": ["classic"],
+        "module": ["module"],
+        "failedFaults": 1,
+        "tornDown": 1,
+        "assetsLeft": 0,
+    }
+    assert "/api/extensions/asset-fixture/ui.js" in requested
+    assert "/api/extensions/asset-fixture/ui.css" in requested
+    assert "/api/extensions/asset-fixture/asset/index.js" in requested
+    assert "/api/extensions/failed-fixture/ui.js" in requested
+    assert all(path.startswith("/api/extensions/") for path in requested)
