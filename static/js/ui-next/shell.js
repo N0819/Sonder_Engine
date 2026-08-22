@@ -2,6 +2,14 @@ export const MODULE_RELEASE = "wp03.1";
 
 export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
 
+// UI_CATALOG_START: global shell shortcut and orientation labels.
+const SHELL_COPY = Object.freeze({
+  name: "Sonder Engine",
+  openSettings: "Open Settings",
+  closeLayer: "Close the top panel",
+});
+// UI_CATALOG_END
+
 function layoutStateFor(width, height) {
   if (width < 720 || (height <= 430 && width < 900)) return "compact";
   if (width < 1100) return "medium";
@@ -128,7 +136,7 @@ export function createApplicationShell(options = {}) {
     owner: "core-shell",
     id: "open-settings",
     combo: "mod+,",
-    label: services.localizer.t("Open Settings"),
+    label: services.localizer.t(SHELL_COPY.openSettings),
     handler: () => services.router.navigate({ destination: "settings" }),
     core: true,
   });
@@ -136,7 +144,7 @@ export function createApplicationShell(options = {}) {
     owner: "core-shell",
     id: "close-layer",
     combo: "escape",
-    label: services.localizer.t("Close the top panel"),
+    label: services.localizer.t(SHELL_COPY.closeLayer),
     handler: () => services.router.closeTopLayer(),
     allowWhenTyping: true,
     core: true,

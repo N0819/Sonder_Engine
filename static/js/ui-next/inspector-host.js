@@ -5,6 +5,18 @@ import { createOverlayController } from "../ui/components/overlay.js?release=wp0
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["narrow", "default", "wide"]);
 
+// UI_CATALOG_START: responsive inspector labels and states.
+const INSPECTOR_COPY = Object.freeze({
+  libraryTitle: "Library details",
+  libraryBody: "Choose an item when the Library replacement arrives to see its details here.",
+  settingsTitle: "Settings help",
+  settingsBody: "Contextual guidance appears here without moving system controls into Play.",
+  storyTitle: "Story tools",
+  storyBody: "Choose a story before opening its contextual tools.",
+  close: "Close",
+});
+// UI_CATALOG_END
+
 function createElement(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
   if (className) node.className = className;
@@ -26,18 +38,18 @@ function contextCopy(destination, t) {
   if (destination === "library") {
     return {
       title: t("Library details"),
-      body: t("Choose an item when the Library replacement arrives to see its details here."),
+      body: t(INSPECTOR_COPY.libraryBody),
     };
   }
   if (destination === "settings") {
     return {
-      title: t("Settings help"),
-      body: t("Contextual guidance appears here without moving system controls into Play."),
+      title: t(INSPECTOR_COPY.settingsTitle),
+      body: t(INSPECTOR_COPY.settingsBody),
     };
   }
   return {
-    title: t("Story tools"),
-    body: t("Choose a story before opening its contextual tools."),
+    title: t(INSPECTOR_COPY.storyTitle),
+    body: t(INSPECTOR_COPY.storyBody),
   };
 }
 
@@ -50,10 +62,10 @@ function sheetContent(documentRef, t) {
   sheet.setAttribute("aria-modal", "true");
   sheet.setAttribute("aria-labelledby", "ui-shell-inspector-sheet-title");
   const header = createElement(documentRef, "header", "ui-shell__inspector-header");
-  const heading = createElement(documentRef, "h2", "ui-heading ui-heading--2", t("Story tools"));
+  const heading = createElement(documentRef, "h2", "ui-heading ui-heading--2", t(INSPECTOR_COPY.storyTitle));
   heading.id = "ui-shell-inspector-sheet-title";
   heading.tabIndex = -1;
-  const close = createElement(documentRef, "button", "ui-button ui-button--quiet", t("Close"));
+  const close = createElement(documentRef, "button", "ui-button ui-button--quiet", t(INSPECTOR_COPY.close));
   close.type = "button";
   close.dataset.shellInspectorSheetClose = "true";
   header.append(heading, close);

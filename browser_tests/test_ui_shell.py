@@ -262,6 +262,67 @@ def test_forbidden_bootstrap_stays_inline_without_exposing_technical_detail(
     expect(page.get_by_text("private host policy detail", exact=True)).to_have_count(0)
     assert page.url.endswith("#/play")
 
+
+def test_long_japanese_shell_copy_and_accessibility_preset_keep_actions_reachable(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 360, "height": 800})
+    messages = {
+        "Play": "プレイ中の物語と現在進行中の場面を確認する場所",
+        "Library": "ストーリーと登場人物と世界設定をまとめて探すライブラリ",
+        "Settings": "表示や接続やメンテナンスを調整するための設定",
+        "Your active story and its tools stay together here.": (
+            "現在選ばれている物語と、その物語だけに関係する道具は、"
+            "迷わず戻れるようにこの場所へまとめて表示されます。"
+        ),
+        "Choose a story to begin.": "始めるストーリーをライブラリから選んでください。",
+        "Go To": "目的の場所へすばやく移動",
+        "Find a destination": "移動したい画面や機能の名前を入力して検索",
+    }
+    bootstrap = {**BOOTSTRAP, "ui_language": "ja", "ui_messages": messages}
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(bootstrap)
+        ),
+    )
+    response = page.goto(f"{ui_base_url}/static/ui-next.html#/play")
+    assert response is not None and response.ok
+    page.wait_for_function(
+        "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
+    )
+    page.evaluate(
+        """() => {
+          const root = document.documentElement;
+          root.dataset.a11yHighContrast = "true";
+          root.dataset.a11ySolid = "true";
+          root.dataset.a11yStrongFocus = "true";
+          root.dataset.a11yLargeUi = "true";
+          root.dataset.a11yLargeProse = "true";
+          root.dataset.a11yRoomyTargets = "true";
+          root.dataset.a11yReducedMotion = "true";
+        }"""
+    )
+    expect(page.locator("html")).to_have_attribute("lang", "ja")
+    expect(page.get_by_role(
+        "heading", name="プレイ中の物語と現在進行中の場面を確認する場所", level=1
+    )).to_be_visible()
+    geometry = page.evaluate(
+        """() => ({
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          targets: [...document.querySelectorAll('[data-core-destination]')]
+            .map(node => node.getBoundingClientRect().height),
+        })"""
+    )
+    assert geometry["overflow"] <= 1
+    assert all(size >= 50 for size in geometry["targets"])
+    opener = page.get_by_role("button", name="目的の場所へすばやく移動", exact=True)
+    expect(opener).to_be_visible()
+    opener.click()
+    expect(page.get_by_role(
+        "searchbox", name="移動したい画面や機能の名前を入力して検索"
+    )).to_be_focused()
+
 def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     page: Page, ui_base_url: str
 ) -> None:
