@@ -31,6 +31,7 @@ def _open_settings(
     width: int = 1440,
     height: int | None = None,
     category: str = "experience",
+    bootstrap: dict[str, object] | None = None,
 ) -> None:
     page.set_viewport_size(
         {"width": width, "height": height or (900 if width >= 1000 else 844)}
@@ -38,7 +39,7 @@ def _open_settings(
     page.route(
         "**/api/bootstrap",
         lambda route: route.fulfill(
-            content_type="application/json", body=json.dumps(BOOTSTRAP)
+            content_type="application/json", body=json.dumps(bootstrap or BOOTSTRAP)
         ),
     )
     response = page.goto(f"{ui_base_url}/static/ui-next.html#/settings/{category}")
@@ -143,3 +144,209 @@ def test_advanced_ports_the_reference_launcher_panel(
     expect(
         page.get_by_text("Advanced tools change engine-facing data.", exact=True)
     ).to_be_visible()
+
+
+def test_ai_connections_ports_provider_ledger_and_tests_the_current_connection(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches an inert provider card or a synthetic legacy-button bridge."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [
+            {
+                "id": 7,
+                "name": "Anthropic",
+                "kind": "anthropic",
+                "base_url": "https://api.anthropic.com",
+                "has_key": True,
+                "prompt_cache": True,
+                "prompt_cache_default": True,
+                "prompt_cache_locked": False,
+            }
+        ],
+        "provider_presets": {
+            "anthropic": "https://api.anthropic.com",
+            "ollama": "http://localhost:11434/v1",
+        },
+        "agent_models": {
+            "default": {"provider": 7, "model": "claude-sonnet-4-5"}
+        },
+    }
+    page.route(
+        "**/api/providers/7/models",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {"models": ["claude-sonnet-4-5", "claude-haiku-4-5"]}
+            ),
+        ),
+    )
+    _open_settings(
+        page,
+        ui_base_url,
+        category="ai-connections",
+        bootstrap=bootstrap,
+    )
+
+    expect(page.get_by_role("heading", name="AI Connections", level=2)).to_be_visible()
+    expect(
+        page.locator(".ui-settings__provider-row strong", has_text="Anthropic")
+    ).to_be_visible()
+    expect(page.get_by_text("Key saved", exact=True)).to_be_visible()
+    expect(page.get_by_text("claude-sonnet-4-5", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Test Anthropic connection").click()
+    expect(
+        page.get_by_text("Connection works. 2 models available.", exact=True)
+    ).to_be_visible()
+
+
+def test_ai_connections_stages_provider_connection_and_default_model_save(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches credential loss, skipped connection tests, or unsaved model choice."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "provider_presets": {
+            "anthropic": "https://api.anthropic.com",
+            "ollama": "http://localhost:11434/v1",
+        },
+        "agent_models": {},
+    }
+    writes: dict[str, object] = {}
+
+    def provider_route(route) -> None:
+        writes["provider"] = route.request.post_data_json
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "id": 11,
+                    "name": "Anthropic",
+                    "kind": "anthropic",
+                    "base_url": "https://api.anthropic.com",
+                    "has_key": True,
+                    "prompt_cache": True,
+                    "prompt_cache_default": True,
+                    "prompt_cache_locked": False,
+                }
+            ),
+        )
+
+    def models_route(route) -> None:
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {"models": ["claude-sonnet-4-5", "claude-haiku-4-5"]}
+            ),
+        )
+
+    def defaults_route(route) -> None:
+        writes["agent_models"] = route.request.post_data_json
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "embeddings_role_changed": False}),
+        )
+
+    page.route("**/api/providers", provider_route)
+    page.route("**/api/providers/11/models", models_route)
+    page.route("**/api/agent_models", defaults_route)
+    _open_settings(
+        page,
+        ui_base_url,
+        category="ai-connections",
+        bootstrap=bootstrap,
+    )
+
+    page.get_by_role("button", name="Add provider").click()
+    page.get_by_role("combobox", name="Provider").select_option("anthropic")
+    page.get_by_label("API key", exact=True).fill("test-key")
+    page.get_by_role("button", name="Connect and test").click()
+    model = page.get_by_role("combobox", name="Default model")
+    expect(model).to_be_visible()
+    expect(page.get_by_text("No AI provider is connected.", exact=True)).to_be_hidden()
+    expect(page.get_by_text("Not selected", exact=True)).to_be_hidden()
+    model.select_option("claude-haiku-4-5")
+    page.get_by_role("button", name="Save default model").click()
+
+    expect(
+        page.locator(".ui-settings__provider-row strong", has_text="Anthropic")
+    ).to_be_visible()
+    expect(
+        page.locator(".ui-settings__group code", has_text="claude-haiku-4-5")
+    ).to_be_visible()
+    assert writes["provider"] == {
+        "name": "Anthropic",
+        "kind": "anthropic",
+        "base_url": "https://api.anthropic.com",
+        "api_key": "test-key",
+    }
+    assert writes["agent_models"] == {
+        "default": {"provider": 11, "model": "claude-haiku-4-5"}
+    }
+
+
+def test_ai_connections_edits_provider_without_requiring_the_saved_key(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches secret readback assumptions or blank-key credential erasure."""
+    provider = {
+        "id": 7,
+        "name": "Anthropic",
+        "kind": "anthropic",
+        "base_url": "https://api.anthropic.com",
+        "has_key": True,
+        "prompt_cache": True,
+        "prompt_cache_default": True,
+        "prompt_cache_locked": False,
+    }
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [provider],
+        "provider_presets": {"anthropic": "https://api.anthropic.com"},
+        "agent_models": {
+            "default": {"provider": 7, "model": "claude-sonnet-4-5"}
+        },
+    }
+    writes: list[dict[str, object]] = []
+
+    def save_route(route) -> None:
+        body = route.request.post_data_json
+        writes.append(body)
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({**provider, **body}),
+        )
+
+    page.route("**/api/providers/7", save_route)
+    page.route(
+        "**/api/providers/7/models",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"models": ["claude-sonnet-4-5"]}),
+        ),
+    )
+    _open_settings(
+        page,
+        ui_base_url,
+        category="ai-connections",
+        bootstrap=bootstrap,
+    )
+
+    page.get_by_role("button", name="Edit Anthropic connection").click()
+    key = page.get_by_label("API key", exact=True)
+    expect(key).to_have_value("")
+    expect(key).to_have_attribute("placeholder", "Leave blank to keep saved key")
+    page.get_by_label("Endpoint", exact=True).fill("https://gateway.example/v1")
+    page.get_by_role("button", name="Save and test").click()
+
+    expect(
+        page.get_by_text("Connection works. 1 model available.", exact=True)
+    ).to_be_visible()
+    assert writes == [
+        {
+            "name": "Anthropic",
+            "kind": "anthropic",
+            "base_url": "https://gateway.example/v1",
+            "api_key": "",
+        }
+    ]
