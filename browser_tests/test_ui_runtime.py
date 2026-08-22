@@ -1230,3 +1230,237 @@ def test_credential_submitter_allowlists_routes_and_always_clears_secrets(
         "url": f"{ui_base_url}/static/ui-next-lab.html",
         "storageContainsSecret": False,
     }
+
+
+def test_save_policy_refuses_explicit_actions_and_sequences_rapid_edits(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createSaveCoordinator, classifySaveAction } = await import(
+            `${base}/static/js/ui-next/save-policy.js?release=wp02.1`
+          );
+          const writes = [];
+          const coordinator = createSaveCoordinator({
+            write: input => new Promise(resolve => writes.push({ input, resolve })),
+          });
+          coordinator.selectOwner("story-a");
+          coordinator.stage({
+            owner: "story-a",
+            revision: 1,
+            draft: { title: "First" },
+            action: "field-edit",
+          });
+          const first = coordinator.save("story-a");
+          await Promise.resolve();
+          coordinator.stage({
+            owner: "story-a",
+            revision: 2,
+            draft: { title: "Second" },
+            action: "field-edit",
+          });
+          const second = coordinator.save("story-a");
+          const concurrentBeforeFirst = writes.length;
+          writes[0].resolve({ ...writes[0].input, saved: true });
+          const firstResult = await first;
+          await Promise.resolve();
+          const concurrentAfterFirst = writes.length;
+          writes[1].resolve({ ...writes[1].input, saved: true });
+          const secondResult = await second;
+          let explicitKind = null;
+          try {
+            coordinator.stage({
+              owner: "story-a",
+              revision: 3,
+              draft: { title: "Delete" },
+              action: "delete",
+            });
+          } catch (error) {
+            explicitKind = error.kind;
+          }
+          return {
+            classifications: [
+              "field-edit", "draft-update", "create", "delete", "import",
+              "generation", "credential-submit", "unknown",
+            ].map(action => [action, classifySaveAction(action)]),
+            concurrentBeforeFirst,
+            concurrentAfterFirst,
+            firstResult,
+            secondResult,
+            final: coordinator.snapshot("story-a"),
+            explicitKind,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result["classifications"] == [
+        ["field-edit", "autosave"],
+        ["draft-update", "autosave"],
+        ["create", "explicit"],
+        ["delete", "explicit"],
+        ["import", "explicit"],
+        ["generation", "explicit"],
+        ["credential-submit", "explicit"],
+        ["unknown", "explicit"],
+    ]
+    assert result["concurrentBeforeFirst"] == 1
+    assert result["concurrentAfterFirst"] == 2
+    assert result["firstResult"] == {"accepted": False, "reason": "stale"}
+    assert result["secondResult"] == {"accepted": True, "reason": "saved"}
+    assert result["final"] == {
+        "owner": "story-a",
+        "revision": 2,
+        "requestId": 2,
+        "status": "saved",
+        "draft": {"title": "Second"},
+        "server": None,
+        "error": None,
+    }
+    assert result["explicitKind"] == "explicit-action"
+
+
+def test_save_policy_preserves_drafts_on_owner_switch_conflict_and_error(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createSaveCoordinator } = await import(
+            `${base}/static/js/ui-next/save-policy.js?release=wp02.1`
+          );
+          const pending = [];
+          const coordinator = createSaveCoordinator({
+            write: input => new Promise((resolve, reject) => (
+              pending.push({ input, resolve, reject })
+            )),
+          });
+          coordinator.selectOwner("story-a");
+          coordinator.stage({
+            owner: "story-a",
+            revision: 7,
+            draft: "local seven",
+            action: "draft-update",
+          });
+          const switched = coordinator.save("story-a");
+          await Promise.resolve();
+          coordinator.selectOwner("story-b");
+          pending[0].resolve({ ...pending[0].input, saved: true });
+          const switchedResult = await switched;
+          const afterSwitch = coordinator.snapshot("story-a");
+
+          coordinator.selectOwner("story-a");
+          coordinator.stage({
+            owner: "story-a",
+            revision: 8,
+            draft: "local eight",
+            action: "draft-update",
+          });
+          const conflict = coordinator.save("story-a");
+          await Promise.resolve();
+          pending[1].resolve({
+            ...pending[1].input,
+            conflict: true,
+            server: { revision: 9, draft: "remote nine" },
+          });
+          const conflictResult = await conflict;
+          const afterConflict = coordinator.snapshot("story-a");
+
+          coordinator.stage({
+            owner: "story-a",
+            revision: 10,
+            draft: "local ten",
+            action: "draft-update",
+          });
+          const failed = coordinator.save("story-a");
+          await Promise.resolve();
+          pending[2].reject({ kind: "network", userMessage: "Offline" });
+          const failedResult = await failed;
+          return {
+            switchedResult,
+            afterSwitch,
+            conflictResult,
+            afterConflict,
+            failedResult,
+            afterFailure: coordinator.snapshot("story-a"),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result["switchedResult"] == {"accepted": False, "reason": "stale"}
+    assert result["afterSwitch"]["status"] == "dirty"
+    assert result["afterSwitch"]["draft"] == "local seven"
+    assert result["conflictResult"] == {"accepted": False, "reason": "conflict"}
+    assert result["afterConflict"]["status"] == "conflict"
+    assert result["afterConflict"]["draft"] == "local eight"
+    assert result["afterConflict"]["server"] == {
+        "revision": 9,
+        "draft": "remote nine",
+    }
+    assert result["failedResult"] == {"accepted": False, "reason": "error"}
+    assert result["afterFailure"]["status"] == "recoverable-error"
+    assert result["afterFailure"]["draft"] == "local ten"
+    assert result["afterFailure"]["error"] == {
+        "kind": "network",
+        "message": "Offline",
+    }
+
+
+def test_undo_policy_accepts_only_bounded_matching_server_receipts(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { acceptUndoReceipt } = await import(
+            `${base}/static/js/ui-next/save-policy.js?release=wp02.1`
+          );
+          const now = 1000;
+          const valid = {
+            receiptId: "undo-17",
+            action: "delete",
+            owner: "story-a",
+            inverse: { method: "POST", endpoint: "/api/chats/17/restore" },
+            expiresAt: 1400,
+          };
+          const capture = receipt => {
+            try {
+              return acceptUndoReceipt(receipt, {
+                owner: "story-a",
+                action: "delete",
+                now,
+              });
+            } catch (error) {
+              return error.kind;
+            }
+          };
+          return {
+            valid: capture(valid),
+            expired: capture({ ...valid, expiresAt: 999 }),
+            foreign: capture({ ...valid, owner: "story-b" }),
+            wrongAction: capture({ ...valid, action: "branch" }),
+            unsafeEndpoint: capture({
+              ...valid,
+              inverse: { method: "POST", endpoint: "https://evil.test/steal" },
+            }),
+            tooLong: capture({ ...valid, expiresAt: now + 900001 }),
+            absent: capture(null),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "valid": {
+            "receiptId": "undo-17",
+            "action": "delete",
+            "owner": "story-a",
+            "inverse": {"method": "POST", "endpoint": "/api/chats/17/restore"},
+            "expiresAt": 1400,
+        },
+        "expired": "undo-expired",
+        "foreign": "undo-owner",
+        "wrongAction": "undo-action",
+        "unsafeEndpoint": "undo-endpoint",
+        "tooLong": "undo-expiry",
+        "absent": "undo-missing",
+    }
