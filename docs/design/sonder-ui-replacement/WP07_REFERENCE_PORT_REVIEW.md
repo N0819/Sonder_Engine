@@ -9,8 +9,8 @@ Design Bible revision screenshot archive.
 The Play correction uses `01_desktop_play.png`, `09_mobile_play.png`, and
 `15_tablet_play.png` from the same archive.
 
-**Status:** corrective visual slice accepted for continued WP-07 work; this is
-not the complete WP-07 or product-surface gate.
+**Status:** complete. The corrective reference port and the Story,
+character/persona, and lore authoring tranches are all qualified.
 
 ## Correction
 
@@ -87,11 +87,12 @@ The focused corrective gate passed all 42 tests after the final optical cleanup.
 The focused Play, Story Tools, and shell gate passed all 63 tests after the
 reference port and responsive cleanup.
 
-## Remaining UI-only work
+## Authoring qualification
 
-- Apply the same source-first comparison to selected-item/detail and WP-07
-  authoring states before accepting their presentation.
-- Continue Settings, entry, dialog, and remaining responsive surfaces
-  from their matching supplied screenshots and candidate files.
-- Keep service and server architecture unchanged unless a visible current
-  capability cannot be connected through its existing owner.
+Selected-item detail and Story, character/persona, and lore authoring retain
+the reference hierarchy while using current API and save authority. Draft,
+validation, import/export, association, archive, responsive staging, and unload
+contracts are covered by `browser_tests/test_ui_library_authoring.py`,
+`browser_tests/test_ui_character_persona_editor.py`,
+`tests/test_ui_library_authoring_contracts.py`, and
+`tests/test_ui_character_persona_editor_contracts.py`.

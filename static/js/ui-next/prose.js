@@ -1,12 +1,18 @@
 export const MODULE_RELEASE = "wp07.1";
 
-const EMPHASIS_TAGS = Object.freeze({
+const MARKUP_TAGS = Object.freeze({
   i: "em",
   em: "em",
   b: "strong",
   strong: "strong",
+  u: "u",
+  s: "s",
+  mark: "mark",
+  sup: "sup",
+  sub: "sub",
+  code: "code",
 });
-const EMPHASIS_PAIR = /<(i|em|b|strong)>([\s\S]*?)<\/\1>/gi;
+const MARKUP_TOKEN = /<\/?(?:i|em|b|strong|u|s|mark|sup|sub|code)>|<font color="(red|amber|green|blue|violet|grey)">|<\/font>/gi;
 const TYPOGRAPHY = Object.freeze({
   "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-",
   "‘": "'", "’": "'", "“": '"', "”": '"',
@@ -26,24 +32,67 @@ function foldTypography(value) {
 }
 
 export function emphasisRuns(value) {
-  const source = decodeAllowedEntities(value);
+  const source = String(value ?? "");
+  const tokens = [];
+  const stacks = new Map();
+  const paired = new Set();
+  MARKUP_TOKEN.lastIndex = 0;
+  let tokenMatch;
+  while ((tokenMatch = MARKUP_TOKEN.exec(source))) {
+    const raw = tokenMatch[0];
+    const closing = raw.startsWith("</");
+    const sourceName = raw.slice(closing ? 2 : 1).split(/[ >]/, 1)[0].toLowerCase();
+    const name = sourceName === "font" ? "font" : MARKUP_TAGS[sourceName];
+    const token = {
+      start: tokenMatch.index,
+      end: tokenMatch.index + raw.length,
+      raw,
+      closing,
+      name,
+      color: tokenMatch[1] || "",
+    };
+    const index = tokens.push(token) - 1;
+    const stack = stacks.get(name) || [];
+    if (!closing) stack.push(index);
+    else if (stack.length) {
+      paired.add(stack.pop());
+      paired.add(index);
+    }
+    stacks.set(name, stack);
+  }
+
   const runs = [];
   let plain = "";
   let cursor = 0;
-  let match;
-  EMPHASIS_PAIR.lastIndex = 0;
-  while ((match = EMPHASIS_PAIR.exec(source))) {
-    plain += source.slice(cursor, match.index);
+  const active = [];
+  const append = text => {
+    const decoded = decodeAllowedEntities(text);
     const start = plain.length;
-    plain += match[2];
-    runs.push(Object.freeze({
+    plain += decoded;
+    if (decoded && active.length) runs.push(Object.freeze({
       start,
       end: plain.length,
-      tag: EMPHASIS_TAGS[match[1].toLowerCase()],
+      marks: Object.freeze(active.map(mark => Object.freeze({ ...mark }))),
     }));
-    cursor = match.index + match[0].length;
+  };
+  tokens.forEach((token, index) => {
+    append(source.slice(cursor, token.start));
+    if (!paired.has(index)) append(token.raw);
+    else if (!token.closing) active.push(token.name === "font"
+      ? { tag: "span", className: `ink ink-${token.color}` }
+      : { tag: token.name, className: "" });
+    else {
+      const depth = active.map(mark => mark.tag).lastIndexOf(
+        token.name === "font" ? "span" : token.name,
+      );
+      if (depth >= 0) active.splice(depth, 1);
+    }
+    cursor = token.end;
+  });
+  append(source.slice(cursor));
+  if (!tokens.length) {
+    plain = decodeAllowedEntities(source);
   }
-  plain += source.slice(cursor);
   return Object.freeze({ text: plain, runs: Object.freeze(runs) });
 }
 
@@ -118,10 +167,11 @@ function speakerColor(colors, speaker) {
   return String(colors[speaker] || colors[String(speaker).toLowerCase()] || "");
 }
 
-function appendSegment(documentRef, host, text, emphasis, speaker, colors) {
+function appendSegment(documentRef, host, text, marks, speaker, colors) {
   let node = documentRef.createTextNode(text);
-  if (emphasis) {
-    const mark = documentRef.createElement(emphasis);
+  for (const definition of [...(marks || [])].reverse()) {
+    const mark = documentRef.createElement(definition.tag);
+    if (definition.className) mark.className = definition.className;
     mark.append(node);
     node = mark;
   }
@@ -180,7 +230,7 @@ export function renderProse(host, value, options = {}) {
       documentRef,
       fragment,
       emphasis.text.slice(start, end),
-      run?.tag || "",
+      run?.marks || [],
       said?.speaker || "",
       options.colors,
     );

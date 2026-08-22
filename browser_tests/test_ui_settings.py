@@ -708,6 +708,7 @@ def test_ai_connections_edits_role_samplers_and_ordered_backup_models(
     page.get_by_role("textbox", name="Backup 2 model for Default").fill("claude-haiku-4-5")
     page.get_by_role("button", name="Save model assignments").click()
 
+    expect(page.get_by_text("Model assignments saved.", exact=True)).to_be_visible()
     assert writes["models"] == {
         "default": {
             "provider": 7,

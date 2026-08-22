@@ -34,7 +34,8 @@ selector. The replacement is now the authenticated production root; the
 classic entry, scripts, and styles were removed in WP-13.
 The program and gates are in
 [`2026-08-21-sonder-ui-full-replacement-design.md`](../superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md),
-while [`UNBUILT.md`](../UNBUILT.md) §2.26 is the sole status authority.
+and the completed G8 qualification is in the
+[WP14 release audit](../design/sonder-ui-replacement/wp14/REVIEW.md).
 
 WP-00 is complete and G0 is locked. The exact current-source captures,
 performance ceilings, qualification commands, and all failures encountered
@@ -347,12 +348,11 @@ Every replacement increment must:
 8. remain independently reversible before cutover.
 
 Evidence ledgers under `docs/design/sonder-ui-replacement/` are reproducible
-maps and run records. They do not replace `UNBUILT.md`, cannot approve a
-deviation, and cannot declare a work package complete. A deviation records the
-affected requirement, reason, impact, owner, evidence, and approval in the
-traceability matrix; unapproved missing mobile capability or data-loss/security
-risk is release-blocking.
+maps and run records. The WP14 review and closed traceability matrix are the
+release record. A future deviation records the affected requirement, reason,
+impact, owner, evidence, and approval in the traceability matrix; unapproved
+missing mobile capability or data-loss/security risk is release-blocking.
 
-The default UI changes only at G6. Legacy implementation is deleted at G7. The
-replacement is releasable only at G8 after exact-head behavioral, responsive,
-accessibility, localization, extension, performance, novice, and expert proof.
+The default UI changed at G6, legacy implementation was deleted at G7, and the
+replacement passed G8 behavioral, responsive, accessibility, localization,
+extension, performance, novice, and expert qualification.
