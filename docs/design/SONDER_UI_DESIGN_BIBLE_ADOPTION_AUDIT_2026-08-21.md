@@ -162,9 +162,9 @@ porting source.
 | `static/js/theme-init.js`, `themes.js`, `themes.css` | **Adapt** | Merge registry/tokens without deleting current fonts or theme behavior. |
 | `static/login.html`, `static/guest.html` | **Adapt styling only** | Preserve current security/session/polling logic exactly unless separately tested. |
 | `language_packs/*/ui.json` | **Merge, never replace** | Current catalogs changed after candidate baseline; all new remaster strings must be extracted. |
-| `tests/test_ui_remaster_delivery.py` | **Adapt** | Keep structural tripwires; add behavioral tests instead of treating source presence as closure. |
-| `browser_tests/ui_helpers.py` | **Adapt** | Useful visible navigation helpers. |
-| `browser_tests/test_ui_remaster_layout.py` | **Adapt** | Keep geometry checks; add full production-page journeys and continuous viewport coverage. |
+| Candidate snapshot: tests/test_ui_remaster_delivery.py | **Adapt** | Keep structural tripwires; add behavioral tests instead of treating source presence as closure. |
+| Candidate snapshot: browser_tests/ui_helpers.py | **Adapt** | Useful visible navigation helpers. |
+| Candidate snapshot: browser_tests/test_ui_remaster_layout.py | **Adapt** | Keep geometry checks; add full production-page journeys and continuous viewport coverage. |
 | deleted `static/fonts/*.woff2` | **Reject deletion** | The candidate archive's redistribution choice must not delete assets already in Sonder. |
 
 ## Mandatory corrections before any default switch

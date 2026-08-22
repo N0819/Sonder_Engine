@@ -8,7 +8,8 @@
 
 **Adoption audit:** `docs/design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`
 
-**Status:** program design for review; source-level workstream plans follow separately
+**Status:** adversarially self-reviewed; product-owner review pending;
+source-level workstream plans follow separately
 
 ## Goal
 
@@ -18,6 +19,31 @@ persistence, security, and supported extension contracts.
 
 This is a full replacement. The old host shell is migration scaffolding, not a
 permanent fallback and not part of the finished product.
+
+## Self-review record
+
+The 2026-08-21 adversarial review corrected six structural gaps in the first
+program draft:
+
+1. Program status now rolls up through `docs/UNBUILT.md`, Sonder's sole
+   unfinished-work register, instead of creating a competing worklist.
+2. New Story, authentication/host setup, and guest play are separate work
+   packages because they have different authorities, risks, and release gates.
+3. The extension host contract and a representative v1 adapter are proven with
+   the runtime and shell, rather than discovering incompatibility after every
+   destination is built.
+4. Untrusted-content rendering, credential handling, and static-module cache
+   versioning are explicit runtime contracts.
+5. UI-affecting engine changes that land during the program have a drift and
+   dual-surface policy, preventing the capability ledger from freezing at one
+   old snapshot.
+6. Novice and expert usability audits are release evidence, not optional
+   follow-up research.
+
+The review also assigns the current vitals/story-width collision recorded in
+`docs/UNBUILT.md` section 1.66 to the replacement's Play/Story Tools work rather
+than assuming deletion of the old layout automatically proves the defect class
+closed.
 
 ## Definition of full replacement
 
@@ -67,6 +93,13 @@ The candidate is 78 commits behind the implementation baseline. Candidate
 files are ported as scoped changes; the archive is never copied over the
 repository.
 
+The Design Bible begins as approved target design under `docs/design/`, because
+that directory is context rather than current implementation authority.
+The planned `INTERFACE.md` guide under `docs/guides/` becomes the maintained description of what the
+current host actually implements and which Design Bible version it is moving
+toward. At final cutover, the maintained guide records the completed contract;
+the repository must never describe a future target as already built.
+
 ## Approaches considered
 
 ### Selected: progressive replacement on a separate application entry
@@ -101,6 +134,20 @@ mandatory bundler, package manager, or network runtime. The candidate proves
 the visual system can be delivered within that constraint. This program keeps
 that decision and gains structure through small modules, JSDoc contracts,
 explicit state/actions, and browser tests.
+
+### Program amendment to the reference migration architecture
+
+Reference requirement `ARCH-12` proposed one bridge owning legacy host globals
+during an in-place migration. This program supersedes that mechanism: the
+replacement runs at a separate authenticated entry and never calls classic host
+globals. The old entry remains isolated until cutover. The only legacy adapter
+inside the replacement is the documented public extension v1 API, which is a
+supported external contract rather than a bridge to old host behavior.
+
+This is not a scope reduction. It is the stronger boundary required by the
+approved full-replacement outcome and by the adoption audit's rejection of
+polling, `window.S`, synthetic clicks, and hidden duplicate controls. WP-00
+records the amendment against `ARCH-12` in the imported traceability matrix.
 
 ## Target architecture
 
@@ -189,6 +236,11 @@ Every request whose response can become stale carries an abort signal or
 request identity. A response for Story A or Library Item A cannot repaint the
 surface after the user has selected B.
 
+Eligible simple edits and removals return a bounded undo receipt or equivalent
+reversible action. Undo is offered only where current persistence semantics make
+it safe; destructive, structural, security-sensitive, installation, repair,
+and expensive operations retain explicit confirmation and recovery instead.
+
 ### API boundary
 
 One API client owns:
@@ -246,6 +298,31 @@ contract. User-authored names, story prose, model output, imported content, and
 protocol values remain untranslated. The replacement cannot merge a surface
 with hard-coded English and defer extraction.
 
+### Content and credential safety
+
+- User-authored names, imported content, model prose, extension strings, and
+  server error detail are untrusted input.
+- Ordinary rendering primitives create text nodes or assign `textContent`.
+  Rich story rendering uses one reviewed sanitizer/renderer and cannot become a
+  general `innerHTML` escape hatch for other surfaces.
+- Translation lookup applies only to engine-authored UI strings and never turns
+  user/model content into catalog keys.
+- Provider credentials, session material, guest tokens, and password fields
+  never enter browser-local drafts, route state, diagnostic logs, notices, or
+  the general application store beyond the narrow lifetime required to submit
+  them.
+- The development entry has the same host authentication and extension-asset
+  access controls as the production entry.
+
+### Static version integrity
+
+Native modules create a dependency graph that must update as one release. The
+server and entries therefore need an explicit cache/version contract so a
+browser cannot combine a new bootstrap with stale dependency modules. WP-02
+selects and tests either release-versioned URLs or a cache policy that makes the
+directly served module graph coherent. Theme preflight, extension assets, login,
+and guest entries follow the same release-version rule where they share files.
+
 ### Extension boundary
 
 The final host provides a versioned, owner-attributed extension surface with:
@@ -289,6 +366,12 @@ The replacement maintains these living artifacts:
    accessibility, localization, migration, approval, and expiry.
 8. **Verification record** — exact commit and command/browser/device evidence
    for each gate.
+
+`docs/UNBUILT.md` receives one umbrella entry for the replacement and remains
+the repository's only unfinished-work register. The detailed requirement,
+capability, and salvage ledgers are execution evidence linked from that entry,
+not independent status authorities. The umbrella entry is deleted in the same
+commit that completes the final program gate, following the register's rules.
 
 No aggregate percentage can close the program. A work package closes only when
 its own requirements and capability rows are closed.
@@ -353,17 +436,47 @@ WP-00 Program control and baseline
                 ├─> WP-06 Library data model and discovery
                 │     └─> WP-07 Library editors and authoring flows
                 ├─> WP-08 Settings and accessibility control center
-                └─> WP-09 New Story, authentication, and guest entry
+                └─> WP-09 New Story and first run
 
-WP-01 + stable destination contracts ─> WP-10 Themes and extensions
-WP-04 through WP-10 complete ─────────> WP-11 Cutover and legacy deletion
-WP-11 complete ───────────────────────> WP-12 Release qualification
+WP-01 + WP-02 entry contracts ────────> WP-10 Authentication and host setup
+                                  └───> WP-11 Guest join and play
+WP-01 + stable destination contracts ─> WP-12 Themes and extensions
+WP-04 through WP-12 complete ─────────> WP-13 Cutover and legacy deletion
+WP-13 complete ───────────────────────> WP-14 Release qualification
 ```
 
 WP-01 and WP-02 may overlap after their shared contracts are recorded. After
 WP-03 stabilizes, destination work may overlap only when file ownership and
 shared contract changes are isolated. No destination may invent its own
 tokens, router, save model, responsive rules, or error vocabulary.
+
+### Reference requirement-family ownership
+
+The reference traceability matrix contains 156 requirements across 14 named
+families. WP-00 imports the individual rows, but their program ownership is
+fixed here so none can disappear during decomposition.
+
+| Family | Rows | Program owner(s) |
+|---|---:|---|
+| `GOV` | 10 | WP-00 establishes governance; WP-13 and WP-14 close it |
+| `IA` | 10 | WP-03, with destination route evidence from WP-04 through WP-12 |
+| `RESP` | 12 | WP-01 and WP-03 define it; every surface proves it; WP-14 closes it |
+| `PLAY` | 16 | WP-04 and WP-05 |
+| `LIB` | 16 | WP-06 and WP-07 |
+| `SET` | 14 | WP-08 |
+| `ONB` | 8 | WP-09 |
+| `AUTH` | 6 | WP-10 and WP-11 |
+| `THEME` | 13 | WP-01 and WP-12 |
+| `ICON` | 10 | WP-01 and WP-12 |
+| `SAVE` | 8 | WP-02 contract; WP-04, WP-07, WP-08, WP-09, and WP-11 workflows |
+| `ARCH` | 14 | WP-02, WP-03, and WP-13 |
+| `EXT` | 7 | WP-02 and WP-03 prove the boundary early; WP-08 and WP-12 complete it |
+| `VER` | 12 | WP-00 establishes evidence; every gate contributes; WP-14 closes it |
+
+Accessibility, content/terminology, responsive parity, localization, and state
+completeness are cross-cutting Design Bible contracts even where the earlier
+traceability document placed them inside the families above. Each surface owns
+its applicable rows; WP-14 audits them across the product.
 
 ## Work packages
 
@@ -373,14 +486,22 @@ tokens, router, save model, responsive rules, or error vocabulary.
 
 **Deliverables:**
 
-- reconcile and import the Design Bible into the repository;
+- reconcile and import the Design Bible under `docs/design/`, create the
+  maintained `INTERFACE.md` guide under `docs/guides/`, update `docs/README.md`, and verify/update the one
+  umbrella replacement entry already present in `docs/UNBUILT.md`;
 - import its requirement matrix with audit corrections;
 - create the complete capability, surface, API, global, DOM-ID, theme, and
   extension inventories;
 - capture current baseline screenshots and browser behavior;
 - record performance baselines for boot, 500-turn transcript, Library scale,
   active effects, and idle traffic;
+- convert those measurements into recorded release budgets or explicit
+  comparison thresholds before implementation can make the baseline harder to
+  reproduce;
 - identify frontend drift from `73a380a` to the implementation head;
+- identify every UI-relevant entry already in `docs/UNBUILT.md`, including the
+  story-width/vitals collision in section 1.66, and assign it to a replacement
+  requirement rather than duplicating it;
 - create the development entry and an isolated browser-test fixture without
   changing the default UI.
 
@@ -397,6 +518,8 @@ destination.
 
 - port and reconcile tokens, typography, icons, curated themes, geometry,
   density, motion, z-order, and surface rules;
+- verify the icon/font/theme asset provenance and retain the repository's
+  licensed font payloads unless a separate asset decision replaces them;
 - implement buttons, fields, text areas, selects, toggles, segmented controls,
   tabs, menus, list rows, cards, control clusters, dialogs, sheets, notices,
   task status, skeletons, empty/no-result/error states, and confirmation
@@ -408,7 +531,9 @@ destination.
 
 **Exit gate:** every applicable component state renders under four curated
 themes, solid surfaces, reduced motion, Accessibility Mode, large UI/prose,
-high contrast, and long localized text; semantic and keyboard tests pass.
+high contrast, and long localized text; semantic and keyboard tests pass; the
+component system and primary shell composition receive an explicit visual-system
+review before destination work scales.
 
 ### WP-02 — Runtime boundaries
 
@@ -425,12 +550,22 @@ on classic globals or DOM shims.
 - task, notice, and recoverable-error services;
 - versioned browser-local storage for appearance, navigation, pane state, and
   drafts;
+- the shared save policy, including visible save states, stale-write refusal,
+  safe undo receipts, and explicit-action classification;
+- coherent static-module cache/version behavior across host, login, guest, and
+  shared assets;
+- safe text/rich-content rendering primitives and narrow credential submission
+  paths;
+- the versioned extension registry/lifecycle contract plus a representative v1
+  adapter fixture, before destination slots are finalized;
 - explicit development diagnostics without ordinary-player log noise.
 
 **Exit gate:** a test harness boots with no current host scripts, performs
 authenticated reads/writes through the real route shapes, survives session
-expiry, aborts stale reads, restores safe presentation state, and introduces no
-unregistered globals.
+expiry, aborts stale reads, restores safe presentation state, rejects unsafe
+content insertion, never persists credential material, cannot load a mixed
+module release, runs the representative v1 extension fixture, and introduces
+no unregistered globals beyond the documented extension adapter.
 
 ### WP-03 — Application shell and responsive navigation
 
@@ -444,12 +579,17 @@ layout states.
 - compact, medium, wide, and expansive layout states;
 - deep links, refresh restoration, transient-sheet history, fallback messages,
   focus restoration, and scroll-state ownership;
+- one shortcut registry plus a Go To launcher for expert navigation, with
+  localized labels, extension collision handling, and guards that prevent
+  ordinary shortcuts from firing while the user is typing;
 - extension destination boundary;
 - no global settings controls in Play.
 
 **Exit gate:** the three destinations and nested placeholder routes pass
 pointer, touch, and keyboard journeys across the full viewport matrix with no
-horizontal overflow, hidden capability, or legacy script/DOM dependency.
+horizontal overflow, hidden capability, or legacy script/DOM dependency. A
+representative v1 extension mounts, navigates, fails safely, and unmounts
+through the shell boundary before G2 closes.
 
 ### WP-04 — Play core
 
@@ -483,6 +623,9 @@ prose reflow from chrome state.
 - desktop inspector pin/resize/replace/close behavior;
 - mobile full-screen staged tools and Back behavior;
 - backdrop, weather, ambience, chime, and effects integration;
+- replacement tests for the `docs/UNBUILT.md` section 1.66 defect class: no
+  condition/vitals or utility rail may overlap the story/composer when minimum
+  reading measure competes with a measured side reservation;
 - story-switch invalidation and running-task preservation.
 
 **Exit gate:** every tool has desktop/mobile routes and full state coverage;
@@ -505,6 +648,8 @@ their story associations.
   no-result/error/loading states;
 - item routes, selection, usage/association summaries, attach/detach semantics,
   and delete/archive distinction;
+- bounded undo for safe recent detach/archive/simple metadata operations, while
+  true destructive deletion remains explicit;
 - any narrowly required presentation endpoints and their tests.
 
 **Exit gate:** scope and association fixtures match database truth; detaching
@@ -525,7 +670,7 @@ Library workflow.
 - create, duplicate, rename, import, export, generate, attach, detach, archive,
   delete, and promotion flows where currently supported;
 - hybrid autosave/explicit-save policy, drafts, validation, conflicts, failure
-  recovery, and leave protection;
+  recovery, safe bounded undo, and leave protection;
 - mobile list-to-detail/editor staging.
 
 **Exit gate:** field-completeness diffs show no silent data loss; import/export
@@ -548,17 +693,19 @@ through the new UI.
 - adult-content presentation, updates, storage, backup/checkpoint, repair,
   prompts, diagnostics, experiments, and extension management;
 - validation, save/saving/saved/failed, restart-required, scoped reset, and
-  destructive confirmation behavior.
+  destructive confirmation behavior;
+- bounded undo for simple settings edits/removals where persistence semantics
+  make reversal safe.
 
 **Exit gate:** every current settings control has exactly one intentional
 destination; aliases and localized search reach it; mobile retains all
 capabilities; consequential actions never autosave; failure injection preserves
 input and explains recovery.
 
-### WP-09 — New Story, authentication, host setup, and guest play
+### WP-09 — New Story and first run
 
-**Outcome:** all entry and first-use surfaces share the new system without
-weakening their distinct behavior or security boundaries.
+**Outcome:** every player can create an ordinary Sonder story through the
+approved guided paths without introducing a parallel simplified data model.
 
 **Deliverables:**
 
@@ -566,17 +713,58 @@ weakening their distinct behavior or security boundaries.
 - provider-optional manual creation and provider-aware generation;
 - current language, character/persona/lore selection, validation, card
   warnings, and final ordinary story creation;
-- new login and first-host setup presentation preserving trusted-event,
-  password, cooldown, lockout, and redirect behavior;
-- new guest join/play presentation preserving token, polling, visibility,
-  stale-response, busy, recovery, and session-expiry behavior;
-- shared entry tokens/components without full-host loading.
+- review/edit navigation, save/resume/discard, failure recovery, and explicit
+  model-cost boundaries;
+- empty-Library and unavailable-provider recovery paths.
 
-**Exit gate:** every New Story route completes on desktop/mobile; auth security
-tests remain unchanged and green; guest join/resume/send/error/expiry journeys
-pass; no ordinary recoverable guest error uses `alert`.
+**Exit gate:** all three creation paths complete on desktop/mobile with and
+without a provider as applicable; setup drafts are isolated and recoverable;
+every result is an ordinary current-schema story that opens in Play.
 
-### WP-10 — Themes, extensions, and compatibility contracts
+### WP-10 — Authentication, host setup, and session lifecycle
+
+**Outcome:** the replacement login and first-host experience preserves the
+current security boundary and gives session loss a predictable recovery path.
+
+**Deliverables:**
+
+- first-host setup, sign-in, sign-out, reauthentication, and session-expiry
+  presentation;
+- trusted-event, password, cooldown, lockout countdown, redirect, autocomplete,
+  and network/server failure behavior;
+- narrow credential submission that does not enter general state, storage,
+  diagnostics, or notices;
+- shared entry tokens/components without loading the full host application;
+- safe restoration of non-secret navigation/draft context after successful
+  reauthentication where current semantics permit it.
+
+**Exit gate:** current auth policy tests remain unchanged and green; setup,
+login, invalid credentials, cooldown, lockout, sign-out, restart, session
+expiry, and reauthentication journeys pass on desktop/mobile; accessibility and
+localization states are complete.
+
+### WP-11 — Guest join and guest play
+
+**Outcome:** guests receive the new reading/composer experience without access
+to host-only data, settings, routes, or extension code.
+
+**Deliverables:**
+
+- join-code entry, redemption, session resume, guest transcript/composer,
+  turn submission, busy state, and session end;
+- preservation of current polling, visibility pause, stale-response, and
+  in-flight request guards behind explicit guest-owned state;
+- connection-loss, retry, host-unavailable, expired/revoked-session, and inline
+  error recovery;
+- guest draft preservation within the allowed session lifecycle;
+- lightweight entry assets with no host extension bundle or host-only state.
+
+**Exit gate:** join/resume/send/busy/error/visibility/revocation/expiry journeys
+pass on desktop/mobile; no ordinary recoverable error uses `alert`; browser and
+route evidence proves host-only information and extensions never reach the
+guest entry.
+
+### WP-12 — Themes, extensions, and compatibility contracts
 
 **Outcome:** the replacement is a stable host platform rather than a closed
 application.
@@ -597,7 +785,7 @@ themes remain usable; v1 and v2 fixtures pass load/hot-load/disable/retire/error
 journeys; a retired extension cannot strand a route or surface; extension CSS
 cannot silently corrupt core layout within the supported contract.
 
-### WP-11 — Default cutover and legacy deletion
+### WP-13 — Default cutover and legacy deletion
 
 **Outcome:** the replacement becomes the only host UI implementation.
 
@@ -614,15 +802,16 @@ cannot silently corrupt core layout within the supported contract.
 - retain only explicitly supported public extension adapters and Legacy theme
   data;
 - update `docs/guides/ENGINEERING.md`, `docs/guides/EXTENSIONS.md`,
-  `docs/guides/LANGUAGE_PACKS.md`, `docs/guides/TESTING.md`, feature inventory,
-  structure checks, and generated code map.
+  the maintained `INTERFACE.md` guide, `docs/guides/LANGUAGE_PACKS.md`,
+  `docs/guides/TESTING.md`, `docs/README.md`, feature inventory, structure
+  checks, and generated code map.
 
 **Exit gate:** source search finds no supported caller of removed globals/IDs;
 the application boots with no legacy host file; there is no fallback shell;
 every capability ledger row is closed; clean-install and upgraded-install
 journeys both reach the same new UI.
 
-### WP-12 — Release qualification and adversarial audit
+### WP-14 — Release qualification and adversarial audit
 
 **Outcome:** the exact release commit is proven complete rather than inferred
 from work-package success.
@@ -638,27 +827,34 @@ from work-package success.
 - performance comparison for boot, idle, transcript, Library, effects, and
   repeated navigation/listener cleanup;
 - extension compatibility and localization reports;
+- novice audit covering destination recognition, first story creation,
+  hesitation, misleading labels, dead ends, and error recovery;
+- expert audit covering action counts, shortcuts, recents, search, persistent
+  panes/filters, compact density, and whether More hides frequent actions;
 - final surface/capability audit and independent search for partial legacy
   treatments;
+- delete the UI replacement umbrella entry from `docs/UNBUILT.md` only after
+  the exact-head evidence closes every linked requirement;
 - exact-head `make check`, `make test-browser`, and packaging evidence.
 
 **Exit gate:** no open P0; no open P1 without explicit product-owner deviation;
-no unapproved missing capability; all traceability rows closed; release package
-and screenshots reproduce the reviewed result.
+no unapproved missing capability; measured performance meets the WP-00 budgets
+or has an approved evidence-backed deviation; all traceability rows are closed;
+release package and screenshots reproduce the reviewed result.
 
 ## Gate model
 
 | Gate | Decision enabled | Required proof |
 |---|---|---|
 | G0 — Baseline locked | Start replacement source work | WP-00 inventories, drift classification, clean baseline gates |
-| G1 — Foundations accepted | Build product surfaces | Component laboratory, runtime harness, accessibility/theme states |
-| G2 — Shell contract stable | Allow destination work to overlap | Router/history/focus/responsive tests, no legacy dependency |
+| G1 — Foundations accepted | Build product surfaces | Component laboratory, runtime harness, accessibility/theme states, visual-system review |
+| G2 — Shell contract stable | Allow destination work to overlap | Router/history/focus/responsive tests, representative v1 extension adapter, no legacy dependency |
 | G3 — Play parity | Treat new host as viable for real play | WP-04 and WP-05 capability closure, long-play and stream evidence |
-| G4 — Product-surface parity | Stop adding features to the old product surfaces | WP-06 through WP-09 closure and data-loss review |
-| G5 — Host compatibility | Freeze extension/theme contracts | WP-10 lifecycle and theme matrices |
+| G4 — Product-surface parity | Stop adding features to the old product surfaces | WP-06 through WP-11 closure and data-loss/security review |
+| G5 — Host compatibility | Freeze extension/theme contracts | WP-12 lifecycle and theme matrices |
 | G6 — Cutover eligible | Switch root entry | All capability rows closed; no open P0/P1; rollback rehearsal |
-| G7 — Legacy eliminated | Remove fallback and freeze deletion | WP-11 source search, clean/upgraded install, docs/map/structure |
-| G8 — Release qualified | Merge/release | WP-12 exact-commit evidence package |
+| G7 — Legacy eliminated | Remove fallback and freeze deletion | WP-13 source search, clean/upgraded install, docs/map/structure |
+| G8 — Release qualified | Merge/release | WP-14 exact-commit evidence package, novice/expert audits |
 
 Passing a later-looking screenshot cannot waive an earlier gate.
 
@@ -668,6 +864,12 @@ This program document does not prescribe one enormous source-level plan. Each
 work package receives its own implementation plan immediately before execution,
 after the contracts it depends on are stable. That keeps file paths and tests
 accurate while preserving the whole-program destination.
+
+WP-05, WP-07, WP-08, and WP-12 are themselves too broad for one source-level
+plan. They must be decomposed into independently gateable subplans: Story Tool
+families; story/character-persona/lore authoring; Settings category groups; and
+theme/extension contract families respectively. A subplan may share a work
+package gate, but it must own a distinct capability set and test cycle.
 
 Each implementation task must:
 
@@ -680,11 +882,32 @@ Each implementation task must:
 6. be independently reviewable and reversible before cutover;
 7. avoid unrelated engine refactors and preserve unrelated branch work.
 
+Every major screen or component family receives the four Design Bible reviews
+before its work-package gate: product flow, visual system, responsive behavior,
+and implementation/state preservation. A single code review is not a substitute
+for those four perspectives, though one review session may record all four.
+
 The `interface` branch is the program integration line. Larger work packages
 should execute in isolated worktrees/branches and integrate only after their
 gate passes. Current engine branches may continue advancing; every integration
 refreshes the frontend drift check rather than replacing current files with an
 older snapshot.
+
+### Ongoing repository-change policy
+
+- Every integration compares current UI, server routes, language catalogs,
+  extension contracts, and browser tests with the last program baseline.
+- A newly landed player-facing capability receives a capability-ledger and
+  requirement owner before the replacement branch absorbs it.
+- Before G4, a capability required on the currently released legacy UI may need
+  a minimal legacy presentation, but its replacement path is implemented in the
+  same program window; the old implementation is never treated as the new
+  design source.
+- After G4, legacy product-surface feature work is frozen except for security,
+  data-loss, or release-blocking corrections. New ordinary capability work
+  targets the replacement.
+- A backend or schema change that affects UI truth updates both its maintained
+  guide and the replacement contract in the same integration.
 
 ## Test strategy
 
@@ -765,7 +988,7 @@ candidate only and never satisfy a current gate.
 
 ## Program completion checklist
 
-- [ ] All WP-00 through WP-12 exit gates pass on recorded commits.
+- [ ] All WP-00 through WP-14 exit gates pass on recorded commits.
 - [ ] All Design Bible requirements and adoption-audit corrections are linked
       to current implementation and evidence.
 - [ ] Every current capability is present, explicitly approved for removal, or
