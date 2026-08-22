@@ -87,6 +87,13 @@ def inspect_page(page) -> dict[str, object]:
               const rect = element.getBoundingClientRect();
               return rect.width > 1 && rect.height > 1;
             });
+          const targetSize = element => {
+            const target = element.matches('input[type="checkbox"], input[type="radio"]')
+              ? element.closest('label') || element
+              : element;
+            const rect = target.getBoundingClientRect();
+            return Math.min(rect.width, rect.height);
+          };
           return {
             state: document.documentElement.dataset.uiNextState,
             ready: document.documentElement.dataset.uiNextReady || null,
@@ -96,12 +103,7 @@ def inspect_page(page) -> dict[str, object]:
             detail: document.querySelector('[data-runtime-detail]')?.textContent,
             horizontal_overflow_px:
               document.documentElement.scrollWidth - document.documentElement.clientWidth,
-            minimum_target_px: controls.length
-              ? Math.min(...controls.map(element => {
-                  const rect = element.getBoundingClientRect();
-                  return Math.min(rect.width, rect.height);
-                }))
-              : null,
+            minimum_target_px: controls.length ? Math.min(...controls.map(targetSize)) : null,
             focus: document.activeElement?.getAttribute('data-runtime-diagnostics') !== null
               ? 'diagnostics-toggle'
               : document.activeElement?.tagName?.toLowerCase() || null,
@@ -170,7 +172,10 @@ def capture() -> dict[str, object]:
             page_errors: list[str] = []
             page.on("console", lambda message, rows=console_errors: rows.append(message.text) if message.type == "error" else None)
             page.on("pageerror", lambda error, rows=page_errors: rows.append(str(error)))
-            page.route("**/api/bootstrap", lambda route, data=bootstrap: fulfill_json(route, data))
+            page.route(
+                "**/api/bootstrap",
+                lambda route, _request, data=bootstrap: fulfill_json(route, data),
+            )
             if extension_failure:
                 page.route("**/api/extensions/broken-ui/ui.js", lambda route: route.abort())
             response = page.goto(f"{base_url}/static/ui-next-runtime.html")
