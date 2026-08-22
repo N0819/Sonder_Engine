@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
 const OWNER = /^[a-z][a-z0-9_-]{1,63}$/;
 const ID = /^[A-Za-z0-9:._-]{1,120}$/;

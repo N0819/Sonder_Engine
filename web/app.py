@@ -623,7 +623,7 @@ _RELEASED_UI_ASSET_PREFIXES = (
     "/static/js/ui-next/", "/static/js/ui/", "/static/css/ui/",
     "/static/assets/icons/sonder-icons.svg",
 )
-_UI_RELEASE = "wp03.1"
+_UI_RELEASE = "wp04.1"
 
 
 @app.middleware("http")

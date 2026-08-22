@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
 export const LAYOUT_STATES = Object.freeze(["compact", "medium", "wide", "expansive"]);
 
@@ -24,11 +24,12 @@ function required(documentRef, selector) {
 }
 
 function sameShellState(left, right) {
-  return left.route === right.route
-    && left.story === right.story
-    && left.library === right.library
-    && left.settings === right.settings
-    && left.extensions === right.extensions;
+  if (left.route !== right.route || left.extensions !== right.extensions) return false;
+  const destination = left.route?.destination || "play";
+  if (destination === "library") return left.library === right.library;
+  if (destination === "settings") return left.settings === right.settings;
+  return left.story?.status === right.story?.status
+    && left.story?.owner === right.story?.owner;
 }
 
 export function createApplicationShell(options = {}) {
@@ -40,7 +41,8 @@ export function createApplicationShell(options = {}) {
     throw new Error("The application shell requires the coherent host runtime.");
   }
   if (!modules?.destinations || !modules?.inspectorHost
-      || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost) {
+      || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost
+      || !modules?.playView || !modules?.prose) {
     throw new Error("The application shell presentation modules are missing.");
   }
 
@@ -55,6 +57,7 @@ export function createApplicationShell(options = {}) {
   let inspectorHost = null;
   let goTo = null;
   let extensionHost = null;
+  let destinationTeardown = null;
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
@@ -79,12 +82,18 @@ export function createApplicationShell(options = {}) {
         link.removeAttribute("aria-current");
       }
     }
-    const destinationView = modules.destinations.renderDestination({
+    const destinationMount = modules.destinations.renderDestination({
       document: documentRef,
       destination,
       state: services.store.getSnapshot(),
       t,
+      services,
+      modules,
     });
+    const destinationView = destinationMount?.element || destinationMount;
+    destinationTeardown?.();
+    destinationTeardown = typeof destinationMount?.teardown === "function"
+      ? destinationMount.teardown : null;
     if (shellState.route?.explanation) {
       const notice = documentRef.createElement("div");
       notice.className = "ui-notice ui-shell__route-notice";
@@ -174,6 +183,8 @@ export function createApplicationShell(options = {}) {
     extensionHost.teardown();
     shortcutRegistry.stop();
     inspectorHost.teardown();
+    destinationTeardown?.();
+    destinationTeardown = null;
     view.replaceChildren();
   };
 

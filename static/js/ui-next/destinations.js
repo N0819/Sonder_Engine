@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp03.1";
+export const MODULE_RELEASE = "wp04.1";
 
 export const CORE_DESTINATIONS = Object.freeze(["play", "library", "settings"]);
 
@@ -78,19 +78,14 @@ function emptyState(documentRef, title, detail) {
   return state;
 }
 
-function playView(documentRef, state, t) {
-  if (state.story?.status === "ready" && state.story.data) {
-    return emptyState(
-      documentRef,
-      t(PLACEHOLDER_COPY.storyPending),
-      t(PLACEHOLDER_COPY.storyPendingDetail),
-    );
-  }
-  return emptyState(
-    documentRef,
-    t(PLACEHOLDER_COPY.chooseStory),
-    t(PLACEHOLDER_COPY.chooseStoryDetail),
-  );
+function playView(documentRef, state, t, services, modules) {
+  return modules.playView.createPlayView({
+    document: documentRef,
+    state,
+    t,
+    services,
+    prose: modules.prose,
+  });
 }
 
 function libraryView(documentRef, state, t) {
@@ -168,9 +163,16 @@ export function destinationCopy(destination, segment = "", t = value => value) {
   });
 }
 
-export function renderDestination({ document: documentRef, destination, state, t }) {
+export function renderDestination({
+  document: documentRef,
+  destination,
+  state,
+  t,
+  services,
+  modules,
+}) {
   const safe = CORE_DESTINATIONS.includes(destination) ? destination : "play";
   if (safe === "library") return libraryView(documentRef, state, t);
   if (safe === "settings") return settingsView(documentRef, state, t);
-  return playView(documentRef, state, t);
+  return playView(documentRef, state, t, services, modules);
 }
