@@ -95,6 +95,8 @@ export function createInspectorHost(options = {}) {
   let panes = safePanes(services.localState);
   let layout = root.dataset.layoutState || "wide";
   let route = services.router.current();
+  let initialLibraryDeepLinkPending = route.destination === "library"
+    && Boolean(route.query?.item) && !route.layers.some(layer => layer.id === LAYER_ID);
   let syncing = false;
   let stopped = false;
   let desktopStoryTools = null;
@@ -175,6 +177,12 @@ export function createInspectorHost(options = {}) {
 
   const layerOpen = () => route.layers.some(layer => layer.id === LAYER_ID);
   const isPaneLayout = () => layout === "wide" || layout === "expansive";
+  const stageInitialLibraryDeepLink = () => {
+    if (!initialLibraryDeepLinkPending || isPaneLayout() || layerOpen()) return;
+    initialLibraryDeepLinkPending = false;
+    services.router.openLayer({ id: LAYER_ID, focusReturn: "inspector-toggle" });
+    route = services.router.current();
+  };
 
   const apply = () => {
     if (stopped) return;
@@ -247,10 +255,13 @@ export function createInspectorHost(options = {}) {
   };
   const setLayout = nextLayout => {
     layout = nextLayout;
+    if (isPaneLayout()) initialLibraryDeepLinkPending = false;
+    else stageInitialLibraryDeepLink();
     if (isPaneLayout() && layerOpen()) services.router.closeTopLayer();
     apply();
   };
 
+  stageInitialLibraryDeepLink();
   apply();
   const teardown = () => {
     if (stopped) return;
