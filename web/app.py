@@ -142,6 +142,11 @@ from web.auth_routes import (
     router as auth_router,
 )
 from web.library import cleanup_library_state, router as library_router
+from web.library_authoring import (
+    assert_expected_revision,
+    authoring_payload,
+    router as library_authoring_router,
+)
 
 # ---- App setup ----
 # No CORS middleware: the frontend is always served same-origin from this
@@ -3259,6 +3264,7 @@ def chat_edit(cid: int, body: dict = Body(...)):
     for k in ("name", "persona_id", "scenario"):
         if k in body: cur[k] = body[k]
     with transaction():
+        assert_expected_revision("story", cid, body.get("expected_revision"))
         qi("UPDATE chats SET name=?,persona_id=?,scenario=? WHERE id=?",
            (cur["name"], cur["persona_id"], cur["scenario"], cid))
         if persona_changed and cur["persona_id"] is not None:
@@ -3274,7 +3280,7 @@ def chat_edit(cid: int, body: dict = Body(...)):
                     persona_initial_outfit(sheet),
                 ):
                     wset(cid, "scene", existing_scene)
-    return {"ok": True}
+    return {"ok": True, **authoring_payload("story", cid)}
 
 @app.post("/api/chats/{cid}/lorebooks")
 def attach_lore(cid: int, body: dict = Body(...)):
@@ -4875,6 +4881,7 @@ chat_export = _chat_archive_service.export_chat
 chat_import = _chat_archive_service.import_chat
 app.include_router(_chat_archive_service.router)
 app.include_router(library_router)
+app.include_router(library_authoring_router)
 
 # ============================ MEMORIES ============================
 @app.get("/api/chats/{cid}/characters/{ch}/memories")
