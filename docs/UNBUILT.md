@@ -2133,8 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-00 control-plane implementation is in
-progress.** Replace the
+**Approved target 2026-08-21; WP-00 complete and G0 baseline locked.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2152,6 +2151,11 @@ Those documents hold evidence and execution detail; this entry remains the one
 status authority and is deleted only with the exact-head final qualification.
 The source-level G0 plan is
 [`superpowers/plans/2026-08-21-sonder-ui-replacement-wp00.md`](superpowers/plans/2026-08-21-sonder-ui-replacement-wp00.md).
+Its current-source captures, budgets, exact qualification commands, and failure
+record are in
+[`design/sonder-ui-replacement/BASELINE_AND_BUDGETS.md`](design/sonder-ui-replacement/BASELINE_AND_BUDGETS.md).
+Product implementation begins at WP-01; no product requirement is closed merely
+because the control plane passed G0.
 
 ### 2.2 Make stance auditable
 

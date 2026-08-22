@@ -8,6 +8,51 @@ All content is synthetic. No live database, credential, join code, or player
 story is read. Candidate screenshots are reference material and are not part of
 this current-source baseline.
 
+## G0 qualification record
+
+**Qualified implementation tree:** `7d4ee3c`  
+**Gate result:** passed on 2026-08-21
+
+GNU Make is not installed on the qualification host, so the maintained
+Makefile targets were executed through their exact underlying Python commands.
+
+| Gate | Exact command | Result |
+|---|---|---|
+| Focused WP-00 | `.venv\Scripts\python.exe -m pytest -q tests/test_ui_replacement_control_plane.py tests/test_ui_replacement_inventory.py tests/test_ui_baseline_recorder.py tests/test_ui_next_entry.py browser_tests/test_ui_next_entry.py --basetemp=.tmp\pytest-wp00-final --disable-warnings` | 18 passed in 3.96s |
+| Compile | `.venv\Scripts\python.exe -m compileall -q <source roots printed by tools/project_check.py --source-roots>` | passed |
+| Map | `.venv\Scripts\python.exe tools/generate_code_map.py` | generated `docs/CODE_MAP.md` |
+| Structure | `.venv\Scripts\python.exe tools/project_check.py` | passed |
+| Full regression | `.venv\Scripts\python.exe -m pytest -q -n auto --basetemp=.tmp\pytest-full-final-3 --disable-warnings` | 8,740 passed, 4 platform skips, 0 failures/errors in 204.32s |
+| Full browser | `.venv\Scripts\python.exe -m pytest -q browser_tests --basetemp=.tmp\pytest-browser-final-3 --disable-warnings` | 51 passed in 64.40s |
+| Inventory determinism | generator run twice with the recorded baseline/candidate SHAs and SHA-256 comparison | all 8 generated artifacts byte-identical |
+
+Failures found while qualifying G0 were treated as blockers and retained here
+rather than hidden by the final green run:
+
+- Structure first rejected a stale English catalog, package-relative paths in
+  the byte-for-byte vendored Bible, and historical candidate paths presented as
+  current paths. The scaffold copy was reduced to existing catalog language;
+  vendored/history paths are now classified explicitly.
+- The first full run produced 16 failures and 336 teardown errors (8,723
+  passes); the next produced 16 failures and 165 teardown errors (8,724
+  passes). Windows exposed unowned startup, request-worker, migration, and
+  direct-stream SQLite handles. Production shutdown now tracks/drains these
+  handles, and direct-route tests own their producer threads.
+- The remaining 16 assertions were Windows test portability defects: implicit
+  cp1252 reads of UTF-8 source/catalogs, a CRLF-sensitive JavaScript harness,
+  and deletion of Git read-only object files. Their platform-neutral forms
+  passed individually.
+- The next full run passed every assertion but reported 11 teardown errors.
+  These were direct route tests with no ASGI stream consumer, startup-message
+  tests launching unrelated maintenance, and an intentionally failed migration
+  retaining its standalone connection. Each owner was made explicit before the
+  final clean run.
+- Browser collection initially reported three package-import errors after the
+  new isolated-entry test made `browser_tests` a package. Relative imports fixed
+  all three. One later assertion sampled a transient disabled button after its
+  instantaneous mock had already rerendered; it now captures the click state in
+  the same browser task. The final browser run is clean.
+
 ## Captured journeys
 
 | Journey | Viewport | Screenshot | SHA-256 |
