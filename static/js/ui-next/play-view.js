@@ -8,6 +8,7 @@ const COPY = Object.freeze({
   loading: "Opening your story…",
   loadingDetail: "Your saved story is being read from the engine.",
   unavailable: "This story could not be opened",
+  offline: "Sonder is offline",
   retryOpen: "Try again",
   emptyTranscript: "This story is ready for its first turn.",
   emptyMeaning: "Leave the box empty and send to let the story continue without a new action.",
@@ -217,13 +218,15 @@ function renderNoStory(documentRef, services) {
 }
 
 function renderUnavailable(documentRef, services, story) {
-  const title = story.status === "loading" ? COPY.loading : COPY.unavailable;
+  const title = story.status === "loading"
+    ? COPY.loading
+    : (story.status === "offline" ? COPY.offline : COPY.unavailable);
   const detail = story.status === "loading"
     ? COPY.loadingDetail
-    : (story.error?.userMessage || COPY.chooseDetail);
+    : (story.error?.message || story.error?.userMessage || COPY.chooseDetail);
   const state = emptyState(documentRef, title, detail);
   state.dataset.state = story.status;
-  if (story.status === "error") {
+  if (story.status === "error" || story.status === "offline") {
     const retry = button(documentRef, COPY.retryOpen, "ui-button ui-button--primary");
     retry.addEventListener("click", () => services.play.refresh());
     state.append(retry);

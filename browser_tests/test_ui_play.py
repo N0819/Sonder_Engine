@@ -474,6 +474,31 @@ def test_recoverable_send_failure_preserves_draft_and_offers_retry(
     expect(composer).to_have_value("Do not lose this")
 
 
+def test_story_network_failure_has_a_distinct_offline_state(
+    page: Page, ui_base_url: str
+) -> None:
+    attempts = {"count": 0}
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(_bootstrap())
+        ),
+    )
+
+    def offline(route) -> None:
+        attempts["count"] += 1
+        route.abort("failed")
+
+    page.route("**/api/chats/1", offline)
+    response = page.goto(f"{ui_base_url}/static/ui-next.html#/play?chat=1")
+    assert response is not None and response.ok
+    state = page.get_by_role("heading", name="Sonder is offline")
+    expect(state).to_be_visible()
+    expect(page.get_by_text("Sonder could not reach the engine. Your work is still here.")).to_be_visible()
+    expect(page.get_by_role("button", name="Try again", exact=True)).to_be_visible()
+    assert attempts["count"] == 1
+
+
 def test_stream_transport_can_discard_token_history_while_delivering_events(
     page: Page, ui_base_url: str
 ) -> None:
