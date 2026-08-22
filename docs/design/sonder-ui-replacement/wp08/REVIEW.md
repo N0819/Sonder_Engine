@@ -24,8 +24,8 @@ current UI runtime instead of inventing a substitute runtime contract.
   model discovery, and default-model saves to the current runtime APIs.
 - Connected per-provider prompt caching and the provider-side response limit, always reflecting
   the server's returned cache state rather than the requested checkbox state.
-- Added the required advanced disclosure for per-role model and reasoning assignments while
-  preserving untouched sampler and fallback configuration fields.
+- Added the required advanced disclosure for per-role model, reasoning, sampler, and ordered
+  fallback assignments while preserving untouched role configuration fields.
 - Connected embeddings-model change warnings, backdrop image configuration, backdrop enablement
   and continuity, and credential-safe local/Freesound ambience configuration.
 - Connected Content preferences to the current adult-content, authored-underneath-detail, and
@@ -43,15 +43,21 @@ current UI runtime instead of inventing a substitute runtime contract.
   route; the editor no longer depends on a legacy dialog or hidden control.
 - Added staged embeddings repair and downloadable bounded/redacted interface diagnostics to
   Maintenance.
+- Completed Experience's current reading-size, density, effects, story sound, turn notification,
+  and interface-language controls alongside the supplied theme/accessibility treatment.
+- Added current-route raw world and attire JSON editors under Advanced with load ownership,
+  validation, explicit save, and no legacy modal bridge.
+- Made advanced per-role samplers and ordered backup models editable without flattening untouched
+  role configuration, and connected OpenRouter retention/fallback/upstream routing.
+- Added story-scoped Living world controls sourced entirely from the server's built/permitted/
+  effective ladder, including visible clamp explanations for unbuilt or disallowed depth.
 - Added the reference terminal glyph used by Advanced and Turn details.
 - Preserved safe fallback behavior for invalid Settings deep links.
 
 ## Deliberately incomplete
 
-- AI Connections still needs advanced sampler and backup-model editing, OpenRouter upstream
-  routing, image-model catalogue discovery, and the embeddings rebuild action.
-- Advanced Turn details routes to the replacement Play tool. Raw story and clothing editors still
-  need current-route replacements; neither bridges to the legacy DOM.
+- Advanced Turn details routes to the replacement Play tool. Prompt preset import/export/activation
+  and image-model catalogue discovery remain before WP08 closure.
 - Add-ons settings registrations are mounted by the existing contained extension host, but
   installed v1/v2 corpus qualification remains WP12.
 
@@ -68,7 +74,10 @@ current UI runtime instead of inventing a substitute runtime contract.
 - `screenshots/settings-add-ons-1440.png`
 - `screenshots/settings-maintenance-1440.png`
 - `screenshots/settings-advanced-prompts-1440.png`
+- `screenshots/settings-advanced-story-data-1440.png`
+- `screenshots/settings-content-living-world-1440.png`
 - `screenshots/settings-search-1440.png`
-- `17 passed` in the focused Settings browser suite after search, prompt, and repair closure.
+- `22 passed` in the focused Settings browser suite after Experience, raw-data, generation-default,
+  OpenRouter, and Living world coverage.
 - `node --check static/js/ui-next/settings-view.js`
 - `git diff --check`

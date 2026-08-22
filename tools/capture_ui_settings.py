@@ -24,7 +24,7 @@ BOOTSTRAP = {
     "ui_language": "en",
     "ui_direction": "ltr",
     "ui_messages": {},
-    "chats": [],
+    "chats": [{"id": 5, "title": "The Glass District"}],
     "characters": [],
     "personas": [],
     "lorebooks": [],
@@ -172,6 +172,51 @@ def main() -> None:
                     ),
                 ),
             )
+            page.route(
+                "**/api/chats/5/living_world",
+                lambda route: route.fulfill(
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "living_world": {
+                                "routine_residue": "ceiling",
+                                "rumor_ledger": "ceiling",
+                            },
+                            "approaches": [
+                                {
+                                    "approach": "routine_residue",
+                                    "label": "Routine and residue",
+                                    "value": "ceiling",
+                                    "effective": "floor",
+                                    "cost": "floor: free; ceiling: one call per familiar place",
+                                    "depths": [
+                                        {"value": "floor", "description": "Rooms drift on the clock while unwatched.", "built": True, "requires": "deterministic", "permitted": True},
+                                        {"value": "ceiling", "description": "Familiar places advance their social life.", "built": False, "requires": "stochastic", "permitted": True},
+                                    ],
+                                },
+                                {
+                                    "approach": "rumor_ledger",
+                                    "label": "Rumor ledger",
+                                    "value": "ceiling",
+                                    "effective": "floor",
+                                    "cost": "floor: free; ceiling: one small call per posted artifact",
+                                    "depths": [
+                                        {"value": "floor", "description": "News travels inside actual witnesses.", "built": True, "requires": "deterministic", "permitted": True},
+                                        {"value": "ceiling", "description": "Notices receive posted wording.", "built": True, "requires": "stochastic", "permitted": False},
+                                    ],
+                                },
+                            ],
+                        }
+                    ),
+                ),
+            )
+            page.route(
+                "**/api/chats/5/world",
+                lambda route: route.fulfill(
+                    content_type="application/json",
+                    body=json.dumps({"rooms": {"atrium": {"name": "Atrium"}}, "positions": {"Player": "atrium"}}),
+                ),
+            )
             page.goto(
                 f"http://{host}:{port}/static/ui-next.html#/settings/ai-connections"
             )
@@ -190,6 +235,8 @@ def main() -> None:
             page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/content")
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
             page.screenshot(path=OUTPUT / "settings-content-1440.png")
+            page.get_by_text("Living world", exact=True).scroll_into_view_if_needed()
+            page.screenshot(path=OUTPUT / "settings-content-living-world-1440.png")
 
             page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/add-ons")
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
@@ -205,6 +252,11 @@ def main() -> None:
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
             page.get_by_role("textbox", name="Director prompt").wait_for()
             page.screenshot(path=OUTPUT / "settings-advanced-prompts-1440.png")
+
+            page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/advanced?tool=story-data")
+            page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+            page.get_by_role("textbox", name="Raw story data JSON").wait_for()
+            page.screenshot(path=OUTPUT / "settings-advanced-story-data-1440.png")
 
             page.goto(f"http://{host}:{port}/static/ui-next.html#/settings/experience")
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
