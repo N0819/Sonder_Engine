@@ -120,6 +120,12 @@ const COPY = Object.freeze({
   drafts: "Drafts",
   noneYet: "None yet.",
   localDraft: "Local draft",
+  editCharacter: "Edit character",
+  editPersona: "Edit persona",
+  exportCharacter: "Export character",
+  exportPersona: "Export persona",
+  duplicateCharacter: "Duplicate character",
+  duplicatePersona: "Duplicate persona",
 });
 // UI_CATALOG_END
 
@@ -528,6 +534,31 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
   );
   archive.addEventListener("click", () => services.library.setArchived(item, !item.archived));
   section.append(archive);
+  if (item.kind === "character" || item.kind === "persona") {
+    const edit = button(documentRef, item.kind === "character" ? COPY.editCharacter : COPY.editPersona);
+    edit.addEventListener("click", () => {
+      const route = services.library.currentRoute();
+      services.library.navigate({
+        type: item.kind,
+        query: { ...(route?.query || {}), item: item.key, mode: "edit" },
+      });
+    });
+    const exported = node(
+      documentRef, "a", "ui-button ui-button--quiet",
+      item.kind === "character" ? COPY.exportCharacter : COPY.exportPersona,
+    );
+    exported.href = item.kind === "character"
+      ? `/api/characters/${item.id}/export`
+      : `/api/personas/${item.id}/export`;
+    exported.download = `${item.name || item.kind}.json`;
+    const duplicate = button(
+      documentRef,
+      item.kind === "character" ? COPY.duplicateCharacter : COPY.duplicatePersona,
+    );
+    duplicate.addEventListener("click", () => services.authoring.duplicate());
+    section.prepend(edit, exported, duplicate);
+    return section;
+  }
   if (item.kind !== "story") return section;
 
   const open = button(documentRef, COPY.openStory, "ui-button ui-button--primary");

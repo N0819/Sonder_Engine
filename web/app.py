@@ -2786,12 +2786,47 @@ def char_export(cid: int):
 @app.put("/api/characters/{cid}")
 def char_edit(cid: int, body: dict = Body(...)):
     sheet = normalize_character_data(body.get("sheet") or {})
-    qi(
-        "UPDATE characters SET name=?,sheet=? WHERE id=?",
-        (character_name(sheet), json.dumps(sheet, ensure_ascii=False), cid),
-    )
+    with transaction():
+        assert_expected_revision("character", cid, body.get("expected_revision"))
+        qi(
+            "UPDATE characters SET name=?,sheet=? WHERE id=?",
+            (character_name(sheet), json.dumps(sheet, ensure_ascii=False), cid),
+        )
+    if "expected_revision" in body:
+        return {
+            "ok": True, **authoring_payload("character", cid),
+            "warnings": character_card_warnings(sheet),
+        }
     return {"ok": True, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
+
+
+@app.post("/api/characters/{cid}/duplicate")
+def char_duplicate(cid: int):
+    row = q("SELECT * FROM characters WHERE id=?", (cid,), one=True)
+    if not row:
+        raise HTTPException(404, "Character not found")
+    sheet = normalize_character_data(json.loads(row["sheet"] or "{}"))
+    sheet["identity"] = dict(sheet.get("identity") or {})
+    sheet["identity"]["uid"] = new_uid("char")
+    source = json.loads(row["source"] or "{}")
+    if not isinstance(source, dict):
+        source = {"format": "native", "original": None}
+    source = {**source, "duplicated_from": row["resource_uid"] or f"character:{cid}"}
+    with transaction():
+        copy_id = qi(
+            "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+            "VALUES(?,?,?,?,?)",
+            (
+                character_name(sheet), json.dumps(sheet, ensure_ascii=False),
+                json.dumps(source, ensure_ascii=False), time.time(), new_uid("char"),
+            ),
+        )
+    return {
+        **authoring_payload("character", copy_id),
+        "duplicate_of": f"character:{cid}",
+        "warnings": character_card_warnings(sheet),
+    }
 
 @app.delete("/api/characters/{cid}")
 def char_del(cid: int):
@@ -2869,11 +2904,41 @@ def persona_export(pid: int):
 @app.put("/api/personas/{pid}")
 def persona_edit(pid: int, body: dict = Body(...)):
     sheet = normalize_persona_data(body.get("sheet") or {})
-    qi(
-        "UPDATE personas SET name=?,sheet=? WHERE id=?",
-        (persona_name(sheet), json.dumps(sheet, ensure_ascii=False), pid),
-    )
+    with transaction():
+        assert_expected_revision("persona", pid, body.get("expected_revision"))
+        qi(
+            "UPDATE personas SET name=?,sheet=? WHERE id=?",
+            (persona_name(sheet), json.dumps(sheet, ensure_ascii=False), pid),
+        )
+    if "expected_revision" in body:
+        return {"ok": True, **authoring_payload("persona", pid)}
     return {"ok": True, "sheet": sheet}
+
+
+@app.post("/api/personas/{pid}/duplicate")
+def persona_duplicate(pid: int):
+    row = q("SELECT * FROM personas WHERE id=?", (pid,), one=True)
+    if not row:
+        raise HTTPException(404, "Persona not found")
+    sheet = normalize_persona_data(json.loads(row["sheet"] or "{}"))
+    sheet["identity"] = dict(sheet.get("identity") or {})
+    sheet["identity"]["uid"] = new_uid("persona")
+    source = json.loads(row["source"] or "{}")
+    if not isinstance(source, dict):
+        source = {"format": "native", "original": None}
+    source = {**source, "duplicated_from": row["resource_uid"] or f"persona:{pid}"}
+    with transaction():
+        copy_id = qi(
+            "INSERT INTO personas(name,sheet,source,resource_uid) VALUES(?,?,?,?)",
+            (
+                persona_name(sheet), json.dumps(sheet, ensure_ascii=False),
+                json.dumps(source, ensure_ascii=False), new_uid("persona"),
+            ),
+        )
+    return {
+        **authoring_payload("persona", copy_id),
+        "duplicate_of": f"persona:{pid}",
+    }
 
 @app.delete("/api/personas/{pid}")
 def persona_del(pid: int):

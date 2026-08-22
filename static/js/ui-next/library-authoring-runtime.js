@@ -309,6 +309,42 @@ export function createLibraryAuthoringRuntime(options = {}) {
     }
   };
 
+  const duplicate = async () => {
+    if (!active || !["character", "persona"].includes(active.kind) || !active.id) return false;
+    const captured = Object.freeze({ ...active, generation });
+    const state = store.getSnapshot().library.authoring;
+    patch({ authoring: { ...state, status: "duplicating", error: "" } });
+    const path = active.kind === "character"
+      ? `/api/characters/${active.id}/duplicate`
+      : `/api/personas/${active.id}/duplicate`;
+    try {
+      const result = await apiClient.request("POST", path, {
+        channel: "library-authoring-duplicate",
+        owner: captured.owner,
+        isCurrent: identity => identity.owner === captured.owner
+          && isOwnerCurrent(captured) && generation === captured.generation,
+      });
+      if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
+      const id = Number(result.data?.id);
+      if (!Number.isSafeInteger(id) || id < 1) throw new Error("The duplicate response was incomplete.");
+      router.navigate({
+        destination: "library",
+        segments: [captured.kind === "character" ? "characters" : "personas"],
+        query: { item: `${captured.kind}:${id}` },
+      });
+      return true;
+    } catch (error) {
+      if (!isOwnerCurrent(captured) || generation !== captured.generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        ...store.getSnapshot().library.authoring,
+        status: "recoverable-error",
+        error: String(error?.userMessage || error?.message || "The item could not be duplicated."),
+      } });
+      return false;
+    }
+  };
+
   const beforeUnload = event => {
     const state = store.getSnapshot().library.authoring;
     if (!state || !DIRTY_STATES.has(state.status)) return;
@@ -326,6 +362,7 @@ export function createLibraryAuthoringRuntime(options = {}) {
     apiClient.cancel?.("library-authoring-save", "runtime-stop");
     apiClient.cancel?.("library-authoring-import", "runtime-stop");
     apiClient.cancel?.("library-authoring-branch", "runtime-stop");
+    apiClient.cancel?.("library-authoring-duplicate", "runtime-stop");
     target.removeEventListener("beforeunload", beforeUnload);
   };
 
@@ -336,6 +373,7 @@ export function createLibraryAuthoringRuntime(options = {}) {
     importStory,
     retryImport: () => importDraft && importStory(importDraft),
     branchStory,
+    duplicate,
     reload: () => active?.id && load(active),
     teardown,
   });
