@@ -2,7 +2,8 @@
 
 **Themes:** `ash-brass`, `carbon-signal`, `ink`, `lcars`, `midnight-ink`, `parchment-night`, `stone`, `tavern`  
 **CSS custom properties:** 156
-**UI catalog keys:** 2083
+
+**UI catalog keys:** 2204
 
 ## Extension routes
 

@@ -61,15 +61,24 @@ extension-v1 route consumer. The [G2 review and deterministic browser
 matrix](../design/sonder-ui-replacement/G2_SHELL_REVIEW.md) qualify that shell
 without claiming the destination workflows.
 
-WP-04 establishes the accepted Play-core tranche of G3. One runtime-owned coordinator owns
+WP-04 established the accepted Play-core tranche of G3. One runtime-owned coordinator owns
 selected story/frame identity, story loading, generation, stop/retry, reroll,
 variants, mutations, and authoritative refresh across destination remounts.
 The view owns the literary transcript, story-scoped composer, current story
 and turn actions, explicit Play states, and responsive presentation. The
 [G3 review and deterministic browser matrix](../design/sonder-ui-replacement/G3_PLAY_REVIEW.md)
-qualify those behaviors without closing G3 as a whole or claiming Story Tools,
-conditions, backdrops, ambience, or Library lifecycle. WP-05 is next and owns
-the remaining contextual Play surfaces required for full G3 parity.
+qualified those behaviors without then claiming Story Tools or Library
+lifecycle.
+
+WP-05 completes G3. A stable ten-tool registry owns Cast, World, Style,
+Dialogue, Attire, Backdrops, Ambience, Conditions, Frames, and Multiplayer in
+the desktop inspector and compact staged sheet. Structural editors preserve
+complete server documents and owner-scoped drafts. The runtime owns backdrop,
+weather, ambience, and completion-chime lifetime independently of inspector
+DOM. The [Story Tools review and deterministic browser
+matrix](../design/sonder-ui-replacement/G3_STORY_TOOLS_REVIEW.md) qualify all
+current-story surfaces without claiming Library lifecycle or later global
+Settings/editor packages.
 
 ## Runtime boundary
 
@@ -92,7 +101,7 @@ the remaining contextual Play surfaces required for full G3 parity.
 - The application store separates server slices (`session`, `story`,
   `transcript`, `library`, `settings`, `extensions`) from presentation slices
   (`route`, `composer`, `inspector`, `tasks`, `notices`, `appearance`,
-  `diagnostics`). State enters by named owner actions and leaves as copied,
+  `atmosphere`, `diagnostics`). State enters by named owner actions and leaves as copied,
   frozen snapshots.
 - The shared API client owns same-origin/no-store requests, response parsing,
   correlation identity, cancellation, and stale-owner rejection. It never
@@ -200,6 +209,32 @@ do not carry persistent work, failures, or choices.
 - Compact Play retains every current action and a minimum 44 px target.
   Short-landscape treatment prioritizes the active field and primary action;
   safe-area padding belongs to the composer and bottom navigation.
+
+### Story Tools and atmosphere ownership
+
+- `story-tools-registry.js` is the complete current-story tool list.
+  `story-tools-runtime.js` captures story, frame, tool, mount, and request
+  sequence; a late response cannot repaint another owner.
+- Wide layouts mount the selected tool in the right inspector. Medium and
+  compact layouts mount the same module in a focus-contained staged sheet.
+  Tool changes preserve Play draft, scroll, run, and media state.
+- Cast, Conditions, Frames, and Multiplayer project current guarded routes.
+  They do not create parallel character, condition, frame, invite, or guest
+  authority in browser state.
+- World, Style, Dialogue, and Attire are explicit-save structural tools.
+  Complete JSON remains available where summary controls cannot faithfully
+  cover the document. Drafts clear only after accepted save or explicit
+  discard; story language never rewrites host UI language.
+- `atmosphere-runtime.js` owns backdrop/ambience request de-duplication, media
+  tokens, visibility pause, unlock, mute, volume, and optional completion
+  chime. Only mute, volume, and chime preferences persist locally; URLs,
+  credits, story data, and credentials do not.
+- Backdrop and weather layers are absolute behind Play and cannot affect prose
+  measure or composer geometry. Effects Off removes decorative weather while
+  reduced motion makes it static. Pending generation uses an explicit status
+  check and never an idle interval.
+- Mute and Volume remain beside the composer. Provider/source configuration,
+  pins, reroll, credits, unlock, and chime stay in the contextual tool.
 
 ## Design-system boundary
 
