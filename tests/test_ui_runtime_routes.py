@@ -43,7 +43,7 @@ def test_documents_and_assets_have_coherent_cache_policy(monkeypatch):
             assert response.headers.get("cache-control") == "no-store", path
 
         unversioned = client.get("/static/js/ui-next/main.js")
-        versioned = client.get("/static/js/ui-next/main.js?release=wp02.1")
+        versioned = client.get("/static/js/ui-next/main.js?release=wp03.1")
     finally:
         client.close()
 

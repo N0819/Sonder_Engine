@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp02.1";
+export const MODULE_RELEASE = "wp03.1";
 
 class NoticeError extends Error {
   constructor(kind, message) {

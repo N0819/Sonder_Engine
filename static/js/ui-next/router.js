@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp02.1";
+export const MODULE_RELEASE = "wp03.1";
 
 const ROUTES = Object.freeze({
   play: Object.freeze([]),
