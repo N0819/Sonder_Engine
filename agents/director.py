@@ -2203,6 +2203,100 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     record["events_addressed"] = _index_addressed_events(dispatch)
 
 
+_PUBLIC_SPEECH_ACTS = frozenset({
+    "greeting", "request", "offer", "promise", "question", "command",
+    "threat", "accusation", "disclosure", "denial", "agreement",
+    "refusal", "warning", "apology", "thanks", "praise", "insult",
+    "challenge", "bargain", "other",
+})
+
+
+def _ground_public_evidence(out, view):
+    """Make the social specialist's semantic labels evidence, not authority.
+
+    Actor, target, quote/action surface, volume and concealment come back from
+    the engine-authored source list.  A speech-frame's free text must be an
+    exact span of the utterance it annotates; this lets the model say that a
+    span is a request or an offer without giving it a prose lane through which
+    omniscient resolve detail could enter a Charter mind.  Every legitimate
+    source receives a deterministic fallback record when the specialist omits
+    it or fails, so cognition quality can degrade without erasing perception.
+    """
+    sources = {
+        str(source.get("source_id") or ""): dict(source)
+        for source in (view.get("public_sources") or [])
+        if isinstance(source, dict) and source.get("source_id")
+    }
+    annotated = {}
+    for entry in out.get("public_evidence") or []:
+        if not isinstance(entry, dict):
+            continue
+        source_id = str(entry.get("source_id") or "")
+        if source_id in sources:
+            annotated[source_id] = entry
+
+    # The final authority/attribution backstops may have dropped, retagged or
+    # deduplicated a prose-author line after the specialist saw it.  Only a
+    # line still present under the same speaker and quote body may survive.
+    final_lines = {}
+    for line in out.get("dialogue_log") or []:
+        if not isinstance(line, dict):
+            continue
+        key = (str(line.get("speaker") or "").strip().casefold(),
+               _quote_body(line.get("exact_quote") or "").casefold())
+        final_lines.setdefault(key, line)
+
+    grounded = []
+    for source_id, source in sources.items():
+        if source.get("kind") == "speech":
+            key = (str(source.get("actor") or "").strip().casefold(),
+                   _quote_body(source.get("exact_quote") or "").casefold())
+            final = final_lines.get(key)
+            if final is None:
+                continue
+            for field, default in (
+                    ("exact_quote", ""), ("intended_target", None),
+                    ("volume", "normal"), ("tone", ""),
+                    ("visibility", "overt"), ("conceal_from", []),
+                    ("medium", None)):
+                if field in final or default is not None:
+                    source[field if field != "intended_target" else "target"] = \
+                        final.get(field, default)
+
+        semantic = annotated.get(source_id) or {}
+        frames = []
+        quote = _quote_body(source.get("exact_quote") or "")
+        folded_quote = quote.casefold()
+        if source.get("kind") == "speech":
+            for raw in (semantic.get("speech_acts") or [])[:4]:
+                if not isinstance(raw, dict):
+                    continue
+                kind = str(raw.get("kind") or "other").strip().casefold()
+                if kind not in _PUBLIC_SPEECH_ACTS:
+                    kind = "other"
+                frame = {"kind": kind}
+                for field in ("content", "about", "condition"):
+                    value = " ".join(str(raw.get(field) or "").split())[:240]
+                    # Exact-span grounding: semantic DIRECTION may come from
+                    # the model; semantic CONTENT must already be audible.
+                    if value and value.casefold() in folded_quote:
+                        frame[field] = value
+                if frame.get("content") or kind in {
+                        "greeting", "apology", "thanks", "agreement",
+                        "refusal", "denial"}:
+                    frames.append(frame)
+
+        try:
+            salience = max(0.0, min(1.0, float(
+                semantic.get("salience", 0.5))))
+        except (TypeError, ValueError):
+            salience = 0.5
+        grounded.append({**source, "source_id": source_id,
+                         "speech_acts": frames, "salience": salience})
+
+    out["public_evidence"] = grounded[:12]
+
+
 class CampaignInvariantError(RuntimeError):
     """An extension's campaign rule the Director could not be made to obey.
 
@@ -2446,6 +2540,21 @@ def director_resolve(ctx, nonce, _corrections=None):
                 }
         except Exception as exc:
             ctx.add_warning(f"destination residue skipped: {exc}")
+        try:
+            from world.charter_runtime import residue_facts
+            _charter_facts = residue_facts(
+                chat["id"], _mv_target, frame_id=ctx.turn.frame_id, cap=3)
+            if _charter_facts:
+                existing = list((_destination_residue or {}).get("facts") or [])
+                _destination_residue = {
+                    "room": str(_mv_target),
+                    "since_turn": (_destination_residue or {}).get("since_turn"),
+                    # Institutional incidents outrank routine texture. They are
+                    # the causally legible reason the Charter exists.
+                    "facts": (_charter_facts + existing)[:3],
+                }
+        except Exception as exc:
+            ctx.add_warning(f"charter destination state skipped: {exc}")
 
     # W5's light authority appraisal hint: each present person's evident
     # public role/standing (never private history), for the prompt's
@@ -2666,6 +2775,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         physical=_beat_has_physical_activity(interp, char_actions, dice),
         speech=bool(char_speech) or bool(player_speech_lines(interp)),
         material_effects=bool(character_material_effects),
+        resolved_stage=True,
     )
     _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts)
     # The prose author's OWN scope (same mechanism as the specialists'
@@ -3647,6 +3757,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         deduped.append(d)
 
     out["dialogue_log"] = deduped
+    _ground_public_evidence(out, _orch_view)
 
     tracked_names = [
         character_name_from_text(c["sheet"]) for c in ctx.cast

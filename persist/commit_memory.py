@@ -24,7 +24,8 @@ from mind.theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
 from world.survival import vitals_of
 from world.comfort import comfort_level
 from persist.commit_common import (_clamp, _known_name_roster, _monotonic_elapsed,
-                           _names_heard_in, _normalize_character_output,
+                           _address_index, _names_heard_in,
+                           _normalize_character_output,
                            _room_of, _stable_event_key)
 from persist.commit_place_graph import (ROUTE_CREDIT_CAP, ROUTE_CREDIT_WINDOW,
                                 record_spatial_experience)
@@ -274,7 +275,69 @@ def prepare_memory_commit(ctx, *, scene=None):
     # by commit_memories inside the transaction -- this function runs BEFORE
     # the write lock and must not write. See _names_heard_in.
     _name_roster = _known_name_roster(chat, ctx.cast)
+    # Charter bodies are real co-located identities even before promotion.
+    # They are absent from chat_chars by design, so the legacy cast-only
+    # roster made it impossible for either a character or the player to learn
+    # a Charter name they plainly heard.  The runtime projection contains no
+    # private institutional state: only display name and physical place.
+    _charter_rooms = {}
+    _charter_aliases = {}
+    try:
+        from world.charter_runtime import charter_speaker_records
+        for _speaker in charter_speaker_records(
+                cid, frame_id=ctx.turn.frame_id):
+            _speaker_name = str(_speaker.get("name") or "").strip()
+            if not _speaker_name:
+                continue
+            if _speaker_name not in _name_roster:
+                _name_roster.append(_speaker_name)
+            _charter_rooms[_speaker_name] = str(
+                _speaker.get("place") or "")
+            _aliases = [
+                str(value).strip()
+                for value in (_speaker.get("aliases") or [_speaker_name])
+                if str(value or "").strip()
+            ]
+            _charter_aliases[_speaker_name] = list(dict.fromkeys(_aliases))
+    except Exception as exc:
+        ctx.add_warning(f"Charter recognition roster skipped: {exc}")
+    _name_address_index = _address_index(_name_roster)
     _names_learned = {}
+
+    # The persona has no memory row and therefore never entered the character
+    # loop below.  Learn through the same delivered-view proof: an exact line
+    # must be present in this player's own view, and the named body must be in
+    # the same room.  Additional human players use their own view keys.
+    from story.scene import persona_of as _persona_for_recognition
+    _primary_name = persona_name(_persona_for_recognition(chat))
+    _human_hearers = [("player", _primary_name)]
+    for _extra in (ctx.extra_players or []):
+        _human_hearers.append((
+            f"extra:{_extra.get('persona_id')}",
+            str(_extra.get("name") or "").strip()))
+    _known_before = wget(cid, "known", {}) or {}
+    for _view_key, _hearer_name in _human_hearers:
+        _view = str(views.get(_view_key) or "")
+        if not _view or not _hearer_name:
+            continue
+        _hearer_room = _room_of(sc, _hearer_name)
+        _already = set(_known_before.get(_hearer_name) or [])
+        for _line in dlog:
+            _quote = str((_line or {}).get("exact_quote") or "").strip()
+            _qbody = _quote_body(_quote)
+            if not _qbody or (_quote not in _view and _qbody not in _view):
+                continue
+            for _learned in _names_heard_in(
+                    _qbody, _hearer_name, _name_roster, sc, _hearer_room,
+                    rooms_by_name=_charter_rooms,
+                    address_index=_name_address_index):
+                if _learned not in _already:
+                    for _alias in _charter_aliases.get(
+                            _learned, [_learned]):
+                        if _alias not in _already:
+                            _already.add(_alias)
+                            _names_learned.setdefault(
+                                _hearer_name, []).append(_alias)
     relationship_ops = []
     belief_reconciles = []
     memory_disputes = []
@@ -557,10 +620,16 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # question is already answered above, so a name inside it
                     # is a name they heard. See _names_heard_in.
                     for _learned in _names_heard_in(
-                            qbody, cname, _name_roster, sc, char_room):
+                            qbody, cname, _name_roster, sc, char_room,
+                            rooms_by_name=_charter_rooms,
+                            address_index=_name_address_index):
                         if _learned not in _hearer_known:
-                            _hearer_known.add(_learned)
-                            _names_learned.setdefault(cname, []).append(_learned)
+                            for _alias in _charter_aliases.get(
+                                    _learned, [_learned]):
+                                if _alias not in _hearer_known:
+                                    _hearer_known.add(_alias)
+                                    _names_learned.setdefault(
+                                        cname, []).append(_alias)
                     category = _durable_dialogue_category(qbody)
                     memory_mark = _marked_for_memory(own_result, qbody)
                     # This mind asked to keep the line. The phrase list is a

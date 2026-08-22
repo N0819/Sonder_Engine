@@ -671,8 +671,16 @@ class TestDirectorSpecialists:
         bare.add_director_specialist(
             "morale", channels=["ops"], prompt="p",
             gate=lambda facts: facts["physical_beat"])
+        # Mirrors `director_scopes._gate_facts`'s returned keys. A gate reads
+        # `facts[key]`, so a fact this list has not heard of raises rather
+        # than gating -- which is what happened when `public_evidence` landed
+        # keying on `resolved_stage`. The list is hand-kept because the real
+        # builder needs a chat row and does DB reads; when it next drifts, the
+        # symptom is a KeyError naming the missing fact, which is a legible
+        # enough failure to be worth the duplication.
         facts = {key: False for key in (
-            "physical_beat", "speech_present", "anyone_wears",
+            "physical_beat", "speech_present", "resolved_stage",
+            "anyone_wears",
             "active_conditions", "vitals_tracked", "overlays_present",
             "contacts_standing", "containment_active", "scales_active",
             "material_effects_declared", "notices_in_scene", "reports_carried",

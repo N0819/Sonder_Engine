@@ -136,6 +136,14 @@ def test_the_result_is_the_same_every_time_for_the_same_cast():
     assert resolve_cast_colors(cast) == resolve_cast_colors(list(cast))
 
 
+def test_a_display_rename_does_not_repaint_a_seeded_institutional_body():
+    before = resolve_cast_colors([
+        {"uid": "Captain Ysra Vale", "seed": "charter:watch:ysra"}])
+    after = resolve_cast_colors([
+        {"uid": "Commander Ysra Vale", "seed": "charter:watch:ysra"}])
+    assert before["Captain Ysra Vale"] == after["Commander Ysra Vale"]
+
+
 # ---- Overrides ----
 
 def test_an_explicit_colour_is_honoured_exactly():

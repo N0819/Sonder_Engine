@@ -7,10 +7,11 @@ background_claims) are the existing cycle-breakers and stay deferred.
 See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
-import json, re, time
+import copy, json, re, time
 from core.db import q, qi, wget, wset, get_setting
 from mind.memory import add_memories_batch
 from story.character_schema import (character_name, character_initial_outfit,
+                              character_initial_active_state,
                               normalize_character_data, persona_name)
 from story.scene import seed_initial_attire
 from world.spatial import room_of, spatial_rel, hear_level, _is_body_entity
@@ -393,10 +394,14 @@ def _merge_presence_record(target, other):
         merged = set(target.get(field) or []) | set(other.get(field) or [])
         if merged:
             target[field] = sorted(merged)
-    target["first_turn"] = min(target.get("first_turn", 0),
-                               other.get("first_turn", 0))
-    target["last_turn"] = max(target.get("last_turn", 0),
-                              other.get("last_turn", 0))
+    if other.get("first_turn") is not None:
+        target["first_turn"] = min(
+            target.get("first_turn", other["first_turn"]),
+            other["first_turn"])
+    if other.get("last_turn") is not None:
+        target["last_turn"] = max(
+            target.get("last_turn", other["last_turn"]),
+            other["last_turn"])
     # A sketch the duplicate carried is still objective description of
     # the same body; keep anything the keeper is missing.
     for key, value in (other.get("sketch") or {}).items():
@@ -412,6 +417,11 @@ def _merge_presence_record(target, other):
     # An id denotes exactly one body: whichever side knows it, keep it.
     if other.get("entity_id") and not target.get("entity_id"):
         target["entity_id"] = other["entity_id"]
+    if other.get("nature") and not target.get("nature"):
+        target["nature"] = other["nature"]
+    for ref in (other.get("charter_refs") or []):
+        if ref not in target.setdefault("charter_refs", []):
+            target["charter_refs"].append(copy.deepcopy(ref))
     for alias in (other.get("aka") or []):
         if alias not in target.setdefault("aka", []):
             target["aka"].append(alias)
@@ -536,6 +546,34 @@ def _fold_duplicate_presences(presences, scene=None):
         for other_name in rest:
             _merge_presence_record(target, presences.pop(other_name))
     return presences
+
+
+def with_charter_presences(cid, presences, scene=None, *, places=None,
+                           names=None, frame_id=None, turn_idx=None):
+    """Overlay derived Charter bodies onto a background-presence ledger.
+
+    The caller gets a copy.  Merely noticing a Charter worker must not write
+    a second identity store; ordinary presence tracking persists the record
+    only after the person actually participates in a beat.
+    """
+    merged = copy.deepcopy(presences or {})
+    try:
+        from world.charter_runtime import background_presence_records
+        derived = background_presence_records(
+            cid, places=places, names=names, frame_id=frame_id)
+    except Exception:
+        return merged
+    for name, record in derived.items():
+        if turn_idx is not None:
+            record = copy.deepcopy(record)
+            record["first_turn"] = int(turn_idx)
+            record["last_turn"] = int(turn_idx)
+        key = _resolve_presence_name(name, merged, scene)
+        if key in merged:
+            _merge_presence_record(merged[key], record)
+        else:
+            merged[key] = copy.deepcopy(record)
+    return merged
 
 
 def overt_declaration(ctx):
@@ -1016,6 +1054,13 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     live_scene = wget(cid, "scene", {}) or {}
     presences = _fold_duplicate_presences(
         wget(cid, "background_presences", {}), live_scene)
+    _selected_for_charter = {
+        str(n).strip() for n in (br.get("selected") or ()) if str(n).strip()
+    }
+    presences = with_charter_presences(
+        cid, presences, live_scene,
+        names=(set(candidates) | _selected_for_charter),
+        frame_id=ctx.turn.frame_id, turn_idx=turn_idx)
     for name in candidates:
         # `A Dalek`, `Dalek` and `The Dalek` are one creature WHEN THE ROOM
         # HOLDS ONE DALEK -- the scene decides that, not the string. Resolve to
@@ -1048,6 +1093,33 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # Scene-manager bookkeeping (docs/design/BACKGROUND_LIFE_DESIGN.md §3.8, §3.11).
     _persist_blurbs(br, presences)
     _append_manager_conduct(br, presences, turn_idx)
+
+    charter_conduct = []
+    for reaction in _background_fired_reactions_any(br):
+        conduct = reaction.get("charter_act")
+        if not isinstance(conduct, dict):
+            continue
+        reaction_name = str(reaction.get("name") or "").strip()
+        key = _resolve_presence_name(reaction_name, presences, live_scene)
+        record = presences.get(key) or {}
+        if not record.get("charter_refs"):
+            continue
+        try:
+            from world.charter_runtime import apply_presence_conduct
+            result = apply_presence_conduct(
+                cid, reaction_name, conduct, record=record,
+                frame_id=ctx.turn.frame_id,
+                allowed=reaction.get("charter_offers") or (),
+                place=reaction.get("room") or "")
+            if result:
+                charter_conduct.append(result)
+                if result.get("refused"):
+                    ctx.add_warning(
+                        "Charter refused %s's %s toward %s: %s" % (
+                            reaction_name, conduct.get("act"),
+                            conduct.get("other"), result["refused"]))
+        except Exception as exc:
+            ctx.add_warning(f"Charter conduct skipped for {reaction_name}: {exc}")
 
     # Lore a background presence asserted this beat enters as a CLAIM, never as
     # fact -- the Director ratifies it, contradicts it, or lets it expire
@@ -1137,9 +1209,29 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 record["last_turn"] = turn_idx
 
     wset(cid, "background_presences", presences)
-    return {"tracked": len(presences)}
+    return {"tracked": len(presences),
+            "charter_conduct": charter_conduct}
 
 BACKGROUND_RECENT_TAIL = 4
+
+
+def commit_charter_observations(ctx, scene):
+    """Persist this beat's observer-scoped player/major-character evidence.
+
+    ``director_resolve.public_evidence`` has already been grounded against
+    exact declarations/dialogue.  This commit domain does no interpretation;
+    it only asks the Charter runtime which unpromoted bodies could see/hear
+    each source and writes those bodies' private claims.
+    """
+    resolved = ctx.get("director_resolve") or {}
+    evidence = resolved.get("public_evidence") or []
+    if not evidence:
+        return {"sources": 0, "opportunities": 0, "acquired": 0}
+    from world.charter_runtime import ingest_public_evidence
+
+    return ingest_public_evidence(
+        ctx.chat.id, evidence, scene or {}, turn_id=ctx.turn.id,
+        frame_id=ctx.turn.frame_id)
 
 def _persist_blurbs(br, presences):
     """Write minted blurbs (§3.8). FROZEN: a blurb is written once and never
@@ -1167,6 +1259,11 @@ def _append_manager_conduct(br, presences, turn_idx):
             continue
         entry = r.get("dialogue_log_entry") or {}
         parts = []
+        heard = r.get("heard_address") or {}
+        if heard.get("exact_quote"):
+            speaker = str(heard.get("speaker") or "someone").strip()
+            parts.append('heard %s say "%s"' % (
+                speaker, str(heard["exact_quote"]).strip()))
         if entry.get("exact_quote"):
             parts.append('said "%s"' % str(entry["exact_quote"]).strip())
         if r.get("action"):
@@ -1359,6 +1456,21 @@ def pick_background_reactors(ctx, dr_output, cap=1):
     # Where the player is standing, for the at-post test below.
     _pname = _player_name_or_none(ctx)
     player_room = room_of(sc, _pname) if _pname else ""
+    charter_places = {str(player_room)} if player_room else set()
+    if player_room:
+        try:
+            from world.spatial import ambient_scope
+            nearby, _ = ambient_scope(sc, player_room)
+            charter_places.update(str(p) for p in (nearby or ()) if p)
+        except Exception:
+            pass
+    presences = with_charter_presences(
+        cid, presences, sc, places=charter_places,
+        frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+    if forced_routed:
+        presences = with_charter_presences(
+            cid, presences, sc, names=forced_routed,
+            frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
     # A presence the Director MINTED THIS BEAT has no record yet -- and
     # never can at this point, because `track_background_presences` writes
     # it at commit, after this gate. Iterating `presences` alone therefore
@@ -1540,7 +1652,8 @@ def _refuse_name_collision(cid, new_name):
             "this engine tells minds apart." % (new_name, taken[wanted]))
 
 
-def promote_background_character(cid, name, sheet=None, memory_seeds=None):
+def promote_background_character(cid, name, sheet=None, memory_seeds=None,
+                                 *, frame_id=None, promoted_turn=None):
     """Attach a tracked background presence as a real character: mint the
     characters/chat_chars rows, seed her scene position, mutual recognition
     with the player and every registered cast member, and any starter
@@ -1559,12 +1672,33 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
     from story.importers import draft_promoted_character
     from story.scene import persona_of
 
+    scene_for_identity = wget(cid, "scene", {}) or {}
+    presences_for_identity = _fold_duplicate_presences(
+        wget(cid, "background_presences", {}) or {}, scene_for_identity)
+    presence_key = _resolve_presence_name(
+        name, presences_for_identity, scene_for_identity)
+    presence_record = presences_for_identity.get(presence_key) or {}
+    from world.charter_runtime import promotion_bundle
+    charter_bundle = promotion_bundle(
+        cid, name, record=presence_record, frame_id=frame_id)
+
     if sheet is None:
         draft = draft_promoted_character(cid, name)
         sheet = draft["sheet"]
         if memory_seeds is None:
             memory_seeds = draft["memory_seeds"]
 
+    sheet = copy.deepcopy(sheet)
+    handoff = ((charter_bundle or {}).get("handoff") or {})
+    if handoff:
+        sheet.setdefault("embodiment", {}).setdefault(
+            "interoception", {}).update(handoff.get("interoception") or {})
+        sheet.setdefault("psychology", {}).setdefault(
+            "stress_profile", {}).update(handoff.get("stress_profile") or {})
+        sheet.setdefault("initial_state", {}).setdefault(
+            "stress", {}).update(handoff.get("stress") or {})
+        sheet.setdefault("initial_state", {}).setdefault(
+            "hedonic", {}).update(handoff.get("hedonic") or {})
     sheet = normalize_character_data(sheet)
     memory_seeds = [str(m) for m in (memory_seeds or []) if str(m).strip()]
     _refuse_name_collision(cid, character_name(sheet))
@@ -1573,25 +1707,65 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
         "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
         (
             character_name(sheet), json.dumps(sheet, ensure_ascii=False),
-            json.dumps({"format": "promoted", "chat_id": cid}, ensure_ascii=False),
+            json.dumps({
+                "format": "promoted", "chat_id": cid,
+                **({"charter": charter_bundle["charter"],
+                    "charter_body": charter_bundle["body"]}
+                   if charter_bundle else {}),
+            }, ensure_ascii=False),
             time.time(),
         ),
     )
+    initial_active = character_initial_active_state(sheet)
+    _charter_color = ""
+    if charter_bundle:
+        from story.dialogue_colors import auto_dialogue_color, normalize_color
+        _charter_color = normalize_color(
+            charter_bundle.get("dialogue_color")) or auto_dialogue_color(
+                charter_bundle.get("dialogue_color_seed"))
     qi(
-        "INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?,'active')",
-        (cid, char_id),
+        "INSERT INTO chat_chars(chat_id,char_id,status,state,dialogue_color) "
+        "VALUES(?,?,'active',?,?)",
+        (cid, char_id, json.dumps({
+            "active_state": initial_active,
+            **({"charter_origin": {
+                "charter": charter_bundle["charter"],
+                "body": charter_bundle["body"],
+                "stood": handoff.get("stood") or {},
+            }} if charter_bundle else {}),
+        }, ensure_ascii=False), _charter_color),
     )
 
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
-    sc = wget(cid, "scene", None)
+    if frame_id is None:
+        sc = wget(cid, "scene", None)
+    else:
+        from core.db import wget_for_frame
+        sc = wget_for_frame(cid, "scene", frame_id, None)
     if isinstance(sc, dict):
         positions = sc.setdefault("positions", {})
         if character_name(sheet) not in positions:
             player_name = persona_name(persona_of(chat_row))
-            positions[character_name(sheet)] = positions.get(player_name)
+            positions[character_name(sheet)] = (
+                (charter_bundle or {}).get("place")
+                or positions.get(player_name))
+        # Survival remains opt-in.  If this scene already owns vitals, carry
+        # the body's real depletion across; never create the subsystem here.
+        if isinstance(sc.get("vitals"), dict) and handoff.get("body_state"):
+            vitals = {
+                key: handoff["body_state"][key]
+                for key in ("stamina", "nourishment", "injury")
+                if key in handoff["body_state"]
+            }
+            if vitals:
+                sc["vitals"].setdefault(character_name(sheet), {}).update(vitals)
         seed_initial_attire(
             sc, character_name(sheet), character_initial_outfit(sheet))
-        wset(cid, "scene", sc)
+        if frame_id is None:
+            wset(cid, "scene", sc)
+        else:
+            from core.db import wset_for_frame
+            wset_for_frame(cid, "scene", sc, frame_id)
 
     # Seed mutual recognition with the player and with every other
     # already-registered cast member -- she's been part of the scene the
@@ -1615,16 +1789,26 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
             known[other].append(her_name)
     wset(cid, "known", known)
 
-    if memory_seeds:
-        add_memories_batch([
+    memory_rows = [
             {
                 "chat_id": cid, "char_id": char_id, "turn_id": None,
                 "kind": "episodic", "provenance": "witnessed", "salience": 0.6,
                 "content": seed, "turn_idx": None,
+                "frame_id": frame_id,
                 "event_key": f"promotion:{cid}:{char_id}:{i}",
             }
             for i, seed in enumerate(memory_seeds)
-        ])
+        ]
+    for memory in (handoff.get("memories") or []):
+        memory_rows.append({
+            "chat_id": cid, "char_id": char_id, "turn_id": None,
+            "turn_idx": promoted_turn, "frame_id": frame_id,
+            **copy.deepcopy(memory),
+            "event_key": "charter:%s:%s" % (
+                charter_bundle["charter"], memory.get("event_key") or "memory"),
+        })
+    if memory_rows:
+        add_memories_batch(memory_rows)
 
     # If the chat launched from a greeting that put this presence on the
     # page, the extraction retained her mind unclaimed -- a background
@@ -1634,6 +1818,19 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None):
     # must stay importable inside the commit family.
     from story.greetings import claim_greeting_mind
     claim_greeting_mind(cid, char_id, name, sheet)
+
+    if charter_bundle:
+        from world.charter_runtime import bind_promoted_character
+        bound = bind_promoted_character(
+            cid, charter_bundle, char_id=char_id,
+            name=character_name(sheet),
+            entity_id=(sheet.get("identity") or {}).get("uid") or "",
+            promoted_turn=promoted_turn,
+            place=((sc or {}).get("positions") or {}).get(
+                character_name(sheet), "") if isinstance(sc, dict) else "",
+            frame_id=frame_id)
+        if not bound:
+            raise RuntimeError("Charter promotion binding could not be saved")
 
     presences = wget(cid, "background_presences", {})
     # Every spelling of them, not just the one promotion was called with: a
@@ -1787,5 +1984,7 @@ def auto_promote_background_characters(ctx):
         return {"promoted": []}
     candidates.sort(reverse=True)
     name = candidates[0][-1]
-    char_id = promote_background_character(cid, name)
+    char_id = promote_background_character(
+        cid, name, frame_id=ctx.turn.frame_id,
+        promoted_turn=ctx.turn.idx)
     return {"promoted": [{"name": name, "char_id": char_id}]}

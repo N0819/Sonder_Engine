@@ -56,7 +56,7 @@ SCENE = {"rooms": {"tavern_main": {"name": "The Brass Tankard tavern",
 
 class TestTheLadder:
     """The declared/built split is the engine's own statement, not a menu's
-    memory — the OFFSCREEN_LIFE_BUILT idiom, extended to five approaches."""
+    memory — the OFFSCREEN_LIFE_BUILT idiom, extended to world approaches."""
 
     def test_every_approach_is_declared_priced_and_marked(self):
         """A rung with three rich fields and one empty reads as complete
@@ -70,15 +70,8 @@ class TestTheLadder:
             assert LIVING_WORLD_BUILT[approach] <= set(LIVING_WORLD_DEPTHS)
             assert "off" not in LIVING_WORLD_BUILT[approach]
 
-    def test_c_and_es_built_depths_stay_honest(self):
-        """C's ceiling (the artifact wording mint, `artifacts.
-        schedule_artifact_wording`) and E's (`offscreen.
-        schedule_agent_ticks`) are built; a built-set that still called
-        either unbuilt would clamp every story that asked for it back to
-        the floor, silently — and one that overclaimed A, B or D would
-        sell a tier that does nothing."""
-        assert LIVING_WORLD_BUILT["rumor_ledger"] == frozenset(
-            {"floor", "ceiling"})
+    def test_es_built_depths_stay_honest(self):
+        """E's model-assisted tier is built; the others expose only floors."""
         assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset(
             {"floor", "ceiling"})
         for approach in ("routine_residue", "scheduled_consequence",
@@ -107,11 +100,6 @@ class TestTheLadder:
         already asked rather than a surprise."""
         cfg = {"scheduled_consequence": "ceiling"}
         assert effective_depth(cfg, "scheduled_consequence") == "floor"
-        # C's ceiling is BUILT now (the artifact wording mint), so asking
-        # for it gets it — the clamp releasing is the same honesty as the
-        # clamp holding.
-        assert effective_depth({"rumor_ledger": "ceiling"},
-                               "rumor_ledger") == "ceiling"
         assert effective_depth({"antagonist_ladder": "ceiling"},
                                "antagonist_ladder") == "floor"
 
@@ -477,7 +465,7 @@ class TestTheRoute:
         assert out["living_world"] == {
             a: "off" for a in LIVING_WORLD_APPROACHES}
         by_key = {row["approach"]: row for row in out["approaches"]}
-        assert by_key["rumor_ledger"]["depths"][0]["built"] is True
+        assert "rumor_ledger" not in by_key
         assert by_key["routine_residue"]["depths"][0]["built"] is True
         assert by_key["routine_residue"]["cost"]
 
@@ -487,7 +475,7 @@ class TestTheRoute:
             json={"living_world": {"routine_residue": "floor",
                                    "rumor_ledger": "warp speed"}}).json()
         assert out["living_world"]["routine_residue"] == "floor"
-        assert out["living_world"]["rumor_ledger"] == "off"
+        assert "rumor_ledger" not in out["living_world"]
         again = client.get(f"/api/chats/{chat_id}/living_world").json()
         assert again["living_world"]["routine_residue"] == "floor"
 
