@@ -91,7 +91,7 @@ def test_components_are_scoped_and_consume_semantic_tokens():
 
 
 def test_replacement_entries_are_head_safe_and_legacy_free():
-    for name in ("ui-next.html", "ui-next-lab.html"):
+    for name in ("ui-next.html", "ui-next-lab.html", "ui-next-runtime.html"):
         html = _read(ROOT / "static" / name)
         assert '/static/js/ui/appearance-preflight.js' in html
         assert html.index("appearance-preflight.js") < html.index("tokens.css")
@@ -101,7 +101,9 @@ def test_replacement_entries_are_head_safe_and_legacy_free():
         assert "window.S" not in html
 
     extractor = _read(ROOT / "tools" / "extract_ui_catalog.py")
-    assert 'path.name != "ui-next-lab.html"' in extractor
+    assert '"ui-next-lab.html"' in extractor
+    assert '"ui-next-runtime.html"' in extractor
+    assert "if path.name not in DEVELOPMENT_HTML_FILES" in extractor
 
 
 def test_foundation_has_no_polling_or_external_asset_dependency():

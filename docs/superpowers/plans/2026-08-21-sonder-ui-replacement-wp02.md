@@ -338,18 +338,18 @@ narrow adapter backed by the new registry.
 
 ## Gate checklist
 
-- [ ] Native boot and teardown work with no classic scripts.
-- [ ] The only replacement global is the documented v1 `window.Sonder` adapter.
-- [ ] API outcomes are normalized; 401, 403, abort, stale, malformed, and stream
+- [x] Native boot and teardown work with no classic scripts.
+- [x] The only replacement global is the documented v1 `window.Sonder` adapter.
+- [x] API outcomes are normalized; 401, 403, abort, stale, malformed, and stream
       paths are behaviorally proven.
-- [ ] Store slices and browser-local envelopes have one owner each.
-- [ ] No idle polling or permanent mutation observer exists.
-- [ ] Route/history semantics are stable without claiming the WP-03 shell.
-- [ ] Interface localization cannot translate story/user/model content.
-- [ ] Unsafe rich content and credential persistence are rejected.
-- [ ] Save sequencing refuses stale writes and preserves drafts.
-- [ ] Mixed module releases fail closed.
-- [ ] Representative v1 extension load/fault/unload is complete.
-- [ ] Current engine, persistence, auth, guest, language, and classic host tests
+- [x] Store slices and browser-local envelopes have one owner each.
+- [x] No idle polling or permanent mutation observer exists.
+- [x] Route/history semantics are stable without claiming the WP-03 shell.
+- [x] Interface localization cannot translate story/user/model content.
+- [x] Unsafe rich content and credential persistence are rejected.
+- [x] Save sequencing refuses stale writes and preserves drafts.
+- [x] Mixed module releases fail closed.
+- [x] Representative v1 extension load/fault/unload is complete.
+- [x] Current engine, persistence, auth, guest, language, and classic host tests
       remain green.
-- [ ] WP-02 is complete; G2 remains open for WP-03.
+- [x] WP-02 is complete; G2 remains open for WP-03.

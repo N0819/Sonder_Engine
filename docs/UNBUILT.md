@@ -2133,7 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-01 complete and G1 visual foundation locked.** Replace the
+**Approved target 2026-08-21; WP-02 complete, G1 locked, and G2 still open.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2165,8 +2165,20 @@ matrix, four required reviews, and complete qualification are recorded in
 [`design/sonder-ui-replacement/G1_FOUNDATION_REVIEW.md`](design/sonder-ui-replacement/G1_FOUNDATION_REVIEW.md).
 Only `ICON-01` through `ICON-10` close at G1; real application flows and all
 cross-program theme, responsive, accessibility, localization, architecture,
-and compatibility requirements remain open. WP-02 is next and owns runtime
-state, API, task, router, content, and localization foundations.
+and compatibility requirements remain open.
+
+WP-02's source plan is
+[`superpowers/plans/2026-08-21-sonder-ui-replacement-wp02.md`](superpowers/plans/2026-08-21-sonder-ui-replacement-wp02.md).
+Its release-coherent native boot, API/error client, explicit server and
+presentation state, truthful hash history, localization/content boundary,
+task/notice/diagnostic services, versioned browser-local state, save sequencing,
+credential boundary, contained extension-v1 adapter, authenticated current-route
+harness, findings, and complete qualification are recorded in
+[`design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md`](design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md).
+No cross-package `ARCH-*`, `SAVE-*`, or `EXT-*` row closes here: their visible
+consumers remain unbuilt. WP-03 is next and owns the real responsive Play,
+Library, and Settings shell, route/focus consumers, and the first visible
+extension slots required to close G2.
 
 ### 2.2 Make stance auditable
 

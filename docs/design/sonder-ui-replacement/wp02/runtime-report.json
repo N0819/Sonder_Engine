@@ -1,0 +1,214 @@
+{
+  "browser": "Chromium 149.0.7827.55",
+  "cases": [
+    {
+      "adapter_global": true,
+      "classic_global": false,
+      "console_errors": [],
+      "detail": "0 stories · 0 extensions",
+      "direction": "ltr",
+      "focus": "body",
+      "horizontal_overflow_px": 0,
+      "id": "desktop",
+      "language": "en",
+      "minimum_target_px": 36,
+      "page_errors": [],
+      "ready": "true",
+      "screenshot": "docs/design/sonder-ui-replacement/wp02/screenshots/desktop.png",
+      "screenshot_sha256": "ae688adaa6bef0cfb64aed276ac112b7b8d4eef3f147b10251e8de1b1bea3ede",
+      "state": "ready",
+      "status": "Runtime services ready",
+      "target_sizes": [
+        {
+          "kind": "checkbox-label",
+          "size": 36
+        },
+        {
+          "kind": "a",
+          "size": 36.5
+        }
+      ],
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "adapter_global": true,
+      "classic_global": false,
+      "console_errors": [],
+      "detail": "0 stories · 0 extensions",
+      "direction": "ltr",
+      "focus": "body",
+      "horizontal_overflow_px": 0,
+      "id": "mobile",
+      "language": "en",
+      "minimum_target_px": 44,
+      "page_errors": [],
+      "ready": "true",
+      "screenshot": "docs/design/sonder-ui-replacement/wp02/screenshots/mobile.png",
+      "screenshot_sha256": "d4f80ef2b65a8b3484512712e1a269ca475c1c8258f4b5ae6a5431c6722cf99c",
+      "state": "ready",
+      "status": "Runtime services ready",
+      "target_sizes": [
+        {
+          "kind": "checkbox-label",
+          "size": 44
+        },
+        {
+          "kind": "a",
+          "size": 44
+        }
+      ],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "adapter_global": true,
+      "classic_global": false,
+      "console_errors": [],
+      "detail": "0 stories · 0 extensions",
+      "direction": "ltr",
+      "focus": "body",
+      "horizontal_overflow_px": 0,
+      "id": "zoom-200-equivalent",
+      "language": "en",
+      "minimum_target_px": 44,
+      "page_errors": [],
+      "ready": "true",
+      "screenshot": "docs/design/sonder-ui-replacement/wp02/screenshots/zoom-200-equivalent.png",
+      "screenshot_sha256": "d49b6c155bc9b141d162fc2d2e221a186f957dc3ad8f4fc8b19a9e9c0e7e9c68",
+      "state": "ready",
+      "status": "Runtime services ready",
+      "target_sizes": [
+        {
+          "kind": "checkbox-label",
+          "size": 44
+        },
+        {
+          "kind": "a",
+          "size": 44
+        }
+      ],
+      "viewport": {
+        "height": 360,
+        "width": 640
+      }
+    },
+    {
+      "adapter_global": true,
+      "classic_global": false,
+      "console_errors": [],
+      "detail": "0 stories · 0 extensions",
+      "direction": "ltr",
+      "focus": "diagnostics-toggle",
+      "horizontal_overflow_px": 0,
+      "id": "keyboard",
+      "language": "en",
+      "minimum_target_px": 36,
+      "page_errors": [],
+      "ready": "true",
+      "screenshot": "docs/design/sonder-ui-replacement/wp02/screenshots/keyboard.png",
+      "screenshot_sha256": "d5128a833e80f2c823cfb6ca435f5d0ec29fe9d100c19488e1d07732b6422ad7",
+      "state": "ready",
+      "status": "Runtime services ready",
+      "target_sizes": [
+        {
+          "kind": "checkbox-label",
+          "size": 36
+        },
+        {
+          "kind": "a",
+          "size": 36.5
+        }
+      ],
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "adapter_global": true,
+      "classic_global": false,
+      "console_errors": [],
+      "detail": "0 stories · 0 extensions",
+      "direction": "ltr",
+      "focus": "body",
+      "horizontal_overflow_px": 0,
+      "id": "japanese-long-copy",
+      "language": "ja",
+      "minimum_target_px": 44,
+      "page_errors": [],
+      "ready": "true",
+      "screenshot": "docs/design/sonder-ui-replacement/wp02/screenshots/japanese-long-copy.png",
+      "screenshot_sha256": "5bfa3812544b32b5b2cd30a4bedfb59060f424d7b41e8f11229f2a5853b53593",
+      "state": "ready",
+      "status": "ランタイムサービスの準備ができました",
+      "target_sizes": [
+        {
+          "kind": "checkbox-label",
+          "size": 44
+        },
+        {
+          "kind": "a",
+          "size": 44
+        }
+      ],
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "adapter_global": true,
+      "classic_global": false,
+      "console_errors": [
+        "Failed to load resource: net::ERR_FAILED"
+      ],
+      "detail": "0 stories · 1 extensions",
+      "direction": "ltr",
+      "focus": "diagnostics-toggle",
+      "horizontal_overflow_px": 0,
+      "id": "extension-failure",
+      "language": "en",
+      "minimum_target_px": 36,
+      "page_errors": [],
+      "ready": "true",
+      "screenshot": "docs/design/sonder-ui-replacement/wp02/screenshots/extension-failure.png",
+      "screenshot_sha256": "0cebc12a5636ab9f5be1125f48c281f50abad1b9063766ce1f3259262df39c69",
+      "state": "ready",
+      "status": "Runtime services ready",
+      "target_sizes": [
+        {
+          "kind": "checkbox-label",
+          "size": 36
+        },
+        {
+          "kind": "a",
+          "size": 36.5
+        }
+      ],
+      "viewport": {
+        "height": 768,
+        "width": 1024
+      }
+    },
+    {
+      "adapter_global": false,
+      "classic_global": false,
+      "destinations": [
+        "/login"
+      ],
+      "id": "session-expiry",
+      "kind": "session-expired",
+      "ready": null,
+      "state": "failed"
+    }
+  ],
+  "platform": "Windows-10-10.0.19045-SP0",
+  "schema_version": 1,
+  "source_commit": "c0465fdade03d840197f4351b69e4db6090cd269",
+  "source_tree_sha256": "1dd1a124b20a532a5707d0b3a4c1c481014ed51ebefda24c67fbfc94f3522156"
+}
