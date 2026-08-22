@@ -1932,3 +1932,40 @@ def test_host_runtime_contains_extension_asset_failure_and_still_becomes_ready(
         "detail": "0 stories · 1 extensions",
         "adapter": True,
     }
+
+
+def test_runtime_harness_mobile_controls_keep_touch_targets(
+    page: Page, ui_base_url: str
+) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body="""{
+              "ui_language":"en",
+              "ui_direction":"ltr",
+              "ui_messages":{},
+              "chats":[],
+              "characters":[],
+              "personas":[],
+              "lorebooks":[],
+              "extensions":[],
+              "extension_errors":[],
+              "extension_lanes":[]
+            }""",
+        ),
+    )
+    page.goto(f"{ui_base_url}/static/ui-next-runtime.html")
+    page.wait_for_function(
+        "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
+    )
+    sizes = page.evaluate(
+        """() => ({
+          toggle: document.querySelector('.ui-runtime__diagnostic-toggle')
+            .getBoundingClientRect().height,
+          back: document.querySelector('.ui-runtime__back').getBoundingClientRect().height,
+        })"""
+    )
+    assert sizes["toggle"] >= 44
+    assert sizes["back"] >= 44
