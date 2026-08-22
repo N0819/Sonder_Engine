@@ -187,7 +187,9 @@ def capture() -> dict:
             if response is None or not response.ok: raise RuntimeError(case_id)
             page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
             if width < 1100:
-                page.get_by_role("button", name="Open context panel").click()
+                opener = page.get_by_role("button", name="Open context panel")
+                if opener.count() and opener.is_visible():
+                    opener.click()
             page.wait_for_function("[...document.querySelectorAll('[data-story-tool-panel]')].some(node => { const r = node.getBoundingClientRect(); return r.width > 1 && r.height > 1; })")
             page.wait_for_function("document.fonts.status === 'loaded'")
             page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
