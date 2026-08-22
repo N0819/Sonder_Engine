@@ -1,15 +1,19 @@
 export const MODULE_RELEASE = "wp03.1";
 
 const ROUTES = Object.freeze({
-  play: Object.freeze([]),
+  play: Object.freeze(["story-tools"]),
   library: Object.freeze([
     "stories",
     "characters",
-    "worlds",
-    "presets",
-    "extensions",
+    "personas",
+    "lore",
   ]),
   settings: Object.freeze([
+    "experience",
+    "ai-connections",
+    "content",
+    "add-ons",
+    "maintenance",
     "appearance",
     "language",
     "providers",

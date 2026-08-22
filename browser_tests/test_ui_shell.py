@@ -78,6 +78,102 @@ def test_destination_navigation_refresh_and_history_preserve_orientation(
     expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
 
 
+def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          history.replaceState(null, "", location.pathname);
+          const navigationModule = await import(
+            `${base}/static/js/ui-next/navigation-state.js?release=wp03.1`
+          );
+          const routerModule = await import(
+            `${base}/static/js/ui-next/router.js?release=wp03.1`
+          );
+          let record = {
+            route: "#/library/characters",
+            scrollRegions: {},
+            focusIdentity: "",
+          };
+          const localState = {
+            snapshot: () => ({ navigation: structuredClone(record) }),
+            setRecord: (_name, value) => { record = structuredClone(value); return true; },
+          };
+          const region = document.createElement("div");
+          region.dataset.shellScrollRegion = "workspace";
+          region.style.cssText = "height:40px;overflow:auto";
+          const content = document.createElement("div");
+          content.style.height = "1000px";
+          region.append(content);
+          document.body.append(region);
+          const focusTarget = document.createElement("button");
+          focusTarget.dataset.focusIdentity = "story-card:17";
+          document.body.append(focusTarget);
+
+          const navigation = navigationModule.createNavigationState({
+            localState,
+            target: window,
+            document,
+          });
+          const initial = navigation.prepareInitialRoute(routerModule.parseHashRoute);
+          navigation.onRoute(routerModule.parseHashRoute("#/play"));
+          region.scrollTop = 180;
+          navigation.onRoute(routerModule.parseHashRoute("#/library"));
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const libraryScroll = region.scrollTop;
+          region.scrollTop = 72;
+          navigation.onRoute(routerModule.parseHashRoute("#/play"));
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const playScroll = region.scrollTop;
+          const focused = navigation.restoreFocus("story-card:17");
+          const activeIdentity = document.activeElement.dataset.focusIdentity;
+          navigation.teardown();
+          return {
+            initial,
+            locationHash: location.hash,
+            libraryScroll,
+            playScroll,
+            focused,
+            activeIdentity,
+            storedRoute: record.route,
+            storedFocus: record.focusIdentity,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "initial": "#/library/characters",
+        "locationHash": "#/library/characters",
+        "libraryScroll": 0,
+        "playScroll": 180,
+        "focused": True,
+        "activeIdentity": "story-card:17",
+        "storedRoute": "#/play",
+        "storedFocus": "story-card:17",
+    }
+
+
+def test_shell_restores_only_a_valid_saved_route_when_url_has_no_hash(
+    page: Page, ui_base_url: str
+) -> None:
+    page.add_init_script(
+        """(() => localStorage.setItem("sonder.ui-next", JSON.stringify({
+          version: 2,
+          appearance: {},
+          navigation: {
+            route: "#/library/characters",
+            scrollRegions: {},
+            focusIdentity: "destination:library",
+          },
+          panes: {},
+          drafts: {},
+        })))()"""
+    )
+    _open_shell(page, ui_base_url, hash_value="")
+    expect(page).to_have_url(re.compile(r"#/library/characters$"))
+    expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
+
 def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     page: Page, ui_base_url: str
 ) -> None:
