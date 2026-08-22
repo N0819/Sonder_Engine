@@ -1,0 +1,21 @@
+@layer ui-utilities {
+  .ui-sr-only {
+    position: absolute !important;
+    inline-size: 1px !important;
+    block-size: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip-path: inset(50%) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+  .ui-stack { display: grid; gap: var(--ui-space-6); }
+  .ui-stack--tight { gap: var(--ui-space-4); }
+  .ui-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-4); }
+  .ui-grow { flex: 1 1 auto; min-inline-size: 0; }
+  .ui-safe-top { padding-block-start: max(var(--ui-space-4), env(safe-area-inset-top)); }
+  .ui-safe-bottom { padding-block-end: max(var(--ui-space-4), env(safe-area-inset-bottom)); }
+  .ui-scroll-lock { overflow: hidden; }
+  [hidden] { display: none !important; }
+}
