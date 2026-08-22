@@ -1,6 +1,6 @@
 # Gate G2 application-shell review
 
-**UI source:** `3b0e4b170aa10116c441322b3bd020660277eec9`  
+**UI source:** `49895c7f4f7e238b93b217dc8e980c3cec3d4fa6`
 **UI tree SHA-256:** `1313bc4c50e7bdd435e5a73170ab977caccb2cd7b60bbdf53a73f349e6f5ca73`  
 **Evidence:** [deterministic shell report](g2/shell-report.json), [screenshots](g2/screenshots/), [browser contracts](../../../browser_tests/test_ui_shell.py), [source contracts](../../../tests/test_ui_shell_contracts.py), [WP-03 plan](../../superpowers/plans/2026-08-22-sonder-ui-replacement-wp03.md)  
 **Scope:** authenticated application frame, responsive navigation, route/focus/scroll restoration, contextual inspector, Go To, visible extension-v1 hosting, and the current-host boundary. Destination workflows remain owned by WP-04 through WP-12.
@@ -110,7 +110,19 @@ consecutive complete captures produced byte-identical JSON and PNG files after
 resource ordering was normalized. Screenshots are full-page, animation-free,
 and SHA-256 bound in the report. Chromium 149 on Windows produced the evidence.
 
-Gate-wide repository qualification and the exact passing counts are recorded
-when the gate is locked in the maintained interface guide. G2 acceptance does
-not close destination workflow, final responsive, installed-extension, or
-cutover requirements.
+Exact-source qualification on Windows completed with:
+
+- 110 focused shell, runtime, source, current-server, and browser checks;
+- Python compilation across every maintained source root;
+- generated catalog, code map, structure, inventory, and drift checks;
+- 8,769 repository tests passed with four expected platform skips;
+- 119 browser tests passed;
+- two consecutive complete G2 captures byte-identical across the JSON report
+  and all 15 screenshots.
+
+The isolated worktree structure check reports no finding. The merged root can
+also report seven pre-existing `extensions/directive` integration-test facade
+couplings because that local extension checkout exists only in the root; those
+are recorded separately from replacement-UI findings. G2 acceptance does not
+close destination workflow, final responsive, installed-extension, or cutover
+requirements.

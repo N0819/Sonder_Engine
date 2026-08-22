@@ -1594,12 +1594,22 @@ registrations/assets, and calls optional module teardown. All UI assets load
 through authenticated `/api/extensions/...` routes; one failed extension does
 not stop host boot.
 
-Those slots are data until their owning replacement surface renders them.
-WP-03 owns the first visible consumers, and WP-12 owns installed-extension
-compatibility, capability disclosure, routing and CSS containment, plus any
-public extension-v2 contract. An extension that depends on `S`, `el`, `txt`,
-or a private classic DOM id is therefore not yet proven compatible with the
-replacement even when its `Sonder.*` registrations pass the WP-02 fixture.
+WP-03 gives the registry its first production-shaped consumer. A labeled
+Add-ons route lists registered legacy views and mounts the selected view inside
+an owner-attributed shell region. A synchronous render failure becomes a
+localized unavailable surface while core navigation remains ready. Owner
+unload removes the launcher and active result, then returns a retired deep link
+to the safe Add-ons parent. Go To learns and forgets those views from registry
+subscriptions rather than polling or reading private DOM ids. The complete
+behavioral and visual evidence is in
+[`G2_SHELL_REVIEW.md`](../design/sonder-ui-replacement/G2_SHELL_REVIEW.md).
+
+This is a visible migration consumer, not the final compatibility claim.
+WP-12 still owns the installed-extension corpus, capability disclosure, every
+slot's destination-specific presentation, routing and CSS containment, plus
+any public extension-v2 contract. An extension that depends on `S`, `el`,
+`txt`, or a private classic DOM id is therefore not yet proven compatible with
+the replacement even when its `Sonder.*` registrations pass the current shell.
 
 ---
 

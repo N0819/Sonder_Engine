@@ -2133,7 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-02 complete, G1 locked, and G2 still open.** Replace the
+**Approved target 2026-08-21; WP-03 complete and G2 locked.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2175,10 +2175,21 @@ task/notice/diagnostic services, versioned browser-local state, save sequencing,
 credential boundary, contained extension-v1 adapter, authenticated current-route
 harness, findings, and complete qualification are recorded in
 [`design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md`](design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md).
-No cross-package `ARCH-*`, `SAVE-*`, or `EXT-*` row closes here: their visible
-consumers remain unbuilt. WP-03 is next and owns the real responsive Play,
-Library, and Settings shell, route/focus consumers, and the first visible
-extension slots required to close G2.
+No cross-package `ARCH-*`, `SAVE-*`, or `EXT-*` row closes at WP-02: their
+visible consumers were then unbuilt.
+
+WP-03's source plan is
+[`superpowers/plans/2026-08-22-sonder-ui-replacement-wp03.md`](superpowers/plans/2026-08-22-sonder-ui-replacement-wp03.md).
+Its real authenticated Play/Library/Settings frame, compact through expansive
+layouts, versioned route/focus/scroll restoration, desktop/mobile inspector,
+Go To, visible extension-v1 hosting, historical-candidate disposition, review
+findings, deterministic evidence, and qualification are recorded in
+[`design/sonder-ui-replacement/G2_SHELL_REVIEW.md`](design/sonder-ui-replacement/G2_SHELL_REVIEW.md).
+Only shell-complete `IA-*` and architectural rows close here; responsive,
+destination, save, installed-extension, auth/guest, cutover, and final
+verification requirements remain open. WP-04 is next and owns the Play
+transcript, streaming and generation lifecycle, composer/draft behavior,
+turn actions, story switching, and current story controls required for G3.
 
 ### 2.2 Make stance auditable
 

@@ -224,6 +224,15 @@ name. Adding visible replacement copy therefore requires both an owning block
 and regenerated `language_packs/en/ui.json`; technical strings elsewhere in a
 module are not silently promoted into translator work.
 
+The WP-03 application shell is the first complete product consumer of this
+boundary. Static shell labels are catalogued from `static/ui-next.html` and
+dynamic navigation, inspector, Go To, fallback, and extension-host wording is
+catalogued from the owning modules. English extraction is exact; Japanese has
+matching keys. The G2 matrix exercises injected long Japanese copy on a compact
+viewport and proves that navigation, focus, Go To, and 44 px targets remain
+available without horizontal overflow. Full translation quality and every
+later workflow remain release-gate work; key parity is still not native review.
+
 ## 6. Validation and tests
 
 Before enabling `story: true`, add tests that prove behavior rather than file
