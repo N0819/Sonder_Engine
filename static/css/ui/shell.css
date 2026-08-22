@@ -173,6 +173,8 @@
   .ui-shell__loading-line { display: block; inline-size: min(16rem, 70vw); block-size: .75rem; }
 
   .ui-shell-placeholder { display: grid; gap: var(--ui-space-6); align-content: start; }
+  .ui-shell__route-notice { margin-block-end: var(--ui-space-6); }
+  .ui-shell__route-notice > * { margin: 0; }
   .ui-shell-placeholder > * { margin: 0; }
   .ui-shell-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ui-space-5); margin: 0; }
   .ui-shell-count { display: grid; gap: var(--ui-space-3); min-inline-size: 0; padding: var(--ui-space-6); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-md); background: var(--ui-color-surface-muted); }
@@ -196,8 +198,8 @@
 
   .ui-shell__inspector-header { display: flex; justify-content: space-between; align-items: start; gap: var(--ui-space-5); padding-block-end: var(--ui-space-6); border-block-end: 1px solid var(--ui-color-border); }
   .ui-shell__inspector-header :is(h2, p) { margin: 0; }
+  .ui-shell__inspector-actions { display: flex; gap: var(--ui-space-2); }
   .ui-shell__inspector-body { min-block-size: 0; overflow: auto; padding-block: var(--ui-space-6); }
-  .ui-shell__inspector-resize { position: absolute; inset-block: 0; inset-inline-start: -3px; inline-size: 6px; cursor: ew-resize; }
 
   .ui-shell__overlay-host:empty,
   .ui-shell__notice-host:empty,
@@ -210,6 +212,11 @@
 
   [data-layout-state="expansive"] .ui-shell { --ui-shell-rail: 15rem; --ui-shell-inspector: 23rem; }
   [data-layout-state="wide"] .ui-shell { --ui-shell-rail: 13rem; --ui-shell-inspector: 19rem; }
+  [data-inspector-size="narrow"] .ui-shell { --ui-shell-inspector: 17rem; }
+  [data-inspector-size="default"] .ui-shell { --ui-shell-inspector: 20rem; }
+  [data-inspector-size="wide"] .ui-shell { --ui-shell-inspector: 24rem; }
+  :root[data-inspector-open="false"]:is([data-layout-state="wide"], [data-layout-state="expansive"]) .ui-shell { grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr); }
+  :root[data-inspector-open="false"] .ui-shell__inspector { display: none; }
 
   [data-layout-state="medium"] .ui-shell { --ui-shell-rail: 5.25rem; grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr); }
   [data-layout-state="medium"] .ui-shell__brand-copy,

@@ -66,11 +66,8 @@
         </div>
         <div class="ui-shell__header-actions">
           <span class="ui-shell__save" data-shell-save-state>Nothing to save</span>
-          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Open story tools" title="Story tools" data-shell-inspector-open>
+          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Open context panel" title="Context panel" data-shell-inspector-open data-focus-identity="inspector-toggle">
             <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg#icon-tools"></use></svg>
-          </button>
-          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="More actions" title="More actions" data-shell-more>
-            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg#icon-more"></use></svg>
           </button>
         </div>
       </header>
@@ -91,14 +88,21 @@
           <p class="ui-shell__eyebrow">Context</p>
           <h2 class="ui-heading ui-heading--2" tabindex="-1" data-shell-inspector-heading>Story tools</h2>
         </div>
-        <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Close story tools" title="Close" data-shell-inspector-close>
-          <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg#icon-close"></use></svg>
-        </button>
+        <div class="ui-shell__inspector-actions">
+          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Pin context panel" title="Pin context panel" aria-pressed="true" data-shell-inspector-pin>
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg#icon-pin"></use></svg>
+          </button>
+          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Resize context panel" title="Resize context panel" data-shell-inspector-resize>
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg#icon-resize"></use></svg>
+          </button>
+          <button class="ui-button ui-button--quiet ui-button--icon" type="button" aria-label="Close context panel" title="Close" data-shell-inspector-close>
+            <svg class="ui-icon" aria-hidden="true" focusable="false"><use href="/static/assets/icons/sonder-icons.svg#icon-close"></use></svg>
+          </button>
+        </div>
       </header>
       <div class="ui-shell__inspector-body" data-shell-inspector-body>
         <p class="ui-muted">Choose a story before opening its contextual tools.</p>
       </div>
-      <div class="ui-shell__inspector-resize" aria-hidden="true"></div>
     </aside>
 
     <div class="ui-shell__overlay-host" data-ui-region="overlays" data-shell-overlay-host></div>

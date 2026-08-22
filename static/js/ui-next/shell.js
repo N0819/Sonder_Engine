@@ -31,8 +31,8 @@ export function createApplicationShell(options = {}) {
   if (!services?.store || !services?.router || !services?.localizer) {
     throw new Error("The application shell requires the coherent host runtime.");
   }
-  if (!modules?.destinations) {
-    throw new Error("The application shell destination renderer is missing.");
+  if (!modules?.destinations || !modules?.inspectorHost) {
+    throw new Error("The application shell presentation modules are missing.");
   }
 
   const heading = required(documentRef, "[data-shell-heading]");
@@ -43,9 +43,11 @@ export function createApplicationShell(options = {}) {
   const t = services.localizer.t;
   let stopped = false;
   let renderedDestination = null;
+  let inspectorHost = null;
 
   const applyLayout = () => {
     root.dataset.layoutState = layoutStateFor(target.innerWidth, target.innerHeight);
+    inspectorHost?.setLayout(root.dataset.layoutState);
   };
 
   const render = shellState => {
@@ -53,8 +55,9 @@ export function createApplicationShell(options = {}) {
     const destination = modules.destinations.CORE_DESTINATIONS.includes(
       shellState.route?.destination,
     ) ? shellState.route.destination : "play";
-    const copy = modules.destinations.destinationCopy(destination, t);
-    parent.textContent = t("Sonder Engine");
+    const segment = shellState.route?.segments?.[0] || "";
+    const copy = modules.destinations.destinationCopy(destination, segment, t);
+    parent.textContent = copy.parent;
     heading.textContent = copy.label;
     heading.dataset.focusIdentity = `destination:${destination}`;
     context.textContent = copy.context;
@@ -65,19 +68,38 @@ export function createApplicationShell(options = {}) {
         link.removeAttribute("aria-current");
       }
     }
-    view.replaceChildren(modules.destinations.renderDestination({
+    const destinationView = modules.destinations.renderDestination({
       document: documentRef,
       destination,
       state: services.store.getSnapshot(),
       t,
-    }));
+    });
+    if (shellState.route?.explanation) {
+      const notice = documentRef.createElement("div");
+      notice.className = "ui-notice ui-shell__route-notice";
+      notice.dataset.tone = "warning";
+      notice.dataset.marker = "!";
+      notice.setAttribute("role", "status");
+      const message = documentRef.createElement("p");
+      message.textContent = shellState.route.explanation;
+      notice.append(message);
+      view.replaceChildren(notice, destinationView);
+    } else {
+      view.replaceChildren(destinationView);
+    }
     services.localizer.localize(view);
+    inspectorHost?.sync(shellState.route);
     if (renderedDestination !== destination) {
       renderedDestination = destination;
       target.requestAnimationFrame(() => heading.focus({ preventScroll: true }));
     }
   };
 
+  inspectorHost = modules.inspectorHost.createInspectorHost({
+    services,
+    document: documentRef,
+    root,
+  });
   applyLayout();
   target.addEventListener("resize", applyLayout);
   const selectShellState = state => ({
@@ -97,6 +119,7 @@ export function createApplicationShell(options = {}) {
     stopped = true;
     unsubscribe();
     target.removeEventListener("resize", applyLayout);
+    inspectorHost.teardown();
     view.replaceChildren();
   };
 

@@ -1,16 +1,14 @@
 import { containFocus, focusableElements, restoreFocus } from "./focus.js";
 
-function setBackgroundInert(overlay, value) {
-  const parent = overlay.parentElement;
+function setBackgroundInert(overlay, parent) {
   if (!parent) return [];
   const changed = [];
   for (const sibling of parent.children) {
-    if (sibling === overlay || !(sibling instanceof HTMLElement)) continue;
-    if (value) {
-      changed.push({ sibling, inert: sibling.inert, ariaHidden: sibling.getAttribute("aria-hidden") });
-      sibling.inert = true;
-      sibling.setAttribute("aria-hidden", "true");
-    }
+    if (sibling === overlay || sibling.contains(overlay)
+        || !(sibling instanceof HTMLElement)) continue;
+    changed.push({ sibling, inert: sibling.inert, ariaHidden: sibling.getAttribute("aria-hidden") });
+    sibling.inert = true;
+    sibling.setAttribute("aria-hidden", "true");
   }
   return changed;
 }
@@ -23,7 +21,11 @@ function restoreBackground(changed) {
   }
 }
 
-export function createOverlayController(overlay, { closeOnEscape = true, onClose = () => {} } = {}) {
+export function createOverlayController(overlay, {
+  closeOnEscape = true,
+  onClose = () => {},
+  backgroundRoot = overlay.parentElement,
+} = {}) {
   if (!(overlay instanceof HTMLElement)) throw new TypeError("An overlay element is required.");
   const surface = overlay.querySelector("[role='dialog']") || overlay;
   let opener = null;
@@ -40,7 +42,7 @@ export function createOverlayController(overlay, { closeOnEscape = true, onClose
     opener = document.activeElement;
     open = true;
     overlay.hidden = false;
-    background = setBackgroundInert(overlay, true);
+    background = setBackgroundInert(overlay, backgroundRoot);
     document.documentElement.classList.add("ui-scroll-lock");
     document.addEventListener("keydown", onKeydown, true);
     const target = overlay.querySelector("[autofocus]") || focusableElements(surface)[0] || surface;

@@ -26,6 +26,7 @@ MODULES = (
     "extensions.js",
     "extensions-v1.js",
     "destinations.js",
+    "inspector-host.js",
     "navigation-state.js",
     "shell.js",
 )

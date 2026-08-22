@@ -17,6 +17,31 @@ const DESTINATION_COPY = Object.freeze({
   }),
 });
 
+const SUBVIEW_COPY = Object.freeze({
+  play: Object.freeze({
+    "story-tools": "Story tools",
+  }),
+  library: Object.freeze({
+    stories: "Stories",
+    characters: "Characters",
+    personas: "Personas",
+    lore: "Lore",
+  }),
+  settings: Object.freeze({
+    experience: "Experience",
+    "ai-connections": "AI Connections",
+    content: "Content",
+    "add-ons": "Add-ons",
+    maintenance: "Maintenance",
+    appearance: "Appearance",
+    language: "Language",
+    providers: "Providers",
+    models: "Models",
+    extensions: "Extensions",
+    advanced: "Advanced",
+  }),
+});
+
 function element(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
   if (className) node.className = className;
@@ -109,10 +134,15 @@ function settingsView(documentRef, _state, t) {
   return section;
 }
 
-export function destinationCopy(destination, t = value => value) {
+export function destinationCopy(destination, segment = "", t = value => value) {
   const safe = CORE_DESTINATIONS.includes(destination) ? destination : "play";
   const copy = DESTINATION_COPY[safe];
-  return Object.freeze({ label: t(copy.label), context: t(copy.context) });
+  const subview = SUBVIEW_COPY[safe]?.[segment];
+  return Object.freeze({
+    label: t(subview || copy.label),
+    parent: t(subview ? copy.label : "Sonder Engine"),
+    context: t(copy.context),
+  });
 }
 
 export function renderDestination({ document: documentRef, destination, state, t }) {
