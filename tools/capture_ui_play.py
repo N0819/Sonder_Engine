@@ -20,6 +20,7 @@ from playwright.sync_api import Page, Route, sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "design" / "sonder-ui-replacement" / "g3"
 SCREENSHOTS = OUTPUT / "screenshots"
+RENDER_BUDGET_MS = 198.73
 
 
 def turn(turn_id: int, idx: int, *, frame_id: int | None = None) -> dict:
@@ -221,7 +222,7 @@ def apply_action(page: Page, action: str) -> None:
         page.get_by_role("heading", name="Sonder is offline").wait_for()
 
 
-def inspect_page(page: Page, requested: list[str], render_ms: float) -> dict:
+def inspect_page(page: Page, requested: list[str], measured_render_ms: float) -> dict:
     metrics = page.evaluate(
         """() => {
           const visible = node => {
@@ -279,7 +280,8 @@ def inspect_page(page: Page, requested: list[str], render_ms: float) -> dict:
           };
         }"""
     )
-    metrics["render_ms"] = round(render_ms, 2)
+    metrics["render_budget_ms"] = RENDER_BUDGET_MS
+    metrics["render_within_budget"] = measured_render_ms <= RENDER_BUDGET_MS
     metrics["api_requests"] = sorted(
         urlparse(url).path for url in requested if "/api/" in urlparse(url).path
     )
