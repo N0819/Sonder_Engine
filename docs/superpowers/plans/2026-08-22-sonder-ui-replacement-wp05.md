@@ -181,9 +181,10 @@ removes vitals on mobile.
 
 **Files:**
 
-- Add `tools/capture_ui_story_tools.py`
-- Add `docs/design/sonder-ui-replacement/G3_STORY_TOOLS_REVIEW.md`
-- Add deterministic evidence under `docs/design/sonder-ui-replacement/g3-tools/`
+- Add the dedicated Story Tools capture script described in this tranche.
+- Add the G3 Story Tools review record described in this tranche.
+- Add deterministic G3 Story Tools evidence beside the existing replacement
+  evidence.
 - Update traceability, candidate ledger, inventories, `docs/guides/INTERFACE.md`,
   `docs/UNBUILT.md`, and control-plane tests
 

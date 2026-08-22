@@ -1,36 +1,39 @@
-import { assertReleaseModules } from "./release.js?release=wp04.1";
+import { assertReleaseModules } from "./release.js?release=wp05.1";
 
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
 // UI_CATALOG_START: fatal boundary copy is deliberately stack-free.
 const RUNTIME_FAILURE_MESSAGE = "The interface stopped unexpectedly. Your saved stories were not changed.";
 // UI_CATALOG_END
 
 const SERVICE_PATHS = Object.freeze({
-  api: "./api.js?release=wp04.1",
-  errors: "./errors.js?release=wp04.1",
-  store: "./store.js?release=wp04.1",
-  router: "./router.js?release=wp04.1",
-  localization: "./localization.js?release=wp04.1",
-  content: "./content.js?release=wp04.1",
-  tasks: "./tasks.js?release=wp04.1",
-  notices: "./notices.js?release=wp04.1",
-  diagnostics: "./diagnostics.js?release=wp04.1",
-  storage: "./storage.js?release=wp04.1",
-  credentials: "./credentials.js?release=wp04.1",
-  savePolicy: "./save-policy.js?release=wp04.1",
-  extensions: "./extensions.js?release=wp04.1",
-  extensionsV1: "./extensions-v1.js?release=wp04.1",
-  destinations: "./destinations.js?release=wp04.1",
-  inspectorHost: "./inspector-host.js?release=wp04.1",
-  navigationState: "./navigation-state.js?release=wp04.1",
-  shortcuts: "./shortcuts.js?release=wp04.1",
-  goTo: "./go-to.js?release=wp04.1",
-  extensionHost: "./extension-host.js?release=wp04.1",
-  shell: "./shell.js?release=wp04.1",
-  playRuntime: "./play-runtime.js?release=wp04.1",
-  playView: "./play-view.js?release=wp04.1",
-  prose: "./prose.js?release=wp04.1",
+  api: "./api.js?release=wp05.1",
+  errors: "./errors.js?release=wp05.1",
+  store: "./store.js?release=wp05.1",
+  router: "./router.js?release=wp05.1",
+  localization: "./localization.js?release=wp05.1",
+  content: "./content.js?release=wp05.1",
+  tasks: "./tasks.js?release=wp05.1",
+  notices: "./notices.js?release=wp05.1",
+  diagnostics: "./diagnostics.js?release=wp05.1",
+  storage: "./storage.js?release=wp05.1",
+  credentials: "./credentials.js?release=wp05.1",
+  savePolicy: "./save-policy.js?release=wp05.1",
+  extensions: "./extensions.js?release=wp05.1",
+  extensionsV1: "./extensions-v1.js?release=wp05.1",
+  destinations: "./destinations.js?release=wp05.1",
+  inspectorHost: "./inspector-host.js?release=wp05.1",
+  navigationState: "./navigation-state.js?release=wp05.1",
+  shortcuts: "./shortcuts.js?release=wp05.1",
+  goTo: "./go-to.js?release=wp05.1",
+  extensionHost: "./extension-host.js?release=wp05.1",
+  shell: "./shell.js?release=wp05.1",
+  playRuntime: "./play-runtime.js?release=wp05.1",
+  playView: "./play-view.js?release=wp05.1",
+  prose: "./prose.js?release=wp05.1",
+  storyToolsRegistry: "./story-tools-registry.js?release=wp05.1",
+  storyToolsRuntime: "./story-tools-runtime.js?release=wp05.1",
+  storyToolsView: "./story-tools-view.js?release=wp05.1",
 });
 
 let activeTeardown = null;
@@ -312,6 +315,14 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     registry,
   });
   cleanups.push(() => play.teardown());
+  const storyTools = modules.storyToolsRuntime.createStoryToolsRuntime({
+    store,
+    apiClient,
+    localState,
+    router,
+    toolRegistry: modules.storyToolsRegistry,
+  });
+  cleanups.push(() => storyTools.teardown());
 
   if (harness.diagnosticsToggle) {
     const onDiagnostics = () => {
@@ -349,6 +360,7 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     registry,
     adapter,
     play,
+    storyTools,
   };
   let shell = null;
   if (options.shell === true) {

@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
 const EMPHASIS_TAGS = Object.freeze({
   i: "em",

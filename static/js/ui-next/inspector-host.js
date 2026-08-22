@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=wp04.1";
+import { createOverlayController } from "../ui/components/overlay.js?release=wp05.1";
 
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["narrow", "default", "wide"]);
@@ -76,7 +76,7 @@ function sheetContent(documentRef, t) {
 }
 
 export function createInspectorHost(options = {}) {
-  const { services } = options;
+  const { services, modules } = options;
   const documentRef = options.document || document;
   const root = options.root || documentRef.documentElement;
   const aside = documentRef.querySelector("[data-shell-inspector]");
@@ -97,6 +97,8 @@ export function createInspectorHost(options = {}) {
   let route = services.router.current();
   let syncing = false;
   let stopped = false;
+  let desktopStoryTools = null;
+  let sheetStoryTools = null;
   const sheet = sheetContent(documentRef, services.localizer.t);
   overlayHost.append(sheet.overlay);
   const overlay = createOverlayController(sheet.overlay, {
@@ -113,11 +115,36 @@ export function createInspectorHost(options = {}) {
     services.localState.setRecord("panes", { ...current, inspector: panes });
   };
 
+  const clearStoryTools = () => {
+    desktopStoryTools?.teardown();
+    sheetStoryTools?.teardown();
+    desktopStoryTools = null;
+    sheetStoryTools = null;
+  };
+
   const updateCopy = destination => {
     const copy = contextCopy(destination, services.localizer.t);
     heading.textContent = copy.title;
-    body.replaceChildren(createElement(documentRef, "p", "ui-muted", copy.body));
     sheet.heading.textContent = copy.title;
+    clearStoryTools();
+    if (destination === "play" && modules?.storyToolsView && modules?.storyToolsRegistry) {
+      desktopStoryTools = modules.storyToolsView.mountStoryTools({
+        document: documentRef,
+        services,
+        registry: modules.storyToolsRegistry,
+        target: body,
+        compact: false,
+      });
+      sheetStoryTools = modules.storyToolsView.mountStoryTools({
+        document: documentRef,
+        services,
+        registry: modules.storyToolsRegistry,
+        target: sheet.body,
+        compact: true,
+      });
+      return;
+    }
+    body.replaceChildren(createElement(documentRef, "p", "ui-muted", copy.body));
     sheet.body.replaceChildren(createElement(documentRef, "p", "ui-muted", copy.body));
   };
 
@@ -206,6 +233,7 @@ export function createInspectorHost(options = {}) {
     sheet.close.removeEventListener("click", close);
     pinButton.removeEventListener("click", togglePin);
     resizeButton.removeEventListener("click", resize);
+    clearStoryTools();
     overlay.destroy();
     sheet.overlay.remove();
   };

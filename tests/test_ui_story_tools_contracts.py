@@ -60,9 +60,9 @@ def test_story_tool_routes_are_stable_and_inspector_content_is_mounted():
     assert 'play: Object.freeze(["story-tools"])' in router
     assert "preserveLayers" in router
     assert "mountStoryTools" in inspector
-    assert "data-story-tools" in view
-    assert "data-story-tool-list" in view
-    assert "data-story-tool-panel" in view
+    assert "dataset.storyTools" in view
+    assert "dataset.storyToolList" in view
+    assert "dataset.storyToolPanel" in view
 
 
 def test_story_tool_runtime_owns_requests_by_story_frame_tool_and_sequence():
@@ -118,4 +118,3 @@ def test_story_tool_css_declares_bounded_inspector_and_mobile_sheet_contracts():
     assert "env(safe-area-inset-bottom)" in source
     assert "overflow-x: hidden" in source
     assert "!important" not in source
-

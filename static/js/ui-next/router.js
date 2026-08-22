@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
 const ROUTES = Object.freeze({
   play: Object.freeze(["story-tools"]),
@@ -240,8 +240,9 @@ export function createRouter(options = {}) {
     const hash = typeof next === "string" ? next : serializeRoute(next);
     const parsed = parseHashRoute(hash, { explain: options.explain });
     const method = navigationOptions.replace ? "replaceState" : "pushState";
-    history[method]({ sonderUi: { hash: parsed.canonicalHash, layers: [] } }, "", parsed.canonicalHash);
-    route = withLayers(parsed, []);
+    const layers = navigationOptions.preserveLayers ? route.layers : [];
+    history[method]({ sonderUi: { hash: parsed.canonicalHash, layers } }, "", parsed.canonicalHash);
+    route = withLayers(parsed, layers);
     emit();
     return route;
   };

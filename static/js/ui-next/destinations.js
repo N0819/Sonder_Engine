@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp04.1";
+export const MODULE_RELEASE = "wp05.1";
 
 export const CORE_DESTINATIONS = Object.freeze(["play", "library", "settings"]);
 
@@ -155,7 +155,7 @@ function settingsView(documentRef, _state, t) {
 export function destinationCopy(destination, segment = "", t = value => value) {
   const safe = CORE_DESTINATIONS.includes(destination) ? destination : "play";
   const copy = DESTINATION_COPY[safe];
-  const subview = SUBVIEW_COPY[safe]?.[segment];
+  const subview = safe === "play" ? "" : SUBVIEW_COPY[safe]?.[segment];
   return Object.freeze({
     label: t(subview || copy.label),
     parent: t(subview ? copy.label : SHELL_NAME),
