@@ -386,10 +386,10 @@ def test_story_import_retry_and_branch_use_distinct_owned_operations(
     assert result["requests"] == [
         {"method": "POST", "path": "/api/chats/import", "body": {
             "data": {"format": "sonder.story.v1", "chat": {"name": "Imported"}},
-        }, "owner": "story:import"},
+            }, "owner": "story:import:current"},
         {"method": "POST", "path": "/api/chats/import", "body": {
             "data": {"format": "sonder.story.v1", "chat": {"name": "Imported"}},
-        }, "owner": "story:import"},
+            }, "owner": "story:import:current"},
         {"method": "POST", "path": "/api/turns/51/branch", "body": None,
          "owner": "story:3"},
     ]

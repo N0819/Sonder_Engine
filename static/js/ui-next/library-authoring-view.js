@@ -4,7 +4,10 @@ import {
   createStoryEditor,
   createStoryImporter,
 } from "./library-editors/story.js?release=wp07.1";
-import { createPersonEditor } from "./library-editors/character-persona.js?release=wp07.1";
+import {
+  createPersonEditor,
+  createPersonImporter,
+} from "./library-editors/character-persona.js?release=wp07.1";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({
@@ -17,6 +20,8 @@ const COPY = Object.freeze({
   dirty: "Unsaved draft",
   conflict: "This story changed elsewhere. Your draft is still here.",
   failure: "Could not save. Your draft is still here.",
+  previewing: "Generating preview…",
+  previewFailure: "Preview failed. Your draft is still here.",
   back: "Back to story overview",
   backToLibrary: "Back to Library",
 });
@@ -44,6 +49,8 @@ function statusCopy(state, t) {
   if (state.status === "saved") return t(COPY.saved);
   if (state.status === "conflict") return t(COPY.conflict);
   if (state.status === "recoverable-error") return t(COPY.failure);
+  if (state.status === "previewing") return t(COPY.previewing);
+  if (state.status === "generation-error") return state.error || t(COPY.previewFailure);
   return t(COPY.dirty);
 }
 
@@ -91,6 +98,19 @@ export function mountLibraryAuthoring(options = {}) {
       target.replaceChildren(wrapper);
       services.localizer.localize(target);
       onTitle?.("Import story archive");
+      rendering = false;
+      return;
+    }
+    if (["character", "persona"].includes(state.kind) && state.mode === "import") {
+      const wrapper = node(documentRef, "section", "ui-authoring");
+      const back = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.backToLibrary));
+      back.type = "button";
+      back.addEventListener("click", () => services.library.navigate({ type: state.kind, query: {} }));
+      wrapper.append(back, createPersonImporter({ document: documentRef, services, state }));
+      target.dataset.authoringOwner = state.owner;
+      target.replaceChildren(wrapper);
+      services.localizer.localize(target);
+      onTitle?.(`Import ${state.kind}`);
       rendering = false;
       return;
     }

@@ -578,7 +578,7 @@ def import_character(payload, reinterpret=False):
 character_import_warnings = character_card_warnings
 
 
-def recover_greetings_from_source(char_id):
+def recover_greetings_from_source(char_id, *, persist=True, draft=None):
     """Backfill opening.greetings for an already-imported character from its
     stored source card (first_mes + alternate_greetings). Imports made via the
     AI-reinterpret path (or before greeting capture existed) never stored the
@@ -587,7 +587,8 @@ def recover_greetings_from_source(char_id):
     row = q("SELECT id,sheet,source FROM characters WHERE id=?", (char_id,), one=True)
     if not row:
         return None
-    sheet = json.loads(row["sheet"] or "{}")
+    sheet = copy.deepcopy(draft) if isinstance(draft, dict) else json.loads(
+        row["sheet"] or "{}")
     opening = sheet.setdefault("opening", {})
     if opening.get("greetings"):
         return sheet  # already present -- nothing to do
@@ -600,8 +601,9 @@ def recover_greetings_from_source(char_id):
     opening["greetings"] = greetings
     if not opening.get("first_message"):
         opening["first_message"] = greetings[0]["prose"]
-    qi("UPDATE characters SET sheet=? WHERE id=?",
-       (json.dumps(sheet, ensure_ascii=False), char_id))
+    if persist:
+        qi("UPDATE characters SET sheet=? WHERE id=?",
+           (json.dumps(sheet, ensure_ascii=False), char_id))
     return sheet
 
 def import_persona(payload, reinterpret=False):
@@ -839,7 +841,8 @@ def draft_promoted_character(chat_id, name):
         "warnings": character_card_warnings(sheet),
     }
 
-def generate_character(brief, language="en"):
+def generate_character_preview(brief, language="en"):
+    """Generate a complete Character sheet without creating a Library row."""
     authoring = language_pack(language).card("authoring")
     with _silent_provider_stream():
         raw = chat_complete(
@@ -858,7 +861,12 @@ def generate_character(brief, language="en"):
         )
     _require_whole_json(raw)
 
-    sheet = normalize_character_data(parsed)
+    return normalize_character_data(parsed)
+
+
+def generate_character(brief, language="en"):
+    """Compatibility create path; new authoring previews before accepting."""
+    sheet = generate_character_preview(brief, language=language)
     name = character_name(sheet)
 
     cid = qi(
@@ -920,7 +928,7 @@ def _merge_missing_fields(existing, proposed):
     return copy.deepcopy(existing)
 
 
-def fill_character_psychology(char_id, brief):
+def fill_character_psychology(char_id, brief, draft=None):
     """Preview an AI fill of missing psychology/interoception fields.
 
     The existing card remains unchanged until the editor's normal Save action.
@@ -930,7 +938,8 @@ def fill_character_psychology(char_id, brief):
     row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
     if not row:
         raise ValueError("Character not found")
-    stored = json.loads(row["sheet"] or "{}")
+    stored = copy.deepcopy(draft) if isinstance(draft, dict) else json.loads(
+        row["sheet"] or "{}")
     normalized = normalize_character_data(stored)
     payload = {
         "brief": str(brief or "").strip(),
@@ -1125,7 +1134,8 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
     return normalize(merged)
 
 
-def generate_persona(brief, language="en"):
+def generate_persona_preview(brief, language="en"):
+    """Generate a complete Persona sheet without creating a Library row."""
     authoring = language_pack(language).card("authoring")
     with _silent_provider_stream():
         raw = chat_complete(
@@ -1144,7 +1154,12 @@ def generate_persona(brief, language="en"):
         )
     _require_whole_json(raw)
 
-    sheet = normalize_persona_data(parsed)
+    return normalize_persona_data(parsed)
+
+
+def generate_persona(brief, language="en"):
+    """Compatibility create path; new authoring previews before accepting."""
+    sheet = generate_persona_preview(brief, language=language)
     name = persona_name(sheet)
 
     pid = qi(
