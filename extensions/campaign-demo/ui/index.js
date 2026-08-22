@@ -9,12 +9,5 @@
 import { createCampaignView } from "./campaign-view.js";
 
 export function register(sonder) {
-  sonder.registerView(createCampaignView(sonder));
-
-  sonder.registerTopBarButton({
-    id: "campaign-demo-launch",
-    icon: "🗝",
-    title: "Campaign",
-    onClick: () => sonder.openView("campaign-demo")
-  });
+  sonder.registerDestination(createCampaignView(sonder));
 }

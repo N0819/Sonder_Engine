@@ -12,6 +12,6 @@
     ],
     "commit_domains": ["mission"],
     "python": "extension.py",
-    "ui": {"module": "ui/index.js", "css": "ui/campaign.css"}
+    "ui": {"api": 2, "module": "ui/index.js", "css": "ui/campaign.css"}
   }
 }

@@ -710,7 +710,12 @@ function addOnsSettings(documentRef, services) {
       const title = el(documentRef, "span", "ui-settings__field-copy");
       title.append(
         el(documentRef, "strong", "", name),
-        el(documentRef, "small", "", `v${extension.version || "?"} · ${extension.provenance || "local"}`),
+        el(
+          documentRef,
+          "small",
+          "",
+          `v${extension.version || "?"} · Extension UI API ${Number(extension.capabilities?.ui?.api) === 2 ? 2 : 1} · ${extension.provenance || "local"}`,
+        ),
       );
       const enabled = el(documentRef, "span", "ui-settings__provider-credential", extension.enabled ? "Enabled" : "Disabled");
       rowHead.append(title, enabled);
@@ -721,6 +726,8 @@ function addOnsSettings(documentRef, services) {
         const permissionList = el(documentRef, "ul", "ui-settings__permission-list");
         permissions.forEach(permission => permissionList.append(el(documentRef, "li", "", permission)));
         row.append(permissionList);
+      } else {
+        row.append(el(documentRef, "p", "ui-muted", "No additional capabilities were declared."));
       }
       row.append(el(documentRef, "p", "ui-settings__trust-note", extensionTrustText(extension)));
       if (extension.error) row.append(el(documentRef, "p", "ui-settings__extension-error", String(extension.error)));

@@ -99,6 +99,14 @@ matrix](../design/sonder-ui-replacement/WP06_LIBRARY_REVIEW.md) qualify these
 surfaces without claiming the long-form editors and complete action parity
 owned by WP-07 or the later product-surface gate.
 
+WP-12 closes G5 after the intervening Library-authoring, Settings, New Story,
+authentication, and guest packages. Its curated/Legacy theme matrix and mixed
+installed extension corpus prove the native UI API 2 facade, explicit v1
+adapter, destination-specific consumers, owner teardown, plain-language
+capability disclosure, and contained semantic-token CSS. The [WP12
+review](../design/sonder-ui-replacement/wp12/REVIEW.md) records the visual and
+296-test qualification. Production entry cutover remains WP-13.
+
 ## Runtime boundary
 
 - The replacement is delivered by the existing FastAPI process, same-origin.
@@ -152,11 +160,13 @@ explicitly owned, evented, attributed to its caller, independently testable,
 and named for deletion at WP-13. Cross-module behavior goes through imported
 interfaces or DOM events with documented payloads, not a mutable global bag.
 
-The public extension v1 contract remains supported through an adapter on the
-new host until the program explicitly changes that contract. Extension v2 is
-not advertised until registration timing, rendering, permission, attribution,
-failure containment, disable/retire cleanup, routing, and CSS containment all
-have behavioral evidence. See [`EXTENSIONS.md`](EXTENSIONS.md).
+The public extension v1 contract remains supported through a narrow adapter.
+Extension UI v2 is the native owner-bound module facade, selected by
+`capabilities.ui.api: 2`; missing or version 1 declarations receive the v1
+compatibility facade. Every renderable slot has a destination-specific
+consumer, and disable/retire/failure teardown removes its routes and owned
+resources. Supported extension CSS is owner-prefixed, mount-contained, and
+uses public semantic tokens. See [`EXTENSIONS.md`](EXTENSIONS.md).
 
 ## Content, credentials, and persistence
 
@@ -292,6 +302,12 @@ semantic visual vocabulary. Curated themes change semantic tokens, never
 layout. Legacy themes may map values into those tokens but do not own component
 geometry. Icons come from the reviewed local SVG family and retain accessible
 names where the symbol alone is not established.
+
+The curated themes are Carbon Signal, Ash & Brass, Midnight Ink, and Parchment
+Night. Appearance preflight applies the chosen theme synchronously before the
+module graph starts. Legacy palette values map into the same semantic roles;
+effects, contrast, text size, reduced motion, and Accessibility Mode remain
+independent preferences rather than theme side effects.
 
 Foundation source responsibilities are fixed: `tokens.css` defines geometry,
 motion, type, layering, and semantic color roles; theme files only override

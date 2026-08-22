@@ -2133,7 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-06 complete and G3 locked.** Replace the
+**Approved target 2026-08-21; WP-12 complete and G5 locked.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2212,9 +2212,16 @@ owner-scoped route/mutation runtime, responsive ledger/detail treatment,
 Japanese catalog closure, deterministic 32-case matrix, findings, and
 qualification are recorded in
 [`design/sonder-ui-replacement/WP06_LIBRARY_REVIEW.md`](design/sonder-ui-replacement/WP06_LIBRARY_REVIEW.md).
-WP-07 is next and owns Library editors and remaining authoring parity. New
-Story, global Settings/editors, auth/guest replacement, installed-extension
-compatibility, cutover, and final qualification remain under later packages.
+WP-07's reference-port review records the Library editor and authoring parity
+tranche. WP-08 through WP-11 replace Settings, New Story, host authentication,
+and guest join/play respectively, with their reviews under
+`design/sonder-ui-replacement/wp08` through `wp11`. WP-12's four curated
+themes, Legacy mapping, installed v1/v2 corpus, versioned native extension UI
+facade, destination-specific slot consumers, lifecycle cleanup, CSS contract,
+screenshots, and 296-test qualification are recorded in
+[`design/sonder-ui-replacement/wp12/REVIEW.md`](design/sonder-ui-replacement/wp12/REVIEW.md).
+G5 is locked. WP-13 cutover and deletion, then WP-14 exact-head final
+qualification, remain; this roadmap entry therefore stays open.
 
 ### 2.2 Make stance auditable
 

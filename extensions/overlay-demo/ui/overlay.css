@@ -1,9 +1,7 @@
 /* Every class is prefixed `ext-overlay-demo-`. The host's stylesheet is not
    namespaced, so an unprefixed `.shell` here would restyle the app.
 
-   Colours come from the host's custom properties rather than literals, so the
-   view follows the reader's theme instead of being one more thing they have to
-   theme separately. */
+   Colours come from the replacement host's public semantic tokens. */
 
 .ext-overlay-demo-shell {
   display: flex;
@@ -14,16 +12,7 @@
   margin: 0 auto;
 }
 
-.ext-overlay-demo-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--bd);
-  padding-bottom: 12px;
-}
-
-.ext-overlay-demo-head h2 {
+.ext-overlay-demo-title {
   margin: 0;
   font-size: 18px;
 }
@@ -38,7 +27,7 @@
 .ext-overlay-demo-empty,
 .ext-overlay-demo-status {
   margin: 0;
-  color: var(--dim);
+  color: var(--ui-color-text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -47,18 +36,18 @@
   width: 100%;
   resize: vertical;
   padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--bd);
-  background: var(--bg2);
-  color: var(--fg);
+  border-radius: var(--ui-radius-md);
+  border: 1px solid var(--ui-color-border);
+  background: var(--ui-color-canvas);
+  color: var(--ui-color-text);
   font: inherit;
 }
 
-.ext-overlay-demo-close {
-  background: var(--bg3);
-  color: var(--fg);
-  border: 1px solid var(--bd);
-  border-radius: 8px;
+.ext-overlay-demo-save {
+  background: var(--ui-color-interactive-soft);
+  color: var(--ui-color-interactive-strong);
+  border: 1px solid var(--ui-color-interactive);
+  border-radius: var(--ui-radius-md);
   padding: 6px 12px;
   cursor: pointer;
 }

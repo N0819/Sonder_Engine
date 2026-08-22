@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "ext_api": 1,
   "name": "Overlay (demo)",
-  "description": "A reference total-conversion extension: an ES module split across files, a toolbar launcher, a full-window view over the transcript, and a standing block of narration context the story is told through.",
+  "description": "A reference extension-v2 module: an owner-bound destination split across files and a standing block of narration context the story is told through.",
   "capabilities": {
     "chat_state": true,
     "routes": [
@@ -11,6 +11,6 @@
       {"method": "POST", "path": "/frame", "description": "Install or clear that frame."}
     ],
     "python": "extension.py",
-    "ui": {"module": "ui/index.js", "css": "ui/overlay.css"}
+    "ui": {"api": 2, "module": "ui/index.js", "css": "ui/overlay.css"}
   }
 }

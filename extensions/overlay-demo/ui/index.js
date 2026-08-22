@@ -9,12 +9,5 @@
 import { createFrameView } from "./frame-view.js";
 
 export function register(sonder) {
-  sonder.registerView(createFrameView(sonder));
-
-  sonder.registerTopBarButton({
-    id: "overlay-demo-launch",
-    icon: "🛰",
-    title: "Story frame",
-    onClick: () => sonder.openView("overlay-frame")
-  });
+  sonder.registerDestination(createFrameView(sonder));
 }

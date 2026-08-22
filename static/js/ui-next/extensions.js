@@ -75,6 +75,7 @@ export function createExtensionRegistry(options = {}) {
   const assets = new Map();
   const teardowns = new Map();
   const pendingModules = new Map();
+  const uiApiVersions = new Map();
   const listeners = new Set();
   const importModule = options.importModule || (href => import(href));
   const documentRef = options.document || document;
@@ -159,6 +160,7 @@ export function createExtensionRegistry(options = {}) {
     }
     callTeardowns(owner);
     dropAssets(owner);
+    uiApiVersions.delete(owner);
     if (unregisterOptions.retire) retired.add(owner);
     emit();
     return true;
@@ -227,7 +229,10 @@ export function createExtensionRegistry(options = {}) {
       const module = await importModule(href);
       if (typeof module?.register !== "function") return true;
       const faultsBefore = faults.get(owner) || 0;
-      const registered = await safe(owner, module.register, facade(owner));
+      const moduleFacade = (uiApiVersions.get(owner) || 1) >= 2
+        ? facade(owner)
+        : legacyFacade(owner);
+      const registered = await safe(owner, module.register, moduleFacade);
       if ((faults.get(owner) || 0) > faultsBefore) return false;
       if (typeof registered === "function") addTeardown(owner, registered);
       else if (typeof registered?.teardown === "function") {
@@ -277,6 +282,7 @@ export function createExtensionRegistry(options = {}) {
     dropAssets(owner);
     const ui = extension.capabilities?.ui;
     if (!ui || typeof ui !== "object") return { id: owner, loaded: true };
+    uiApiVersions.set(owner, Math.max(1, Number(ui.api || 1)));
     const encoded = encodeURIComponent(owner);
     const pending = [];
     if (ui.css) {
@@ -418,15 +424,62 @@ export function createExtensionRegistry(options = {}) {
     reroll: turnId => api("POST", `/api/turns/${encodeURIComponent(turnId)}/reroll`, {}),
   });
 
-  let makeFacade = null;
-  const facade = (ownerValue) => makeFacade(ownerId(ownerValue));
-  makeFacade = options.makeFacade || (owner => {
-    throw new ExtensionRegistryError(
-      "extension-facade",
-      `No v1 facade factory is installed for ${owner}.`,
-    );
+  const V2_TOKENS = Object.freeze({
+    canvas: "--ui-color-canvas",
+    surface: "--ui-color-surface-muted",
+    text: "--ui-color-text",
+    border: "--ui-color-border",
+    accent: "--ui-color-interactive",
+    danger: "--ui-color-danger",
   });
+  const V2_REGISTRATIONS = Object.freeze({
+    registerDestination: ["destination", "render"],
+    registerLibraryType: ["library-type", "render"],
+    registerPlayTool: ["play-tool", "render"],
+    registerSettingsSection: ["addon-settings", "render"],
+    registerTaskProvider: ["task-provider", "provide"],
+  });
+  const createV2Facade = owner => {
+    const bound = {
+      apiVersion: 2,
+      id: owner,
+      tokens: V2_TOKENS,
+      state,
+      chats,
+      api: (method, path, body) => withOwner(owner, () => api(method, path, body)),
+      call: (method, path, body) => withOwner(owner, () => call(owner, method, path, body)),
+      notify: definition => withOwner(owner, () => notify(definition)),
+      dismissNotice: id => withOwner(owner, () => dismissNotice(id)),
+      on: (event, callback) => withOwner(owner, () => on(event, callback)),
+      off: (event, callback) => withOwner(owner, () => off(event, callback)),
+      addTeardown: teardown => addTeardown(owner, teardown),
+      refresh: () => options.onRefresh?.(),
+      openStory: chatId => options.onOpenStory?.(chatId) ?? Promise.resolve(null),
+    };
+    for (const [name, [kind, callbackName]] of Object.entries(V2_REGISTRATIONS)) {
+      bound[name] = definition => {
+        if (!definition?.id || typeof definition[callbackName] !== "function") return false;
+        return register(owner, kind, definition);
+      };
+    }
+    return Object.freeze(bound);
+  };
+
+  let makeFacade = options.makeFacade || createV2Facade;
+  let makeLegacyFacade = null;
+  const facade = ownerValue => makeFacade(ownerId(ownerValue));
+  const legacyFacade = ownerValue => {
+    const owner = ownerId(ownerValue);
+    if (typeof makeLegacyFacade !== "function") {
+      throw new ExtensionRegistryError(
+        "extension-v1-facade",
+        `No extension-v1 adapter is installed for ${owner}.`,
+      );
+    }
+    return makeLegacyFacade(owner);
+  };
   const setFacadeFactory = factory => { makeFacade = factory; };
+  const setLegacyFacadeFactory = factory => { makeLegacyFacade = factory; };
 
   return Object.freeze({
     register,
@@ -464,5 +517,6 @@ export function createExtensionRegistry(options = {}) {
     openStory: chatId => options.onOpenStory?.(chatId) ?? Promise.resolve(null),
     facade,
     setFacadeFactory,
+    setLegacyFacadeFactory,
   });
 }

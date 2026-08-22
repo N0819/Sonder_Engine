@@ -4,16 +4,14 @@
  * extension should follow: the host's stylesheet is not namespaced, so an
  * unprefixed `.card` here would restyle every card in the app.
  *
- * Colours come from the host's custom properties rather than literals, so the
- * panel follows the reader's theme instead of fighting it. An extension that
- * WANTS to override the theme sets those properties on `:root` -- that is the
- * supported way to ship a full theme, and it is deliberately available.
+ * Colours come from the replacement host's public semantic tokens, so the
+ * panel follows every curated and mapped Legacy theme.
  */
 
 .ext-cohesion-demo-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--control-radius, 8px);
+  background: var(--ui-color-surface-muted);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
   padding: 12px;
   margin: 8px;
 }
@@ -31,14 +29,15 @@
   height: 8px;
   border-radius: 999px;
   overflow: hidden;
-  background: var(--bg3);
+  background: var(--ui-color-canvas-subtle);
 }
 
 .ext-cohesion-demo-fill { height: 100%; transition: width .3s ease; }
 
 .ext-cohesion-demo-note,
-.ext-cohesion-demo-evidence-label {
-  color: var(--muted);
+.ext-cohesion-demo-evidence-label,
+.ext-cohesion-demo-empty {
+  color: var(--ui-color-text-muted);
   font-size: 12px;
   margin-top: 8px;
 }

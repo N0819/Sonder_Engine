@@ -958,6 +958,7 @@ def test_add_ons_discloses_permissions_and_runs_current_extension_lifecycle(
                             "description": "Adds a story tool.",
                             "provenance": "git:https://example.invalid/sample",
                             "trust": "code",
+                            "capabilities": {"ui": {"api": 2}},
                             "disclosures": ["Read story state", "Run code in the engine process"],
                             "enabled": enabled["value"],
                             "updatable": True,
@@ -992,6 +993,7 @@ def test_add_ons_discloses_permissions_and_runs_current_extension_lifecycle(
     expect(page.get_by_role("heading", name="Add-ons", level=2)).to_be_visible()
     expect(page.locator(".ui-settings__extension-list")).to_have_attribute("data-extension-count", "1")
     expect(page.get_by_text("Sample Extension", exact=True)).to_be_visible()
+    expect(page.get_by_text(re.compile(r"Extension UI API 2"))).to_be_visible()
     page.get_by_role("button", name="Enable Sample Extension").click()
     expect(page.get_by_text("Nothing has reviewed this code.", exact=True)).to_be_visible()
     expect(

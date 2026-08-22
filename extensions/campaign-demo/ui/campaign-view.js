@@ -21,8 +21,9 @@ async function draw(sonder, container) {
 
   let data;
   try {
-    data = await sonder.api("/api/extensions/campaign-demo/x/campaign"
-      + "?chat_id=" + encodeURIComponent(sonder.chatId || ""));
+    const { chatId } = sonder.state();
+    data = await sonder.call("GET", "/x/campaign"
+      + "?chat_id=" + encodeURIComponent(chatId || ""));
   } catch (err) {
     root.appendChild(el("p", "campaign-demo__note", "Could not read the campaign."));
     return;
@@ -34,8 +35,7 @@ async function draw(sonder, container) {
     const start = el("button", "campaign-demo__start", "Start “The Sealed Wing”");
     start.addEventListener("click", async () => {
       start.disabled = true;
-      const made = await sonder.api("/api/extensions/campaign-demo/x/start",
-        { method: "POST", body: {} });
+      const made = await sonder.call("POST", "/x/start", {});
       // The host owns which story is open; a campaign that navigated on its own
       // would be deciding that for a player who might be mid-beat elsewhere.
       root.appendChild(el("p", "campaign-demo__note",
