@@ -686,6 +686,7 @@ def test_localizer_applies_explicit_chrome_rules_and_preserves_data(
               "Story title": "物語のタイトル",
               "Saved {count} stories": "{count}件の物語を保存しました",
               "${name} is ready": "${name}の準備ができました",
+              "${index} of ${total}": "${total}件中${index}件目",
               [longSource]: longTarget,
             },
           });
@@ -723,6 +724,7 @@ def test_localizer_applies_explicit_chrome_rules_and_preserves_data(
             exact: localizer.t("Open story"),
             variable: localizer.t("Saved {count} stories", { count: 3 }),
             template: localizer.t("Aya is ready"),
+            dollarVariables: localizer.t("${index} of ${total}", { index: 2, total: 4 }),
             longCopy: localizer.t(longSource) === longTarget,
             chrome: chrome.textContent,
             chromeTitle: chrome.title,
@@ -743,6 +745,7 @@ def test_localizer_applies_explicit_chrome_rules_and_preserves_data(
         "exact": "物語を開く",
         "variable": "3件の物語を保存しました",
         "template": "Ayaの準備ができました",
+        "dollarVariables": "4件中2件目",
         "longCopy": True,
         "chrome": "物語を開く",
         "chromeTitle": "物語を開く",

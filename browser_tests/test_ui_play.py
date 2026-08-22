@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from urllib.parse import urlparse
 
 from playwright.sync_api import Page, expect
@@ -175,7 +176,7 @@ def test_turn_actions_and_reroll_warning_are_touch_discoverable(
         ),
     )
 
-    for name in ("Edit", "Reroll", "More"):
+    for name in ("Edit", "Reroll", "Versions", "More"):
         expect(page.get_by_role("button", name=name, exact=True)).to_be_visible()
     page.get_by_role("button", name="Reroll", exact=True).click()
     dialog = page.get_by_role("dialog", name="Reroll this turn?")
@@ -190,6 +191,7 @@ def test_keyboard_send_and_short_landscape_keep_composer_action_visible(
 ) -> None:
     page.set_viewport_size({"width": 844, "height": 390})
     _open_play(page, ui_base_url)
+    expect(page.get_by_role("button", name="New turn", exact=True)).to_be_hidden()
     requests: list[dict] = []
 
     def serve_turn(route) -> None:
@@ -505,3 +507,263 @@ def test_stream_transport_can_discard_token_history_while_delivering_events(
         "data": None,
         "seen": ["step_start", "token", "done"],
     }
+
+
+def test_whitespace_only_input_is_not_confused_with_empty_continue(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_play(page, ui_base_url)
+    requests: list[dict] = []
+    page.route("**/api/chats/1/turns", lambda route: requests.append(route.request.post_data_json))
+    composer = page.get_by_role("textbox", name="What do you do or say?")
+    composer.fill("   ")
+    page.get_by_role("button", name="Send", exact=True).click()
+    expect(page.get_by_role("alert")).to_have_text(
+        "Remove the spaces to send an empty continue turn."
+    )
+    assert requests == []
+
+
+def test_story_rename_and_portable_archive_export_use_current_routes(
+    page: Page, ui_base_url: str
+) -> None:
+    name = {"value": "Lantern Archive"}
+
+    def story_handler(chat_id: int) -> dict:
+        payload = _story(chat_id)
+        if chat_id == 1:
+            payload["chat"]["name"] = name["value"]
+        return payload
+
+    _open_play(page, ui_base_url, story_handler=story_handler)
+
+    def save_name(route) -> None:
+        if route.request.method == "GET":
+            route.fulfill(
+                content_type="application/json",
+                body=json.dumps(story_handler(1)),
+            )
+            return
+        name["value"] = route.request.post_data_json["name"]
+        route.fulfill(content_type="application/json", body='{"ok":true}')
+
+    page.route("**/api/chats/1", save_name)
+    page.route(
+        "**/api/chats/1/export",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"chat": {"name": name["value"]}, "turns": []}),
+        ),
+    )
+    page.get_by_role("button", name="Story actions").click()
+    page.get_by_role("button", name="Rename story", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Rename story")
+    dialog.get_by_role("textbox", name="Rename story").fill("The Brass Archive")
+    dialog.get_by_role("button", name="Save", exact=True).click()
+    expect(page.get_by_role("heading", name="The Brass Archive", level=2)).to_be_visible()
+
+    with page.expect_download() as download_info:
+        page.get_by_role("button", name="Export archive", exact=True).click()
+    assert download_info.value.suggested_filename == "The_Brass_Archive.json"
+
+
+def test_latest_turn_versions_switch_immediately_and_persist(
+    page: Page, ui_base_url: str
+) -> None:
+    selected: list[int] = []
+    _open_play(
+        page,
+        ui_base_url,
+        story_handler=lambda chat_id: _story(
+            chat_id,
+            [_turn(12, 0, "Wait", "The first telling.")],
+        ),
+    )
+
+    def narration(route) -> None:
+        if route.request.method == "GET":
+            route.fulfill(
+                content_type="application/json",
+                body=json.dumps(
+                    {
+                        "variants": [
+                            {"id": 1, "active": True, "prose": "The first telling."},
+                            {"id": 2, "active": False, "prose": "The second telling."},
+                        ]
+                    }
+                ),
+            )
+            return
+        selected.append(route.request.post_data_json["variant_id"])
+        route.fulfill(content_type="application/json", body='{"ok":true}')
+
+    page.route("**/api/turns/12/narration", narration)
+    page.get_by_role("button", name="Versions", exact=True).click()
+    dialog = page.get_by_role("dialog", name="Versions")
+    dialog.get_by_role("button", name="Next version").click()
+    expect(dialog).to_contain_text("The second telling.")
+    expect(dialog).to_contain_text("2 of 2")
+    dialog.press("ArrowLeft")
+    expect(dialog).to_contain_text("The first telling.")
+    assert selected == [2, 1]
+
+
+def test_confirmed_reroll_uses_the_existing_streaming_endpoint(
+    page: Page, ui_base_url: str
+) -> None:
+    rerolls: list[str] = []
+    _open_play(
+        page,
+        ui_base_url,
+        story_handler=lambda chat_id: _story(
+            chat_id,
+            [_turn(12, 0, "Wait", "Rain crosses the windows.")],
+        ),
+    )
+
+    def reroll(route) -> None:
+        rerolls.append(route.request.method)
+        route.fulfill(
+            content_type="application/x-ndjson",
+            body=json.dumps({"type": "done", "turn_id": 12}) + "\n",
+        )
+
+    page.route("**/api/turns/12/reroll", reroll)
+    page.get_by_role("button", name="Reroll", exact=True).click()
+    with page.expect_request("**/api/turns/12/reroll"):
+        page.get_by_role("dialog", name="Reroll this turn?").get_by_role(
+            "button", name="Reroll", exact=True
+        ).click()
+    expect(page.get_by_role("button", name="Send", exact=True)).to_be_visible()
+    assert rerolls == ["POST"]
+
+
+def test_story_threads_filter_transcript_without_copying_drafts(
+    page: Page, ui_base_url: str
+) -> None:
+    def story_handler(chat_id: int) -> dict:
+        payload = _story(
+            chat_id,
+            [
+                _turn(1, 0, "Present action", "The present continues."),
+                {**_turn(2, 1, "Elsewhere", "The side thread continues."), "frame_id": 5},
+            ],
+        )
+        payload["frames"] = [
+            {"id": None, "label": "Present", "kind": "present", "ordinal": 0},
+            {"id": 5, "label": "Courtyard", "kind": "branch", "ordinal": 1},
+        ]
+        return payload
+
+    _open_play(page, ui_base_url, story_handler=story_handler)
+    expect(page.get_by_text("The present continues.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Courtyard", exact=True).click()
+    expect(page).to_have_url(re.compile(r"#/play\?chat=1&frame=5$"))
+    expect(page.get_by_text("The side thread continues.", exact=True)).to_be_visible()
+    assert page.get_by_text("The present continues.", exact=True).count() == 0
+
+
+def test_japanese_localizes_late_play_dialogs_but_not_story_data(
+    page: Page, ui_base_url: str
+) -> None:
+    catalog = json.loads(
+        (Path(__file__).parents[1] / "language_packs" / "ja" / "ui.json")
+        .read_text(encoding="utf-8")
+    )
+    boot = _bootstrap()
+    boot.update({"ui_language": "ja", "ui_messages": catalog})
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(boot, ensure_ascii=False)
+        ),
+    )
+    payload = _story(
+        1, [_turn(12, 0, "Wait beneath the window", "Rain crosses the archive windows.")]
+    )
+    page.route(
+        re.compile(r".*/api/chats/\d+$"),
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(payload)
+        ),
+    )
+    response = page.goto(f"{ui_base_url}/static/ui-next.html#/play?chat=1")
+    assert response is not None and response.ok
+    page.wait_for_selector("[data-play-composer]")
+
+    expect(page.get_by_role("heading", name="Lantern Archive", level=2)).to_be_visible()
+    expect(page.get_by_text("Rain crosses the archive windows.", exact=True)).to_be_visible()
+    expect(page.get_by_role("textbox", name="何をする、または何と言いますか？")).to_be_visible()
+    expect(page.get_by_role("button", name="送信", exact=True)).to_be_visible()
+    page.get_by_role("button", name="リロール", exact=True).click()
+    dialog = page.get_by_role("dialog", name="このターンを再生成しますか？")
+    expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("button", name="リロール", exact=True)).to_be_focused()
+
+
+def test_turn_edit_details_delete_and_branch_use_current_routes(
+    page: Page, ui_base_url: str
+) -> None:
+    calls: list[tuple[str, str, dict | None]] = []
+    _open_play(
+        page,
+        ui_base_url,
+        story_handler=lambda chat_id: _story(
+            chat_id,
+            [_turn(12, 0, "Wait", "Rain crosses the windows.")],
+        ),
+    )
+
+    def mutation(route) -> None:
+        body = route.request.post_data_json if route.request.post_data else None
+        calls.append((route.request.method, urlparse(route.request.url).path, body))
+        route.fulfill(content_type="application/json", body='{"ok":true}')
+
+    page.route("**/api/turns/12/input", mutation)
+    page.route("**/api/turns/12/prose", mutation)
+    page.route("**/api/turns/12", mutation)
+    page.route(
+        "**/api/turns/12/pipeline",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"steps": [{"key": "narrator", "label": "Write the scene"}]}),
+        ),
+    )
+    page.route(
+        "**/api/turns/12/branch",
+        lambda route: route.fulfill(content_type="application/json", body='{"id":2}'),
+    )
+
+    page.get_by_role("button", name="Edit", exact=True).click()
+    edit_input = page.get_by_role("dialog", name="Edit player input")
+    edit_input.get_by_role("textbox", name="Edit player input").fill("Open the door")
+    edit_input.get_by_role("button", name="Save", exact=True).click()
+
+    page.get_by_role("button", name="More", exact=True).click()
+    page.get_by_role("menuitem", name="Edit narration", exact=True).click()
+    edit_prose = page.get_by_role("dialog", name="Edit narration")
+    edit_prose.get_by_role("textbox", name="Edit narration").fill("The door opens.")
+    edit_prose.get_by_role("button", name="Save", exact=True).click()
+
+    page.get_by_role("button", name="More", exact=True).click()
+    page.get_by_role("menuitem", name="Turn details", exact=True).click()
+    details = page.get_by_role("dialog", name="Turn details")
+    expect(details).to_contain_text("Write the scene")
+    details.get_by_role("button", name="Close", exact=True).click()
+
+    page.get_by_role("button", name="More", exact=True).click()
+    page.get_by_role("menuitem", name="Delete turn", exact=True).click()
+    page.get_by_role("dialog", name="Delete the latest turn?").get_by_role(
+        "button", name="Delete turn", exact=True
+    ).click()
+
+    page.get_by_role("button", name="More", exact=True).click()
+    with page.expect_request("**/api/turns/12/branch"):
+        page.get_by_role("menuitem", name="Branch here", exact=True).click()
+    expect(page).to_have_url(re.compile(r"#/play\?chat=2$"))
+
+    assert calls == [
+        ("PUT", "/api/turns/12/input", {"input": "Open the door"}),
+        ("PUT", "/api/turns/12/prose", {"prose": "The door opens."}),
+        ("DELETE", "/api/turns/12", None),
+    ]

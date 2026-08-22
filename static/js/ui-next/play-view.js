@@ -29,8 +29,40 @@ const COPY = Object.freeze({
   turnDetails: "Turn details",
   deleteTurn: "Delete turn",
   advanced: "Advanced technical detail",
+  cancel: "Cancel",
+  close: "Close",
+  save: "Save",
+  continue: "Continue",
+  editPlayerInput: "Edit player input",
+  rerollTitle: "Reroll this turn?",
+  rerollWarning: "This restores world state, memories, and lorebooks to the start of this turn, including changes made since then.",
+  editNarrationDetail: "This changes only the words shown for the beat. World state and memory stay as recorded.",
+  deleteTitle: "Delete the latest turn?",
+  deleteWarning: "The story returns to the point before this turn. This cannot be undone here.",
+  currentStory: "Current story",
+  storyThreads: "Story threads",
+  present: "Present",
+  transcript: "Story transcript",
+  composerLabel: "What do you do or say?",
+  saving: "Saving this turn…",
+  generationStopped: "Generation stopped",
+  loadingDetails: "Loading turn details…",
+  detailsUnavailable: "Turn details are unavailable.",
+  loadingVersions: "Loading versions…",
+  oneVersion: "This turn has one version.",
+  versionsUnavailable: "Versions are unavailable.",
+  previousVersion: "Previous version",
+  nextVersion: "Next version",
+  variantCount: "${index} of ${total}",
+  saveFailure: "That change could not be saved.",
+  untitledStory: "Untitled story",
+  earlierStep: "an earlier step",
+  superseded: "Superseded — this text was written before “${label}” was re-run.",
+  partlyOutdated: "Partly out of date — steps from “${label}” onward were not recomputed.",
 });
 // UI_CATALOG_END
+
+let dialogSequence = 0;
 
 function element(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);
@@ -42,6 +74,16 @@ function element(documentRef, tag, className = "", text = "") {
 function button(documentRef, label, className = "ui-button ui-button--quiet") {
   const node = element(documentRef, "button", className, label);
   node.type = "button";
+  return node;
+}
+
+function markData(node) {
+  node.setAttribute("translate", "no");
+  return node;
+}
+
+function localize(services, node) {
+  services?.localizer?.localize(node);
   return node;
 }
 
@@ -58,12 +100,12 @@ function emptyState(documentRef, title, detail) {
 function createDialogHost(documentRef, title, options = {}) {
   const overlay = documentRef.querySelector("[data-shell-overlay-host]") || documentRef.body;
   const dialog = element(documentRef, "dialog", "ui-dialog ui-play-dialog");
-  dialog.setAttribute("aria-labelledby", `play-dialog-${Math.random().toString(36).slice(2)}`);
+  dialog.setAttribute("aria-labelledby", `play-dialog-${++dialogSequence}`);
   const heading = element(documentRef, "h2", "ui-heading ui-heading--2", title);
   heading.id = dialog.getAttribute("aria-labelledby");
   const body = element(documentRef, "div", "ui-play-dialog__body");
   const actions = element(documentRef, "div", "ui-play-dialog__actions");
-  const cancel = button(documentRef, options.cancelLabel || "Cancel");
+  const cancel = button(documentRef, options.cancelLabel || COPY.cancel);
   cancel.addEventListener("click", () => dialog.close("cancel"));
   actions.append(cancel);
   dialog.append(heading, body, actions);
@@ -74,11 +116,12 @@ function createDialogHost(documentRef, title, options = {}) {
     dialog.close("cancel");
   });
   dialog.showModal();
+  localize(options.services, dialog);
   return { dialog, body, actions, cancel };
 }
 
 function textDialog(documentRef, title, initialValue, options = {}) {
-  const host = createDialogHost(documentRef, title);
+  const host = createDialogHost(documentRef, title, { services: options.services });
   if (options.description) {
     host.body.append(element(documentRef, "p", "ui-muted", options.description));
   }
@@ -90,8 +133,9 @@ function textDialog(documentRef, title, initialValue, options = {}) {
   const error = element(documentRef, "p", "ui-play-dialog__error");
   error.setAttribute("role", "alert");
   host.body.append(error);
-  const save = button(documentRef, options.saveLabel || "Save", "ui-button ui-button--primary");
+  const save = button(documentRef, options.saveLabel || COPY.save, "ui-button ui-button--primary");
   host.actions.append(save);
+  localize(options.services, host.dialog);
   save.addEventListener("click", async () => {
     save.disabled = true;
     error.textContent = "";
@@ -100,7 +144,8 @@ function textDialog(documentRef, title, initialValue, options = {}) {
       host.dialog.close("saved");
     } catch (failure) {
       save.disabled = false;
-      error.textContent = failure?.userMessage || failure?.message || "That change could not be saved.";
+      error.textContent = failure?.userMessage || failure?.message || COPY.saveFailure;
+      localize(options.services, error);
     }
   });
   queueMicrotask(() => field.focus());
@@ -109,14 +154,18 @@ function textDialog(documentRef, title, initialValue, options = {}) {
 
 function confirmDialog(documentRef, title, description, options = {}) {
   return new Promise(resolve => {
-    const host = createDialogHost(documentRef, title, { cancelLabel: "Cancel" });
+    const host = createDialogHost(documentRef, title, {
+      cancelLabel: COPY.cancel,
+      services: options.services,
+    });
     host.body.append(element(documentRef, "p", "ui-play-dialog__copy", description));
     const confirm = button(
       documentRef,
-      options.confirmLabel || "Continue",
+      options.confirmLabel || COPY.continue,
       `ui-button ${options.danger ? "ui-button--danger" : "ui-button--primary"}`,
     );
     host.actions.append(confirm);
+    localize(options.services, host.dialog);
     confirm.addEventListener("click", () => host.dialog.close("confirmed"));
     host.dialog.addEventListener("close", () => resolve(host.dialog.returnValue === "confirmed"), { once: true });
     queueMicrotask(() => confirm.focus());
@@ -142,6 +191,7 @@ function storyChoice(documentRef, services, currentId) {
   select.setAttribute("aria-label", COPY.switchStory);
   for (const chat of services.store.getSnapshot().library.chats || []) {
     const option = element(documentRef, "option", "", chat.name || `Story ${chat.id}`);
+    markData(option);
     option.value = String(chat.id);
     option.selected = Number(chat.id) === Number(currentId);
     select.append(option);
@@ -155,7 +205,7 @@ function renderNoStory(documentRef, services) {
   const state = emptyState(documentRef, COPY.chooseStory, COPY.chooseDetail);
   const actions = element(documentRef, "div", "ui-play__empty-actions");
   for (const chat of (services.store.getSnapshot().library.chats || []).slice(0, 4)) {
-    const open = button(documentRef, chat.name || `Story ${chat.id}`);
+    const open = markData(button(documentRef, chat.name || `Story ${chat.id}`));
     open.addEventListener("click", () => services.play.openStory(chat.id));
     actions.append(open);
   }
@@ -183,14 +233,14 @@ function renderUnavailable(documentRef, services, story) {
 
 function staleNote(documentRef, turn) {
   if (!turn.stale_from) return null;
-  const label = String(turn.stale_from.label || "an earlier step");
+  const label = String(turn.stale_from.label || COPY.earlierStep);
   return element(
     documentRef,
     "p",
     "ui-play__stale",
     turn.prose_stale
-      ? `Superseded — this text was written before “${label}” was re-run.`
-      : `Partly out of date — steps from “${label}” onward were not recomputed.`,
+      ? COPY.superseded.replace("${label}", label)
+      : COPY.partlyOutdated.replace("${label}", label),
   );
 }
 
@@ -210,9 +260,13 @@ function closeMenu(menu) {
 }
 
 function turnDetailsDialog(documentRef, services, turn) {
-  const host = createDialogHost(documentRef, COPY.turnDetails, { cancelLabel: "Close" });
-  const loading = element(documentRef, "p", "ui-muted", "Loading turn details…");
+  const host = createDialogHost(documentRef, COPY.turnDetails, {
+    cancelLabel: COPY.close,
+    services,
+  });
+  const loading = element(documentRef, "p", "ui-muted", COPY.loadingDetails);
   host.body.append(loading);
+  localize(services, host.body);
   void services.play.pipeline(turn.id).then(payload => {
     const steps = Array.isArray(payload?.steps) ? payload.steps : [];
     const list = element(documentRef, "ol", "ui-play__step-list");
@@ -222,34 +276,44 @@ function turnDetailsDialog(documentRef, services, turn) {
     const advanced = element(documentRef, "details", "ui-play__advanced");
     advanced.append(
       element(documentRef, "summary", "", COPY.advanced),
-      element(documentRef, "pre", "ui-play__technical", JSON.stringify(payload, null, 2)),
+      markData(element(documentRef, "pre", "ui-play__technical", JSON.stringify(payload, null, 2))),
     );
     host.body.replaceChildren(list, advanced);
+    localize(services, host.body);
   }).catch(error => {
-    loading.textContent = error?.userMessage || error?.message || "Turn details are unavailable.";
+    loading.textContent = error?.userMessage || error?.message || COPY.detailsUnavailable;
+    localize(services, loading);
   });
 }
 
 async function versionsDialog(documentRef, services, turn, proseModule) {
-  const host = createDialogHost(documentRef, COPY.versions, { cancelLabel: "Close" });
-  host.body.append(element(documentRef, "p", "ui-muted", "Loading versions…"));
+  const host = createDialogHost(documentRef, COPY.versions, {
+    cancelLabel: COPY.close,
+    services,
+  });
+  host.body.append(element(documentRef, "p", "ui-muted", COPY.loadingVersions));
+  localize(services, host.body);
   try {
     const payload = await services.play.variants(turn.id);
     const variants = Array.isArray(payload?.variants) ? payload.variants : [];
     if (!variants.length) {
-      host.body.replaceChildren(element(documentRef, "p", "ui-muted", "This turn has one version."));
+      host.body.replaceChildren(element(documentRef, "p", "ui-muted", COPY.oneVersion));
+      localize(services, host.body);
       return;
     }
     let index = Math.max(0, variants.findIndex(variant => variant.active));
     const preview = element(documentRef, "div", "ui-play__variant-preview");
     const count = element(documentRef, "span", "ui-play__variant-count");
-    const previous = button(documentRef, "Previous version");
-    const next = button(documentRef, "Next version");
+    const previous = button(documentRef, COPY.previousVersion);
+    const next = button(documentRef, COPY.nextVersion);
     const controls = element(documentRef, "div", "ui-play__variant-controls");
     controls.append(previous, count, next);
     const paint = () => {
       const variant = variants[index];
-      count.textContent = `${index + 1} of ${variants.length}`;
+      count.textContent = services.localizer.t(COPY.variantCount, {
+        index: index + 1,
+        total: variants.length,
+      });
       proseModule.renderProse(preview, variant.prose || "…", {
         speech: turn.speech,
         colors: services.store.getSnapshot().story.data?.dialogue_colors,
@@ -272,23 +336,24 @@ async function versionsDialog(documentRef, services, turn, proseModule) {
     });
     paint();
     host.body.replaceChildren(preview, controls);
+    localize(services, host.body);
   } catch (error) {
     host.body.replaceChildren(element(
       documentRef, "p", "ui-play-dialog__error",
-      error?.userMessage || error?.message || "Versions are unavailable.",
+      error?.userMessage || error?.message || COPY.versionsUnavailable,
     ));
+    localize(services, host.body);
   }
 }
 
 function createTurn(documentRef, services, proseModule, turn, isLatest) {
   const article = element(documentRef, "article", "ui-play__turn");
   article.dataset.turnId = String(turn.id);
-  article.setAttribute("translate", "no");
   if (turn.stale) article.dataset.stale = "true";
   if (turn.player_input) {
-    article.append(element(documentRef, "p", "ui-play__input-echo", turn.player_input));
+    article.append(markData(element(documentRef, "p", "ui-play__input-echo", turn.player_input)));
   }
-  const prose = element(documentRef, "div", "ui-play__prose");
+  const prose = markData(element(documentRef, "div", "ui-play__prose"));
   proseModule.renderProse(prose, turn.prose || "…", {
     speech: turn.speech,
     colors: services.store.getSnapshot().story.data?.dialogue_colors,
@@ -300,9 +365,9 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
   const edit = button(documentRef, COPY.edit);
   edit.addEventListener("click", () => textDialog(
     documentRef,
-    "Edit player input",
+    COPY.editPlayerInput,
     turn.player_input,
-    { multiline: true, onSave: value => services.play.editInput(turn.id, value) },
+    { services, multiline: true, onSave: value => services.play.editInput(turn.id, value) },
   ));
   actions.append(edit);
   if (isLatest) {
@@ -310,9 +375,9 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
     reroll.addEventListener("click", async () => {
       const confirmed = await confirmDialog(
         documentRef,
-        "Reroll this turn?",
-        "This restores world state, memories, and lorebooks to the start of this turn, including changes made since then.",
-        { confirmLabel: "Reroll", danger: true },
+        COPY.rerollTitle,
+        COPY.rerollWarning,
+        { services, confirmLabel: COPY.reroll, danger: true },
       );
       if (confirmed) void services.play.reroll(turn.id);
     });
@@ -327,7 +392,8 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
     closeMenu(more.menu);
     textDialog(documentRef, COPY.editNarration, turn.prose, {
       multiline: true,
-      description: "This changes only the words shown for the beat. World state and memory stay as recorded.",
+      services,
+      description: COPY.editNarrationDetail,
       onSave: value => services.play.editProse(turn.id, value),
     });
   });
@@ -352,9 +418,9 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
       closeMenu(more.menu);
       const confirmed = await confirmDialog(
         documentRef,
-        "Delete the latest turn?",
-        "The story returns to the point before this turn. This cannot be undone here.",
-        { confirmLabel: "Delete turn", danger: true },
+        COPY.deleteTitle,
+        COPY.deleteWarning,
+        { services, confirmLabel: COPY.deleteTurn, danger: true },
       );
       if (confirmed) await services.play.deleteTurn(turn.id);
     });
@@ -362,7 +428,7 @@ function createTurn(documentRef, services, proseModule, turn, isLatest) {
   }
   actions.append(more.menu);
   article.append(actions);
-  return article;
+  return localize(services, article);
 }
 
 function createStoryView(documentRef, services, proseModule, initialState) {
@@ -371,9 +437,12 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const story = initialState.story.data;
   const storyHeader = element(documentRef, "header", "ui-play__story-header");
   const identity = element(documentRef, "div", "ui-play__identity");
-  const storyTitle = element(documentRef, "h2", "ui-heading ui-heading--2", story.chat.name || "Untitled story");
+  const storyTitle = element(
+    documentRef, "h2", "ui-heading ui-heading--2", story.chat.name || COPY.untitledStory,
+  );
+  if (story.chat.name) markData(storyTitle);
   identity.append(
-    element(documentRef, "p", "ui-kicker", "Current story"),
+    element(documentRef, "p", "ui-kicker", COPY.currentStory),
     storyTitle,
   );
   const storyActions = element(documentRef, "div", "ui-play__story-actions");
@@ -382,7 +451,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     documentRef,
     COPY.rename,
     story.chat.name,
-    { onSave: value => services.play.rename(value) },
+    { services, onSave: value => services.play.rename(value) },
   ));
   const archive = button(documentRef, COPY.exportArchive);
   archive.addEventListener("click", async () => downloadArchive(
@@ -396,9 +465,10 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const frames = story.frames || [];
   if (frames.length > 1) {
     const frameBar = element(documentRef, "nav", "ui-play__frames");
-    frameBar.setAttribute("aria-label", "Story threads");
+    frameBar.setAttribute("aria-label", COPY.storyThreads);
     for (const frame of frames) {
-      const frameButton = button(documentRef, frame.id === null ? "Present" : frame.label);
+      const frameButton = button(documentRef, frame.id === null ? COPY.present : frame.label);
+      if (frame.id !== null) markData(frameButton);
       if ((frame.id ?? null) === (initialState.story.frameId ?? null)) {
         frameButton.setAttribute("aria-current", "page");
       }
@@ -411,7 +481,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const transcript = element(documentRef, "div", "ui-play__transcript");
   transcript.setAttribute("data-play-transcript", "true");
   transcript.dataset.shellScrollRegion = "play-transcript";
-  transcript.setAttribute("aria-label", "Story transcript");
+  transcript.setAttribute("aria-label", COPY.transcript);
   transcript.setAttribute("role", "region");
   const newTurn = button(documentRef, COPY.newTurn, "ui-button ui-button--primary ui-play__new-turn");
   newTurn.hidden = true;
@@ -423,8 +493,8 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const composer = element(documentRef, "section", "ui-play__composer");
   composer.setAttribute("data-play-composer", "true");
   const input = element(documentRef, "textarea", "ui-play__composer-input");
-  input.setAttribute("aria-label", "What do you do or say?");
-  input.placeholder = "What do you do or say?";
+  input.setAttribute("aria-label", COPY.composerLabel);
+  input.placeholder = COPY.composerLabel;
   const composerHelp = element(documentRef, "p", "ui-play__composer-help", COPY.emptyMeaning);
   const progress = element(documentRef, "div", "ui-play__progress");
   progress.setAttribute("data-play-progress", "true");
@@ -457,7 +527,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
 
   const pinned = () => transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 96;
   const renderTranscript = state => {
-    const wasPinned = lastItems === null || pinned();
+    const wasPinned = lastItems === null || lastItems.length === 0 || pinned();
     const previousTop = transcript.scrollTop;
     const items = state.transcript.items || [];
     const nodes = items.map((turn, index) => createTurn(
@@ -470,13 +540,14 @@ function createStoryView(documentRef, services, proseModule, initialState) {
       const preview = element(documentRef, "article", "ui-play__turn ui-play__turn--preview");
       preview.dataset.preview = "true";
       if (state.transcript.preview.playerInput) {
-        preview.append(element(
+        preview.append(markData(element(
           documentRef, "p", "ui-play__input-echo", state.transcript.preview.playerInput,
-        ));
+        )));
       }
-      const prose = element(documentRef, "div", "ui-play__prose");
+      const prose = markData(element(documentRef, "div", "ui-play__prose"));
       proseModule.renderProse(prose, state.transcript.preview.prose);
-      preview.append(prose, element(documentRef, "p", "ui-kicker", "Saving this turn…"));
+      preview.append(prose, element(documentRef, "p", "ui-kicker", COPY.saving));
+      localize(services, preview);
       nodes.push(preview);
     }
     transcript.replaceChildren(...nodes);
@@ -518,7 +589,8 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     stop.hidden = !running;
     retry.hidden = !failed || current.failure?.retryable === false;
     input.disabled = running || stopping;
-    phase.textContent = current.run?.phase || (failed ? current.failure?.message || "Generation stopped" : "");
+    phase.textContent = current.run?.phase || (failed ? current.failure?.message || COPY.generationStopped : "");
+    localize(services, phase);
     progress.hidden = !current.run && !failed;
     stop.textContent = stopping ? COPY.stopping : COPY.stop;
     stop.disabled = stopping;

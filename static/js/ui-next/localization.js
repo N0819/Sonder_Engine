@@ -88,8 +88,8 @@ function replaceVariables(value, vars) {
   let output = String(value);
   for (const [name, replacement] of Object.entries(vars || {})) {
     output = output
-      .split(`{${name}}`).join(String(replacement))
-      .split(`\${${name}}`).join(String(replacement));
+      .split(`\${${name}}`).join(String(replacement))
+      .split(`{${name}}`).join(String(replacement));
   }
   return output;
 }

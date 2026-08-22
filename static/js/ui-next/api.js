@@ -163,6 +163,14 @@ export function createApiClient(options = {}) {
         requestOptions.isCurrent,
         identity,
       );
+      if (response.ok) {
+        requestOptions.onResponse?.({
+          status: response.status,
+          owner,
+          requestId,
+          correlationId: requestCorrelationId,
+        });
+      }
       const data = response.ok && requestOptions.parseResponse
         ? await requestOptions.parseResponse(response, identity)
         : await parseResponse(response, requestOptions.responseType, identity);
