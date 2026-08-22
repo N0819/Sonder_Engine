@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en" data-ui-next-entry="component-lab" data-ui-next-version="wp01">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sonder component laboratory</title>
+  <script src="/static/js/ui/appearance-preflight.js"></script>
+  <link rel="stylesheet" href="/static/css/ui/reset.css">
+  <link rel="stylesheet" href="/static/css/ui/tokens.css">
+  <link rel="stylesheet" href="/static/css/ui/themes/carbon-signal.css">
+  <link rel="stylesheet" href="/static/css/ui/themes/ash-brass.css">
+  <link rel="stylesheet" href="/static/css/ui/themes/midnight-ink.css">
+  <link rel="stylesheet" href="/static/css/ui/themes/parchment-night.css">
+  <link rel="stylesheet" href="/static/css/ui/typography.css">
+  <link rel="stylesheet" href="/static/css/ui/components.css">
+  <link rel="stylesheet" href="/static/css/ui/utilities.css">
+  <link rel="stylesheet" href="/static/css/ui/lab.css">
+</head>
+<body class="ui-lab">
+  <header class="ui-lab__header ui-safe-top">
+    <div>
+      <p class="ui-kicker">Sonder replacement · Gate G1</p>
+      <h1 class="ui-heading ui-heading--1">Component laboratory</h1>
+    </div>
+    <a class="ui-button ui-button--quiet" href="/ui-next">Back to replacement entry</a>
+  </header>
+
+  <nav class="ui-lab__nav" aria-label="Laboratory sections">
+    <a href="#appearance">Appearance</a><a href="#controls">Controls</a><a href="#forms">Forms</a>
+    <a href="#navigation">Navigation</a><a href="#states">States</a><a href="#overlays">Overlays</a><a href="#composition">Composition</a>
+  </nav>
+
+  <main class="ui-lab__main" id="lab-main">
+    <section class="ui-lab__section" id="appearance" aria-labelledby="appearance-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">01 · Visual system</p><h2 class="ui-heading ui-heading--2" id="appearance-title">Appearance matrix</h2></div>
+      <div class="ui-lab__grid">
+        <div class="ui-card ui-stack">
+          <h3 class="ui-heading ui-heading--3">Curated themes</h3>
+          <div class="ui-segmented" id="theme-picker" aria-label="Theme" role="group">
+            <button class="ui-button" type="button" data-theme-choice="carbon-signal" aria-pressed="true">Carbon Signal</button>
+            <button class="ui-button" type="button" data-theme-choice="ash-brass" aria-pressed="false">Ash and Brass</button>
+            <button class="ui-button" type="button" data-theme-choice="midnight-ink" aria-pressed="false">Midnight Ink</button>
+            <button class="ui-button" type="button" data-theme-choice="parchment-night" aria-pressed="false">Parchment Night</button>
+          </div>
+        </div>
+        <fieldset class="ui-card ui-stack ui-lab__fieldset">
+          <legend class="ui-heading ui-heading--3">Accessibility and presentation</legend>
+          <label class="ui-toggle"><input class="ui-toggle__input" id="a11y-mode" type="checkbox"><span class="ui-toggle__track"></span><span>Accessibility Mode</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="solidSurfaces" type="checkbox"><span class="ui-toggle__track"></span><span>Solid surfaces</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="highContrast" type="checkbox"><span class="ui-toggle__track"></span><span>High contrast</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="strongFocus" type="checkbox"><span class="ui-toggle__track"></span><span>Stronger focus</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="reducedMotion" type="checkbox"><span class="ui-toggle__track"></span><span>Reduced motion</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="largeUi" type="checkbox"><span class="ui-toggle__track"></span><span>Larger interface</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="largeProse" type="checkbox"><span class="ui-toggle__track"></span><span>Larger story text</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="roomyTargets" type="checkbox"><span class="ui-toggle__track"></span><span>More space around controls</span></label>
+          <label class="ui-toggle"><input class="ui-toggle__input" data-a11y="statusMarkers" type="checkbox"><span class="ui-toggle__track"></span><span>Extra status markers</span></label>
+        </fieldset>
+      </div>
+      <article class="ui-card ui-prose"><p>The corridor held the blue stillness of predawn. Every footstep returned a quieter answer, and the sealed brass door waited at the far end.</p></article>
+    </section>
+
+    <section class="ui-lab__section" id="controls" aria-labelledby="controls-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">02 · Actions</p><h2 class="ui-heading ui-heading--2" id="controls-title">Buttons and controls</h2></div>
+      <div class="ui-card ui-stack">
+        <div class="ui-cluster"><button class="ui-button" type="button">Default</button><button class="ui-button ui-button--primary" type="button">Continue story</button><button class="ui-button ui-button--quiet" type="button">Quiet</button><button class="ui-button ui-button--destructive" type="button">Delete story</button></div>
+        <div class="ui-cluster"><button class="ui-button ui-button--compact" type="button">Compact</button><button class="ui-button ui-button--prominent" type="button">Prominent</button><button class="ui-button" type="button" disabled>Unavailable</button><button class="ui-button" type="button" data-loading="true">Saving</button><button class="ui-button" type="button" aria-pressed="true">Pinned</button><button class="ui-button ui-button--icon" id="icon-only" type="button"></button></div>
+        <div class="ui-segmented" id="density-picker" aria-label="Density" role="group"><button class="ui-button" aria-pressed="true" type="button">Comfortable</button><button class="ui-button" aria-pressed="false" type="button">Compact</button><button class="ui-button" aria-pressed="false" type="button">Roomy</button></div>
+        <label class="ui-toggle"><input class="ui-toggle__input" type="checkbox" checked><span class="ui-toggle__track"></span><span>Keep story tools visible</span></label>
+        <label class="ui-toggle"><input class="ui-toggle__input" type="checkbox" disabled><span class="ui-toggle__track"></span><span>Unavailable option</span></label>
+      </div>
+    </section>
+
+    <section class="ui-lab__section" id="forms" aria-labelledby="forms-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">03 · Input</p><h2 class="ui-heading ui-heading--2" id="forms-title">Fields and validation</h2></div>
+      <form class="ui-card ui-lab__form" id="example-form" novalidate>
+        <label class="ui-field"><span class="ui-field__label">Story name</span><input class="ui-field__control" id="story-name" name="story-name" placeholder="Name this story" aria-describedby="story-name-help"><span class="ui-field__help" id="story-name-help">You can change this later.</span><span class="ui-field__error" id="story-name-error" hidden></span></label>
+        <label class="ui-field"><span class="ui-field__label">Opening direction</span><textarea class="ui-field__control" placeholder="Describe where the story should begin"></textarea></label>
+        <label class="ui-field"><span class="ui-field__label">Narration style</span><select class="ui-field__control"><option>Close third person</option><option>First person</option><option>Second person</option></select></label>
+        <label class="ui-toggle"><input class="ui-toggle__input" type="checkbox"><span class="ui-toggle__track"></span><span>I understand this creates a new story.</span></label>
+        <div class="ui-cluster ui-cluster--end"><button class="ui-button" type="reset">Clear</button><button class="ui-button ui-button--primary" type="submit">Validate example</button></div>
+      </form>
+    </section>
+
+    <section class="ui-lab__section" id="navigation" aria-labelledby="navigation-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">04 · Selection</p><h2 class="ui-heading ui-heading--2" id="navigation-title">Tabs, menus, rows, and cards</h2></div>
+      <div class="ui-lab__grid">
+        <div class="ui-tabs ui-card">
+          <div class="ui-tabs__list" role="tablist" aria-label="Story details">
+            <button class="ui-tabs__tab" role="tab" id="tab-summary" aria-controls="panel-summary" aria-selected="true">Summary</button>
+            <button class="ui-tabs__tab" role="tab" id="tab-cast" aria-controls="panel-cast" aria-selected="false" tabindex="-1">Cast</button>
+            <button class="ui-tabs__tab" role="tab" id="tab-world" aria-controls="panel-world" aria-selected="false" tabindex="-1">World</button>
+          </div>
+          <div class="ui-tabs__panel" role="tabpanel" id="panel-summary" aria-labelledby="tab-summary">A quiet arrival before dawn.</div>
+          <div class="ui-tabs__panel" role="tabpanel" id="panel-cast" aria-labelledby="tab-cast" hidden>Three characters are active.</div>
+          <div class="ui-tabs__panel" role="tabpanel" id="panel-world" aria-labelledby="tab-world" hidden>The eastern gate is closed.</div>
+        </div>
+        <div class="ui-menu" role="menu" aria-label="Story actions" id="story-menu"><button class="ui-menu__item" role="menuitem" type="button">Rename story</button><button class="ui-menu__item" role="menuitemcheckbox" aria-checked="true" type="button">Keep favorite</button><button class="ui-menu__item" role="menuitem" type="button">Export archive</button></div>
+      </div>
+      <div class="ui-list" aria-label="Story list">
+        <button class="ui-list-row" type="button" aria-current="true"><span data-icon="story"></span><span class="ui-list-row__copy"><span class="ui-list-row__title">The Lantern Archive</span><span class="ui-list-row__meta">Played 12 minutes ago</span></span><span class="ui-kicker">Active</span></button>
+        <button class="ui-list-row" type="button"><span data-icon="story"></span><span class="ui-list-row__copy"><span class="ui-list-row__title">A story title intentionally long enough to test wrapping without hiding the action</span><span class="ui-list-row__meta">Played yesterday · 146 turns</span></span><span class="ui-kicker">Saved</span></button>
+      </div>
+      <div class="ui-lab__grid"><article class="ui-card" data-state="selected"><p class="ui-kicker">Selected card</p><h3 class="ui-heading ui-heading--3">Carbon instruments</h3><p class="ui-muted">Selection uses structure and color together.</p></article><article class="ui-card"><p class="ui-kicker">Ordinary card</p><h3 class="ui-heading ui-heading--3">Quiet surface</h3><p class="ui-muted">A restrained container for related information.</p></article></div>
+    </section>
+
+    <section class="ui-lab__section" id="states" aria-labelledby="states-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">05 · Feedback</p><h2 class="ui-heading ui-heading--2" id="states-title">Notices, tasks, and content states</h2></div>
+      <div class="ui-stack">
+        <div class="ui-notice" data-tone="success" data-marker="OK"><span data-icon="check"></span><div><strong>Story saved</strong><div class="ui-muted">Your latest changes are safely stored.</div></div></div>
+        <div class="ui-notice" data-tone="warning" data-marker="! "><span data-icon="warning"></span><div><strong>Connection is slow</strong><div class="ui-muted">Sonder is still working. You can wait or stop.</div></div><button class="ui-button ui-button--quiet" type="button">Stop</button></div>
+        <div class="ui-notice" data-tone="error" data-marker="X"><span data-icon="error"></span><div><strong>Could not save</strong><div class="ui-muted">Your draft remains on this device.</div></div><button class="ui-button" type="button">Try again</button></div>
+        <div class="ui-card ui-task" data-state="working"><span data-icon="tasks"></span><div><div class="ui-task__state">Working</div><strong>Building story opening</strong><div class="ui-muted">Preparing the cast and setting.</div></div></div>
+        <div class="ui-card ui-task" data-state="complete"><span data-icon="check"></span><div><div class="ui-task__state">Complete</div><strong>Archive exported</strong></div></div>
+        <div class="ui-card ui-stack"><div class="ui-skeleton" aria-label="Loading title"></div><div class="ui-skeleton" aria-label="Loading paragraph"></div><div class="ui-skeleton" aria-label="Loading paragraph"></div></div>
+        <div class="ui-lab__grid"><div class="ui-card ui-empty"><span data-icon="folder"></span><div class="ui-empty__title">No stories yet</div><p>Start a story when you are ready.</p><button class="ui-button ui-button--primary" type="button">Start a story</button></div><div class="ui-card ui-empty"><span data-icon="search"></span><div class="ui-empty__title">No matches</div><p>Try a shorter search or clear a filter.</p></div><div class="ui-card ui-empty" data-state="error"><span data-icon="error"></span><div class="ui-empty__title">Could not load stories</div><p>Nothing was changed. Try again.</p><button class="ui-button" type="button">Try again</button></div></div>
+        <button class="ui-button" id="announce-status" type="button">Announce one useful status</button>
+      </div>
+    </section>
+
+    <section class="ui-lab__section" id="overlays" aria-labelledby="overlays-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">06 · Layers</p><h2 class="ui-heading ui-heading--2" id="overlays-title">Dialog, sheet, and confirmation</h2></div>
+      <div class="ui-cluster"><button class="ui-button ui-button--primary" id="open-dialog" type="button">Open confirmation dialog</button><button class="ui-button" id="open-sheet" type="button">Open details sheet</button></div>
+    </section>
+
+    <section class="ui-lab__section" id="composition" aria-labelledby="composition-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">07 · Non-functional specimen</p><h2 class="ui-heading ui-heading--2" id="composition-title">Primary shell composition</h2></div>
+      <div class="ui-shell-specimen" aria-label="Shell hierarchy specimen">
+        <nav class="ui-shell-specimen__rail" aria-label="Specimen destinations"><button class="ui-button ui-button--icon" aria-label="Play" title="Play" type="button"><span data-icon="play"></span></button><button class="ui-button ui-button--icon" aria-label="Library" title="Library" type="button"><span data-icon="library"></span></button><button class="ui-button ui-button--icon" aria-label="Settings" title="Settings" type="button"><span data-icon="settings"></span></button></nav>
+        <header class="ui-shell-specimen__header"><div><p class="ui-kicker">Play · 01</p><strong>The Lantern Archive</strong></div><button class="ui-button ui-button--quiet" type="button">Story tools</button></header>
+        <article class="ui-shell-specimen__story ui-prose"><p>Rain crossed the high windows in silver threads. Below them, the archive keeper turned one page and waited for your answer.</p><p>Nothing in this specimen is connected to story data. It exists to review hierarchy, measure, surfaces, and layer behavior before WP03.</p></article>
+        <aside class="ui-shell-specimen__aside"><p class="ui-kicker">Context</p><strong>Eastern archive</strong><p class="ui-muted">Three people nearby</p></aside>
+        <nav class="ui-shell-specimen__mobile" aria-label="Mobile specimen navigation"><span>Play</span><span>Library</span><span>Settings</span></nav>
+      </div>
+    </section>
+
+    <section class="ui-lab__section" id="localization" aria-labelledby="localization-title">
+      <div class="ui-lab__section-head"><p class="ui-kicker">08 · Stress fixture</p><h2 class="ui-heading ui-heading--2" id="localization-title">Long localized copy</h2></div>
+      <div class="ui-notice" data-tone="warning" data-marker="!"><span data-icon="warning"></span><div><strong>Review the complete collection of connected characters before continuing with this irreversible action</strong><p class="ui-muted">This intentionally expanded copy verifies wrapping, target height, action visibility, and the absence of horizontal page scrolling.</p></div><button class="ui-button" type="button">Review connected characters</button></div>
+    </section>
+  </main>
+
+  <div class="ui-overlay" id="dialog-overlay" hidden>
+    <section class="ui-dialog ui-confirmation" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+      <div class="ui-cluster"><h2 class="ui-heading ui-heading--2 ui-grow" id="dialog-title">Delete this draft?</h2><button class="ui-button ui-button--icon" id="close-dialog" type="button"></button></div>
+      <p class="ui-muted">This example demonstrates a consequential confirmation with an explicit consequence and a safe cancel action.</p>
+      <div class="ui-cluster ui-cluster--end"><button class="ui-button" id="cancel-dialog" type="button">Keep draft</button><button class="ui-button ui-button--destructive" type="button">Delete draft</button></div>
+    </section>
+  </div>
+
+  <div class="ui-overlay" id="sheet-overlay" hidden>
+    <aside class="ui-sheet ui-stack" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="ui-cluster"><h2 class="ui-heading ui-heading--2 ui-grow" id="sheet-title">Story details</h2><button class="ui-button ui-button--icon" id="close-sheet" type="button"></button></div>
+      <p class="ui-muted">A mobile-safe contextual surface with focus containment and restoration.</p>
+      <button class="ui-button" type="button">A focusable action</button>
+    </aside>
+  </div>
+
+  <script type="module" src="/static/js/ui/lab.js"></script>
+</body>
+</html>

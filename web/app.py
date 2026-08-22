@@ -570,6 +570,14 @@ def ui_next(request: Request):
         return RedirectResponse("/login")
     return FileResponse(STATIC_ROOT / "ui-next.html")
 
+
+@app.get("/ui-next/lab")
+def ui_next_lab(request: Request):
+    """Host-only component laboratory for the replacement interface."""
+    if not guest.verify_host_session(request.cookies.get(HOST_COOKIE)):
+        return RedirectResponse("/login")
+    return FileResponse(STATIC_ROOT / "ui-next-lab.html")
+
 @app.get("/login")
 def login_page():
     # Standalone page like /guest: handles both first-run account setup

@@ -43,3 +43,23 @@ def test_ui_next_serves_only_the_static_fixture_to_a_valid_host(
     assert 'data-ui-next-entry="development"' in response.text
     assert "/api/" not in response.text
     assert "Baseline Story" not in response.text
+
+
+def test_ui_next_lab_uses_the_same_host_only_boundary(monkeypatch):
+    monkeypatch.setattr(
+        app_module.guest,
+        "verify_host_session",
+        lambda token: token == "valid-host-session",
+    )
+    client = TestClient(app_module.app)
+    try:
+        anonymous = client.get("/ui-next/lab", follow_redirects=False)
+        client.cookies.set(app_module.HOST_COOKIE, "valid-host-session")
+        authenticated = client.get("/ui-next/lab")
+    finally:
+        client.close()
+
+    assert anonymous.status_code in {302, 303, 307, 308}
+    assert anonymous.headers["location"] == "/login"
+    assert authenticated.status_code == 200
+    assert 'data-ui-next-entry="component-lab"' in authenticated.text
