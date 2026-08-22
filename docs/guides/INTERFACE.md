@@ -34,6 +34,16 @@ during qualification are recorded in
 This establishes the control plane only; replacement product requirements stay
 open until their owning work package provides implementation and evidence.
 
+WP-01 establishes the G1 visual foundation under `static/css/ui/` and
+`static/js/ui/`. Semantic tokens and curated-theme overrides own appearance;
+component modules own focus, overlays, roving focus, live announcements, and
+primitive state. The reviewed local SVG family is served from
+`static/assets/icons/sonder-icons.svg`. The authenticated `/ui-next/lab`
+component laboratory is a non-functional review surface: it performs no API
+requests and owns no application truth. Its [G1 review and browser
+matrix](../design/sonder-ui-replacement/G1_FOUNDATION_REVIEW.md) qualify the
+foundation for reuse without claiming later product flows.
+
 ## Runtime boundary
 
 - The replacement is delivered by the existing FastAPI process, same-origin.
@@ -118,6 +128,15 @@ semantic visual vocabulary. Curated themes change semantic tokens, never
 layout. Legacy themes may map values into those tokens but do not own component
 geometry. Icons come from the reviewed local SVG family and retain accessible
 names where the symbol alone is not established.
+
+Foundation source responsibilities are fixed: `tokens.css` defines geometry,
+motion, type, layering, and semantic color roles; theme files only override
+semantic values; `components.css` owns reusable component geometry; entry and
+laboratory styles compose those pieces without redefining their contracts.
+`appearance-preflight.js` is the only pre-module behavior and may only stamp
+validated browser-local appearance before paint. Accessibility preferences are
+independent overrides, with Accessibility Mode applying the documented bundle
+without preventing a later granular choice.
 
 Major screens and component families require four recorded reviews before
 their package gate: product flow, visual system, responsive behavior, and

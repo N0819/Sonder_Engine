@@ -100,6 +100,9 @@ def test_replacement_entries_are_head_safe_and_legacy_free():
         assert "/static/js/app.js" not in html
         assert "window.S" not in html
 
+    extractor = _read(ROOT / "tools" / "extract_ui_catalog.py")
+    assert 'path.name != "ui-next-lab.html"' in extractor
+
 
 def test_foundation_has_no_polling_or_external_asset_dependency():
     paths = [*CSS.rglob("*.css"), *JS.rglob("*.js")]

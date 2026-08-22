@@ -42,7 +42,7 @@
 - Add: `static/js/ui/appearance-preflight.js`
 - Add: `static/js/ui/appearance.js`
 - Modify: `static/ui-next.html`
-- Delete: `static/css/ui-next-development.css`
+- Delete: the temporary WP-00 development stylesheet
 
 - [ ] Define role-based semantic tokens for backgrounds, solid/translucent surfaces, text, borders, interaction, status, typography, spacing, radii, sizes, motion, focus, shadows, and named z bands. Component CSS may consume only semantic roles.
 - [ ] Implement Carbon Signal as the default and the other three curated, genre-neutral palettes as data-attribute overrides.

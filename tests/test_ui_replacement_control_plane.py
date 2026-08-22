@@ -82,4 +82,5 @@ def test_arch_12_records_the_approved_no_global_bridge_amendment():
 def test_candidate_status_cannot_close_current_product_requirements():
     rows = _rows()
     closed = {row["id"] for row in rows if row["status"] == "closed"}
-    assert closed <= {"GOV-02", "GOV-03", "GOV-04", "ARCH-12"}
+    g1_icon_requirements = {f"ICON-{number:02d}" for number in range(1, 11)}
+    assert closed <= {"GOV-02", "GOV-03", "GOV-04", "ARCH-12"} | g1_icon_requirements
