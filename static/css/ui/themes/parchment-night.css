@@ -1,0 +1,23 @@
+@layer ui-themes {
+  :root[data-theme="parchment-night"] {
+    --ui-color-canvas: rgb(14 11 8);
+    --ui-color-canvas-subtle: rgb(21 17 13);
+    --ui-color-surface: rgb(29 23 18 / 89%);
+    --ui-color-surface-solid: rgb(21 17 13);
+    --ui-color-surface-raised: rgb(42 33 25 / 96%);
+    --ui-color-surface-muted: rgb(35 28 21 / 66%);
+    --ui-color-text: rgb(238 227 203);
+    --ui-color-text-muted: rgb(188 173 145);
+    --ui-color-text-faint: rgb(139 122 95);
+    --ui-color-border: rgb(225 202 160 / 19%);
+    --ui-color-border-strong: rgb(225 202 160 / 38%);
+    --ui-color-interactive: rgb(134 186 190);
+    --ui-color-interactive-strong: rgb(190 219 217);
+    --ui-color-interactive-soft: rgb(134 186 190 / 12%);
+    --ui-color-callout: rgb(185 145 80);
+    --ui-color-callout-soft: rgb(185 145 80 / 13%);
+    --ui-color-success: rgb(130 170 123);
+    --ui-color-danger: rgb(204 116 105);
+    --ui-color-info: rgb(134 162 186);
+  }
+}

@@ -1,0 +1,23 @@
+@layer ui-themes {
+  :root[data-theme="ash-brass"] {
+    --ui-color-canvas: rgb(11 11 10);
+    --ui-color-canvas-subtle: rgb(17 17 15);
+    --ui-color-surface: rgb(24 24 21 / 88%);
+    --ui-color-surface-solid: rgb(17 17 15);
+    --ui-color-surface-raised: rgb(36 34 29 / 96%);
+    --ui-color-surface-muted: rgb(30 29 25 / 64%);
+    --ui-color-text: rgb(238 234 224);
+    --ui-color-text-muted: rgb(183 176 159);
+    --ui-color-text-faint: rgb(132 123 108);
+    --ui-color-border: rgb(220 205 175 / 18%);
+    --ui-color-border-strong: rgb(220 205 175 / 36%);
+    --ui-color-interactive: rgb(159 196 211);
+    --ui-color-interactive-strong: rgb(208 228 234);
+    --ui-color-interactive-soft: rgb(159 196 211 / 12%);
+    --ui-color-callout: rgb(185 151 83);
+    --ui-color-callout-soft: rgb(185 151 83 / 13%);
+    --ui-color-success: rgb(121 173 139);
+    --ui-color-danger: rgb(206 113 111);
+    --ui-color-info: rgb(132 169 189);
+  }
+}
