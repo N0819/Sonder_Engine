@@ -1,6 +1,6 @@
 # WP-03 application-shell review findings
 
-**Review date:** 2026-08-22  
+**Review date:** 2026-08-22
 **Scope:** the authenticated `/ui-next` shell at G2, before Play, Library, and
 Settings product workflows are implemented.
 
