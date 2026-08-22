@@ -24,7 +24,7 @@ the requirement or visual reference but not the mechanism.
 | `static/js/remaster/router.js` | rebuild | WP-03 | Truthful story/item/tool deep links, history, fallback, focus restoration |
 | `static/js/remaster/bridge.js` | reject mechanism | WP-02 | Explicit state/actions/events; no `window.S`, polling, DOM clicks, or embedded v2 API |
 | `static/js/remaster/shell.js` | adapt interaction ideas | WP-03, WP-04 | Imported state contracts, draft isolation, no inline layout ownership |
-| `static/js/remaster/inspector.js` | adapt shell, rebuild hosting | WP-03, WP-05 | Real tool mounts, route/history lifecycle, pin/resize/focus/mobile evidence |
+| `static/js/remaster/inspector.js` | adapted shell; rebuilt hosting complete | WP-03, WP-05 | [G3 Story Tools review](G3_STORY_TOOLS_REVIEW.md): real mounts, route/history lifecycle, pin/resize/focus, staged mobile, and state preservation |
 | `static/js/remaster/library.js` | rebuild behavior, reuse visual reference | WP-06 | Authoritative scopes, search, associations, states, routes, scale behavior |
 | `static/js/remaster/settings.js` | adapt IA, rebuild registry | WP-08 | Global localized search/aliases, control routes, real mounts and save states |
 | candidate `static/index.html` | reference and scoped adaptation only | WP-03, WP-04 | Current script/ID/API/extension behavior preserved; no whole-file copy |
