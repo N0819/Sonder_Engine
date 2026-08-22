@@ -1,0 +1,39 @@
+/* WP-00 diagnostic shell only. WP-01 owns the replacement token system. */
+html {
+  color-scheme: dark;
+  min-height: 100%;
+  background: #0a0f17;
+  color: #edf2f8;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+}
+
+main {
+  width: min(34rem, calc(100% - 3rem));
+  padding: 2rem;
+  border: 1px solid #33445a;
+  border-radius: 0.75rem;
+  background: #111a27;
+}
+
+h1 {
+  margin: 0.25rem 0 0.75rem;
+}
+
+p {
+  line-height: 1.5;
+}
+
+.development-label {
+  margin: 0;
+  color: #9fb2c8;
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

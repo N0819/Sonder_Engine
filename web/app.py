@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
 from starlette.datastructures import Headers
 from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
-                               Response)
+                               RedirectResponse, Response)
 from fastapi.staticfiles import StaticFiles
 
 from pathlib import Path
@@ -518,6 +518,20 @@ def guest_page():
 @app.get("/")
 def index():
     return FileResponse(STATIC_ROOT / "index.html")
+
+
+@app.get("/ui-next")
+def ui_next(request: Request):
+    """Opt-in development entry for the replacement interface.
+
+    The default host page remains the shipping UI until the replacement gates
+    pass. Unlike the public login and guest shells, this page is host-only even
+    before it makes an API request, so an anonymous browser cannot inspect a
+    partially built application surface.
+    """
+    if not guest.verify_host_session(request.cookies.get(HOST_COOKIE)):
+        return RedirectResponse("/login")
+    return FileResponse(STATIC_ROOT / "ui-next.html")
 
 @app.get("/login")
 def login_page():

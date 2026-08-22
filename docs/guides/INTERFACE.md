@@ -38,8 +38,10 @@ while [`UNBUILT.md`](../UNBUILT.md) §2.26 is the sole status authority.
 - Client state is an explicit projection of server state plus bounded UI-only
   state. Every async result carries enough request/story/record identity to be
   rejected when stale.
-- Development uses a separate authenticated entry. It does not alter `/` until
-  the cutover gate passes.
+- Development uses `/ui-next`, a separate host-session-authenticated native
+  module entry. Anonymous requests redirect to `/login`; the entry does not
+  load classic host assets, read API state, poll, or alter `/` until its owning
+  work packages add those responsibilities and the cutover gate passes.
 - Browser-local migrations are versioned and idempotent. Consequential drafts
   are scoped to their real story or record, recoverable, and never silently
   moved between owners.
@@ -140,4 +142,3 @@ risk is release-blocking.
 The default UI changes only at G6. Legacy implementation is deleted at G7. The
 replacement is releasable only at G8 after exact-head behavioral, responsive,
 accessibility, localization, extension, performance, novice, and expert proof.
-

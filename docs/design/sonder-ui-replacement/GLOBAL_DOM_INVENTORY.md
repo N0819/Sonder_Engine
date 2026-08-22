@@ -338,6 +338,7 @@ Classic declarations are potential shared-global bindings because current script
 | `appearanceButton` | classic-const | `static/js/themes.js:158` |
 | `openAppearanceSettings` | classic-function | `static/js/themes.js:19` |
 | `themePreview` | classic-function | `static/js/themes.js:3` |
+| `root` | classic-const | `static/js/ui-next/main.js:1` |
 | `I18N_SKIP_TREE` | classic-const | `static/js/utils.js:130` |
 | `I18N_SKIP_TEXT` | classic-const | `static/js/utils.js:131` |
 | `localizeDocument` | classic-function | `static/js/utils.js:133` |
@@ -390,7 +391,7 @@ Classic declarations are potential shared-global bindings because current script
 
 ## DOM IDs declared by entries
 
-`activity`, `activity-count`, `activity-head`, `activity-list`, `activity-title`, `amb-vol`, `ambience-bar`, `app`, `auth-screen`, `b-amb-mute`, `b-amb-reroll`, `b-ambience`, `b-api`, `b-attire`, `b-backdrop`, `b-cast`, `b-chime`, `b-dlg`, `b-extensions`, `b-menu`, `b-nsfw`, `b-prompts`, `b-style`, `b-theme`, `b-update`, `b-world`, `chatname`, `code-input`, `composer`, `composer-inner`, `drawer`, `framebar`, `head-sub`, `input`, `join-btn`, `join-err`, `join-screen`, `live`, `login-btn`, `login-err`, `login-form`, `login-password`, `login-username`, `main`, `modal`, `modalbody`, `modalbox`, `modalhead`, `modaltitle`, `modalx`, `msgs`, `play-screen`, `send`, `send-btn`, `setup-btn`, `setup-confirm`, `setup-err`, `setup-form`, `setup-password`, `setup-username`, `side`, `sideactions`, `sidelist`, `stop`, `streamtgl`, `tabs`, `toasts`, `top`, `top-context`, `topactions`, `turnstatus`, `turnstatus-elapsed`, `turnstatus-phase`, `vitals`, `vitals-npcs`
+`activity`, `activity-count`, `activity-head`, `activity-list`, `activity-title`, `amb-vol`, `ambience-bar`, `app`, `auth-screen`, `b-amb-mute`, `b-amb-reroll`, `b-ambience`, `b-api`, `b-attire`, `b-backdrop`, `b-cast`, `b-chime`, `b-dlg`, `b-extensions`, `b-menu`, `b-nsfw`, `b-prompts`, `b-style`, `b-theme`, `b-update`, `b-world`, `chatname`, `code-input`, `composer`, `composer-inner`, `drawer`, `framebar`, `head-sub`, `input`, `join-btn`, `join-err`, `join-screen`, `live`, `login-btn`, `login-err`, `login-form`, `login-password`, `login-username`, `main`, `modal`, `modalbody`, `modalbox`, `modalhead`, `modaltitle`, `modalx`, `msgs`, `play-screen`, `send`, `send-btn`, `setup-btn`, `setup-confirm`, `setup-err`, `setup-form`, `setup-password`, `setup-username`, `side`, `sideactions`, `sidelist`, `stop`, `streamtgl`, `tabs`, `toasts`, `top`, `top-context`, `topactions`, `turnstatus`, `turnstatus-elapsed`, `turnstatus-phase`, `ui-next-title`, `vitals`, `vitals-npcs`
 
 ## DOM IDs referenced by classic scripts
 
