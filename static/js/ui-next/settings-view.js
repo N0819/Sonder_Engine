@@ -234,6 +234,89 @@ function settingToggle(documentRef, label, detail, checked) {
   return { row, input };
 }
 
+function livingWorldSettings(documentRef, services, state) {
+  const chatId = Number(state.story?.data?.chat?.id || state.library?.chats?.[0]?.id || 0);
+  const group = el(documentRef, "section", "ui-settings__group ui-settings__living-world");
+  const copy = el(documentRef, "span", "ui-settings__field-copy");
+  copy.append(
+    el(documentRef, "strong", "", "Living world"),
+    el(documentRef, "small", "", "Choose which world mechanisms may run outside the current scene. Requested depth is visibly clamped to what is built and what this story permits."),
+  );
+  const body = el(documentRef, "div", "ui-settings__maintenance-result", chatId ? "Loading this story's world settings…" : "Open a story to configure its living world.");
+  body.setAttribute("role", "status");
+  group.append(copy, body);
+  if (!chatId) return group;
+  queueMicrotask(async () => {
+    try {
+      const result = await services.apiClient.get(`/api/chats/${chatId}/living_world`, {
+        channel: `settings-living-world:${chatId}`, owner: `story:${chatId}`,
+      });
+      if (!group.isConnected) return;
+      const report = result.data || {};
+      const controls = new Map();
+      const rows = el(documentRef, "div", "ui-settings__living-world-rows");
+      for (const approach of report.approaches || []) {
+        const row = el(documentRef, "div", "ui-settings__living-world-row");
+        const rowCopy = el(documentRef, "span", "ui-settings__field-copy");
+        const floor = (approach.depths || []).find(depth => depth.value === "floor");
+        rowCopy.append(
+          el(documentRef, "strong", "", approach.label || humanizeSettingKey(approach.approach)),
+          el(documentRef, "small", "", floor?.description || approach.cost || ""),
+        );
+        const control = documentRef.createElement("select");
+        control.setAttribute("aria-label", `${approach.label || humanizeSettingKey(approach.approach)} depth`);
+        const off = el(documentRef, "option", "", "Off");
+        off.value = "off";
+        off.selected = approach.value === "off";
+        control.append(off);
+        for (const depth of approach.depths || []) {
+          const option = el(documentRef, "option", "", depth.built ? humanizeSettingKey(depth.value) : `${humanizeSettingKey(depth.value)} — not built yet`);
+          option.value = depth.value;
+          option.selected = approach.value === depth.value;
+          control.append(option);
+        }
+        const effective = el(documentRef, "p", "ui-settings__living-world-effective");
+        const selectedDepth = (approach.depths || []).find(depth => depth.value === approach.value);
+        if (approach.effective !== approach.value) {
+          const reason = selectedDepth && !selectedDepth.built
+            ? `${humanizeSettingKey(approach.value)} is not built yet.`
+            : `the story's off-screen limit does not permit ${humanizeSettingKey(approach.value)}.`;
+          effective.textContent = `Runs as ${humanizeSettingKey(approach.effective)} — ${reason}`;
+        } else effective.textContent = `Runs as ${humanizeSettingKey(approach.effective)}.`;
+        const field = el(documentRef, "span", "ui-settings__living-world-control");
+        field.append(control, effective, el(documentRef, "small", "ui-muted", approach.cost || ""));
+        row.append(rowCopy, field);
+        rows.append(row);
+        controls.set(approach.approach, control);
+      }
+      const status = el(documentRef, "p", "ui-settings__connection-status");
+      status.setAttribute("role", "status");
+      const footer = el(documentRef, "div", "ui-settings__connection-footer");
+      const save = el(documentRef, "button", "ui-button ui-button--primary", "Save living world settings");
+      save.type = "button";
+      footer.append(save);
+      save.addEventListener("click", async () => {
+        save.disabled = true;
+        status.textContent = "Saving living world settings…";
+        try {
+          await services.apiClient.put(`/api/chats/${chatId}/living_world`, {
+            living_world: Object.fromEntries([...controls].map(([key, control]) => [key, control.value])),
+          }, { channel: `settings-living-world:${chatId}`, owner: `story:${chatId}` });
+          if (save.isConnected) status.textContent = "Living world settings saved.";
+        } catch (error) {
+          if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save living world settings.";
+        } finally {
+          if (save.isConnected) save.disabled = false;
+        }
+      });
+      body.replaceChildren(rows, status, footer);
+    } catch (error) {
+      if (group.isConnected) body.textContent = error?.userMessage || error?.message || "Sonder could not load living world settings.";
+    }
+  });
+  return group;
+}
+
 function experience(documentRef, services) {
   const section = el(documentRef, "section", "ui-settings__section");
   const head = el(documentRef, "header", "ui-settings__section-head");
@@ -284,6 +367,132 @@ function experience(documentRef, services) {
   legacy.append(legacyCopy, select);
   themeGroup.append(themeHead, themes, legacy);
 
+  const readingGroup = el(documentRef, "section", "ui-settings__group");
+  readingGroup.id = "settings-control-reading";
+  const appearanceState = services.localState.snapshot().appearance || {};
+  const localSelectRow = (label, detail, ariaLabel, options, current, onChange) => {
+    const row = el(documentRef, "div", "ui-settings__field-head");
+    const rowCopy = el(documentRef, "span", "ui-settings__field-copy");
+    rowCopy.append(el(documentRef, "strong", "", label), el(documentRef, "small", "", detail));
+    const control = documentRef.createElement("select");
+    control.setAttribute("aria-label", ariaLabel);
+    options.forEach(([value, optionLabel]) => {
+      const option = el(documentRef, "option", "", optionLabel);
+      option.value = value;
+      option.selected = String(current) === value;
+      control.append(option);
+    });
+    control.addEventListener("change", () => onChange(control.value));
+    row.append(rowCopy, control);
+    return row;
+  };
+  readingGroup.append(
+    localSelectRow(
+      "Story text size",
+      "Changes story prose without enlarging the surrounding controls.",
+      "Story text size",
+      [["15", "Small"], ["17", "Standard"], ["19", "Large"], ["21", "Extra large"]],
+      documentRef.documentElement.dataset.proseSize || appearanceState.proseSize || "17",
+      value => {
+        appearance.setProseSize(value);
+        services.localState.setRecord("appearance", { ...services.localState.snapshot().appearance, proseSize: value });
+      },
+    ),
+    localSelectRow(
+      "Interface density",
+      "Changes spacing while keeping every control available.",
+      "Interface density",
+      [["compact", "Compact"], ["comfortable", "Comfortable"], ["roomy", "Roomy"]],
+      documentRef.documentElement.dataset.density || appearanceState.density || "comfortable",
+      value => {
+        documentRef.documentElement.dataset.density = value;
+        services.localState.setRecord("appearance", { ...services.localState.snapshot().appearance, density: value });
+      },
+    ),
+    localSelectRow(
+      "Visual effects",
+      "Reduce or stop decorative weather, hearth, and backdrop transitions.",
+      "Visual effects",
+      [["full", "Full"], ["reduced", "Reduced"], ["off", "Off"]],
+      documentRef.documentElement.dataset.effects || appearanceState.effects || "full",
+      value => {
+        appearance.setEffects(value);
+        services.localState.setRecord("appearance", { ...services.localState.snapshot().appearance, effects: value });
+      },
+    ),
+  );
+
+  const soundGroup = el(documentRef, "section", "ui-settings__group");
+  soundGroup.id = "settings-control-sound";
+  const soundPreferences = services.atmosphere.snapshot()?.preferences || { muted: false, volume: 0.7, chime: false };
+  const volumeRow = el(documentRef, "div", "ui-settings__field-head");
+  const volumeCopy = el(documentRef, "span", "ui-settings__field-copy");
+  volumeCopy.append(el(documentRef, "strong", "", "Story sound"), el(documentRef, "small", "", "Controls room ambience and the optional turn-complete chime on this device."));
+  const soundControls = el(documentRef, "div", "ui-settings__sound-controls");
+  const volume = documentRef.createElement("input");
+  volume.type = "range";
+  volume.min = "0";
+  volume.max = "1";
+  volume.step = "0.05";
+  volume.value = String(soundPreferences.volume ?? 0.7);
+  volume.setAttribute("aria-label", "Sound volume");
+  volume.addEventListener("input", () => services.atmosphere.setVolume(volume.value));
+  const muted = documentRef.createElement("input");
+  muted.type = "checkbox";
+  muted.checked = Boolean(soundPreferences.muted);
+  muted.setAttribute("aria-label", "Mute story sound");
+  muted.addEventListener("change", () => services.atmosphere.setMuted(muted.checked));
+  const muteLabel = el(documentRef, "label", "");
+  muteLabel.append(muted, documentRef.createTextNode(" Mute story sound"));
+  const chime = documentRef.createElement("input");
+  chime.type = "checkbox";
+  chime.checked = Boolean(soundPreferences.chime);
+  chime.setAttribute("aria-label", "Notify when a turn finishes");
+  chime.addEventListener("change", () => services.atmosphere.setChime(chime.checked));
+  const chimeLabel = el(documentRef, "label", "");
+  chimeLabel.append(chime, documentRef.createTextNode(" Notify when a turn finishes"));
+  soundControls.append(volume, muteLabel, chimeLabel);
+  volumeRow.append(volumeCopy, soundControls);
+  soundGroup.append(volumeRow);
+
+  const languagePacks = Array.isArray(services.store.getSnapshot().settings?.data?.language_packs)
+    ? services.store.getSnapshot().settings.data.language_packs.filter(pack => pack.ui !== false) : [];
+  if (languagePacks.length) {
+    const languageRow = el(documentRef, "div", "ui-settings__field-head");
+    const languageCopy = el(documentRef, "span", "ui-settings__field-copy");
+    languageCopy.append(el(documentRef, "strong", "", "Interface language"), el(documentRef, "small", "", "Applies to menus and controls after reload. Story language is chosen per story."));
+    const languageControls = el(documentRef, "div", "ui-settings__inline-control");
+    const language = documentRef.createElement("select");
+    language.setAttribute("aria-label", "Interface language");
+    languagePacks.forEach(pack => {
+      const option = el(documentRef, "option", "", pack.native_name || pack.name || pack.id);
+      option.value = pack.id;
+      option.selected = pack.id === services.store.getSnapshot().settings.data.ui_language;
+      language.append(option);
+    });
+    const applyLanguage = el(documentRef, "button", "ui-button ui-button--quiet", "Apply interface language");
+    applyLanguage.type = "button";
+    const languageStatus = el(documentRef, "p", "ui-settings__connection-status");
+    languageStatus.setAttribute("role", "status");
+    applyLanguage.addEventListener("click", async () => {
+      applyLanguage.disabled = true;
+      languageStatus.textContent = "Saving language…";
+      try {
+        await services.apiClient.put("/api/ui-language", { language: language.value }, {
+          channel: "settings-ui-language", owner: "settings-experience",
+        });
+        if (applyLanguage.isConnected) languageStatus.textContent = "Language saved. Reload Sonder to apply it everywhere.";
+      } catch (error) {
+        if (applyLanguage.isConnected) languageStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the interface language.";
+      } finally {
+        if (applyLanguage.isConnected) applyLanguage.disabled = false;
+      }
+    });
+    languageControls.append(language, applyLanguage);
+    languageRow.append(languageCopy, languageControls);
+    soundGroup.append(languageRow, languageStatus);
+  }
+
   const accessibilityGroup = el(documentRef, "section", "ui-settings__group");
   accessibilityGroup.id = "settings-control-accessibility";
   const preferences = initAccessibility();
@@ -297,7 +506,7 @@ function experience(documentRef, services) {
   ACCESSIBILITY.forEach(([key, label, detail]) => accessibilityGroup.append(
     toggleRow(documentRef, key, label, detail, preferences, syncAccessibility),
   ));
-  section.append(head, themeGroup, accessibilityGroup);
+  section.append(head, themeGroup, readingGroup, soundGroup, accessibilityGroup);
   return section;
 }
 
@@ -369,7 +578,7 @@ function contentSettings(documentRef, services, state) {
   const manage = el(documentRef, "a", "ui-button ui-button--quiet", "Manage story exports and deletion");
   manage.href = "#/library/stories";
   localData.append(dataCopy, manage);
-  section.append(head, permissions, localData);
+  section.append(head, permissions, localData, livingWorldSettings(documentRef, services, state));
   return section;
 }
 
@@ -1049,6 +1258,77 @@ function promptEditor(documentRef, services, state) {
   return editor;
 }
 
+function rawDataEditor(documentRef, services, state, kind) {
+  const isAttire = kind === "clothing-data";
+  const chatId = Number(
+    state.story?.data?.chat?.id
+    || services.router.current().query?.chat
+    || state.library?.chats?.[0]?.id
+    || 0,
+  );
+  const label = isAttire ? "Raw clothing data" : "Raw story data";
+  const path = chatId ? `/api/chats/${chatId}/${isAttire ? "attire" : "world"}` : "";
+  const editor = el(documentRef, "section", "ui-settings__group ui-settings__raw-editor");
+  editor.id = `settings-control-${kind}`;
+  const header = el(documentRef, "div", "ui-settings__field-head");
+  const copy = el(documentRef, "span", "ui-settings__field-copy");
+  copy.append(
+    el(documentRef, "strong", "", label),
+    el(documentRef, "small", "", isAttire
+      ? "Correct the current story's clothing and visible-state record. Ordinary play updates this automatically."
+      : "Correct the current story's rooms, positions, objects, and standing facts. Ordinary play updates this automatically."),
+  );
+  const back = el(documentRef, "button", "ui-button ui-button--quiet", "Back to Advanced");
+  back.type = "button";
+  back.addEventListener("click", () => services.router.navigate({ destination: "settings", segments: ["advanced"] }));
+  header.append(copy, back);
+  const textarea = documentRef.createElement("textarea");
+  textarea.rows = 20;
+  textarea.spellcheck = false;
+  textarea.setAttribute("aria-label", `${label} JSON`);
+  const status = el(documentRef, "p", "ui-settings__connection-status", chatId ? `Loading ${label.toLocaleLowerCase()}…` : "Open a story before using this editor.");
+  status.setAttribute("role", "status");
+  const save = el(documentRef, "button", "ui-button ui-button--primary", `Save ${label.toLocaleLowerCase()}`);
+  save.type = "button";
+  save.disabled = !chatId;
+  save.addEventListener("click", async () => {
+    let body;
+    try {
+      body = JSON.parse(textarea.value);
+    } catch {
+      status.textContent = "Enter valid JSON before saving.";
+      textarea.focus();
+      return;
+    }
+    save.disabled = true;
+    status.textContent = `Saving ${label.toLocaleLowerCase()}…`;
+    try {
+      await services.apiClient.put(path, body, {
+        channel: `settings-raw-${kind}:${chatId}`, owner: `story:${chatId}`,
+      });
+      if (save.isConnected) status.textContent = `${label} saved.`;
+    } catch (error) {
+      if (save.isConnected) status.textContent = error?.userMessage || error?.message || `Sonder could not save ${label.toLocaleLowerCase()}.`;
+    } finally {
+      if (save.isConnected) save.disabled = false;
+    }
+  });
+  editor.append(header, textarea, status, save);
+  if (chatId) queueMicrotask(async () => {
+    try {
+      const result = await services.apiClient.get(path, {
+        channel: `settings-raw-${kind}:${chatId}`, owner: `story:${chatId}`,
+      });
+      if (!textarea.isConnected) return;
+      textarea.value = JSON.stringify(result.data, null, 2);
+      status.textContent = "Loaded. Changes are not saved until you choose Save.";
+    } catch (error) {
+      if (textarea.isConnected) status.textContent = error?.userMessage || error?.message || `Sonder could not load ${label.toLocaleLowerCase()}.`;
+    }
+  });
+  return editor;
+}
+
 function advanced(documentRef, services, state, route) {
   const section = el(documentRef, "section", "ui-settings__section ui-settings__section--advanced");
   const head = el(documentRef, "header", "ui-settings__section-head");
@@ -1085,6 +1365,7 @@ function advanced(documentRef, services, state, route) {
   const tool = String(route?.query?.tool || "");
   section.append(head);
   if (tool === "prompts") section.append(promptEditor(documentRef, services, state));
+  else if (tool === "story-data" || tool === "clothing-data") section.append(rawDataEditor(documentRef, services, state, tool));
   else section.append(launchers, warning);
   return section;
 }
@@ -1439,6 +1720,85 @@ function aiConnections(documentRef, services, state) {
   });
   limitGroup.append(limitHead, limitStatus);
 
+  let openRouterGroup = null;
+  if (providers.some(provider => provider.kind === "openrouter")) {
+    const routing = data.openrouter_routing || {};
+    const splitRouting = value => String(value || "").split(/[\s,]+/).map(item => item.trim()).filter(Boolean);
+    openRouterGroup = el(documentRef, "section", "ui-settings__group");
+    const routingCopy = el(documentRef, "span", "ui-settings__field-copy");
+    routingCopy.append(
+      el(documentRef, "strong", "", "OpenRouter upstream routing"),
+      el(documentRef, "small", "", "Choose which upstreams may serve a model and whether providers that retain or train on prompts are allowed."),
+    );
+    const routingFields = el(documentRef, "div", "ui-settings__media-fields");
+    const onlyField = el(documentRef, "label", "ui-field");
+    onlyField.append(el(documentRef, "span", "ui-field__label", "Allow only"));
+    const only = documentRef.createElement("input");
+    only.type = "text";
+    only.value = (routing.only || []).join(", ");
+    only.placeholder = "Blank lets OpenRouter choose";
+    only.setAttribute("aria-label", "OpenRouter allowed upstreams");
+    onlyField.append(only);
+    const ignoreField = el(documentRef, "label", "ui-field");
+    ignoreField.append(el(documentRef, "span", "ui-field__label", "Never use"));
+    const ignore = documentRef.createElement("input");
+    ignore.type = "text";
+    ignore.value = (routing.ignore || []).join(", ");
+    ignore.setAttribute("aria-label", "OpenRouter blocked upstreams");
+    ignoreField.append(ignore);
+    const sortField = el(documentRef, "label", "ui-field");
+    sortField.append(el(documentRef, "span", "ui-field__label", "Prefer by"));
+    const sort = documentRef.createElement("select");
+    sort.setAttribute("aria-label", "OpenRouter routing preference");
+    [["", "OpenRouter default"], ["price", "Price"], ["throughput", "Throughput"], ["latency", "Latency"]].forEach(([value, label]) => {
+      const option = el(documentRef, "option", "", label);
+      option.value = value;
+      option.selected = (routing.sort || "") === value;
+      sort.append(option);
+    });
+    sortField.append(sort);
+    routingFields.append(onlyField, ignoreField, sortField);
+    const routingToggles = el(documentRef, "div", "ui-settings__media-toggles");
+    const privacy = documentRef.createElement("input");
+    privacy.type = "checkbox";
+    privacy.checked = routing.data_collection === "deny";
+    privacy.setAttribute("aria-label", "Block OpenRouter providers that retain or train on prompts");
+    const privacyLabel = el(documentRef, "label", "");
+    privacyLabel.append(privacy, documentRef.createTextNode(" Block providers that retain or train on prompts"));
+    const pin = documentRef.createElement("input");
+    pin.type = "checkbox";
+    pin.checked = routing.allow_fallbacks === false;
+    pin.setAttribute("aria-label", "Never fall back to another OpenRouter upstream");
+    const pinLabel = el(documentRef, "label", "");
+    pinLabel.append(pin, documentRef.createTextNode(" Never fall back to another upstream"));
+    routingToggles.append(privacyLabel, pinLabel);
+    const routingStatus = el(documentRef, "p", "ui-settings__connection-status");
+    routingStatus.setAttribute("role", "status");
+    const routingFooter = el(documentRef, "div", "ui-settings__connection-footer");
+    const saveRouting = el(documentRef, "button", "ui-button ui-button--quiet", "Save OpenRouter routing");
+    saveRouting.type = "button";
+    routingFooter.append(saveRouting);
+    saveRouting.addEventListener("click", async () => {
+      saveRouting.disabled = true;
+      routingStatus.textContent = "Saving OpenRouter routing…";
+      try {
+        await services.apiClient.put("/api/openrouter_routing", {
+          only: splitRouting(only.value),
+          ignore: splitRouting(ignore.value),
+          data_collection: privacy.checked ? "deny" : "allow",
+          allow_fallbacks: !pin.checked,
+          sort: sort.value || null,
+        }, { channel: "settings-openrouter-routing", owner: "settings-ai-connections" });
+        if (saveRouting.isConnected) routingStatus.textContent = "OpenRouter routing saved.";
+      } catch (error) {
+        if (saveRouting.isConnected) routingStatus.textContent = error?.userMessage || error?.message || "Sonder could not save OpenRouter routing.";
+      } finally {
+        if (saveRouting.isConnected) saveRouting.disabled = false;
+      }
+    });
+    openRouterGroup.append(routingCopy, routingFields, routingToggles, routingStatus, routingFooter);
+  }
+
   const assignments = documentRef.createElement("details");
   assignments.className = "ui-settings__group ui-settings__model-assignments";
   const assignmentsSummary = el(documentRef, "summary", "ui-settings__details-summary", "Advanced model assignments");
@@ -1454,6 +1814,8 @@ function aiConnections(documentRef, services, state) {
   const roleControls = new Map();
   const effortLevels = Array.isArray(data.reasoning_effort_levels)
     ? data.reasoning_effort_levels : ["off", "minimal", "low", "medium", "high"];
+  const samplerKeys = Array.isArray(data.sampler_keys) ? data.sampler_keys : [];
+  const defaultSamplers = data.default_samplers || {};
   orderedRoles.forEach(role => {
     const label = humanizeSettingKey(role);
     const existing = data.agent_models?.[role] || {};
@@ -1495,9 +1857,66 @@ function aiConnections(documentRef, services, state) {
       effort.append(option);
     });
     effortField.append(effort);
-    row.append(providerField, modelField, effortField);
+    const advancedRole = documentRef.createElement("details");
+    advancedRole.className = "ui-settings__role-advanced";
+    const roleSummary = el(documentRef, "summary", "", `Sampling and backup models for ${label}`);
+    const samplerFields = el(documentRef, "div", "ui-settings__sampler-fields");
+    const samplerInputs = new Map();
+    samplerKeys.forEach(key => {
+      const field = el(documentRef, "label", "ui-field");
+      field.append(el(documentRef, "span", "ui-field__label", humanizeSettingKey(key)));
+      const input = documentRef.createElement("input");
+      input.type = "number";
+      input.step = "any";
+      input.value = String(existing[key] ?? defaultSamplers[key] ?? "");
+      input.setAttribute("aria-label", `${humanizeSettingKey(key)} for ${label}`);
+      field.append(input);
+      samplerFields.append(field);
+      samplerInputs.set(key, input);
+    });
+    const backupList = el(documentRef, "div", "ui-settings__backup-list");
+    const backupRows = [];
+    const addBackup = fallback => {
+      const index = backupRows.length + 1;
+      const backup = el(documentRef, "div", "ui-settings__backup-row");
+      const backupProvider = documentRef.createElement("select");
+      backupProvider.setAttribute("aria-label", `Backup ${index} provider for ${label}`);
+      const blank = el(documentRef, "option", "", "Choose provider");
+      blank.value = "";
+      backupProvider.append(blank);
+      providers.forEach(provider => {
+        const option = el(documentRef, "option", "", provider.name || provider.kind || `Provider ${provider.id}`);
+        option.value = String(provider.id);
+        option.selected = String(fallback?.provider ?? "") === String(provider.id);
+        backupProvider.append(option);
+      });
+      const backupModel = documentRef.createElement("input");
+      backupModel.type = "text";
+      backupModel.value = fallback?.model || "";
+      backupModel.placeholder = "Backup model id";
+      backupModel.setAttribute("aria-label", `Backup ${index} model for ${label}`);
+      const remove = el(documentRef, "button", "ui-button ui-button--quiet", "Remove");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove backup ${index} for ${label}`);
+      const record = { element: backup, provider: backupProvider, model: backupModel };
+      remove.addEventListener("click", () => {
+        backup.remove();
+        const at = backupRows.indexOf(record);
+        if (at >= 0) backupRows.splice(at, 1);
+      });
+      backup.append(backupProvider, backupModel, remove);
+      backupRows.push(record);
+      backupList.append(backup);
+    };
+    (Array.isArray(existing.fallbacks) ? existing.fallbacks : []).forEach(addBackup);
+    const addBackupButton = el(documentRef, "button", "ui-button ui-button--quiet", "Add backup model");
+    addBackupButton.type = "button";
+    addBackupButton.setAttribute("aria-label", `Add backup model for ${label}`);
+    addBackupButton.addEventListener("click", () => addBackup({}));
+    advancedRole.append(roleSummary, samplerFields, backupList, addBackupButton);
+    row.append(providerField, modelField, effortField, advancedRole);
     assignmentRows.append(row);
-    roleControls.set(role, { providerSelect, modelInput, effort });
+    roleControls.set(role, { providerSelect, modelInput, effort, samplerInputs, backupRows });
   });
   const assignmentFooter = el(documentRef, "div", "ui-settings__connection-footer");
   const assignmentStatus = el(documentRef, "p", "ui-settings__connection-status");
@@ -1525,6 +1944,20 @@ function aiConnections(documentRef, services, state) {
         provider: provider?.id ?? providerId,
         model,
       };
+      for (const [key, input] of controls.samplerInputs) {
+        const value = Number(input.value);
+        if (input.value !== "" && Number.isFinite(value)) nextModels[role][key] = value;
+        else delete nextModels[role][key];
+      }
+      const fallbacks = controls.backupRows.map(row => {
+        const fallbackProvider = providers.find(item => String(item.id) === row.provider.value);
+        return {
+          provider: fallbackProvider?.id ?? row.provider.value,
+          model: row.model.value.trim(),
+        };
+      }).filter(fallback => fallback.provider && fallback.model);
+      if (fallbacks.length) nextModels[role].fallbacks = fallbacks;
+      else delete nextModels[role].fallbacks;
       if (controls.effort.value) efforts[role] = controls.effort.value;
     }
     try {
@@ -1715,7 +2148,9 @@ function aiConnections(documentRef, services, state) {
   });
   ambience.append(ambienceTitle, ambienceFields, ambienceToggles, ambienceStatus, ambienceFooter);
 
-  section.append(head, connections, defaults, limitGroup, assignments, backdrops, ambience);
+  section.append(head, connections, defaults, limitGroup);
+  if (openRouterGroup) section.append(openRouterGroup);
+  section.append(assignments, backdrops, ambience);
   return section;
 }
 

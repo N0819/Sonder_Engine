@@ -93,6 +93,51 @@ def test_experience_ports_reference_frame_and_applies_local_preferences(
     expect(page.get_by_role("checkbox", name="Accessibility Mode")).not_to_be_checked()
 
 
+def test_experience_connects_reading_sound_effects_and_interface_language(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches an appearance-only Experience panel that omits current preferences."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "ui_language": "en",
+        "language_packs": [
+            {"id": "en", "name": "English", "native_name": "English", "ui": True},
+            {"id": "ja", "name": "Japanese", "native_name": "日本語", "ui": True},
+        ],
+    }
+    writes: list[dict[str, object]] = []
+
+    def language(route) -> None:
+        writes.append(route.request.post_data_json)
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "language": "ja"}),
+        )
+
+    page.route("**/api/ui-language", language)
+    _open_settings(page, ui_base_url, bootstrap=bootstrap)
+
+    page.get_by_role("combobox", name="Story text size").select_option("19")
+    expect(page.locator("html")).to_have_attribute("data-prose-size", "19")
+    page.get_by_role("combobox", name="Visual effects").select_option("off")
+    expect(page.locator("html")).to_have_attribute("data-effects", "off")
+    page.get_by_role("slider", name="Sound volume").fill("0.35")
+    page.get_by_role("checkbox", name="Mute story sound").check()
+    page.get_by_role("combobox", name="Interface language").select_option("ja")
+    page.get_by_role("button", name="Apply interface language").click()
+
+    expect(page.get_by_text("Language saved. Reload Sonder to apply it everywhere.", exact=True)).to_be_visible()
+    stored = page.evaluate("JSON.parse(localStorage.getItem('sonder.ui-next') || '{}')")
+    assert stored["appearance"]["proseSize"] == "19"
+    assert stored["appearance"]["effects"] == "off"
+    assert stored["panes"]["atmosphere"] == {
+        "muted": True,
+        "volume": 0.35,
+        "chime": False,
+    }
+    assert writes == [{"language": "ja"}]
+
+
 def test_mobile_settings_uses_reference_horizontal_category_staging(
     page: Page, ui_base_url: str
 ) -> None:
@@ -215,6 +260,36 @@ def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
         "language": "en",
         "prompts": {"director": "Revised focused sheet"},
     }
+
+
+def test_advanced_raw_story_editor_validates_and_saves_the_current_story(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches a raw-data launcher that falls back to the classic modal."""
+    bootstrap = {**BOOTSTRAP, "chats": [{"id": 5, "title": "The Glass District"}]}
+    writes: list[dict[str, object]] = []
+    page.route(
+        re.compile(r".*/api/chats/5/world$"),
+        lambda route: (
+            writes.append(route.request.post_data_json)
+            or route.fulfill(content_type="application/json", body=json.dumps({"rooms": {"atrium": {}}}))
+            if route.request.method == "PUT"
+            else route.fulfill(content_type="application/json", body=json.dumps({"rooms": {"atrium": {}}}))
+        ),
+    )
+    _open_settings(page, ui_base_url, category="advanced", bootstrap=bootstrap)
+
+    page.get_by_role("button", name=re.compile("^Raw story data")).click()
+    expect(page).to_have_url(re.compile(r"#/settings/advanced\?tool=story-data$"))
+    editor = page.get_by_role("textbox", name="Raw story data JSON")
+    expect(editor).to_have_value(re.compile(r'"atrium"'))
+    editor.fill("not json")
+    page.get_by_role("button", name="Save raw story data").click()
+    expect(page.get_by_text("Enter valid JSON before saving.", exact=True)).to_be_visible()
+    editor.fill('{"rooms":{"atrium":{"name":"Atrium"}}}')
+    page.get_by_role("button", name="Save raw story data").click()
+    expect(page.get_by_text("Raw story data saved.", exact=True)).to_be_visible()
+    assert writes == [{"rooms": {"atrium": {"name": "Atrium"}}}]
 
 
 def test_ai_connections_ports_provider_ledger_and_tests_the_current_connection(
@@ -546,6 +621,111 @@ def test_ai_connections_saves_advanced_role_models_without_flattening_configs(
     assert writes["efforts"] == {"efforts": {"embeddings": "low"}}
 
 
+def test_ai_connections_edits_role_samplers_and_ordered_backup_models(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches preservation-only handling of generation defaults and fallbacks."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [
+            {"id": 7, "name": "Anthropic", "kind": "anthropic", "has_key": True},
+            {"id": 8, "name": "OpenRouter", "kind": "openrouter", "has_key": True},
+        ],
+        "provider_presets": {},
+        "roles": ["default"],
+        "sampler_keys": ["temperature", "top_p"],
+        "default_samplers": {"temperature": 0.7, "top_p": 1.0},
+        "agent_models": {
+            "default": {
+                "provider": 7,
+                "model": "claude-sonnet-4-5",
+                "temperature": 0.7,
+                "fallbacks": [{"provider": 8, "model": "anthropic/claude-sonnet-4"}],
+            }
+        },
+        "reasoning_effort_levels": ["off", "low", "medium", "high"],
+    }
+    writes: dict[str, object] = {}
+
+    def models(route) -> None:
+        writes["models"] = route.request.post_data_json
+        route.fulfill(content_type="application/json", body=json.dumps({"ok": True}))
+
+    page.route("**/api/agent_models", models)
+    page.route(
+        "**/api/reasoning_effort",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps({"ok": True})),
+    )
+    _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
+
+    page.get_by_text("Advanced model assignments", exact=True).click()
+    page.get_by_text("Sampling and backup models for Default", exact=True).click()
+    page.get_by_role("spinbutton", name="Temperature for Default").fill("0.45")
+    page.get_by_role("textbox", name="Backup 1 model for Default").fill(
+        "anthropic/claude-haiku-4"
+    )
+    page.get_by_role("button", name="Add backup model for Default").click()
+    page.get_by_role("combobox", name="Backup 2 provider for Default").select_option("7")
+    page.get_by_role("textbox", name="Backup 2 model for Default").fill("claude-haiku-4-5")
+    page.get_by_role("button", name="Save model assignments").click()
+
+    assert writes["models"] == {
+        "default": {
+            "provider": 7,
+            "model": "claude-sonnet-4-5",
+            "temperature": 0.45,
+            "top_p": 1,
+            "fallbacks": [
+                {"provider": 8, "model": "anthropic/claude-haiku-4"},
+                {"provider": 7, "model": "claude-haiku-4-5"},
+            ],
+        }
+    }
+
+
+def test_ai_connections_saves_openrouter_privacy_and_upstream_routing(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches omission of the provider-retention and fallback routing controls."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [{"id": 8, "name": "OpenRouter", "kind": "openrouter", "has_key": True}],
+        "provider_presets": {},
+        "roles": ["default"],
+        "agent_models": {"default": {"provider": 8, "model": "anthropic/claude-sonnet-4"}},
+        "openrouter_routing": {"only": ["anthropic"], "data_collection": "deny"},
+    }
+    writes: list[dict[str, object]] = []
+
+    def routing(route) -> None:
+        writes.append(route.request.post_data_json)
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "routing": route.request.post_data_json}),
+        )
+
+    page.route("**/api/openrouter_routing", routing)
+    _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
+
+    page.get_by_role("textbox", name="OpenRouter allowed upstreams").fill(
+        "anthropic, amazon-bedrock"
+    )
+    page.get_by_role("checkbox", name="Never fall back to another OpenRouter upstream").check()
+    page.get_by_role("combobox", name="OpenRouter routing preference").select_option("latency")
+    page.get_by_role("button", name="Save OpenRouter routing").click()
+
+    expect(page.get_by_text("OpenRouter routing saved.", exact=True)).to_be_visible()
+    assert writes == [
+        {
+            "only": ["anthropic", "amazon-bedrock"],
+            "ignore": [],
+            "data_collection": "deny",
+            "allow_fallbacks": False,
+            "sort": "latency",
+        }
+    ]
+
+
 def test_ai_connections_saves_backdrop_and_ambience_sources(
     page: Page, ui_base_url: str
 ) -> None:
@@ -656,6 +836,58 @@ def test_content_saves_current_story_content_permissions_and_explains_local_data
         "attire": {"enabled": True},
         "promote": {"enabled": True},
     }
+
+
+def test_content_renders_living_world_built_and_effective_depth_from_server_truth(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches a copied ladder that presents an unbuilt or ceiling-capped tier as active."""
+    bootstrap = {**BOOTSTRAP, "chats": [{"id": 5, "title": "The Glass District"}]}
+    writes: list[dict[str, object]] = []
+    report = {
+        "living_world": {"routine_residue": "ceiling", "rumor_ledger": "ceiling"},
+        "approaches": [
+            {
+                "approach": "routine_residue",
+                "label": "Routine and residue",
+                "value": "ceiling",
+                "effective": "floor",
+                "cost": "floor: free; ceiling: one call",
+                "depths": [
+                    {"value": "floor", "description": "Rooms drift on the clock.", "built": True, "requires": "deterministic", "permitted": True},
+                    {"value": "ceiling", "description": "Places advance social life.", "built": False, "requires": "stochastic", "permitted": True},
+                ],
+            },
+            {
+                "approach": "rumor_ledger",
+                "label": "Rumor ledger",
+                "value": "ceiling",
+                "effective": "floor",
+                "cost": "floor: free; ceiling: one small call",
+                "depths": [
+                    {"value": "floor", "description": "News travels with witnesses.", "built": True, "requires": "deterministic", "permitted": True},
+                    {"value": "ceiling", "description": "Posted notices get wording.", "built": True, "requires": "stochastic", "permitted": False},
+                ],
+            },
+        ],
+    }
+
+    def living_world(route) -> None:
+        if route.request.method == "PUT":
+            writes.append(route.request.post_data_json)
+            route.fulfill(content_type="application/json", body=json.dumps({"ok": True, "living_world": route.request.post_data_json["living_world"]}))
+        else:
+            route.fulfill(content_type="application/json", body=json.dumps(report))
+
+    page.route(re.compile(r".*/api/chats/5/living_world$"), living_world)
+    _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
+
+    expect(page.get_by_text("Runs as Floor — Ceiling is not built yet.", exact=True)).to_be_visible()
+    expect(page.get_by_text("Runs as Floor — the story's off-screen limit does not permit Ceiling.", exact=True)).to_be_visible()
+    page.get_by_role("combobox", name="Routine and residue depth").select_option("floor")
+    page.get_by_role("button", name="Save living world settings").click()
+    expect(page.get_by_text("Living world settings saved.", exact=True)).to_be_visible()
+    assert writes == [{"living_world": {"routine_residue": "floor", "rumor_ledger": "ceiling"}}]
 
 
 def test_add_ons_discloses_permissions_and_runs_current_extension_lifecycle(
