@@ -187,10 +187,15 @@ export function createPlayRuntime(options = {}) {
       if (error?.kind === "aborted" || error?.kind === "stale") return false;
       if (!selectedStillMatches(id, frame) || sequence !== loadSequence) return false;
       replaceServer("story", {
-        status: error?.kind === "malformed-response" ? "fatal" : "error",
+        status: error?.kind === "malformed-response"
+          ? "fatal"
+          : (error?.kind === "network" ? "offline" : "error"),
         owner,
         data: null,
-        error,
+        error: {
+          kind: error?.kind || "server",
+          message: error?.userMessage || error?.message || "This story could not be opened.",
+        },
       });
       replaceServer("transcript", { status: "error", owner, items: [], preview: null });
       publishComposer({ status: "recoverable-error", failure: {

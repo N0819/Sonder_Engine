@@ -99,6 +99,7 @@ CASES = (
     ("turn-details", 1280, 800, "#/play?chat=1", "details", 1, False),
     ("story-actions", 1280, 800, "#/play?chat=1", "story-actions", 12, False),
     ("recoverable-error", 390, 844, "#/play?chat=1", "failure", 12, False),
+    ("offline-story", 390, 844, "#/play?chat=1", "offline-story", 0, False),
 )
 
 
@@ -160,7 +161,10 @@ def tree_hash() -> str:
 
 def route_case(page: Page, payload: dict, boot: dict, action: str) -> None:
     page.route("**/api/bootstrap", lambda route: fulfill_json(route, boot))
-    page.route("**/api/chats/1", lambda route: fulfill_json(route, payload))
+    if action == "offline-story":
+        page.route("**/api/chats/1", lambda route: route.abort("failed"))
+    else:
+        page.route("**/api/chats/1", lambda route: fulfill_json(route, payload))
     page.route(
         "**/api/turns/*/narration",
         lambda route: fulfill_json(
@@ -213,6 +217,8 @@ def apply_action(page: Page, action: str) -> None:
         box.fill("Keep this draft")
         page.get_by_role("button", name="Send", exact=True).click()
         page.get_by_role("button", name="Retry", exact=True).wait_for()
+    elif action == "offline-story":
+        page.get_by_role("heading", name="Sonder is offline").wait_for()
 
 
 def inspect_page(page: Page, requested: list[str], render_ms: float) -> dict:
