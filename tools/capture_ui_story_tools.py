@@ -148,6 +148,7 @@ def inspect(page: Page, requests: list[str]) -> dict:
       const composer = document.querySelector('[data-play-composer]')?.getBoundingClientRect();
       const panelNode = [...document.querySelectorAll('[data-story-tool-panel]')].find(visible);
       const panel = panelNode?.getBoundingClientRect();
+      const modalStaged = Boolean(panelNode?.closest('[role="dialog"]'));
       const overlap = (a, b) => a && b && Math.max(0, Math.min(a.right,b.right)-Math.max(a.left,b.left)) * Math.max(0, Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
       return {
         layout_state: document.documentElement.dataset.layoutState,
@@ -157,6 +158,8 @@ def inspect(page: Page, requests: list[str]) -> dict:
         tool_visible: Boolean(panelNode),
         transcript_composer_overlap_px2: overlap(transcript, composer),
         panel_composer_overlap_px2: overlap(panel, composer),
+        modal_staged: modalStaged,
+        continuous_workspace_overlap_px2: modalStaged ? 0 : Math.max(overlap(transcript, composer), overlap(panel, composer)),
         classic_global: Object.hasOwn(window, 'S'),
         sensitive_text: /password|api[_ -]?key|join code|cookie|session=/i.test(document.body.textContent),
         dom_count: document.querySelectorAll('*').length,
