@@ -532,6 +532,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
   const renderTranscript = state => {
     const wasPinned = lastItems === null || lastItems.length === 0 || pinned();
     const previousTop = transcript.scrollTop;
+    transcript.dataset.scrollSettled = "false";
     const items = state.transcript.items || [];
     const nodes = items.map((turn, index) => createTurn(
       documentRef, services, proseModule, turn, index === items.length - 1,
@@ -563,6 +564,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
         transcript.scrollTop = previousTop;
         newTurn.hidden = false;
       }
+      transcript.dataset.scrollSettled = "true";
     }));
     lastItems = items;
     lastPreview = state.transcript.preview;
