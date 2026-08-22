@@ -40,6 +40,9 @@ rather than prose, and everything points at them.
 - [`ENGINEERING.md`](guides/ENGINEERING.md) — how the system operates, layer by
   layer, and why each boundary is where it is. The connective tissue between the
   references below; it explains mechanism and does not restate their tables.
+- [`INTERFACE.md`](guides/INTERFACE.md) — maintained web-interface authority:
+  replacement outcome, runtime/integration boundaries, responsive parity,
+  content and credential safety, and evidence/change-control rules.
 - [`PIPELINE.md`](guides/PIPELINE.md) — implemented turn execution, stage by
   stage, and the debugging map.
 - [`DATABASE.md`](guides/DATABASE.md) — persistence, schema, and the checklist
@@ -70,6 +73,16 @@ routing.
 
 What any of these has **not** built is registered in
 [`UNBUILT.md`](UNBUILT.md), not in the note itself.
+
+Interface replacement:
+
+- [`sonder-ui-bible/README.md`](design/sonder-ui-bible/README.md) — approved
+  visual, interaction, responsive, accessibility, and terminology direction.
+  It is design context reconciled by the maintained
+  [`INTERFACE.md`](guides/INTERFACE.md); historical completion claims are not
+  current implementation status.
+- [`SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`](design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md)
+  — current-source disposition of the supplied candidate and its evidence.
 
 Minds:
 
