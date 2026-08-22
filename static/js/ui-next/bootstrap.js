@@ -22,6 +22,7 @@ const SERVICE_PATHS = Object.freeze({
   extensions: "./extensions.js?release=wp03.1",
   extensionsV1: "./extensions-v1.js?release=wp03.1",
   destinations: "./destinations.js?release=wp03.1",
+  navigationState: "./navigation-state.js?release=wp03.1",
   shell: "./shell.js?release=wp03.1",
 });
 
@@ -170,6 +171,13 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     status: "ready",
     ...localState.snapshot().appearance,
   });
+  const navigationState = modules.navigationState.createNavigationState({
+    localState,
+    target,
+    document: documentRef,
+  });
+  navigationState.prepareInitialRoute(modules.router.parseHashRoute);
+  cleanups.push(() => navigationState.teardown());
 
   let loginRequested = false;
   const apiClient = modules.api.createApiClient({
@@ -236,10 +244,14 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
   const router = modules.router.createRouter({
     target,
     explain: key => localizer.t(key),
-    onRoute: route => replacePresentationSlice(store, "route", {
-      status: "ready",
-      ...route,
-    }),
+    onRoute: route => {
+      navigationState.onRoute(route);
+      replacePresentationSlice(store, "route", {
+        status: "ready",
+        ...route,
+      });
+    },
+    onFocusReturn: identity => navigationState.restoreFocus(identity),
   });
   router.start();
   cleanups.push(() => router.stop());
@@ -314,6 +326,7 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     notices,
     diagnostics,
     localState,
+    navigationState,
     router,
     registry,
     adapter,

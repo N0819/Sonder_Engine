@@ -56,6 +56,7 @@ export function createApplicationShell(options = {}) {
     const copy = modules.destinations.destinationCopy(destination, t);
     parent.textContent = t("Sonder Engine");
     heading.textContent = copy.label;
+    heading.dataset.focusIdentity = `destination:${destination}`;
     context.textContent = copy.context;
     for (const link of links) {
       if (link.dataset.coreDestination === destination) {
