@@ -1,9 +1,9 @@
 # Frontend drift record
 
 **From candidate baseline:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
-**To current program baseline:** `f0e9ea39cd7ab3a4d3f9289fcf8a204f34204cd5`  
-**Changed frontend-adjacent paths:** 167  
-**Review classes:** api-contract: 1, behavioral-test: 14, engine-or-test-context: 92, frontend-behavior: 14, localization-contract: 2, presentation: 14, security-contract: 2, tooling: 28
+**To current program baseline:** `230876b6d6f4a694f99ffae7768e4b78d240c110`  
+**Changed frontend-adjacent paths:** 168  
+**Review classes:** api-contract: 1, behavioral-test: 14, engine-or-test-context: 92, frontend-behavior: 14, localization-contract: 2, presentation: 14, security-contract: 2, tooling: 29
 
 A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.
 
@@ -151,6 +151,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tools/capture_ui_baseline.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_foundation.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/cheap_embed_width_sweep.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| M | `tools/extract_ui_catalog.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/fetch_longmemeval.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | M | `tools/generate_code_map.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/generate_synthetic_bank.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
