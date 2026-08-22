@@ -19,6 +19,29 @@ const THEME_COPY = Object.freeze({
   "parchment-night": ["Parchment Night", "Dark umber, ink, and warm cream.", ["#15100d", "#2a211a", "#819da0", "#c99a58"]],
 });
 
+const LEGACY_THEMES = Object.freeze([
+  ["sonder", "Sonder", "carbon-signal"],
+  ["tavern", "Tavern", "ash-brass"],
+  ["lcars", "LCARS", "carbon-signal"],
+  ["stone", "Stone", "ash-brass"],
+  ["ink", "Ink", "midnight-ink"],
+]);
+
+const SETTINGS_INDEX = Object.freeze([
+  ["experience", "themes", "Themes", "appearance palette colors legacy skin"],
+  ["experience", "accessibility", "Accessibility", "contrast motion focus large text roomy controls"],
+  ["ai-connections", "providers", "Provider credentials", "api key token endpoint connection provider"],
+  ["ai-connections", "models", "Models and roles", "model defaults backup sampler reasoning openrouter routing"],
+  ["content", "content-permissions", "Story content", "adult mature nsfw underneath attire promotion"],
+  ["add-ons", "extensions", "Extensions", "addon plugin install permissions enable update remove recovery"],
+  ["maintenance", "updates", "Sonder updates", "upgrade version git restart"],
+  ["maintenance", "memory-search", "Memory search repair", "embedding vectors rebuild repair"],
+  ["maintenance", "diagnostics", "Diagnostics", "logs errors report download"],
+  ["advanced", "prompts", "Prompt editor", "prompt preset sheets instructions"],
+  ["advanced", "story-data", "Raw story data", "world json technical"],
+  ["advanced", "clothing-data", "Raw clothing data", "attire json technical"],
+]);
+
 const ACCESSIBILITY = Object.freeze([
   ["mode", "Accessibility Mode", "Enable the recommended visual accessibility adjustments together."],
   ["solidSurfaces", "Solid surfaces", "Remove transparency and blur while preserving the layout."],
@@ -86,6 +109,63 @@ function categoryNav(documentRef, services, active) {
   return nav;
 }
 
+function settingsSearch(documentRef, services) {
+  const field = el(documentRef, "div", "ui-settings__search-wrap");
+  const label = el(documentRef, "label", "ui-settings__search");
+  const input = documentRef.createElement("input");
+  input.type = "search";
+  input.placeholder = "Search settings";
+  input.setAttribute("aria-label", "Search settings");
+  input.setAttribute("aria-controls", "settings-search-results");
+  const results = el(documentRef, "div", "ui-settings__search-results");
+  results.id = "settings-search-results";
+  results.hidden = true;
+  const close = () => {
+    results.hidden = true;
+    results.replaceChildren();
+  };
+  const render = () => {
+    const query = input.value.trim().toLocaleLowerCase();
+    results.replaceChildren();
+    if (!query) {
+      close();
+      return;
+    }
+    const words = query.split(/\s+/).filter(Boolean);
+    const matches = SETTINGS_INDEX.filter(([, , labelText, aliases]) => {
+      const haystack = `${labelText} ${aliases}`.toLocaleLowerCase();
+      return words.every(word => haystack.includes(word));
+    });
+    if (!matches.length) {
+      results.append(el(documentRef, "p", "ui-muted", "No settings match that search."));
+      results.hidden = false;
+      return;
+    }
+    matches.forEach(([category, control, labelText]) => {
+      const categoryLabel = CATEGORIES.find(([id]) => id === category)?.[1] || category;
+      const button = el(documentRef, "button", "ui-settings__search-result", `${labelText} · ${categoryLabel}`);
+      button.type = "button";
+      button.addEventListener("click", () => services.router.navigate({
+        destination: "settings",
+        segments: [category],
+        query: { control },
+      }));
+      results.append(button);
+    });
+    results.hidden = false;
+  };
+  input.addEventListener("input", render);
+  input.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      close();
+      input.focus();
+    }
+  });
+  label.append(icon(documentRef, "search"), input);
+  field.append(label, results);
+  return field;
+}
+
 function themeChoice(documentRef, services, id, active) {
   const [name, detail, colors] = THEME_COPY[id];
   const control = el(documentRef, "button", "ui-settings__theme-choice");
@@ -104,8 +184,9 @@ function themeChoice(documentRef, services, id, active) {
   control.append(el(documentRef, "span", "ui-settings__index", String(Object.keys(THEME_COPY).indexOf(id) + 1).padStart(2, "0")), copy, status);
   control.addEventListener("click", () => {
     appearance.setTheme(id);
+    delete documentRef.documentElement.dataset.legacyTheme;
     const stored = services.localState.snapshot().appearance || {};
-    services.localState.setRecord("appearance", { ...stored, theme: id });
+    services.localState.setRecord("appearance", { ...stored, theme: id, legacyTheme: undefined });
     control.closest(".ui-settings__group")?.querySelector(".ui-settings__theme-readout")?.replaceChildren(name);
     for (const candidate of control.parentElement.children) {
       const selected = candidate.dataset.themeChoice === id;
@@ -162,6 +243,7 @@ function experience(documentRef, services) {
     el(documentRef, "p", "ui-muted", "Look, reading, sound, motion, and accessibility"),
   );
   const themeGroup = el(documentRef, "section", "ui-settings__group");
+  themeGroup.id = "settings-control-themes";
   const themeHead = el(documentRef, "div", "ui-settings__field-head");
   const copy = el(documentRef, "span", "ui-settings__field-copy");
   copy.append(el(documentRef, "strong", "", "Theme"), el(documentRef, "small", "", "Four restrained, genre-neutral palettes. Theme changes stay on this device."));
@@ -174,11 +256,36 @@ function experience(documentRef, services) {
   legacyCopy.append(el(documentRef, "strong", "", "Legacy themes"), el(documentRef, "small", "", "Kept for compatibility."));
   const select = documentRef.createElement("select");
   select.setAttribute("aria-label", "Legacy themes");
-  select.append(el(documentRef, "option", "", "Choose a legacy theme"));
+  const emptyLegacy = el(documentRef, "option", "", "Choose a legacy theme");
+  emptyLegacy.value = "";
+  select.append(emptyLegacy);
+  const storedLegacy = services.localState.snapshot().appearance?.legacyTheme || "";
+  LEGACY_THEMES.forEach(([id, label]) => {
+    const option = el(documentRef, "option", "", label);
+    option.value = id;
+    option.selected = id === storedLegacy;
+    select.append(option);
+  });
+  select.addEventListener("change", () => {
+    const selected = LEGACY_THEMES.find(([id]) => id === select.value);
+    if (!selected) return;
+    const [legacyId, , semanticTheme] = selected;
+    appearance.setTheme(semanticTheme);
+    documentRef.documentElement.dataset.legacyTheme = legacyId;
+    const stored = services.localState.snapshot().appearance || {};
+    services.localState.setRecord("appearance", { ...stored, theme: semanticTheme, legacyTheme: legacyId });
+    themeGroup.querySelector(".ui-settings__theme-readout")?.replaceChildren(`Legacy · ${selected[1]}`);
+    themes.querySelectorAll("[data-theme-choice]").forEach(choice => {
+      const activeChoice = choice.dataset.themeChoice === semanticTheme;
+      choice.setAttribute("aria-pressed", String(activeChoice));
+      choice.querySelector(".ui-settings__theme-status").textContent = activeChoice ? "Mapped" : "Use";
+    });
+  });
   legacy.append(legacyCopy, select);
   themeGroup.append(themeHead, themes, legacy);
 
   const accessibilityGroup = el(documentRef, "section", "ui-settings__group");
+  accessibilityGroup.id = "settings-control-accessibility";
   const preferences = initAccessibility();
   const syncAccessibility = next => {
     accessibilityGroup.querySelectorAll("input[data-accessibility-key]").forEach(input => {
@@ -205,6 +312,7 @@ function contentSettings(documentRef, services, state) {
   );
 
   const permissions = el(documentRef, "section", "ui-settings__group");
+  permissions.id = "settings-control-content-permissions";
   const adult = settingToggle(
     documentRef,
     "Allow adult story content",
@@ -283,6 +391,7 @@ function addOnsSettings(documentRef, services) {
   const status = el(documentRef, "p", "ui-settings__connection-status", "Loading installed extensions…");
   status.setAttribute("role", "status");
   const list = el(documentRef, "section", "ui-settings__group ui-settings__extension-list");
+  list.id = "settings-control-extensions";
   const install = el(documentRef, "section", "ui-settings__group");
   const installCopy = el(documentRef, "span", "ui-settings__field-copy");
   installCopy.append(
@@ -542,6 +651,7 @@ function maintenanceSettings(documentRef, services) {
   );
 
   const updates = el(documentRef, "section", "ui-settings__group");
+  updates.id = "settings-control-updates";
   const updateHead = el(documentRef, "div", "ui-settings__field-head");
   const updateCopy = el(documentRef, "span", "ui-settings__field-copy");
   updateCopy.append(
@@ -732,8 +842,115 @@ function maintenanceSettings(documentRef, services) {
       if (checkpoints.isConnected) checkpointResult.textContent = error?.userMessage || error?.message || "Sonder could not check checkpoint storage.";
     }
   };
-  section.append(head, updates, checkpoints);
+  const memorySearch = el(documentRef, "section", "ui-settings__group");
+  memorySearch.id = "settings-control-memory-search";
+  const memoryCopy = el(documentRef, "span", "ui-settings__field-copy");
+  memoryCopy.append(
+    el(documentRef, "strong", "", "Memory search"),
+    el(documentRef, "small", "", "Check and rebuild stored search vectors after changing the embeddings model."),
+  );
+  const memoryResult = el(documentRef, "div", "ui-settings__maintenance-result", "Checking memory search…");
+  memoryResult.setAttribute("role", "status");
+  memorySearch.append(memoryCopy, memoryResult);
+  const loadMemory = async () => {
+    try {
+      const result = await services.apiClient.get("/api/memory/embeddings", {
+        channel: "settings-memory-search-status", owner: "settings-maintenance",
+      });
+      if (!memorySearch.isConnected) return;
+      const report = result.data || {};
+      memoryResult.replaceChildren();
+      if (report.error) {
+        memoryResult.append(el(documentRef, "p", "ui-settings__extension-error", report.error));
+        return;
+      }
+      const progress = report.progress || {};
+      if (progress.running) {
+        const done = Number(progress.done || progress.current || 0);
+        const total = Number(progress.total || 0);
+        const meter = documentRef.createElement("progress");
+        meter.max = total || 1;
+        meter.value = done;
+        memoryResult.append(el(documentRef, "p", "", `Rebuilding ${done.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} memories.`), meter);
+        setTimeout(loadMemory, 1000);
+        return;
+      }
+      const stale = Number(report.stale ?? report.missing ?? Math.max(0, Number(report.total || 0) - Number(report.current || 0)));
+      if (!stale) {
+        memoryResult.append(el(documentRef, "p", "", "Memory search vectors are current."));
+        return;
+      }
+      memoryResult.append(el(documentRef, "p", "", `${stale.toLocaleString("en-US")} ${stale === 1 ? "memory needs" : "memories need"} updated search vectors.`));
+      const rebuild = el(documentRef, "button", "ui-button ui-button--quiet", "Rebuild memory search");
+      rebuild.type = "button";
+      const consent = el(documentRef, "div", "ui-settings__extension-consent");
+      consent.hidden = true;
+      rebuild.addEventListener("click", () => {
+        consent.replaceChildren(
+          el(documentRef, "strong", "", "Rebuild memory search?"),
+          el(documentRef, "p", "", "This may use the configured embeddings provider."),
+          el(documentRef, "p", "ui-muted", "Stories and memories are not deleted."),
+        );
+        const confirm = el(documentRef, "button", "ui-button ui-button--primary", "Confirm rebuild memory search");
+        confirm.type = "button";
+        const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+        cancel.type = "button";
+        consent.append(confirm, cancel);
+        consent.hidden = false;
+        confirm.addEventListener("click", async () => {
+          confirm.disabled = true;
+          try {
+            const started = await services.apiClient.post("/api/memory/embeddings/rebuild", {}, {
+              channel: "settings-memory-search-rebuild", owner: "settings-maintenance",
+            });
+            if (!confirm.isConnected) return;
+            const answer = started.data || {};
+            memoryResult.replaceChildren(el(documentRef, "p", "", answer.started === false
+              ? `Memory search rebuild was not started: ${answer.reason || "nothing to rebuild"}.`
+              : `Memory search rebuild started for ${Number(answer.total || stale).toLocaleString("en-US")} memories.`));
+          } catch (error) {
+            if (confirm.isConnected) {
+              confirm.disabled = false;
+              consent.append(el(documentRef, "p", "ui-settings__extension-error", error?.userMessage || error?.message || "Sonder could not rebuild memory search."));
+            }
+          }
+        });
+        cancel.addEventListener("click", () => {
+          consent.hidden = true;
+          rebuild.focus();
+        });
+      });
+      memoryResult.append(rebuild, consent);
+    } catch (error) {
+      if (memorySearch.isConnected) memoryResult.textContent = error?.userMessage || error?.message || "Sonder could not check memory search.";
+    }
+  };
+
+  const diagnostics = el(documentRef, "section", "ui-settings__group");
+  diagnostics.id = "settings-control-diagnostics";
+  const diagnosticHead = el(documentRef, "div", "ui-settings__field-head");
+  const diagnosticCopy = el(documentRef, "span", "ui-settings__field-copy");
+  diagnosticCopy.append(
+    el(documentRef, "strong", "", "Diagnostics"),
+    el(documentRef, "small", "", "Download the bounded, redacted interface event log. Credentials and request bodies are excluded."),
+  );
+  const download = el(documentRef, "button", "ui-button ui-button--quiet", "Download redacted diagnostics");
+  download.type = "button";
+  download.addEventListener("click", () => {
+    const blob = new Blob([JSON.stringify(services.diagnostics.snapshot(), null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const link = documentRef.createElement("a");
+    link.href = href;
+    link.download = "sonder-interface-diagnostics.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(href), 0);
+  });
+  diagnosticHead.append(diagnosticCopy, download);
+  diagnostics.append(diagnosticHead);
+
+  section.append(head, updates, checkpoints, memorySearch, diagnostics);
   queueMicrotask(loadCheckpoints);
+  queueMicrotask(loadMemory);
   return section;
 }
 
@@ -749,7 +966,90 @@ function placeholder(documentRef, active) {
   return section;
 }
 
-function advanced(documentRef) {
+function promptEditor(documentRef, services, state) {
+  const data = state.settings?.data || {};
+  const presets = data.prompt_presets && typeof data.prompt_presets === "object" ? data.prompt_presets : {};
+  const activeName = String(data.active_preset || "Default");
+  const active = activeName === "Default" ? null : presets[activeName];
+  const prompts = { ...(active?.prompts || data.default_prompts || {}) };
+  const editor = el(documentRef, "section", "ui-settings__group ui-settings__prompt-editor");
+  editor.id = "settings-control-prompts";
+  const header = el(documentRef, "div", "ui-settings__field-head");
+  const copy = el(documentRef, "span", "ui-settings__field-copy");
+  copy.append(
+    el(documentRef, "strong", "", "Prompt preset"),
+    el(documentRef, "small", "", "Long-form engine instructions are saved only when you choose Save prompt preset."),
+  );
+  const back = el(documentRef, "button", "ui-button ui-button--quiet", "Back to Advanced");
+  back.type = "button";
+  back.addEventListener("click", () => services.router.navigate({ destination: "settings", segments: ["advanced"] }));
+  header.append(copy, back);
+  const controls = el(documentRef, "div", "ui-settings__prompt-controls");
+  const nameField = el(documentRef, "label", "ui-field");
+  nameField.append(el(documentRef, "span", "ui-field__label", "Preset name"));
+  const name = documentRef.createElement("input");
+  name.type = "text";
+  name.value = activeName === "Default" ? "" : activeName;
+  name.setAttribute("aria-label", "Prompt preset name");
+  nameField.append(name);
+  const languageField = el(documentRef, "label", "ui-field");
+  languageField.append(el(documentRef, "span", "ui-field__label", "Story language"));
+  const language = documentRef.createElement("select");
+  language.setAttribute("aria-label", "Prompt preset language");
+  const packs = Array.isArray(data.language_packs) && data.language_packs.length
+    ? data.language_packs : [{ id: active?.language || "en", name: active?.language || "English" }];
+  packs.forEach(pack => {
+    const option = el(documentRef, "option", "", pack.name || pack.id);
+    option.value = pack.id;
+    option.selected = pack.id === (active?.language || "en");
+    language.append(option);
+  });
+  languageField.append(language);
+  controls.append(nameField, languageField);
+  const fields = el(documentRef, "div", "ui-settings__prompt-fields");
+  const promptInputs = new Map();
+  Object.entries(prompts).sort(([left], [right]) => left.localeCompare(right)).forEach(([id, value]) => {
+    const field = el(documentRef, "label", "ui-field ui-settings__prompt-field");
+    field.append(el(documentRef, "span", "ui-field__label", humanizeSettingKey(id)));
+    const textarea = documentRef.createElement("textarea");
+    textarea.value = String(value || "");
+    textarea.rows = 10;
+    textarea.setAttribute("aria-label", `${humanizeSettingKey(id)} prompt`);
+    field.append(textarea);
+    fields.append(field);
+    promptInputs.set(id, textarea);
+  });
+  const status = el(documentRef, "p", "ui-settings__connection-status");
+  status.setAttribute("role", "status");
+  const save = el(documentRef, "button", "ui-button ui-button--primary", "Save prompt preset");
+  save.type = "button";
+  save.addEventListener("click", async () => {
+    const presetName = name.value.trim();
+    if (!presetName || presetName === "Default") {
+      status.textContent = "Give this editable preset a name first.";
+      name.focus();
+      return;
+    }
+    save.disabled = true;
+    status.textContent = "Saving prompt preset…";
+    try {
+      await services.apiClient.put("/api/prompt_presets", {
+        name: presetName,
+        language: language.value,
+        prompts: Object.fromEntries([...promptInputs].map(([id, input]) => [id, input.value])),
+      }, { channel: `settings-prompt-preset:${presetName}`, owner: "settings-prompts" });
+      if (save.isConnected) status.textContent = "Prompt preset saved.";
+    } catch (error) {
+      if (save.isConnected) status.textContent = error?.userMessage || error?.message || "Sonder could not save the prompt preset.";
+    } finally {
+      if (save.isConnected) save.disabled = false;
+    }
+  });
+  editor.append(header, controls, fields, status, save);
+  return editor;
+}
+
+function advanced(documentRef, services, state, route) {
   const section = el(documentRef, "section", "ui-settings__section ui-settings__section--advanced");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
@@ -762,9 +1062,17 @@ function advanced(documentRef) {
     const control = el(documentRef, "button", "ui-settings__launcher");
     control.type = "button";
     control.dataset.settingsLauncher = id;
+    control.id = `settings-control-${id}`;
     const copy = el(documentRef, "span", "ui-settings__launcher-copy");
     copy.append(el(documentRef, "strong", "", label), el(documentRef, "small", "", detail));
     control.append(icon(documentRef, iconName), copy, icon(documentRef, "chevron-right"));
+    control.addEventListener("click", () => {
+      if (id === "turn-details") {
+        services.router.navigate({ destination: "play", segments: ["story-tools"], query: { tool: "turn-details" } });
+        return;
+      }
+      services.router.navigate({ destination: "settings", segments: ["advanced"], query: { tool: id } });
+    });
     launchers.append(control);
   });
   const warning = el(documentRef, "aside", "ui-settings__warning");
@@ -774,7 +1082,10 @@ function advanced(documentRef) {
     el(documentRef, "small", "", "Use them when correcting a known problem or diagnosing a turn."),
   );
   warning.append(icon(documentRef, "warning"), warningCopy);
-  section.append(head, launchers, warning);
+  const tool = String(route?.query?.tool || "");
+  section.append(head);
+  if (tool === "prompts") section.append(promptEditor(documentRef, services, state));
+  else section.append(launchers, warning);
   return section;
 }
 
@@ -800,6 +1111,7 @@ function aiConnections(documentRef, services, state) {
   const connectionActions = el(documentRef, "span", "ui-settings__connection-actions");
   const addProvider = el(documentRef, "button", "ui-button ui-button--quiet", "Add provider");
   addProvider.type = "button";
+  addProvider.id = "settings-control-providers";
   connectionActions.append(
     el(documentRef, "code", "ui-settings__theme-readout", `${providers.length} connected`),
     addProvider,
@@ -1418,13 +1730,7 @@ export function createSettingsView(options = {}) {
   const header = el(documentRef, "header", "ui-settings__header");
   const title = el(documentRef, "div");
   title.append(el(documentRef, "p", "ui-settings__kicker", "Settings"), el(documentRef, "h1", "ui-heading ui-heading--1", "Sonder preferences"));
-  const search = documentRef.createElement("input");
-  search.type = "search";
-  search.placeholder = "Search settings";
-  search.setAttribute("aria-label", "Search settings");
-  const searchField = el(documentRef, "label", "ui-settings__search");
-  searchField.append(icon(documentRef, "search"), search);
-  header.append(title, searchField);
+  header.append(title, settingsSearch(documentRef, services));
   const body = el(documentRef, "div", "ui-settings__body");
   const nav = categoryNav(documentRef, services, active);
   const content = el(documentRef, "main", "ui-settings__content");
@@ -1441,12 +1747,23 @@ export function createSettingsView(options = {}) {
       : active === "maintenance"
         ? maintenanceSettings(documentRef, services)
       : active === "advanced"
-        ? advanced(documentRef)
+        ? advanced(documentRef, services, state, route)
         : placeholder(documentRef, active),
   );
   body.append(nav, content);
   root.append(header, body);
   services.localizer.localize(root);
-  requestAnimationFrame(() => nav.querySelector("[aria-current='page']")?.scrollIntoView({ block: "nearest", inline: "center" }));
+  requestAnimationFrame(() => {
+    nav.querySelector("[aria-current='page']")?.scrollIntoView({ block: "nearest", inline: "center" });
+    const control = String(route.query?.control || "");
+    if (control) {
+      const target = content.querySelector(`#settings-control-${CSS.escape(control)}`);
+      const focusTarget = target?.matches("button, input, select, textarea, a[href]")
+        ? target
+        : target?.querySelector("button, input, select, textarea, a[href]");
+      focusTarget?.focus();
+      target?.scrollIntoView({ block: "center" });
+    }
+  });
   return { element: root, teardown() {} };
 }

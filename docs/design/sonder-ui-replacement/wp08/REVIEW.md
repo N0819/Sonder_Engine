@@ -36,6 +36,13 @@ current UI runtime instead of inventing a substitute runtime contract.
   update, and staged removal that explicitly preserves extension-owned story data.
 - Replaced the Maintenance placeholder with explicit update checking/install staging and the
   resumable, equivalence-checked legacy-checkpoint conversion flow.
+- Added localized-label/alias Settings search with control-level routes and focus restoration.
+- Connected the Legacy selector through semantic curated-theme mappings without allowing classic
+  theme CSS to own replacement layout.
+- Connected Advanced's Prompt editor to the current preset projection and explicit preset-save
+  route; the editor no longer depends on a legacy dialog or hidden control.
+- Added staged embeddings repair and downloadable bounded/redacted interface diagnostics to
+  Maintenance.
 - Added the reference terminal glyph used by Advanced and Turn details.
 - Preserved safe fallback behavior for invalid Settings deep links.
 
@@ -43,11 +50,10 @@ current UI runtime instead of inventing a substitute runtime contract.
 
 - AI Connections still needs advanced sampler and backup-model editing, OpenRouter upstream
   routing, image-model catalogue discovery, and the embeddings rebuild action.
-- Settings search and legacy theme selection are not connected yet.
-- The four Advanced launchers are visual ports only until their replacement editors are
-  connected to current engine owners. They do not bridge to the legacy DOM.
-- Maintenance still needs its log and repair/rebuild controls, and Add-ons still needs to render
-  extension-owned settings slots. Those are not represented as complete by the current captures.
+- Advanced Turn details routes to the replacement Play tool. Raw story and clothing editors still
+  need current-route replacements; neither bridges to the legacy DOM.
+- Add-ons settings registrations are mounted by the existing contained extension host, but
+  installed v1/v2 corpus qualification remains WP12.
 
 ## Evidence
 
@@ -61,6 +67,8 @@ current UI runtime instead of inventing a substitute runtime contract.
 - `screenshots/settings-content-1440.png`
 - `screenshots/settings-add-ons-1440.png`
 - `screenshots/settings-maintenance-1440.png`
-- `13 passed` in the focused Settings browser suite after the Content/Add-ons/Maintenance tranche.
+- `screenshots/settings-advanced-prompts-1440.png`
+- `screenshots/settings-search-1440.png`
+- `17 passed` in the focused Settings browser suite after search, prompt, and repair closure.
 - `node --check static/js/ui-next/settings-view.js`
 - `git diff --check`

@@ -11,8 +11,13 @@
   .ui-settings__header h1 { margin-block-start: 5px; font-size: 28px; }
   .ui-settings__kicker { color: var(--ui-color-text-faint); font: 650 10px var(--ui-font-mono); letter-spacing: .12em; text-transform: uppercase; }
   .ui-settings__search { position: relative; inline-size: min(420px, 44vw); margin-inline-start: auto; }
+  .ui-settings__search-wrap { position: relative; inline-size: min(420px, 44vw); margin-inline-start: auto; }
+  .ui-settings__search-wrap .ui-settings__search { inline-size: 100%; margin: 0; }
   .ui-settings__search .ui-icon { position: absolute; inset: 10px auto auto 12px; inline-size: 16px; block-size: 16px; color: var(--ui-color-text-faint); pointer-events: none; }
   .ui-settings__header input { inline-size: 100%; min-block-size: 36px; padding-inline: 38px 12px; border: 1px solid var(--ui-color-border-strong); border-radius: var(--ui-radius-md); background: var(--ui-color-canvas); color: var(--ui-color-text); }
+  .ui-settings__search-results { position: absolute; z-index: 8; inset: calc(100% + 6px) 0 auto; overflow: auto; max-block-size: min(60vh, 420px); padding: 6px; border: 1px solid var(--ui-color-border-strong); border-radius: var(--ui-radius-md); background: var(--ui-color-surface-solid); box-shadow: var(--ui-shadow-lg); }
+  .ui-settings__search-result { display: block; inline-size: 100%; min-block-size: 44px; padding: 9px 10px; border: 0; border-block-end: 1px solid var(--ui-color-border); border-radius: 0; background: transparent; color: var(--ui-color-text); text-align: start; }
+  .ui-settings__search-result:last-child { border-block-end: 0; }
   .ui-settings__body { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-block-size: 0; }
   .ui-settings__categories { min-block-size: 0; overflow: auto; padding: 12px 9px; border-inline-end: 1px solid var(--ui-color-border-strong); }
   .ui-settings__category { display: grid; grid-template-columns: 26px 18px minmax(0, 1fr); align-items: center; gap: 9px; min-block-size: 44px; padding: 0 10px; border-block-end: 1px solid var(--ui-color-border); color: var(--ui-color-text-muted); text-decoration: none; }
@@ -105,6 +110,11 @@
   .ui-settings__maintenance-result > .ui-button { justify-self: start; }
   .ui-settings__model-stage { padding-block-start: 12px; border-block-start: 1px solid var(--ui-color-border); }
   .ui-settings__model-stage .ui-field { flex: 1; display: grid; gap: 6px; }
+  .ui-settings__prompt-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
+  .ui-settings__prompt-controls .ui-field, .ui-settings__prompt-field { display: grid; gap: 6px; }
+  .ui-settings__prompt-controls :is(input, select), .ui-settings__prompt-field textarea { inline-size: 100%; min-inline-size: 0; }
+  .ui-settings__prompt-fields { display: grid; gap: 14px; }
+  .ui-settings__prompt-field textarea { min-block-size: 190px; resize: vertical; }
 
   @media (min-width: 720px) and (max-width: 1099px) {
     .ui-settings { grid-template-rows: 72px minmax(0, 1fr); }
@@ -121,7 +131,7 @@
     .ui-settings__header { gap: 8px; }
     .ui-settings__header .ui-settings__kicker { display: none; }
     .ui-settings__header h1 { font-size: 18px; }
-    .ui-settings__search { inline-size: 100%; margin: 0; }
+    .ui-settings__search-wrap, .ui-settings__search { inline-size: 100%; margin: 0; }
     .ui-settings__body { display: contents; }
     .ui-settings__categories { grid-row: 2; display: flex; inline-size: 100%; overflow-x: auto; overflow-y: hidden; padding: 6px 8px 0; border-inline-end: 0; border-block-end: 1px solid var(--ui-color-border-strong); scrollbar-width: none; }
     .ui-settings__category { flex: 0 0 auto; grid-template-columns: auto 18px auto; min-block-size: 50px; padding-inline: 11px; border-inline-end: 1px solid var(--ui-color-border); border-block-end: 0; }
@@ -145,6 +155,7 @@
     .ui-settings__theme-ledger { grid-template-columns: minmax(0, 1fr); }
     .ui-settings__theme-choice { border-inline-end: 0; }
     .ui-settings__toggle-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+    .ui-settings__prompt-controls { grid-template-columns: minmax(0, 1fr); }
     :root[data-destination="settings"] .ui-shell__go-to { display: none; }
   }
 }

@@ -146,6 +146,77 @@ def test_advanced_ports_the_reference_launcher_panel(
     ).to_be_visible()
 
 
+def test_settings_search_reaches_an_aliased_control_and_restores_focus(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches category-only search or aliases that cannot restore a control."""
+    _open_settings(page, ui_base_url)
+
+    search = page.get_by_role("searchbox", name="Search settings")
+    search.fill("api key")
+    result = page.get_by_role("button", name=re.compile("Provider credentials"))
+    expect(result).to_be_visible()
+    result.click()
+
+    expect(page).to_have_url(re.compile(r"#/settings/ai-connections\?control=providers$"))
+    expect(page.get_by_role("heading", name="AI Connections", level=2)).to_be_visible()
+    expect(page.get_by_role("button", name="Add provider")).to_be_focused()
+
+
+def test_experience_applies_a_legacy_theme_through_the_compatibility_mapping(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches an inert legacy selector or classic CSS taking layout ownership."""
+    _open_settings(page, ui_base_url)
+
+    page.get_by_role("combobox", name="Legacy themes").select_option("tavern")
+    expect(page.locator("html")).to_have_attribute("data-theme", "ash-brass")
+    expect(page.locator("html")).to_have_attribute("data-legacy-theme", "tavern")
+    stored = page.evaluate(
+        "JSON.parse(localStorage.getItem('sonder.ui-next') || '{}').appearance"
+    )
+    assert stored == {"theme": "ash-brass", "legacyTheme": "tavern"}
+
+
+def test_advanced_prompt_editor_uses_current_presets_and_explicit_save(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches an inert Advanced launcher or a prompt editor backed by legacy DOM."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "default_prompts": {"director": "Default director sheet"},
+        "prompt_presets": {
+            "Focused": {"language": "en", "prompts": {"director": "Focused sheet"}}
+        },
+        "active_preset": "Focused",
+        "language_packs": [{"id": "en", "name": "English"}],
+    }
+    writes: dict[str, object] = {}
+
+    def save(route) -> None:
+        writes["preset"] = route.request.post_data_json
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "name": "Focused", "language": "en"}),
+        )
+
+    page.route("**/api/prompt_presets", save)
+    _open_settings(page, ui_base_url, category="advanced", bootstrap=bootstrap)
+
+    page.get_by_role("button", name=re.compile("^Prompt editor")).click()
+    expect(page).to_have_url(re.compile(r"#/settings/advanced\?tool=prompts$"))
+    editor = page.get_by_role("textbox", name="Director prompt")
+    expect(editor).to_have_value("Focused sheet")
+    editor.fill("Revised focused sheet")
+    page.get_by_role("button", name="Save prompt preset").click()
+    expect(page.get_by_text("Prompt preset saved.", exact=True)).to_be_visible()
+    assert writes["preset"] == {
+        "name": "Focused",
+        "language": "en",
+        "prompts": {"director": "Revised focused sheet"},
+    }
+
+
 def test_ai_connections_ports_provider_ledger_and_tests_the_current_connection(
     page: Page, ui_base_url: str
 ) -> None:
@@ -807,3 +878,50 @@ def test_maintenance_checks_updates_and_stages_checkpoint_conversion(
     page.get_by_role("button", name="Confirm checkpoint conversion").click()
     expect(page.get_by_text("Checkpoint conversion started for 3 checkpoints.", exact=True)).to_be_visible()
     assert writes == [("install", {}), ("compact", {})]
+
+
+def test_maintenance_exposes_redacted_diagnostics_and_stages_embedding_rebuild(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches missing logs/repair ownership or an automatic paid rebuild."""
+    writes: list[dict[str, object]] = []
+    page.route(
+        "**/api/maintenance/checkpoints",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"checkpoints": 0, "legacy": 0, "progress": {"running": False}}),
+        ),
+    )
+    page.route(
+        re.compile(r".*/api/memory/embeddings$"),
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "model_key": "openai:text-embedding-3-small",
+                    "total": 42,
+                    "current": 31,
+                    "stale": 11,
+                    "progress": {"running": False},
+                }
+            ),
+        ),
+    )
+
+    def rebuild(route) -> None:
+        writes.append(route.request.post_data_json)
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"started": True, "total": 11}),
+        )
+
+    page.route("**/api/memory/embeddings/rebuild", rebuild)
+    _open_settings(page, ui_base_url, category="maintenance")
+
+    expect(page.get_by_text("11 memories need updated search vectors.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Rebuild memory search").click()
+    expect(page.get_by_text("This may use the configured embeddings provider.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Confirm rebuild memory search").click()
+    expect(page.get_by_text("Memory search rebuild started for 11 memories.", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Download redacted diagnostics")).to_be_visible()
+    assert writes == [{}]
