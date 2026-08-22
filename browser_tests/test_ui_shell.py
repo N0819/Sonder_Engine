@@ -67,19 +67,19 @@ def test_destination_navigation_refresh_and_history_preserve_orientation(
 
     page.get_by_role("link", name="Library", exact=True).click()
     expect(page).to_have_url(re.compile(r"#/library$"))
-    expect(page.get_by_role("heading", name="Library", level=1)).to_be_focused()
+    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_focused()
 
     page.reload()
     page.wait_for_function(
         "document.documentElement.dataset.uiNextState === 'ready'", timeout=10000
     )
     expect(page).to_have_url(re.compile(r"#/library$"))
-    expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
+    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
 
     page.get_by_role("link", name="Settings", exact=True).click()
     page.go_back()
     expect(page).to_have_url(re.compile(r"#/library$"))
-    expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
+    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
 
 
 def test_navigation_state_restores_valid_route_scroll_and_focus_identity(
@@ -176,7 +176,7 @@ def test_shell_restores_only_a_valid_saved_route_when_url_has_no_hash(
     )
     _open_shell(page, ui_base_url, hash_value="")
     expect(page).to_have_url(re.compile(r"#/library/characters$"))
-    expect(page.get_by_role("heading", name="Characters", level=1)).to_be_visible()
+    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
 
 
 def test_desktop_inspector_opens_closes_pins_and_resizes_without_covering_workspace(

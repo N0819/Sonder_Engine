@@ -473,8 +473,11 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     documentRef, await services.play.exportArchive(),
   ));
   const storyMore = actionMenu(documentRef, COPY.storyActions);
-  storyMore.body.append(rename, archive);
-  storyActions.append(storyChoice(documentRef, services, story.chat.id), storyMore.menu);
+  storyMore.body.append(storyChoice(documentRef, services, story.chat.id), rename, archive);
+  storyActions.append(
+    element(documentRef, "span", "ui-play__story-state", "Ready"),
+    storyMore.menu,
+  );
   storyHeader.append(identity, storyActions);
 
   const frames = story.frames || [];

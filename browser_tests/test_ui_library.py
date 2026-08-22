@@ -61,8 +61,9 @@ def _projection(items=ITEMS):
     }
 
 
-def _open(page: Page, ui_base_url: str, *, width: int = 1280) -> None:
-    page.set_viewport_size({"width": width, "height": 800 if width > 700 else 844})
+def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
+    height = 900 if width >= 1400 else (1024 if width == 768 else (800 if width > 700 else 844))
+    page.set_viewport_size({"width": width, "height": height})
     page.route(
         "**/api/bootstrap",
         lambda route: route.fulfill(content_type="application/json", body=json.dumps(BOOTSTRAP)),
@@ -74,14 +75,32 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1280) -> None:
     response = page.goto(f"{ui_base_url}/static/ui-next.html#/library")
     assert response is not None and response.ok
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-    expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
-    expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(3)
-    visibility = page.get_by_role("combobox", name="Library visibility")
-    expect(visibility).to_have_value("active")
-    expect(visibility).to_be_visible()
-    assert page.locator(".ui-library__content").evaluate(
-        "node => node.scrollWidth - node.clientWidth"
-    ) == 0
+    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
+    overview = page.get_by_role("heading", name="Your story material", level=2)
+    if width > 700:
+        expect(overview).to_be_visible()
+    else:
+        expect(overview).to_be_hidden()
+    expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(1)
+    if width > 700:
+        geometry = page.locator(".ui-shell").evaluate(
+            """node => ({
+              rail: node.querySelector('.ui-shell__navigation').getBoundingClientRect().width,
+              side: node.querySelector('.ui-library__filters').getBoundingClientRect().width,
+            })"""
+        )
+        expected = {"rail": 68, "side": 320} if width < 1100 else {"rail": 72, "side": 320}
+        assert geometry == expected
+    if width > 700:
+        assert page.locator(".ui-library__content").evaluate(
+            "node => node.scrollWidth - node.clientWidth"
+        ) == 0
+
+
+def test_tablet_library_uses_reference_rail_and_side_pane(
+    page: Page, ui_base_url: str,
+) -> None:
+    _open(page, ui_base_url, width=768)
 
 
 def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
@@ -290,7 +309,9 @@ def test_library_search_route_and_desktop_detail_are_truthful(
     page: Page, ui_base_url: str,
 ) -> None:
     _open(page, ui_base_url)
-    page.get_by_role("button", name=re.compile("Mara Venn")).click()
+    page.get_by_role("button", name="Characters", exact=True).click()
+    expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(1)
+    page.locator('[data-library-item="character:7"]').click()
 
     expect(page).to_have_url(re.compile(r"item=character%3A7"))
     detail = page.get_by_role("complementary", name="Library details")
@@ -308,9 +329,9 @@ def test_compact_library_detail_is_history_staged_and_targets_are_large(
     page: Page, ui_base_url: str,
 ) -> None:
     _open(page, ui_base_url, width=390)
-    expect(page.get_by_role("button", name="Not used", exact=True)).to_be_visible()
-    expect(page.get_by_role("button", name="Multiple stories", exact=True)).to_be_visible()
-    page.get_by_role("button", name=re.compile("Quiet Roads")).click()
+    expect(page.get_by_role("combobox", name="Scope")).to_be_visible()
+    page.get_by_role("button", name="Lore", exact=True).click()
+    page.locator('[data-library-item="lore:12"]').click()
 
     sheet = page.get_by_role("dialog", name="Library details")
     expect(sheet).to_be_visible()
@@ -427,7 +448,7 @@ def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
     page.route("**/api/library/character/7/archive", archive_route)
     page.goto(f"{ui_base_url}/static/ui-next.html#/library/characters")
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-    page.get_by_role("button", name=re.compile("Mara Venn")).click()
+    page.locator('[data-library-item="character:7"]').click()
     detail = page.get_by_role("complementary", name="Library details")
 
     detail.get_by_role("button", name="Remove from active cast").click()
@@ -436,11 +457,12 @@ def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
     detail.get_by_role("button", name="Undo").click()
     expect(detail.get_by_text("Active", exact=True)).to_be_visible()
 
+    detail.get_by_text("More", exact=True).click()
     detail.get_by_role("button", name="Archive character").click()
     expect(page.get_by_role("button", name="Undo")).to_be_visible()
-    expect(page.get_by_role("button", name=re.compile("Mara Venn"))).to_have_count(0)
+    expect(page.locator('[data-library-item="character:7"]')).to_have_count(0)
     page.get_by_role("button", name="Undo").click()
-    expect(page.get_by_role("button", name=re.compile("Mara Venn"))).to_be_visible()
+    expect(page.locator('[data-library-item="character:7"]')).to_be_visible()
 
 
 def test_primary_persona_is_protected_and_story_delete_names_its_scope(
@@ -474,18 +496,20 @@ def test_primary_persona_is_protected_and_story_delete_names_its_scope(
     page.goto(f"{ui_base_url}/static/ui-next.html#/library/personas")
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
 
-    page.get_by_role("button", name=re.compile("Ilyra")).click()
+    page.locator('[data-library-item="persona:9"]').click()
     detail = page.get_by_role("complementary", name="Library details")
     expect(detail.get_by_text("Primary", exact=True)).to_be_visible()
     expect(detail.get_by_text("Primary persona · change in Story setup")).to_be_visible()
     expect(detail.get_by_role("button", name=re.compile("Remove"))).to_have_count(0)
 
+    page.get_by_role("button", name="Stories", exact=True).click()
     page.locator('[data-library-item="story:1"]').click()
     detail.get_by_role("button", name="Delete story…").click()
     expect(detail.get_by_text(re.compile("complete story, its history, and story-owned lore"))).to_be_visible()
     detail.get_by_role("button", name="Delete this story").click()
     expect(page.locator('[data-library-item="story:1"]')).to_have_count(0)
-    expect(page.get_by_role("button", name=re.compile("Ilyra"))).to_be_visible()
+    page.get_by_role("button", name="Personas", exact=True).click()
+    expect(page.locator('[data-library-item="persona:9"]')).to_be_visible()
 
 
 def test_lore_detach_targets_story_copy_and_undo_reattaches_origin(
@@ -523,7 +547,7 @@ def test_lore_detach_targets_story_copy_and_undo_reattaches_origin(
     page.route("**/api/chats/1/lorebooks**", association_route)
     page.goto(f"{ui_base_url}/static/ui-next.html#/library/lore")
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-    page.get_by_role("button", name=re.compile("Quiet Roads")).click()
+    page.locator('[data-library-item="lore:12"]').click()
     detail = page.get_by_role("complementary", name="Library details")
 
     detail.get_by_role("button", name="Detach from story").click()

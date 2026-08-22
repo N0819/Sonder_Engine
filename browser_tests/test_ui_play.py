@@ -109,11 +109,13 @@ def test_story_switching_keeps_drafts_owned_by_story(
     composer = page.get_by_role("textbox", name="What do you do or say?")
     composer.fill("Light the lantern")
 
+    page.get_by_role("button", name="Story actions").click()
     page.get_by_role("combobox", name="Switch story").select_option("2")
     expect(page.get_by_role("heading", name="Winter Road", level=2)).to_be_visible()
     expect(composer).to_have_value("")
     composer.fill("Follow the tracks")
 
+    page.get_by_role("button", name="Story actions").click()
     page.get_by_role("combobox", name="Switch story").select_option("1")
     expect(page.get_by_role("heading", name="Lantern Archive", level=2)).to_be_visible()
     expect(page.get_by_role("textbox", name="What do you do or say?")).to_have_value(
@@ -175,7 +177,6 @@ def test_turn_actions_and_reroll_warning_are_touch_discoverable(
             [_turn(12, 0, "Wait", "Rain crosses the windows in silver threads.")],
         ),
     )
-
     for name in ("Edit", "Reroll", "Versions", "More"):
         expect(page.get_by_role("button", name=name, exact=True)).to_be_visible()
     page.get_by_role("button", name="Reroll", exact=True).click()

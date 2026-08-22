@@ -22,6 +22,22 @@ function button(documentRef, label) {
   return node;
 }
 
+const TOOL_ICONS = Object.freeze({
+  cast: "cast", world: "world", style: "style", dialogue: "dialogue",
+  attire: "clothing", backdrops: "image", ambience: "ambience",
+  conditions: "clothing", frames: "story", multiplayer: "cast",
+});
+
+function icon(documentRef, name) {
+  const svg = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("ui-icon", "ui-story-tools__icon");
+  svg.setAttribute("aria-hidden", "true");
+  const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  svg.append(use);
+  return svg;
+}
+
 export function mountStoryTools(options = {}) {
   const { services, registry, target, tools } = options;
   const documentRef = options.document || document;
@@ -44,7 +60,12 @@ export function mountStoryTools(options = {}) {
     control.dataset.storyTool = tool.id;
     const index = element(documentRef, "span", "ui-story-tools__index", String(tool.index).padStart(2, "0"));
     index.setAttribute("aria-hidden", "true");
-    control.append(index, element(documentRef, "span", "ui-story-tools__label", t(tool.label)));
+    const copy = element(documentRef, "span", "ui-story-tools__copy");
+    copy.append(
+      element(documentRef, "strong", "ui-story-tools__label", t(tool.label)),
+      element(documentRef, "small", "ui-story-tools__detail", t(tool.detail)),
+    );
+    control.append(index, icon(documentRef, TOOL_ICONS[tool.id] || "tools"), copy);
     control.addEventListener("click", () => services.storyTools.open(tool.id, {
       preserveLayers: true,
     }));
@@ -55,10 +76,16 @@ export function mountStoryTools(options = {}) {
   const render = state => {
     mountedTool?.teardown?.();
     mountedTool = null;
-    const active = registry.resolveStoryTool(state.inspector?.toolId);
+    const selectedId = state.inspector?.toolId || null;
+    const active = registry.resolveStoryTool(selectedId);
     for (const [id, control] of controls) {
-      if (id === active.id) control.setAttribute("aria-current", "page");
+      if (selectedId && id === active.id) control.setAttribute("aria-current", "page");
       else control.removeAttribute("aria-current");
+    }
+    panel.hidden = !selectedId;
+    if (!selectedId) {
+      panel.replaceChildren();
+      return;
     }
     const heading = element(documentRef, "h3", "ui-heading ui-heading--3", t(active.label));
     heading.tabIndex = -1;
