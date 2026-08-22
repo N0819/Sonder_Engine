@@ -1,5 +1,7 @@
 export const MODULE_RELEASE = "wp07.1";
 
+import { openNewStory } from "./new-story.js?release=wp07.1";
+
 // UI_CATALOG_START: Library discovery and detail copy.
 const COPY = Object.freeze({
   search: "Search Library",
@@ -354,9 +356,7 @@ function filterRail(documentRef, services, state) {
   const actions = node(documentRef, "div", "ui-library__side-actions");
   const create = labelWithIcon(documentRef,
     button(documentRef, COPY.newStory, "ui-button ui-button--primary"), "plus", COPY.newStory);
-  create.addEventListener("click", () => navigate(services, "story", {
-    mode: "create", session: workflowSession(),
-  }));
+  create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
   const importStory = labelWithIcon(documentRef,
     button(documentRef, COPY.importStory, "ui-button ui-button--quiet"), "import", COPY.importStory);
   importStory.addEventListener("click", () => navigate(services, "story", {
@@ -540,9 +540,7 @@ function libraryHome(documentRef, services, library) {
   browse.addEventListener("click", () => navigate(services, "story", {}));
   const create = labelWithIcon(documentRef,
     button(documentRef, COPY.createStory, "ui-button ui-button--primary"), "plus", COPY.createStory);
-  create.addEventListener("click", () => navigate(services, "story", {
-    mode: "create", session: workflowSession(),
-  }));
+  create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
   actions.append(browse, create);
   toolbar.append(title, actions);
 
