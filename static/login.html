@@ -5,54 +5,60 @@
 <title>Sonder Engine — Sign In</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="/static/js/i18n.js" defer></script>
-<script src="/static/js/theme-init.js"></script>
-<!-- Shares the host app's actual stylesheet, same rationale as guest.html:
-     the sign-in screen should look like the app it guards. Only the
-     centered-card layout is defined locally below. -->
-<link rel="stylesheet" href="/static/styles.css">
-<link rel="stylesheet" href="/static/themes.css">
-<style>
-  body { display: flex; flex-direction: column; }
-  header {
-    padding: 14px 18px; border-bottom: 1px solid var(--bd);
-    display: flex; align-items: center; gap: 10px; min-height: 50px;
-    background: var(--chrome-bg);
-  }
-  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
-  header .sub { color: var(--dim); font-size: 13px; }
-  #auth-screen {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; padding: 24px; gap: 14px;
-  }
-  #auth-screen .card { width: min(360px, 100%); display: flex; flex-direction: column; gap: 12px; }
-  #auth-screen h2 { margin: 0; font-size: 18px; }
-  .err { color: var(--err); font-size: 13px; min-height: 18px; }
-</style>
+<script src="/static/js/ui/appearance-preflight.js?release=wp07.1"></script>
+<link rel="stylesheet" href="/static/css/ui/reset.css?release=wp07.1">
+<link rel="stylesheet" href="/static/css/ui/tokens.css?release=wp07.1">
+<link rel="stylesheet" href="/static/css/ui/themes/carbon-signal.css?release=wp07.1">
+<link rel="stylesheet" href="/static/css/ui/typography.css?release=wp07.1">
+<link rel="stylesheet" href="/static/css/ui/components.css?release=wp07.1">
+<link rel="stylesheet" href="/static/css/ui/auth.css?release=wp07.1">
 </head>
-<body>
-<header>
-  <h1>Sonder Engine</h1>
-  <span class="sub" id="head-sub">Host access</span>
+<body class="ui-auth-page">
+<header class="ui-auth-header">
+  <span class="ui-auth-header__mark" aria-hidden="true">S</span>
+  <span class="ui-auth-header__copy">
+    <strong>Sonder Engine</strong>
+    <span id="head-sub">Host access</span>
+  </span>
 </header>
 
-<div id="auth-screen">
-  <div class="card" id="setup-form" style="display:none">
-    <h2>Create your host account</h2>
-    <input id="setup-username" placeholder="Username" autocomplete="username">
-    <input id="setup-password" type="password" placeholder="Password" autocomplete="new-password">
-    <input id="setup-confirm" type="password" placeholder="Confirm password" autocomplete="new-password">
-    <button id="setup-btn" class="primary">Create account</button>
-    <div class="err" id="setup-err"></div>
-  </div>
+<main id="auth-screen">
+  <section class="ui-auth-card" id="setup-form" style="display:none" aria-labelledby="setup-title">
+    <p class="ui-auth-card__eyebrow">First run</p>
+    <h1 id="setup-title">Create your host account</h1>
+    <p class="ui-auth-card__intro">This account controls this Sonder host and its stories.</p>
+    <label class="ui-auth-field">
+      <span>Username</span>
+      <input id="setup-username" autocomplete="username">
+    </label>
+    <label class="ui-auth-field">
+      <span>New password</span>
+      <input id="setup-password" type="password" autocomplete="new-password">
+    </label>
+    <label class="ui-auth-field">
+      <span>Confirm password</span>
+      <input id="setup-confirm" type="password" autocomplete="new-password">
+    </label>
+    <button id="setup-btn" class="ui-button ui-button--primary">Create account</button>
+    <div class="ui-auth-card__error" id="setup-err" role="status" aria-live="polite"></div>
+  </section>
 
-  <div class="card" id="login-form" style="display:none">
-    <h2>Sign in</h2>
-    <input id="login-username" placeholder="Username" autocomplete="username">
-    <input id="login-password" type="password" placeholder="Password" autocomplete="current-password">
-    <button id="login-btn" class="primary">Sign in</button>
-    <div class="err" id="login-err"></div>
-  </div>
-</div>
+  <section class="ui-auth-card" id="login-form" style="display:none" aria-labelledby="login-title">
+    <p class="ui-auth-card__eyebrow">Welcome back</p>
+    <h1 id="login-title">Sign in</h1>
+    <p class="ui-auth-card__intro">Open your stories and continue where you left off.</p>
+    <label class="ui-auth-field">
+      <span>Username</span>
+      <input id="login-username" autocomplete="username">
+    </label>
+    <label class="ui-auth-field">
+      <span>Password</span>
+      <input id="login-password" type="password" autocomplete="current-password">
+    </label>
+    <button id="login-btn" class="ui-button ui-button--primary">Sign in</button>
+    <div class="ui-auth-card__error" id="login-err" role="status" aria-live="polite"></div>
+  </section>
+</main>
 
 <script>
 "use strict";

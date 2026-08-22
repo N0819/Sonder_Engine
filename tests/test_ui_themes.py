@@ -99,11 +99,15 @@ def test_composer_shares_the_story_measure_and_text_size():
     assert 'var(--prose-font' in input_rule
 
 
-def test_login_and_guest_inherit_the_saved_theme():
-    for filename in ("login.html", "guest.html"):
-        html = (STATIC / filename).read_text(encoding="utf-8")
-        assert '/static/js/theme-init.js' in html
-        assert '/static/themes.css' in html
+def test_lightweight_entries_inherit_their_saved_theme():
+    login = (STATIC / "login.html").read_text(encoding="utf-8")
+    assert '/static/js/ui/appearance-preflight.js' in login
+    assert '/static/css/ui/themes/carbon-signal.css' in login
+
+    # Guest remains on the legacy entry until WP-11 replaces it in place.
+    guest = (STATIC / "guest.html").read_text(encoding="utf-8")
+    assert '/static/js/theme-init.js' in guest
+    assert '/static/themes.css' in guest
 
 
 def test_textured_theme_assets_and_input_contrast_tokens_exist():

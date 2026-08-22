@@ -1220,7 +1220,48 @@ function maintenanceSettings(documentRef, services) {
   manageBackups.href = "#/library/stories";
   backups.append(backupCopy, manageBackups);
 
-  section.append(head, updates, checkpoints, memorySearch, diagnostics, backups);
+  const session = el(documentRef, "section", "ui-settings__group ui-settings__data-note");
+  session.id = "settings-control-session";
+  const sessionCopy = el(documentRef, "span", "ui-settings__field-copy");
+  sessionCopy.append(
+    el(documentRef, "strong", "", "Host session"),
+    el(documentRef, "small", "", "Sign out only this browser session. Stories and host settings stay on this Sonder host."),
+  );
+  const signOut = el(documentRef, "button", "ui-button ui-button--quiet", "Sign out");
+  signOut.type = "button";
+  const signOutConsent = el(documentRef, "div", "ui-settings__extension-consent");
+  signOutConsent.hidden = true;
+  signOut.addEventListener("click", () => {
+    signOutConsent.replaceChildren(
+      el(documentRef, "strong", "", "Sign out of this host session?"),
+      el(documentRef, "p", "", "Unsaved browser-local drafts remain on this device. You will need the host password to sign in again."),
+    );
+    const confirm = el(documentRef, "button", "ui-button ui-button--primary", "Confirm sign out");
+    confirm.type = "button";
+    const cancel = el(documentRef, "button", "ui-button ui-button--quiet", "Cancel");
+    cancel.type = "button";
+    confirm.addEventListener("click", async () => {
+      confirm.disabled = true;
+      try {
+        await services.apiClient.post("/api/auth/logout", {}, {
+          channel: "settings-host-sign-out", owner: "settings-maintenance",
+        });
+        documentRef.defaultView.location.assign("/login");
+      } catch (error) {
+        confirm.disabled = false;
+        signOutConsent.append(el(documentRef, "p", "ui-settings__extension-error", error?.userMessage || error?.message || "Sonder could not sign out."));
+      }
+    });
+    cancel.addEventListener("click", () => {
+      signOutConsent.hidden = true;
+      signOut.focus();
+    });
+    signOutConsent.append(confirm, cancel);
+    signOutConsent.hidden = false;
+  });
+  session.append(sessionCopy, signOut, signOutConsent);
+
+  section.append(head, updates, checkpoints, memorySearch, diagnostics, backups, session);
   queueMicrotask(loadCheckpoints);
   queueMicrotask(loadMemory);
   return section;
