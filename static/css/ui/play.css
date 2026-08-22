@@ -81,6 +81,7 @@
     border-color: var(--ui-color-interactive);
     color: var(--ui-color-interactive-strong);
   }
+  .ui-play__frames .ui-button { min-block-size: 44px; }
 
   .ui-play__transcript {
     min-block-size: 0;
@@ -101,6 +102,9 @@
   }
   .ui-play__turn[data-stale="true"] { opacity: .72; }
   .ui-play__turn--preview { border-color: var(--ui-color-interactive); }
+  .ui-play__turn:has(.ui-play__menu[open]) {
+    content-visibility: visible;
+  }
 
   .ui-play__input-echo {
     margin: 0 0 var(--ui-space-6);
@@ -148,6 +152,10 @@
   }
   .ui-play__menu:not([open]) .ui-play__menu-body { display: none; }
   .ui-play__menu-body .ui-button { justify-content: flex-start; inline-size: 100%; }
+  .ui-play__turn-actions .ui-play__menu-body {
+    position: static;
+    margin-block-start: var(--ui-space-2);
+  }
 
   .ui-play__composer {
     position: sticky;
@@ -188,7 +196,7 @@
   .ui-play__progress-elapsed { font: 600 .75rem var(--ui-font-mono); }
   .ui-play__progress .ui-play__advanced { grid-column: 1 / -1; }
   .ui-play__technical { max-block-size: 9rem; overflow: auto; white-space: pre-wrap; }
-  .ui-play__new-turn { position: absolute; inset-inline: 50%; inset-block-end: 10rem; translate: -50% 0; z-index: var(--ui-z-sticky); box-shadow: var(--ui-shadow-raised); }
+  .ui-play__new-turn { position: absolute; inset-inline: 50%; inset-block-end: 10rem; min-inline-size: 44px; min-block-size: 44px; white-space: nowrap; translate: -50% 0; z-index: var(--ui-z-sticky); box-shadow: var(--ui-shadow-raised); }
 
   .ui-play__state { min-block-size: 20rem; }
   .ui-play__empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ui-space-3); margin-block-start: var(--ui-space-5); }
@@ -217,7 +225,7 @@
   [data-layout-state="compact"] .ui-play__story-header { padding-inline: 0; }
   [data-layout-state="compact"] .ui-play__composer { inline-size: calc(100% + 2 * var(--ui-space-5)); margin-inline: calc(-1 * var(--ui-space-5)); padding-inline: max(var(--ui-space-5), env(safe-area-inset-left)) max(var(--ui-space-5), env(safe-area-inset-right)); }
   [data-layout-state="compact"] .ui-play__turn-actions { opacity: 1; }
-  [data-layout-state="compact"] .ui-play__turn-actions > .ui-button:nth-of-type(n + 3) { display: none; }
+  [data-layout-state="compact"] .ui-play__turn-actions .ui-button { min-block-size: 44px; }
 
   @media (max-height: 430px) and (max-width: 900px) {
     .ui-play__story-header { padding-block-end: var(--ui-space-2); }

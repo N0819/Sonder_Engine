@@ -53,6 +53,7 @@ def test_play_uses_owned_story_drafts_and_current_server_routes():
     assert "/export" in runtime
     assert "isCurrent" in runtime
     assert "frameId" in runtime
+    assert "registry?.emitEvent?.(`turn:${event.type}`" in runtime
     for module in ("play-runtime.js", "play-view.js", "prose.js"):
         assert f'"./{module}?release=wp04.1"' in bootstrap
 

@@ -20,6 +20,9 @@ const FRIENDLY_PHASES = Object.freeze({
 });
 const DETAIL_LIMIT = 120;
 const NARRATION_STEPS = new Set(["narrator", "narrator_extra"]);
+// UI_CATALOG_START: composer validation shown beside the active field.
+const WHITESPACE_MESSAGE = "Remove the spaces to send an empty continue turn.";
+// UI_CATALOG_END
 
 function numericId(value) {
   const id = Number(value);
@@ -271,13 +274,6 @@ export function createPlayRuntime(options = {}) {
 
   const handleEvent = (run, event) => {
     if (activeRun !== run || !event || typeof event !== "object") return;
-    if (!run.accepted) {
-      run.accepted = true;
-      if (run.kind === "send") {
-        localState.clearDraft("story", run.owner);
-        if (selected.owner === run.owner) publishComposer({ draft: "" });
-      }
-    }
     if (event.type === "step_start") {
       run.phase = phaseFor(event);
     } else if (event.type === "step" && NARRATION_STEPS.has(event.key)) {
@@ -333,6 +329,15 @@ export function createPlayRuntime(options = {}) {
     });
     publishRun(run);
     let completed = false;
+    const acceptRun = () => {
+      if (activeRun !== run || run.accepted) return;
+      run.accepted = true;
+      if (run.kind === "send") {
+        localState.clearDraft("story", run.owner);
+        if (selected.owner === run.owner) publishComposer({ draft: "" });
+      }
+      publishRun(run);
+    };
     try {
       await apiClient.stream(run.path, {
         method: "POST",
@@ -341,6 +346,7 @@ export function createPlayRuntime(options = {}) {
         owner: run.owner,
         collectEvents: false,
         isCurrent: () => activeRun === run,
+        onResponse: acceptRun,
         onEvent: event => {
           handleEvent(run, event);
           tasks.update(run.taskId, { phase: run.phase });
@@ -397,6 +403,10 @@ export function createPlayRuntime(options = {}) {
     if (!selected.chatId || activeRun) return Promise.resolve(false);
     const input = String(value ?? "");
     updateDraft(input);
+    if (input.length > 0 && !input.trim()) {
+      publishComposer({ validation: WHITESPACE_MESSAGE });
+      return Promise.resolve(false);
+    }
     return runOperation({
       kind: "send",
       owner: selected.owner,

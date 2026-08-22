@@ -32,6 +32,9 @@ MODULES = (
     "go-to.js",
     "extension-host.js",
     "shell.js",
+    "play-runtime.js",
+    "play-view.js",
+    "prose.js",
 )
 
 
