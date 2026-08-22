@@ -44,7 +44,7 @@ export function createApplicationShell(options = {}) {
       || !modules?.shortcuts || !modules?.goTo || !modules?.extensionHost
       || !modules?.playView || !modules?.prose || !modules?.storyToolsRegistry
       || !modules?.storyToolsView || !modules?.libraryView
-      || !modules?.libraryAuthoringView) {
+      || !modules?.libraryAuthoringView || !modules?.settingsView) {
     throw new Error("The application shell presentation modules are missing.");
   }
 
