@@ -239,6 +239,29 @@ def test_invalid_nested_link_shows_explanation_at_its_safe_parent(
         "That page does not exist. Its parent area was opened instead."
     )
 
+
+def test_forbidden_bootstrap_stays_inline_without_exposing_technical_detail(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            status=403,
+            content_type="application/json",
+            body='{"detail":"private host policy detail"}',
+        ),
+    )
+    response = page.goto(f"{ui_base_url}/static/ui-next.html#/play")
+    assert response is not None and response.ok
+    page.wait_for_function(
+        "document.documentElement.dataset.uiNextState === 'failed'", timeout=10000
+    )
+    expect(page.get_by_text(
+        "This account cannot open the replacement interface.", exact=True
+    )).to_be_visible()
+    expect(page.get_by_text("private host policy detail", exact=True)).to_have_count(0)
+    assert page.url.endswith("#/play")
+
 def test_go_to_is_keyboard_owned_and_does_not_fire_while_typing(
     page: Page, ui_base_url: str
 ) -> None:

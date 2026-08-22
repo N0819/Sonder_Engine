@@ -559,7 +559,7 @@ def index():
 
 @app.get("/ui-next")
 def ui_next(request: Request):
-    """Opt-in development entry for the replacement interface.
+    """Authenticated application entry for the in-progress replacement.
 
     The default host page remains the shipping UI until the replacement gates
     pass. Unlike the public login and guest shells, this page is host-only even
