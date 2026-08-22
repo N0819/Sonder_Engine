@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="icon-play" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="icon-library" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h6a3 3 0 0 1 3 3v11a3 3 0 0 0-3-3H4zM20 5h-6a3 3 0 0 0-3 3v11a3 3 0 0 1 3-3h6z"/></symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3.5"/><path d="M19 13.5v-3l-2-.7-.7-1.6.9-1.9-2.1-2.1-1.9.9-1.7-.7-.6-2H8l-.7 2-1.6.7-2-.9-2 2.1.9 1.9-.7 1.6-2 .7v3l2 .7.7 1.6-.9 1.9 2 2.1 2-.9 1.6.7.7 2h2.9l.6-2 1.7-.7 1.9.9 2.1-2.1-.9-1.9.7-1.6z"/></symbol>
+  <symbol id="icon-tools" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h9M4 12h16M4 18h11"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="18" r="2"/></symbol>
+  <symbol id="icon-cast" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M14 15a5 5 0 0 1 7 4v1"/></symbol>
+  <symbol id="icon-world" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="icon-style" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 18 15 8l2 2L7 20l-3 1zM14 5l1-2 1 2 2 .4-1.5 1.5.4 2.1L15 8l-2 1 .4-2.1L12 5.4z"/></symbol>
+  <symbol id="icon-dialogue" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"/></symbol>
+  <symbol id="icon-clothing" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m8 4 4 2 4-2 4 4-3 3v9H7v-9L4 8zM10 6v4h4V6"/></symbol>
+  <symbol id="icon-image" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="1"/><circle cx="8" cy="9" r="1.5"/><path d="m5 18 5-5 3 3 2-2 4 4"/></symbol>
+  <symbol id="icon-ambience" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 14a8 8 0 0 1 16 0M4 14v4a2 2 0 0 0 2 2h2v-7H6a2 2 0 0 0-2 1zM20 14v4a2 2 0 0 1-2 2h-2v-7h2a2 2 0 0 1 2 1z"/></symbol>
+  <symbol id="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 4 18 8-18 8 4-8zM7 12h14"/></symbol>
+  <symbol id="icon-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+  <symbol id="icon-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+  <symbol id="icon-more" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="icon-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 9 7 7 7-7"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="icon-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14"/></symbol>
+  <symbol id="icon-import" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12M7 10l5 5 5-5M4 17v3h16v-3"/></symbol>
+  <symbol id="icon-export" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15V3M7 8l5-5 5 5M4 17v3h16v-3"/></symbol>
+  <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 17-1 4 4-1L19 9l-3-3zM14 8l3 3"/></symbol>
+  <symbol id="icon-delete" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 7h14M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/></symbol>
+  <symbol id="icon-duplicate" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="7" y="7" width="13" height="13" rx="1"/><path d="M17 7V4H4v13h3"/></symbol>
+  <symbol id="icon-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16v14H4zM3 3h18v4H3zM9 11h6"/></symbol>
+  <symbol id="icon-favorite" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+  <symbol id="icon-recent" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="icon-story" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 3h11l3 3v15H5zM16 3v4h4M8 11h8M8 15h8"/></symbol>
+  <symbol id="icon-character" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="4"/><path d="M5 21v-2a7 7 0 0 1 14 0v2"/></symbol>
+  <symbol id="icon-persona" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="5" width="14" height="14"/><circle cx="12" cy="10" r="3"/><path d="M8 17a4 4 0 0 1 8 0"/></symbol>
+  <symbol id="icon-lore" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h14a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2zM8 4v16M11 8h6M11 12h6"/></symbol>
+  <symbol id="icon-link" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 15 7 17a4 4 0 0 1-6-6l3-3a4 4 0 0 1 6 0M15 9l2-2a4 4 0 0 1 6 6l-3 3a4 4 0 0 1-6 0M8 12h8"/></symbol>
+  <symbol id="icon-unlink" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 15 7 17a4 4 0 0 1-6-6l2-2M15 9l2-2a4 4 0 0 1 6 6l-2 2M8 12h4M4 4l16 16"/></symbol>
+  <symbol id="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m8 3 8 8-2 2 3 3-1 1-4-2-3 3-3-3 3-3-2-4zM5 19l-2 2"/></symbol>
+  <symbol id="icon-unpin" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m8 3 8 8-2 2 3 3-1 1-4-2-3 3M5 19l-2 2M3 3l18 18"/></symbol>
+  <symbol id="icon-resize" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4M4 8l5-5M20 8l-5-5M4 16l5 5M20 16l-5 5"/></symbol>
+  <symbol id="icon-theme" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 0-4h-2a2 2 0 0 1 0-4h4a5 5 0 0 0 0-10z"/><circle cx="7" cy="9" r="1" fill="currentColor"/><circle cx="10" cy="6" r="1" fill="currentColor"/><circle cx="15" cy="6" r="1" fill="currentColor"/></symbol>
+  <symbol id="icon-api" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M7 7h10v10H7zM9 2v5M15 2v5M9 17v5M15 17v5M2 9h5M17 9h5M2 15h5M17 15h5"/></symbol>
+  <symbol id="icon-update" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7V3l-3 3a8 8 0 1 0 2 8M20 3h-5"/></symbol>
+  <symbol id="icon-prompt" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 3h14v18H5zM8 7h8M8 11h8M8 15h5"/></symbol>
+  <symbol id="icon-extension" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 3v4H5v4H3v4h4v4h4v2h4v-4h4v-4h2V9h-4V5h-4v4H9z"/></symbol>
+  <symbol id="icon-sound-on" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 10v4h4l5 4V6l-5 4zM16 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12"/></symbol>
+  <symbol id="icon-sound-off" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 10v4h4l5 4V6l-5 4zM16 9l5 6M21 9l-5 6"/></symbol>
+  <symbol id="icon-retry" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7V3l-3 3a8 8 0 1 0 2 8"/></symbol>
+  <symbol id="icon-tasks" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 5h14v16H5zM9 3h6v4H9zM8 11l1.5 1.5L12 10M8 16l1.5 1.5L12 15M14 12h3M14 17h3"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m4 12 5 5L20 6"/></symbol>
+  <symbol id="icon-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 10 18H2zM12 9v5M12 17h.01"/></symbol>
+  <symbol id="icon-error" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></symbol>
+  <symbol id="icon-info" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="10" width="14" height="11" rx="1"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="icon-unlock" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="5" y="10" width="14" height="11" rx="1"/><path d="M16 10V7a4 4 0 0 0-7.5-2"/></symbol>
+  <symbol id="icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3z"/></symbol>
+  <symbol id="icon-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h7l2 2h9v12H3z"/></symbol>
+  <symbol id="icon-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 5h16v16H4zM4 9h16M8 3v4M16 3v4"/></symbol>
+  <symbol id="icon-connection" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="m7 11 10-4M7 13l10 4"/></symbol>
+  <symbol id="icon-offline" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 9a12 12 0 0 1 16 0M7 13a8 8 0 0 1 10 0M10 17a3 3 0 0 1 4 0M3 3l18 18"/></symbol>
+  <symbol id="icon-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 2 1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/></symbol>
+  <symbol id="icon-sort" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5h12M8 12h9M8 19h6M4 4v16M2 18l2 2 2-2"/></symbol>
+  <symbol id="icon-save" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 3h14l2 2v16H4zM8 3v6h8V3M8 21v-7h8v7"/></symbol>
+</svg>

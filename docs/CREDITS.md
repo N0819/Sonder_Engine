@@ -226,6 +226,17 @@ records the reconciled current authority, and
 records which supplied implementation ideas are accepted, adapted, rebuilt, or
 rejected.
 
+### Supplied implementation candidate
+
+The separately supplied `Sonder_Engine_UI_Design_Bible_Revision-main` snapshot
+at commit `73a380a0df2f6b139c98d66da9005489bd549d1d` identifies itself as MIT
+(Copyright 2026 N0819). WP-01 adapted its original local SVG symbol sprite into
+`static/assets/icons/sonder-icons.svg`; the adopted inventory and accessibility
+rules are recorded in
+[`design/sonder-ui-replacement/ICON_INVENTORY.md`](design/sonder-ui-replacement/ICON_INVENTORY.md).
+The candidate's global glyph-replacement observer, legacy-button inference,
+compatibility token bridge, and theme migration were not adopted.
+
 ---
 
 ## Change log for this file
@@ -235,3 +246,4 @@ rejected.
 | 2026-08-14 | Created. Directive and grb-systems surveyed; nothing adopted from either yet. |
 | 2026-08-14 | Antonio added — the register's first adopted *implementation*, bundled under OFL 1.1 for the `lcars` theme. |
 | 2026-08-21 | Imported the maintainer-supplied Sonder UI Design Bible 1.0 and recorded its authority boundary. |
+| 2026-08-21 | Recorded the supplied MIT implementation candidate and the narrowly adapted SVG icon sprite. |
