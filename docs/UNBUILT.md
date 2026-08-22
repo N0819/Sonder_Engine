@@ -2131,6 +2131,25 @@ Features the architecture intends and has not built. Ordered by value per unit
 of risk; items 2.2–2.3 repay the structural debt in
 [`../Design.md`](../Design.md) § Structural debt.
 
+### 2.26 Replace the entire player and host web interface
+
+**Approved target 2026-08-21; implementation has not started.** Replace the
+classic browser-global host with the Design Bible's Play, Library and Settings
+application; replace every editor, story tool, entry surface, auth/host flow,
+guest flow and extension-hosted surface; then delete the old host markup,
+scripts, CSS, globals, polling/click bridges, hidden controls and obsolete
+dialogs. FastAPI, current engine/persistence/security authority, build-free
+native ES modules, the public extension v1 adapter and Legacy theme data are
+the boundaries. The finished product has no selectable fallback shell.
+
+The program, sequencing, 15 work packages, nine gates, current-source drift
+policy and completion contract are in
+[`superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md`](superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md).
+The candidate-source disposition and verified defects are in
+[`design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md`](design/SONDER_UI_DESIGN_BIBLE_ADOPTION_AUDIT_2026-08-21.md).
+Those documents hold evidence and execution detail; this entry remains the one
+status authority and is deleted only with the exact-head final qualification.
+
 ### 2.2 Make stance auditable
 
 **Closes debt #2.** Move relationships out of the `world` KV blob into a
