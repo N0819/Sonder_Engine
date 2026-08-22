@@ -540,3 +540,270 @@ def test_ai_connections_saves_backdrop_and_ambience_sources(
         "freesound_key": "",
         "licenses": ["Creative Commons 0", "Attribution", "Attribution NonCommercial"],
     }
+
+
+def test_content_saves_current_story_content_permissions_and_explains_local_data(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches an inert Content placeholder or invented global data controls."""
+    bootstrap = {
+        **BOOTSTRAP,
+        "nsfw_enabled": False,
+        "attire_beneath": False,
+        "auto_promote": False,
+    }
+    writes: dict[str, object] = {}
+
+    def record(name: str):
+        def route_handler(route) -> None:
+            writes[name] = route.request.post_data_json
+            route.fulfill(
+                content_type="application/json",
+                body=json.dumps({"enabled": route.request.post_data_json["enabled"]}),
+            )
+
+        return route_handler
+
+    page.route("**/api/nsfw", record("nsfw"))
+    page.route("**/api/attire_beneath", record("attire"))
+    page.route("**/api/auto_promote", record("promote"))
+    _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
+
+    expect(page.get_by_role("heading", name="Content", level=2)).to_be_visible()
+    expect(page.get_by_text("Your stories stay on this Sonder host.", exact=True)).to_be_visible()
+    page.get_by_role("checkbox", name="Allow adult story content").check()
+    page.get_by_role("checkbox", name="Use underneath descriptions from cards").check()
+    page.get_by_role("checkbox", name="Allow stories to promote recurring extras").check()
+    page.get_by_role("button", name="Save content preferences").click()
+
+    expect(page.get_by_text("Content preferences saved.", exact=True)).to_be_visible()
+    expect(page.get_by_role("link", name="Manage story exports and deletion")).to_have_attribute(
+        "href", "#/library/stories"
+    )
+    assert writes == {
+        "nsfw": {"enabled": True},
+        "attire": {"enabled": True},
+        "promote": {"enabled": True},
+    }
+
+
+def test_add_ons_discloses_permissions_and_runs_current_extension_lifecycle(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches a cosmetic extension list or consent shown after enablement."""
+    enabled = {"value": False}
+    writes: list[tuple[str, str]] = []
+
+    def listing(route) -> None:
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "extensions": [
+                        {
+                            "id": "sample",
+                            "name": "Sample Extension",
+                            "version": "1.2.0",
+                            "description": "Adds a story tool.",
+                            "provenance": "git:https://example.invalid/sample",
+                            "trust": "code",
+                            "disclosures": ["Read story state", "Run code in the engine process"],
+                            "enabled": enabled["value"],
+                            "updatable": True,
+                        }
+                    ],
+                    "load_errors": [],
+                    "safe_mode": False,
+                    "ext_api": 1,
+                    "host_capabilities": ["ui"],
+                }
+            ),
+        )
+
+    def enable(route) -> None:
+        writes.append((route.request.method, route.request.url.rsplit("/", 1)[-1]))
+        enabled["value"] = True
+        route.fulfill(content_type="application/json", body=json.dumps({"id": "sample", "enabled": True}))
+
+    def updates(route) -> None:
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {"updates": [{"id": "sample", "update": True, "latest": "2.0.0", "checkable": True}]}
+            ),
+        )
+
+    page.route(re.compile(r".*/api/extensions$"), listing)
+    page.route("**/api/extensions/sample/enable", enable)
+    page.route("**/api/extensions/updates", updates)
+    _open_settings(page, ui_base_url, category="add-ons")
+
+    expect(page.get_by_role("heading", name="Add-ons", level=2)).to_be_visible()
+    expect(page.locator(".ui-settings__extension-list")).to_have_attribute("data-extension-count", "1")
+    expect(page.get_by_text("Sample Extension", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Enable Sample Extension").click()
+    expect(page.get_by_text("Nothing has reviewed this code.", exact=True)).to_be_visible()
+    expect(
+        page.locator(".ui-settings__extension-consent").get_by_text(
+            "Read story state", exact=True
+        )
+    ).to_be_visible()
+    page.get_by_role("button", name="Confirm enable Sample Extension").click()
+    expect(page.get_by_text("Enabled", exact=True)).to_be_visible()
+
+    page.get_by_role("button", name="Check for extension updates").click()
+    expect(page.get_by_role("button", name="Update Sample Extension")).to_be_visible()
+    assert writes == [("POST", "enable")]
+
+
+def test_add_ons_stages_install_and_preserves_story_data_on_removal(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches installation without consent or removal wording that implies data loss."""
+    installed = {"value": False}
+    writes: dict[str, object] = {}
+
+    def listing(route) -> None:
+        rows = []
+        if installed["value"]:
+            rows.append(
+                {
+                    "id": "sample",
+                    "name": "Sample Extension",
+                    "version": "1.0.0",
+                    "enabled": False,
+                    "trust": "code",
+                    "disclosures": [],
+                }
+            )
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "extensions": rows,
+                    "load_errors": [],
+                    "safe_mode": False,
+                    "ext_api": 1,
+                    "host_capabilities": [],
+                }
+            ),
+        )
+
+    def install(route) -> None:
+        writes["install"] = route.request.post_data_json
+        installed["value"] = True
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"extension": {"id": "sample", "enabled": False}}),
+        )
+
+    def remove(route) -> None:
+        writes["remove"] = route.request.method
+        installed["value"] = False
+        route.fulfill(content_type="application/json", body=json.dumps({"removed": True}))
+
+    page.route(re.compile(r".*/api/extensions$"), listing)
+    page.route("**/api/extensions/install", install)
+    page.route("**/api/extensions/sample", remove)
+    _open_settings(page, ui_base_url, category="add-ons")
+
+    page.get_by_role("textbox", name="Extension source").fill(
+        "https://example.invalid/sample.git"
+    )
+    page.get_by_role("button", name="Install extension").click()
+    expect(
+        page.get_by_text(
+            "Nothing has reviewed this code. Installation copies it to this Sonder host; it still will not run until you enable it.",
+            exact=True,
+        )
+    ).to_be_visible()
+    page.get_by_role("button", name="Confirm install extension").click()
+    expect(page.get_by_text("Sample Extension", exact=True)).to_be_visible()
+
+    page.get_by_role("button", name="Remove Sample Extension").click()
+    expect(
+        page.get_by_text(
+            "Its files will be deleted. Story data it owns is kept so reinstalling can recover it.",
+            exact=True,
+        )
+    ).to_be_visible()
+    page.get_by_role("button", name="Confirm remove Sample Extension").click()
+    expect(page.get_by_text("No extensions are installed.", exact=True)).to_be_visible()
+    assert writes == {
+        "install": {"source": "https://example.invalid/sample.git"},
+        "remove": "DELETE",
+    }
+
+
+def test_maintenance_checks_updates_and_stages_checkpoint_conversion(
+    page: Page, ui_base_url: str
+) -> None:
+    """Catches automatic destructive maintenance or disconnected legacy controls."""
+    writes: list[tuple[str, object]] = []
+    page.route(
+        "**/api/updates/check",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "ok": True,
+                    "branch": "interface",
+                    "current": "abc1234",
+                    "behind": 2,
+                    "ahead": 0,
+                    "dirty": False,
+                    "up_to_date": False,
+                    "commits": [{"hash": "def5678", "subject": "Update interface"}],
+                    "releases": None,
+                }
+            ),
+        ),
+    )
+    page.route(
+        "**/api/maintenance/checkpoints",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "checkpoints": 12,
+                    "legacy": 3,
+                    "bytes": 40_000_000,
+                    "legacy_bytes": 25_000_000,
+                    "progress": {"running": False},
+                }
+            ),
+        ),
+    )
+
+    def install(route) -> None:
+        writes.append(("install", route.request.post_data_json))
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "updated": True, "current": "def5678"}),
+        )
+
+    def compact(route) -> None:
+        writes.append(("compact", route.request.post_data_json))
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"started": True, "total": 3}),
+        )
+
+    page.route("**/api/updates/install", install)
+    page.route("**/api/maintenance/checkpoints/compact", compact)
+    _open_settings(page, ui_base_url, category="maintenance")
+
+    expect(page.get_by_role("heading", name="Maintenance", level=2)).to_be_visible()
+    expect(page.get_by_text("3 of 12 checkpoints use the legacy format.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Check for Sonder updates").click()
+    expect(page.get_by_text("2 updates are available.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Install update").click()
+    expect(page.get_by_text("The running server will need a restart.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Confirm install update").click()
+    expect(page.get_by_text("Update installed. Restart the Sonder server, then reload this page.", exact=True)).to_be_visible()
+
+    page.get_by_role("button", name="Convert legacy checkpoints").click()
+    expect(page.get_by_text("Rollback history will be rewritten into the current storage format.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Confirm checkpoint conversion").click()
+    expect(page.get_by_text("Checkpoint conversion started for 3 checkpoints.", exact=True)).to_be_visible()
+    assert writes == [("install", {}), ("compact", {})]
