@@ -1,25 +1,5 @@
 export const MODULE_RELEASE = "wp06.1";
 
-const TYPES = Object.freeze([
-  ["", "All", "All Library items"],
-  ["story", "Stories", "Stories"],
-  ["character", "Characters", "Characters"],
-  ["persona", "Personas", "Personas"],
-  ["lore", "Lore", "Lore"],
-]);
-const SCOPES = Object.freeze([
-  ["all", "All"],
-  ["story", "Chosen story"],
-  ["unassigned", "Not used"],
-  ["multiple", "Multiple stories"],
-]);
-const KIND_LABELS = Object.freeze({
-  story: "Story",
-  character: "Character",
-  persona: "Persona",
-  lore: "Lore",
-});
-
 // UI_CATALOG_START: Library discovery and detail copy.
 const COPY = Object.freeze({
   search: "Search Library",
@@ -50,8 +30,112 @@ const COPY = Object.freeze({
   confirmDeleteStory: "Delete this story",
   cancelDelete: "Keep story",
   deleteWarning: "This permanently removes the complete story, its history, and story-owned lore. Reusable Characters, Personas, and original Lore remain.",
+  all: "All",
+  allItems: "All Library items",
+  stories: "Stories",
+  characters: "Characters",
+  personas: "Personas",
+  lore: "Lore",
+  chosenStory: "Chosen story",
+  notUsed: "Not used",
+  multipleStories: "Multiple stories",
+  story: "Story",
+  character: "Character",
+  persona: "Persona",
+  scope: "Scope",
+  storyScope: "Story scope",
+  untitledStory: "Untitled story",
+  name: "Name",
+  type: "Type",
+  created: "Created",
+  storyUse: "Story use",
+  visibility: "Library visibility",
+  activeItems: "Active items",
+  archivedItems: "Archived items",
+  untitled: "Untitled",
+  libraryItem: "Library item",
+  tryAgain: "Try again when the engine is available.",
+  usedOne: "Used in one story",
+  usedMany: "Used in ${count} stories",
+  changeSaved: "Library change saved.",
+  removeActiveCast: "Remove from active cast",
+  restoreActiveCast: "Restore to active cast",
+  primaryPersonaChange: "Primary persona · change in Story setup",
+  removeAdditionalPlayer: "Remove additional player",
+  restoreAdditionalPlayer: "Restore additional player",
+  detachFromStory: "Detach from story",
+  addToStoryHeading: "Add to a story",
+  storyFor: "Story for ${name}",
+  addToStory: "Add to story",
+  archiveStory: "Archive story",
+  archiveCharacter: "Archive character",
+  archivePersona: "Archive persona",
+  archiveLore: "Archive lore",
+  restoreStory: "Restore story",
+  restoreCharacter: "Restore character",
+  restorePersona: "Restore persona",
+  restoreLore: "Restore lore",
+  libraryDetails: "Library details",
+  noSummary: "No public summary has been added.",
+  savingChange: "Saving Library change…",
+  waitingEngine: "Waiting for the engine to accept it.",
+  changeNotSaved: "Library change was not saved",
+  active: "Active",
+  dormant: "Dormant",
+  primary: "Primary",
+  attached: "Attached",
+  disabled: "Disabled",
+  canon: "Canon",
+  owned: "Owned",
+  safeLink: "Some Library link options were invalid and were safely ignored.",
+  unavailableInformation: "Library information is temporarily unavailable.",
+  undoBriefly: "The Library change can be undone briefly.",
+  removedCast: "Character removed from the active cast. Their story history remains.",
+  restoredCast: "Character restored to the active cast.",
+  removedPlayer: "Additional player removed from the story.",
+  restoredPlayer: "Additional player restored.",
+  detachedLore: "Lore detached from the story; the reusable original remains in Library.",
+  addedCharacter: "Character added to the story.",
+  addedPlayer: "Additional player added to the story.",
+  attachedLore: "Lore attached to the story.",
+  archivedTemplate: "${name} archived.",
+  restoredTemplate: "${name} restored.",
+  mutationFailed: "The Library change was not saved.",
+  undoFailed: "Undo was not accepted.",
 });
 // UI_CATALOG_END
+
+const TYPES = Object.freeze([
+  ["", COPY.all, COPY.allItems],
+  ["story", COPY.stories, COPY.stories],
+  ["character", COPY.characters, COPY.characters],
+  ["persona", COPY.personas, COPY.personas],
+  ["lore", COPY.lore, COPY.lore],
+]);
+const SCOPES = Object.freeze([
+  ["all", COPY.all],
+  ["story", COPY.chosenStory],
+  ["unassigned", COPY.notUsed],
+  ["multiple", COPY.multipleStories],
+]);
+const KIND_LABELS = Object.freeze({
+  story: COPY.story,
+  character: COPY.character,
+  persona: COPY.persona,
+  lore: COPY.lore,
+});
+const ARCHIVE_LABELS = Object.freeze({
+  story: COPY.archiveStory,
+  character: COPY.archiveCharacter,
+  persona: COPY.archivePersona,
+  lore: COPY.archiveLore,
+});
+const RESTORE_LABELS = Object.freeze({
+  story: COPY.restoreStory,
+  character: COPY.restoreCharacter,
+  persona: COPY.restorePersona,
+  lore: COPY.restoreLore,
+});
 
 function node(documentRef, tag, className = "", text = "") {
   const element = documentRef.createElement(tag);
@@ -78,9 +162,9 @@ function stateBlock(documentRef, state, title, detail) {
 
 function usage(item) {
   const associations = Array.isArray(item?.associations) ? item.associations : [];
-  if (!associations.length) return "Not used";
-  if (associations.length === 1) return associations[0].story_name || "Used in one story";
-  return `Used in ${associations.length} stories`;
+  if (!associations.length) return COPY.notUsed;
+  if (associations.length === 1) return associations[0].story_name || COPY.usedOne;
+  return COPY.usedMany.replace("${count}", String(associations.length));
 }
 
 function typeForRoute(route) {
@@ -121,7 +205,7 @@ function filterRail(documentRef, services, state) {
   }
   rail.append(typeList);
 
-  const scopeTitle = node(documentRef, "p", "ui-library__filter-title", "Scope");
+  const scopeTitle = node(documentRef, "p", "ui-library__filter-title", COPY.scope);
   const scopeList = node(documentRef, "ul", "ui-library__filter-list");
   for (const [scope, label] of SCOPES) {
     const item = node(documentRef, "li");
@@ -143,11 +227,11 @@ function filterRail(documentRef, services, state) {
   const stories = state.library?.chats || [];
   if (stories.length) {
     const storyLabel = node(documentRef, "label", "ui-field ui-library__story-scope");
-    storyLabel.append(node(documentRef, "span", "ui-field__label", "Story scope"));
+    storyLabel.append(node(documentRef, "span", "ui-field__label", COPY.storyScope));
     const story = node(documentRef, "select", "ui-input");
-    story.setAttribute("aria-label", "Story scope");
+    story.setAttribute("aria-label", COPY.storyScope);
     for (const row of stories) {
-      const option = node(documentRef, "option", "", row.name || "Untitled story");
+      const option = node(documentRef, "option", "", row.name || COPY.untitledStory);
       option.value = row.id;
       option.selected = String(query.story || "") === String(row.id);
       story.append(option);
@@ -184,7 +268,7 @@ function toolbar(documentRef, services, state) {
   const sort = node(documentRef, "select", "ui-input");
   sort.setAttribute("aria-label", COPY.sort);
   for (const [value, text] of [
-    ["name", "Name"], ["type", "Type"], ["created", "Created"], ["usage", "Story use"],
+    ["name", COPY.name], ["type", COPY.type], ["created", COPY.created], ["usage", COPY.storyUse],
   ]) {
     const option = node(documentRef, "option", "", text);
     option.value = value;
@@ -198,10 +282,10 @@ function toolbar(documentRef, services, state) {
   }));
   sortLabel.append(sort);
   const visibilityLabel = node(documentRef, "label", "ui-field ui-library__visibility");
-  visibilityLabel.append(node(documentRef, "span", "ui-field__label", "Library visibility"));
+  visibilityLabel.append(node(documentRef, "span", "ui-field__label", COPY.visibility));
   const visibility = node(documentRef, "select", "ui-input");
-  visibility.setAttribute("aria-label", "Library visibility");
-  for (const [value, text] of [["active", "Active items"], ["archived", "Archived items"]]) {
+  visibility.setAttribute("aria-label", COPY.visibility);
+  for (const [value, text] of [["active", COPY.activeItems], ["archived", COPY.archivedItems]]) {
     const option = node(documentRef, "option", "", text);
     option.value = value;
     option.selected = (query.visibility || "active") === value;
@@ -237,10 +321,10 @@ function ledger(documentRef, services, state) {
     const index = node(documentRef, "span", "ui-library__index", String(item.id).padStart(2, "0"));
     index.setAttribute("aria-hidden", "true");
     const copy = node(documentRef, "span", "ui-library__item-copy");
-    const name = node(documentRef, "strong", "ui-library__name", item.name || "Untitled");
+    const name = node(documentRef, "strong", "ui-library__name", item.name || COPY.untitled);
     const meta = node(documentRef, "span", "ui-library__meta");
     meta.append(
-      node(documentRef, "span", "ui-library__kind", KIND_LABELS[item.kind] || "Library item"),
+      node(documentRef, "span", "ui-library__kind", KIND_LABELS[item.kind] || COPY.libraryItem),
       node(documentRef, "span", "ui-library__usage", usage(item)),
     );
     if (item.summary) copy.append(name, node(documentRef, "span", "ui-library__summary", item.summary), meta);
@@ -266,7 +350,7 @@ function resultState(documentRef, library) {
   if (library.status === "offline" || library.status === "error") {
     const title = library.status === "offline" ? COPY.offline : COPY.error;
     return stateBlock(documentRef, library.status, title,
-      library.items?.length ? COPY.preserved : "Try again when the engine is available.");
+      library.items?.length ? COPY.preserved : COPY.tryAgain);
   }
   if (library.status === "empty") {
     const filtered = Boolean(library.route?.q || library.route?.type
@@ -312,7 +396,7 @@ function undoNotice(documentRef, services, library) {
   notice.dataset.tone = "success";
   notice.setAttribute("role", "status");
   notice.append(
-    node(documentRef, "p", "", library.undo.message || "Library change saved."),
+    node(documentRef, "p", "", library.undo.message || COPY.changeSaved),
   );
   const undo = button(documentRef, COPY.undo, "ui-button ui-button--quiet");
   undo.addEventListener("click", () => services.library.runUndo());
@@ -324,16 +408,16 @@ function associationAction(documentRef, services, item, association) {
   let label = "";
   if (item.kind === "character") {
     label = association.state === "active"
-      ? "Remove from active cast" : "Restore to active cast";
+      ? COPY.removeActiveCast : COPY.restoreActiveCast;
   } else if (item.kind === "persona") {
     if (association.state === "primary") {
-      return node(documentRef, "span", "ui-muted", "Primary persona · change in Story setup");
+      return node(documentRef, "span", "ui-muted", COPY.primaryPersonaChange);
     }
     label = association.state === "active"
-      ? "Remove additional player" : "Restore additional player";
+      ? COPY.removeAdditionalPlayer : COPY.restoreAdditionalPlayer;
   } else if (item.kind === "lore" && item.reusable
       && ["attached", "disabled", "canon"].includes(association.state)) {
-    label = "Detach from story";
+    label = COPY.detachFromStory;
   }
   if (!label) return null;
   const control = button(documentRef, label);
@@ -347,16 +431,16 @@ function addToStory(documentRef, services, library, item) {
   const stories = (library.chats || []).filter(story => !used.has(Number(story.id)));
   if (!stories.length) return null;
   const section = node(documentRef, "section", "ui-library-detail__add");
-  section.append(node(documentRef, "h4", "ui-heading ui-heading--3", "Add to a story"));
+  section.append(node(documentRef, "h4", "ui-heading ui-heading--3", COPY.addToStoryHeading));
   const controls = node(documentRef, "div", "ui-tool-inline");
   const select = node(documentRef, "select", "ui-input");
-  select.setAttribute("aria-label", `Story for ${item.name || "Library item"}`);
+  select.setAttribute("aria-label", COPY.storyFor.replace("${name}", item.name || COPY.libraryItem));
   for (const story of stories) {
-    const option = node(documentRef, "option", "", story.name || "Untitled story");
+    const option = node(documentRef, "option", "", story.name || COPY.untitledStory);
     option.value = story.id;
     select.append(option);
   }
-  const add = button(documentRef, "Add to story", "ui-button ui-button--primary");
+  const add = button(documentRef, COPY.addToStory, "ui-button ui-button--primary");
   add.addEventListener("click", () => services.library.addToStory(item, select.value));
   controls.append(select, add);
   section.append(controls);
@@ -367,7 +451,7 @@ function lifecycleActions(documentRef, services, library, item, viewState, reren
   const section = node(documentRef, "section", "ui-library-detail__actions");
   const archive = button(
     documentRef,
-    `${item.archived ? "Restore" : "Archive"} ${KIND_LABELS[item.kind]?.toLowerCase() || "item"}`,
+    item.archived ? RESTORE_LABELS[item.kind] : ARCHIVE_LABELS[item.kind],
   );
   archive.addEventListener("click", () => services.library.setArchived(item, !item.archived));
   section.append(archive);
@@ -420,13 +504,13 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
     wrapper.append(stateBlock(documentRef, "empty", COPY.choose, COPY.chooseDetail));
     if (undo) wrapper.append(undo);
     target.replaceChildren(wrapper);
-    return "Library details";
+    return COPY.libraryDetails;
   }
   const article = node(documentRef, "article", "ui-library-detail");
-  const kind = node(documentRef, "p", "ui-library-detail__kind", KIND_LABELS[item.kind] || "Library item");
-  const title = node(documentRef, "h3", "ui-heading ui-heading--2", item.name || "Untitled");
+  const kind = node(documentRef, "p", "ui-library-detail__kind", KIND_LABELS[item.kind] || COPY.libraryItem);
+  const title = node(documentRef, "h3", "ui-heading ui-heading--2", item.name || COPY.untitled);
   const summary = node(documentRef, "p", "ui-library-detail__summary",
-    item.summary || "No public summary has been added.");
+    item.summary || COPY.noSummary);
   const favorite = button(
     documentRef,
     services.library.isFavorite(item.key) ? COPY.unfavorite : COPY.favorite,
@@ -439,9 +523,9 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
   const currentMutation = library.mutation?.routeOwner === library.owner
     ? library.mutation : null;
   if (currentMutation?.status === "saving") {
-    article.append(stateBlock(documentRef, "loading", "Saving Library change…", "Waiting for the engine to accept it."));
+    article.append(stateBlock(documentRef, "loading", COPY.savingChange, COPY.waitingEngine));
   } else if (currentMutation?.status === "error") {
-    article.append(stateBlock(documentRef, "error", "Library change was not saved", currentMutation.message));
+    article.append(stateBlock(documentRef, "error", COPY.changeNotSaved, currentMutation.message));
   }
   const associations = node(documentRef, "section", "ui-library-detail__associations");
   associations.append(node(documentRef, "h4", "ui-heading ui-heading--3", COPY.associations));
@@ -452,7 +536,7 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
     for (const association of item.associations) {
       const row = node(documentRef, "li", "ui-library-detail__usage");
       row.append(
-        node(documentRef, "strong", "", association.story_name || "Untitled story"),
+        node(documentRef, "strong", "", association.story_name || COPY.untitledStory),
         node(documentRef, "span", "ui-state-marker", String(association.state || "used")
           .replace(/(^|[-_])([a-z])/g, (_match, lead, letter) => `${lead ? " " : ""}${letter.toUpperCase()}`)),
       );
@@ -469,7 +553,7 @@ function renderDetail(documentRef, services, target, library, viewState, rerende
   if (undo) article.append(undo);
   wrapper.append(article);
   target.replaceChildren(wrapper);
-  return item.name || "Library details";
+  return item.name || COPY.libraryDetails;
 }
 
 export function mountLibraryDetail(options = {}) {
@@ -484,6 +568,7 @@ export function mountLibraryDetail(options = {}) {
     const title = renderDetail(
       documentRef, services, target, library, viewState, rerender,
     );
+    services.localizer.localize(target);
     onTitle?.(title);
   };
   const unsubscribe = services.store.subscribe(state => state.library, render);

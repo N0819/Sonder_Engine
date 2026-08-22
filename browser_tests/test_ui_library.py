@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 from playwright.sync_api import Page, expect
 
@@ -75,7 +76,12 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1280) -> None:
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
     expect(page.get_by_role("heading", name="Library", level=1)).to_be_visible()
     expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(3)
-    expect(page.get_by_role("combobox", name="Library visibility")).to_have_value("active")
+    visibility = page.get_by_role("combobox", name="Library visibility")
+    expect(visibility).to_have_value("active")
+    expect(visibility).to_be_visible()
+    assert page.locator(".ui-library__content").evaluate(
+        "node => node.scrollWidth - node.clientWidth"
+    ) == 0
 
 
 def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
@@ -311,6 +317,57 @@ def test_compact_library_detail_is_history_staged_and_targets_are_large(
     page.go_back()
     expect(sheet).to_be_hidden()
     expect(page.locator("[data-library-ledger]")).to_be_visible()
+
+
+def test_compact_library_deep_link_stages_detail_then_back_restores_context(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(BOOTSTRAP)),
+    )
+    page.route(
+        "**/api/library?*",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(_projection())),
+    )
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/lore?item=lore%3A12")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    sheet = page.get_by_role("dialog", name="Library details")
+    expect(sheet).to_be_visible()
+    expect(sheet.get_by_role("heading", name="Quiet Roads")).to_be_visible()
+    page.go_back()
+    expect(sheet).to_be_hidden()
+    expect(page.locator("[data-library-ledger]")).to_be_visible()
+
+
+def test_japanese_localizes_late_library_detail_without_translating_story_data(
+    page: Page, ui_base_url: str,
+) -> None:
+    catalog = json.loads(
+        (Path(__file__).parents[1] / "language_packs" / "ja" / "ui.json")
+        .read_text(encoding="utf-8")
+    )
+    boot = {**BOOTSTRAP, "ui_language": "ja", "ui_messages": catalog}
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps(boot, ensure_ascii=False),
+        ),
+    )
+    page.route(
+        "**/api/library?*",
+        lambda route: route.fulfill(content_type="application/json", body=json.dumps(_projection())),
+    )
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/characters?item=character%3A7")
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    detail = page.get_by_role("complementary", name="ライブラリの詳細")
+    expect(detail.get_by_role("heading", name="Mara Venn")).to_be_visible()
+    expect(detail.get_by_text("ストーリーでの使用", exact=True)).to_be_visible()
+    expect(detail.get_by_role("button", name="アクティブキャストから外す")).to_be_visible()
+    expect(detail.get_by_text("The Lantern Archive", exact=True)).to_be_visible()
 
 
 def test_library_character_lifecycle_and_bounded_undo_use_server_truth(
