@@ -1218,6 +1218,27 @@ def test_maintenance_routes_portable_backups_to_owned_story_exports(
     expect(backup).to_have_attribute("href", "#/library/stories")
 
 
+def test_maintenance_stages_host_sign_out_before_destroying_session(
+    page: Page, ui_base_url: str
+) -> None:
+    writes: list[dict[str, object]] = []
+
+    def logout(route) -> None:
+        writes.append(route.request.post_data_json)
+        route.fulfill(content_type="application/json", body=json.dumps({"ok": True}))
+
+    page.route("**/api/auth/logout", logout)
+    page.route("**/login", lambda route: route.fulfill(body="signed out"))
+    _open_settings(page, ui_base_url, category="maintenance")
+
+    page.get_by_role("button", name="Sign out").click()
+    expect(page.get_by_text("Sign out of this host session?", exact=True)).to_be_visible()
+    assert writes == []
+    page.get_by_role("button", name="Confirm sign out").click()
+    page.wait_for_url("**/login")
+    assert writes == [{}]
+
+
 def test_mobile_advanced_keeps_prompt_tools_without_horizontal_overflow(
     page: Page, ui_base_url: str
 ) -> None:
