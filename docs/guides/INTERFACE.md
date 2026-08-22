@@ -51,8 +51,19 @@ route history, localization and content boundaries, task/notice/diagnostic
 services, browser-local draft ownership, save sequencing, and a contained v1
 extension adapter. Its [runtime review and browser
 matrix](../design/sonder-ui-replacement/WP02_RUNTIME_REVIEW.md) qualify those
-boundaries without claiming a product shell. G2 remains open until WP-03 makes
-Play, Library, Settings, focus, responsive routes, and extension consumers real.
+boundaries without claiming a product shell.
+
+WP-03 closes G2 with the authenticated `/ui-next` application frame. It owns
+exactly three primary destinations (Play, Library, and Settings), four explicit
+layout states, versioned route/focus/scroll restoration, the desktop and mobile
+inspector frame, Go To, overlay/notice/task hosts, and the first visible
+extension-v1 route consumer. The [G2 review and deterministic browser
+matrix](../design/sonder-ui-replacement/G2_SHELL_REVIEW.md) qualify that shell
+without claiming the destination workflows. WP-04 is next and owns the Play
+transcript, turn lifecycle, streaming, composer, and current story actions.
+The lock passed 110 focused checks, 8,769 repository tests with four expected
+platform skips, all 119 browser tests, the maintained-source compile and
+structure gates, and byte-identical repeated G2 captures.
 
 ## Runtime boundary
 
@@ -66,9 +77,9 @@ Play, Library, Settings, focus, responsive routes, and extension consumers real.
   state. Every async result carries enough request/story/record identity to be
   rejected when stale.
 - Development uses `/ui-next`, a separate host-session-authenticated native
-  module entry. Anonymous requests redirect to `/login`; the entry does not
-  load classic host assets, read API state, poll, or alter `/` until its owning
-  work packages add those responsibilities and the cutover gate passes.
+  module entry. Anonymous requests redirect to `/login`; the entry loads the
+  replacement graph and one `/api/bootstrap` projection, but no classic host
+  asset or idle polling. It does not alter `/` before the cutover gate passes.
 - Browser-local migrations are versioned and idempotent. Consequential drafts
   are scoped to their real story or record, recoverable, and never silently
   moved between owners.
@@ -135,6 +146,15 @@ have behavioral evidence. See [`EXTENSIONS.md`](EXTENSIONS.md).
 The primary destinations are Play, Library, and Settings. Story Tools are
 story-scoped; global configuration is not. New Story, host setup/sign-in, and
 guest join/play are complete entry workflows rather than dialog fragments.
+
+The G2 shell makes this topology executable. Wide layouts use a left
+navigation rail, central destination workspace, and right contextual inspector.
+Medium layouts retain the same routes in a compact rail. Compact layouts use a
+three-item bottom navigation and move Go To to the header; the inspector becomes
+a focus-contained, Back-owned sheet. Stable routes, named scroll regions, and
+focus identities are data. No shell service retains a DOM node across a route
+or refresh. Unfinished destination work is presented as a bounded truthful
+summary, never as a synthetic call into the classic interface.
 
 Desktop, tablet, portrait mobile, narrow mobile, landscape mobile, short-height
 windows, 200-percent zoom, long localization, keyboard, pointer, and touch all

@@ -1,8 +1,8 @@
 # Current theme, localization, and extension inventory
 
 **Themes:** `ash-brass`, `carbon-signal`, `ink`, `lcars`, `midnight-ink`, `parchment-night`, `stone`, `tavern`  
-**CSS custom properties:** 153  
-**UI catalog keys:** 1980  
+**CSS custom properties:** 155
+**UI catalog keys:** 2035
 
 ## Extension routes
 

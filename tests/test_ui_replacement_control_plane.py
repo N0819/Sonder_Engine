@@ -79,8 +79,24 @@ def test_arch_12_records_the_approved_no_global_bridge_amendment():
     assert arch_12["status"] == "closed"
 
 
-def test_candidate_status_cannot_close_current_product_requirements():
+def test_only_qualified_program_gates_close_current_requirements():
     rows = _rows()
     closed = {row["id"] for row in rows if row["status"] == "closed"}
     g1_icon_requirements = {f"ICON-{number:02d}" for number in range(1, 11)}
-    assert closed <= {"GOV-02", "GOV-03", "GOV-04", "ARCH-12"} | g1_icon_requirements
+    g2_shell_requirements = {
+        "IA-01",
+        "IA-03",
+        "IA-04",
+        "IA-05",
+        "IA-07",
+        "IA-09",
+        *(f"ARCH-{number:02d}" for number in range(1, 10)),
+        "ARCH-14",
+    }
+    qualified = {
+        "GOV-02",
+        "GOV-03",
+        "GOV-04",
+        "ARCH-12",
+    } | g1_icon_requirements | g2_shell_requirements
+    assert closed <= qualified

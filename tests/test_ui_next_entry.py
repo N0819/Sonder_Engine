@@ -1,4 +1,4 @@
-"""Authenticated development entry for the replacement interface."""
+"""Authenticated application entry for the replacement interface."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def test_ui_next_redirects_anonymous_requests_without_changing_root(
     assert 'data-ui-next-ready="true"' not in root.text
 
 
-def test_ui_next_serves_only_the_static_fixture_to_a_valid_host(
+def test_ui_next_serves_only_the_static_application_to_a_valid_host(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -40,7 +40,8 @@ def test_ui_next_serves_only_the_static_fixture_to_a_valid_host(
         client.close()
 
     assert response.status_code == 200
-    assert 'data-ui-next-entry="development"' in response.text
+    assert 'data-ui-next-entry="application"' in response.text
+    assert '/static/js/ui-next/main.js?release=wp03.1' in response.text
     assert "/api/" not in response.text
     assert "Baseline Story" not in response.text
 
