@@ -1832,3 +1832,103 @@ def test_runtime_boot_drops_unknown_sensitive_bootstrap_fields_and_tears_down(
         "stateAfterStop": "stopped",
         "adapterAfterStop": False,
     }
+
+
+def test_host_runtime_reports_session_expiry_once_and_fails_closed(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            status=401,
+            content_type="application/json",
+            body='{"detail":"Expired"}',
+        ),
+    )
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { bootRuntime } = await import(
+            `${base}/static/js/ui-next/bootstrap.js?release=wp02.1`
+          );
+          const root = document.documentElement;
+          const destinations = [];
+          let kind = null;
+          try {
+            await bootRuntime({
+              host: true,
+              root,
+              target: window,
+              onLoginRequired: destination => destinations.push(destination),
+            });
+          } catch (error) {
+            kind = error.kind;
+          }
+          return {
+            kind,
+            destinations,
+            state: root.dataset.uiNextState,
+            ready: root.dataset.uiNextReady || null,
+            classicState: Object.hasOwn(window, "S"),
+            adapter: Object.hasOwn(window, "Sonder"),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "kind": "session-expired",
+        "destinations": ["/login"],
+        "state": "failed",
+        "ready": None,
+        "classicState": False,
+        "adapter": False,
+    }
+
+
+def test_host_runtime_contains_extension_asset_failure_and_still_becomes_ready(
+    page: Page, ui_base_url: str
+) -> None:
+    page.route(
+        "**/api/bootstrap",
+        lambda route: route.fulfill(
+            content_type="application/json",
+            body="""{
+              "ui_language":"en",
+              "ui_direction":"ltr",
+              "ui_messages":{},
+              "chats":[],
+              "characters":[],
+              "personas":[],
+              "lorebooks":[],
+              "extensions":[{
+                "id":"broken-ui",
+                "enabled":true,
+                "capabilities":{"ui":{"js":"ui.js"}}
+              }],
+              "extension_errors":[],
+              "extension_lanes":[]
+            }""",
+        ),
+    )
+    page.route("**/api/extensions/broken-ui/ui.js", lambda route: route.abort())
+    page.goto(f"{ui_base_url}/static/ui-next-runtime.html")
+    page.wait_for_function(
+        "['ready', 'failed'].includes(document.documentElement.dataset.uiNextState)",
+        timeout=10000,
+    )
+    result = page.evaluate(
+        """() => ({
+          state: document.documentElement.dataset.uiNextState,
+          ready: document.documentElement.dataset.uiNextReady,
+          status: document.querySelector("[data-runtime-status]")?.textContent,
+          detail: document.querySelector("[data-runtime-detail]")?.textContent,
+          adapter: Object.hasOwn(window, "Sonder"),
+        })"""
+    )
+    assert result == {
+        "state": "ready",
+        "ready": "true",
+        "status": "Runtime services ready",
+        "detail": "0 stories · 1 extensions",
+        "adapter": True,
+    }
