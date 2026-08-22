@@ -35,6 +35,7 @@ const SERVICE_PATHS = Object.freeze({
   storyToolsRuntime: "./story-tools-runtime.js?release=wp05.1",
   storyToolsView: "./story-tools-view.js?release=wp05.1",
   liveStoryTools: "./live-story-tools.js?release=wp05.1",
+  atmosphereRuntime: "./atmosphere-runtime.js?release=wp05.1",
 });
 
 let activeTeardown = null;
@@ -306,6 +307,14 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     uiLoads: extensionLoads,
   });
 
+  const atmosphere = modules.atmosphereRuntime.createAtmosphereRuntime({
+    store,
+    apiClient,
+    localState,
+    target,
+    document: documentRef,
+  });
+  cleanups.push(() => atmosphere.teardown());
   const play = modules.playRuntime.createPlayRuntime({
     store,
     apiClient,
@@ -361,6 +370,7 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     registry,
     adapter,
     play,
+    atmosphere,
     storyTools,
   };
   let shell = null;

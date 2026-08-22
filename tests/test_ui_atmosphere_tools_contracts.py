@@ -29,13 +29,12 @@ def test_atmosphere_modules_are_release_coherent_and_runtime_owned():
 def test_backdrops_use_current_turn_contract_without_idle_polling():
     source = (TOOLS / "backdrops.js").read_text(encoding="utf-8")
     for contract in (
-        "/api/turns/${turnId}/backdrop",
+        "services.atmosphere.loadBackdrop",
         '"GET"',
         '"POST"',
         "Check status",
         "Generate backdrop",
-        "force: true",
-        "services.atmosphere.applyBackdrop",
+        'request("POST", true)',
     ):
         assert contract in source
     assert "setInterval(" not in source
@@ -45,11 +44,10 @@ def test_backdrops_use_current_turn_contract_without_idle_polling():
 def test_ambience_uses_current_resolve_pin_oneshot_and_media_contracts():
     source = (TOOLS / "ambience.js").read_text(encoding="utf-8")
     for contract in (
-        "/api/turns/${turnId}/ambience",
+        "services.atmosphere.loadAmbience",
         "/api/chats/${chatId}/ambience/pins",
         "/api/chats/${chatId}/ambience/pin",
         "/api/chats/${chatId}/ambience/oneshot/thunder",
-        "services.atmosphere.applyAmbience",
         "services.atmosphere.setMuted",
         "services.atmosphere.setVolume",
         "services.atmosphere.setChime",
@@ -64,14 +62,15 @@ def test_atmosphere_runtime_owns_visibility_audio_tokens_and_completion_chime():
     source = (RUNTIME / "atmosphere-runtime.js").read_text(encoding="utf-8")
     for contract in (
         "visibilitychange",
-        "document.hidden",
-        "payload.token",
-        "new Audio",
+        "documentRef.hidden",
+        "payload?.token",
+        "new target.Audio",
         "pause()",
         "composer.status",
         'previousStatus === "running"',
         "completionChime",
         "localState.setRecord",
+        "/api/turns/${turnId}/${kind}",
     ):
         assert contract in source
     for forbidden in (
@@ -94,6 +93,9 @@ def test_play_atmosphere_is_a_non_reflowing_effects_aware_stage():
         "data-play-backdrop",
         "data-play-weather",
         "state.atmosphere",
+        "ui-play__audio-cluster",
+        "services.atmosphere.setMuted",
+        "services.atmosphere.setVolume",
     ):
         assert contract in view
     assert "position: absolute" in css
