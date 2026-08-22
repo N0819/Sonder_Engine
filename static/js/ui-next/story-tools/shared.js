@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
 export function element(documentRef, tag, className = "", text = "") {
   const node = documentRef.createElement(tag);

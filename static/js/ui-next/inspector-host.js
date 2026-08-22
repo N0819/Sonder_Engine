@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=wp05.1";
+import { createOverlayController } from "../ui/components/overlay.js?release=wp06.1";
 
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["narrow", "default", "wide"]);
@@ -99,6 +99,8 @@ export function createInspectorHost(options = {}) {
   let stopped = false;
   let desktopStoryTools = null;
   let sheetStoryTools = null;
+  let desktopLibrary = null;
+  let sheetLibrary = null;
   const sheet = sheetContent(documentRef, services.localizer.t);
   overlayHost.append(sheet.overlay);
   const overlay = createOverlayController(sheet.overlay, {
@@ -115,18 +117,23 @@ export function createInspectorHost(options = {}) {
     services.localState.setRecord("panes", { ...current, inspector: panes });
   };
 
-  const clearStoryTools = () => {
+  const clearContextView = () => {
     desktopStoryTools?.teardown();
     sheetStoryTools?.teardown();
     desktopStoryTools = null;
     sheetStoryTools = null;
+    desktopLibrary?.teardown();
+    sheetLibrary?.teardown();
+    desktopLibrary = null;
+    sheetLibrary = null;
   };
 
   const updateCopy = destination => {
     const copy = contextCopy(destination, services.localizer.t);
     heading.textContent = copy.title;
     sheet.heading.textContent = copy.title;
-    clearStoryTools();
+    aside.setAttribute("aria-label", copy.title);
+    clearContextView();
     if (destination === "play" && modules?.storyToolsView && modules?.storyToolsRegistry) {
       desktopStoryTools = modules.storyToolsView.mountStoryTools({
         document: documentRef,
@@ -145,6 +152,20 @@ export function createInspectorHost(options = {}) {
         compact: true,
         interactive: !isPaneLayout() && layerOpen(),
         tools: modules.liveStoryTools,
+      });
+      return;
+    }
+    if (destination === "library") {
+      body.dataset.libraryContext = "true";
+      desktopLibrary = modules.libraryView.mountLibraryDetail({
+        document: documentRef,
+        services,
+        target: body,
+      });
+      sheetLibrary = modules.libraryView.mountLibraryDetail({
+        document: documentRef,
+        services,
+        target: sheet.body,
       });
       return;
     }
@@ -213,6 +234,8 @@ export function createInspectorHost(options = {}) {
   sheet.close.addEventListener("click", close);
   pinButton.addEventListener("click", togglePin);
   resizeButton.addEventListener("click", resize);
+  const onLibrarySelect = () => open();
+  documentRef.addEventListener("sonder:library-select", onLibrarySelect);
 
   const sync = nextRoute => {
     route = nextRoute;
@@ -237,7 +260,8 @@ export function createInspectorHost(options = {}) {
     sheet.close.removeEventListener("click", close);
     pinButton.removeEventListener("click", togglePin);
     resizeButton.removeEventListener("click", resize);
-    clearStoryTools();
+    documentRef.removeEventListener("sonder:library-select", onLibrarySelect);
+    clearContextView();
     overlay.destroy();
     sheet.overlay.remove();
   };

@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=wp05.1";
+import { createOverlayController } from "../ui/components/overlay.js?release=wp06.1";
 
 const LAYER_ID = "go-to";
 

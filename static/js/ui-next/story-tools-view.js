@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
 // UI_CATALOG_START: Story Tool platform states shown before family modules land.
 const COPY = Object.freeze({

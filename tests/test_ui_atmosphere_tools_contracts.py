@@ -18,11 +18,11 @@ def test_atmosphere_modules_are_release_coherent_and_runtime_owned():
     )
     assert [path.name for path in modules if not path.is_file()] == []
     for path in modules:
-        assert 'export const MODULE_RELEASE = "wp05.1";' in path.read_text(
+        assert 'export const MODULE_RELEASE = "wp06.1";' in path.read_text(
             encoding="utf-8"
         )
     bootstrap = (RUNTIME / "bootstrap.js").read_text(encoding="utf-8")
-    assert '"./atmosphere-runtime.js?release=wp05.1"' in bootstrap
+    assert '"./atmosphere-runtime.js?release=wp06.1"' in bootstrap
     assert "createAtmosphereRuntime" in bootstrap
 
 

@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp05.1";
+export const MODULE_RELEASE = "wp06.1";
 
 const DEFAULTS = Object.freeze({ muted: false, volume: 0.7, chime: false });
 
