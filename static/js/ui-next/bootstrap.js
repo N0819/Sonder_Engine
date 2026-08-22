@@ -34,6 +34,7 @@ const SERVICE_PATHS = Object.freeze({
   storyToolsRegistry: "./story-tools-registry.js?release=wp05.1",
   storyToolsRuntime: "./story-tools-runtime.js?release=wp05.1",
   storyToolsView: "./story-tools-view.js?release=wp05.1",
+  liveStoryTools: "./live-story-tools.js?release=wp05.1",
 });
 
 let activeTeardown = null;

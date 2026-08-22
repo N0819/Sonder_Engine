@@ -134,6 +134,8 @@ export function createInspectorHost(options = {}) {
         registry: modules.storyToolsRegistry,
         target: body,
         compact: false,
+        interactive: isPaneLayout() && panes.open,
+        tools: modules.liveStoryTools,
       });
       sheetStoryTools = modules.storyToolsView.mountStoryTools({
         document: documentRef,
@@ -141,6 +143,8 @@ export function createInspectorHost(options = {}) {
         registry: modules.storyToolsRegistry,
         target: sheet.body,
         compact: true,
+        interactive: !isPaneLayout() && layerOpen(),
+        tools: modules.liveStoryTools,
       });
       return;
     }

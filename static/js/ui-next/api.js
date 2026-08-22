@@ -95,6 +95,14 @@ export function createApiClient(options = {}) {
     active.clear();
   };
 
+  const cancel = (channel, reason = "cancelled") => {
+    const record = active.get(String(channel));
+    if (!record) return false;
+    record.controller.abort(reason);
+    active.delete(String(channel));
+    return true;
+  };
+
   const request = async (method, path, requestOptions = {}) => {
     const normalizedMethod = String(method || "GET").toUpperCase();
     const channel = String(requestOptions.channel || `${normalizedMethod}:${path}`);
@@ -258,6 +266,7 @@ export function createApiClient(options = {}) {
     patch: (path, body, opts = {}) => request("PATCH", path, { ...opts, body }),
     delete: (path, opts = {}) => request("DELETE", path, opts),
     stream,
+    cancel,
     cancelAll,
     isSessionExpired: () => sessionExpired,
   });

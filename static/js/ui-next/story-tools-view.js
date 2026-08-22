@@ -23,7 +23,7 @@ function button(documentRef, label) {
 }
 
 export function mountStoryTools(options = {}) {
-  const { services, registry, target } = options;
+  const { services, registry, target, tools } = options;
   const documentRef = options.document || document;
   if (!services?.store || !services?.storyTools || !registry || !target) {
     throw new TypeError("Story Tool presentation requires a target and runtime.");
@@ -37,6 +37,7 @@ export function mountStoryTools(options = {}) {
   const panel = element(documentRef, "section", "ui-story-tools__panel");
   panel.dataset.storyToolPanel = "true";
   const controls = new Map();
+  let mountedTool = null;
 
   for (const tool of registry.STORY_TOOLS) {
     const control = button(documentRef, t(tool.label));
@@ -52,6 +53,8 @@ export function mountStoryTools(options = {}) {
   }
 
   const render = state => {
+    mountedTool?.teardown?.();
+    mountedTool = null;
     const active = registry.resolveStoryTool(state.inspector?.toolId);
     for (const [id, control] of controls) {
       if (id === active.id) control.setAttribute("aria-current", "page");
@@ -68,6 +71,18 @@ export function mountStoryTools(options = {}) {
     );
     status.dataset.state = state.inspector?.status || "empty";
     panel.replaceChildren(heading, detail, status);
+    if (options.interactive !== false && state.story?.status === "ready" && tools) {
+      const toolTarget = element(documentRef, "div", "ui-story-tools__content");
+      toolTarget.dataset.storyToolContent = active.id;
+      panel.replaceChildren(heading, detail, toolTarget);
+      mountedTool = tools.mountStoryTool(active.id, {
+        document: documentRef,
+        services,
+        target: toolTarget,
+        compact: options.compact === true,
+      });
+      if (!mountedTool) toolTarget.append(status);
+    }
   };
 
   root.append(list, panel);
@@ -83,8 +98,8 @@ export function mountStoryTools(options = {}) {
     element: root,
     teardown() {
       unsubscribe();
+      mountedTool?.teardown?.();
       root.remove();
     },
   });
 }
-
