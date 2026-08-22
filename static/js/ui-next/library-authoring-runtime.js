@@ -24,19 +24,22 @@ function selectedOwner(route) {
   });
 }
 
-function importOwner(route) {
-  if (route?.destination !== "library" || route.query?.mode !== "import") return null;
+function workflowOwner(route) {
+  if (route?.destination !== "library"
+      || !["create", "import"].includes(route.query?.mode)) return null;
   const kind = ({ stories: "story", characters: "character", personas: "persona", lore: "lore" })[
     route.segments?.[0]
   ] || "story";
+  const mode = String(route.query.mode);
+  const session = String(route.query?.session || "current").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "current";
   return Object.freeze({
-    kind, id: null, owner: `${kind}:import`, mode: "import",
+    kind, id: null, owner: `${kind}:${mode}:${session}`, mode,
     route: String(route.canonicalHash || ""),
   });
 }
 
 function routeOwner(route) {
-  return selectedOwner(route) || importOwner(route);
+  return selectedOwner(route) || workflowOwner(route);
 }
 
 function writeSpec(owner, draft, revision) {
@@ -78,6 +81,9 @@ export function createLibraryAuthoringRuntime(options = {}) {
   let generation = 0;
   let active = null;
   let importDraft = null;
+  let personImportDraft = null;
+  let previewRetry = null;
+  let previewBase = null;
 
   const patch = value => store.dispatch({
     type: "server/patch", slice: "library", value,
@@ -140,17 +146,68 @@ export function createLibraryAuthoringRuntime(options = {}) {
     }
   };
 
+  const loadTemplate = async owner => {
+    generation += 1;
+    const requestGeneration = generation;
+    active = owner;
+    patch({ authoring: {
+      status: "loading", owner: owner.owner, kind: owner.kind, id: null,
+      mode: owner.mode, route: owner.route, document: null, draft: null,
+      revision: "", overview: null, restored: false, error: "",
+    } });
+    try {
+      const path = owner.kind === "character"
+        ? "/api/characters/new-document" : "/api/personas/new-document";
+      const result = await apiClient.get(path, {
+        channel: "library-authoring-template", owner: owner.owner,
+        isCurrent: identity => identity.owner === owner.owner
+          && requestGeneration === generation && routeOwner(router.current())?.owner === owner.owner,
+      });
+      if (!isOwnerCurrent(owner) || requestGeneration !== generation) return false;
+      const template = result.data?.sheet;
+      if (!template || typeof template !== "object" || Array.isArray(template)) {
+        throw new Error("The new document template was incomplete.");
+      }
+      const recovered = restoredDraft(localState, owner.owner);
+      patch({ authoring: {
+        status: recovered ? "dirty" : "create-ready",
+        owner: owner.owner, kind: owner.kind, id: null, mode: owner.mode,
+        route: owner.route, document: clone(template),
+        draft: clone(recovered || template), revision: "", overview: null,
+        restored: Boolean(recovered), error: "", preview: null,
+      } });
+      return true;
+    } catch (error) {
+      if (stopped || requestGeneration !== generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        status: "load-error", owner: owner.owner, kind: owner.kind, id: null,
+        mode: owner.mode, route: owner.route, document: null,
+        draft: restoredDraft(localState, owner.owner), revision: "",
+        overview: null, restored: false,
+        error: String(error?.userMessage || error?.message || "The new document could not be opened."),
+      } });
+      return false;
+    }
+  };
+
   const onRoute = route => {
     const owner = selectedOwner(route);
-    const workflow = importOwner(route);
+    const workflow = workflowOwner(route);
     if (!owner && workflow) {
+      if (workflow.mode === "create" && ["character", "persona"].includes(workflow.kind)) {
+        if (active?.owner === workflow.owner && active?.route === workflow.route) return;
+        loadTemplate(workflow);
+        return;
+      }
       generation += 1;
       active = workflow;
       patch({ authoring: {
         status: "import-ready", owner: workflow.owner, kind: workflow.kind,
         id: null, mode: "import", route: workflow.route,
         document: null, draft: null, revision: "", overview: null,
-        restored: false, error: "", retryAvailable: Boolean(importDraft),
+        restored: false, error: "",
+        retryAvailable: Boolean(importDraft || personImportDraft),
       } });
       return;
     }
@@ -182,12 +239,18 @@ export function createLibraryAuthoringRuntime(options = {}) {
   const save = async () => {
     const state = store.getSnapshot().library.authoring;
     if (!state?.owner || !active || state.owner !== active.owner
-        || !DIRTY_STATES.has(state.status) || state.status === "saving") return false;
+        || (!DIRTY_STATES.has(state.status) && state.status !== "create-ready")
+        || state.status === "saving") return false;
     const captured = Object.freeze({
       ...active, revision: state.revision, draft: clone(state.draft),
       generation,
     });
-    const spec = writeSpec(captured, captured.draft, captured.revision);
+    const isCreate = captured.mode === "create" && captured.id === null;
+    const spec = isCreate ? {
+      method: "POST",
+      path: captured.kind === "character" ? "/api/characters" : "/api/personas",
+      body: { sheet: clone(captured.draft) },
+    } : writeSpec(captured, captured.draft, captured.revision);
     patch({ authoring: { ...state, status: "saving", error: "" } });
     try {
       const result = await apiClient.request(spec.method, spec.path, {
@@ -199,6 +262,19 @@ export function createLibraryAuthoringRuntime(options = {}) {
       });
       if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
       const data = result.data;
+      if (isCreate) {
+        const id = Number(data?.id);
+        if (!Number.isSafeInteger(id) || id < 1) {
+          throw new Error("The created item response was incomplete.");
+        }
+        localState.clearDraft("library-authoring", captured.owner);
+        router.navigate({
+          destination: "library",
+          segments: [captured.kind === "character" ? "characters" : "personas"],
+          query: { item: `${captured.kind}:${id}` },
+        });
+        return true;
+      }
       if (data?.owner !== captured.owner || !data.document || !data.revision) {
         throw new Error("The saved authoring document response was incomplete.");
       }
@@ -267,6 +343,140 @@ export function createLibraryAuthoringRuntime(options = {}) {
       } });
       return false;
     }
+  };
+
+  const importPerson = async (data, reinterpret = false) => {
+    if (!active || active.mode !== "import"
+        || !["character", "persona"].includes(active.kind)) return false;
+    personImportDraft = { data: clone(data), reinterpret: Boolean(reinterpret) };
+    const captured = Object.freeze({ ...active, generation });
+    const state = store.getSnapshot().library.authoring;
+    patch({ authoring: { ...state, status: "importing", error: "", retryAvailable: true } });
+    try {
+      const path = captured.kind === "character" ? "/api/characters/import" : "/api/personas/import";
+      const result = await apiClient.request("POST", path, {
+        body: { card: personImportDraft.data, reinterpret: personImportDraft.reinterpret },
+        channel: "library-authoring-import", owner: captured.owner,
+        isCurrent: identity => identity.owner === captured.owner
+          && isOwnerCurrent(captured) && generation === captured.generation,
+      });
+      if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
+      const id = Number(result.data?.id);
+      if (!Number.isSafeInteger(id) || id < 1) throw new Error("The imported item response was incomplete.");
+      personImportDraft = null;
+      router.navigate({
+        destination: "library",
+        segments: [captured.kind === "character" ? "characters" : "personas"],
+        query: { item: `${captured.kind}:${id}` },
+      });
+      return true;
+    } catch (error) {
+      if (!isOwnerCurrent(captured) || generation !== captured.generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        ...store.getSnapshot().library.authoring,
+        status: error?.kind === "forbidden" ? "permission-error" : "import-error",
+        error: String(error?.userMessage || error?.message || "The item could not be imported."),
+        retryAvailable: true,
+      } });
+      return false;
+    }
+  };
+
+  const runPreview = async (name, path, body, applyResult) => {
+    const state = store.getSnapshot().library.authoring;
+    if (!active || !state?.draft || state.owner !== active.owner
+        || state.status === "previewing") return false;
+    const captured = Object.freeze({ ...active, generation });
+    const base = clone(state.draft);
+    previewRetry = () => runPreview(name, path, body, applyResult);
+    patch({ authoring: { ...state, status: "previewing", error: "", previewTask: name } });
+    try {
+      const result = await apiClient.request("POST", path, {
+        body, channel: "library-authoring-preview", owner: captured.owner,
+        isCurrent: identity => identity.owner === captured.owner
+          && isOwnerCurrent(captured) && generation === captured.generation,
+      });
+      if (!isOwnerCurrent(captured) || generation !== captured.generation) return false;
+      const next = applyResult(result.data, base);
+      if (!next || typeof next !== "object" || Array.isArray(next)) {
+        throw new Error("The preview response was incomplete.");
+      }
+      previewBase = base;
+      stage(next);
+      const current = store.getSnapshot().library.authoring;
+      patch({ authoring: { ...current, preview: { task: name }, error: "" } });
+      return true;
+    } catch (error) {
+      if (!isOwnerCurrent(captured) || generation !== captured.generation
+          || ["aborted", "stale"].includes(error?.kind)) return false;
+      patch({ authoring: {
+        ...store.getSnapshot().library.authoring, status: "generation-error",
+        draft: base,
+        error: String(error?.userMessage || error?.message || "The preview could not be generated."),
+      } });
+      return false;
+    }
+  };
+
+  const previewGenerate = brief => {
+    if (!active || active.mode !== "create") return false;
+    const path = active.kind === "character"
+      ? "/api/characters/generate-preview" : "/api/personas/generate-preview";
+    return runPreview("generate", path, { brief }, data => data?.sheet);
+  };
+  const previewAppearance = brief => {
+    if (!active?.id || !["character", "persona"].includes(active.kind)) return false;
+    const state = store.getSnapshot().library.authoring;
+    return runPreview(
+      "appearance", `/api/${active.kind === "character" ? "characters" : "personas"}/${active.id}/fill_appearance`,
+      { brief, draft: clone(state.draft) }, data => data?.sheet,
+    );
+  };
+  const previewPsychology = brief => {
+    if (!active?.id || active.kind !== "character") return false;
+    const state = store.getSnapshot().library.authoring;
+    return runPreview(
+      "psychology", `/api/characters/${active.id}/fill_psychology`,
+      { brief, draft: clone(state.draft) }, data => data?.sheet,
+    );
+  };
+  const previewGreeting = brief => {
+    if (!active?.id || active.kind !== "character") return false;
+    return runPreview(
+      "greeting", `/api/characters/${active.id}/generate_greeting`, { brief },
+      (data, base) => {
+        const next = clone(base);
+        next.opening = { ...(next.opening || {}) };
+        const greetings = Array.isArray(next.opening.greetings)
+          ? next.opening.greetings.slice() : [];
+        greetings.push(clone(data?.greeting));
+        next.opening.greetings = greetings;
+        if (!next.opening.first_message && data?.greeting?.prose) {
+          next.opening.first_message = data.greeting.prose;
+        }
+        return next;
+      },
+    );
+  };
+  const previewGreetingRecovery = () => {
+    if (!active?.id || active.kind !== "character") return false;
+    const state = store.getSnapshot().library.authoring;
+    return runPreview(
+      "greeting-recovery", `/api/characters/${active.id}/recover_greetings_preview`,
+      { draft: clone(state.draft) }, data => data?.sheet,
+    );
+  };
+
+  const discardPreview = () => {
+    if (!previewBase) return false;
+    const base = clone(previewBase);
+    previewBase = null;
+    previewRetry = null;
+    stage(base);
+    const state = store.getSnapshot().library.authoring;
+    patch({ authoring: { ...state, preview: null, error: "" } });
+    return true;
   };
 
   const servicesNavigateToStory = id => router.navigate({
@@ -363,6 +573,8 @@ export function createLibraryAuthoringRuntime(options = {}) {
     apiClient.cancel?.("library-authoring-import", "runtime-stop");
     apiClient.cancel?.("library-authoring-branch", "runtime-stop");
     apiClient.cancel?.("library-authoring-duplicate", "runtime-stop");
+    apiClient.cancel?.("library-authoring-template", "runtime-stop");
+    apiClient.cancel?.("library-authoring-preview", "runtime-stop");
     target.removeEventListener("beforeunload", beforeUnload);
   };
 
@@ -371,9 +583,21 @@ export function createLibraryAuthoringRuntime(options = {}) {
     save,
     discard,
     importStory,
-    retryImport: () => importDraft && importStory(importDraft),
+    importPerson,
+    retryImport: () => active?.kind === "story"
+      ? (importDraft && importStory(importDraft))
+      : (personImportDraft && importPerson(
+        personImportDraft.data, personImportDraft.reinterpret,
+      )),
     branchStory,
     duplicate,
+    previewGenerate,
+    previewAppearance,
+    previewPsychology,
+    previewGreeting,
+    previewGreetingRecovery,
+    retryPreview: () => previewRetry?.(),
+    discardPreview,
     reload: () => active?.id && load(active),
     teardown,
   });

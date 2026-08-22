@@ -78,7 +78,8 @@ from story.scene import (background_config, dialogue_config, interaction_limits,
                    STYLE_GUIDE_FIELDS)
 from story.importers import (
     import_character, import_persona, import_lorebook,
-    generate_character, generate_persona, generate_lore_entries,
+    generate_character, generate_character_preview,
+    generate_persona, generate_persona_preview, generate_lore_entries,
     reinterpret_lorebook, resolve_import_card, draft_promoted_character,
     recover_greetings_from_source,
     fill_character_psychology, fill_appearance,
@@ -2619,6 +2620,13 @@ def image_models(pid: int):
     except Exception as e: raise HTTPException(502, str(e))
 
 # ============================ CHARACTERS ============================
+@app.get("/api/characters/new-document")
+def char_new_document():
+    """Return the complete blank authoring document without creating a row."""
+    sheet = default_character_data("Unnamed")
+    return {"sheet": sheet, "warnings": character_card_warnings(sheet)}
+
+
 @app.post("/api/characters/generate")
 def char_generate(body: dict = Body(default={})):
     brief = str(body.get("prompt") or body.get("brief") or body.get("description") or "").strip()
@@ -2641,6 +2649,24 @@ def char_generate(body: dict = Body(default={})):
     _ensure_resource_uid("characters", cid, "char")
     return {"id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
+
+
+@app.post("/api/characters/generate-preview")
+def char_generate_preview(body: dict = Body(default={})):
+    """Generate a reviewable Character document without writing Library state."""
+    brief = str(body.get("prompt") or body.get("brief") or body.get("description") or "").strip()
+    try:
+        language = require_language_pack(
+            body.get("language") or _default_authoring_language(),
+            capability="story").id
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        with language_scope(language):
+            sheet = generate_character_preview(brief, language=language)
+    except Exception as exc:
+        raise HTTPException(502, f"Character generation failed: {exc}") from exc
+    return {"sheet": sheet, "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/characters")
 def char_create(body: dict = Body(...)):
@@ -2718,6 +2744,17 @@ def char_recover_greetings(cid: int):
     return {"sheet": sheet,
             "greetings": (sheet.get("opening") or {}).get("greetings") or []}
 
+
+@app.post("/api/characters/{cid}/recover_greetings_preview")
+def char_recover_greetings_preview(cid: int, body: dict = Body(default={})):
+    """Recover imported greetings into the current draft without persisting."""
+    sheet = recover_greetings_from_source(
+        cid, persist=False, draft=body.get("draft"))
+    if sheet is None:
+        raise HTTPException(404, "No greetings found in this character's imported card")
+    return {"sheet": sheet,
+            "greetings": (sheet.get("opening") or {}).get("greetings") or []}
+
 @app.post("/api/characters/{cid}/generate_greeting")
 def char_generate_greeting(cid: int, body: dict = Body(default={})):
     """Generate one greeting in the character's voice from an optional situation
@@ -2740,7 +2777,7 @@ def char_fill_psychology(cid: int, body: dict = Body(default={})):
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
     try:
         with language_scope(_require_story_language(body.get("language"))):
-            sheet = fill_character_psychology(cid, brief)
+            sheet = fill_character_psychology(cid, brief, draft=body.get("draft"))
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
@@ -2836,6 +2873,12 @@ def char_del(cid: int):
     return {"ok": True}
 
 # ============================ PERSONAS ============================
+@app.get("/api/personas/new-document")
+def persona_new_document():
+    """Return the complete blank authoring document without creating a row."""
+    return {"sheet": default_persona_data("Player")}
+
+
 @app.post("/api/personas/generate")
 def persona_generate(body: dict = Body(default={})):
     brief = str(body.get("prompt") or body.get("brief") or body.get("description") or "").strip()
@@ -2857,6 +2900,24 @@ def persona_generate(body: dict = Body(default={})):
         raise HTTPException(502, f"Persona generation failed: {exc}") from exc
     _ensure_resource_uid("personas", pid, "persona")
     return {"id": pid, "sheet": sheet}
+
+
+@app.post("/api/personas/generate-preview")
+def persona_generate_preview(body: dict = Body(default={})):
+    """Generate a reviewable Persona document without writing Library state."""
+    brief = str(body.get("prompt") or body.get("brief") or body.get("description") or "").strip()
+    try:
+        language = require_language_pack(
+            body.get("language") or _default_authoring_language(),
+            capability="story").id
+    except LanguagePackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    try:
+        with language_scope(language):
+            sheet = generate_persona_preview(brief, language=language)
+    except Exception as exc:
+        raise HTTPException(502, f"Persona generation failed: {exc}") from exc
+    return {"sheet": sheet}
 
 @app.post("/api/personas")
 def persona_create(body: dict = Body(...)):

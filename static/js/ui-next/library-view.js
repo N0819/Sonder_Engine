@@ -126,6 +126,10 @@ const COPY = Object.freeze({
   exportPersona: "Export persona",
   duplicateCharacter: "Duplicate character",
   duplicatePersona: "Duplicate persona",
+  createCharacter: "Create character",
+  createPersona: "Create persona",
+  importCharacter: "Import character",
+  importPersona: "Import persona",
 });
 // UI_CATALOG_END
 
@@ -207,6 +211,11 @@ function routeQuery(route) {
 
 function navigate(services, type, query) {
   services.library.navigate({ type, query });
+}
+
+function workflowSession() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function filterRail(documentRef, services, state) {
@@ -330,12 +339,24 @@ function toolbar(documentRef, services, state) {
   if (!activeType || activeType === "story") {
     const importStory = button(documentRef, COPY.importStory);
     importStory.addEventListener("click", () => {
-      navigate(services, "story", { mode: "import" });
+      navigate(services, "story", { mode: "import", session: workflowSession() });
       documentRef.dispatchEvent(new CustomEvent("sonder:library-select", {
         detail: { workflow: "story-import" },
       }));
     });
     form.append(importStory);
+  }
+  if (activeType === "character" || activeType === "persona") {
+    const isCharacter = activeType === "character";
+    const create = button(documentRef, isCharacter ? COPY.createCharacter : COPY.createPersona);
+    create.addEventListener("click", () => navigate(services, activeType, {
+      mode: "create", session: workflowSession(),
+    }));
+    const importPerson = button(documentRef, isCharacter ? COPY.importCharacter : COPY.importPersona);
+    importPerson.addEventListener("click", () => navigate(services, activeType, {
+      mode: "import", session: workflowSession(),
+    }));
+    form.append(create, importPerson);
   }
   return form;
 }
