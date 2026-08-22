@@ -2133,7 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-05 complete and G3 locked.** Replace the
+**Approved target 2026-08-21; WP-06 complete and G3 locked.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2205,8 +2205,15 @@ weather, ambience and chime state, deterministic 21-case matrix, candidate
 disposition, review findings, and qualification are recorded in
 [`design/sonder-ui-replacement/G3_STORY_TOOLS_REVIEW.md`](design/sonder-ui-replacement/G3_STORY_TOOLS_REVIEW.md).
 G3 is locked: only the linked `PLAY-*` rows close. The full replacement remains
-open. WP-06 is next and owns Library structure and story lifecycle; New Story,
-global Settings/editors, auth/guest replacement, installed-extension
+open. WP-06's source plan is
+[`superpowers/plans/2026-08-22-sonder-ui-replacement-wp06.md`](superpowers/plans/2026-08-22-sonder-ui-replacement-wp06.md).
+Its unified public Library projection, association and archive lifecycle,
+owner-scoped route/mutation runtime, responsive ledger/detail treatment,
+Japanese catalog closure, deterministic 32-case matrix, findings, and
+qualification are recorded in
+[`design/sonder-ui-replacement/WP06_LIBRARY_REVIEW.md`](design/sonder-ui-replacement/WP06_LIBRARY_REVIEW.md).
+WP-07 is next and owns Library editors and remaining authoring parity. New
+Story, global Settings/editors, auth/guest replacement, installed-extension
 compatibility, cutover, and final qualification remain under later packages.
 
 ### 2.2 Make stance auditable

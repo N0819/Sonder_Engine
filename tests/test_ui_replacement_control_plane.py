@@ -114,6 +114,17 @@ def test_only_qualified_program_gates_close_current_requirements():
         "PLAY-13",
         "PLAY-15",
     }
+    wp06_library_requirements = {
+        "LIB-01",
+        "LIB-02",
+        "LIB-03",
+        "LIB-04",
+        "LIB-05",
+        "LIB-06",
+        "LIB-07",
+        "LIB-11",
+        "LIB-13",
+    }
     qualified = {
         "GOV-02",
         "GOV-03",
@@ -124,5 +135,6 @@ def test_only_qualified_program_gates_close_current_requirements():
         | g2_shell_requirements
         | wp04_play_core_requirements
         | wp05_story_tools_requirements
+        | wp06_library_requirements
     )
     assert closed <= qualified
