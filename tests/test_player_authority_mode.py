@@ -504,10 +504,9 @@ class TestTheHostControl:
         from pathlib import Path
 
         settings = (Path(__file__).resolve().parents[1]
-                    / "static/js/settings.js").read_text(encoding="utf-8")
-
-        assert "/player_authority`)" in settings
-        assert "authorityState.modes" in settings
+                    / "static/js/ui-next/story-tools/style.js").read_text(encoding="utf-8")
+        assert "/player_authority`" in settings
+        assert "player_authority?.modes" in settings
 
     def test_the_enforcer_reads_the_ladder_through_its_one_normalizer(self):
         """`apply_player_authority` had its own second copy of the rule --
@@ -538,9 +537,6 @@ class TestTheHostControl:
         from pathlib import Path
 
         settings = (Path(__file__).resolve().parents[1]
-                    / "static/js/settings.js").read_text(encoding="utf-8")
-        labels = settings[settings.index("const AUTHORITY_LABELS"):
-                          settings.index("const authority =")]
-
-        for mode in PLAYER_AUTHORITY_MODES:
-            assert mode in labels, mode
+                    / "static/js/ui-next/story-tools/style.js").read_text(encoding="utf-8")
+        assert "mode.label || String(mode.value" in settings
+        assert "player_authority?.modes" in settings

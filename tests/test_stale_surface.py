@@ -334,9 +334,9 @@ def test_the_host_page_writes_a_sentence_and_not_only_a_dim():
     """The dim already existed. What it could not do was name the step, which
     is the only part a reader can act on.
     """
-    chat_js = (STATIC / "js" / "chat.js").read_text(encoding="utf-8")
-    assert "t.stale_from" in chat_js
-    assert "stale-note" in chat_js
+    chat_js = (STATIC / "js" / "ui-next" / "play-view.js").read_text(encoding="utf-8")
+    assert "turn.stale_from" in chat_js
+    assert "ui-play__stale" in chat_js
     assert "Superseded" in chat_js and "Partly out of date" in chat_js
 
 
@@ -346,10 +346,10 @@ def test_the_dim_the_notes_sit_under_still_exists():
     rule were dropped the notes would still render and the visual signal they
     explain would be gone.
     """
-    legacy_css = (STATIC / "styles.css").read_text(encoding="utf-8")
+    legacy_css = (STATIC / "css" / "ui" / "play.css").read_text(encoding="utf-8")
     guest_css = (STATIC / "css" / "ui" / "guest.css").read_text(encoding="utf-8")
-    assert ".turn.stale .prose" in legacy_css
-    assert ".stale-note" in legacy_css
+    assert '.ui-play__turn[data-stale="true"]' in legacy_css
+    assert ".ui-play__stale" in legacy_css
     assert ".ui-guest-turn.stale .ui-guest-turn__prose" in guest_css
     assert ".ui-guest-turn__stale" in guest_css
     assert '/static/css/ui/guest.css' in (

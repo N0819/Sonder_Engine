@@ -107,7 +107,7 @@ Physical-world authority (consolidated in movement/space Phase 3a): the frame-sc
 
 Supporting service seams are explicit: `web/auth_routes.py` owns typed host-auth routes and cookie transport; `persist/chat_archive.py` owns portable chat import/export; `persist/pipeline_trace.py` owns privacy-conscious persisted-history export/replay; `world/spatial_orientation.py` owns bearing math. It is one of the fourteen siblings behind the `world/spatial.py` FACADE, not a seam you import directly — `tools/project_check.py` enforces that for `world.spatial`, `agents.director` and `persist.commit` alike: a caller imports the facade, and only a test that PATCHES or introspects a sibling may name it.
 
-Frontend (`static/js/`) uses browser globals, not ES modules. `theme-init.js` loads in the document head; the remaining order is `utils.js → components.js → editors.js → lorebooks.js → backdrops.js → ambience.js → weather-fx.js → chime.js → chat.js → settings.js → themes.js → app.js` (`static/index.html`). Never rename a shared JS function without grepping every file.
+Frontend production code is the ES-module replacement rooted at `static/ui-next.html`. Startup lives in `static/js/ui-next/main.js`; surface modules live under `static/js/ui-next/`, and shared primitives under `static/js/ui/`. Never rename a shared export without grepping every import.
 
 ## Working in this repo
 

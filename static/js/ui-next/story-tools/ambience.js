@@ -28,6 +28,10 @@ const COPY = Object.freeze({
   thunder: "Preview thunder",
   layers: "Sound layers",
   source: "Source",
+  browse: "Browse library",
+  readingLibrary: "Reading the library…",
+  emptyLibrary: "No playable files were found in the configured local library.",
+  useHere: "Use here",
 });
 // UI_CATALOG_END
 
@@ -82,6 +86,22 @@ export function mountAmbienceTool({ services, target, document: documentRef }) {
           source: layer.source, path: layer.path, id: layer.id, title: layer.title,
           license: layer.license, username: layer.username, url: layer.credit_url,
         },
+      });
+      await request("GET");
+    } catch (error) {
+      if (stopped || error?.kind === "stale" || error?.kind === "aborted") return;
+      target.prepend(stateMessage(documentRef, errorState(error).state, errorState(error).message));
+      services.localizer.localize(target);
+    }
+  };
+
+  const pinChoice = async (payload, choice) => {
+    const { chatId } = scope.current();
+    if (!payload.room_id) return;
+    try {
+      await scope.run("PUT", "pin-choice", `/api/chats/${chatId}/ambience/pin`, {
+        room: payload.room_id,
+        choice,
       });
       await request("GET");
     } catch (error) {
@@ -194,6 +214,40 @@ export function mountAmbienceTool({ services, target, document: documentRef }) {
     actions.append(thunder);
     card.append(actions);
     body.append(card);
+    if (payload.room_id) {
+      const library = element(documentRef, "details", "ui-tool-card ui-ambience-library");
+      const summary = element(documentRef, "summary", "ui-button ui-button--quiet", COPY.browse);
+      const libraryBody = element(documentRef, "div", "ui-tool-stack");
+      library.append(summary, libraryBody);
+      library.addEventListener("toggle", () => {
+        if (library.dataset.loaded || !library.open) return;
+        library.dataset.loaded = "true";
+        libraryBody.replaceChildren(stateMessage(documentRef, "loading", COPY.readingLibrary));
+        void scope.run("GET", "library", "/api/ambience/library").then(result => {
+          if (stopped || !scope.isLive()) return;
+          libraryBody.replaceChildren();
+          const files = Array.isArray(result?.files) ? result.files : [];
+          if (!files.length) {
+            libraryBody.append(stateMessage(documentRef, "empty", COPY.emptyLibrary));
+            return;
+          }
+          for (const path of files) {
+            const row = element(documentRef, "div", "ui-sound-layer");
+            const label = markData(element(documentRef, "span", "", path));
+            const use = button(documentRef, COPY.useHere);
+            use.addEventListener("click", () => void pinChoice(payload, { source: "local", path }));
+            row.append(label, use);
+            libraryBody.append(row);
+          }
+          services.localizer.localize(libraryBody);
+        }).catch(error => {
+          if (stopped || error?.kind === "stale" || error?.kind === "aborted") return;
+          libraryBody.replaceChildren(stateMessage(documentRef, errorState(error).state, errorState(error).message));
+          services.localizer.localize(libraryBody);
+        });
+      });
+      body.append(library);
+    }
     replaceLocalized(services, target, body);
   };
 

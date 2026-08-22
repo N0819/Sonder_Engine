@@ -247,9 +247,7 @@ def test_both_card_editors_present_and_save_a_body_scent():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    editors = (root / "static/js/editors.js").read_text(encoding="utf-8")
-    for header in ("function charEditor(", "function personaEditor("):
-        body = _js_function_body(editors, header)
-        assert "f.scent = fText(" in body, header
-        assert "f.scent.node" in body, header
-        assert "scent: f.scent.read()" in body, header
+    editor = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    assert "createSchemaSections" in editor
+    assert "JSON.stringify(state.draft, null, 2)" in editor
+    assert "services.authoring.stage(parsed)" in editor

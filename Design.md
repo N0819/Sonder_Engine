@@ -678,7 +678,7 @@ Subsystems the original architecture never imagined, now load-bearing:
   five declared fields missed, the whiteout became fair/none/still/mild while
   the player stood in an open clearing, and five later beats inherited the
   calm.)
-- **Weather rendering** (`static/js/weather-fx.js`). Rain and snow drawn over
+- **Weather rendering** (`static/js/ui-next/play-view.js`, `static/css/ui/play.css`). Rain and snow drawn over
   the story for rooms that can see the sky, with storm flashes and thunder
   arriving after them on a distance-shaped delay. A minority of flashes —
   `WFX_BOLT_CHANCE`, 22% — also draw the channel itself, `weatherFxBolt`
@@ -791,7 +791,7 @@ Subsystems the original architecture never imagined, now load-bearing:
   default, with explicit content-bearing offline replay artifacts.
 - **Host authentication routes** (`web/auth_routes.py`, `web/guest_access.py`). Typed
   request/cookie transport separated from credential/session persistence.
-- **Appearance system** (`static/themes.css`). Browser-local themes, independent
+- **Appearance system** (`static/js/ui/appearance.js`, `static/css/ui/themes/`). Browser-local themes, independent
   story-text sizing.
 - **Provider layer** (`llm/providers.py`, `llm/prompt_cache.py`, `llm/llm_quality.py`).
 

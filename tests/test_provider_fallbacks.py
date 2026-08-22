@@ -92,7 +92,7 @@ class TestBlankRowsFollowDefault:
         assert '"role_fallbacks":' in boot
 
     def test_the_panel_reads_the_map_rather_than_hardcoding_default(self):
-        js = open("static/js/settings.js", encoding="utf-8").read()
+        js = open("static/js/ui-next/settings-view.js", encoding="utf-8").read()
         assert 'role_fallbacks' in js
         # Still built from the map rather than asserted as a bare string:
         # the map being empty is what makes "follow default" true, not a

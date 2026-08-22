@@ -224,10 +224,9 @@ def test_cast_ui_offers_story_card_editor():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    settings = (root / "static/js/settings.js").read_text(encoding="utf-8")
-    editors = (root / "static/js/editors.js").read_text(encoding="utf-8")
-
-    assert "Edit this character card for this story only" in settings
-    assert "charEditor(p, { chatId })" in settings
-    assert "/characters/${c.id}/card" in editors
-    assert "Live mood, stress, memories, relationships" in editors
+    view = (root / "static/js/ui-next/library-view.js").read_text(encoding="utf-8")
+    runtime = (root / "static/js/ui-next/library-authoring-runtime.js").read_text(encoding="utf-8")
+    editor = (root / "static/js/ui-next/library-editors/character-persona.js").read_text(encoding="utf-8")
+    assert "Edit Story card" in view
+    assert "/api/chats/${owner.storyId}/characters/${owner.id}/card" in runtime
+    assert 'state.mode === "story-card"' in editor

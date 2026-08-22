@@ -184,7 +184,7 @@ and are not sold on their own. Nothing in it reaches Sonder's own MIT terms.
 
 | Taken | Where it landed | Note |
 |---|---|---|
-| The typeface itself, two woff2 subsets (latin, latin-ext), variable 400–700, 42KB total | `static/fonts/antonio-*.woff2`, declared by the `@font-face` pair at the head of `static/themes.css` and consumed through `--ui-font` in the `lcars` theme | Bundled, **never linked**. The engine runs local and offline; a font fetched from a CDN is missing exactly under the conditions this application is built for. `tests/test_ui_themes.py::test_lcars_ships_its_own_condensed_face` pins both the files and the absence of any `fonts.googleapis.com` / `fonts.gstatic.com` reference |
+| The typeface itself, two woff2 subsets (latin, latin-ext), variable 400–700, 42KB total | `static/fonts/antonio-*.woff2`, declared by the `@font-face` pair in `static/css/ui/themes/ash-brass.css` and consumed through `--ui-font` | Bundled, **never linked**. The engine runs local and offline; a font fetched from a CDN is missing exactly under the conditions this application is built for. `tests/test_ui_wp12_contracts.py` pins the local theme assets and absence of remote font hosts |
 
 Why a font at all, recorded because it is the reusable part: the `lcars` theme
 had **asked** for `Antonio, Oswald, Roboto Condensed, Arial Narrow` since it was

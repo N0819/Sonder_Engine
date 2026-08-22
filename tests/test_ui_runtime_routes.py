@@ -31,24 +31,22 @@ def test_runtime_harness_uses_the_host_session_boundary(monkeypatch):
     assert 'data-ui-next-entry="runtime-harness"' in authenticated.text
 
 
-def test_application_shell_is_host_only_while_classic_root_is_unchanged(monkeypatch):
+def test_application_shell_is_the_host_only_root_and_has_no_parallel_route(monkeypatch):
     client = _client(monkeypatch)
     try:
-        anonymous = client.get("/ui-next", follow_redirects=False)
-        classic = client.get("/")
+        anonymous = client.get("/", follow_redirects=False)
         client.cookies.set(app_module.HOST_COOKIE, "valid-host-session")
-        application = client.get("/ui-next")
+        application = client.get("/")
+        retired = client.get("/ui-next", follow_redirects=False)
     finally:
         client.close()
 
     assert anonymous.status_code in {302, 303, 307, 308}
     assert anonymous.headers["location"] == "/login"
-    assert classic.status_code == 200
-    assert '<div id="app">' in classic.text
-    assert 'data-ui-next-entry="application"' not in classic.text
     assert application.status_code == 200
     assert 'data-ui-next-entry="application"' in application.text
     assert '/static/js/app.js' not in application.text
+    assert retired.status_code == 404
 
 
 def test_documents_and_assets_have_coherent_cache_policy(monkeypatch):
@@ -56,7 +54,7 @@ def test_documents_and_assets_have_coherent_cache_policy(monkeypatch):
     try:
         client.cookies.set(app_module.HOST_COOKIE, "valid-host-session")
         for path in (
-            "/", "/login", "/guest", "/ui-next", "/ui-next/lab",
+            "/", "/login", "/guest", "/ui-next/lab",
             "/ui-next/runtime",
         ):
             response = client.get(path)

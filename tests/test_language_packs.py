@@ -77,7 +77,9 @@ def test_english_is_an_installed_complete_default_pack():
     assert "director_resolve" not in default_prompts_for("en")
     assert "director_resolve_lean" in default_prompts_for("en")
     assert "agents.common" in packs["en"].card("linguistics")
-    assert len(packs["en"].ui_catalog) > 1000
+    # The classic global-script catalog was retired with WP-13. The native
+    # replacement's explicitly owned production catalog remains substantial.
+    assert len(packs["en"].ui_catalog) >= 750
 
 
 def test_japanese_is_a_complete_selectable_story_and_ui_pack():

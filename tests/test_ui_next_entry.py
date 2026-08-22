@@ -1,4 +1,4 @@
-"""Authenticated application entry for the replacement interface."""
+"""Authenticated application entry after replacement cutover."""
 
 from __future__ import annotations
 
@@ -7,24 +7,23 @@ from fastapi.testclient import TestClient
 from web import app as app_module
 
 
-def test_ui_next_redirects_anonymous_requests_without_changing_root(
+def test_root_redirects_anonymous_requests_and_ui_next_is_retired(
     monkeypatch,
 ):
     monkeypatch.setattr(app_module.guest, "verify_host_session", lambda token: False)
     client = TestClient(app_module.app)
     try:
-        response = client.get("/ui-next", follow_redirects=False)
-        root = client.get("/")
+        root = client.get("/", follow_redirects=False)
+        retired = client.get("/ui-next", follow_redirects=False)
     finally:
         client.close()
 
-    assert response.status_code in {302, 303, 307, 308}
-    assert response.headers["location"] == "/login"
-    assert root.status_code == 200
-    assert 'data-ui-next-ready="true"' not in root.text
+    assert root.status_code in {302, 303, 307, 308}
+    assert root.headers["location"] == "/login"
+    assert retired.status_code == 404
 
 
-def test_ui_next_serves_only_the_static_application_to_a_valid_host(
+def test_root_serves_only_the_static_application_to_a_valid_host(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -35,7 +34,7 @@ def test_ui_next_serves_only_the_static_application_to_a_valid_host(
     client = TestClient(app_module.app)
     try:
         client.cookies.set(app_module.HOST_COOKIE, "valid-host-session")
-        response = client.get("/ui-next")
+        response = client.get("/")
     finally:
         client.close()
 

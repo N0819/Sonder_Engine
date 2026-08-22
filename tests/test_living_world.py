@@ -616,10 +616,8 @@ class TestOneAuthorityCeiling:
         from pathlib import Path
 
         js = (Path(__file__).resolve().parents[1]
-              / "static/js/settings.js").read_text(encoding="utf-8")
-        assert '"World simulation"' in js
-        assert '"Living world"' not in js  # the second card is gone
-        block = js[js.index('"World simulation"'):
-                   js.index('"Background life"')]
-        assert block.index("offLife") < block.index("lwRows")
-        assert "d.requires" in js and "refreshLw" in js
+              / "static/js/ui-next/settings-view.js").read_text(encoding="utf-8")
+        assert '"Living world"' in js
+        assert "/living_world`" in js
+        assert "depth.built" in js
+        assert 'services.apiClient.put(`/api/chats/${chatId}/living_world`' in js

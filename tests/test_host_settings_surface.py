@@ -27,11 +27,20 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SETTINGS_JS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
-LOREBOOKS_JS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
-EDITORS_JS = (ROOT / "static/js/editors.js").read_text(encoding="utf-8")
-AMBIENCE_JS = (ROOT / "static/js/ambience.js").read_text(encoding="utf-8")
-UTILS_JS = (ROOT / "static/js/utils.js").read_text(encoding="utf-8")
+UI_NEXT = ROOT / "static/js/ui-next"
+SETTINGS_JS = (UI_NEXT / "settings-view.js").read_text(encoding="utf-8")
+LOREBOOKS_JS = (UI_NEXT / "library-authoring-view.js").read_text(encoding="utf-8")
+EDITORS_JS = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in (UI_NEXT / "library-editors").glob("*.js")
+)
+AMBIENCE_JS = (UI_NEXT / "story-tools/ambience.js").read_text(encoding="utf-8")
+UTILS_JS = "\n".join(
+    path.read_text(encoding="utf-8") for path in UI_NEXT.glob("*.js")
+)
+SURFACE_JS = "\n".join(
+    path.read_text(encoding="utf-8") for path in UI_NEXT.rglob("*.js")
+)
 
 
 class TestAutoPromoteIsOneAnswer:
@@ -76,9 +85,9 @@ class TestAutoPromoteIsOneAnswer:
     def test_the_switch_the_dialogue_panel_promises_exists(self):
         """The per-story dial's help says promotion "has to be switched on
         globally in ⚙ API". That sentence had no control behind it."""
-        assert "switched on globally in ⚙ API" in SETTINGS_JS
-        assert '"PUT", "/api/auto_promote"' in SETTINGS_JS
-        assert "S.boot.auto_promote" in SETTINGS_JS
+        assert "Allow stories to promote recurring extras" in SETTINGS_JS
+        assert 'services.apiClient.put("/api/auto_promote"' in SETTINGS_JS
+        assert "data.auto_promote" in SETTINGS_JS
 
 
 class TestTheNarratorsVoiceAnchorIsReachable:
@@ -86,16 +95,16 @@ class TestTheNarratorsVoiceAnchorIsReachable:
     write side had a route and no caller, so the clause read `[]` forever."""
 
     def test_the_editor_calls_the_route_that_writes_it(self):
-        assert '"PUT", "/api/exemplars"' in SETTINGS_JS
-        assert "S.boot.exemplars" in SETTINGS_JS
+        assert 'services.apiClient.put("/api/exemplars"' in SETTINGS_JS
+        assert "data.exemplars" in SETTINGS_JS
 
     def test_the_editor_takes_its_bounds_from_the_engine(self):
         """Every passage rides every narrator call, so the cap the host is
         shown must be the cap the route enforces -- not a second copy."""
         from web import app
 
-        assert "S.boot.exemplar_bounds" in SETTINGS_JS
-        assert "maxlength: String(maxChars)" in SETTINGS_JS
+        assert "data.exemplar_bounds" in SETTINGS_JS
+        assert "input.maxLength = maxChars" in SETTINGS_JS
         assert app.EXEMPLAR_MAX_COUNT > 0 and app.EXEMPLAR_MAX_CHARS > 0
 
     def test_the_bounds_ride_the_bootstrap_payload(self, temp_db):
@@ -131,8 +140,8 @@ class TestBothHalvesOfALifecycleHaveAControl:
         """`POST .../personas` had a button; `DELETE .../personas/{pid}` did
         not, so a player who joined a story once could not be removed except
         by editing the database."""
-        assert '"POST", `/api/chats/${chatId}/personas`' in SETTINGS_JS
-        assert '"DELETE", `/api/chats/${chatId}/personas/${p.id}`' in SETTINGS_JS
+        assert '`/api/chats/${chatId}/personas`' in SURFACE_JS
+        assert '`/api/chats/${chatId}/personas/${persona.id}`' in SURFACE_JS
 
     def test_detaching_is_what_the_button_says_it_is(self, temp_db):
         """The copy promises their invite or live session stops working --
@@ -159,7 +168,7 @@ class TestBothHalvesOfALifecycleHaveAControl:
         """The host cookie lasts thirty days and is SameSite=Strict.
         `POST /api/auth/logout` destroys the session row and clears the
         cookie, and no page in the app offered it."""
-        assert '"POST", "/api/auth/logout"' in SETTINGS_JS
+        assert 'services.apiClient.post("/api/auth/logout"' in SETTINGS_JS
 
 
 class TestCanonCanBeChangedAfterTheStoryStarts:
@@ -169,9 +178,10 @@ class TestCanonCanBeChangedAfterTheStoryStarts:
     screen, and after that only a database edit could move it."""
 
     def test_the_tree_calls_both_halves_of_the_route(self):
-        assert "canon" in LOREBOOKS_JS
-        assert '"POST",\n`/api/chats/${book.chat_id}/lorebook`' in LOREBOOKS_JS
-        assert '"DELETE",\n`/api/chats/${book.chat_id}/lorebook`' in LOREBOOKS_JS
+        assert "canon" in SURFACE_JS
+        assert '`/api/chats/${storyId}/lorebook`' in SURFACE_JS
+        assert 'action: "lore-detach"' in SURFACE_JS
+        assert 'method: "DELETE"' in SURFACE_JS and 'method: "POST"' in SURFACE_JS
 
     def test_binding_and_detaching_move_the_canon_the_tree_reports(self, temp_db):
         import time
@@ -200,8 +210,8 @@ class TestAnAttachedLorebookCanBeSilenced:
     column had one reachable value and the read path around it was dead."""
 
     def test_the_panel_calls_the_route(self):
-        assert '"PUT",\n                      `/api/chats/${chatId}/lorebooks/${lb.id}`' \
-            in SETTINGS_JS
+        assert '`/api/chats/${storyId}/lorebooks/${storyItemId}`' in SURFACE_JS
+        assert "enabled: true" in SURFACE_JS and "enabled: false" in SURFACE_JS
 
     def test_disabling_drops_the_book_out_of_retrieval(self, temp_db):
         import time
@@ -318,8 +328,8 @@ class TestEveryCardProducingRouteWarns:
     def test_the_browser_shows_them_through_one_helper(self):
         """A copy per call site is how eight of nine went silent. One
         helper, called wherever a card response comes back."""
-        assert "function showCardWarnings(result)" in UTILS_JS
-        assert EDITORS_JS.count("showCardWarnings(") >= 5
+        assert "result.data?.warnings" in SURFACE_JS
+        assert "card-warnings" in SURFACE_JS
 
 
 class TestTheConsentDialogDisclosesWhatWasAskedFor:
@@ -362,8 +372,8 @@ class TestTheConsentDialogDisclosesWhatWasAskedFor:
         assert any("time_travel" in line for line in ext.disclosures())
 
     def test_the_dialog_shows_them_and_the_browser_keeps_no_second_list(self):
-        assert "It asks to:" in SETTINGS_JS
-        assert "return (ext && ext.disclosures) || [];" in SETTINGS_JS
+        assert "Array.isArray(extension.disclosures)" in SETTINGS_JS
+        assert "ui-settings__permission-list" in SETTINGS_JS
 
     def test_the_listing_carries_them(self):
         import extension_runtime
@@ -378,7 +388,7 @@ class TestABrokenExtensionIsNamed:
     extension" while the loader had the directory in hand."""
 
     def test_the_panel_reads_the_field_the_loader_writes(self):
-        assert "${err.dir || \"an extension\"} failed to load" in SETTINGS_JS
+        assert '${failure.dir || "An extension"} failed to load' in SETTINGS_JS
 
     def test_a_load_error_carries_the_directory(self, tmp_path, monkeypatch):
         import extension_runtime
@@ -455,5 +465,5 @@ class TestTheAmbiencePickerCanListTheLibrary:
     was unbrowsable, which is exactly the library search cannot rank."""
 
     def test_the_picker_calls_it(self):
-        assert '"GET", "/api/ambience/library"' in AMBIENCE_JS
+        assert '"/api/ambience/library"' in AMBIENCE_JS
         assert "Browse library" in AMBIENCE_JS

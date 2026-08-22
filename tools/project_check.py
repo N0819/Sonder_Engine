@@ -2021,6 +2021,11 @@ def check_docs_name_real_paths(errors: list[str]) -> None:
     tops = _top_level_dirs()
     for path in authority_doc_paths():
         rel = path.relative_to(ROOT).as_posix()
+        # Design records and implementation plans intentionally describe
+        # superseded paths. They are historical context, not live navigation
+        # instructions (AGENTS.md makes the same authority distinction).
+        if rel.startswith(("docs/design/", "docs/superpowers/")):
+            continue
         here = path.parent
         text = path.read_text(encoding="utf-8")
         seen: set[str] = set()

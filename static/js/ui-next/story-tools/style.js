@@ -85,7 +85,7 @@ export function mountStyleTool({ services, target, document: documentRef }) {
           language.addEventListener("change", () => set("language", "selected", language.value));
           const authority = documentRef.createElement("select");
           for (const mode of value.player_authority?.modes || []) {
-            const option = element(documentRef, "option", "", mode.value);
+            const option = element(documentRef, "option", "", mode.label || String(mode.value || "").replaceAll("_", " "));
             option.value = mode.value;
             option.selected = mode.value === value.player_authority?.mode;
             authority.append(option);

@@ -246,10 +246,9 @@ class TestFullRungDocumentationStaysHonest:
         from pathlib import Path
 
         js = (Path(__file__).resolve().parents[1]
-              / "static/js/settings.js").read_text(encoding="utf-8")
-        block = js[js.index('"Off-screen life"'):js.index('"Background life"')]
-        assert "Not built yet" not in block
-        assert "opted in" in block
+              / "static/js/ui-next/story-tools/dialogue.js").read_text(encoding="utf-8")
+        assert "Not built yet" not in js
+        assert 'COPY.offscreen' in js
 
     def test_the_ui_renders_the_engines_own_ladder(self):
         """Listing the rungs in the menu would drift the first time one was
@@ -257,8 +256,8 @@ class TestFullRungDocumentationStaysHonest:
         from pathlib import Path
 
         js = (Path(__file__).resolve().parents[1]
-              / "static/js/settings.js").read_text(encoding="utf-8")
-        assert "c.offscreen_life_levels" in js
+              / "static/js/ui-next/story-tools/dialogue.js").read_text(encoding="utf-8")
+        assert "dialogue_config?.offscreen_life_levels" in js
 
 
 def test_the_api_round_trips_the_setting(temp_db):

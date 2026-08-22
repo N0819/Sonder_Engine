@@ -706,15 +706,12 @@ the UI reads its state from the predicate rather than re-deriving it.
 
 ## 11. Frontend
 
-`static/js/` uses **browser globals, not ES modules**. `theme-init.js` loads in
-the head; the rest load in a fixed order:
-
-```
-utils.js → components.js → editors.js → lorebooks.js → backdrops.js
-        → chat.js → settings.js → themes.js → app.js
-```
-
-Renaming a shared function without grepping every file will break it silently.
+The production interface is the native ES-module graph rooted at
+`static/ui-next.html`. `static/js/ui-next/main.js` starts the application;
+destination views and runtimes live beside it, shared UI primitives live in
+`static/js/ui/`, and semantic theme sheets live in `static/css/ui/themes/`.
+There is no build or bundling step. Renaming an export without grepping every
+import will break it at module load.
 
 ---
 
