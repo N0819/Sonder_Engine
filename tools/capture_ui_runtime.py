@@ -104,6 +104,10 @@ def inspect_page(page) -> dict[str, object]:
             horizontal_overflow_px:
               document.documentElement.scrollWidth - document.documentElement.clientWidth,
             minimum_target_px: controls.length ? Math.min(...controls.map(targetSize)) : null,
+            target_sizes: controls.map(element => ({
+              kind: element.matches('input[type="checkbox"]') ? 'checkbox-label' : element.tagName.toLowerCase(),
+              size: targetSize(element),
+            })),
             focus: document.activeElement?.getAttribute('data-runtime-diagnostics') !== null
               ? 'diagnostics-toggle'
               : document.activeElement?.tagName?.toLowerCase() || null,
@@ -192,6 +196,8 @@ def capture() -> dict[str, object]:
             page.screenshot(path=screenshot, full_page=True, animations="disabled")
             metrics = inspect_page(page)
             metrics["minimum_target_px"] = round(metrics["minimum_target_px"], 2)
+            for target in metrics["target_sizes"]:
+                target["size"] = round(target["size"], 2)
             results.append({
                 "id": case_id,
                 "viewport": {"width": width, "height": height},
