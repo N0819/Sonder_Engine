@@ -18,14 +18,30 @@ import re
 
 ROOT = Path(__file__).resolve().parent.parent
 UI_PATH = ROOT / "language_packs" / "en" / "ui.json"
-# The authenticated component laboratory is a development/evidence fixture,
-# not a player-facing product surface. It is intentionally English-only and
-# must not create false translation debt for installed language packs.
+# Authenticated laboratories are development/evidence fixtures, not
+# player-facing product surfaces. They are intentionally English-only and must
+# not create false translation debt for installed language packs.
+DEVELOPMENT_HTML_FILES = frozenset((
+    "ui-next-lab.html",
+    "ui-next-runtime.html",
+))
+DEVELOPMENT_JS_FILES = frozenset((
+    "ui-next/lab.js",
+    "ui-next/runtime-harness.js",
+))
+_REPLACEMENT_CATALOG_BLOCK = re.compile(
+    r"UI_CATALOG_START.*?(.*?)\s*//\s*UI_CATALOG_END",
+    re.DOTALL,
+)
 HTML_FILES = tuple(sorted(
     path for path in (ROOT / "static").glob("*.html")
-    if path.name != "ui-next-lab.html"
+    if path.name not in DEVELOPMENT_HTML_FILES
 ))
-JS_FILES = tuple(sorted((ROOT / "static" / "js").glob("*.js")))
+JS_FILES = tuple(sorted(
+    path for path in (ROOT / "static" / "js").rglob("*.js")
+    if path.relative_to(ROOT / "static" / "js").as_posix()
+    not in DEVELOPMENT_JS_FILES
+))
 #: The engine's own modules, which since the 2026-08-18 layout change live in
 #: subsystem packages rather than at the repository root.
 SUBSYSTEM_PACKAGES = ("core", "llm", "world", "mind", "story",
@@ -454,11 +470,17 @@ def source_messages() -> list[str]:
         found.update(parser.messages)
     for path in JS_FILES:
         source = path.read_text(encoding="utf-8")
-        found.update(_option_labels(source))
-        for raw in _javascript_strings(source):
-            message = _message(_unescape_js(raw))
-            if message:
-                found.add(message)
+        relative = path.relative_to(ROOT / "static" / "js")
+        if len(relative.parts) > 1:
+            sources = _REPLACEMENT_CATALOG_BLOCK.findall(source)
+        else:
+            sources = (source,)
+            found.update(_option_labels(source))
+        for catalog_source in sources:
+            for raw in _javascript_strings(catalog_source):
+                message = _message(_unescape_js(raw))
+                if message:
+                    found.add(message)
     return sorted(found, key=lambda item: (item.casefold(), item))
 
 

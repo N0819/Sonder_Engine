@@ -70,3 +70,11 @@ def test_runtime_entry_names_the_versioned_graph_and_no_classic_assets():
     assert "/static/js/utils.js" not in html
     assert "/static/js/extensions.js" not in html
     assert "/static/styles.css" not in html
+
+
+def test_catalog_excludes_only_named_replacement_laboratories():
+    source = (ROOT / "tools/extract_ui_catalog.py").read_text(encoding="utf-8")
+    assert '"ui-next-lab.html"' in source
+    assert '"ui-next-runtime.html"' in source
+    assert '"ui-next/lab.js"' in source
+    assert "rglob(\"*.js\")" in source

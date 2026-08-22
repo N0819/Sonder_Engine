@@ -1,5 +1,6 @@
 export const MODULE_RELEASE = "wp02.1";
 
+// UI_CATALOG_START: player-safe error copy.
 const PLAYER_MESSAGES = Object.freeze({
   network: "Sonder could not reach the engine. Your work is still here.",
   "session-expired": "Your Sonder session ended. Sign in to continue.",
@@ -12,6 +13,7 @@ const PLAYER_MESSAGES = Object.freeze({
   aborted: "The earlier request was replaced.",
   stale: "The result belongs to an older selection.",
 });
+// UI_CATALOG_END
 
 const STATUS_KINDS = Object.freeze({
   400: "validation",
