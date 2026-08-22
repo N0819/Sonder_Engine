@@ -118,7 +118,7 @@ def capture() -> dict[str, object]:
             page.locator("html[data-ui-next-ready='true']").wait_for()
             page.locator(f'[data-theme-choice="{theme}"]').click()
             apply_preferences(page, preferences)
-            page.locator("#composition").scroll_into_view_if_needed()
+            page.evaluate("scrollTo(0, 0)")
             screenshot = SCREENSHOTS / f"{case_id}.png"
             page.screenshot(path=screenshot, full_page=True, animations="disabled")
             metrics = page.evaluate("""() => {

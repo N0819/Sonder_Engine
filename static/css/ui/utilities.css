@@ -10,7 +10,7 @@
     white-space: nowrap !important;
     border: 0 !important;
   }
-  .ui-stack { display: grid; gap: var(--ui-space-6); }
+  .ui-stack { display: grid; align-content: start; gap: var(--ui-space-6); }
   .ui-stack--tight { gap: var(--ui-space-4); }
   .ui-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-4); }
   .ui-grow { flex: 1 1 auto; min-inline-size: 0; }
