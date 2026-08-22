@@ -35,6 +35,10 @@ def test_authoring_runtime_owns_revisions_drafts_and_stale_responses():
         'setDraft("library-authoring"',
         'clearDraft("library-authoring"',
         'addEventListener("beforeunload"',
+        '"/api/chats/import"',
+        "/api/turns/${turnId}/branch",
+        'channel: "library-authoring-import"',
+        'channel: "library-authoring-branch"',
     ):
         assert required in source
     for forbidden in (
@@ -53,3 +57,26 @@ def test_story_editor_uses_semantic_controls_and_never_parses_story_markup():
     assert "expected_revision" not in source
     for forbidden in (".innerHTML", "insertAdjacentHTML", "confirm(", "prompt("):
         assert forbidden not in source
+
+
+def test_story_import_and_branch_are_routed_native_actions():
+    editor = (RUNTIME / "library-editors" / "story.js").read_text(encoding="utf-8")
+    view = (RUNTIME / "library-view.js").read_text(encoding="utf-8")
+    inspector = (RUNTIME / "inspector-host.js").read_text(encoding="utf-8")
+    assert 'name = "story_archive"' in editor
+    assert "JSON.parse" in editor
+    assert "services.authoring.importStory" in editor
+    assert "services.authoring.retryImport" in editor
+    assert "services.authoring.branchStory" in view
+    assert 'route.query?.mode === "import"' in inspector
+    assert "Duplicate story" not in view
+
+
+def test_library_home_surfaces_only_owned_recent_favorite_and_draft_keys():
+    runtime = (RUNTIME / "library-runtime.js").read_text(encoding="utf-8")
+    view = (RUNTIME / "library-view.js").read_text(encoding="utf-8")
+    assert "homeState" in runtime
+    assert 'drafts?.["library-authoring"]' in runtime
+    for heading in ("Recent", "Favorites", "Drafts"):
+        assert f'{heading.lower()}: "{heading}"' in view
+    assert "draft.document" not in view

@@ -351,3 +351,32 @@ def test_projection_validation_and_pagination_are_bounded_and_deterministic(
     assert invalid_scope.status_code == 422
     assert invalid_story.status_code == 422
     assert unsafe_query.status_code == 422
+
+
+def test_recent_use_sort_is_backed_by_story_activity_not_invented_edit_times(
+    temp_db, monkeypatch,
+):
+    seeded = _seed_library(temp_db)
+    newest = time.time() + 100
+    temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+        (seeded["story_a"], 0, "arrive", newest),
+    )
+    with _client(monkeypatch) as client:
+        stories = client.get(
+            "/api/library?types=story&sort=recent&limit=100"
+        )
+        characters = client.get(
+            "/api/library?types=character&sort=recent&limit=100"
+        )
+
+    assert stories.status_code == 200, stories.text
+    assert [row["id"] for row in stories.json()["items"]] == [
+        seeded["story_a"], seeded["story_b"],
+    ]
+    assert stories.json()["items"][0]["recent_use"] == newest
+    assert [row["id"] for row in characters.json()["items"]] == [
+        seeded["char_used"], seeded["char_unused"],
+    ]
+    assert characters.json()["items"][0]["recent_use"] == newest
+    assert characters.json()["items"][1]["recent_use"] is None

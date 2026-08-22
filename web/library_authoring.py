@@ -195,8 +195,10 @@ def _story_activity(item_id: int) -> dict:
     count = q(
         "SELECT COUNT(*) AS count FROM turns WHERE chat_id=?", (item_id,), one=True,
     )["count"]
-    recent = [{"idx": int(row["idx"]), "created": row["created"]} for row in q(
-        "SELECT idx,created FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 3",
+    recent = [{
+        "id": int(row["id"]), "idx": int(row["idx"]), "created": row["created"],
+    } for row in q(
+        "SELECT id,idx,created FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 3",
         (item_id,),
     )]
     return {"turn_count": int(count or 0), "recent": recent}

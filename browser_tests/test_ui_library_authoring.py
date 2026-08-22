@@ -289,3 +289,110 @@ def test_authoring_runtime_restores_draft_and_preserves_failed_save(
         "error": "Offline",
     }
     assert result["draftStillStored"] is True
+
+
+def test_story_import_retry_and_branch_use_distinct_owned_operations(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const storeModule = await import(
+            `${base}/static/js/ui-next/store.js?release=wp07.1`
+          );
+          const authoringModule = await import(
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+          );
+          const store = storeModule.createStore();
+          let route = {
+            destination: "library", segments: ["stories"], query: { mode: "import" },
+            canonicalHash: "#/library/stories?mode=import",
+          };
+          store.dispatch({ type: "presentation/replace", slice: "route", value: route });
+          const requests = [];
+          let importAttempts = 0;
+          const apiClient = {
+            get: async () => { throw new Error("unexpected load"); },
+            request: async (method, path, options) => {
+              requests.push({ method, path, body: options.body ?? null, owner: options.owner });
+              if (path === "/api/chats/import" && importAttempts++ === 0) {
+                throw { kind: "network", userMessage: "Offline" };
+              }
+              return { data: path === "/api/chats/import" ? { id: 7 } : { id: 8 } };
+            },
+            cancel: () => true,
+          };
+          const navigations = [];
+          const router = {
+            current: () => route,
+            navigate: destination => {
+              navigations.push(destination);
+              route = {
+                ...destination,
+                canonicalHash: `#/library/stories?item=${destination.query.item}`,
+              };
+              store.dispatch({ type: "presentation/replace", slice: "route", value: route });
+            },
+          };
+          const runtime = authoringModule.createLibraryAuthoringRuntime({
+            store, apiClient,
+            localState: { getDraft: () => null, setDraft() {}, clearDraft() {} },
+            router, target: { addEventListener() {}, removeEventListener() {} },
+          });
+          const archive = { format: "sonder.story.v1", chat: { name: "Imported" } };
+          const firstImport = await runtime.importStory(archive);
+          const failed = structuredClone(store.getSnapshot().library.authoring);
+          const retried = await runtime.retryImport();
+
+          route = {
+            destination: "library", segments: ["stories"],
+            query: { item: "story:3" },
+            canonicalHash: "#/library/stories?item=story%3A3",
+          };
+          store.dispatch({ type: "presentation/replace", slice: "route", value: route });
+          await Promise.resolve(); await Promise.resolve();
+          // Resolve the view load through a second runtime whose read is complete.
+          runtime.teardown();
+          const branchRuntime = authoringModule.createLibraryAuthoringRuntime({
+            store,
+            apiClient: {
+              get: async () => ({ data: {
+                kind: "story", id: 3, owner: "story:3", revision: "rev-three",
+                document: { name: "Source", scenario: "", persona_id: null },
+                overview: { cast: [], personas: [], lore: [], activity: {
+                  turn_count: 1, recent: [{ id: 51, idx: 0, created: 1 }],
+                }, issues: [] },
+              } }),
+              request: apiClient.request,
+              cancel: () => true,
+            },
+            localState: { getDraft: () => null, setDraft() {}, clearDraft() {} },
+            router, target: { addEventListener() {}, removeEventListener() {} },
+          });
+          await Promise.resolve(); await Promise.resolve();
+          const branched = await branchRuntime.branchStory(51);
+          branchRuntime.teardown();
+          return {
+            firstImport, failed: { status: failed.status, retryAvailable: failed.retryAvailable },
+            retried, branched, requests, navigations,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result["firstImport"] is False
+    assert result["failed"] == {"status": "import-error", "retryAvailable": True}
+    assert result["retried"] is True
+    assert result["branched"] is True
+    assert result["requests"] == [
+        {"method": "POST", "path": "/api/chats/import", "body": {
+            "data": {"format": "sonder.story.v1", "chat": {"name": "Imported"}},
+        }, "owner": "story:import"},
+        {"method": "POST", "path": "/api/chats/import", "body": {
+            "data": {"format": "sonder.story.v1", "chat": {"name": "Imported"}},
+        }, "owner": "story:import"},
+        {"method": "POST", "path": "/api/turns/51/branch", "body": None,
+         "owner": "story:3"},
+    ]
+    assert [row["query"]["item"] for row in result["navigations"]] == [
+        "story:7", "story:8",
+    ]

@@ -1,6 +1,9 @@
 export const MODULE_RELEASE = "wp07.1";
 
-import { createStoryEditor } from "./library-editors/story.js?release=wp07.1";
+import {
+  createStoryEditor,
+  createStoryImporter,
+} from "./library-editors/story.js?release=wp07.1";
 
 // UI_CATALOG_START: Library authoring status copy.
 const COPY = Object.freeze({
@@ -14,6 +17,7 @@ const COPY = Object.freeze({
   conflict: "This story changed elsewhere. Your draft is still here.",
   failure: "Could not save. Your draft is still here.",
   back: "Back to story overview",
+  backToLibrary: "Back to Library",
 });
 // UI_CATALOG_END
 
@@ -56,6 +60,25 @@ export function mountLibraryAuthoring(options = {}) {
         services.localizer.t(COPY.loading),
         services.localizer.t(COPY.loadingDetail),
       ));
+      rendering = false;
+      return;
+    }
+    if (state.kind === "story" && state.mode === "import") {
+      const wrapper = node(documentRef, "section", "ui-authoring");
+      const back = node(
+        documentRef, "button", "ui-button ui-button--quiet",
+        services.localizer.t(COPY.backToLibrary),
+      );
+      back.type = "button";
+      back.addEventListener("click", () => services.library.navigate({
+        type: "story", query: {},
+      }));
+      wrapper.append(back, createStoryImporter({
+        document: documentRef, services, state,
+      }));
+      target.replaceChildren(wrapper);
+      services.localizer.localize(target);
+      onTitle?.("Import story archive");
       rendering = false;
       return;
     }
