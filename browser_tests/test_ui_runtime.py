@@ -1028,3 +1028,205 @@ def test_diagnostics_are_opt_in_bounded_and_recursively_redacted(
         ],
         "mutationRejected": True,
     }
+
+
+def test_local_storage_migrates_members_and_isolates_story_drafts(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createLocalState } = await import(
+            `${base}/static/js/ui-next/storage.js?release=wp02.1`
+          );
+          const memory = new Map();
+          let writes = 0;
+          const storage = {
+            getItem: key => memory.get(key) ?? null,
+            setItem: (key, value) => { writes += 1; memory.set(key, value); },
+            removeItem: key => memory.delete(key),
+          };
+          memory.set("sonder.ui-next", JSON.stringify({
+            version: 1,
+            theme: "ash-brass",
+            lastRoute: "#/library/stories",
+            sidePane: "closed",
+            drafts: { "story:alpha": "alpha draft" },
+          }));
+          const first = createLocalState({ storage });
+          const migrated = first.snapshot();
+          const second = createLocalState({ storage });
+          const writesAfterTwoReads = writes;
+          second.setDraft("story", "beta", "beta draft");
+          const isolated = {
+            alpha: second.getDraft("story", "alpha"),
+            beta: second.getDraft("story", "beta"),
+            otherType: second.getDraft("character", "beta"),
+          };
+          second.clearDraft("story", "beta");
+          return {
+            migrated,
+            writesAfterTwoReads,
+            isolated,
+            afterClear: second.getDraft("story", "beta"),
+            storedVersion: JSON.parse(memory.get("sonder.ui-next")).version,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "migrated": {
+            "version": 2,
+            "appearance": {"theme": "ash-brass"},
+            "navigation": {"route": "#/library/stories"},
+            "panes": {"side": "closed"},
+            "drafts": {"story": {"alpha": "alpha draft"}},
+        },
+        "writesAfterTwoReads": 1,
+        "isolated": {
+            "alpha": "alpha draft",
+            "beta": "beta draft",
+            "otherType": None,
+        },
+        "afterClear": None,
+        "storedVersion": 2,
+    }
+
+
+def test_local_storage_discards_only_bad_members_and_survives_write_failure(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createLocalState } = await import(
+            `${base}/static/js/ui-next/storage.js?release=wp02.1`
+          );
+          const errors = [];
+          const storage = {
+            value: JSON.stringify({
+              version: 2,
+              appearance: "broken",
+              navigation: { route: "#/settings/language" },
+              panes: { inspector: "open" },
+              drafts: { story: { alpha: "safe" }, character: 4 },
+            }),
+            getItem() { return this.value; },
+            setItem() { throw new DOMException("quota", "QuotaExceededError"); },
+            removeItem() {},
+          };
+          const state = createLocalState({
+            storage,
+            onError: error => errors.push(error.kind),
+          });
+          const loaded = state.snapshot();
+          const persisted = state.setRecord("appearance", {
+            theme: "midnight-ink",
+          });
+          let sensitive = null;
+          try {
+            state.setDraft("story", "alpha", "Bearer super-secret-token");
+          } catch (error) {
+            sensitive = error.kind;
+          }
+          return {
+            loaded,
+            persisted,
+            inMemoryTheme: state.snapshot().appearance.theme,
+            sensitive,
+            errors,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "loaded": {
+            "version": 2,
+            "appearance": {},
+            "navigation": {"route": "#/settings/language"},
+            "panes": {"inspector": "open"},
+            "drafts": {"story": {"alpha": "safe"}},
+        },
+        "persisted": False,
+        "inMemoryTheme": "midnight-ink",
+        "sensitive": "sensitive-material",
+        "errors": ["invalid-member", "invalid-member", "storage-write"],
+    }
+
+
+def test_credential_submitter_allowlists_routes_and_always_clears_secrets(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { submitCredentialForm } = await import(
+            `${base}/static/js/ui-next/credentials.js?release=wp02.1`
+          );
+          const calls = [];
+          const apiClient = {
+            request: async (method, path, options) => {
+              calls.push({ method, path, body: { ...options.body } });
+              return { data: { ok: true }, status: 200 };
+            },
+          };
+          const form = document.createElement("form");
+          const username = document.createElement("input");
+          username.name = "username";
+          username.value = "keeper";
+          const password = document.createElement("input");
+          password.name = "password";
+          password.type = "password";
+          password.value = "correct horse battery staple";
+          form.append(username, password);
+          const response = await submitCredentialForm({
+            form,
+            apiClient,
+            method: "POST",
+            endpoint: "/api/auth/login",
+          });
+          password.value = "must-clear-on-refusal";
+          let refusal = null;
+          try {
+            await submitCredentialForm({
+              form,
+              apiClient,
+              method: "POST",
+              endpoint: "/api/chats?token=bad",
+            });
+          } catch (error) {
+            refusal = error.kind;
+          }
+          return {
+            calls,
+            response,
+            passwordAfterSuccess: calls.length ? password.value : "not-called",
+            refusal,
+            passwordAfterRefusal: password.value,
+            url: location.href,
+            storageContainsSecret: Object.values(localStorage).some(value => (
+              String(value).includes("correct horse")
+              || String(value).includes("must-clear")
+            )),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "calls": [
+            {
+                "method": "POST",
+                "path": "/api/auth/login",
+                "body": {
+                    "username": "keeper",
+                    "password": "correct horse battery staple",
+                },
+            }
+        ],
+        "response": {"data": {"ok": True}, "status": 200},
+        "passwordAfterSuccess": "",
+        "refusal": "credential-route",
+        "passwordAfterRefusal": "",
+        "url": f"{ui_base_url}/static/ui-next-lab.html",
+        "storageContainsSecret": False,
+    }
