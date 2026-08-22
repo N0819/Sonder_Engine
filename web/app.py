@@ -607,6 +607,40 @@ async def access_control(request: Request, call_next):
     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
 
+_UI_DOCUMENT_PATHS = frozenset((
+    "/", "/guest", "/login", "/ui-next", "/ui-next/lab",
+    "/ui-next/runtime",
+))
+_RELEASED_UI_ASSET_PREFIXES = (
+    "/static/js/ui-next/", "/static/js/ui/", "/static/css/ui/",
+    "/static/assets/icons/sonder-icons.svg",
+)
+_UI_RELEASE = "wp02.1"
+
+
+@app.middleware("http")
+async def ui_cache_policy(request: Request, call_next):
+    """Keep HTML fresh and one replacement module graph cache-coherent."""
+    response = await call_next(request)
+    if request.method not in ("GET", "HEAD"):
+        return response
+
+    path = request.url.path
+    if path in _UI_DOCUMENT_PATHS:
+        response.headers["Cache-Control"] = "no-store"
+    elif path.startswith("/static/"):
+        released = (
+            request.query_params.get("release") == _UI_RELEASE
+            and any(path.startswith(prefix)
+                    for prefix in _RELEASED_UI_ASSET_PREFIXES)
+        )
+        response.headers["Cache-Control"] = (
+            "private, max-age=31536000, immutable" if released
+            else "no-cache"
+        )
+    return response
+
+
 # ---- Helpers ----
 import logging
 
