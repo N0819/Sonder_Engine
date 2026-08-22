@@ -25,6 +25,8 @@ MODULES = (
     "save-policy.js",
     "extensions.js",
     "extensions-v1.js",
+    "destinations.js",
+    "shell.js",
 )
 
 

@@ -8,6 +8,7 @@ if (!new Set(["application", "runtime-harness"]).has(root.dataset.uiNextEntry)) 
 }
 
 initAccessibility();
-bootRuntime().catch(() => {
+const application = root.dataset.uiNextEntry === "application";
+bootRuntime({ host: application, shell: application }).catch(() => {
   root.dataset.uiNextState = "failed";
 });

@@ -21,6 +21,8 @@ const SERVICE_PATHS = Object.freeze({
   savePolicy: "./save-policy.js?release=wp03.1",
   extensions: "./extensions.js?release=wp03.1",
   extensionsV1: "./extensions-v1.js?release=wp03.1",
+  destinations: "./destinations.js?release=wp03.1",
+  shell: "./shell.js?release=wp03.1",
 });
 
 let activeTeardown = null;
@@ -304,7 +306,7 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     localizer.t("Runtime services ready"),
     `${(bootstrap.chats || []).length} stories · ${extensionRows.length} extensions`,
   );
-  return Object.freeze({
+  const services = {
     store,
     apiClient,
     localizer,
@@ -315,7 +317,19 @@ async function startHostRuntime({ modules, target, root, options, cleanups }) {
     router,
     registry,
     adapter,
-  });
+  };
+  let shell = null;
+  if (options.shell === true) {
+    shell = modules.shell.createApplicationShell({
+      services,
+      modules,
+      document: documentRef,
+      target,
+      root,
+    });
+    cleanups.push(() => shell.teardown());
+  }
+  return Object.freeze({ ...services, shell });
 }
 
 export async function bootRuntime(options = {}) {
