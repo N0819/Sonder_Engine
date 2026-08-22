@@ -128,3 +128,220 @@ def test_reboot_replaces_runtime_listeners_instead_of_accumulating_them(
         },
         "afterStop": {"removed": 4, "live": 0, "state": "stopped"},
     }
+
+
+def test_api_normalizes_forbidden_malformed_and_session_expired(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        r"""async (base) => {
+          const { createApiClient } = await import(
+            `${base}/static/js/ui-next/api.js?release=wp02.1`
+          );
+          let expired = 0;
+          const fetchImpl = async url => {
+            if (String(url).endsWith("/forbidden")) {
+              return new Response('{"detail":"No access"}', {
+                status: 403,
+                headers: { "Content-Type": "application/json" },
+              });
+            }
+            if (String(url).endsWith("/expired")) {
+              return new Response('{"detail":"Expired"}', {
+                status: 401,
+                headers: { "Content-Type": "application/json" },
+              });
+            }
+            return new Response("{", {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            });
+          };
+          const client = createApiClient({
+            fetchImpl,
+            onSessionExpired: () => { expired += 1; },
+          });
+          const capture = async path => {
+            try {
+              await client.get(path, { channel: path });
+            } catch (error) {
+              return {
+                kind: error.kind,
+                status: error.status,
+                detail: error.technicalDetail,
+              };
+            }
+            return null;
+          };
+          const forbidden = await capture("/forbidden");
+          const malformed = await capture("/malformed");
+          const firstExpiry = await capture("/expired");
+          const secondExpiry = await capture("/expired");
+          return { forbidden, malformed, firstExpiry, secondExpiry, expired };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "forbidden": {"kind": "forbidden", "status": 403, "detail": "No access"},
+        "malformed": {
+            "kind": "malformed-response",
+            "status": 200,
+            "detail": "Response was not valid JSON.",
+        },
+        "firstExpiry": {
+            "kind": "session-expired",
+            "status": 401,
+            "detail": "Expired",
+        },
+        "secondExpiry": {
+            "kind": "session-expired",
+            "status": 401,
+            "detail": "The host session has expired.",
+        },
+        "expired": 1,
+    }
+
+
+def test_api_aborts_superseded_channels_and_refuses_stale_owners(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async (base) => {
+          const { createApiClient } = await import(
+            `${base}/static/js/ui-next/api.js?release=wp02.1`
+          );
+          let settleFirst;
+          let firstAborted = false;
+          const fetchImpl = (url, init) => {
+            if (String(url).endsWith("/first")) {
+              init.signal.addEventListener("abort", () => { firstAborted = true; });
+              return new Promise(resolve => { settleFirst = resolve; });
+            }
+            return Promise.resolve(new Response('{"value":2}', {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }));
+          };
+          const client = createApiClient({ fetchImpl });
+          const first = client.get("/first", { channel: "library", owner: "a" })
+            .catch(error => ({ kind: error.kind, requestId: error.requestId }));
+          const second = await client.get("/second", {
+            channel: "library",
+            owner: "a",
+          });
+          settleFirst(new Response('{"value":1}', {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }));
+          const firstResult = await first;
+          let staleKind = null;
+          try {
+            await client.get("/second", {
+              channel: "owner-check",
+              owner: "old-story",
+              isCurrent: () => false,
+            });
+          } catch (error) {
+            staleKind = error.kind;
+          }
+          return {
+            firstAborted,
+            firstKind: firstResult.kind,
+            secondData: second.data,
+            identitiesDiffer: firstResult.requestId !== second.requestId,
+            staleKind,
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "firstAborted": True,
+        "firstKind": "aborted",
+        "secondData": {"value": 2},
+        "identitiesDiffer": True,
+        "staleKind": "stale",
+    }
+
+
+def test_api_parses_text_empty_and_ndjson_without_retrying_writes(
+    page: Page, ui_base_url: str
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        r"""async (base) => {
+          const { createApiClient } = await import(
+            `${base}/static/js/ui-next/api.js?release=wp02.1`
+          );
+          const calls = [];
+          const fetchImpl = async (url, init) => {
+            calls.push({ url: String(url), method: init.method, init });
+            if (String(url).endsWith("/text")) {
+              return new Response("plain", { status: 200 });
+            }
+            if (String(url).endsWith("/empty")) {
+              return new Response(null, { status: 204 });
+            }
+            if (String(url).endsWith("/stream")) {
+              const encoder = new TextEncoder();
+              const body = new ReadableStream({
+                start(controller) {
+                  controller.enqueue(encoder.encode('{"n":1}\n{"n"'));
+                  controller.enqueue(encoder.encode(':2}\n'));
+                  controller.close();
+                },
+              });
+              return new Response(body, {
+                status: 200,
+                headers: { "Content-Type": "application/x-ndjson" },
+              });
+            }
+            throw new TypeError("offline");
+          };
+          const diagnostics = [];
+          const client = createApiClient({
+            fetchImpl,
+            onDiagnostic: entry => diagnostics.push(entry),
+          });
+          const text = await client.get("/text", { responseType: "text" });
+          const empty = await client.get("/empty");
+          const streamed = [];
+          const stream = await client.stream("/stream", {
+            onEvent: item => streamed.push(item),
+          });
+          let networkKind = null;
+          try {
+            await client.post("/write", { secret: "do-not-log" });
+          } catch (error) {
+            networkKind = error.kind;
+          }
+          return {
+            text: text.data,
+            empty: empty.data,
+            stream: stream.data,
+            streamed,
+            methods: calls.map(call => call.method),
+            credentials: calls.map(call => call.init.credentials),
+            caches: calls.map(call => call.init.cache),
+            networkKind,
+            writeCalls: calls.filter(call => call.url.endsWith("/write")).length,
+            diagnosticHasBody: diagnostics.some(entry => "body" in entry),
+            hasCorrelation: diagnostics.every(entry => Boolean(entry.correlationId)),
+          };
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "text": "plain",
+        "empty": None,
+        "stream": [{"n": 1}, {"n": 2}],
+        "streamed": [{"n": 1}, {"n": 2}],
+        "methods": ["GET", "GET", "GET", "POST"],
+        "credentials": ["same-origin"] * 4,
+        "caches": ["no-store"] * 4,
+        "networkKind": "network",
+        "writeCalls": 1,
+        "diagnosticHasBody": False,
+        "hasCorrelation": True,
+    }
