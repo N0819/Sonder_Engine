@@ -33,14 +33,14 @@
 - [ ] Add reference provenance and the supplied package to `docs/CREDITS.md`; do not imply ownership or a license not present in the package.
 - [ ] Commit: `docs(ui): import and reconcile design bible`
 
-## Task 2: Import the 156-row requirement matrix and assign ownership
+## Task 2: Import the 170-row requirement matrix and assign ownership
 
 **Files:**
 
 - Add: `docs/design/sonder-ui-replacement/REQUIREMENTS_TRACEABILITY.md`
 - Add: `tests/test_ui_replacement_control_plane.py`
 
-- [ ] Create the focused test first. It must parse Markdown table rows, assert exactly 156 unique requirement IDs across the 14 declared families, require a valid WP-00–WP-14 owner for every row, and require the amended `ARCH-12` decision.
+- [ ] Create the focused test first. It must parse Markdown table rows, assert exactly 170 unique requirement IDs across the 15 declared families (including all 14 `A11Y` rows), require a valid WP-00–WP-14 owner for every row, and require the amended `ARCH-12` decision.
 - [ ] Run `python -m pytest -q tests/test_ui_replacement_control_plane.py` and confirm the expected RED failure because the traceability artifact does not exist.
 - [ ] Import the candidate's `13_REQUIREMENTS_TRACEABILITY.md` as evidence, replace historical workstream ownership with the program work-package ownership table from the spec, and add columns for disposition, current implementation/evidence, gate, and status.
 - [ ] Apply all adoption-audit corrections: polling/global bridge rejected; deep routing, Library scopes/search, Settings registry, mobile vitals, localization, draft isolation, extension v2, and legacy removal remain open; candidate-reported passes are not current evidence.
@@ -150,7 +150,7 @@
 
 ## Plan self-review
 
-- [x] **Completeness:** every WP-00 deliverable and G0 proof item from the program spec has an owning task; no TODO or implementation placeholder remains.
+- [x] **Completeness:** every WP-00 deliverable and G0 proof item from the program spec has an owning task; all 170 reference requirements, including the previously miscounted 14-row `A11Y` family, have program ownership; no TODO or implementation placeholder remains.
 - [x] **Spec alignment:** the plan creates control/evidence infrastructure and a development seam only; it does not begin WP-01 visual foundations or change the default host UI.
 - [x] **Task decomposition:** governance, traceability, inventories, drift, browser evidence, and the entry seam have separate commits and focused tests.
 - [x] **Buildability:** paths, commands, expected RED failures, generated artifacts, and acceptance conditions are explicit.
