@@ -21,7 +21,8 @@ def test_foundation_report_covers_the_required_visual_matrix():
     assert {case["theme"] for case in cases} == {
         "carbon-signal", "ash-brass", "midnight-ink", "parchment-night"
     }
-    assert {case["viewport"]["width"] for case in cases} >= {360, 390, 844, 1024, 1440}
+    assert {case["viewport"]["width"] for case in cases} >= {360, 390, 640, 844, 1024, 1440}
+    assert any(case["id"] == "zoom-200-equivalent" for case in cases)
     preferences = {preference for case in cases for preference in case["preferences"]}
     assert preferences >= {
         "solid-surfaces", "reduced-motion", "accessibility-mode",
@@ -42,4 +43,3 @@ def test_every_foundation_capture_is_clean_and_present():
         assert screenshot.is_file()
         assert len(case["screenshot_sha256"]) == 64
         assert screenshot.stat().st_size > 1_000
-

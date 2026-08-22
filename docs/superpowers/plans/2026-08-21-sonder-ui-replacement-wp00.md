@@ -112,7 +112,7 @@
 
 - Add: `static/ui-next.html`
 - Add: `static/js/ui-next/main.js`
-- Add: `static/css/ui-next-development.css`
+- Add: temporary WP-00 development stylesheet (removed by WP-01)
 - Modify: `web/app.py`
 - Add: `tests/test_ui_next_entry.py`
 - Add: `browser_tests/test_ui_next_entry.py`

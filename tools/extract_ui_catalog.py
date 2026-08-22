@@ -18,7 +18,13 @@ import re
 
 ROOT = Path(__file__).resolve().parent.parent
 UI_PATH = ROOT / "language_packs" / "en" / "ui.json"
-HTML_FILES = tuple(sorted((ROOT / "static").glob("*.html")))
+# The authenticated component laboratory is a development/evidence fixture,
+# not a player-facing product surface. It is intentionally English-only and
+# must not create false translation debt for installed language packs.
+HTML_FILES = tuple(sorted(
+    path for path in (ROOT / "static").glob("*.html")
+    if path.name != "ui-next-lab.html"
+))
 JS_FILES = tuple(sorted((ROOT / "static" / "js").glob("*.js")))
 #: The engine's own modules, which since the 2026-08-18 layout change live in
 #: subsystem packages rather than at the repository root.

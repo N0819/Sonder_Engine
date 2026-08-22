@@ -2133,7 +2133,7 @@ of risk; items 2.2–2.3 repay the structural debt in
 
 ### 2.26 Replace the entire player and host web interface
 
-**Approved target 2026-08-21; WP-00 complete and G0 baseline locked.** Replace the
+**Approved target 2026-08-21; WP-01 complete and G1 visual foundation locked.** Replace the
 classic browser-global host with the Design Bible's Play, Library and Settings
 application; replace every editor, story tool, entry surface, auth/host flow,
 guest flow and extension-hosted surface; then delete the old host markup,
@@ -2156,6 +2156,17 @@ record are in
 [`design/sonder-ui-replacement/BASELINE_AND_BUDGETS.md`](design/sonder-ui-replacement/BASELINE_AND_BUDGETS.md).
 Product implementation begins at WP-01; no product requirement is closed merely
 because the control plane passed G0.
+
+WP-01's source plan is
+[`superpowers/plans/2026-08-21-sonder-ui-replacement-wp01.md`](superpowers/plans/2026-08-21-sonder-ui-replacement-wp01.md).
+Its semantic token system, four curated themes, local SVG icon family,
+accessible component primitives, responsive laboratory, 15-case visual
+matrix, four required reviews, and complete qualification are recorded in
+[`design/sonder-ui-replacement/G1_FOUNDATION_REVIEW.md`](design/sonder-ui-replacement/G1_FOUNDATION_REVIEW.md).
+Only `ICON-01` through `ICON-10` close at G1; real application flows and all
+cross-program theme, responsive, accessibility, localization, architecture,
+and compatibility requirements remain open. WP-02 is next and owns runtime
+state, API, task, router, content, and localization foundations.
 
 ### 2.2 Make stance auditable
 
