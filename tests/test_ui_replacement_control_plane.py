@@ -85,6 +85,7 @@ def test_only_qualified_program_gates_close_current_requirements():
     g1_icon_requirements = {f"ICON-{number:02d}" for number in range(1, 11)}
     g2_shell_requirements = {
         "IA-01",
+        "IA-02",
         "IA-03",
         "IA-04",
         "IA-05",
@@ -93,10 +94,21 @@ def test_only_qualified_program_gates_close_current_requirements():
         *(f"ARCH-{number:02d}" for number in range(1, 10)),
         "ARCH-14",
     }
+    wp04_play_core_requirements = {
+        "PLAY-01",
+        "PLAY-02",
+        "PLAY-03",
+        "PLAY-05",
+        "PLAY-06",
+        "PLAY-11",
+        "PLAY-12",
+        "PLAY-14",
+        "PLAY-16",
+    }
     qualified = {
         "GOV-02",
         "GOV-03",
         "GOV-04",
         "ARCH-12",
-    } | g1_icon_requirements | g2_shell_requirements
+    } | g1_icon_requirements | g2_shell_requirements | wp04_play_core_requirements
     assert closed <= qualified

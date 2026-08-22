@@ -1,9 +1,9 @@
 # Frontend drift record
 
 **From candidate baseline:** `73a380a0df2f6b139c98d66da9005489bd549d1d`  
-**To current program baseline:** `dd0528d085e2c87f8691f49c9ef6e0e1b0d585df`
-**Changed frontend-adjacent paths:** 202
-**Review classes:** api-contract: 1, behavioral-test: 20, engine-or-test-context: 92, frontend-behavior: 37, localization-contract: 2, presentation: 17, security-contract: 2, tooling: 31
+**To current program baseline:** `d08b1ac1932a34a3e97a2086c3778e253cadbd14`
+**Changed frontend-adjacent paths:** 209
+**Review classes:** api-contract: 1, behavioral-test: 22, engine-or-test-context: 92, frontend-behavior: 40, localization-contract: 2, presentation: 18, security-contract: 2, tooling: 32
 
 A direct candidate collision means both the candidate implementation and current Sonder changed the path after the historical baseline. Such a file is always rebased by scoped intent; it is never copied wholesale from the candidate.
 
@@ -17,6 +17,7 @@ A direct candidate collision means both the candidate implementation and current
 | M | `browser_tests/test_scrollback_commission.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `browser_tests/test_ui_foundation.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `browser_tests/test_ui_next_entry.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `browser_tests/test_ui_play.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `browser_tests/test_ui_runtime.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `browser_tests/test_ui_shell.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | M | `language_packs/en/cards/linguistics.json` | engine-or-test-context | no | preserve current behavior; port scoped candidate intent only |
@@ -29,6 +30,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `static/css/ui/components.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/entry.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/lab.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/css/ui/play.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/reset.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/runtime.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/css/ui/shell.css` | presentation | no | preserve current behavior; port scoped candidate intent only |
@@ -57,6 +59,9 @@ A direct candidate collision means both the candidate implementation and current
 | A | `static/js/ui-next/main.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui-next/navigation-state.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui-next/notices.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/play-runtime.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/play-view.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
+| A | `static/js/ui-next/prose.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui-next/release.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui-next/router.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
 | A | `static/js/ui-next/save-policy.js` | frontend-behavior | no | preserve current behavior; port scoped candidate intent only |
@@ -163,6 +168,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tests/test_ui_foundation_report.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_icon_system.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_next_entry.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
+| A | `tests/test_ui_play_contracts.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_replacement_control_plane.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_replacement_inventory.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
 | A | `tests/test_ui_runtime_contracts.py` | behavioral-test | no | preserve current behavior; port scoped candidate intent only |
@@ -182,6 +188,7 @@ A direct candidate collision means both the candidate implementation and current
 | A | `tools/benchmark_recall_review.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_baseline.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_foundation.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
+| A | `tools/capture_ui_play.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_runtime.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/capture_ui_shell.py` | tooling | no | preserve current behavior; port scoped candidate intent only |
 | A | `tools/cheap_embed_width_sweep.py` | tooling | no | preserve current behavior; port scoped candidate intent only |

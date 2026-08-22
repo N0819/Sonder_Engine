@@ -29,7 +29,7 @@ the requirement or visual reference but not the mechanism.
 | `static/js/remaster/settings.js` | adapt IA, rebuild registry | WP-08 | Global localized search/aliases, control routes, real mounts and save states |
 | candidate `static/index.html` | reference and scoped adaptation only | WP-03, WP-04 | Current script/ID/API/extension behavior preserved; no whole-file copy |
 | candidate `static/js/app.js` New Story changes | adapt | WP-09 | Current warnings/language/provider behavior plus all three journeys |
-| candidate `static/js/chat.js` changes | adapt only when owned | WP-04 | Current stream/reroll/frame/scrollback/extension tests remain green |
+| candidate `static/js/chat.js` changes | adapt only when owned | WP-04 | [G3 Play review](G3_PLAY_REVIEW.md): current stream/reroll/frame/scrollback/extension behavior rebuilt without whole-file copying |
 | candidate `static/js/theme-init.js` | adapt | WP-01, WP-12 | First-paint migration and every curated/Legacy state |
 | candidate `static/js/themes.js` and `static/themes.css` | adapt | WP-12 | Semantic registry, retained current fonts, Legacy mapping, no layout ownership |
 | candidate `static/login.html` | adapt presentation only | WP-10 | Trusted-event, cooldown, lockout, autocomplete, session tests |
