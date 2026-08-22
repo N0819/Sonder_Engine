@@ -5,6 +5,8 @@
 **Status authority:** [`docs/UNBUILT.md` §2.26](../../UNBUILT.md)  
 **Program:** [full replacement specification](../../superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md)
 
+**G0:** locked by the [current baseline and qualification record](BASELINE_AND_BUDGETS.md). G0 closes the control plane, not the open product rows below.
+
 This evidence matrix imports all 170 numbered requirements in the historical candidate's `13_REQUIREMENTS_TRACEABILITY.md`. The previous program count of 156 accidentally excluded the 14 `A11Y-*` rows because its parser allowed only letters in a family name; WP-00 corrects the count to 170 requirements across 15 families.
 
 Candidate statuses and historical pass reports are not current closure evidence. Every product row begins open. The only closed row at import is `ARCH-12`, whose requested global bridge is replaced by the approved no-general-purpose-global integration rule. Detailed work status remains exclusively in `docs/UNBUILT.md`.

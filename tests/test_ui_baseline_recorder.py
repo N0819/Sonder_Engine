@@ -68,4 +68,3 @@ def test_release_budgets_are_never_tighter_than_observed_baseline():
     assert budgets["effects_frame_p95_ms"] >= 22.0
     assert budgets["idle_api_requests"] == 0
     assert budgets["navigation_dom_growth_after_50"] >= 3.0
-

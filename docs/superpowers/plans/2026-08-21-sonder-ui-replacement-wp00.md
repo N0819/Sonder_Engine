@@ -157,4 +157,3 @@
 - [x] **Authority consistency:** `docs/UNBUILT.md` remains the sole work-status register; the Bible remains design context; `INTERFACE.md` becomes maintained current authority.
 - [x] **Naming consistency:** the route is `/ui-next`; assets use `ui-next`; program ownership uses WP-00–WP-14; the baseline head is `c99173dd8b7544d6ef7c53e9ed837fc0f841bbcc`.
 - [x] **Safety:** no database migration, default-entry switch, extension-contract change, credential capture, or historical whole-tree copy is authorized by WP-00.
-

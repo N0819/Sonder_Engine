@@ -27,6 +27,13 @@ The program and gates are in
 [`2026-08-21-sonder-ui-full-replacement-design.md`](../superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md),
 while [`UNBUILT.md`](../UNBUILT.md) §2.26 is the sole status authority.
 
+WP-00 is complete and G0 is locked. The exact current-source captures,
+performance ceilings, qualification commands, and all failures encountered
+during qualification are recorded in
+[`BASELINE_AND_BUDGETS.md`](../design/sonder-ui-replacement/BASELINE_AND_BUDGETS.md).
+This establishes the control plane only; replacement product requirements stay
+open until their owning work package provides implementation and evidence.
+
 ## Runtime boundary
 
 - The replacement is delivered by the existing FastAPI process, same-origin.
