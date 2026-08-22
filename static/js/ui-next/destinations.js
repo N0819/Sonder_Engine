@@ -88,32 +88,6 @@ function playView(documentRef, state, t, services, modules) {
   });
 }
 
-function settingsView(documentRef, _state, t) {
-  const section = element(documentRef, "section", "ui-shell-placeholder");
-  section.append(
-    element(documentRef, "h2", "ui-heading ui-heading--2", t(PLACEHOLDER_COPY.settingsReady)),
-    element(
-      documentRef,
-      "p",
-      "ui-muted",
-      t(PLACEHOLDER_COPY.settingsDetail),
-    ),
-  );
-  const categories = element(documentRef, "ul", "ui-shell-category-list");
-  for (const name of [
-    "Experience",
-    "AI Connections",
-    "Content",
-    "Add-ons",
-    "Maintenance",
-    "Advanced",
-  ]) {
-    categories.append(element(documentRef, "li", "ui-shell-category", t(name)));
-  }
-  section.append(categories);
-  return section;
-}
-
 export function destinationCopy(destination, segment = "", t = value => value) {
   const safe = CORE_DESTINATIONS.includes(destination) ? destination : "play";
   const copy = DESTINATION_COPY[safe];
@@ -140,6 +114,11 @@ export function renderDestination({
     t,
     services,
   });
-  if (safe === "settings") return settingsView(documentRef, state, t);
+  if (safe === "settings") return modules.settingsView.createSettingsView({
+    document: documentRef,
+    state,
+    t,
+    services,
+  });
   return playView(documentRef, state, t, services, modules);
 }

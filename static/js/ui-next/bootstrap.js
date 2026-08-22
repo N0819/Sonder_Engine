@@ -22,6 +22,7 @@ const SERVICE_PATHS = Object.freeze({
   extensions: "./extensions.js?release=wp07.1",
   extensionsV1: "./extensions-v1.js?release=wp07.1",
   destinations: "./destinations.js?release=wp07.1",
+  settingsView: "./settings-view.js?release=wp07.1",
   inspectorHost: "./inspector-host.js?release=wp07.1",
   libraryRuntime: "./library-runtime.js?release=wp07.1",
   libraryView: "./library-view.js?release=wp07.1",

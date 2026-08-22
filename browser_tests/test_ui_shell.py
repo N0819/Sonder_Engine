@@ -234,7 +234,9 @@ def test_invalid_nested_link_shows_explanation_at_its_safe_parent(
     page: Page, ui_base_url: str
 ) -> None:
     _open_shell(page, ui_base_url, hash_value="#/settings/not-real")
-    expect(page.get_by_role("heading", name="Settings", level=1)).to_be_visible()
+    expect(
+        page.get_by_role("heading", name="Sonder preferences", level=1)
+    ).to_be_visible()
     expect(page.get_by_role("status")).to_contain_text(
         "That page does not exist. Its parent area was opened instead."
     )
