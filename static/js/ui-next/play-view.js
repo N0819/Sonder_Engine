@@ -554,7 +554,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
       nodes.push(preview);
     }
     transcript.replaceChildren(...nodes);
-    requestAnimationFrame(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       if (disposed) return;
       if (wasPinned) {
         transcript.scrollTo({ top: transcript.scrollHeight, behavior: "instant" });
@@ -563,7 +563,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
         transcript.scrollTop = previousTop;
         newTurn.hidden = false;
       }
-    });
+    }));
     lastItems = items;
     lastPreview = state.transcript.preview;
   };

@@ -86,6 +86,7 @@
   .ui-play__transcript {
     min-block-size: 0;
     overflow-y: auto;
+    overflow-anchor: none;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     padding: var(--ui-space-8) max(var(--ui-space-3), calc((100% - var(--play-reading-measure)) / 2));
