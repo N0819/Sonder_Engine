@@ -157,7 +157,10 @@ records the port, responsive renders, and current-endpoint evidence.
   useful parent explanation.
 - Runtime modules and their entry assets carry one release id. Mixed cached
   releases fail before services start. HTML is `no-store`; versioned
-  replacement assets are immutable for that release.
+  replacement assets are immutable for that release. The release id ends in a
+  normalized content fingerprint covering every immutable replacement CSS,
+  JavaScript, and sprite asset. Changing one of those assets therefore requires
+  a new release id; the runtime contract test rejects a reused immutable URL.
 
 ## Integration rules
 
@@ -335,7 +338,11 @@ do not carry persistent work, failures, or choices.
 - The shell gives the destination track `minmax(0, 1fr)`. Settings gives its
   detail track the same bound and makes `[data-settings-content]` the vertical
   scroll owner. The document body is never relied on to reveal clipped settings
-  in desktop, short-height, or compact layouts.
+  in desktop, short-height, or compact layouts. The detail owner is a named,
+  keyboard-focusable region. Vertical wheel and Page Up/Down/Home/End intent
+  from the surrounding Settings header or category navigation is forwarded to
+  it; a nested result list keeps its own scrolling, and horizontal category
+  gestures remain horizontal.
 - Story text size changes prose only. The Experience page includes a local prose
   preview so the setting remains discoverable without an open Story; nearby
   labels and controls retain their interface size.

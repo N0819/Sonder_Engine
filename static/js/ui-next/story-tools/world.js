@@ -1,7 +1,7 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
-import { element, errorState, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui1";
-import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui1";
+import { element, errorState, markData, replaceLocalized, stateMessage, toolScope } from "./shared.js?release=alpha98-ui2-d5cf750f8b7e";
+import { mountDocumentEditor } from "./document-editor.js?release=alpha98-ui2-d5cf750f8b7e";
 
 // UI_CATALOG_START: World summary copy.
 const COPY = Object.freeze({

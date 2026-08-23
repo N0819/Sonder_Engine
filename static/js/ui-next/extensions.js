@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
 export const REGISTRATION_KINDS = Object.freeze([
   "destination",

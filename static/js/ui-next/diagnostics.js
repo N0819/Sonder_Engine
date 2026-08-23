@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "alpha98-ui1";
+export const MODULE_RELEASE = "alpha98-ui2-d5cf750f8b7e";
 
-import { redactSensitive } from "./credentials.js?release=alpha98-ui1";
+import { redactSensitive } from "./credentials.js?release=alpha98-ui2-d5cf750f8b7e";
 
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;

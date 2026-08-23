@@ -2,8 +2,8 @@
   :root[data-destination="settings"] .ui-shell { grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr); }
   :root[data-destination="settings"] .ui-shell__header,
   :root[data-destination="settings"] .ui-shell__inspector { display: none; }
-  :root[data-destination="settings"] .ui-shell__workspace { padding: 0; overflow: hidden; scrollbar-gutter: auto; }
-  :root[data-destination="settings"] .ui-shell__destination-view { inline-size: 100%; max-inline-size: none; block-size: 100%; min-block-size: 0; }
+  :root[data-destination="settings"] .ui-shell__workspace { padding: 0; overflow: clip; scrollbar-gutter: auto; }
+  :root[data-destination="settings"] .ui-shell__destination-view { overflow: clip; inline-size: 100%; max-inline-size: none; block-size: 100%; min-block-size: 0; }
 
   .ui-settings { display: grid; grid-template-rows: 84px minmax(0, 1fr); block-size: 100%; min-block-size: 0; background: var(--ui-color-canvas); }
   .ui-settings__header { display: flex; align-items: center; gap: 18px; padding: 16px 36px; border-block-end: 1px solid var(--ui-color-border-strong); background: color-mix(in srgb, var(--ui-color-surface-solid) 92%, transparent); }
@@ -23,7 +23,8 @@
   .ui-settings__category { display: grid; grid-template-columns: 26px 18px minmax(0, 1fr); align-items: center; gap: 9px; min-block-size: 44px; padding: 0 10px; border-block-end: 1px solid var(--ui-color-border); color: var(--ui-color-text-muted); text-decoration: none; }
   .ui-settings__category[aria-current="page"] { color: var(--ui-color-interactive-strong); background: linear-gradient(90deg, var(--ui-color-interactive-soft), transparent 72%); box-shadow: inset 2px 0 var(--ui-color-interactive); }
   .ui-settings__index { color: var(--ui-color-text-faint); font: 650 8px var(--ui-font-mono); }
-  .ui-settings__content { min-block-size: 0; overflow: auto; padding: clamp(22px, 3vw, 42px); background-image: linear-gradient(var(--ui-color-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ui-color-grid) 1px, transparent 1px); background-size: 72px 72px; }
+  .ui-settings__content { min-block-size: 0; overflow: auto; overscroll-behavior: contain; padding: clamp(22px, 3vw, 42px); background-image: linear-gradient(var(--ui-color-grid) 1px, transparent 1px), linear-gradient(90deg, var(--ui-color-grid) 1px, transparent 1px); background-size: 72px 72px; }
+  .ui-settings__content:focus-visible { outline: 2px solid var(--ui-color-focus); outline-offset: -2px; }
   .ui-settings__section { max-inline-size: 880px; margin-inline: auto; }
   .ui-settings__section-head { margin-block-end: 18px; padding-block-end: 14px; border-block-end: 1px solid var(--ui-color-border); }
   .ui-settings__section-head > * { margin: 0; }

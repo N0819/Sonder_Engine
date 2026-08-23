@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -43,6 +44,31 @@ MODULES = (
     "atmosphere-runtime.js",
 )
 
+IMMUTABLE_UI_ROOTS = (
+    ROOT / "static" / "js" / "ui-next",
+    ROOT / "static" / "js" / "ui",
+    ROOT / "static" / "css" / "ui",
+)
+IMMUTABLE_UI_FILES = (ROOT / "static" / "assets" / "icons" / "sonder-icons.svg",)
+RELEASE_TOKEN = re.compile(rb"alpha98-ui\d+(?:-[0-9a-f]{12})?")
+
+
+def _immutable_ui_fingerprint() -> str:
+    paths = [
+        path
+        for root in IMMUTABLE_UI_ROOTS
+        for path in root.rglob("*")
+        if path.is_file()
+    ]
+    paths.extend(IMMUTABLE_UI_FILES)
+    digest = hashlib.sha256()
+    for path in sorted(paths, key=lambda candidate: candidate.relative_to(ROOT).as_posix()):
+        digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(RELEASE_TOKEN.sub(b"__UI_RELEASE__", path.read_bytes()))
+        digest.update(b"\0")
+    return digest.hexdigest()[:12]
+
 
 def test_runtime_modules_have_one_literal_release_and_no_classic_bridge():
     missing = [name for name in MODULES if not (RUNTIME / name).is_file()]
@@ -57,7 +83,21 @@ def test_runtime_modules_have_one_literal_release_and_no_classic_bridge():
         assert match, name
         releases.add(match.group(1))
 
-    assert releases == {"alpha98-ui1"}
+    assert len(releases) == 1
+    release = releases.pop()
+    assert re.fullmatch(r"alpha98-ui\d+-[0-9a-f]{12}", release)
+    assert release.rsplit("-", 1)[1] == _immutable_ui_fingerprint()
+    graph_releases = {
+        match.group(1)
+        for path in RUNTIME.rglob("*.js")
+        if (
+            match := re.search(
+                r'export const MODULE_RELEASE = "([^"]+)";',
+                path.read_text(encoding="utf-8"),
+            )
+        )
+    }
+    assert graph_releases == {release}
     assert "setInterval(" not in combined
     assert "MutationObserver" not in combined
     assert "window.S " not in combined
@@ -81,12 +121,75 @@ def test_v1_adapter_is_the_only_runtime_global_assignment():
 
 def test_runtime_entry_names_the_versioned_graph_and_no_classic_assets():
     html = (ROOT / "static" / "ui-next.html").read_text(encoding="utf-8")
-    assert "?release=alpha98-ui1" in html
-    assert 'data-ui-next-version="alpha98-ui1"' in html
+    release_source = (RUNTIME / "release.js").read_text(encoding="utf-8")
+    release = re.search(r'export const MODULE_RELEASE = "([^"]+)";', release_source)
+    assert release
+    assert f"?release={release.group(1)}" in html
+    assert f'data-ui-next-version="{release.group(1)}"' in html
     assert "/static/js/app.js" not in html
     assert "/static/js/utils.js" not in html
     assert "/static/js/extensions.js" not in html
     assert "/static/styles.css" not in html
+
+
+def test_every_replacement_entry_and_server_release_reference_is_coherent():
+    release_source = (RUNTIME / "release.js").read_text(encoding="utf-8")
+    release = re.search(r'export const MODULE_RELEASE = "([^"]+)";', release_source)
+    assert release
+    sources = [
+        *(ROOT / "static").glob("ui-next*.html"),
+        ROOT / "static" / "login.html",
+        ROOT / "static" / "guest.html",
+        ROOT / "web" / "app.py",
+        *RUNTIME.rglob("*.js"),
+    ]
+    references = {
+        match
+        for path in sources
+        for match in re.findall(
+            r"alpha98-ui\d+(?:-[0-9a-f]{12})?",
+            path.read_text(encoding="utf-8"),
+        )
+    }
+    assert references == {release.group(1)}
+
+    entry_sources = [
+        *(ROOT / "static").glob("ui-next*.html"),
+        ROOT / "static" / "login.html",
+        ROOT / "static" / "guest.html",
+    ]
+    entry_references = {
+        match
+        for path in entry_sources
+        for match in re.findall(
+            r"[?&]release=([A-Za-z0-9.-]+)",
+            path.read_text(encoding="utf-8"),
+        )
+    }
+    assert entry_references == {release.group(1)}
+
+
+def test_every_icon_sprite_request_uses_the_immutable_ui_release():
+    release_source = (RUNTIME / "release.js").read_text(encoding="utf-8")
+    release = re.search(r'export const MODULE_RELEASE = "([^"]+)";', release_source)
+    assert release
+    sources = [
+        ROOT / "static" / "ui-next.html",
+        *(ROOT / "static" / "js" / "ui").rglob("*.js"),
+        *RUNTIME.rglob("*.js"),
+    ]
+    references = [
+        line.strip()
+        for path in sources
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if "sonder-icons.svg" in line
+    ]
+    assert references
+    assert all("sonder-icons.svg?release=" in line for line in references)
+    assert all(
+        release.group(1) in line or "${MODULE_RELEASE}" in line
+        for line in references
+    )
 
 
 def test_catalog_excludes_only_named_replacement_laboratories():

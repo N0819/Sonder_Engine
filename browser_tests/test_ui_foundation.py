@@ -145,45 +145,53 @@ def test_mobile_targets_are_at_least_44_css_pixels(page: Page, ui_base_url: str)
     assert undersized == []
 
 
-def test_supplied_replacement_icons_keep_optical_padding_inside_their_layout_box(
+def test_every_sprite_icon_keeps_fill_and_stroke_inside_its_viewbox(
     page: Page, ui_base_url: str
 ):
     _open_lab(page, ui_base_url)
-    icon_names = [
-        "settings", "link", "unlink", "style", "multiplayer", "pin", "resize",
-        "theme", "extension", "retry", "offline", "sort", "duplicate",
-    ]
     measurements = page.evaluate(
-        """iconNames => new Promise(resolve => {
+        """async () => {
+          const source = await fetch('/static/assets/icons/sonder-icons.svg?release=alpha98-ui2-d5cf750f8b7e').then(response => response.text());
+          const sprite = new DOMParser().parseFromString(source, 'image/svg+xml');
           const host = document.createElement('div');
-          host.style.cssText = 'position:fixed;inset:0 auto auto 0;display:flex;background:black';
-          for (const name of iconNames) {
+          host.style.cssText = 'position:fixed;inset:0 auto auto 0;display:flex;visibility:hidden';
+          const rows = [];
+          for (const symbol of sprite.querySelectorAll('symbol')) {
             const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.classList.add('ui-icon');
-            const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
-            use.setAttribute('href', `/static/assets/icons/sonder-icons.svg#icon-${name}`);
-            svg.append(use);
+            const viewBox = symbol.viewBox.baseVal;
+            svg.setAttribute('viewBox', symbol.getAttribute('viewBox'));
+            svg.setAttribute('width', '96');
+            svg.setAttribute('height', '96');
+            for (const name of ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-miterlimit']) {
+              if (symbol.hasAttribute(name)) svg.setAttribute(name, symbol.getAttribute(name));
+            }
+            for (const child of symbol.children) svg.append(child.cloneNode(true));
             host.append(svg);
+            rows.push({ id: symbol.id, svg, viewBox });
           }
           document.body.append(host);
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            const rows = [...host.querySelectorAll('svg')].map((svg, index) => {
-              const outer = svg.getBoundingClientRect();
-              const content = svg.querySelector('use').getBoundingClientRect();
-              return {
-                name: iconNames[index],
-                inset: Math.min(
-                  content.left - outer.left,
-                  content.top - outer.top,
-                  outer.right - content.right,
-                  outer.bottom - content.bottom,
-                ),
-              };
-            });
-            host.remove();
-            resolve(rows);
-          }));
-        })""",
-        icon_names,
+          const measurements = rows.map(({ id, svg, viewBox }) => {
+            const bounds = svg.getBBox();
+            const stroked = [...svg.querySelectorAll('*')].some(node => getComputedStyle(node).stroke !== 'none');
+            const strokeWidth = stroked ? Math.max(
+              Number.parseFloat(getComputedStyle(svg).strokeWidth) || 0,
+              ...[...svg.querySelectorAll('*')].map(node => Number.parseFloat(getComputedStyle(node).strokeWidth) || 0),
+            ) : 0;
+            const inset = {
+              left: bounds.x - strokeWidth / 2 - viewBox.x,
+              top: bounds.y - strokeWidth / 2 - viewBox.y,
+              right: viewBox.x + viewBox.width - (bounds.x + bounds.width + strokeWidth / 2),
+              bottom: viewBox.y + viewBox.height - (bounds.y + bounds.height + strokeWidth / 2),
+            };
+            return { id, inset };
+          });
+          host.remove();
+          return measurements;
+        }""",
     )
-    assert [row for row in measurements if row["inset"] < 0.75] == []
+    clipped = [
+        row
+        for row in measurements
+        if min(row["inset"].values()) < -0.01
+    ]
+    assert clipped == []
