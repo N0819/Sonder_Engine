@@ -707,10 +707,20 @@ def score(raw, beat):
         event_order=beat["events"])
     enforceable = [w for w in warnings
                    if w.startswith(_ling("_ENFORCEABLE_PREFIXES"))]
+    typography = [w for w in enforceable if _is_typography_only(w, prose)]
     return {
         "warnings": warnings,
         "enforceable": enforceable,
         "craft_tells": _craft_tells(prose),
+        # SPLIT OUT, because it dominated a 24-beat comparison and is not
+        # a composition failure: the model writes "you—you're" where the
+        # view has "you — you're", and DIALOGUE FIDELITY demands the line
+        # character for character. Four of six enforceable findings in one
+        # arm were this. It is a real cost (each still buys a rewrite) but
+        # it moves with the model's typesetting habits rather than with
+        # anything a sheet or a payload says, so an arm comparison that
+        # does not separate it is mostly measuring noise.
+        "typography": typography,
         "act_coverage": _act_coverage(prose, beat),
         "direction_agreement": _direction_agreement(prose, beat),
         "tag_leaks": _tag_leaks(prose),
@@ -735,6 +745,26 @@ a an the and or but of to in on at by for with from into onto over under
 is are was were be been being do does did doing has have had his her their
 its your you they them he she it this that these those not no as up down
 """.split())
+
+
+def _normalise_typography(text):
+    """Dashes, quotes and spacing folded to one form."""
+    text = re.sub(r"\s*[\u2014\u2013-]\s*", " - ", text or "")
+    text = re.sub(r"[\u2018\u2019\u02bc]", "'", text)
+    text = re.sub(r"[\u201c\u201d]", '"', text)
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _is_typography_only(warning, prose):
+    """Is this dropped-dialogue finding really just re-typeset punctuation?"""
+    if "Dialogue from view" not in warning:
+        return False
+    quoted = re.search(r': "(.+)$', warning)
+    if not quoted:
+        return False
+    fragment = _normalise_typography(quoted.group(1))[:40]
+    return bool(fragment) and fragment in _normalise_typography(
+        re.sub(r"<[^>]+>", " ", prose or ""))
 
 
 def _act_coverage(prose, beat):
@@ -923,6 +953,9 @@ def main():
             print(f"\n{name:14} n={n}"
                   f" | clean drafts {clean}/{n}"
                   f" | ENFORCEABLE {enf} ({enf / n:.2f}/turn)"
+                  f" [{sum(len(r['typography']) for r in rows)} typography,"
+                  f" {enf - sum(len(r['typography']) for r in rows)}"
+                  f" substantive]"
                   f" | all warnings {allw}"
                   f" | craft tells {tells}"
                   f" | mean chars {sum(r['chars'] for r in rows) // n}")

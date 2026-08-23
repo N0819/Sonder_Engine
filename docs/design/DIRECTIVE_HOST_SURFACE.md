@@ -382,8 +382,11 @@ built under other names and never collected under that one:
   "validator-and-retry, prompt text alone is not acceptable" mechanism the
   report asks for;
 - `_scrub_undeclared_player_speech` at the perception layer, and
-  `_check_player_interiority_prose` + `_check_player_person` among the
-  narrator's enforceable fidelity prefixes.
+  `_check_player_person` among the narrator's enforceable fidelity prefixes.
+  (`_check_player_interiority_prose` stood beside it until 2026-08-23 and was
+  deleted: it could not tell "you feel the cold" from "you feel afraid", which
+  in the second person is most of what a narrator writes. The Director-side
+  `_check_player_interiority_authority` is untouched.)
 
 So the engine already refused to invent player conduct. What it had no switch
 for was the **other** direction: Sonder's default is `world_author`, where a

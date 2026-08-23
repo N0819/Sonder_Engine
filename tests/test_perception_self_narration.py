@@ -127,48 +127,16 @@ def test_every_perception_stage_applies_the_guard():
 # guard at the first two stages leaves the third able to add it back on its
 # own — and there it becomes what the story SAID happened.
 
-from agents.common import _check_player_interiority_prose
-
-VIEW_SRC = "Your hands shake. The crimson figure leans closer."
-
-
-def test_the_narrator_may_not_tell_the_player_what_they_feel():
-    assert _check_player_interiority_prose(
-        "You feel a genuine terror rising.", VIEW_SRC)
-
-
-def test_an_emotion_that_acts_on_you_is_the_same_assertion():
-    """"Terror grips you" asserts the state as surely as "you feel terror"."""
-    assert _check_player_interiority_prose(
-        "Terror grips you as she leans in.", VIEW_SRC)
-    assert _check_player_interiority_prose("Your fear is unmistakable.", VIEW_SRC)
-
-
-def test_the_body_is_always_the_narrators_to_render():
-    for prose in ("Your hands shake as she leans closer.",
-                  "Your hands shake and you take a step back.",
-                  "Your breath catches and you go still."):
-        assert _check_player_interiority_prose(prose, VIEW_SRC) == [], prose
-
-
-def test_a_feeling_the_view_already_carried_is_rendering_not_adding():
-    """Perception is the narrator's source of truth. A feeling that reached
-    the view legitimately may be rendered; this catches what the narrator
-    invents."""
-    view = "You feel the cold through the floorboards."
-    assert _check_player_interiority_prose(
-        "You feel the cold through the floorboards.", view) == []
-
-
-def test_it_is_enforced_rather_than_merely_warned():
-    """It is the LAST stage — an interior state asserted here reaches the
-    reader as fact, so it earns a rewrite rather than a note nobody reads."""
-    assert any("interior state" in p for p in _enforceable())
-
-
-def test_empty_prose_is_a_noop():
-    assert _check_player_interiority_prose("", VIEW_SRC) == []
-
+# THE NARRATOR-SIDE INTERIORITY CHECK WAS DELETED (2026-08-23) and its unit
+# tests with it. `_check_player_interiority_prose` matched a named-emotion
+# and verb list against second-person prose, where "you feel" is how a
+# narrator reports SENSATION -- it flagged 73 of 2,389 stored drafts (3.1%)
+# on lines like "you feel [the water] lap against your shoulders", and each
+# firing was enforceable, buying a whole extra narrator call.
+#
+# What remains below is the PERCEPTION-side half of the same story, which
+# is a different mechanism and still live: the Director's omniscient
+# sentence must not be copied whole into the player's own view.
 
 # Chat 56 ("Run!") t6, verbatim from perception_outcome.views["player"]: the
 # Director's omniscient sentence copied whole into the PLAYER's own view, in
@@ -202,23 +170,6 @@ def test_another_bodys_sentences_are_not_dropped():
         ["Hinami", "The Doctor"])
     assert dropped == []
     assert "raises both hands" in view
-
-
-def test_narrator_may_not_name_the_players_interior_state_at_a_distance():
-    """Chat 56 t6, verbatim narrator prose. Every branch of _YOU_INTERIOR
-    required the state to sit beside "you"/"your" or govern it through a short
-    verb list; here "your" attaches to "eyes" and the verb is "pulls back"."""
-    assert _check_player_interiority_prose(
-        "The terror that had been living wide-open in your eyes pulls back to "
-        "something smaller, something that can blink.", VIEW_SRC)
-
-
-def test_observable_surface_at_a_distance_is_still_allowed():
-    """The widened branch must not swallow ordinary description."""
-    for prose in ("The tremor that had been running through your hands eases.",
-                  "The light in your eyes steadies.",
-                  "The grip on your arm loosens."):
-        assert _check_player_interiority_prose(prose, VIEW_SRC) == [], prose
 
 
 # ---- the article belongs to the prose, not to the name ----

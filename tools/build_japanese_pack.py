@@ -310,7 +310,6 @@ ling[common]["_PRONOUN_GROUPS"].update({
     "彼ら": {"$type": "tuple", "items": ["彼ら", "彼らの", "彼ら自身"]},
 })
 regex(common, "_LOOK_VERB_RE", "見る|見つめる|眺める|目を向ける|視線を向ける|指さす|振り向く")
-regex(common, "_YOU_INTERIOR", "(?:あなた|君|お前)(?:自身)?(?:の)?(?:恐怖|不安|喜び|欲望|考え|気持ち|決意|記憶)")
 add(common, "_SUBJECT_LEADS", "私", "僕", "俺", "あなた", "君", "彼", "彼女", "彼ら", "その", "この", "あの")
 regex(common, "_CLAUSE_BREAKS", "そして|しかし|だが|ので|から|ながら|とき|前に|後で|まで|、|；|：")
 add(common, "ATTEMPT_CUES", "しようとする", "試みる", "狙う", "手を伸ばす", "近づこうとする")
