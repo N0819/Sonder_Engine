@@ -990,21 +990,21 @@ candidate only and never satisfy a current gate.
 
 ## Program completion checklist
 
-- [ ] All WP-00 through WP-14 exit gates pass on recorded commits.
-- [ ] All Design Bible requirements and adoption-audit corrections are linked
+- [x] All WP-00 through WP-14 exit gates pass on recorded commits.
+- [x] All Design Bible requirements and adoption-audit corrections are linked
       to current implementation and evidence.
-- [ ] Every current capability is present, explicitly approved for removal, or
+- [x] Every current capability is present, explicitly approved for removal, or
       superseded by a documented equivalent.
-- [ ] The final host entry loads no legacy host scripts or styles.
-- [ ] No `window.S`, state polling, synthetic legacy clicks, hidden controls,
+- [x] The final host entry loads no legacy host scripts or styles.
+- [x] No `window.S`, state polling, synthetic legacy clicks, hidden controls,
       or duplicate legacy dialogs remain.
-- [ ] Public extension compatibility and Legacy theme behavior match their
+- [x] Public extension compatibility and Legacy theme behavior match their
       documented final contracts.
-- [ ] Desktop/mobile parity, localization, accessibility, theme, performance,
+- [x] Desktop/mobile parity, localization, accessibility, theme, performance,
       and long-content evidence is complete.
-- [ ] Maintained guides, feature inventory, UI catalog, structure checks, and
+- [x] Maintained guides, feature inventory, UI catalog, structure checks, and
       generated code map describe the replacement accurately.
-- [ ] Exact-head `make check` and `make test-browser` pass.
-- [ ] Final adversarial audit has no unapproved P0 or P1 finding.
+- [x] Exact-head `make check` and `make test-browser` pass.
+- [x] Final adversarial audit has no unapproved P0 or P1 finding.
 
 Only then is the Sonder UI replacement finished.

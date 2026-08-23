@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROGRAM = ROOT / "docs/superpowers/specs/2026-08-21-sonder-ui-full-replacement-design.md"
 TRACEABILITY = ROOT / "docs/design/sonder-ui-replacement/REQUIREMENTS_TRACEABILITY.md"
 CAPABILITIES = ROOT / "docs/design/sonder-ui-replacement/CAPABILITY_LEDGER.md"
 WP07_REVIEW = ROOT / "docs/design/sonder-ui-replacement/WP07_REFERENCE_PORT_REVIEW.md"
@@ -45,3 +46,11 @@ def test_wp07_and_wp14_reviews_record_complete_gates() -> None:
 def test_completed_ui_replacement_is_not_left_in_unbuilt_register() -> None:
     source = UNBUILT.read_text(encoding="utf-8")
     assert "### 2.26 Replace the entire player and host web interface" not in source
+
+
+def test_program_completion_checklist_is_closed() -> None:
+    source = PROGRAM.read_text(encoding="utf-8")
+    checklist = source.split("## Program completion checklist", 1)[1]
+    checklist = checklist.split("Only then is the Sonder UI replacement finished.", 1)[0]
+    assert "- [ ]" not in checklist
+    assert checklist.count("- [x]") == 10
