@@ -15,6 +15,9 @@ def test_people_editor_is_loaded_and_edits_complete_documents():
     editor = (
         RUNTIME / "library-editors" / "character-persona.js"
     ).read_text(encoding="utf-8")
+    sections = (
+        RUNTIME / "library-editors" / "person-sections.js"
+    ).read_text(encoding="utf-8")
     assert 'export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";' in editor
     assert "library-editors/character-persona.js" in bootstrap
     assert "createPersonEditor" in view
@@ -25,13 +28,14 @@ def test_people_editor_is_loaded_and_edits_complete_documents():
         '"embodiment", "visible", "summary"',
         '"knowledge", "public_history"',
     ):
-        assert owned_path in editor
+        assert owned_path in sections
     assert "JSON.stringify(state.draft, null, 2)" in editor
     assert "JSON.parse" in editor
     assert "services.authoring.stage(parsed)" in editor
-    assert "dataset.schemaPath" in editor
-    assert "createSchemaSections" in editor
-    assert 'dotted === "identity.uid"' in editor
+    assert "dataset.schemaPath" in sections
+    assert "createPersonSectionEditor" in editor
+    assert 'dotted === "identity.uid"' in sections
+    assert "library-editors/person-sections.js" in bootstrap
     for forbidden in (".innerHTML", "window.S", "MutationObserver", "clickLegacy"):
         assert forbidden not in editor
 

@@ -1,6 +1,7 @@
 export const MODULE_RELEASE = "alpha98-ui2-3f44d1cc71ed";
 
 import { buildQuickStartLivedLocation, mountLivedLocationFields } from "../lived-location.js?release=alpha98-ui2-3f44d1cc71ed";
+import { createPersonSectionEditor } from "./person-sections.js?release=alpha98-ui2-3f44d1cc71ed";
 
 const quickStartDrafts = new Map();
 
@@ -124,95 +125,11 @@ function textControl(documentRef, id, name, value, long = false) {
   return control;
 }
 
-const PRIMARY_PATHS = new Set([
-  "identity.name", "identity.aliases", "identity.pronouns.subject",
-  "identity.pronouns.object", "identity.pronouns.possessive",
-  "embodiment.visible.summary", "knowledge.public_history",
-  "opening.first_message",
-]);
-
-function humanize(value) {
-  return String(value || "").replace(/_/g, " ").replace(/^./, letter => letter.toUpperCase());
-}
-
-function createSchemaNode(documentRef, path, value, update, t) {
-  const dotted = path.join(".");
-  if (PRIMARY_PATHS.has(dotted)) return null;
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const details = node(documentRef, "details", "ui-authoring-schema__group");
-    details.dataset.schemaPath = dotted;
-    details.append(node(documentRef, "summary", "ui-authoring-field__label", humanize(path.at(-1))));
-    const children = Object.entries(value).map(([key, child]) => (
-      createSchemaNode(documentRef, [...path, key], child, update, t)
-    )).filter(Boolean);
-    if (!children.length) return null;
-    details.append(...children);
-    return details;
-  }
-  const id = `ui-schema-${dotted.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-  let control;
-  if (Array.isArray(value)) {
-    control = textControl(documentRef, id, dotted, JSON.stringify(value, null, 2), true);
-    control.classList.add("ui-authoring-schema__json");
-    control.addEventListener("change", () => {
-      try {
-        const parsed = JSON.parse(control.value);
-        if (!Array.isArray(parsed)) throw new Error("array required");
-        control.removeAttribute("aria-invalid");
-        update(path, parsed);
-      } catch {
-        control.setAttribute("aria-invalid", "true");
-      }
-    });
-  } else if (typeof value === "boolean") {
-    control = node(documentRef, "input");
-    control.type = "checkbox";
-    control.id = id;
-    control.name = dotted;
-    control.checked = value;
-    control.addEventListener("change", () => update(path, control.checked));
-  } else if (typeof value === "number") {
-    control = node(documentRef, "input", "ui-input");
-    control.type = "number";
-    control.step = "any";
-    control.id = id;
-    control.name = dotted;
-    control.value = String(value);
-    control.addEventListener("input", () => {
-      if (control.value !== "" && Number.isFinite(Number(control.value))) {
-        update(path, Number(control.value));
-      }
-    });
-  } else {
-    control = textControl(documentRef, id, dotted, value, String(value || "").length > 80);
-    control.addEventListener("input", () => update(path, control.value));
-  }
-  control.dataset.schemaPath = dotted;
-  if (dotted === "identity.uid") {
-    control.disabled = true;
-    control.setAttribute("aria-description", t(COPY.stableIdentity));
-  }
-  return field(documentRef, humanize(path.at(-1)), control);
-}
-
-function createSchemaSections(documentRef, current, update, t) {
-  const host = node(documentRef, "section", "ui-authoring-schema");
-  host.append(node(documentRef, "h3", "ui-heading ui-heading--3", t(COPY.completeFields)));
-  host.append(node(
-    documentRef, "p", "ui-muted",
-    t(COPY.completeFieldsHelp),
-  ));
-  for (const [key, value] of Object.entries(current)) {
-    const section = createSchemaNode(documentRef, [key], value, update, t);
-    if (section) host.append(section);
-  }
-  return host;
-}
-
 export function createPersonEditor(options = {}) {
   const { document: documentRef, services, state } = options;
   let current = clone(state.draft);
   let advanced;
+  let save;
   const form = node(documentRef, "form", "ui-authoring-form");
   form.dataset.personEditor = state.kind;
   const editorHeader = node(documentRef, "header", "ui-authoring-form__header");
@@ -238,64 +155,26 @@ export function createPersonEditor(options = {}) {
         : services.localizer.t(state.mode === "create" ? COPY.createHelp : COPY.editHelp),
     ),
   );
-  form.append(editorHeader);
   const update = (path, value) => {
     current = setPath(current, path, value);
     if (advanced) advanced.value = JSON.stringify(current, null, 2);
     services.authoring.stage(current);
   };
-  const bind = (control, path, read = element => element.value) => {
-    control.addEventListener("input", () => update(path, read(control)));
-    return control;
-  };
-  const identity = current.identity || {};
-  const pronouns = identity.pronouns || {};
-  const visible = current.embodiment?.visible || {};
-  const name = bind(textControl(
-    documentRef, `ui-person-name-${state.id}`, "identity.name", identity.name,
-  ), ["identity", "name"]);
-  name.addEventListener("input", () => { editorTitle.textContent = name.value; });
-  name.required = true;
-  name.maxLength = 240;
-  name.disabled = state.mode === "story-card";
-  const aliases = bind(textControl(
-    documentRef, `ui-person-aliases-${state.id}`, "identity.aliases",
-    (identity.aliases || []).join("\n"), true,
-  ), ["identity", "aliases"], element => element.value.split(/\r?\n/)
-    .map(value => value.trim()).filter(Boolean));
-  const subject = bind(textControl(
-    documentRef, `ui-person-subject-${state.id}`, "identity.pronouns.subject", pronouns.subject,
-  ), ["identity", "pronouns", "subject"]);
-  const object = bind(textControl(
-    documentRef, `ui-person-object-${state.id}`, "identity.pronouns.object", pronouns.object,
-  ), ["identity", "pronouns", "object"]);
-  const possessive = bind(textControl(
-    documentRef, `ui-person-possessive-${state.id}`, "identity.pronouns.possessive", pronouns.possessive,
-  ), ["identity", "pronouns", "possessive"]);
-  const appearance = bind(textControl(
-    documentRef, `ui-person-appearance-${state.id}`, "embodiment.visible.summary",
-    visible.summary, true,
-  ), ["embodiment", "visible", "summary"]);
-  const history = bind(textControl(
-    documentRef, `ui-person-history-${state.id}`, "knowledge.public_history",
-    current.knowledge?.public_history, true,
-  ), ["knowledge", "public_history"]);
-  form.append(
-    field(documentRef, services.localizer.t(COPY.name), name),
-    field(documentRef, services.localizer.t(COPY.aliases), aliases),
-    field(documentRef, services.localizer.t(COPY.subject), subject),
-    field(documentRef, services.localizer.t(COPY.object), object),
-    field(documentRef, services.localizer.t(COPY.possessive), possessive),
-    field(documentRef, services.localizer.t(COPY.appearance), appearance),
-    field(documentRef, services.localizer.t(COPY.history), history),
-  );
-  if (state.kind === "character") {
-    const greeting = bind(textControl(
-      documentRef, `ui-character-greeting-${state.id}`, "opening.first_message",
-      current.opening?.first_message, true,
-    ), ["opening", "first_message"]);
-    form.append(field(documentRef, services.localizer.t(COPY.greeting), greeting));
-  }
+  const sections = createPersonSectionEditor({
+    document: documentRef,
+    current,
+    kind: state.kind,
+    mode: state.mode,
+    owner: state.owner || `${state.kind}:${state.id || "new"}`,
+    t: services.localizer.t,
+    onChange: update,
+    onNameChange(value) {
+      editorTitle.textContent = value;
+      if (save) save.disabled = state.status === "saving" || !value.trim();
+    },
+  });
+  const name = sections.name;
+  form.append(editorHeader, sections.element);
   const tools = node(documentRef, "section", "ui-authoring-tools");
   tools.append(node(documentRef, "h3", "ui-heading ui-heading--3", services.localizer.t(COPY.tools)));
   const brief = textControl(
@@ -349,7 +228,7 @@ export function createPersonEditor(options = {}) {
     if (state.status === "generation-error") previewStatus.dataset.tone = "danger";
     tools.append(previewStatus);
   }
-  form.append(tools);
+  sections.mount(state.kind === "character" ? "opening" : "story-presence", tools);
   if (state.kind === "character" && state.mode === "edit") {
     const personas = availableLibraryRows(services, "persona");
     const greetings = Array.isArray(current.opening?.greetings)
@@ -429,13 +308,9 @@ export function createPersonEditor(options = {}) {
         start,
       );
     }
-    form.append(quick);
+    sections.mount("quick-start", quick);
   }
-  form.append(createSchemaSections(
-    documentRef, current, update, services.localizer.t,
-  ));
-  const disclosure = node(documentRef, "details", "ui-authoring-advanced");
-  disclosure.append(node(documentRef, "summary", "ui-authoring-field__label", services.localizer.t(COPY.advanced)));
+  const disclosure = node(documentRef, "div", "ui-authoring-advanced");
   disclosure.append(node(documentRef, "p", "ui-muted", services.localizer.t(COPY.advancedHelp)));
   advanced = textControl(
     documentRef, `ui-person-advanced-${state.id}`, "advanced_json",
@@ -463,25 +338,25 @@ export function createPersonEditor(options = {}) {
     }
   });
   disclosure.append(advanced, feedback, applyAdvanced);
-  form.append(disclosure);
+  sections.mount("advanced", disclosure);
   const actions = node(documentRef, "div", "ui-authoring-form__actions ui-action-cluster");
   actions.setAttribute("role", "toolbar");
   const discard = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.discard));
   discard.type = "button";
   discard.addEventListener("click", () => services.authoring.discard());
-  const save = node(
+  save = node(
     documentRef, "button", "ui-button ui-button--primary",
     services.localizer.t(state.kind === "character" ? COPY.saveCharacter : COPY.savePersona),
   );
   save.type = "submit";
-  save.disabled = state.status === "saving" || !String(identity.name || "").trim();
+  save.disabled = state.status === "saving" || !String(current.identity?.name || "").trim();
   actions.append(discard, save);
   form.append(actions);
   form.addEventListener("submit", async event => {
     event.preventDefault();
     if (!String(current.identity?.name || "").trim()) {
       name.setAttribute("aria-invalid", "true");
-      name.focus();
+      sections.firstInvalid()?.focus();
       return;
     }
     await services.authoring.save();

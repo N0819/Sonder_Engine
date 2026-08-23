@@ -7,6 +7,76 @@ import json
 from playwright.sync_api import Page, expect
 
 
+def test_shared_person_sections_keep_all_document_fields_reachable(
+    page: Page, ui_base_url: str,
+) -> None:
+    """Flattening the editor again would hide extension fields in one long form."""
+
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const editorModule = await import(
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed`
+          );
+          const original = {
+            identity: { uid: "char-mara", name: "Mara", aliases: [],
+              pronouns: { subject: "she", object: "her", possessive: "her" } },
+            initial_outfit: { wearing: [], state: [], regions: {} },
+            simulation: { tier: "mid", temperature: 0.8, sampler: {},
+              curiosity: 0.5, offscreen_agent: false },
+            embodiment: { visible: { summary: "Rain-dark coat" }, senses: [],
+              scent: "rain", latent: [], extra_parts: [] },
+            psychology: { traits: [], values: [] },
+            social: { voice: { register: "quiet" } },
+            competence: { abilities: [] },
+            knowledge: { public_history: "Courier", private_history: [] },
+            initial_state: { mood: { label: "watchful" } },
+            opening: { first_message: "Evening.", greetings: [] },
+            extension_payload: { note: "must survive" },
+          };
+          let staged = structuredClone(original);
+          const services = {
+            localizer: { t: value => value },
+            store: { getSnapshot: () => ({ library: { personas: [], lorebooks: [], items: [] }, settings: { data: {} } }) },
+            authoring: {
+              stage: value => { staged = structuredClone(value); },
+              discard() {}, save() {}, previewAppearance() {}, previewPsychology() {},
+              previewGreeting() {}, previewGreetingRecovery() {}, retryPreview() {},
+              discardPreview() {}, quickStart() {},
+            },
+          };
+          const host = document.createElement("div");
+          document.body.append(host);
+          host.append(editorModule.createPersonEditor({
+            document, services,
+            state: { kind: "character", id: 7, mode: "edit", status: "saved",
+              owner: "character:7", draft: structuredClone(original) },
+          }));
+          const labels = [...host.querySelectorAll(".ui-person-editor__nav button")]
+            .map(button => button.textContent.trim());
+          const additional = [...host.querySelectorAll(".ui-person-editor__nav button")]
+            .find(button => button.textContent.trim() === "Additional fields");
+          additional?.click();
+          const note = host.querySelector('[data-schema-path="extension_payload.note"]');
+          if (note) {
+            note.value = "kept and edited";
+            note.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          const activePanel = host.querySelector('.ui-person-editor__panel:not([hidden])')?.dataset.editorSection;
+          host.remove();
+          return { labels, staged, activePanel };
+        }""",
+        ui_base_url,
+    )
+
+    assert result["labels"] == [
+        "Basics", "Appearance", "History", "Inner life", "Opening",
+        "Simulation", "Quick start", "Additional fields", "Advanced",
+    ]
+    assert result["activePanel"] == "additional"
+    assert result["staged"]["extension_payload"]["note"] == "kept and edited"
+
+
 def test_character_editor_preserves_unknown_fields_through_advanced_json(
     page: Page, ui_base_url: str,
 ) -> None:
