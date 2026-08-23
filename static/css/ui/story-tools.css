@@ -1,7 +1,8 @@
 @layer ui-story-tools {
-  :root[data-inspector-size="narrow"] .ui-shell { --ui-shell-inspector: 280px; }
-  :root[data-inspector-size="default"] .ui-shell { --ui-shell-inspector: 352px; }
-  :root[data-inspector-size="wide"] .ui-shell { --ui-shell-inspector: min(520px, 36vw); }
+  :root[data-inspector-size="expanded"] .ui-shell { --ui-shell-inspector: 352px; }
+  :root[data-inspector-size="compact"] .ui-shell { --ui-shell-inspector: 232px; }
+  :root[data-inspector-size="rail"] .ui-shell { --ui-shell-inspector: 80px; }
+  :root:has(.ui-shell__inspector .ui-story-tools[data-detail="true"]) .ui-shell { --ui-shell-inspector: 352px; }
 
   .ui-story-tools {
     container-type: inline-size;
@@ -35,6 +36,7 @@
     background: transparent;
     text-align: start;
   }
+  .ui-story-tools__item > .ui-icon:last-child { inline-size: 16px; block-size: 16px; }
 
   .ui-story-tools__item[aria-current="page"] {
     border-color: var(--ui-color-interactive);
@@ -50,12 +52,11 @@
   .ui-story-tools__copy { display: block; min-inline-size: 0; }
   .ui-story-tools__copy strong { display: block; }
   .ui-story-tools__detail { display: block; margin-block-start: 3px; color: var(--ui-color-text-faint); font-size: 12px; line-height: 1.35; }
-  .ui-story-tools__item::after { content: "›"; color: var(--ui-color-text); font-size: 22px; font-weight: 300; }
-
   .ui-story-tools__label { min-inline-size: 0; overflow-wrap: anywhere; }
   .ui-story-tools__panel { min-block-size: 0; overflow: auto; padding-block: var(--ui-space-6); }
   .ui-story-tools__panel[hidden] { display: none; }
   .ui-story-tools__panel > * { margin-block-start: 0; }
+  .ui-story-tools__back { min-block-size: 44px; margin-block-end: var(--ui-space-5); }
   .ui-story-tools__state { padding: var(--ui-space-5); border: 1px solid var(--ui-color-border); background: var(--ui-color-surface-muted); color: var(--ui-color-text-muted); }
   .ui-story-tools__content, .ui-tool-stack { display: grid; gap: var(--ui-space-4); min-inline-size: 0; }
   .ui-tool-card { display: grid; gap: var(--ui-space-3); min-inline-size: 0; padding: var(--ui-space-4); border: 1px solid var(--ui-color-border); border-radius: var(--ui-radius-lg); background: var(--ui-color-surface-muted); }
@@ -86,7 +87,54 @@
     min-block-size: 0;
     padding-block-end: max(var(--ui-space-6), env(safe-area-inset-bottom));
   }
+  .ui-shell__inspector-sheet .ui-story-tools button { min-block-size: 44px; }
   .ui-shell__inspector-sheet .ui-shell__inspector-header .ui-button { min-block-size: 44px; }
+
+  .ui-story-tools[data-detail="true"] .ui-story-tools__list {
+    display: flex;
+    overflow-x: auto;
+    padding-block-end: var(--ui-space-3);
+    border-block-end: 1px solid var(--ui-color-border);
+    scrollbar-width: thin;
+  }
+  .ui-story-tools[data-detail="true"] .ui-story-tools__item {
+    flex: 0 0 44px;
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    inline-size: 44px;
+    min-block-size: 44px;
+    padding: 8px;
+    border-block-end: 0;
+  }
+  .ui-story-tools[data-detail="true"] .ui-story-tools__item
+    > :not(.ui-story-tools__icon:first-of-type) { display: none; }
+
+  :root[data-inspector-size="compact"] .ui-shell__inspector .ui-story-tools__detail,
+  :root[data-inspector-size="compact"] .ui-shell__inspector .ui-story-tools__index,
+  :root[data-inspector-size="compact"] .ui-shell__inspector .ui-story-tools__item > .ui-icon:last-child { display: none; }
+  :root[data-inspector-size="compact"] .ui-shell__inspector .ui-story-tools__item {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-block-size: 52px;
+  }
+  :root[data-inspector-size="rail"] .ui-shell__inspector { padding-inline: 8px; }
+  :root[data-inspector-size="rail"] .ui-shell__inspector-header {
+    align-items: center;
+    flex-direction: column;
+  }
+  :root[data-inspector-size="rail"] .ui-shell__inspector-header > :first-child,
+  :root[data-inspector-size="rail"] .ui-shell__inspector-actions > :not([data-shell-inspector-resize]),
+  :root[data-inspector-size="rail"] .ui-shell__inspector .ui-story-tools__index,
+  :root[data-inspector-size="rail"] .ui-shell__inspector .ui-story-tools__copy,
+  :root[data-inspector-size="rail"] .ui-shell__inspector .ui-story-tools__item > .ui-icon:last-child { display: none; }
+  :root[data-inspector-size="rail"] .ui-shell__inspector .ui-story-tools__item {
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    inline-size: 100%;
+    min-block-size: 48px;
+    padding: 8px;
+  }
 
   @container (max-width: 340px) {
     .ui-story-tools__list { grid-template-columns: minmax(0, 1fr); }

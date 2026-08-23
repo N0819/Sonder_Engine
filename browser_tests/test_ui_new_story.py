@@ -93,6 +93,8 @@ def test_new_story_ports_reference_three_route_choice_without_provider(
     _open(page, ui_base_url)
     _open_wizard(page)
 
+    close = page.get_by_role("button", name="Close New story")
+    assert close.locator("use").get_attribute("href").endswith("#icon-close")
     expect(page.get_by_role("heading", name="Choose how to begin", level=2)).to_be_visible()
     expect(page.get_by_role("button", name="Describe a story")).to_be_visible()
     expect(page.get_by_role("button", name="Use my Library")).to_be_visible()

@@ -112,8 +112,9 @@ def test_story_tool_css_declares_bounded_inspector_and_mobile_sheet_contracts():
     )
 
     assert "container-type" in source
-    assert "280px" in source
-    assert "520px" in source
+    assert '--ui-shell-inspector: 352px' in source
+    assert '--ui-shell-inspector: 232px' in source
+    assert '--ui-shell-inspector: 80px' in source
     assert "44px" in source
     assert "env(safe-area-inset-bottom)" in source
     assert "overflow-x: hidden" in source

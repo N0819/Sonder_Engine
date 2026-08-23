@@ -142,8 +142,8 @@
   }
   .ui-play__weather[data-weather="clear"] { display: none; }
   @keyframes ui-weather-drift { to { translate: 5rem 7rem; } }
-  :root[data-motion="off"] .ui-play__weather { display: none; }
-  :root[data-motion="reduced"] .ui-play__weather { animation: none; opacity: .2; }
+  :root[data-effects="off"] .ui-play__weather { display: none; }
+  :root[data-effects="reduced"] .ui-play__weather { animation: none; opacity: .2; }
   :root[data-page-visibility="hidden"] .ui-play__weather { animation-play-state: paused; }
 
   .ui-play__story-header {
@@ -170,7 +170,7 @@
   .ui-play__story-state { order: -1; color: var(--ui-color-text-faint); font: 10px var(--ui-font-mono); }
   .ui-play__story-state::before { content: ""; display: inline-block; inline-size: 5px; block-size: 5px; margin-inline-end: 6px; background: var(--ui-color-success); box-shadow: 0 0 7px color-mix(in srgb, var(--ui-color-success) 44%, transparent); }
   .ui-play__story-actions > details > summary { inline-size: 40px; font-size: 0; }
-  .ui-play__story-actions > details > summary::after { content: "⋯"; font-size: 16px; }
+  .ui-play__story-actions > details > summary .ui-icon { inline-size: 18px; block-size: 18px; }
   .ui-play__story-choice { display: grid; }
   .ui-play__menu-body .ui-play__story-choice { margin-block-end: var(--ui-space-2); }
   .ui-play__menu-body .ui-play__story-select { inline-size: 100%; max-inline-size: none; }
@@ -329,8 +329,16 @@
   .ui-play__technical { max-block-size: 9rem; overflow: auto; white-space: pre-wrap; }
   .ui-play__new-turn { position: absolute; inset-inline: 50%; inset-block-end: 10rem; min-inline-size: 44px; min-block-size: 44px; white-space: nowrap; translate: -50% 0; z-index: var(--ui-z-sticky); box-shadow: var(--ui-shadow-raised); }
 
-  .ui-play__state { min-block-size: 20rem; }
+  .ui-play__state {
+    inline-size: min(42rem, calc(100% - 2 * var(--ui-space-8)));
+    min-block-size: 20rem;
+    margin: clamp(7rem, 18vh, 12rem) auto 0;
+    border: 1px solid var(--ui-color-border);
+    border-inline-start: 2px solid var(--ui-color-interactive);
+    background: color-mix(in srgb, var(--ui-color-surface-solid) 58%, transparent);
+  }
   .ui-play__empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--ui-space-3); margin-block-start: var(--ui-space-5); }
+  :root:is([data-layout-state="compact"], [data-layout-state="medium"]) .ui-play__empty-actions .ui-button { min-block-size: 44px; }
 
   .ui-play-dialog { display: none; }
   .ui-play-dialog[open] { display: grid; gap: var(--ui-space-6); }

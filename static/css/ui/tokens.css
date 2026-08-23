@@ -122,6 +122,18 @@
     --ui-motion-slow: 0ms;
   }
 
+  :root[data-effects="reduced"] {
+    --ui-motion-fast: 80ms;
+    --ui-motion-default: 100ms;
+    --ui-motion-slow: 120ms;
+  }
+
+  :root[data-effects="off"] {
+    --ui-motion-fast: 0ms;
+    --ui-motion-default: 0ms;
+    --ui-motion-slow: 0ms;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     :root:not([data-motion-preference="full"]) {
       --ui-motion-fast: 0ms;

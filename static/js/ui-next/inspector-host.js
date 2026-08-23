@@ -3,7 +3,12 @@ export const MODULE_RELEASE = "alpha98-ui1";
 import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui1";
 
 const LAYER_ID = "inspector:context";
-const SIZES = Object.freeze(["narrow", "default", "wide"]);
+const SIZES = Object.freeze(["expanded", "compact", "rail"]);
+const LEGACY_SIZES = Object.freeze({
+  wide: "expanded",
+  default: "expanded",
+  narrow: "compact",
+});
 
 // UI_CATALOG_START: responsive inspector labels and states.
 const INSPECTOR_COPY = Object.freeze({
@@ -30,7 +35,9 @@ function safePanes(localState) {
   return {
     open: inspector.open !== false,
     pinned: inspector.pinned !== false,
-    size: SIZES.includes(inspector.size) ? inspector.size : "default",
+    size: SIZES.includes(inspector.size)
+      ? inspector.size
+      : (LEGACY_SIZES[inspector.size] || "expanded"),
   };
 }
 

@@ -224,6 +224,10 @@ density, but it may not hide a capability such as conditions/vitals or make a
 control unreachable. Reading content, condition surfaces, utilities, and the
 composer must never overlap continuously at supported sizes.
 
+Compact layouts give every actionable control a minimum 44 px target. Desktop
+density may reduce non-target spacing and keep native fields at a 36 px minimum,
+but it never shrinks the compact/touch target contract.
+
 Loading, unavailable, confirmed empty, error, and stale states are distinct.
 Recoverable errors stay in context; toasts acknowledge completed actions and
 do not carry persistent work, failures, or choices.
@@ -261,9 +265,15 @@ do not carry persistent work, failures, or choices.
 - `story-tools-registry.js` is the complete current-story tool list.
   `story-tools-runtime.js` captures story, frame, tool, mount, and request
   sequence; a late response cannot repaint another owner.
-- Wide layouts mount the selected tool in the right inspector. Medium and
-  compact layouts mount the same module in a focus-contained staged sheet.
-  Tool changes preserve Play draft, scroll, run, and media state.
+- Wide layouts mount Story Tools in the right inspector with exactly three
+  semantic list modes: Expanded shows icon, title, and description; Compact
+  shows icon and title; Rail shows the icon with its accessible name and
+  tooltip intact. Legacy `wide`, `default`, and `narrow` values migrate to
+  Expanded, Expanded, and Compact. A selected tool uses Expanded presentation,
+  retains a compact icon switcher, and exposes `All tools` to restore the saved
+  list mode. Medium and compact layouts mount the same module in a
+  focus-contained staged sheet. Tool changes preserve Play draft, scroll, run,
+  and media state.
 - Cast, Conditions, Frames, and Multiplayer project current guarded routes.
   They do not create parallel character, condition, frame, invite, or guest
   authority in browser state.
@@ -304,13 +314,47 @@ do not carry persistent work, failures, or choices.
 - Undo is in-memory, owner-bound, exact-operation, and expires after twelve
   seconds. It is offered only for sound inverses; no receipt or story data is
   persisted in browser-local presentation state.
-- Wide/expansive layouts use category/scope navigation, ledger, and contextual
-  detail. Medium/compact layouts stage the same detail in the Back-owned
-  inspector sheet. Direct selected-item links stage that sheet once; Back
-  returns to the retained ledger rather than reopening it.
+- Wide/expansive layouts assign each responsibility once: the left pane owns
+  category and scope navigation, the center owns the single searchable/sortable
+  material ledger and create/import actions, and the right pane owns selected
+  item detail. Decorative duplicate totals, recent lists, and scope summaries
+  are not parallel authorities. Medium/compact layouts retain the central
+  ledger and stage detail in the Back-owned inspector sheet. Direct
+  selected-item links stage that sheet once; Back returns to the retained ledger
+  rather than reopening it.
+- Activating a Story row selects it and reveals Library detail; it never enters
+  Play. Only the explicit `Open in Play` action commits that navigation. Until
+  then the Library route, scope, filters, selection, and scroll remain owned by
+  Library.
 - Only favorites, recents, per-route scroll, and the last safe route enter the
   versioned local presentation envelope, each with a hard bound. They never
   make an archived, missing, or server-rejected item appear available.
+
+### Settings and appearance ownership
+
+- The shell gives the destination track `minmax(0, 1fr)`. Settings gives its
+  detail track the same bound and makes `[data-settings-content]` the vertical
+  scroll owner. The document body is never relied on to reveal clipped settings
+  in desktop, short-height, or compact layouts.
+- Story text size changes prose only. The Experience page includes a local prose
+  preview so the setting remains discoverable without an open Story; nearby
+  labels and controls retain their interface size.
+- Interface density has two values: Comfortable and Compact. Compact reduces
+  non-target Settings spacing while preserving all controls and target minimums.
+  The retired Roomy density migrates to Comfortable; the separate accessibility
+  preference `Roomy controls` remains the authority for enlarged controls.
+- Visual effects has three values: Full, Reduced, and Off. `appearance.effects`
+  is the persisted envelope field and `data-effects` is the CSS contract. The
+  older `appearance.motion` value is migration input only. Reduced shortens or
+  removes decorative movement; Off zeroes motion tokens and removes decorative
+  weather. OS reduced-motion and the granular accessibility preference may
+  further reduce motion, never increase it.
+- AI Connections presents `Memory search model (embeddings)` as essential model
+  configuration beside the Default summary, not as an expert role assignment.
+  Its copy explains meaning-based recall and the vector-model requirement.
+  Changing it names the required stored-vector rebuild and links to the existing
+  Memory search maintenance operation. Unrelated specialist roles, sampling,
+  and backup models remain under Advanced model assignments.
 
 ### Alpha 9.8 lived-location ownership
 

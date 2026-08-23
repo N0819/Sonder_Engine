@@ -3,6 +3,7 @@ export const MODULE_RELEASE = "alpha98-ui1";
 // UI_CATALOG_START: Story Tool platform states shown before family modules land.
 const COPY = Object.freeze({
   list: "Story tools",
+  allTools: "All tools",
   chooseStory: "Choose a story to use Story Tools.",
   platformReady: "This current-story tool is ready for its dedicated controls.",
 });
@@ -25,7 +26,7 @@ function button(documentRef, label) {
 const TOOL_ICONS = Object.freeze({
   cast: "cast", world: "world", style: "style", dialogue: "dialogue",
   attire: "clothing", backdrops: "image", ambience: "ambience",
-  conditions: "clothing", frames: "story", multiplayer: "cast",
+  conditions: "conditions", frames: "frames", multiplayer: "multiplayer",
 });
 
 function icon(documentRef, name) {
@@ -58,6 +59,7 @@ export function mountStoryTools(options = {}) {
   for (const tool of registry.STORY_TOOLS) {
     const control = button(documentRef, t(tool.label));
     control.dataset.storyTool = tool.id;
+    control.title = t(tool.label);
     const index = element(documentRef, "span", "ui-story-tools__index", String(tool.index).padStart(2, "0"));
     index.setAttribute("aria-hidden", "true");
     const copy = element(documentRef, "span", "ui-story-tools__copy");
@@ -65,7 +67,12 @@ export function mountStoryTools(options = {}) {
       element(documentRef, "strong", "ui-story-tools__label", t(tool.label)),
       element(documentRef, "small", "ui-story-tools__detail", t(tool.detail)),
     );
-    control.append(index, icon(documentRef, TOOL_ICONS[tool.id] || "tools"), copy);
+    control.append(
+      index,
+      icon(documentRef, TOOL_ICONS[tool.id] || "tools"),
+      copy,
+      icon(documentRef, "chevron-right"),
+    );
     control.addEventListener("click", () => services.storyTools.open(tool.id, {
       preserveLayers: true,
     }));
@@ -76,17 +83,34 @@ export function mountStoryTools(options = {}) {
   const render = state => {
     mountedTool?.teardown?.();
     mountedTool = null;
+    if (state.story?.status !== "ready") {
+      list.hidden = true;
+      root.dataset.detail = "false";
+      panel.hidden = false;
+      panel.replaceChildren(element(documentRef, "p", "ui-story-tools__state", t(COPY.chooseStory)));
+      return;
+    }
     const selectedId = state.inspector?.toolId || null;
-    const active = registry.resolveStoryTool(selectedId);
+    const active = selectedId ? registry.resolveStoryTool(selectedId) : null;
     for (const [id, control] of controls) {
-      if (selectedId && id === active.id) control.setAttribute("aria-current", "page");
+      if (active && id === active.id) control.setAttribute("aria-current", "page");
       else control.removeAttribute("aria-current");
     }
+    list.hidden = false;
+    root.dataset.detail = String(Boolean(selectedId));
     panel.hidden = !selectedId;
     if (!selectedId) {
       panel.replaceChildren();
       return;
     }
+    const back = element(documentRef, "button", "ui-button ui-button--quiet ui-story-tools__back");
+    back.type = "button";
+    back.append(icon(documentRef, "chevron-left"), element(documentRef, "span", "", t(COPY.allTools)));
+    back.setAttribute("aria-label", t(COPY.allTools));
+    back.addEventListener("click", () => {
+      services.storyTools.close();
+      queueMicrotask(() => controls.get(active.id)?.focus());
+    });
     const heading = element(documentRef, "h3", "ui-heading ui-heading--3", t(active.label));
     heading.tabIndex = -1;
     const detail = element(documentRef, "p", "ui-muted", t(active.detail));
@@ -97,11 +121,11 @@ export function mountStoryTools(options = {}) {
       state.story?.status === "ready" ? t(COPY.platformReady) : t(COPY.chooseStory),
     );
     status.dataset.state = state.inspector?.status || "empty";
-    panel.replaceChildren(heading, detail, status);
+    panel.replaceChildren(back, heading, detail, status);
     if (options.interactive !== false && state.story?.status === "ready" && tools) {
       const toolTarget = element(documentRef, "div", "ui-story-tools__content");
       toolTarget.dataset.storyToolContent = active.id;
-      panel.replaceChildren(heading, detail, toolTarget);
+      panel.replaceChildren(back, heading, detail, toolTarget);
       mountedTool = tools.mountStoryTool(active.id, {
         document: documentRef,
         services,

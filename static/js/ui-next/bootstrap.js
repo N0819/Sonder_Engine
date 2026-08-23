@@ -138,8 +138,14 @@ function extensionBootstrapProjection(bootstrap) {
 function applyLocalAppearance(root, appearance) {
   const safe = appearance && typeof appearance === "object" ? appearance : {};
   if (safe.theme) root.dataset.theme = String(safe.theme);
-  if (safe.density) root.dataset.density = String(safe.density);
-  if (safe.motion) root.dataset.motion = String(safe.motion);
+  root.dataset.density = safe.density === "compact" ? "compact" : "comfortable";
+  const legacyEffects = safe.motion === "off" || safe.motion === "reduced"
+    ? safe.motion : "full";
+  const effects = ["full", "reduced", "off"].includes(String(safe.effects))
+    ? String(safe.effects) : legacyEffects;
+  root.dataset.effects = effects;
+  const systemReduced = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  root.dataset.motionPreference = systemReduced ? "reduced" : effects;
 }
 
 function replaceServerSlice(store, slice, value) {

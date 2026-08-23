@@ -143,3 +143,47 @@ def test_mobile_targets_are_at_least_44_css_pixels(page: Page, ui_base_url: str)
     )
     undersized = [target for target in targets if target["height"] < 43.5 or target["width"] < 43.5]
     assert undersized == []
+
+
+def test_supplied_replacement_icons_keep_optical_padding_inside_their_layout_box(
+    page: Page, ui_base_url: str
+):
+    _open_lab(page, ui_base_url)
+    icon_names = [
+        "settings", "link", "unlink", "style", "multiplayer", "pin", "resize",
+        "theme", "extension", "retry", "offline", "sort", "duplicate",
+    ]
+    measurements = page.evaluate(
+        """iconNames => new Promise(resolve => {
+          const host = document.createElement('div');
+          host.style.cssText = 'position:fixed;inset:0 auto auto 0;display:flex;background:black';
+          for (const name of iconNames) {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.classList.add('ui-icon');
+            const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+            use.setAttribute('href', `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+            svg.append(use);
+            host.append(svg);
+          }
+          document.body.append(host);
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            const rows = [...host.querySelectorAll('svg')].map((svg, index) => {
+              const outer = svg.getBoundingClientRect();
+              const content = svg.querySelector('use').getBoundingClientRect();
+              return {
+                name: iconNames[index],
+                inset: Math.min(
+                  content.left - outer.left,
+                  content.top - outer.top,
+                  outer.right - content.right,
+                  outer.bottom - content.bottom,
+                ),
+              };
+            });
+            host.remove();
+            resolve(rows);
+          }));
+        })""",
+        icon_names,
+    )
+    assert [row for row in measurements if row["inset"] < 0.75] == []

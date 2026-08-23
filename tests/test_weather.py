@@ -796,7 +796,7 @@ def test_snow_does_not_render_as_a_grid():
            / "static/css/ui/play.css").read_text(encoding="utf-8")
     assert '.ui-play__weather[data-weather="snow"]' in css
     assert "radial-gradient" in css
-    assert ':root[data-motion="off"] .ui-play__weather' in css
+    assert ':root[data-effects="off"] .ui-play__weather' in css
 
 
 def test_snow_marks_hold_one_density_across_layers():

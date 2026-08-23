@@ -35,6 +35,7 @@
     --ui-shell-inspector: 20rem;
     display: grid;
     grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr) var(--ui-shell-inspector);
+    grid-template-rows: minmax(0, 1fr);
     min-block-size: 100dvh;
     max-block-size: 100dvh;
     padding-block-start: env(safe-area-inset-top);
@@ -230,9 +231,9 @@
 
   [data-layout-state="expansive"] .ui-shell { --ui-shell-rail: 15rem; --ui-shell-inspector: 23rem; }
   [data-layout-state="wide"] .ui-shell { --ui-shell-rail: 13rem; --ui-shell-inspector: 19rem; }
-  [data-inspector-size="narrow"] .ui-shell { --ui-shell-inspector: 17rem; }
-  [data-inspector-size="default"] .ui-shell { --ui-shell-inspector: 20rem; }
-  [data-inspector-size="wide"] .ui-shell { --ui-shell-inspector: 24rem; }
+  [data-inspector-size="expanded"] .ui-shell { --ui-shell-inspector: 22rem; }
+  [data-inspector-size="compact"] .ui-shell { --ui-shell-inspector: 14.5rem; }
+  [data-inspector-size="rail"] .ui-shell { --ui-shell-inspector: 5rem; }
   :root[data-inspector-open="false"]:is([data-layout-state="wide"], [data-layout-state="expansive"]) .ui-shell { grid-template-columns: var(--ui-shell-rail) minmax(0, 1fr); }
   :root[data-inspector-open="false"] .ui-shell__inspector { display: none; }
 

@@ -100,7 +100,7 @@ def test_play_atmosphere_is_a_non_reflowing_effects_aware_stage():
         assert contract in view
     assert "position: absolute" in css
     assert ".ui-play__atmosphere" in css
-    assert ':root[data-motion="off"]' in css
+    assert ':root[data-effects="off"]' in css
     assert "prefers-reduced-motion: reduce" in css
     assert "pointer-events: none" in css
 

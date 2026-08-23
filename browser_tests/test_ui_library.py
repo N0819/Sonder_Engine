@@ -75,12 +75,8 @@ def _open(page: Page, ui_base_url: str, *, width: int = 1440) -> None:
     response = page.goto(f"{ui_base_url}/static/ui-next.html#/library")
     assert response is not None and response.ok
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
-    expect(page.get_by_role("heading", name="All Library", level=2)).to_be_visible()
-    overview = page.get_by_role("heading", name="Your story material", level=2)
-    if width > 700:
-        expect(overview).to_be_visible()
-    else:
-        expect(overview).to_be_hidden()
+    expect(page.get_by_role("heading", name="Library", level=2)).to_be_visible()
+    expect(page.get_by_role("heading", name="Stories", level=2)).to_be_visible()
     expect(page.locator("[data-library-ledger] [data-library-item]")).to_have_count(1)
     if width > 700:
         geometry = page.locator(".ui-shell").evaluate(
@@ -101,6 +97,50 @@ def test_tablet_library_uses_reference_rail_and_side_pane(
     page: Page, ui_base_url: str,
 ) -> None:
     _open(page, ui_base_url, width=768)
+
+
+def test_library_has_one_canonical_material_ledger_and_action_cluster(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+
+    expect(page.get_by_role("heading", name="Stories", level=2)).to_be_visible()
+    expect(page.locator(".ui-library__filters [data-library-ledger]")).to_have_count(0)
+    expect(page.locator(".ui-library__content [data-library-ledger]")).to_have_count(1)
+    expect(page.locator(".ui-library-home__summary")).to_have_count(0)
+    expect(page.locator(".ui-library-home__context")).to_have_count(0)
+    expect(page.get_by_role("button", name="New story", exact=True)).to_have_count(1)
+    expect(page.get_by_role("button", name="Import story", exact=True)).to_have_count(1)
+    expect(page.get_by_text("Lorebooks", exact=True)).to_have_count(0)
+    assert page.locator(".ui-library__more use").first.get_attribute("href").endswith(
+        "#icon-more"
+    )
+
+
+def test_compact_library_navigation_controls_meet_touch_minimum(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url, width=390)
+    sizes = page.locator(
+        ".ui-library__side-head :is(input, select), .ui-library__tabs button, "
+        ".ui-library__more"
+    ).evaluate_all("nodes => nodes.map(node => node.getBoundingClientRect().height)")
+    assert sizes and min(sizes) >= 44, sizes
+
+
+def test_story_selection_requires_explicit_open_action(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+
+    page.locator('[data-library-item="story:1"]').click()
+    expect(page).to_have_url(re.compile(r"#/library(?:/stories)?\?.*item=story%3A1"))
+    detail = page.get_by_role("complementary", name="Library details")
+    expect(detail.get_by_role("button", name="Open in Play", exact=True)).to_be_visible()
+    assert "#/play" not in page.url
+
+    detail.get_by_role("button", name="Open in Play", exact=True).click()
+    expect(page).to_have_url(re.compile(r"#/play\?chat=1$"))
 
 
 def test_library_runtime_rejects_stale_results_and_bounds_identity_state(

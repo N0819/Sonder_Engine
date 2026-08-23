@@ -9,7 +9,8 @@ function contextFrom(state, registry) {
   const story = state.story || {};
   const chatId = numericId(story.data?.chat?.id);
   const frameId = story.frameId ?? null;
-  const toolId = registry.resolveStoryTool(state.route?.query?.tool).id;
+  const requestedTool = state.route?.query?.tool;
+  const toolId = requestedTool ? registry.resolveStoryTool(requestedTool).id : null;
   return {
     chatId,
     frameId,
@@ -104,6 +105,19 @@ export function createStoryToolsRuntime(options = {}) {
     return true;
   };
 
+  const close = () => {
+    if (!current.chatId) return false;
+    const query = { chat: String(current.chatId) };
+    if (current.frameId !== null && current.frameId !== undefined) {
+      query.frame = String(current.frameId);
+    }
+    router.navigate({ destination: "play", segments: [], query }, {
+      replace: true,
+      preserveLayers: true,
+    });
+    return true;
+  };
+
   const request = async (toolValue, key, method, path, body) => {
     const toolId = toolRegistry.resolveStoryTool(toolValue).id;
     if (!current.chatId || toolId !== current.toolId || !path) return null;
@@ -193,6 +207,7 @@ export function createStoryToolsRuntime(options = {}) {
 
   return Object.freeze({
     open,
+    close,
     openFrame,
     request,
     cancelRequest,

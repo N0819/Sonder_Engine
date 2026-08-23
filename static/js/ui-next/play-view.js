@@ -1,5 +1,7 @@
 export const MODULE_RELEASE = "alpha98-ui1";
 
+import { openNewStory } from "./new-story.js?release=alpha98-ui1";
+
 import { renderPipelineInspector } from "./pipeline-inspector.js?release=alpha98-ui1";
 
 // UI_CATALOG_START: player-facing Play workflow copy.
@@ -7,6 +9,7 @@ const COPY = Object.freeze({
   chooseStory: "Choose a story to begin",
   chooseDetail: "Open one of your recent stories, or browse the Library.",
   openLibrary: "Open Library",
+  newStory: "New story",
   loading: "Opening your story…",
   loadingDetail: "Your saved story is being read from the engine.",
   unavailable: "This story could not be opened",
@@ -75,6 +78,17 @@ function element(documentRef, tag, className = "", text = "") {
   if (className) node.className = className;
   if (text) node.textContent = text;
   return node;
+}
+
+function icon(documentRef, name) {
+  const svg = documentRef.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "ui-icon");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const use = documentRef.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `/static/assets/icons/sonder-icons.svg#icon-${name}`);
+  svg.append(use);
+  return svg;
 }
 
 function button(documentRef, label, className = "ui-button ui-button--quiet") {
@@ -215,9 +229,11 @@ function renderNoStory(documentRef, services) {
     open.addEventListener("click", () => services.play.openStory(chat.id));
     actions.append(open);
   }
-  const library = button(documentRef, COPY.openLibrary, "ui-button ui-button--primary");
+  const create = button(documentRef, COPY.newStory, "ui-button ui-button--primary");
+  create.addEventListener("click", () => openNewStory({ document: documentRef, services }));
+  const library = button(documentRef, COPY.openLibrary, "ui-button ui-button--quiet");
   library.addEventListener("click", () => services.router.navigate({ destination: "library" }));
-  actions.append(library);
+  actions.append(create, library);
   state.append(actions);
   return { element: state, teardown() {} };
 }
@@ -465,6 +481,7 @@ function createStoryView(documentRef, services, proseModule, initialState) {
     documentRef, await services.play.exportArchive(),
   ));
   const storyMore = actionMenu(documentRef, COPY.storyActions);
+  storyMore.menu.querySelector("summary").append(icon(documentRef, "more"));
   storyMore.body.append(storyChoice(documentRef, services, story.chat.id), rename, archive);
   storyActions.append(
     element(documentRef, "span", "ui-play__story-state", "Ready"),

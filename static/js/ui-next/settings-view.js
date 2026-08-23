@@ -421,8 +421,8 @@ function experience(documentRef, services) {
       "Interface density",
       "Changes spacing while keeping every control available.",
       "Interface density",
-      [["compact", "Compact"], ["comfortable", "Comfortable"], ["roomy", "Roomy"]],
-      documentRef.documentElement.dataset.density || appearanceState.density || "comfortable",
+      [["comfortable", "Comfortable"], ["compact", "Compact"]],
+      documentRef.documentElement.dataset.density === "compact" ? "compact" : "comfortable",
       value => {
         documentRef.documentElement.dataset.density = value;
         services.localState.setRecord("appearance", { ...services.localState.snapshot().appearance, density: value });
@@ -440,6 +440,14 @@ function experience(documentRef, services) {
       },
     ),
   );
+  const prosePreview = el(
+    documentRef,
+    "p",
+    "ui-prose ui-settings__prose-preview",
+    "The next line of your story will read at this size.",
+  );
+  prosePreview.dataset.proseSizePreview = "true";
+  readingGroup.append(prosePreview);
 
   const soundGroup = el(documentRef, "section", "ui-settings__group");
   soundGroup.id = "settings-control-sound";
@@ -1662,7 +1670,9 @@ function advanced(documentRef, services, state, route) {
 function aiConnections(documentRef, services, state) {
   const data = state.settings?.data || {};
   const providers = Array.isArray(data.providers) ? data.providers : [];
-  const defaultModel = data.agent_models?.default || {};
+  let currentAgentModels = structuredClone(data.agent_models || {});
+  const defaultModel = currentAgentModels.default || {};
+  const memoryModel = currentAgentModels.embeddings || {};
   const section = el(documentRef, "section", "ui-settings__section ui-settings__section--ai");
   const head = el(documentRef, "header", "ui-settings__section-head");
   head.append(
@@ -1845,7 +1855,7 @@ function aiConnections(documentRef, services, state) {
     if (!createdProvider || !modelSelect.value) return;
     saveDefault.disabled = true;
     const agentModels = {
-      ...(data.agent_models || {}),
+      ...currentAgentModels,
       default: { provider: createdProvider.id, model: modelSelect.value },
     };
     try {
@@ -1853,6 +1863,7 @@ function aiConnections(documentRef, services, state) {
         channel: "settings-agent-models-save",
         owner: "settings-agent-models",
       });
+      currentAgentModels = agentModels;
       services.store.dispatch({
         type: "server/replace",
         slice: "settings",
@@ -1965,6 +1976,87 @@ function aiConnections(documentRef, services, state) {
     el(documentRef, "code", "ui-settings__theme-readout", defaultModel.model || "Not selected"),
   );
   defaults.append(defaultRow);
+
+  const memorySearch = el(documentRef, "section", "ui-settings__group ui-settings__memory-model");
+  const memoryCopy = el(documentRef, "div", "ui-settings__field-copy");
+  memoryCopy.append(
+    el(documentRef, "strong", "", "Memory search model (embeddings)"),
+    el(documentRef, "small", "", "Finds related memories by meaning. Choose a compatible vector or embedding model."),
+  );
+  const memoryFields = el(documentRef, "div", "ui-settings__connection-fields");
+  const memoryProviderField = el(documentRef, "label", "ui-field");
+  memoryProviderField.append(el(documentRef, "span", "ui-field__label", "Provider"));
+  const memoryProvider = documentRef.createElement("select");
+  memoryProvider.setAttribute("aria-label", "Memory search provider");
+  const noMemoryProvider = el(documentRef, "option", "", "Not configured");
+  noMemoryProvider.value = "";
+  memoryProvider.append(noMemoryProvider);
+  providers.forEach(provider => {
+    const option = el(documentRef, "option", "", provider.name || provider.kind || `Provider ${provider.id}`);
+    option.value = String(provider.id);
+    option.selected = String(memoryModel.provider ?? "") === String(provider.id);
+    memoryProvider.append(option);
+  });
+  memoryProviderField.append(memoryProvider);
+  const memoryModelField = el(documentRef, "label", "ui-field");
+  memoryModelField.append(el(documentRef, "span", "ui-field__label", "Vector model"));
+  const memoryModelInput = documentRef.createElement("input");
+  memoryModelInput.type = "text";
+  memoryModelInput.value = memoryModel.model || "";
+  memoryModelInput.placeholder = "Vector model id";
+  memoryModelInput.setAttribute("aria-label", "Memory search model");
+  memoryModelField.append(memoryModelInput);
+  memoryFields.append(memoryProviderField, memoryModelField);
+  const memoryChangeHelp = el(
+    documentRef,
+    "p",
+    "ui-muted ui-settings__memory-model-help",
+    "Changing this model requires rebuilding stored memory search vectors.",
+  );
+  const memoryStatus = el(documentRef, "p", "ui-settings__connection-status");
+  memoryStatus.setAttribute("role", "status");
+  const memoryFooter = el(documentRef, "div", "ui-settings__connection-footer");
+  const reviewMemory = el(documentRef, "button", "ui-button ui-button--quiet", "Review memory search");
+  reviewMemory.type = "button";
+  reviewMemory.addEventListener("click", () => services.router.navigate({
+    destination: "settings", segments: ["maintenance"], query: {},
+  }));
+  const saveMemory = el(documentRef, "button", "ui-button ui-button--primary", "Save memory search model");
+  saveMemory.type = "button";
+  saveMemory.addEventListener("click", async () => {
+    saveMemory.disabled = true;
+    memoryStatus.textContent = "Saving memory search model…";
+    const nextModels = structuredClone(currentAgentModels);
+    const providerId = memoryProvider.value;
+    const model = memoryModelInput.value.trim();
+    if (providerId && model) {
+      const provider = providers.find(item => String(item.id) === providerId);
+      nextModels.embeddings = {
+        provider: provider?.id ?? providerId,
+        model,
+      };
+    } else {
+      delete nextModels.embeddings;
+    }
+    try {
+      const result = await services.apiClient.put("/api/agent_models", nextModels, {
+        channel: "settings-memory-search-model-save",
+        owner: "settings-agent-models",
+      });
+      if (!saveMemory.isConnected) return;
+      currentAgentModels = nextModels;
+      memoryStatus.textContent = result.data?.embeddings_role_changed
+        ? "Stored memory search vectors must be rebuilt for the new model."
+        : "Memory search model saved.";
+    } catch (error) {
+      if (!saveMemory.isConnected) return;
+      memoryStatus.textContent = error?.userMessage || error?.message || "Sonder could not save the memory search model.";
+    } finally {
+      if (saveMemory.isConnected) saveMemory.disabled = false;
+    }
+  });
+  memoryFooter.append(reviewMemory, saveMemory);
+  memorySearch.append(memoryCopy, memoryFields, memoryChangeHelp, memoryStatus, memoryFooter);
 
   const limitBounds = data.max_output_tokens_bounds || { min: 1024, max: 128000, default: 20000 };
   const limitGroup = el(documentRef, "section", "ui-settings__group");
@@ -2095,11 +2187,12 @@ function aiConnections(documentRef, services, state) {
     documentRef,
     "p",
     "ui-muted",
-    "Optional role assignments can use a different model. Blank roles follow Default; embeddings must name a vector model.",
+    "Optional specialist roles can use a different model. Blank roles follow Default.",
   );
   const assignmentRows = el(documentRef, "div", "ui-settings__assignment-rows");
   const roleNames = Array.isArray(data.roles) ? data.roles : Object.keys(data.agent_models || {});
-  const orderedRoles = [...new Set(["default", "embeddings", ...roleNames])].filter(role => role === "default" || role === "embeddings" || roleNames.includes(role));
+  const orderedRoles = [...new Set(["default", ...roleNames])]
+    .filter(role => role !== "embeddings" && (role === "default" || roleNames.includes(role)));
   const roleControls = new Map();
   const effortLevels = Array.isArray(data.reasoning_effort_levels)
     ? data.reasoning_effort_levels : ["off", "minimal", "low", "medium", "high"];
@@ -2107,7 +2200,7 @@ function aiConnections(documentRef, services, state) {
   const defaultSamplers = data.default_samplers || {};
   orderedRoles.forEach(role => {
     const label = humanizeSettingKey(role);
-    const existing = data.agent_models?.[role] || {};
+    const existing = currentAgentModels[role] || {};
     const parentRole = data.role_fallbacks?.[role] || "default";
     const inheritedLabel = `Follow ${humanizeSettingKey(parentRole)}`;
     const row = el(documentRef, "fieldset", "ui-settings__assignment-row");
@@ -2212,15 +2305,13 @@ function aiConnections(documentRef, services, state) {
   const assignmentFooter = el(documentRef, "div", "ui-settings__connection-footer");
   const assignmentStatus = el(documentRef, "p", "ui-settings__connection-status");
   assignmentStatus.setAttribute("role", "status");
-  const embeddingNotice = el(documentRef, "p", "ui-settings__warning-inline");
-  embeddingNotice.hidden = true;
   const saveAssignments = el(documentRef, "button", "ui-button ui-button--primary", "Save model assignments");
   saveAssignments.type = "button";
   assignmentFooter.append(saveAssignments);
   saveAssignments.addEventListener("click", async () => {
     saveAssignments.disabled = true;
     assignmentStatus.textContent = "Saving model assignments…";
-    const nextModels = structuredClone(data.agent_models || {});
+    const nextModels = structuredClone(currentAgentModels);
     const efforts = {};
     for (const [role, controls] of roleControls.entries()) {
       const providerId = controls.providerSelect.value;
@@ -2252,7 +2343,7 @@ function aiConnections(documentRef, services, state) {
       if (controls.effort.value) efforts[role] = controls.effort.value;
     }
     try {
-      const modelsResult = await services.apiClient.put("/api/agent_models", nextModels, {
+      await services.apiClient.put("/api/agent_models", nextModels, {
         channel: "settings-agent-models-save",
         owner: "settings-agent-models",
       });
@@ -2261,11 +2352,8 @@ function aiConnections(documentRef, services, state) {
         owner: "settings-agent-models",
       });
       if (!saveAssignments.isConnected) return;
+      currentAgentModels = nextModels;
       assignmentStatus.textContent = "Model assignments saved.";
-      if (modelsResult.data?.embeddings_role_changed) {
-        embeddingNotice.textContent = "Memory vectors need rebuilding for the new embeddings model.";
-        embeddingNotice.hidden = false;
-      }
     } catch (error) {
       if (!saveAssignments.isConnected) return;
       assignmentStatus.textContent = error?.userMessage || error?.message || "Sonder could not save model assignments.";
@@ -2273,7 +2361,7 @@ function aiConnections(documentRef, services, state) {
       if (saveAssignments.isConnected) saveAssignments.disabled = false;
     }
   });
-  assignments.append(assignmentsSummary, assignmentsIntro, assignmentRows, assignmentStatus, embeddingNotice, assignmentFooter);
+  assignments.append(assignmentsSummary, assignmentsIntro, assignmentRows, assignmentStatus, assignmentFooter);
 
   const backdropConfig = data.image_model || {};
   const backdrops = el(documentRef, "section", "ui-settings__group");
@@ -2477,7 +2565,7 @@ function aiConnections(documentRef, services, state) {
   });
   ambience.append(ambienceTitle, ambienceFields, ambienceToggles, ambienceStatus, ambienceFooter);
 
-  section.append(head, connections, defaults, limitGroup);
+  section.append(head, connections, defaults, memorySearch, limitGroup);
   if (openRouterGroup) section.append(openRouterGroup);
   section.append(assignments, backdrops, ambience);
   return section;

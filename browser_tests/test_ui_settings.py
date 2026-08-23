@@ -138,6 +138,75 @@ def test_experience_connects_reading_sound_effects_and_interface_language(
     assert writes == [{"language": "ja"}]
 
 
+def test_experience_preferences_have_visible_effects_and_only_supported_density_modes(
+    page: Page, ui_base_url: str
+) -> None:
+    _open_settings(page, ui_base_url)
+
+    density = page.get_by_role("combobox", name="Interface density")
+    expect(density.locator("option")).to_have_count(2)
+    row = density.locator("xpath=ancestor::*[contains(@class, 'ui-settings__field-head')]")
+    comfortable = row.evaluate("node => node.getBoundingClientRect().height")
+    density.select_option("compact")
+    compact = row.evaluate("node => node.getBoundingClientRect().height")
+    assert compact < comfortable
+
+    preview = page.locator("[data-prose-size-preview]")
+    expect(preview).to_be_visible()
+    prose_size = page.get_by_role("combobox", name="Story text size")
+    prose_size.select_option("15")
+    small = preview.evaluate("node => parseFloat(getComputedStyle(node).fontSize)")
+    prose_size.select_option("21")
+    large = preview.evaluate("node => parseFloat(getComputedStyle(node).fontSize)")
+    assert (small, large) == (15, 21)
+
+    effects = page.get_by_role("combobox", name="Visual effects")
+    effects.select_option("full")
+    full = page.locator("html").evaluate(
+        "node => getComputedStyle(node).getPropertyValue('--ui-motion-default').trim()"
+    )
+    effects.select_option("reduced")
+    reduced = page.locator("html").evaluate(
+        "node => getComputedStyle(node).getPropertyValue('--ui-motion-default').trim()"
+    )
+    effects.select_option("off")
+    off = page.locator("html").evaluate(
+        "node => getComputedStyle(node).getPropertyValue('--ui-motion-default').trim()"
+    )
+    assert full != reduced
+    assert off == "0ms"
+
+
+def test_settings_detail_is_the_scroll_owner_on_desktop_and_short_laptop(
+    page: Page, ui_base_url: str
+) -> None:
+    for width, height in ((1440, 900), (1024, 600)):
+        page.goto("about:blank")
+        _open_settings(page, ui_base_url, width=width, height=height)
+        content = page.locator("[data-settings-content]")
+        geometry = content.evaluate(
+            "node => ({ client: node.clientHeight, scroll: node.scrollHeight, top: node.scrollTop })"
+        )
+        assert geometry["scroll"] > geometry["client"], (width, height, geometry)
+        bottom = content.evaluate(
+            "node => { node.scrollTop = node.scrollHeight; return node.scrollTop; }"
+        )
+        assert bottom >= geometry["scroll"] - geometry["client"] - 1
+        expect(page.get_by_role("button", name="Reset Experience")).to_be_visible()
+
+
+def test_settings_native_controls_meet_desktop_and_touch_target_minimums(
+    page: Page, ui_base_url: str
+) -> None:
+    for width, height, minimum in ((1440, 900, 36), (390, 844, 44), (844, 390, 44)):
+        page.goto("about:blank")
+        _open_settings(page, ui_base_url, width=width, height=height)
+        sizes = page.locator(
+            "[data-settings-content] select, .ui-settings__header input[type='search']"
+        ).evaluate_all("nodes => nodes.map(node => node.getBoundingClientRect().height)")
+        assert sizes and min(sizes) >= minimum, (width, height, sizes)
+
+
 def test_mobile_settings_uses_reference_horizontal_category_staging(
     page: Page, ui_base_url: str
 ) -> None:
@@ -630,14 +699,14 @@ def test_ai_connections_saves_advanced_role_models_without_flattening_configs(
         writes["models"] = route.request.post_data_json
         route.fulfill(
             content_type="application/json",
-            body=json.dumps({"ok": True, "embeddings_role_changed": True}),
+            body=json.dumps({"ok": True, "embeddings_role_changed": False}),
         )
 
     def effort_route(route) -> None:
         writes["efforts"] = route.request.post_data_json
         route.fulfill(
             content_type="application/json",
-            body=json.dumps({"ok": True, "reasoning_effort": {"embeddings": "low"}}),
+            body=json.dumps({"ok": True, "reasoning_effort": {}}),
         )
 
     page.route("**/api/agent_models", models_route)
@@ -646,18 +715,67 @@ def test_ai_connections_saves_advanced_role_models_without_flattening_configs(
 
     page.get_by_text("Advanced model assignments", exact=True).click()
     page.get_by_role("combobox", name="Provider for Director").select_option("")
-    page.get_by_role("combobox", name="Provider for Embeddings").select_option("8")
-    page.get_by_role("textbox", name="Model for Embeddings").fill("perplexity/pplx-embed-v1-0.6b")
-    page.get_by_role("combobox", name="Reasoning effort for Embeddings").select_option("low")
     page.get_by_role("button", name="Save model assignments").click()
 
     expect(page.get_by_text("Model assignments saved.", exact=True)).to_be_visible()
-    expect(page.get_by_text("Memory vectors need rebuilding for the new embeddings model.", exact=True)).to_be_visible()
     assert writes["models"] == {
         "default": {"provider": 7, "model": "claude-sonnet-4-5", "temperature": 0.7},
-        "embeddings": {"provider": 8, "model": "perplexity/pplx-embed-v1-0.6b"},
+        "embeddings": {"provider": 8, "model": "openai/text-embedding-3-small"},
     }
-    assert writes["efforts"] == {"efforts": {"embeddings": "low"}}
+    assert writes["efforts"] == {"efforts": {}}
+
+
+def test_ai_connections_exposes_memory_search_model_and_rebuild_route(
+    page: Page, ui_base_url: str
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "providers": [
+            {"id": 7, "name": "Anthropic", "kind": "anthropic", "has_key": True},
+            {"id": 8, "name": "OpenRouter", "kind": "openrouter", "has_key": True},
+        ],
+        "provider_presets": {},
+        "roles": ["default", "director", "embeddings"],
+        "agent_models": {
+            "default": {"provider": 7, "model": "claude-sonnet-4-5"},
+            "director": {"provider": 7, "model": "claude-opus-4-1"},
+            "embeddings": {"provider": 8, "model": "openai/text-embedding-3-small"},
+        },
+    }
+    writes: list[dict] = []
+
+    def models(route) -> None:
+        writes.append(route.request.post_data_json)
+        route.fulfill(
+            content_type="application/json",
+            body=json.dumps({"ok": True, "embeddings_role_changed": True}),
+        )
+
+    page.route("**/api/agent_models", models)
+    _open_settings(page, ui_base_url, category="ai-connections", bootstrap=bootstrap)
+
+    expect(page.get_by_text("Memory search model (embeddings)", exact=True)).to_be_visible()
+    expect(page.get_by_text(
+        "Finds related memories by meaning. Choose a compatible vector or embedding model.",
+        exact=True,
+    )).to_be_visible()
+    page.get_by_role("combobox", name="Memory search provider").select_option("8")
+    page.get_by_role("textbox", name="Memory search model").fill(
+        "perplexity/pplx-embed-v1-0.6b"
+    )
+    page.get_by_role("button", name="Save memory search model").click()
+
+    expect(page.get_by_text(
+        "Stored memory search vectors must be rebuilt for the new model.", exact=True
+    )).to_be_visible()
+    assert writes == [{
+        "default": {"provider": 7, "model": "claude-sonnet-4-5"},
+        "director": {"provider": 7, "model": "claude-opus-4-1"},
+        "embeddings": {"provider": 8, "model": "perplexity/pplx-embed-v1-0.6b"},
+    }]
+    page.get_by_role("button", name="Review memory search").click()
+    expect(page).to_have_url(re.compile(r"#/settings/maintenance$"))
+    expect(page.get_by_role("heading", name="Maintenance", level=2)).to_be_visible()
 
 
 def test_ai_connections_edits_role_samplers_and_ordered_backup_models(
