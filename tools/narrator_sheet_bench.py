@@ -255,9 +255,11 @@ def past_narration(con, chat_id, turn_idx, frame_id, current_input, depth=12):
     return "\n\n".join(parts), prev[-4:]
 
 
-def collect(con, want, chats=None):
+def collect(con, want, chats=None, ledger_only=True):
     """Real beats worth scoring: awake, non-opening, with a delivered view and
-    at least one NPC line that actually reached the player."""
+    at least one NPC line that actually reached the player -- and, unless
+    `ledger_only=False`, only beats whose stored observations were written by
+    the projection that runs today (see the era gate below)."""
     from agents.common import _quote_body
     from agents.narration import _narrator_player_declared
 
@@ -280,9 +282,24 @@ def collect(con, want, chats=None):
             break
         if per_chat.get(t["chat_id"], 0) >= cap:
             continue
-        view = ((_step(con, t["id"], "perception_outcome").get("views") or {})
-                .get("player") or "")
+        outcome = _step(con, t["id"], "perception_outcome")
+        view = ((outcome.get("views") or {}).get("player") or "")
         if len(view) < 120:
+            continue
+        # THE ERA GATE, and the marker is the LEDGER rather than a turn id.
+        # `composer_ledger` is written by the live span projection, so its
+        # presence is exactly "these observations came from the code that
+        # runs today". Beats without it carry the output of a sentence
+        # chunker deleted in `dbe9ffa` -- it split the model-written view on
+        # full stops with no idea what a quote was, so a replayed pre-ledger
+        # beat feeds the narrator fractured utterances the live engine
+        # cannot produce. Measured with the partition applied: 398 of 1,418
+        # delivered lines split on pre-ledger beats, 0 of 1,026 on ledger
+        # ones. Absolute rates from a mixed selection are measuring a
+        # retired function; an A/B still holds, because both arms see the
+        # same beats.
+        ledger_era = isinstance(outcome.get("composer_ledger"), dict)
+        if ledger_only and not ledger_era:
             continue
         di = _step(con, t["id"], "director_interpret")
         player = player_name(con, t["chat_id"])
@@ -320,6 +337,7 @@ def collect(con, want, chats=None):
         per_chat[t["chat_id"]] = per_chat.get(t["chat_id"], 0) + 1
         picked.append({
             "turn_id": t["id"], "chat_id": t["chat_id"], "idx": t["idx"],
+            "ledger_era": ledger_era,
             "view": view, "events": kept, "past": block, "prev": prev,
             "past_no_tail": block_no_tail,
             "player": player, "person": person,
@@ -622,7 +640,21 @@ def _channel_tags(payload, beat=None):
     return out
 
 
+#: `beat_only` LIVED HERE and was deleted before it ever ran. It tried to
+#: replay the standing/event re-filing by classifying each stored entry from
+#: the beat record, because rows written before `observations_from_render`
+#: carried a `standing` flag cannot be filed any other way. The dry run
+#: killed it: it dropped "the unfamiliar person steps forward and removes the
+#: wrist restraints" as scenery -- an NPC act the engine keeps via
+#: `order_key` -- so the arm would have measured its own classifier and
+#: scored the change worse than it is. Span order gives no rescue: standing
+#: is a contiguous block but leads or trails depending on whether a sudden
+#: event chain won the discourse rule (composer.py:1738-1742). The re-filing
+#: is settled by `tests/test_composer_poses.py::TestOneEntryIsOneDelivery`
+#: and by a live run once stored rows carry the flag; it is not settleable by
+#: replaying rows that predate it.
 PAYLOAD_ARMS = {
+    "legacy_sheet": ("legacy_sheet", None),
     "no_player_name": ("full", _no_player_name),
     "lean_values": ("lean", _value_prohibitions),
     "drop_view": ("full", _drop_view),
@@ -682,6 +714,12 @@ def score(raw, beat):
         "act_coverage": _act_coverage(prose, beat),
         "direction_agreement": _direction_agreement(prose, beat),
         "tag_leaks": _tag_leaks(prose),
+        # CATALOGUE PROXY. One paragraph per numbered entry is what
+        # transcription looks like; composing pulls the ratio away from 1.
+        # Not a verdict -- a short beat legitimately runs close to it -- so
+        # it is only ever read as a difference between arms.
+        "entries": len([l for l in str(beat.get("_events_sent") or "").split("\n")
+                        if l.strip()]),
         "chars": len(prose),
         "paragraphs": prose.count("<p>"),
         "prose": prose,
@@ -860,6 +898,7 @@ def main():
             built = payload_for(b, b.get("world"))
             if transform:
                 built = transform(built, b)
+            b["_events_sent"] = built.get("current_events") or ""
             user = json.dumps(built, ensure_ascii=False)
             t0 = time.monotonic()
             try:
@@ -904,6 +943,10 @@ def main():
             else:
                 print(f"      egocentric direction: no beat claimed one "
                       f"-- spatial_frame unexercised in this selection")
+            ents = sum(r.get("entries") or 0 for r in rows)
+            paras = sum(r["paragraphs"] for r in rows)
+            print(f"      entries sent {ents}, paragraphs written {paras} "
+                  f"(ratio {paras / max(1, ents):.2f} — 1.00 is transcription)")
             leaks = sum(len(r["tag_leaks"]) for r in rows)
             if leaks:
                 print(f"      ENGINE TAGS COPIED ONTO THE PAGE: {leaks}")

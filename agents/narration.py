@@ -1023,6 +1023,24 @@ def _render_observed_events(observations, player_acts=()):
     for obs in observations or []:
         if not isinstance(obs, dict):
             continue
+        # STANDING STATE IS NOT AN EVENT, and numbering it here was the
+        # engine contradicting its own payload comment: `present_scene` is
+        # declared "standing state, not chronology" three fields below, and
+        # then every standing span arrived here too, numbered, under a sheet
+        # rule saying each numbered entry is a delivery the narrator must
+        # render. A beat's list was mostly wallpaper carrying an obligation,
+        # and a model that renders one paragraph per numbered entry is
+        # obeying that, not misreading it.
+        #
+        # `standing` is decided at projection, where the percept is still in
+        # hand (`composer.observations_from_render`), and it is FALSE for an
+        # appearance the engine flagged `force` -- a garment gone, a mask
+        # down. A change of clothing is an event and keeps its number. A row
+        # stored before the field existed reads back False, which is
+        # obligation: replay can never make something skippable that was not
+        # already.
+        if obs.get("standing"):
+            continue
         text = str((obs.get("observed") or {}).get("text") or "").strip()
         if text:
             lines.append(_event_line(
