@@ -26,7 +26,7 @@
 ### Task 1: Lock the person-authoring route and workspace contract
 
 **Files:**
-- Modify: `tests/test_ui_character_persona_editor_contracts.py`
+- Modify: `browser_tests/test_ui_library_authoring.py`
 - Modify: `browser_tests/test_ui_character_persona_editor.py`
 - Modify: `static/js/ui-next/library-authoring-view.js`
 - Modify: `static/js/ui-next/destinations.js`
@@ -36,21 +36,21 @@
 - Consumes: `state.route`, `services.library`, `mountLibraryAuthoring(options)`.
 - Produces: `isPersonAuthoringRoute(route) -> boolean` and `createLibraryAuthoringWorkspace(options) -> { element, teardown }`.
 
-- [ ] **Step 1: Add failing source-contract coverage**
+- [ ] **Step 1: Add failing destination-workspace behavior coverage**
 
-Add assertions proving the destination routes only Character/Persona
-`edit|create|import|story-card` modes to the workspace and that the inspector
-recognizes the same predicate:
+Add a real-entry Playwright test that stubs the public Library and authoring
+responses, opens a Character edit route, and proves the dedicated workspace
+owns the destination while the inspector is suppressed without changing its
+stored preference:
 
 ```python
-def test_people_authoring_owns_the_library_destination_workspace():
-    view = (RUNTIME / "library-authoring-view.js").read_text(encoding="utf-8")
-    destinations = (RUNTIME / "destinations.js").read_text(encoding="utf-8")
-    inspector = (RUNTIME / "inspector-host.js").read_text(encoding="utf-8")
-    assert "export function isPersonAuthoringRoute" in view
-    assert "createLibraryAuthoringWorkspace" in destinations
-    assert "isPersonAuthoringRoute(route)" in inspector
-    assert "dataset.libraryAuthoring" in inspector
+def test_people_authoring_owns_the_library_destination_workspace(page, ui_base_url):
+    # Route complete public API fixtures, then load the real UI entry.
+    page.goto(f"{ui_base_url}/static/ui-next.html#/library/characters?item=character%3A7&mode=edit")
+    expect(page.locator("[data-person-workspace]")).to_be_visible()
+    expect(page.locator(".ui-library")).to_have_count(0)
+    expect(page.get_by_role("complementary", name="Library details")).to_be_hidden()
+    assert page.locator("html").get_attribute("data-library-authoring") == "true"
 ```
 
 - [ ] **Step 2: Run the source contract and confirm RED**
@@ -58,11 +58,11 @@ def test_people_authoring_owns_the_library_destination_workspace():
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_character_persona_editor_contracts.py::test_people_authoring_owns_the_library_destination_workspace -q
+.\.venv\Scripts\python.exe -m pytest browser_tests/test_ui_library_authoring.py -k "people_authoring_owns" -q
 ```
 
-Expected: failure because the exported route predicate and workspace factory do
-not exist.
+Expected: failure because the ordinary Library and inspector still own the
+viewport.
 
 - [ ] **Step 3: Add the route predicate and workspace factory**
 
@@ -101,7 +101,7 @@ persisted `panes` object unchanged.
 Run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_character_persona_editor_contracts.py tests/test_ui_library_authoring_contracts.py -q
+.\.venv\Scripts\python.exe -m pytest browser_tests/test_ui_library_authoring.py -k "people_authoring_owns" -q
 ```
 
 Expected: all tests pass.
@@ -109,7 +109,7 @@ Expected: all tests pass.
 - [ ] **Step 5: Commit the workspace ownership seam**
 
 ```powershell
-git add tests/test_ui_character_persona_editor_contracts.py static/js/ui-next/library-authoring-view.js static/js/ui-next/destinations.js static/js/ui-next/inspector-host.js
+git add browser_tests/test_ui_library_authoring.py static/js/ui-next/library-authoring-view.js static/js/ui-next/destinations.js static/js/ui-next/inspector-host.js
 git commit -m "feat(ui): add person authoring workspace"
 ```
 
@@ -119,26 +119,27 @@ git commit -m "feat(ui): add person authoring workspace"
 - Create: `static/js/ui-next/library-editors/person-sections.js`
 - Modify: `static/js/ui-next/library-editors/character-persona.js`
 - Modify: `static/js/ui-next/bootstrap.js`
-- Modify: `tests/test_ui_character_persona_editor_contracts.py`
 - Modify: `browser_tests/test_ui_character_persona_editor.py`
 
 **Interfaces:**
 - Consumes: a complete cloned document, `state.kind`, `state.mode`, translator, and `onChange(path, value)`.
 - Produces: `createPersonSectionEditor(options) -> { navigation, panels, firstInvalid(), activate(id), activeId }`.
 
-- [ ] **Step 1: Add failing section and losslessness contracts**
+- [ ] **Step 1: Add failing section and losslessness behavior**
 
-Add source assertions for the shared section module and a browser test that
-mounts a Character with an unknown top-level field:
+Add a browser component test that imports the real editor modules, mounts a
+Character with an unknown top-level field, switches sections through accessible
+buttons, edits the unknown value, and observes the complete staged document:
 
 ```python
-def test_shared_person_sections_keep_all_document_fields_reachable():
-    sections = (RUNTIME / "library-editors" / "person-sections.js").read_text(encoding="utf-8")
-    editor = (RUNTIME / "library-editors" / "character-persona.js").read_text(encoding="utf-8")
-    for label in ("Basics", "Appearance", "History", "Inner life", "Opening", "Simulation", "Story presence", "Additional fields", "Advanced"):
-        assert label in sections or label in editor
-    assert "createPersonSectionEditor" in sections
-    assert "unknownTopLevel" in sections
+def test_shared_person_sections_keep_all_document_fields_reachable(page, ui_base_url):
+    result = page.evaluate("""async base => {
+      // Import and mount the real editor with complete service/store doubles.
+      // Activate Additional fields and edit extension_payload.note.
+      return { labels, staged };
+    }""", ui_base_url)
+    assert result["labels"] == ["Basics", "Appearance", "History", "Inner life", "Opening", "Simulation", "Additional fields", "Advanced"]
+    assert result["staged"]["extension_payload"]["note"] == "kept and edited"
 ```
 
 The browser assertion must verify an `extension_payload` object appears under
@@ -147,10 +148,10 @@ Additional fields and remains in the document passed to `services.authoring.stag
 - [ ] **Step 2: Run the focused test and confirm RED**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_character_persona_editor_contracts.py::test_shared_person_sections_keep_all_document_fields_reachable -q
+.\.venv\Scripts\python.exe -m pytest browser_tests/test_ui_character_persona_editor.py -k "shared_person_sections" -q
 ```
 
-Expected: missing `person-sections.js`.
+Expected: no section navigation or Additional fields control is present.
 
 - [ ] **Step 3: Implement the section registry and controls**
 
@@ -213,7 +214,6 @@ The literal release is rotated in Task 6.
 - [ ] **Step 5: Run source and browser component tests**
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests/test_ui_character_persona_editor_contracts.py -q
 .\.venv\Scripts\python.exe -m pytest browser_tests/test_ui_character_persona_editor.py -q
 ```
 
@@ -223,7 +223,7 @@ generation preview, Quick Start, and story-card behavior.
 - [ ] **Step 6: Commit the shared editor framework**
 
 ```powershell
-git add static/js/ui-next/library-editors/person-sections.js static/js/ui-next/library-editors/character-persona.js static/js/ui-next/bootstrap.js tests/test_ui_character_persona_editor_contracts.py browser_tests/test_ui_character_persona_editor.py
+git add static/js/ui-next/library-editors/person-sections.js static/js/ui-next/library-editors/character-persona.js static/js/ui-next/bootstrap.js browser_tests/test_ui_character_persona_editor.py
 git commit -m "feat(ui): section person card editing"
 ```
 
