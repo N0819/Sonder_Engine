@@ -362,6 +362,21 @@ export function createLibraryAuthoringRuntime(options = {}) {
     return true;
   };
 
+  const returnToLibrary = () => {
+    const route = router.current();
+    if (route?.destination !== "library") return false;
+    const query = { ...(route.query || {}) };
+    delete query.mode;
+    delete query.session;
+    if (["create", "import"].includes(active?.mode)) delete query.item;
+    router.navigate({
+      destination: "library",
+      segments: Array.isArray(route.segments) ? route.segments.slice() : [],
+      query,
+    }, { replace: true });
+    return true;
+  };
+
   const importStory = async data => {
     if (active?.kind !== "story" || active?.mode !== "import") return false;
     importDraft = clone(data);
@@ -683,6 +698,7 @@ export function createLibraryAuthoringRuntime(options = {}) {
     stage,
     save,
     discard,
+    returnToLibrary,
     importStory,
     importPerson,
     retryImport: () => active?.kind === "story"

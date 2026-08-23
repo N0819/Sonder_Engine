@@ -16,8 +16,8 @@ const COPY = Object.freeze({
   unavailable: "Editor unavailable",
   waiting: "Choose an item before editing.",
   saving: "Saving…",
-  saved: "Saved",
-  dirty: "Unsaved draft",
+  saved: "Saved to Library",
+  dirty: "Draft saved on this device",
   conflict: "This story changed elsewhere. Your draft is still here.",
   failure: "Could not save. Your draft is still here.",
   previewing: "Generating preview…",
@@ -52,6 +52,11 @@ function statusCopy(state, t) {
   if (state.status === "previewing") return t(COPY.previewing);
   if (state.status === "generation-error") return state.error || t(COPY.previewFailure);
   return t(COPY.dirty);
+}
+
+function returnToLibrary(services, focusIdentity) {
+  services.library.focusOnReturn(focusIdentity);
+  return services.authoring.returnToLibrary();
 }
 
 export function isPersonAuthoringRoute(route) {
@@ -100,9 +105,8 @@ export function mountLibraryAuthoring(options = {}) {
         services.localizer.t(COPY.backToLibrary),
       );
       back.type = "button";
-      back.addEventListener("click", () => services.library.navigate({
-        type: "story", query: {},
-      }));
+      back.dataset.focusIdentity = "destination:library";
+      back.addEventListener("click", () => returnToLibrary(services, back.dataset.focusIdentity));
       wrapper.append(back, createStoryImporter({
         document: documentRef, services, state,
       }));
@@ -116,7 +120,8 @@ export function mountLibraryAuthoring(options = {}) {
       const wrapper = node(documentRef, "section", "ui-authoring");
       const back = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.backToLibrary));
       back.type = "button";
-      back.addEventListener("click", () => services.library.navigate({ type: state.kind, query: {} }));
+      back.dataset.focusIdentity = "destination:library";
+      back.addEventListener("click", () => returnToLibrary(services, back.dataset.focusIdentity));
       wrapper.append(back, createPersonImporter({ document: documentRef, services, state }));
       target.dataset.authoringOwner = state.owner;
       target.replaceChildren(wrapper);
@@ -130,9 +135,8 @@ export function mountLibraryAuthoring(options = {}) {
         const wrapper = node(documentRef, "section", "ui-authoring");
         const back = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.backToLibrary));
         back.type = "button";
-        back.addEventListener("click", () => services.library.navigate({
-          type: state.kind, query: { item: `${state.kind}:${state.id}` },
-        }));
+        back.dataset.focusIdentity = `library-item:${state.kind}:${state.id}`;
+        back.addEventListener("click", () => returnToLibrary(services, back.dataset.focusIdentity));
         const status = node(documentRef, "p", "ui-authoring__status", statusCopy(state, services.localizer.t));
         status.setAttribute("role", "status");
         status.dataset.saveStatus = state.status;
@@ -158,13 +162,9 @@ export function mountLibraryAuthoring(options = {}) {
     const wrapper = node(documentRef, "section", "ui-authoring");
     const back = node(documentRef, "button", "ui-button ui-button--quiet", services.localizer.t(COPY.back));
     back.type = "button";
-    back.addEventListener("click", () => {
-      const route = services.library.currentRoute();
-      services.library.navigate({
-        type: state.kind,
-        query: { ...(route?.query || {}), mode: "" },
-      });
-    });
+    back.dataset.focusIdentity = state.id
+      ? `library-item:${state.kind}:${state.id}` : "destination:library";
+    back.addEventListener("click", () => returnToLibrary(services, back.dataset.focusIdentity));
     const status = node(documentRef, "p", "ui-authoring__status", statusCopy(state, services.localizer.t));
     status.setAttribute("role", "status");
     status.dataset.saveStatus = state.status;

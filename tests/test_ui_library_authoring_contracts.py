@@ -39,6 +39,9 @@ def test_authoring_runtime_owns_revisions_drafts_and_stale_responses():
         "/api/turns/${turnId}/branch",
         'channel: "library-authoring-import"',
         'channel: "library-authoring-branch"',
+        "returnToLibrary",
+        "delete query.mode",
+        "delete query.session",
     ):
         assert required in source
     for forbidden in (
@@ -46,6 +49,20 @@ def test_authoring_runtime_owns_revisions_drafts_and_stale_responses():
         "setInterval(", "confirm(", "prompt(", ".innerHTML", "clickLegacy",
     ):
         assert forbidden not in source
+
+
+def test_library_return_state_has_stable_scroll_and_focus_ownership():
+    runtime = (RUNTIME / "library-runtime.js").read_text(encoding="utf-8")
+    view = (RUNTIME / "library-view.js").read_text(encoding="utf-8")
+    authoring_view = (RUNTIME / "library-authoring-view.js").read_text(
+        encoding="utf-8"
+    )
+    assert "libraryScrollIdentity" in runtime
+    assert "focusOnReturn" in runtime
+    assert "returnFocusIdentity" in runtime
+    assert "services.library.saveScroll(routeIdentity, scrollRegion.scrollTop)" in view
+    assert "control.dataset.focusIdentity = `library-item:${item.key}`" in view
+    assert "returnToLibrary(services" in authoring_view
 
 
 def test_story_editor_uses_semantic_controls_and_never_parses_story_markup():

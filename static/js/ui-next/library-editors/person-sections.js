@@ -287,6 +287,11 @@ export function createPersonSectionEditor(options = {}) {
       const invalid = panel.querySelector('[aria-invalid="true"], :invalid');
       if (!invalid) continue;
       activate(sectionId);
+      let disclosure = invalid.closest("details");
+      while (disclosure && panel.contains(disclosure)) {
+        disclosure.open = true;
+        disclosure = disclosure.parentElement?.closest("details");
+      }
       return invalid;
     }
     return null;

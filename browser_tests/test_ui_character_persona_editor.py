@@ -77,6 +77,63 @@ def test_shared_person_sections_keep_all_document_fields_reachable(
     assert result["staged"]["extension_payload"]["note"] == "kept and edited"
 
 
+def test_save_reveals_and_focuses_invalid_field_in_another_section(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const editorModule = await import(
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed`
+          );
+          let saves = 0;
+          const host = document.createElement("div");
+          document.body.append(host);
+          host.append(editorModule.createPersonEditor({
+            document,
+            services: {
+              localizer: { t: value => value },
+              store: { getSnapshot: () => ({ library: {}, settings: { data: {} } }) },
+              authoring: {
+                stage() {}, save() { saves += 1; }, discard() {},
+                previewAppearance() {}, previewPsychology() {}, previewGreeting() {},
+                previewGreetingRecovery() {},
+              },
+            },
+            state: {
+              kind: "character", id: 91, mode: "edit", status: "saved",
+              owner: "character:91",
+              draft: {
+                identity: { uid: "char-91", name: "Mara", aliases: [], pronouns: {} },
+                initial_outfit: { wearing: ["coat"] },
+                embodiment: { visible: {} }, knowledge: {}, psychology: {}, social: {},
+                initial_state: {}, opening: { greetings: [] }, simulation: {},
+              },
+            },
+          }));
+          const wearing = host.querySelector('[data-schema-path="initial_outfit.wearing"]');
+          wearing.value = "not valid JSON";
+          wearing.dispatchEvent(new Event("change", { bubbles: true }));
+          [...host.querySelectorAll('[role="tab"]')]
+            .find(tab => tab.textContent.trim() === "Inner life").click();
+          host.querySelector("form").requestSubmit();
+          const result = {
+            saves,
+            active: host.querySelector('.ui-person-editor__panel:not([hidden])')?.dataset.editorSection,
+            focusedPath: document.activeElement?.dataset?.schemaPath,
+          };
+          host.remove();
+          return result;
+        }""",
+        ui_base_url,
+    )
+    assert result == {
+        "saves": 0,
+        "active": "appearance",
+        "focusedPath": "initial_outfit.wearing",
+    }
+
+
 def test_character_editor_preserves_unknown_fields_through_advanced_json(
     page: Page, ui_base_url: str,
 ) -> None:
