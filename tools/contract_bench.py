@@ -90,7 +90,7 @@ PAYLOADS = {
         "variant_seed": "bench",
     },
     "narrator": {
-        "player_view": "You cross to the window. The latch does not give. "
+        "present_scene": "You cross to the window. The latch does not give. "
                        "You hear Vessel say: \"Leave it.\"",
         "scene": SCENE,
         "variant_seed": "bench",

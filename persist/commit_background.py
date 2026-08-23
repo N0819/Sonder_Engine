@@ -1591,14 +1591,28 @@ def promotable_background_presences(chat_id):
             len(record.get("dialogue_turns") or []) >= limits["dialogue"]
             or len(record.get("mention_turns") or []) >= limits["mention"]
         )
-        # Promotion mints a MIND, and a thing cannot hold one -- however much
-        # history its record accrued before the speech gate existed (chat
-        # 75's utility sash spoke on three turns; chat 80's PA-class fixtures
-        # are one dialogue line away from the same flag). "undecided" stays
-        # promotable on purpose: a "dalek war machine" the player keeps
-        # engaging deserves the offer, and the auto-promotion sweep already
-        # demands deliberate addressed_turns on top of this flag.
-        if promotable and _presence_speech_verdict(sc, name, record) == "thing":
+        # Promotion mints a MIND -- a sheet, memories, a psychology -- and a
+        # thing cannot hold one, however much history its record accrued
+        # before the speech gate existed (chat 75's utility sash spoke on
+        # three turns; chat 80's PA-class fixtures are one dialogue line away
+        # from the same flag).
+        #
+        # THIS BAR IS HIGHER THAN THE SPEECH GATE'S, and deliberately so.
+        # Letting a presence say one line is a smaller commitment than minting
+        # a person out of it, so "undecided" is enough for the first and not
+        # for the second. It used to demote only an outright "thing", which
+        # left every presence the kind string cannot classify sitting in the
+        # promotion list: chat 84 offered the Scranton Reality Anchor -- kind
+        # "device", a bolted suppression fixture -- because "device" is off
+        # the deny-list ON PURPOSE (so a sentient robot stays trackable) and
+        # a fixture is not portable, so nothing else caught it either.
+        #
+        # An undecided presence is not refused, only not OFFERED: a "dalek war
+        # machine" the player keeps engaging is still promotable by hand, and
+        # that is the right place for a judgement no deterministic signal can
+        # make. `nature` -- blurb_mint's frozen answer -- promotes it back to
+        # "person" the moment anything actually asks the question.
+        if promotable and _presence_speech_verdict(sc, name, record) != "person":
             promotable = False
         out.append({
             "name": name,

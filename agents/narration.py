@@ -41,6 +41,24 @@ from world.weather import weather_for_room, weather_words
 def _ling(name):
     return linguistic("agents.narration", name)
 
+
+def _event_line(key, **values):
+    """One `current_events` line, in the STORY's language.
+
+    These markers were English f-string literals in this module until
+    2026-08-23, which made the highest-leverage instruction in the whole
+    payload -- the per-line act/speech marker, measured to take placeholder
+    dialogue from 14 to 0 where the same rule stated in the sheet's prose
+    changed nothing -- reach a Japanese story in English, inside an
+    otherwise Japanese sheet. A marker is only worth its measured power
+    while the model can read it.
+
+    They live in `linguistics.json` beside the warning prefixes rather than
+    in the compositor card, because nothing here is reader-exposed: the
+    compositor renders the PAGE, and this renders a prompt.
+    """
+    return str(_ling("_EVENT_LINES")[key]).format(**values)
+
 # English compatibility view for tests/tooling; live checks use `_ling(...)`.
 _ENFORCEABLE_PREFIXES = english_linguistic(
     "agents.narration", "_ENFORCEABLE_PREFIXES")
@@ -621,14 +639,31 @@ def _ordered_beat_events(ctx, p_name, view, recognized, cast_info,
         ev = {"n": len(events) + 1, "actor": display, "kind": kind}
         if kind == "speech":
             if name == p_name:
-                # The narrator needs the causal fact that the player spoke,
-                # not a second copy of words the player has just supplied.
-                # With the quote in both player_declared and event_order, the
-                # model paraphrased a requested fee ("meals and a bed") as an
-                # offer by the player to provide those things.  Redaction is
-                # structural: no prompt has to preserve transaction direction
-                # in text it never receives.
+                # A player line carries its WORDS as well as the causal fact
+                # that it was spoken, and `declared` marks whose it is.
+                #
+                # It used to carry `declared` alone. That redaction was aimed
+                # at a real defect -- with the quote in both `player_declared`
+                # and here, the model paraphrased a requested fee ("meals and
+                # a bed") as an offer BY the player to provide those things --
+                # but it cost more than it bought, because a line with no
+                # content is a line the narrator cannot place. Measured in
+                # chat 84, turns 2581 and 2582: the PA's answer rendered
+                # BEFORE the question it answers, twice, and both player lines
+                # came out as the vague placeholder the sheet explicitly
+                # forbids ("your mutter slips out", "another mutter follows").
+                #
+                # Restoring the words costs no information: `player_speech_lines`
+                # already puts these exact strings in the payload every turn as
+                # the tail of `past_narration`, which is the page the player
+                # has just read. What was missing was never the text, only
+                # its POSITION among the beat's other events. Reproduction is
+                # still forbidden -- by the sheet, and deterministically by
+                # `_strip_player_echo` -- and nothing requires an event_order
+                # quote to reach the page: DIALOGUE FIDELITY is scored off the
+                # VIEW, which never carries a mind's own speech back to it.
                 ev["declared"] = True
+                ev["quote"] = text
             else:
                 ev["quote"] = text
         else:
@@ -825,6 +860,224 @@ def _visible_portal_states(scene, room_id, visible_rooms):
     return out
 
 
+#: How many prior turns of the shared text reach `past_narration`. Override
+#: with the `narrator_history_turns` setting; this is what a chat gets with
+#: no setting written.
+#:
+#: The cap counts TURNS, and that bounds the block predictably because beats
+#: do not grow: measured across chats 74-84, a turn contributes 700-1,200
+#: characters of player input plus prose, so twelve of them is 10-14k
+#: characters and a longer story does not drift upward from there. Most
+#: stories never reach the cap at all -- five of the eight sampled had fewer
+#: turns than the depth.
+_PAST_NARRATION_TURNS = 12
+#: The craft diffs (`already_established_phrases`, `overused_phrases`, the
+#: fidelity reuse check) keep their original four-turn window even when the
+#: narration block runs deeper. Widening them would flag more of the story as
+#: already-established and suppress exactly the fine detail the block exists
+#: to enable -- a different change, with the opposite sign.
+_PREV_PROSE_TURNS = 4
+
+
+def _past_narration_block(chat_id, turn_idx, frame_id, depth):
+    """The story so far, as ONE text, exactly as the player has been reading it.
+
+    `static/js/chat.js` renders every turn as the player's own input followed
+    directly by the narrator's prose, unlabelled, inside a single `.turn`
+    div. The page is therefore already one continuous narration in one voice,
+    the player and the narrator writing alternating stretches of it -- and
+    the narrator had never been shown that text. It received the last four
+    narrator proses as `recent_prose_for_rhythm`, a style reference with the
+    player's own contributions missing, which is why it could not tell where
+    its own beat was supposed to start.
+
+    No labels between the parts: they are the same voice, so a speaker tag
+    would fracture a text that is already whole.
+
+    THIS turn's input is NOT in here. It was, and the block read as one
+    unbroken text because of it -- but that buried the single most
+    load-bearing sentence in the payload at the tail of its longest field.
+    It now has its own section, `current_narration`, sitting between this
+    block and `current_events`: same voice, same position in the story,
+    unmissable. Measured over 12 real beats, splitting it out and sourcing
+    `current_events` from perception together produced the only arm with no
+    enforceable findings AND no warnings at all.
+
+    Returns (block, prev): the joined text, and the narrator-prose list the
+    craft diffs and the fidelity reuse check still score separately.
+    """
+    rows = q("SELECT t.idx AS idx, t.player_input AS player_input, "
+             "v.content AS content FROM turns t "
+             "LEFT JOIN steps s ON s.turn_id=t.id AND s.key='narrator' "
+             "LEFT JOIN variants v ON v.step_id=s.id AND v.active=1 "
+             "WHERE t.chat_id=? AND t.idx<? AND t.frame_id IS ? "
+             "ORDER BY t.idx DESC LIMIT ?",
+             (chat_id, turn_idx, frame_id, max(1, int(depth or 1))))
+    parts, prev = [], []
+    # LEFT JOIN, not the inner join this replaced: a turn whose narrator step
+    # is missing or inactive (a rerun in flight, an aborted beat) still had a
+    # player writing in it, and dropping their text would leave a hole in the
+    # middle of a block whose whole value is that it is continuous.
+    for r in reversed(rows):
+        said = (r["player_input"] or "").strip()
+        if said:
+            parts.append(said)
+        prose = ""
+        if r["content"]:
+            try:
+                prose = (json.loads(r["content"]) or {}).get("prose") or ""
+            except (TypeError, ValueError):
+                prose = ""
+        if prose.strip():
+            parts.append(prose.strip())
+            prev.append(prose)
+    return "\n\n".join(parts), prev[-_PREV_PROSE_TURNS:]
+
+
+def _past_narration_extra_block(chat_id, turn_idx, frame_id, persona_id,
+                                depth):
+    """`_past_narration_block` for one additional human player.
+
+    Same text, different seats: this persona's own inputs
+    (`turn_player_inputs`, keyed by persona) interleaved with the prose that
+    was rendered FOR them (`narrator_extra`, keyed by persona id inside the
+    step content). Two people at one table are shown two different stories on
+    purpose -- each is perception-filtered to its own seat -- so an extra
+    player's block must never be assembled out of the primary player's text.
+
+    Frame filtering comes from the join to `turns`: `turn_player_inputs`
+    carries no frame of its own.
+    """
+    pid_key = str(persona_id)
+    rows = q("SELECT t.idx AS idx, i.input AS player_input, "
+             "v.content AS content FROM turns t "
+             "LEFT JOIN turn_player_inputs i "
+             "  ON i.chat_id=t.chat_id AND i.turn_idx=t.idx AND i.persona_id=? "
+             "LEFT JOIN steps s ON s.turn_id=t.id AND s.key='narrator_extra' "
+             "LEFT JOIN variants v ON v.step_id=s.id AND v.active=1 "
+             "WHERE t.chat_id=? AND t.idx<? AND t.frame_id IS ? "
+             "ORDER BY t.idx DESC LIMIT ?",
+             (persona_id, chat_id, turn_idx, frame_id,
+              max(1, int(depth or 1))))
+    parts, prev = [], []
+    for r in reversed(rows):
+        said = (r["player_input"] or "").strip()
+        if said:
+            parts.append(said)
+        prose = ""
+        if r["content"]:
+            try:
+                prose = ((json.loads(r["content"]) or {}).get(pid_key) or {}
+                         ).get("prose") or ""
+            except (TypeError, ValueError):
+                prose = ""
+        if prose.strip():
+            parts.append(prose.strip())
+            prev.append(prose)
+    return "\n\n".join(parts), prev[-_PREV_PROSE_TURNS:]
+
+
+def _render_observed_events(observations, player_acts=()):
+    """This beat's events, as PERCEPTION delivered them.
+
+    `_ordered_beat_events` re-derives the same record from the loops and the
+    background stage and then re-applies the firewall by hand: the delivery
+    gate on quotes, the visibility gate on acts, and the identity floor on
+    speakers. That is a SECOND implementation of "what reached this mind",
+    standing beside the composer's, and the composer's is the one the
+    firewall is actually built on -- `observations_from_render` derives it
+    FROM the rendered view, so it cannot exceed the view's budget.
+
+    Two authorities on one question drift, and this pair had drifted in three
+    places at once, all measured: an act performed behind a one-way mirror
+    reached the record (`_player_sees_character` is asked, but only after the
+    act is already collected in some paths); a name the ledger does not hold
+    was rendered as the canonical name; and an unrecognised speaker heard
+    over an intercom was labelled by APPEARANCE -- chats 79/80/81 carry six
+    stored narrations calling a voice on a PA "the young Korean-American
+    woman" to a player sealed in a cell who has never seen her. Perception's
+    own view said "You hear a voice say" in every one of them.
+
+    So the model reads perception's answer. The structured record stays on
+    `_fidelity_facts` for the deterministic checks, which score what is on
+    the page rather than deciding what may reach it.
+
+    THE PLAYER'S OWN ACTS ARE PREPENDED, and they have to be: perception
+    cannot supply them, because a mind is never handed its own conduct as a
+    percept. Carrying them ONLY as raw text in `current_narration` does not
+    work -- measured over 12 real beats, player-act coverage on the page fell
+    to 1 of 9 while every draft still scored 12/12 clean on every fidelity
+    check, because no check can see a mind's own conduct either. Restoring
+    them as entries took coverage back to 7 of 9 and REDUCED enforceable
+    findings from 3 to 1. They are the Director's reconciled `observable`
+    surfaces, which is what actually happened, rather than the claim the
+    player's own sentence makes.
+    """
+    lines = []
+    for act in player_acts or ():
+        text = str((act or {}).get("action") or "").strip()
+        if text:
+            lines.append(_event_line(
+                "act_player", n=len(lines) + 1,
+                actor=act.get("actor") or "you", action=text))
+    for obs in observations or []:
+        if not isinstance(obs, dict):
+            continue
+        text = str((obs.get("observed") or {}).get("text") or "").strip()
+        if text:
+            lines.append(_event_line(
+                "observation", n=len(lines) + 1, text=text))
+    return "\n".join(lines)
+
+
+def _render_current_events(events, player_name=""):
+    """`event_order` as the plain chronological package written from.
+
+    The structured list stays the record the deterministic checks read; this
+    is the same record as text, because the thing being asked of the model is
+    prose and a numbered line of prose is what it can follow. A player line is
+    marked as already standing on the page above -- the one place the
+    expand-never-repeat rule is actually needed is the line it governs.
+    """
+    lines = []
+    for ev in events or []:
+        if not isinstance(ev, dict):
+            continue
+        n, actor = ev.get("n"), (ev.get("actor") or "").strip()
+        if ev.get("kind") == "speech":
+            quote = _quote_body(str(ev.get("quote") or "")).strip()
+            if not quote:
+                continue
+            if ev.get("declared"):
+                lines.append(_event_line(
+                    "speech_declared", n=n, actor=actor, quote=quote))
+            else:
+                lines.append(_event_line(
+                    "speech", n=n, actor=actor, quote=quote))
+        elif ev.get("action"):
+            # Marked as emphatically as the speech entries, and for a reason
+            # measured rather than guessed: the per-line speech marker took
+            # placeholders from 14 to 0 across six drafts while a prose-block
+            # rule in the sheet saying the same thing about ACTS changed
+            # nothing -- acts still reached the page 5 times in 12
+            # (tools/narrator_package_bench.py, grok-4.20, n=6). The player's
+            # raw input at the tail of `past_narration` describes the act, and
+            # without this the model reads it as a beat already written.
+            # Whose act it is decides what the marker may CLAIM. Every act
+            # entry used to say "the player described attempting it", and
+            # `_ordered_beat_events` lists NPC acts on the same footing as
+            # the player's -- so a character's own motion was announced to
+            # the model as something the player had written. A marker is only
+            # worth its measured power while it is true.
+            if actor and player_name and actor == player_name:
+                lines.append(_event_line(
+                    "act_player", n=n, actor=actor, action=ev["action"]))
+            else:
+                lines.append(_event_line(
+                    "act_other", n=n, actor=actor, action=ev["action"]))
+    return "\n".join(lines)
+
+
 def _extension_narration_payload(ctx, payload, *, scope, player=""):
     """Hand the assembled narrator payload to installed extensions, or leave it.
 
@@ -936,15 +1189,16 @@ def narrator(ctx, nonce):
     else:
         view = (ctx.get("perception_outcome", {}).get("views") or {}).get("player") \
             or compositor_text("narrator_nothing", ctx.language)
-    # Frame-filtered: t.idx is GLOBAL play order shared by every frame,
-    # so without this an OTHER concurrently-played frame's prior prose
-    # would leak into this frame's own rhythm/repetition context.
-    rows = q("SELECT v.content FROM turns t "
-             "JOIN steps s ON s.turn_id=t.id AND s.key='narrator' "
-             "JOIN variants v ON v.step_id=s.id AND v.active=1 "
-             "WHERE t.chat_id=? AND t.idx<? AND t.frame_id IS ? ORDER BY t.idx DESC LIMIT 4",
-             (chat["id"], ctx.turn["idx"], ctx.turn["frame_id"]))
-    prev = [json.loads(r["content"]).get("prose", "") for r in reversed(rows)]
+    # Frame-filtered: t.idx is GLOBAL play order shared by every frame, so
+    # without this an OTHER concurrently-played frame's prior text would leak
+    # into this frame's own.
+    try:
+        _depth = int(get_setting("narrator_history_turns")
+                     or _PAST_NARRATION_TURNS)
+    except (TypeError, ValueError):
+        _depth = _PAST_NARRATION_TURNS
+    past_narration, prev = _past_narration_block(
+        chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], _depth)
     di = ctx.get("director_interpret") or {}
     p_lines = player_speech_lines(di)
 
@@ -986,6 +1240,10 @@ def narrator(ctx, nonce):
     # _check_narrator_fidelity. Normal turns only (an opening turn has no
     # prior beat to delta against and no loop order), and gated with the
     # spatial fields on consciousness: a non-awake mind gets no scene.
+    # The chronological package the narrator writes from. Empty on an opening
+    # turn (nothing has happened yet) and for a non-awake mind (no beat
+    # reaches it), which is the same gate the world fields take below.
+    current_events = ""
     _world_fields, _fidelity_facts = {}, {}
     if not est and player_awareness not in NON_AWAKE_GATED:
         known_map = wget(chat["id"], "known", {}) or {}
@@ -1039,8 +1297,16 @@ def narrator(ctx, nonce):
             if isinstance(r, dict) and r.get("room_id")
         } | ({p_room} if p_room else set())
         portal_states = _visible_portal_states(_scene_for_frame, p_room, _visible)
-        if event_order:
-            _world_fields["event_order"] = event_order
+        # PERCEPTION'S OWN RECORD is what the model reads (see
+        # `_render_observed_events`). `event_order` is still built above: it
+        # stays on `_fidelity_facts` for the deterministic checks, which score
+        # what reached the page rather than deciding what may reach the model.
+        _obs_map = (ctx.get("perception_outcome", {}) or {}).get(
+            "observations") or {}
+        current_events = _render_observed_events(
+            _obs_map.get("player") or [],
+            [ev for ev in event_order
+             if ev.get("kind") == "action" and ev.get("actor") == player_name])
         if pos_payload:
             _world_fields["co_present_positions"] = pos_payload
         if portal_states:
@@ -1050,8 +1316,6 @@ def narrator(ctx, nonce):
         # and reroll/replay stay safe). Built from the outcome observations'
         # own IR-derived channels plus the standing substrate; every
         # admission subtracts -- see _sensory_channels_manifest.
-        _obs_map = (ctx.get("perception_outcome", {}) or {}).get(
-            "observations") or {}
         _senses = _sensory_channels_manifest(
             _scene_for_frame, player_name, view,
             _obs_map.get("player") or [], recognized, cast_info, p_room)
@@ -1065,35 +1329,96 @@ def narrator(ctx, nonce):
         }
 
     _abp = _authored_body_parts(ctx, pers, player_name)
+    # ABSENT WHEN EMPTY, the pattern `authored_body_parts` already set.
+    # An empty field is not free: it is a key the model must read and
+    # discard, and worse, it ARGUES FOR A RULE WITH NO REFERENT -- the
+    # sheet spends 1.5k characters on what to do with
+    # `already_established_phrases`, and that block is being read against
+    # `[]` on the ordinary beat. `already_established_phrases` is empty on
+    # ordinary beats BY CONSTRUCTION and not because it is dead: since the
+    # composer kept a standing ledger, `render_view` suppresses standing
+    # state the observer was already given, so an ordinary view has nothing
+    # left to overlap with recent prose. It fills on the FULL-RENDER beats
+    # (a room change, a re-entry), which is exactly where re-cataloguing is
+    # the risk it exists to stop -- so the field stays and only its empty
+    # emission goes.
+    _exemplars = json.loads(get_setting("exemplars") or "[]")
+    _overused = _overused_phrases(prev)
+    _established = _already_established_phrases(view, prev)
+    _voice = ((pers.get("narration") or {}).get("voice_setting", "")
+              if isinstance(pers, dict) else "")
+    # ORDER IS THE MESSAGE. `complete_validated_json` sends this dict as
+    # `json.dumps(payload, ensure_ascii=False)`, and a Python dict serializes
+    # in INSERTION order -- so this literal is, exactly, the order the model
+    # reads the beat in. Nothing else constrains it:
+    # `llm/prompt_cache.add_cache_breakpoint` puts the breakpoint on the
+    # SYSTEM block, so the user message has no cached prefix to protect and
+    # reordering it is free.
+    #
+    # It runs config -> craft -> standing facts -> the three PACKAGES, so
+    # that writing begins immediately after `current_events`, which is the
+    # material being written from. The previous order was the reverse of
+    # this: the view opened the payload, eight identity keys separated it
+    # from the world record, and the last thing read before generating was a
+    # list of phrases NOT to use.
     payload = {
-        "player_view": view,
-        "player_declared": player_declared,
-        "cast_pronouns": cast_pronouns,
-        # A body's extra parts are AUTHORED, never inferred. Absent when
-        # nobody declared any, so ordinary casts keep their payload shape.
-        **({"authored_body_parts": _abp} if _abp else {}),
-
-        "do_not_quote_verbatim": p_lines,
-        "scene_opening": bool(est),
-        "player_awareness": player_awareness,
-        "private_voice_setting": (
-            (pers.get("narration") or {}).get("voice_setting", "")
-            if isinstance(pers, dict) else ""
-        ),
+        # -- Who is writing, and in whose voice.
         "narration_person": narration_person,
         "player_name": player_name,
         "player_pronouns": player_pronouns,
-        # perception_outcome stashes this turn's post-move, orientation-refreshed
-        # scene; fall back to the committed KV on the opening turn (establish),
-        # where no movement has happened and orientation is fresh anyway. Using
-        # the committed scene here would describe the space with LAST beat's
-        # facing on movement beats (commit runs after this stage).
+        "cast_pronouns": cast_pronouns,
+        "player_awareness": player_awareness,
+        **({"private_voice_setting": _voice} if _voice else {}),
+        "scene_opening": bool(est),
+        # A body's extra parts are AUTHORED, never inferred. Absent when
+        # nobody declared any, so ordinary casts keep their payload shape.
+        **({"authored_body_parts": _abp} if _abp else {}),
+        # Targeting, visibility and authored private thought -- still with
+        # the spoken CONTENT absent. The words now reach the model twice, as
+        # the tail of `past_narration` and as an entry in `current_events`,
+        # and a third structured copy is what the "meals and a bed" paraphrase
+        # came out of; this one is the copy that was never carrying position.
+        "player_declared": player_declared,
+        # `do_not_quote_verbatim` USED TO SIT HERE, a third copy of the
+        # player's own lines carried purely as a prohibition. It is gone: the
+        # words already reach the model as the tail of `past_narration`, the
+        # echo rule is stated in the sheet, and the FLOOR under it was never
+        # this field -- `_strip_player_echo` deletes an echo deterministically
+        # from `p_lines`, which is a local here and never came from the
+        # payload. Measured over 12 real beats (tools/narrator_sheet_bench.py,
+        # `no_do_not_quote` arm): no enforceable regression attributable to
+        # the drop. It was also the only payload field the sheet never
+        # mentioned in 31k characters, which is its own verdict on how much
+        # explaining it needed.
+
+        # -- Craft.
+        **({"exemplars": _exemplars} if _exemplars else {}),
+        **({"overused_phrases": _overused} if _overused else {}),
+        **({"already_established_phrases": _established} if _established
+           else {}),
+
+        # -- Standing facts. perception_outcome stashes this turn's post-move,
+        # orientation-refreshed scene; fall back to the committed KV on the
+        # opening turn (establish), where no movement has happened and
+        # orientation is fresh anyway. Using the committed scene here would
+        # describe the space with LAST beat's facing on movement beats
+        # (commit runs after this stage).
         **_spatial_fields,
         **_world_fields,
-        "recent_prose_for_rhythm": prev,
-        "already_established_phrases": _already_established_phrases(view, prev),
-        "overused_phrases": _overused_phrases(prev),
-        "exemplars": json.loads(get_setting("exemplars") or "[]"),
+
+        # -- The three packages, in reading order. `past_narration` is the
+        # story so far as one unlabelled text ending in this turn's raw input;
+        # `present_scene` is perception's render of what may legitimately be
+        # perceived right now; `current_events` is what happened this beat, in
+        # order, and is the writing material.
+        "past_narration": past_narration,
+        # The player's own writing for THIS turn, in its own right: the same
+        # voice as the block above and the sentence the narrator continues
+        # from. It is a CLAIM about what they did -- `current_events` is the
+        # record of what came of it, and wins wherever the two differ.
+        "current_narration": (ctx.input or "").strip(),
+        "present_scene": view,
+        "current_events": current_events,
         "variant_seed": nonce,
     }
     # Once, here, rather than inside `_generate_narration`: that function is
@@ -1182,13 +1507,14 @@ def narrator_extra(ctx, nonce):
     di = ctx.get("director_interpret") or {}
     other_players = di.get("other_players") or {}
 
-    # Frame-filtered -- see the matching comment in narrator() above.
-    rows = q("SELECT v.content FROM turns t "
-             "JOIN steps s ON s.turn_id=t.id AND s.key='narrator_extra' "
-             "JOIN variants v ON v.step_id=s.id AND v.active=1 "
-             "WHERE t.chat_id=? AND t.idx<? AND t.frame_id IS ? ORDER BY t.idx DESC LIMIT 4",
-             (chat["id"], ctx.turn["idx"], ctx.turn["frame_id"]))
-    per_persona_prev = [json.loads(r["content"]) for r in reversed(rows)]
+    # Frame-filtered -- see the matching comment in narrator() above. The
+    # block itself is assembled per persona inside render_one, because each
+    # seat reads its own inputs and its own prose.
+    try:
+        _depth = int(get_setting("narrator_history_turns")
+                     or _PAST_NARRATION_TURNS)
+    except (TypeError, ValueError):
+        _depth = _PAST_NARRATION_TURNS
 
     def render_one(extra):
         pid = extra["persona_id"]
@@ -1200,7 +1526,8 @@ def narrator_extra(ctx, nonce):
                 outcome_views.get(f"extra:{pid_key}")) \
             or "Nothing in particular reaches you this beat."
 
-        prev = [d.get(pid_key, {}).get("prose", "") for d in per_persona_prev]
+        past_narration, prev = _past_narration_extra_block(
+            chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], pid, _depth)
 
         player_declared = _narrator_player_declared(entry)
 
@@ -1221,24 +1548,42 @@ def narrator_extra(ctx, nonce):
         # `_authored_body_parts` exists to prevent, one player over.
         _abp2 = _authored_body_parts(
             ctx, extra.get("persona"), extra.get("name") or "Player")
+        # Absent when empty -- see the note in narrator() above.
+        # `private_voice_setting` is gone from this seat entirely rather
+        # than emitted blank: it was a hardcoded "", which is not "this
+        # player has no voice setting" but "this stage never looked", and
+        # a field that always arrives empty teaches the model to skip the
+        # key rather than to read it.
+        _exemplars2 = json.loads(get_setting("exemplars") or "[]")
+        _overused2 = _overused_phrases(prev)
+        _established2 = _already_established_phrases(view, prev)
+        # Same order as narrator() above, and for the same reason -- see the
+        # ORDER IS THE MESSAGE comment there. This seat has no
+        # `current_events` package: `_ordered_beat_events` reads the PRIMARY
+        # player's declaration and view to build the record, and there is no
+        # per-seat equivalent yet, so an extra player still writes from the
+        # view alone. That gap is this stage's, not the design's.
         payload = {
-            "player_view": view,
-            "player_declared": player_declared,
-            "cast_pronouns": _cast_pronouns(ctx.cast),
-            **({"authored_body_parts": _abp2} if _abp2 else {}),
-            "do_not_quote_verbatim": p_lines,
-            "scene_opening": bool(est),
-            "private_voice_setting": "",
             "narration_person": narration_person,
             "player_name": extra.get("name") or "Player",
             "player_pronouns": extra.get("pronouns") or {},
+            "cast_pronouns": _cast_pronouns(ctx.cast),
+            "scene_opening": bool(est),
+            **({"authored_body_parts": _abp2} if _abp2 else {}),
+            "player_declared": player_declared,
+
+            **({"exemplars": _exemplars2} if _exemplars2 else {}),
+            **({"overused_phrases": _overused2} if _overused2 else {}),
+            **({"already_established_phrases": _established2} if _established2
+               else {}),
+
             "spatial_frame": spatial_digest(
                 ctx.get("outcome_scene") or get_scene(chat["id"], chat),
                 extra.get("name") or ""),
-            "recent_prose_for_rhythm": prev,
-            "already_established_phrases": _already_established_phrases(view, prev),
-            "overused_phrases": _overused_phrases(prev),
-            "exemplars": json.loads(get_setting("exemplars") or "[]"),
+
+            "past_narration": past_narration,
+            "current_narration": (extra.get("input") or "").strip(),
+            "present_scene": view,
             "variant_seed": nonce,
         }
         payload = _extension_narration_payload(

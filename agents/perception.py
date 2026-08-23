@@ -3055,6 +3055,65 @@ def _composer_company(others, display_map, percepts):
     return out
 
 
+def _repaired_observations(observations, view, name, known, roster):
+    """Carry the composed view's REPAIRS into the structured observations.
+
+    `composer.observations_from_render` projects from `rendered`, the view
+    BEFORE `_composer_tripwires` runs, so the invariant its docstring claims
+    -- "the text is byte-for-byte part of the view" -- holds only while no
+    tripwire fires. When one does, the two diverge and the observations keep
+    exactly what the view had repaired.
+
+    Survivable while the observations were a secondary representation; not
+    survivable once `agents/narration.py` began building `current_events`
+    from them, because a repaired leak then walks back to the one consumer
+    whose output is the page. Measured over 104 turns in eight stories, 102
+    agree byte for byte and both divergences are the same class: the observer
+    named in the THIRD PERSON inside its own view ("Hinami and The Doctor
+    have begun walking inland toward the ferry port"), which `Design.md`
+    names as an invariant and the self-narration tripwire drops.
+
+    The repaired VIEW is the authority, not a re-run of the repairs. Running
+    them per observation cannot work: `_strip_self_narration_quote_safe`
+    refuses to delete when EVERY sentence names the perceiver -- one
+    observation is one sentence, so a self-narrating one is always the whole
+    of its own input and the refusal fires every time.
+
+    So identity is substituted first (it rewrites a name in place and never
+    deletes), and what survives is what the repaired view still contains.
+    Dropping on absence is safe precisely because of how the tripwire grades
+    its repairs: the self-narration drop is quote-safe and REFUSES a deletion
+    that would take a quote with it, so a sentence missing from the repaired
+    view provably carried no delivered line, and nothing an enforceable
+    dialogue check will demand can be lost here.
+
+    Silent by design: the tripwire has already warned about the view, and
+    this is one composer defect, not two.
+    """
+    if not observations:
+        return []
+    if not str(view or "").strip():
+        return []
+    recognized, unknown = _composer_unknown_sources(name, known, roster)
+    haystack = re.sub(r"\s+", " ", str(view)).strip()
+    out = []
+    for obs in observations:
+        if not isinstance(obs, dict):
+            continue
+        observed = obs.get("observed") or {}
+        text = str(observed.get("text") or "")
+        if not text.strip():
+            continue
+        if unknown:
+            text, _leaked = _scrub_unknown_identities(
+                text, allowed_forms=[name, *recognized],
+                unknown_sources=unknown)
+        if re.sub(r"\s+", " ", text).strip() not in haystack:
+            continue
+        out.append({**obs, "observed": {**observed, "text": text}})
+    return out
+
+
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
                               spoken_lines=None):
@@ -3062,7 +3121,9 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
         ctx, stage, pid, name, rendered.text, known, roster,
         spoken_lines=spoken_lines)
     clean_views[pid] = view or None
-    observations[pid] = composer.observations_from_render(pid, rendered)
+    observations[pid] = _repaired_observations(
+        composer.observations_from_render(pid, rendered), view,
+        name, known, roster)
     ledger[pid] = {
         "standing": sorted(rendered.standing_keys),
         "described": sorted(rendered.described),

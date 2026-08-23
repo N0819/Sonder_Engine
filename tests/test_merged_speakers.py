@@ -152,3 +152,59 @@ def test_a_japanese_story_evaluates_the_same_enforceable_set():
         assert "Merged dialogue from different speakers" in _enforceable()
     finally:
         current_language_id.reset(token)
+
+
+class TestTheShortLineThatWasExempt:
+    """A length floor alone exempted exactly the lines that get absorbed.
+
+    Live, chat 84 turn 13. Sarah Moon's two lines and a guard's "Yes ma'am."
+    -- ten characters, under the 15-character floor -- were welded into one
+    quoted span. The guard never entered the comparison at all, so the span
+    scored as ONE speaker and no warning was raised. Rerolling the narrator
+    was the only thing that fixed it, and nothing had told the reader why.
+    """
+
+    def test_a_short_reply_absorbed_into_another_speakers_span_is_caught(self):
+        prose = ('"Guard. Step back from the chair. The subject is '
+                 'cooperative. Hinami. The guard will not use force on you. '
+                 'Yes ma\'am."')
+        found = _merges(prose, view="", events=_events(
+            ("Sarah Moon", '"Guard. Step back from the chair. The subject is '
+                           'cooperative."'),
+            ("Sarah Moon", '"Hinami. The guard will not use force on you."'),
+            ("the guard", '"Yes ma\'am."')))
+        assert len(found) == 1
+        assert "Sarah Moon" in found[0] and "the guard" in found[0]
+        assert found[0].startswith(_enforceable())
+
+    def test_the_same_beat_rendered_correctly_is_not_flagged(self):
+        """The reroll that fixed it: three spans, one mouth each."""
+        prose = ('"Guard. Step back from the chair. The subject is '
+                 'cooperative." Her next words follow without pause. '
+                 '"Hinami. The guard will not use force on you." '
+                 'The guard answers at once. "Yes ma\'am."')
+        assert _merges(prose, view="", events=_events(
+            ("Sarah Moon", '"Guard. Step back from the chair. The subject is '
+                           'cooperative."'),
+            ("Sarah Moon", '"Hinami. The guard will not use force on you."'),
+            ("the guard", '"Yes ma\'am."'))) == []
+
+    def test_a_short_body_mid_sentence_is_still_coincidence(self):
+        """Why the floor existed. A fragment inside another line is not an
+        absorbed line, and this warning is enforceable -- being wrong costs a
+        rewrite. The sentence-boundary test is what separates the two."""
+        assert _merges('"I said no. That is final."', view="", events=_events(
+            ("Vale", '"I said no. That is final."'),
+            ("Bryn", '"no"'))) == []
+
+    def test_the_players_own_line_is_never_a_merge(self):
+        """`event_order` carries the player's quote for ORDER, marked
+        `declared`. The echo rule requires it to be absent from the prose, so
+        its presence is a different failure with a different fix -- scoring it
+        here would buy a rewrite for the wrong reason."""
+        events = _events(("Vale", '"Then we are agreed on the terms."'))
+        events.append({"n": 2, "actor": "Player", "kind": "speech",
+                       "declared": True,
+                       "quote": '"Then we are agreed on the terms."'})
+        assert _merges('"Then we are agreed on the terms."',
+                       view="", events=events) == []

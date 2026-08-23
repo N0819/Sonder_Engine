@@ -10,6 +10,8 @@ NPCs observing the player.
 import json
 import time
 
+from agents.perception import _repaired_observations
+
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
@@ -113,3 +115,67 @@ def test_unrecognized_speaker_name_is_masked_in_player_view(temp_db, monkeypatch
     assert "Please, help me" in player_view, (
         "the (unattributed) quote should still be delivered"
     )
+
+
+class TestObservationsCarryTheViewsRepairs:
+    """`observations_from_render` projects from the view BEFORE the tripwires
+    repair it, so the two diverge exactly when a repair fires. Measured over
+    104 turns in eight stories: 102 byte-identical, and both divergences the
+    same class -- the observer named in the THIRD PERSON inside its own view,
+    which the self-narration tripwire drops from the view and the observations
+    kept. That was survivable while observations were secondary; it stopped
+    being survivable when `current_events` began sourcing from them.
+    """
+
+    ROSTER = [{"name": "Hinami"}, {"name": "The Doctor"}]
+
+    VIEW = "You are in Moonlit shoreline. You are walking toward the ferry port."
+
+    def _obs(self, *texts):
+        return [{"observation_id": f"current:player:{i}", "channel": "sight",
+                 "observed": {"text": t}} for i, t in enumerate(texts)]
+
+    def test_self_narration_is_dropped_the_way_the_view_drops_it(self):
+        out = _repaired_observations(
+            self._obs("Hinami and The Doctor have begun walking inland "
+                      "toward the ferry port.",
+                      "You are walking toward the ferry port."),
+            self.VIEW, "Hinami", {"Hinami": ["The Doctor"]}, self.ROSTER)
+        texts = [o["observed"]["text"] for o in out]
+        assert not any("Hinami and The Doctor have begun" in t for t in texts)
+        assert any("You are walking" in t for t in texts)
+
+    def test_a_delivered_line_is_never_dropped(self):
+        """The self-narration strip is quote-safe and REFUSES a drop that
+        would take a quote, so nothing an enforceable dialogue check will
+        demand can be lost here. A bare containment filter would carry no
+        such guarantee."""
+        spoken = ('Hinami and The Doctor stop, and The Doctor says: '
+                  '"We should go."')
+        out = _repaired_observations(
+            self._obs(spoken), "The shore is quiet. " + spoken, "Hinami",
+            {"Hinami": ["The Doctor"]}, self.ROSTER)
+        assert len(out) == 1
+        assert '"We should go."' in out[0]["observed"]["text"]
+
+    def test_untouched_observations_pass_through_unchanged(self):
+        obs = self._obs("The Doctor kneels on the shore.")
+        out = _repaired_observations(
+            obs, "The Doctor kneels on the shore.", "Hinami",
+            {"Hinami": ["The Doctor"]}, self.ROSTER)
+        assert [o["observed"]["text"] for o in out] == [
+            "The Doctor kneels on the shore."]
+        # Every other field survives the repair.
+        assert out[0]["observation_id"] == "current:player:0"
+        assert out[0]["channel"] == "sight"
+
+    def test_junk_and_empties_are_dropped(self):
+        assert _repaired_observations([], self.VIEW, "Hinami", {},
+                                      self.ROSTER) == []
+        assert _repaired_observations(
+            ["junk", {"observed": {"text": "   "}}], self.VIEW, "Hinami", {},
+            self.ROSTER) == []
+        # An empty repaired view means the tripwires removed everything.
+        assert _repaired_observations(
+            self._obs("Anything at all."), "", "Hinami", {},
+            self.ROSTER) == []

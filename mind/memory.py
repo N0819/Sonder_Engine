@@ -97,7 +97,9 @@ from mind.memory_lore_entries import (  # noqa: F401
     _carried_stamp, _embed_lore_document, _stamped_live_dimensions, add_lore,
     backfill_lore_embedding_stamps, delete_lore, duplicate_lorebook_for_chat,
     duplicate_lorebook_tree_for_chat, ensure_chat_canon_book,
-    knowledge_for_character, lore_embedding_health, search_lore, update_lore,
+    declared_circles, knowledge_circles, knowledge_for_character,
+    lore_embedding_health,
+    search_lore, update_lore,
 )
 from mind.memory_snapshot import (  # noqa: F401
     _StoredEmbeddingMeta, apply_chat_memory_restore,

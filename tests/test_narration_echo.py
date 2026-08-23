@@ -35,7 +35,7 @@ def test_short_bare_substring_is_not_blindly_stripped():
     assert "know" in result
 
 def test_fidelity_flags_reused_content_from_recent_prose():
-    # recent_prose_for_rhythm is a STYLE reference for the narrator, not a
+    # past_narration is the story's own text for the narrator, not a
     # content source. If the current turn's prose shares long verbatim
     # runs with a recent turn's prose, that means beats were recycled
     # instead of drawn from this turn's actual view -- exactly what

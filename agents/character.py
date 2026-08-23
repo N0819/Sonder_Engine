@@ -41,6 +41,7 @@ from mind.memory import (
     _RECALL_LIMIT,
     build_character_memory_context,
     contrast_memory,
+    declared_circles,
     knowledge_for_character,
     payload_legacy,
     provenance_context_label,
@@ -2823,8 +2824,22 @@ def character_step(ctx, cid, nonce):
         ponder_why=_ponder_why,
         resurfaced_subject=_resurfaced,
     )
-    known_tags, excl_titles = _char_known_tags(sh)
-    knowledge = knowledge_for_character(_books(ctx), char_room, known_tags, excl_titles)
+    known_tags, excl_titles, circles = _char_known_tags(sh)
+    knowledge = knowledge_for_character(
+        _books(ctx), char_room, known_tags, excl_titles, circles=circles)
+    # An OUTSIDER by declaration is fine; an outsider by omission is a sheet
+    # nobody finished. The two are indistinguishable in the payload -- both
+    # are simply a mind that receives the public world -- and the second one
+    # surfaces fifty beats later as a specialist who has forgotten their own
+    # field. The engine can tell them apart here, so it says so.
+    if not circles:
+        _declared = declared_circles(_books(ctx))
+        if _declared:
+            ctx.add_warning(
+                f"character {character_name(sh)}: knowledge.circles is empty "
+                f"while this story's lore declares "
+                f"{', '.join(sorted(_declared))} -- they receive only public "
+                "knowledge. Add the circle to the sheet if they are inside it.")
     # Lore is objective world record and its prose names people by name --
     # including entries the mapping stage writes DURING PLAY, from a beat the
     # reader was standing in. Which entries reach a mind is already gated by

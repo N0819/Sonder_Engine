@@ -322,6 +322,21 @@
       "pattern": "([\"“][^\"“”]+[\"”]|「[^」]+」|『[^』]+』|(?<![\\w\\'’])\\'(?:[^\\']|\\'(?=\\w))*?\\'(?![\\w]))",
       "flags": 32
     },
+    "_SENTENCE_END_CHARS": {
+      "$type": "frozenset",
+      "items": [
+        ".",
+        "!",
+        "?",
+        "。",
+        "！",
+        "？",
+        "…",
+        ":",
+        "：",
+        ";"
+      ]
+    },
     "_SPEECH_NARRATION_RE": {
       "$type": "regex",
       "pattern": "(?:(?<![\\w'])(?:you|your|yours|says?|said|saying|replie[sd]|reply|answers?|answered|mutters?|muttered|whispers?|whispered|murmurs?|murmured|adds?|added|calls?|called|shouts?|shouted)(?![\\w'])|言(?:う|った|って)|話す|答える|尋ねる|囁く|ささやく|つぶやく|叫ぶ)",
@@ -2162,7 +2177,14 @@
           "わずかに首を傾げる"
         ]
       }
-    ]
+    ],
+    "_EVENT_LINES": {
+      "act_other": "{n}. {actor}はこれを行った（まだ本文には書かれていない——それが起きる様を描写せよ）：{action}",
+      "act_player": "{n}. {actor}はこれを行った（まだ本文には書かれていない——プレイヤーが試みたと記したことであり、それが実際に起きる様を描写せよ）：{action}",
+      "observation": "{n}. {text}",
+      "speech": "{n}. {actor}はこう言った：「{quote}」",
+      "speech_declared": "{n}. {actor}はこう言った（この言葉はすでに上の本文に書かれている——その言葉自体は決して繰り返さず、その一言が場に何をもたらしたかを描写せよ。ここにあるそれ以外のものは、すべて描写しなければならない）：「{quote}」"
+    }
   },
   "agents.composer": {
     "_SUDDEN_VERBS": {

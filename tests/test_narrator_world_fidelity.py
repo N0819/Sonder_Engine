@@ -24,6 +24,7 @@ import time
 
 from agents.common import (
     _check_event_order,
+    _check_narrator_fidelity,
     _check_portal_fidelity,
     _check_position_fidelity,
     _check_action_direction,
@@ -34,6 +35,9 @@ from language_runtime import linguistic
 from agents.narration import (
     _narrator_player_declared,
     _ordered_beat_events,
+    _past_narration_block,
+    _render_current_events,
+    _render_observed_events,
     _position_delta_payload,
     _visible_portal_states,
 )
@@ -511,8 +515,14 @@ def test_ordered_beat_events_order_and_view_filter(temp_db):
     assert kinds == [("Player", "speech"), ("Player", "action"),
                      ("Mara", "speech")]
     assert [e["n"] for e in events] == [1, 2, 3]
+    # A player line carries BOTH: `declared` says whose it is (the echo rule
+    # governs it, DIALOGUE FIDELITY does not), and `quote` gives the narrator
+    # the position it needs to place the beat. It used to carry `declared`
+    # alone, and chat 84 turns 2581/2582 rendered the answer before the
+    # question, twice, with both player lines reduced to placeholders.
     assert events[0] == {"n": 1, "actor": "Player", "kind": "speech",
-                         "declared": True}
+                         "declared": True,
+                         "quote": "Who locked the console?"}
     assert events[2]["quote"] == "I did. On my own authority."
     # The undelivered line is absent (info barrier).
     assert all("never heard" not in str(e.get("quote")) for e in events)
@@ -881,3 +891,338 @@ def test_a_lit_room_still_lists_its_standing_sight():
 
     assert sight["status"] == "live"
     assert "light: lit" in sight["standing"]
+
+
+def test_player_quote_in_event_order_is_not_a_reproduction_requirement():
+    """The words reach the narrator without ever obliging it to print them.
+
+    DIALOGUE FIDELITY is scored off the VIEW, not off event_order, and the
+    player's declared lines are excluded from it besides -- so restoring the
+    quote adds position and no obligation. If this inverts, every turn earns
+    a fidelity warning and the correction loop starts pushing the model to
+    violate the echo rule to satisfy it.
+    """
+    view = 'Mara squares up. "I did. On my own authority."'
+    prose = ("<p>The question goes unanswered for a moment. "
+             '"I did. On my own authority."</p>')
+    warnings = _check_narrator_fidelity(
+        {"prose": prose, "new_specifics": []}, view,
+        exclude_quotes=["Who locked the console?"],
+        player_name="Player",
+        event_order=[
+            {"n": 1, "actor": "Player", "kind": "speech", "declared": True,
+             "quote": "Who locked the console?"},
+            {"n": 2, "actor": "Mara", "kind": "speech",
+             "quote": "I did. On my own authority."},
+        ])
+    assert not [w for w in warnings if "Who locked the console" in w]
+
+
+def test_render_current_events_marks_the_player_line_as_already_written():
+    events = [
+        {"n": 1, "actor": "Player", "kind": "speech", "declared": True,
+         "quote": "Who locked the console?"},
+        {"n": 2, "actor": "Player", "kind": "action",
+         "action": "steps to the console"},
+        {"n": 3, "actor": "Mara", "kind": "speech",
+         "quote": "I did. On my own authority."},
+    ]
+    text = _render_current_events(events, "Player")
+    lines = text.splitlines()
+    assert len(lines) == 3
+    assert lines[0].startswith("1. Player said (their WORDS are already on "
+                               "the page above")
+    assert '"Who locked the console?"' in lines[0]
+    # An NPC line carries no such marker -- it is reproduced verbatim.
+    assert lines[2] == '3. Mara said: "I did. On my own authority."'
+    assert "already on the page" not in lines[2]
+    # The marker is scoped to WORDS: an act is never marked skippable, because
+    # the first live run of tools/narrator_package_bench.py had the model drop
+    # the player's acts entirely -- their raw input already described them, and
+    # a marker that read as "this beat is written" generalised from the speech
+    # entries to the whole turn.
+    assert "must still render" in lines[0]
+    assert lines[1].startswith("2. Player did this (NOT yet on the page")
+    assert "the player described attempting it" in lines[1]
+    assert lines[1].endswith("steps to the console")
+
+
+def test_render_current_events_empty_without_events():
+    assert _render_current_events([]) == ""
+    assert _render_current_events(None) == ""
+
+
+def test_past_narration_block_is_one_unlabelled_text_of_prior_turns(temp_db):
+    """The block is the page the player has been reading. THIS turn's input is
+    deliberately not in it -- it has its own `current_narration` section, so
+    the sentence the narrator continues from is not buried at the tail of the
+    payload's longest field."""
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Test", "", time.time()))
+    for idx, (said, prose) in enumerate([
+            ("I push the door open.", "<p>It gives, and the cold comes in.</p>"),
+            ("\"Anyone here?\"", "<p>Nothing answers but the rafters.</p>")]):
+        turn_id = temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) "
+            "VALUES(?,?,?,?)", (chat_id, idx, said, time.time()))
+        step_id = temp_db.qi(
+            "INSERT INTO steps(turn_id,key,label,ord) VALUES(?,?,?,?)",
+            (turn_id, "narrator", "Narration", 7))
+        temp_db.qi(
+            "INSERT INTO variants(step_id,content,created,active) "
+            "VALUES(?,?,?,1)",
+            (step_id, json.dumps({"prose": prose}), time.time()))
+
+    block, prev = _past_narration_block(chat_id, 2, None, 8)
+
+    # Chronological, and no speaker labels anywhere: one voice, one text.
+    assert block == (
+        "I push the door open.\n\n"
+        "<p>It gives, and the cold comes in.</p>\n\n"
+        '"Anyone here?"\n\n'
+        "<p>Nothing answers but the rafters.</p>")
+    assert "Still nothing" not in block
+    assert "narrator:" not in block.lower()
+    # The craft diffs still see only the narrator's own prose.
+    assert prev == ["<p>It gives, and the cold comes in.</p>",
+                    "<p>Nothing answers but the rafters.</p>"]
+
+
+def test_past_narration_block_keeps_input_when_a_turn_has_no_prose(temp_db):
+    """A turn whose narrator step never landed still had a player writing in
+    it; an inner join dropped their text and put a hole in a block whose
+    whole value is being continuous."""
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Test", "", time.time()))
+    temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) "
+               "VALUES(?,?,?,?)", (chat_id, 0, "I wait.", time.time()))
+    block, prev = _past_narration_block(chat_id, 1, None, 8)
+    assert block == "I wait."
+    assert prev == []
+
+
+def test_an_npc_act_is_not_described_as_the_players_writing():
+    """`_ordered_beat_events` lists NPC acts on the same footing as the
+    player's, so a marker claiming "the player described attempting it" was
+    false for every one of them. A per-line marker is only worth its measured
+    power while it is TRUE."""
+    events = [
+        {"n": 1, "actor": "Player", "kind": "action",
+         "action": "steps to the console"},
+        {"n": 2, "actor": "Mara", "kind": "action",
+         "action": "puts a hand on the bulkhead"},
+    ]
+    lines = _render_current_events(events, "Player").splitlines()
+    assert "the player described attempting it" in lines[0]
+    assert "the player described attempting it" not in lines[1]
+    # Both still say the act has not reached the page and must be rendered.
+    assert all("NOT yet on the page" in ln and "must render it" in ln
+               for ln in lines)
+
+
+def test_an_object_pronoun_engages_the_attribution_ambiguity_brake():
+    """The brake declines when a gendered pronoun after the nearest (wrong)
+    candidate re-points the reader elsewhere. It was built from
+    `_PRONOUN_GROUPS`'s KEYS -- he/she/they -- so an OBJECT or POSSESSIVE
+    pronoun could never engage it, and "...before Sarah Moon's orders reach
+    him." read as containing no pronoun at all. Live, chat 84 t13: the guard's
+    "Yes ma'am." was reported as the doctor's, and the finding is enforceable,
+    so a wrong call spends a whole extra narrator call."""
+    prose = ("The guard's flat gaze stays locked on you a beat longer before "
+             "Sarah Moon's orders reach him. \"Yes ma'am,\" he says.")
+    events = [
+        {"n": 1, "actor": "Sarah Moon", "kind": "speech",
+         "quote": '"Guard. Step back from the chair."'},
+        {"n": 2, "actor": "Security Guard (Right)", "kind": "speech",
+         "quote": '"Yes ma\'am."'},
+    ]
+    pronouns = {"Sarah Moon": {"subject": "she", "object": "her",
+                               "possessive": "her"}}
+    assert _check_quote_attribution(prose, events, pronouns) == []
+
+
+def test_attribution_still_fires_with_no_repointing_pronoun():
+    """The brake must not swallow the case it was written against."""
+    prose = ('Sarah Moon sets down the pen. "Yes ma\'am."')
+    events = [
+        {"n": 1, "actor": "Sarah Moon", "kind": "speech",
+         "quote": '"Guard. Step back from the chair."'},
+        {"n": 2, "actor": "Security Guard (Right)", "kind": "speech",
+         "quote": '"Yes ma\'am."'},
+    ]
+    found = _check_quote_attribution(prose, events, {})
+    assert found and "wrong speaker" in found[0]
+
+
+def test_observed_events_are_perceptions_own_record(temp_db):
+    """`current_events` is what PERCEPTION delivered, not a second derivation.
+
+    The re-derivation had drifted from it in three places at once: an act
+    behind a one-way mirror in the record, a name the ledger does not hold
+    rendered canonically, and -- measured across six stored narrations in
+    chats 79/80/81 -- an unrecognised voice on an intercom labelled by
+    APPEARANCE ("the young Korean-American woman") to a player sealed in a
+    cell who has never seen her. Perception's own view said "You hear a voice
+    say" every time.
+    """
+    observations = [
+        {"observation_id": "current:player:0", "channel": "hearing",
+         "observed": {"text": 'You hear a voice say: "Step back from the chair."'}},
+        {"observation_id": "current:player:1", "channel": "sight",
+         "observed": {"text": "The unfamiliar person lowers his hands."}},
+        {"observation_id": "current:player:2", "channel": "hearing",
+         "observed": {"text": 'You hear a voice say: "Stay seated."'}},
+    ]
+    text = _render_observed_events(observations)
+    assert text.splitlines() == [
+        '1. You hear a voice say: "Step back from the chair."',
+        "2. The unfamiliar person lowers his hands.",
+        '3. You hear a voice say: "Stay seated."',
+    ]
+    # Nothing is minted here: every line is perception's own words.
+    assert "Korean" not in text and "Sarah" not in text
+
+
+def test_observed_events_are_empty_without_observations():
+    assert _render_observed_events([]) == ""
+    assert _render_observed_events(None) == ""
+    assert _render_observed_events([{"observed": {}}, "junk"]) == ""
+
+
+def test_the_players_own_acts_are_carried_beside_perceptions_record():
+    """Perception cannot supply a mind's own conduct, and nothing else does.
+
+    Carrying the player's acts only as raw text in `current_narration` drove
+    player-act coverage on the page to 1 of 9 across 12 real beats, while
+    every draft still scored 12/12 clean -- no fidelity check can see a mind's
+    own conduct, so a total regression read as perfect. Restoring them as
+    entries took coverage to 7 of 9 and cut enforceable findings from 3 to 1.
+    """
+    observations = [{"channel": "hearing",
+                     "observed": {"text": 'You hear a voice say: "Sit down."'}}]
+    acts = [{"n": 1, "actor": "Hinami", "kind": "action",
+             "action": "rubs her wrists and leans away"}]
+    lines = _render_observed_events(observations, acts).splitlines()
+    assert lines[0].startswith("1. Hinami did this (NOT yet on the page")
+    assert lines[0].endswith("rubs her wrists and leans away")
+    # Perception's own entries follow, renumbered after the player's.
+    assert lines[1] == '2. You hear a voice say: "Sit down."'
+
+
+def test_observed_events_still_render_with_no_player_acts():
+    assert _render_observed_events(
+        [{"observed": {"text": "A door closes."}}]) == "1. A door closes."
+
+
+def test_the_event_markers_are_language_pack_data_not_code_literals():
+    """The measured highest-leverage instruction in the payload must reach
+    the story in the story's own language.
+
+    The per-line marker took placeholder dialogue from 14 to 0 where the
+    same rule stated in the sheet's prose changed nothing
+    (tools/narrator_package_bench.py, grok-4.20, n=6) -- and it was an
+    English f-string literal in `agents/narration.py`, so a Japanese story
+    got an otherwise Japanese sheet with this one sentence in English. A
+    marker is only worth its measured power while the model can read it.
+    """
+    from language_runtime import current_language_id
+
+    events = [
+        {"n": 1, "actor": "Player", "kind": "speech", "declared": True,
+         "quote": "Who locked the console?"},
+        {"n": 2, "actor": "Mara", "kind": "action", "action": "turns away"},
+    ]
+    english = _render_current_events(events, "Player")
+    token = current_language_id.set("ja")
+    try:
+        japanese = _render_current_events(events, "Player")
+    finally:
+        current_language_id.reset(token)
+
+    # Same record, same numbering, same quoted body -- a different sheet.
+    assert english.splitlines()[0].startswith("1. Player said (")
+    assert japanese.splitlines()[0].startswith("1. Player")
+    assert "Who locked the console?" in japanese
+    assert japanese != english
+    # The English marker must not survive into the Japanese render: that is
+    # the whole defect, and it passes a naive "both are non-empty" check.
+    assert "already on the page" not in japanese
+    assert "NOT yet on the page" not in japanese
+
+
+def test_observed_event_markers_follow_the_story_language_too():
+    from language_runtime import current_language_id
+
+    acts = [{"actor": "Player", "action": "steps to the console"}]
+    obs = [{"observed": {"text": "A door closes."}}]
+    token = current_language_id.set("ja")
+    try:
+        japanese = _render_observed_events(obs, acts)
+    finally:
+        current_language_id.reset(token)
+    assert "NOT yet on the page" not in japanese
+    # Perception's own text is passed through untranslated -- the composer
+    # already rendered it in the story's language, and re-touching it here
+    # would be a second authority on the same string.
+    assert "A door closes." in japanese
+
+
+class TestEmptyFieldsAreAbsentRatherThanEmpty:
+    """A key that always arrives empty teaches the model to skip the key.
+
+    Worse, it ARGUES FOR A RULE WITH NO REFERENT: the sheet spends ~1.5k
+    characters on what to do with `already_established_phrases`, and on an
+    ordinary beat that block was being read against `[]`. Absent-when-empty
+    is the pattern `authored_body_parts` already set.
+
+    The field is NOT dead, which is why this is emission and not deletion:
+    measured over 2,294 stored beats it fills on 25.8% of them, and the
+    rate is a property of the story (60% in chats 10 and 12, 14-20% in the
+    long-running ones) rather than of the corpus.
+    """
+
+    def _payload(self, temp_db, monkeypatch, **settings):
+        from agents import narration
+
+        seen = {}
+
+        def fake_generate(payload, *args, **kwargs):
+            seen["payload"] = payload
+            return {"prose": "<p>ok</p>", "new_specifics": []}, [], []
+
+        monkeypatch.setattr(narration, "_generate_narration", fake_generate)
+        for key, value in settings.items():
+            temp_db.set_setting(key, value)
+        ctx = _mk_ctx(temp_db, {"rooms": [], "positions": {}})
+        ctx._extra["perception_outcome"] = {
+            "views": {"player": "A door closes."}, "observations": {}}
+        narration.narrator(ctx, "seed")
+        return seen["payload"]
+
+    def test_the_craft_lists_are_absent_when_they_have_nothing_to_say(
+            self, temp_db, monkeypatch):
+        payload = self._payload(temp_db, monkeypatch)
+        assert "already_established_phrases" not in payload
+        assert "overused_phrases" not in payload
+        assert "exemplars" not in payload
+        assert "private_voice_setting" not in payload
+
+    def test_an_authored_exemplar_still_reaches_the_model(
+            self, temp_db, monkeypatch):
+        payload = self._payload(
+            temp_db, monkeypatch,
+            exemplars='["The rain kept on, indifferent."]')
+        assert payload["exemplars"] == ["The rain kept on, indifferent."]
+
+    def test_the_fields_that_are_always_meaningful_still_always_ship(
+            self, temp_db, monkeypatch):
+        """Absent-when-empty applies to computed craft lists and authored
+        config, never to a field whose EMPTY value is itself the answer --
+        `scene_opening: false` and `current_events: ""` both say something."""
+        payload = self._payload(temp_db, monkeypatch)
+        for key in ("narration_person", "player_name", "scene_opening",
+                    "past_narration", "current_narration", "present_scene",
+                    "current_events", "variant_seed"):
+            assert key in payload, key

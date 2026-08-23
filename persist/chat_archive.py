@@ -832,9 +832,9 @@ class ChatArchiveService:
                         "INSERT INTO lorebooks("
                         "name,chat_id,origin_id,book_type,summary,resource_uid,"
                         "parent_id,scope_world_id,scope_location_id,"
-                        "inheritance_mode,sort_order,anchor_entity_id,"
-                        "retired_turn_id"
-                        ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "inheritance_mode,default_circles,sort_order,"
+                        "anchor_entity_id,retired_turn_id"
+                        ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (
                             book.get("name") or "book",
                             new_chat_id,
@@ -846,6 +846,11 @@ class ChatArchiveService:
                             book.get("scope_world_id"),
                             book.get("scope_location_id"),
                             book.get("inheritance_mode") or "inherit",
+                            # The compartment is the difference between a
+                            # secret and a leak, so it must survive an export
+                            # -- an archive that drops it republishes the
+                            # organisation's existence to everybody.
+                            book.get("default_circles") or "[]",
                             int(book.get("sort_order") or 0),
                             book.get("anchor_entity_id"),
                             turn_idmap.get(book.get("retired_turn_id")),
@@ -894,8 +899,9 @@ class ChatArchiveService:
                     "INSERT INTO lorebooks("
                     "name,chat_id,origin_id,book_type,summary,resource_uid,"
                     "scope_world_id,scope_location_id,inheritance_mode,"
-                    "sort_order,anchor_entity_id,retired_turn_id"
-                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "default_circles,sort_order,anchor_entity_id,"
+                    "retired_turn_id"
+                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         (book.get("name") or "Imported canon") + " (import)",
                         new_chat_id,
@@ -906,6 +912,7 @@ class ChatArchiveService:
                         book.get("scope_world_id"),
                         book.get("scope_location_id"),
                         book.get("inheritance_mode") or "inherit",
+                        book.get("default_circles") or "[]",
                         int(book.get("sort_order") or 0),
                         book.get("anchor_entity_id"),
                         turn_idmap.get(book.get("retired_turn_id")),

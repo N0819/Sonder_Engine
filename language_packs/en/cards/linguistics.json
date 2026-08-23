@@ -268,6 +268,17 @@
       "pattern": "([\"“][^\"“”]+[\"”]|(?<![\\w'’])'(?:[^']|'(?=\\w))*?'(?![\\w]))",
       "flags": 32
     },
+    "_SENTENCE_END_CHARS": {
+      "$type": "frozenset",
+      "items": [
+        ".",
+        "!",
+        "?",
+        "…",
+        ":",
+        ";"
+      ]
+    },
     "_SPEECH_NARRATION_RE": {
       "$type": "regex",
       "pattern": "(?<![\\w'])(?:you|your|yours|says?|said|saying|replie[sd]|reply|answers?|answered|mutters?|muttered|whispers?|whispered|murmurs?|murmured|adds?|added|calls?|called|shouts?|shouted)(?![\\w'])",
@@ -1819,7 +1830,14 @@
           "generic muted/dim + light/sound"
         ]
       }
-    ]
+    ],
+    "_EVENT_LINES": {
+      "act_other": "{n}. {actor} did this (NOT yet on the page — you must render it happening): {action}",
+      "act_player": "{n}. {actor} did this (NOT yet on the page — the player described attempting it; you must render it happening): {action}",
+      "observation": "{n}. {text}",
+      "speech": "{n}. {actor} said: \"{quote}\"",
+      "speech_declared": "{n}. {actor} said (their WORDS are already on the page above — render what the line does, never the words; everything else here you must still render): \"{quote}\""
+    }
   },
   "agents.composer": {
     "_SUDDEN_VERBS": {
