@@ -30,6 +30,7 @@ const SERVICE_PATHS = Object.freeze({
   libraryAuthoringView: "./library-authoring-view.js?release=alpha98-ui2-3f44d1cc71ed",
   libraryStoryEditor: "./library-editors/story.js?release=alpha98-ui2-3f44d1cc71ed",
   libraryPersonEditor: "./library-editors/character-persona.js?release=alpha98-ui2-3f44d1cc71ed",
+  libraryPersonSections: "./library-editors/person-sections.js?release=alpha98-ui2-3f44d1cc71ed",
   navigationState: "./navigation-state.js?release=alpha98-ui2-3f44d1cc71ed",
   shortcuts: "./shortcuts.js?release=alpha98-ui2-3f44d1cc71ed",
   goTo: "./go-to.js?release=alpha98-ui2-3f44d1cc71ed",
