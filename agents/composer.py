@@ -908,7 +908,7 @@ _POSE_RENDER_FIELDS = ("posture", "support", "relative_to", "relation",
 
 
 def appearance_percept(source_name, label, description, *, force=False,
-                       delta=""):
+                       delta="", reearn=False):
     """The FULL authored appearance -- discovery/structural-change data, first
     mention only (the render ledger gates re-emission; ``force=True`` marks a
     structural change this beat, which re-earns the description).
@@ -922,6 +922,15 @@ def appearance_percept(source_name, label, description, *, force=False,
     render an inventory as something that happened. The full description
     stays available in the standing half of the view, where first-mention
     and dedupe already govern it.
+    ``reearn=True`` re-delivers the description past the first-mention
+    ledger WITHOUT claiming anything happened. The two are different jobs
+    and `force` was doing both: a body you are meeting again is not a body
+    that CHANGED, so its description is standing state that has become
+    sayable again rather than an event the narrator owes the page. Without
+    it, first-mention tracking is permanent -- a stranger described once on
+    beat 3 is never described again in a two-hundred-beat story, however
+    many times they leave and come back.
+
     `description` must already be identity-safe for this observer
     (name-stripped when the observer does not recognize the body). The
     canonical name is folded into an opaque `body_key` for the ledger; it
@@ -930,6 +939,7 @@ def appearance_percept(source_name, label, description, *, force=False,
         kind="appearance", channel="sight", source_label=label,
         data={"source_key": body_key(source_name),
               "description": description, "force": bool(force),
+              **({"reearn": True} if reearn else {}),
               **({"delta": str(delta)} if str(delta or "").strip() else {})},
         salience=0.5,
         dedupe_key="described:" + _short_hash(source_name, description),
@@ -1729,7 +1739,7 @@ def _render_view_english(percepts, *, mode="character",
         if p.kind == "appearance":
             source_key = str(p.data.get("source_key") or "")
             if source_key in described and not p.data.get("force") \
-                    and not full_render:
+                    and not p.data.get("reearn") and not full_render:
                 continue
         elif delta and p.dedupe_key in prev_standing:
             continue
@@ -2135,6 +2145,11 @@ def observations_from_render(pid, rendered):
             # percept's shape.
             "speaker": str(p.source_label or ""),
             "kind": p.kind,
+            # A re-encounter is deliberately NOT excluded here: meeting
+            # someone again is standing state that became sayable again,
+            # not something that happened, so it stays reference and the
+            # narrator owes it nothing. Only `force` -- an actual change --
+            # promotes an appearance to an obligation.
             "standing": p.order_key is None and not p.data.get("force"),
             "text": sentence,
             "intensity": min(1.0, 0.35 + 0.4 * p.salience),

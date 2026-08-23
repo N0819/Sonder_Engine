@@ -2304,6 +2304,18 @@ def _composer_prev_ledger(ctx):
     return ledger
 
 
+def _composer_prev_seen(ledger, pid):
+    """Bodies the previous beat could see, or None when it left no record.
+
+    None is not the empty set. Treating a missing key as "saw nobody" would
+    make the first beat after any older ledger re-describe every body in
+    the room at once, which is the flood this distinction exists to avoid.
+    """
+    entry = (ledger or {}).get(str(pid)) or {}
+    seen = entry.get("seen")
+    return set(seen) if isinstance(seen, list) else None
+
+
 def _composer_prev_state(ledger, pid):
     entry = (ledger or {}).get(str(pid)) or {}
     return (frozenset(entry.get("standing") or []),
@@ -2908,7 +2920,8 @@ def _scent_sources_for(sc, observer, observer_room, others, display_map,
 
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
-                                appearance_deltas=None,
+                                appearance_deltas=None, prev_seen=None,
+                                seen_out=None,
                                 gate=None, extra_parts=None,
                                 body_scents=None):
     """The standing-state half of one observer's IR: environment, presence,
@@ -2955,13 +2968,24 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             continue
         if entity_arc(sc, name, b_name) == "rear":
             continue
+        # SEEN THIS BEAT. Recorded before any of the reasons below to
+        # skip building a percept, because the question the ledger answers
+        # is "could this observer see them", not "did we say anything".
+        if seen_out is not None:
+            seen_out.add(b_name)
         recog = not disguise_breaks_recognition(
             body.get("disguise_known_to"), name,
             body.get("disguise_conceals_identity")
         ) and _recognizes(b_name, recognized)
         changed = any(same_subject(sc, b_name, item)
                       for item in appearance_changed or ())
-        if recog and not changed:
+        # A BODY YOU ARE MEETING AGAIN. `prev_seen` is None when the
+        # previous beat left no record -- an older stored ledger, or the
+        # opening beat -- and unknown must not mean "re-describe
+        # everyone", so it reads as no re-encounter at all.
+        reencountered = (prev_seen is not None
+                         and b_name not in prev_seen)
+        if recog and not changed and not reencountered:
             # A familiar stable body's authored card is not a new percept.
             continue
         label = display_map.get(b_name) or (
@@ -2989,7 +3013,8 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             # falls back to the full description.
             delta = (appearance_deltas or {}).get(b_name, "") if changed else ""
             percepts.append(composer.appearance_percept(
-                b_name, label, description, force=changed, delta=delta))
+                b_name, label, description, force=changed, delta=delta,
+                reearn=reencountered))
     if entity_state:
         state_percept = composer.body_state_percept(entity_state)
         if state_percept:
@@ -3127,7 +3152,7 @@ def _repaired_observations(observations, view, name, known, roster):
 
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
-                              spoken_lines=None):
+                              spoken_lines=None, seen=None):
     view = _composer_tripwires(
         ctx, stage, pid, name, rendered.text, known, roster,
         spoken_lines=spoken_lines)
@@ -3138,6 +3163,12 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
     ledger[pid] = {
         "standing": sorted(rendered.standing_keys),
         "described": sorted(rendered.described),
+        # WHO THIS OBSERVER COULD SEE. Absent (rather than empty) when the
+        # stage did not compute it, and `_composer_prev_seen` keeps that
+        # distinction: an empty list means "saw nobody", a missing key
+        # means "unknown", and only the first can make the next beat a
+        # re-encounter.
+        **({"seen": sorted(seen)} if seen is not None else {}),
     }
 
 
@@ -3177,6 +3208,8 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
     for p in perceivers:
         pid = str(p["id"])
         name = p["name"]
+        # See the note in the act stage: empty is a record, not a gap.
+        seen_bodies = set()
         if p.get("awareness") in NON_AWAKE_GATED:
             percepts = composer.residue_percepts(p["awareness"])
             company[pid] = []       # an unconscious observer sees nobody
@@ -3187,10 +3220,19 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 sc, name, others, known)
             gate = _authored_prose_gate(
                 ctx, "perception_establish", name, known, identity_space)
+            # `prev_seen=set()` is the LITERAL TRUTH of a scene opening --
+            # this observer saw nobody before it -- and it is what finally
+            # describes a body the observer KNOWS. A recognized body's
+            # authored card was skipped unconditionally, so a companion the
+            # player has travelled with for fifty beats opened every scene
+            # undescribed, and the narrator had nothing but `past_narration`
+            # to go on. Familiarity is a reason not to REPEAT a description,
+            # never a reason never to give one.
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
                 or (entity_states or {}).get(name),
+                prev_seen=set(), seen_out=seen_bodies,
                 gate=gate, extra_parts=cast_parts,
                 body_scents=body_scents)
             percepts.extend(
@@ -3203,7 +3245,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                                         language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_establish", pid, name, rendered, known, roster,
-            clean_views, observations, ledger)
+            clean_views, observations, ledger, seen=seen_bodies)
     ctx["_composer_turn_ledger"] = ledger
     return {
         "views": clean_views,
@@ -3252,6 +3294,13 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     for p in perceivers:
         pid = str(p["id"])
         name = p["name"]
+        # An unconscious observer sees nobody, and that is a RECORD rather
+        # than a gap: it must reach the ledger as an empty set, so the beat
+        # they wake on reads as a re-encounter with everyone in the room.
+        # NOT `seen`: this function already binds that name to a visibility
+        # BOOLEAN further down, and shadowing it made `sorted(seen)` fail
+        # on five movement and resume tests at once.
+        seen_bodies = set()
         prev_standing, prev_described = _composer_prev_state(prev_ledger, pid)
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
@@ -3271,6 +3320,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
                 or _own_body_state(sc, name),
+                prev_seen=_composer_prev_seen(prev_ledger, pid),
+                seen_out=seen_bodies,
                 gate=_authored_prose_gate(
                     ctx, "perception_act", name, known, identity_space),
                 extra_parts=cast_parts, body_scents=body_scents)
@@ -3330,7 +3381,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             prev_described=prev_described, language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_act", pid, name, rendered, known, roster,
-            clean_views, observations, ledger, spoken_lines=spoken)
+            clean_views, observations, ledger, spoken_lines=spoken,
+            seen=seen_bodies)
     merged = dict(prev_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged
@@ -3714,6 +3766,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         pid = str(p["id"])
         name = p["name"]
         is_player_view = pid == "player" or pid.startswith("extra:")
+        # See the note in the act stage: empty is a record, not a gap.
+        seen_bodies = set()
         prev_standing, prev_described = _composer_prev_state(base_ledger, pid)
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
@@ -3740,6 +3794,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 or _own_body_state(sc, name),
                 appearance_changed=appearance_changed,
                 appearance_deltas=appearance_deltas,
+                prev_seen=_composer_prev_seen(base_ledger, pid),
+                seen_out=seen_bodies,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
                 extra_parts=cast_parts, body_scents=body_scents)
@@ -3869,7 +3925,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
         _composer_finish_observer(
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
-            spoken_lines=spoken_lines)
+            spoken_lines=spoken_lines, seen=seen_bodies)
         if not is_player_view:
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,
