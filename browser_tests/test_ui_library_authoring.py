@@ -183,11 +183,12 @@ def test_person_workspace_geometry_has_one_scroll_owner_and_safe_targets(
         scrollOwners: owners.length,
         hiddenFocusable: hiddenFocusable.length,
         pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        unusedInspectorTrack: Math.round(innerWidth - root.getBoundingClientRect().right),
       };
     }""")
     assert geometry == {
         "tooSmall": [], "scrollOwners": 1,
-        "hiddenFocusable": 0, "pageOverflow": 0,
+        "hiddenFocusable": 0, "pageOverflow": 0, "unusedInspectorTrack": 0,
     }, (width, height, geometry)
 
 
