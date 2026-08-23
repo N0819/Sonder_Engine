@@ -60,6 +60,33 @@ def _open_wizard(page: Page) -> None:
     expect(page.get_by_role("dialog", name="New story")).to_be_visible()
 
 
+def test_lived_location_request_normalizes_character_routes(
+    page: Page, ui_base_url: str
+) -> None:
+    _open(page, ui_base_url)
+    payload = page.evaluate(
+        """async () => {
+          const module = await import('/static/js/ui-next/lived-location.js?release=alpha98-ui1');
+          return module.buildLivedLocationRequest({
+            enabled: true,
+            brief: '  A crowded orbital customs station  ',
+            horizonHours: 720,
+            characterHistories: [{ key: 'saved:9', mode: 'resident', brief: '  Two years on customs duty  ' }],
+          }, { resolveCharacterId: key => key === 'saved:9' ? 9 : null });
+        }"""
+    )
+    assert payload == {
+        "enabled": True,
+        "brief": "A crowded orbital customs station",
+        "horizon_hours": 720,
+        "active_tail_hours": 96,
+        "generate_history": True,
+        "character_histories": [
+            {"char_id": 9, "mode": "resident", "brief": "Two years on customs duty"}
+        ],
+    }
+
+
 def test_new_story_ports_reference_three_route_choice_without_provider(
     page: Page, ui_base_url: str
 ) -> None:
@@ -105,6 +132,87 @@ def test_start_blank_creates_an_ordinary_story_without_ai(
             "language": "en",
         }
     ]
+
+
+def test_blank_story_can_prepare_a_lived_location(
+    page: Page, ui_base_url: str
+) -> None:
+    generated: list[dict[str, object]] = []
+    page.route(
+        "**/api/chats",
+        lambda route: route.fulfill(
+            content_type="application/json", body=json.dumps({"id": 41})
+        ),
+    )
+    page.route(
+        "**/api/chats/41/charters/generate",
+        lambda route: (
+            generated.append(route.request.post_data_json),
+            route.fulfill(
+                content_type="application/json",
+                body=json.dumps({"charters": {"items": {}}, "warnings": []}),
+            ),
+        ),
+    )
+    _open(page, ui_base_url)
+    _open_wizard(page)
+    page.get_by_role("button", name="Start blank").click()
+    page.get_by_label("Story name").fill("Customs Wake")
+    page.get_by_text("Prepare a lived location", exact=True).click()
+    page.get_by_label("Prepare a lived location").check()
+    page.get_by_label("Location brief").fill("A crowded orbital customs station")
+    page.get_by_label("Recent history").select_option("720")
+    page.get_by_role("button", name="Review story").click()
+    expect(page.get_by_text("Past month · active tail 96 hours", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Create story").click()
+    expect(page).to_have_url(f"{ui_base_url}/static/ui-next.html#/play?chat=41")
+    assert generated == [{
+        "enabled": True,
+        "brief": "A crowded orbital customs station",
+        "horizon_hours": 720,
+        "active_tail_hours": 96,
+        "generate_history": True,
+    }]
+
+
+def test_failed_post_create_setup_deletes_the_incomplete_story(
+    page: Page, ui_base_url: str
+) -> None:
+    requests: list[tuple[str, str]] = []
+    page.route(
+        "**/api/chats",
+        lambda route: (
+            requests.append((route.request.method, "/api/chats")),
+            route.fulfill(content_type="application/json", body=json.dumps({"id": 41})),
+        ),
+    )
+    page.route(
+        "**/api/chats/41/charters/generate",
+        lambda route: (
+            requests.append((route.request.method, "/api/chats/41/charters/generate")),
+            route.fulfill(status=503, content_type="application/json", body=json.dumps({"detail": "unavailable"})),
+        ),
+    )
+    page.route(
+        "**/api/chats/41",
+        lambda route: (
+            requests.append((route.request.method, "/api/chats/41")),
+            route.fulfill(content_type="application/json", body=json.dumps({"ok": True})),
+        ),
+    )
+    _open(page, ui_base_url)
+    _open_wizard(page)
+    page.get_by_role("button", name="Start blank").click()
+    page.get_by_label("Story name").fill("Kept Draft")
+    page.get_by_text("Prepare a lived location", exact=True).click()
+    page.get_by_label("Prepare a lived location").check()
+    page.get_by_label("Location brief").fill("A place whose setup fails")
+    page.get_by_role("button", name="Review story").click()
+    page.get_by_role("button", name="Create story").click()
+    expect(page.get_by_text("Sonder could not complete that action.", exact=True)).to_be_visible()
+    assert requests[-1] == ("DELETE", "/api/chats/41")
+    page.get_by_role("button", name="Edit").click()
+    expect(page.get_by_label("Location brief")).to_have_value("A place whose setup fails")
 
 
 def test_library_route_mixes_saved_persona_character_and_lore_without_ai(

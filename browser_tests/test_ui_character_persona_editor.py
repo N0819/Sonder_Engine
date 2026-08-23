@@ -14,7 +14,7 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
     result = page.evaluate(
         """async base => {
           const editorModule = await import(
-            `${base}/static/js/ui-next/library-editors/character-persona.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-editors/character-persona.js?release=alpha98-ui1`
           );
           const original = {
             identity: { uid: "char-a", name: "Asha", aliases: ["Ash"],
@@ -29,12 +29,17 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
           let quickStart = null;
           const services = {
             localizer: { t: value => value },
-            store: { getSnapshot: () => ({ library: { library: { items: [
-              { kind: "persona", id: 8, name: "Mira", archived: false },
-            ] } } }) },
+            store: { getSnapshot: () => ({
+              library: {
+                personas: [{ id: 8, name: "Mira" }],
+                lorebooks: [{ id: 12, name: "Rain Atlas" }],
+                items: [],
+              },
+              settings: { data: { ui_language: "ja" } },
+            }) },
             authoring: {
               stage: value => { staged = structuredClone(value); },
-              quickStart: (persona, greeting) => { quickStart = { persona, greeting }; },
+              quickStart: options => { quickStart = structuredClone(options); },
             },
           };
           const host = document.createElement("div");
@@ -62,6 +67,18 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
           more.open = true;
           const secondaryTools = more.querySelectorAll(".ui-action-more__menu button").length;
           const stableIdentityLocked = host.querySelector('[data-schema-path="identity.uid"]')?.disabled;
+          const quick = host.querySelector(".ui-authoring-quick-start");
+          quick.querySelector('select[id^="ui-quick-persona-"]').value = "8";
+          quick.querySelectorAll("select")[2].value = "12";
+          quick.querySelector(".ui-authoring-quick-start__known input").click();
+          quick.querySelector("details summary").click();
+          quick.querySelector('input[aria-label="Prepare a lived location"]').click();
+          const locationBrief = quick.querySelector("textarea.ui-textarea");
+          locationBrief.value = "A rain archive";
+          locationBrief.dispatchEvent(new Event("input", { bubbles: true }));
+          const historyRoute = quick.querySelector('select[aria-label^="History route for"]');
+          historyRoute.value = "resident";
+          historyRoute.dispatchEvent(new Event("change", { bubbles: true }));
           host.querySelector(".ui-authoring-quick-start .ui-button--primary").click();
           host.remove();
           return { afterForm, afterAdvanced, heading, secondaryTools, stableIdentityLocked, quickStart };
@@ -82,7 +99,21 @@ def test_character_editor_preserves_unknown_fields_through_advanced_json(
     assert result["heading"] == "Asha Vale"
     assert result["secondaryTools"] == 2
     assert result["stableIdentityLocked"] is True
-    assert result["quickStart"] == {"persona": "8", "greeting": "0"}
+    assert result["quickStart"] == {
+        "personaId": 8,
+        "greetingIndex": 0,
+        "lorebookId": 12,
+        "alreadyKnown": True,
+        "language": "ja",
+        "livedLocation": {
+            "enabled": True,
+            "brief": "A rain archive",
+            "horizon_hours": 0,
+            "active_tail_hours": 0,
+            "generate_history": False,
+            "character_history": {"mode": "resident", "brief": ""},
+        },
+    }
 
 
 def test_create_preview_failure_retry_discard_and_accept_are_lossless(
@@ -91,9 +122,9 @@ def test_create_preview_failure_retry_discard_and_accept_are_lossless(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=wp07.1`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui1`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           const route = {
@@ -195,9 +226,9 @@ def test_quick_start_saves_the_owned_draft_before_opening_play(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=wp07.1`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui1`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           const route = {
@@ -237,7 +268,7 @@ def test_quick_start_saves_the_owned_draft_before_opening_play(
           const draft = structuredClone(original);
           draft.identity.name = "Asha Vale";
           runtime.stage(draft);
-          const started = await runtime.quickStart(8, 0);
+          const started = await runtime.quickStart({ personaId: 8, greetingIndex: 0 });
           runtime.teardown();
           return { started, calls, navigation: navigations[0] };
         }""",
@@ -248,7 +279,12 @@ def test_quick_start_saves_the_owned_draft_before_opening_play(
         "/api/characters/4", "/api/characters/4/start",
     ]
     assert result["calls"][0]["body"]["sheet"]["identity"]["name"] == "Asha Vale"
-    assert result["calls"][1]["body"] == {"persona_id": 8, "greeting_index": 0}
+    assert result["calls"][1]["body"] == {
+        "persona_id": 8,
+        "greeting_index": 0,
+        "already_known": False,
+        "language": "en",
+    }
     assert result["navigation"] == {"destination": "play", "query": {"chat": "71"}}
 
 
@@ -258,9 +294,9 @@ def test_story_card_override_loads_and_saves_its_story_owned_document(
     page.goto(f"{ui_base_url}/static/ui-next-lab.html")
     result = page.evaluate(
         """async base => {
-          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=wp07.1`);
+          const storeModule = await import(`${base}/static/js/ui-next/store.js?release=alpha98-ui1`);
           const runtimeModule = await import(
-            `${base}/static/js/ui-next/library-authoring-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-authoring-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           const route = {

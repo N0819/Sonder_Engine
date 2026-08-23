@@ -1,6 +1,6 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
-import { createOverlayController } from "../ui/components/overlay.js?release=wp07.1";
+import { createOverlayController } from "../ui/components/overlay.js?release=alpha98-ui1";
 
 const LAYER_ID = "inspector:context";
 const SIZES = Object.freeze(["narrow", "default", "wide"]);

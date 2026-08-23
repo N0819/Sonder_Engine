@@ -110,10 +110,10 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp07.1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui1`
           );
           const store = storeModule.createStore();
           let current = {
@@ -202,6 +202,88 @@ def test_library_runtime_rejects_stale_results_and_bounds_identity_state(
     }
 
 
+def test_lore_can_prepare_a_lived_location_for_the_current_story(
+    page: Page, ui_base_url: str,
+) -> None:
+    page.goto(f"{ui_base_url}/static/ui-next-lab.html")
+    result = page.evaluate(
+        """async base => {
+          const storeModule = await import(
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
+          );
+          const libraryModule = await import(
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui1`
+          );
+          const route = {
+            destination: "library", segments: ["lore"],
+            query: { item: "lore:12" },
+            canonicalHash: "#/library/lore?item=lore%3A12",
+          };
+          const store = storeModule.createStore({
+            route,
+            story: { status: "ready", data: { chat: { id: 5 } }, frameId: null },
+          });
+          const item = {
+            kind: "lore", id: 12, key: "lore:12", name: "Quiet Roads",
+            summary: "Paths between old signal towers.", reusable: true,
+            archived: false, use_count: 0, associations: [],
+          };
+          const projection = {
+            items: [item], facets: { types: {}, scopes: {} },
+            page: { offset: 0, limit: 100, returned: 1, total: 1 }, query: {},
+          };
+          const posts = [];
+          const apiClient = {
+            get: async () => ({ data: structuredClone(projection) }),
+            post: async (path, body, options) => {
+              posts.push({ path, body, current: options.isCurrent() });
+              if (path.endsWith("/lorebooks")) return { data: { lorebook_id: 212 } };
+              return { data: { charters: { items: { archive: {} } } } };
+            },
+            cancel: () => true,
+          };
+          let envelope = { version: 2, panes: {}, appearance: {}, navigation: {}, drafts: {} };
+          const localState = {
+            snapshot: () => structuredClone(envelope),
+            setRecord: (name, value) => { envelope = { ...envelope, [name]: structuredClone(value) }; },
+          };
+          const router = { current: () => route, navigate: () => true };
+          const runtime = libraryModule.createLibraryRuntime({ store, apiClient, localState, router });
+          await Promise.resolve(); await Promise.resolve();
+          const generated = await runtime.generateLocationFromLore(item, {
+            enabled: true, brief: "A signal keep", horizonHours: 168,
+            characterHistories: [],
+          });
+          const mutation = store.getSnapshot().library.mutation;
+          runtime.teardown();
+          return { posts, generated, mutation };
+        }""",
+        ui_base_url,
+    )
+    assert result["posts"] == [
+        {
+            "path": "/api/chats/5/lorebooks",
+            "body": {"lorebook_id": 12},
+            "current": True,
+        },
+        {
+            "path": "/api/chats/5/charters/generate",
+            "body": {
+                "enabled": True,
+                "brief": "A signal keep",
+                "horizon_hours": 168,
+                "active_tail_hours": 96,
+                "generate_history": True,
+                "lorebook_id": 12,
+                "owning_lorebook_id": 212,
+            },
+            "current": True,
+        },
+    ]
+    assert result["generated"] == {"charters": {"items": {"archive": {}}}}
+    assert result["mutation"]["message"] == "1 institutions prepared."
+
+
 def test_library_mutations_keep_story_owner_and_undo_expires(
     page: Page, ui_base_url: str,
 ) -> None:
@@ -209,10 +291,10 @@ def test_library_mutations_keep_story_owner_and_undo_expires(
     result = page.evaluate(
         """async base => {
           const storeModule = await import(
-            `${base}/static/js/ui-next/store.js?release=wp07.1`
+            `${base}/static/js/ui-next/store.js?release=alpha98-ui1`
           );
           const libraryModule = await import(
-            `${base}/static/js/ui-next/library-runtime.js?release=wp07.1`
+            `${base}/static/js/ui-next/library-runtime.js?release=alpha98-ui1`
           );
           const item = {
             kind: "character", id: 7, key: "character:7", name: "Mara Venn",

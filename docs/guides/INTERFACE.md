@@ -115,6 +115,14 @@ global scripts, and classic styles no longer ship. `/ui-next/lab` and
 alternatives. The [WP-13 review](../design/sonder-ui-replacement/wp13/REVIEW.md)
 records capability reconciliation and deletion evidence.
 
+Alpha 9.8 adds lived-location preparation and Charter inspection to that same
+replacement composition. It does not add a fourth destination or a parallel
+frontend product. New Story, Character Quick Start, and reusable Lore share one
+location/history form; Dialogue owns the story-scoped institution ledger and
+diagnostics; Settings links to that canonical Story Tool instead of editing a
+second copy. The [alpha 9.8 parity review](../design/sonder-ui-replacement/wp15/REVIEW.md)
+records the port, responsive renders, and current-endpoint evidence.
+
 ## Runtime boundary
 
 - The replacement is delivered by the existing FastAPI process, same-origin.
@@ -303,6 +311,36 @@ do not carry persistent work, failures, or choices.
 - Only favorites, recents, per-route scroll, and the last safe route enter the
   versioned local presentation envelope, each with a hard bound. They never
   make an archived, missing, or server-rejected item appear available.
+
+### Alpha 9.8 lived-location ownership
+
+- `lived-location.js` is the shared presentation adapter for New Story,
+  Character Quick Start, reusable Lore, and Story Tools. It normalizes only
+  browser drafts and maps them to the released alpha 9.8 request documents; it
+  does not simulate institutions, routes, history, or information movement.
+- New Story keeps lived-location choices inside its existing recoverable setup
+  draft. The review names the place and Character-past horizon before creation.
+  Once `/api/chats` succeeds, setup uses the released lore attachment and
+  `/api/chats/{id}/charters/generate` routes. A failed post-create setup deletes
+  the incomplete Story through the released Story deletion route; if cleanup
+  itself fails, the draft retains an explicit link to that Story.
+- Character Quick Start sends the released `lorebook_id`, `already_known`,
+  `language`, and `lived_location` fields through its existing save-before-start
+  runtime. Public resident-card disclosure and private Character-history
+  delivery are stated beside the controls.
+- Reusable Lore may prepare a location only for the current Story at its present
+  frame. The action attaches through the existing lore route, then calls the
+  released Charter generator. The selected Lore, Story, route, and request owner
+  are captured so a late result cannot repaint another detail.
+- Dialogue remains the canonical home for story-scoped institutions. Its
+  Charter section reads `/charters`, expands `/charters/diagnostics` on demand,
+  and offers explicit generation from attached Story Lore. Settings owns only
+  living-world ceilings and a link to this tool.
+- Witnessing, telling, reading, and carrying information are story events, not
+  UI settings. The replacement exposes that boundary in plain language and
+  never invents a browser-side rumor, courier, resident, or world-clock model.
+- Institution names and warnings are engine data and remain untranslated. New
+  interface copy enters both English and Japanese catalogs in the same release.
 
 ## Design-system boundary
 

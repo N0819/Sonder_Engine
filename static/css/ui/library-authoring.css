@@ -76,6 +76,9 @@
   min-block-size: var(--ui-target-current);
 }
 
+.ui-authoring-quick-start__known { min-block-size: 44px; display: flex; align-items: center; gap: var(--ui-space-3); }
+.ui-authoring-quick-start__location { grid-column: 1 / -1; }
+
 .ui-authoring-schema__group {
   padding: var(--ui-space-2) var(--ui-space-3);
   border: 1px solid var(--ui-color-border);

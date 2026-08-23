@@ -1,4 +1,4 @@
-export const MODULE_RELEASE = "wp07.1";
+export const MODULE_RELEASE = "alpha98-ui1";
 
 const MARKUP_TAGS = Object.freeze({
   i: "em",

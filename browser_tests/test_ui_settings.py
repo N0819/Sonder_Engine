@@ -935,11 +935,14 @@ def test_content_renders_living_world_built_and_effective_depth_from_server_trut
     page.route(re.compile(r".*/api/chats/5/living_world$"), living_world)
     _open_settings(page, ui_base_url, category="content", bootstrap=bootstrap)
 
+    expect(page.get_by_text(re.compile("witnessing, telling, reading, and carrying"))).to_be_visible()
     expect(page.get_by_text("Runs as Floor — Ceiling is not built yet.", exact=True)).to_be_visible()
     expect(page.get_by_text("Runs as Floor — the story's off-screen limit does not permit Ceiling.", exact=True)).to_be_visible()
     page.get_by_role("combobox", name="Routine and residue depth").select_option("floor")
     page.get_by_role("button", name="Save living world settings").click()
     expect(page.get_by_text("Living world settings saved.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Open Institution tools").click()
+    expect(page).to_have_url(re.compile(r"#/play/story-tools\?chat=5&tool=dialogue$"))
     assert writes == [{"living_world": {"routine_residue": "floor", "rumor_ledger": "ceiling"}}]
 
 
