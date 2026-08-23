@@ -273,16 +273,75 @@ def _accepted(report):
 
 _SCHEMA_CACHE: dict = {}
 
+# JSON Schema annotations help a human reading a generated schema, but they do
+# not constrain a provider's sampler.  The character schema in particular is
+# prompt-sized: Pydantic's titles/defaults/descriptions made its wire copy
+# 26,446 bytes, while the constraint-equivalent copy is 7,477.  Local
+# validation still uses the original Pydantic model; only the grammar offered
+# to the provider is compacted here.
+_SCHEMA_ANNOTATIONS = frozenset({
+    "title", "description", "default", "examples", "$comment",
+    "deprecated", "readOnly", "writeOnly",
+})
 
-def _step_json_schema(step_key: str):
+
+def _constraint_only_schema(value):
+    """Copy a JSON Schema without non-enforcing annotation keywords."""
+    if isinstance(value, dict):
+        return {
+            key: _constraint_only_schema(item)
+            for key, item in value.items()
+            if key not in _SCHEMA_ANNOTATIONS
+        }
+    if isinstance(value, list):
+        return [_constraint_only_schema(item) for item in value]
+    return value
+
+
+_CHARACTER_COMPACT_WIRE_FIELDS = frozenset({
+    # Compatibility projections: sequence and the two evidence lanes are the
+    # canonical model output.  The engine can still ACCEPT these from an old
+    # provider response; this list changes only what the experimental grammar
+    # advertises.
+    "observations_used", "speech", "action", "actions",
+    # Deliberation scratch.  Deliberately experimental: unlike the aliases
+    # above, this may help a model think even though no commit reader consumes
+    # it, so the normal runtime keeps it until the matched A/B says otherwise.
+    "considered_responses",
+})
+
+
+def _character_wire_schema(schema, wire_variant=None):
+    """Return the optional experimental character wire contract.
+
+    ``compact`` is used only by the comparison harness.  Runtime callers pass
+    no variant and therefore retain the complete character surface.
+    """
+    if wire_variant != "compact" or not isinstance(schema, dict):
+        return schema
+    out = dict(schema)
+    properties = dict(out.get("properties") or {})
+    for field in _CHARACTER_COMPACT_WIRE_FIELDS:
+        properties.pop(field, None)
+    out["properties"] = properties
+    if isinstance(out.get("required"), list):
+        out["required"] = [
+            field for field in out["required"]
+            if field not in _CHARACTER_COMPACT_WIRE_FIELDS
+        ]
+    return out
+
+
+def _step_json_schema(step_key: str, wire_variant=None):
     """The JSON Schema for a step, or None if it has no model or will not build.
 
     Cached because `model_json_schema()` walks the whole Pydantic graph and
     these are the hottest calls in the process. None is a first-class answer:
     every caller treats a missing schema as "send the advisory flag instead".
     """
-    if step_key in _SCHEMA_CACHE:
-        return _SCHEMA_CACHE[step_key]
+    cache_key = (step_key, wire_variant)
+    if cache_key in _SCHEMA_CACHE:
+        return _SCHEMA_CACHE[cache_key]
     schema = None
     try:
         from llm import schemas
@@ -295,9 +354,12 @@ def _step_json_schema(step_key: str):
             schema_builder = getattr(model_cls, "model_json_schema", None)
             schema = (schema_builder() if schema_builder is not None
                       else model_cls.schema())
+            schema = _constraint_only_schema(schema)
+            if step_key == "character":
+                schema = _character_wire_schema(schema, wire_variant)
     except Exception:
         schema = None
-    _SCHEMA_CACHE[step_key] = schema
+    _SCHEMA_CACHE[cache_key] = schema
     return schema
 
 

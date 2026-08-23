@@ -28,7 +28,8 @@ Three rules, all of them deliberate:
 
 from __future__ import annotations
 
-from .charter_mind import hear, see
+from .charter_mind import hear, hear_claim, see
+from .charter_politics import regard_value
 from .charter_roster import TRUST_FLOOR
 
 #: What a claim retains when retold. A seeing is 1.0; hearing it once makes it
@@ -44,6 +45,10 @@ RETOLD_RETENTION = 0.6
 #: the same problem rather than bounding it; bounding is cheaper and the loss
 #: is unobservable.
 PARTNERS_PER_WINDOW = 2
+
+#: A deliberate workplace briefing carries more attention than ambient talk,
+#: while remaining weaker than seeing the event yourself.
+FORMAL_REPORT_RETENTION = 0.82
 
 
 def _rotate(seq, by):
@@ -94,6 +99,11 @@ def tell_ranking(held, exclude=(), visible=()):
     for subject, claim in held.items():
         if subject in exclude:
             continue
+        if claim.get("kind") == "news":
+            from world.degradation import is_exhausted
+
+            if is_exhausted(claim.get("retellings") or 0):
+                continue
         if subject in visible:
             index = 2
         elif claim.get("kind"):
@@ -231,7 +241,7 @@ def converse(minds, bodies, seed=0, regard=None, at_hours=0.0, figures=None):
                            visible=visible_at.get(place, set()))
         if subject is None:
             continue
-        weight = float(regard.get((listener, speaker), 1.0))
+        weight = regard_value(regard, listener, speaker)
         if hear(minds, listener, speaker, subject, RETOLD_RETENTION, weight):
             told += 1
 
@@ -280,3 +290,55 @@ def report_up(roster, minds, watch, bodies, standing=None, at_hours=0.0):
             record["heard_from"] = body_key
             roster[subject] = record
     return roster
+
+
+def report_to_superiors(minds, watch, posts, bodies, *, naming=None,
+                        at_hours=0.0):
+    """Pass one news claim along each staffed, co-present reporting line.
+
+    ``post.reports_to`` is obligation, not telepathy. Both duties must be
+    staffed by different, available bodies in the same place. Only the
+    subordinate's own news may cross; personnel beliefs, needs, feelings and
+    the institutional register are structurally excluded.
+    """
+    from .charter_identity import display_name
+
+    minds = {holder: {subject: dict(claim)
+                      for subject, claim in claims.items()}
+             for holder, claims in (minds or {}).items()}
+    roles = {}
+    for post_key, body_key in (watch or {}).items():
+        roles.setdefault(str(body_key), []).append(str(post_key))
+    told = 0
+    for post_key, post in sorted((posts or {}).items()):
+        superior_post = str((post or {}).get("reports_to") or "")
+        if not superior_post:
+            continue
+        subordinate = str((watch or {}).get(post_key) or "")
+        superior = str((watch or {}).get(superior_post) or "")
+        if not subordinate or not superior or subordinate == superior:
+            continue
+        subordinate_body = (bodies or {}).get(subordinate) or {}
+        superior_body = (bodies or {}).get(superior) or {}
+        if not subordinate_body.get("available", True) \
+                or not superior_body.get("available", True):
+            continue
+        place = str(subordinate_body.get("place") or "")
+        if not place or place != str(superior_body.get("place") or ""):
+            continue
+        candidates = [claim for claim in (minds.get(subordinate) or {}).values()
+                      if claim.get("kind") == "news"]
+        candidates.sort(key=lambda claim: (
+            -float(claim.get("strength") or 0.0),
+            str(claim.get("body") or "")))
+        source_name = display_name(
+            subordinate_body, roles.get(subordinate) or (), naming)
+        for claim in candidates:
+            formal = dict(claim)
+            formal.setdefault("source_provenance", formal.get("provenance"))
+            formal["provenance"] = "reported"
+            if hear_claim(minds, superior, formal, FORMAL_REPORT_RETENTION,
+                          1.0, heard_from=source_name or subordinate):
+                told += 1
+                break
+    return minds, told

@@ -85,6 +85,11 @@ test-lf:
 test-browser:
 	$(PYTEST) -q browser_tests
 
+# Explicit population/month audit. Kept out of default pytest: it exercises
+# realism and scaling, while the ordinary suite proves the mechanism quickly.
+charter-audit:
+	$(PYTHON) tools/charter_simulation_audit.py
+
 browser-install:
 	$(PYTHON) -m playwright install chromium
 

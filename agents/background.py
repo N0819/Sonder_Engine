@@ -9,12 +9,14 @@ pressure, that a deterministic backstop is warranted: exactly the same
 "prompt compliance alone is unreliable" lesson already learned for
 spatial zone-tagging and speech concealment elsewhere in this codebase.
 
-This stage is deliberately NOT a cheap character_step: no memory, no
-mind-models, no relationships, no persistent psychology. It answers one
-question for one beat only -- does this specific present bystander
-plausibly react right now -- and is gated by a deterministic, LLM-free
-check (commit.py's pick_background_reactor) so the common case (no
-salient, un-voiced background presence this beat) costs nothing.
+This stage is deliberately NOT a cheap character_step: no general memory, no
+mind-models, and no persistent psychology. It answers one question for one
+beat only -- does this specific present bystander plausibly react right now --
+and is gated by a deterministic, LLM-free check
+(commit.py's pick_background_reactor) so the common case (no salient,
+un-voiced background presence this beat) costs nothing. An explicitly authored
+Charter may add a bounded slice of this body's own institutional past and
+condition; it never adds the institution's register or another body's interior.
 
 For cheap individuation the payload carries a `sketch` (role_hint,
 station_room) that commit.track_background_presences harvested
@@ -65,6 +67,7 @@ from persist.commit import (
     _registered_name_roster,
     _room_of,
     _valid_pending_reply,
+    with_charter_presences,
 )
 
 from world.background_claims import (
@@ -305,6 +308,21 @@ def background_react(ctx, nonce):
     except Exception:
         cfg = {}
     level = str(cfg.get("scene_life") or "off").strip().casefold()
+    charter_near = False
+    if level in ("ambient", "full"):
+        try:
+            from world.charter_runtime import background_presence_records
+            _sc = wget(ctx.chat.id, "scene", {}) or {}
+            _pr = _player_room(ctx, _sc)
+            _places = {_pr} if _pr else set()
+            if _pr:
+                from world.spatial import ambient_scope
+                _ambient, _ = ambient_scope(_sc, _pr)
+                _places.update(_ambient or ())
+            charter_near = bool(background_presence_records(
+                ctx.chat.id, places=_places, frame_id=ctx.turn.frame_id))
+        except Exception:
+            charter_near = False
     if level in ("ambient", "full"):
         # Scene-manager path (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12). It
         # returns the SAME _result() shape as the per-presence path, so every
@@ -335,12 +353,13 @@ def background_react(ctx, nonce):
                       or r.get("name") or "").casefold()
                   for r in (out.get("reactions") or [])}
         _unpaid = [n for n in _owed if n.casefold() not in _spoke]
-        if out["fired"] and not _unpaid:
+        if out["fired"] and not _unpaid and not charter_near:
             return out
         # `ambient` already fell through on silence for the same reason in a
         # narrower form: a directed line is withheld from the manager there,
         # and a routed line is directed by construction.
-        if not out["fired"] and level == "full" and not _unpaid:
+        if (not out["fired"] and level == "full" and not _unpaid
+                and not charter_near):
             return out
         # Falling through to pay `_unpaid`. Whatever the manager already did
         # stands and is merged back in at the end.
@@ -364,6 +383,12 @@ def background_react(ctx, nonce):
     # (healed at commit; this stage runs before it).
     presences = _fold_duplicate_presences(
         wget(ctx.chat.id, "background_presences", {}) or {}, sc)
+    # Charter people are derived identities until they actually participate.
+    # Resolve only the gated names here so a large institution does not turn
+    # into a payload-sized background ledger.
+    presences = with_charter_presences(
+        ctx.chat.id, presences, sc, names=names,
+        frame_id=ctx.turn.frame_id)
 
     # One independent reactive beat per gated presence. At cap == 1 this is a
     # single call (unchanged behavior). For cap > 1 each extra reacts to the
@@ -493,6 +518,11 @@ def managed_presences(ctx, cap):
         # exactly the "compliance holds until it doesn't" situation this
         # codebase keeps learning to make structural instead.
         if name_in_roster(name, roster):
+            continue
+        # A shared manager prompt is read by every voice it contains. Charter
+        # history is private per body, so linked people are orchestrated by
+        # scene life through isolated `_react_one` calls instead.
+        if rec.get("charter_refs"):
             continue
         # The manager voices whoever it likes among its roster, with no
         # per-signal gate -- so only a PERSON may be on that roster. A
@@ -1070,6 +1100,16 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
             addressed_by = {"speaker": pr.get("from"), "exact_quote": pr.get("quote", ""),
                             "tone": pr.get("tone", ""), "beats_ago": 1}
 
+    institutional_context = []
+    if here:
+        try:
+            from world.charter_runtime import presence_view
+            institutional_context = presence_view(
+                ctx.chat.id, here, name, frame_id=ctx.turn.frame_id,
+                figures=[p for p in present_others if p != name])
+        except Exception as exc:
+            ctx.add_warning(f"charter presence context skipped: {exc}")
+
     payload = {
         # The per-presence path carried NO place block whatever -- not the
         # room, not the time, not the setting, not a word of lore. It knew its
@@ -1088,7 +1128,23 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
             "player_declaration": _filtered_player_declaration(
                 ctx, sc, name, here),
             "present_others": [p for p in present_others if p != name],
+            # Exact, already-delivered exchange fragments from this
+            # presence's own bounded record.  Counters such as
+            # dialogue_turns prove that a conversation occurred but cannot
+            # tell a mind what was said; without this, the Charter captain in
+            # the town playtest forgot Rowan's introduction on the next beat
+            # and invented a second surveyor to reconcile the gap.
+            "recent_interaction": [
+                str(row.get("text") or "")
+                for row in (rec.get("recent") or [])[-3:]
+                if str((row or {}).get("text") or "").strip()
+            ],
         },
+        # A bounded earned past for this body only: own condition, duties,
+        # acquaintances and news. The institution's register and every other
+        # body's interior are structurally absent.
+        **({"institutional_context": institutional_context}
+           if institutional_context else {}),
         "variant_seed": nonce,
     }
 
@@ -1102,11 +1158,25 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce):
     out, warnings = validate_llm_output("background_react", out)
     ctx.warnings.extend(warnings)
 
-    if not out.get("reacts") or not out.get("dialogue_log_entry"):
+    if not out.get("reacts"):
         return None
-    entry = dict(out["dialogue_log_entry"])
-    entry["speaker"] = name
-    entry.setdefault("visibility", "overt")
-    entry.setdefault("conceal_from", [])
+    entry = None
+    if out.get("dialogue_log_entry"):
+        entry = dict(out["dialogue_log_entry"])
+        entry["speaker"] = name
+        entry.setdefault("visibility", "overt")
+        entry.setdefault("conceal_from", [])
+    action = str(out.get("action") or "").strip()
+    if entry is None and not action:
+        return None
+    charter_offers = [
+        offer for context in institutional_context
+        for offer in (context.get("action_instances") or ())
+    ]
     return {"name": name, "dialogue_log_entry": entry,
-            "action": out.get("action", ""), "room": here or ""}
+            "action": action, "room": here or "",
+            "heard_address": addressed_by,
+            "charter_act": out.get("charter_act"),
+            # Engine-authored allowlist paired with the model echo. It never
+            # enters narration, only the commit-side exact-match gate.
+            "charter_offers": charter_offers}

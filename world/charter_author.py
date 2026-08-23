@@ -44,7 +44,7 @@ from __future__ import annotations
 from .charter_figure import figure_claim
 from .charter_mind import hear_claim
 from .charter_model import normalize_charter
-from .charter_politics import normalize_politics, regard_map
+from .charter_politics import normalize_politics, regard_map, regard_value
 from .charter_practice import (
     ASKED_RETENTION,
     REFUSED_ABSENT,
@@ -217,7 +217,7 @@ def _figure_act(actor, act, other, figures, bodies, state, practices, minds,
         keep = ASKED_RETENTION if retention is None else float(retention)
         taken = hear_claim(
             minds, other, claim, keep,
-            state["regard"].get((other, actor), 1.0), heard_from=actor)
+            regard_value(state["regard"], other, actor), heard_from=actor)
         subject = str(claim.get("body"))
         return {"actor": actor, "act": act, "other": other,
                 "taken": bool(taken),

@@ -94,6 +94,12 @@ Authority model (Phase 3a): the frame-scoped `world.scene` blob is the single ru
 
 ## Write helpers
 
+`persist.chat_delete.delete_chat_data` is the complete story-owned deletion
+boundary. The ordinary delete route checks that the pipeline is idle before
+calling it; greeting Quick Start may also call it for the chat it just minted
+when lived-location generation fails before turn 0. Keep the table inventory
+there rather than adding another partial sweep at a caller.
+
 - `q(sql, args, one=False)`: read rows.
 - `qi(sql, args)`: write and commit immediately unless already inside a transaction.
 - `transaction()`: outer `BEGIN IMMEDIATE`; nested calls use savepoints.
@@ -105,15 +111,129 @@ Authority model (Phase 3a): the frame-scoped `world.scene` blob is the single ru
   use these when the era matters, which for live world state it almost always
   does.
 
-`offscreen_epoch`, `offscreen_plans`, and `offscreen_log` are frame-scoped world
-keys. The epoch and reactive plans are primary diegetic state; the log is
-provisional diegetic history. All three therefore
+`offscreen_epoch`, `offscreen_plans`, `offscreen_log`, and `charters` are
+frame-scoped world keys. The epoch, reactive plans, and Charter registry are
+primary diegetic state; the log is
+provisional diegetic history. All four therefore
 ride the existing whole-`world` checkpoint/archive/branch path and roll back
 together. A plan stores its current stage and bounded history, so restore never
 replays a discarded plan advance. Background jobs carry an epoch id in addition to `base_turn`: the
 turn check catches rollback behind the producer, while the epoch check catches
 a restore/branch at the same numeric turn but on a different world edge. Stable
 epoch+rung batch identity makes landing idempotent.
+
+`charters` stores `{version, items}`. Each item separates its
+normalized pure `state` from runtime markers (`last_elapsed_seconds`,
+`last_epoch_id`, `window_hours`). Directed regard keys are JSON strings
+(`listener->speaker`), never tuple keys. Charter jobs write this blob and their
+stable scheduled consequences in one transaction after checking the epoch,
+base turn, and source-registry revision under that same write lock; do not
+persist a Charter
+event list in the blob or a second table. Incidents live only on the existing
+`scheduled_events` -> `world_events` spine.
+
+`structures` is the authoring grammar/extent ledger for planned locations.
+Individual planned rooms use ordinary `room_registry` rows; their free-form
+`payload.planned` contains only structure key, purpose, access, adjacency and
+frontier labels. A planned row becomes resolved only when the live scene room
+has mapped prose. The full skeleton never lives in the scene blob: Charter
+composes it for pathing, while commit materializes only planned neighbours of
+occupied rooms as small scene stubs.
+
+Lived-location generation is additive. A second generated structure receives
+a deterministic suffix when its structure, room or Charter keys would collide;
+the existing `charters`, `structures`, and `room_registry` records remain
+standing. `room_registry.owning_book_id` records the selected lorebook that
+grounded the skeleton. Presim advances only the new Charter items before
+merging them into the existing frame-scoped registry.
+
+Generation lore is retrieved from the author-selected book subtree with the
+same hybrid relevance ranker Mapping uses; insertion order is never relevance.
+Setting-law entries (`rules` categories or `<rules>` content) remain a bounded
+mandatory prefix. The resulting Charter `history.architecture.generation_lore`
+records the exact query, source book, and entry ids so an author can audit what
+shaped a location without exposing that host-facing manifest to any mind.
+
+Within each Charter, `judgments` is holder → subject → independent social axes
+plus bounded evidence identities; `commitments` holds locally recognised
+undertakings and their explicit lifecycle; `economy` holds abstract lots,
+targets, flows and markets; `decisions` holds bounded agendas and typed orders.
+All are part of the one frame-scoped Charter JSON state and therefore use the
+existing checkpoint/archive/branch path—do not create parallel tables for
+them. `history` is author diagnostics and must never be projected into a mind.
+The presim historian may cite synthetic `presim:service:*` evidence rows
+derived from each selected resident's bounded `stood`/`travelled` aggregates.
+Those rows are historian input, not another persisted event ledger: they let a
+quiet competent career be summarized without writing one event per watch.
+`economy.supply_points` is the temporary upstream-chain abstraction: each
+names a physical boundary place and receiving holder, with bounded delivery
+rates, reliability and route burden. It is explicit external dependence, not
+local production and not a broadcast timer; future caravans may replace it
+without changing the local stock/target model.
+
+Within a Charter state, `bodies.<key>.name` is the scene-facing display name;
+the dict key remains the durable institutional identity. An authored `naming`
+profile supplies bounded cultural name pools/parts, formatting, rank titles
+and post titles. Normalization deterministically generates an unnamed body's
+name from `{profile seed, charter key, body key}` and materializes it into the
+body exactly once: changing the profile or inserting another body never
+renames an existing person. Titles are presentation aliases, not identity.
+`dialogue_color`, when authored, is a normalized override; otherwise rendering
+derives it from `charter:<charter>:<body>`, so renames, title changes and
+promotion cannot repaint that speaker. `bindings.<body>` is
+written once at background-to-character promotion and carries `char_id`,
+character/entity identity, display name and promotion turn. A bound body is an
+institutional projection only: scene position is copied into it before a tick,
+while Charter-held `minds`, `needs`, `feel` and `heard_blame` for that body are
+removed. Do not delete the body itself—rosters, watches, standing and service
+history still refer to its durable key, and the character may continue to hold
+office. `background_presences[].charter_refs` contains only stable
+`{charter,body}` references; the Charter registry remains the identity and
+state authority.
+
+A generated authored resident additionally carries `resident_seed_id` on its
+body. It is placement identity only, never cognition and never a card payload;
+for greeting launch its value is `character:<id>`. The private
+`charter_resident_histories` world record makes the one-time handoff auditable:
+exact Charter/body binding, historian citations, recent-life overview, minted
+memory event keys, per-episode chronology/location/entities, grounding drops
+and any generation failure. It contains no private card context. The actual
+pre-story career, recent-life summary and 10–16 episode rows use
+`turn_id=NULL`, `turn_idx=NULL`, stable `prestory:charter:*` event keys, and the
+episode's remembered provenance. Episode keys derive from grounded content
+rather than database row ids, so branch/import identity survives; re-running
+the same handoff updates rather than duplicates identical episodes.
+
+`character_history_routes` is the frame-scoped author routing record: closed
+topology/authority fields, confidence, cited reasons, optional author guidance
+and handoff status. It is not a mind payload. `character_journey_histories`
+stores the separate itinerary ledger: ordered event ids, places, named
+participants, citations (or an explicit generated flag), grounding drops and
+compiled memory keys. Both use ordinary world JSON storage, so checkpoint,
+branch and portable archive paths need no schema migration.
+
+Within a Charter, `experiences.<body>` is capped participant-owned evidence,
+not another objective event ledger. Social rows are copied only to
+participants; private-habit rows only to self. A generated featured-resident
+episode adds one compact `shared_prestory` row to each named participant while
+the featured character receives the detailed autobiographical memory. The
+reciprocal row survives that character's handoff and becomes promotion-safe
+history for its owner. `habit_runs` updates a habit's
+last occurrence and repetition count without appending a diary row per window.
+These stores and `bodies.<body>.private_habits` are removed when a full
+character claims cognition. `posts.<post>.purpose` supplies human meaning for
+career narration; `serves` remains the mechanical upkeep edge.
+
+Witnessed player/major-character conduct is not a second event table. A
+grounded `scene:<turn_id>:<source_id>` claim lives in the receiving body's
+existing `minds` map as `kind: news`, with `public_evidence` carrying the exact
+licensed action/quote and speech-act direction only for a firsthand witness.
+The source id deduplicates a replayed commit; the mind cap and ordinary news
+decay bound it. Body-to-body retelling replaces that firsthand packet with a
+secondhand act-kind summary and degrades `claim_text`, so no listener stores a
+pristine transcript it did not hear. Because the claim remains ordinary
+Charter state, checkpoint/archive/branch/restore and promotion need no new
+durable store.
 
 `world_events` joined `snapshot_state`/`insert_world_tables`, portable
 export/import, branch remapping, deletion, and fidelity tests with its first

@@ -32,6 +32,7 @@ from agents.common import (
 from language_runtime import linguistic
 
 from agents.narration import (
+    _narrator_player_declared,
     _ordered_beat_events,
     _position_delta_payload,
     _visible_portal_states,
@@ -510,9 +511,32 @@ def test_ordered_beat_events_order_and_view_filter(temp_db):
     assert kinds == [("Player", "speech"), ("Player", "action"),
                      ("Mara", "speech")]
     assert [e["n"] for e in events] == [1, 2, 3]
+    assert events[0] == {"n": 1, "actor": "Player", "kind": "speech",
+                         "declared": True}
     assert events[2]["quote"] == "I did. On my own authority."
     # The undelivered line is absent (info barrier).
     assert all("never heard" not in str(e.get("quote")) for e in events)
+
+
+def test_narrator_never_receives_player_speech_to_paraphrase_backwards():
+    interpreted = {
+        "sequence": [{
+            "type": "speech",
+            "text": "Meals and a bed while I work.",
+            "intended_target": "Captain Vale",
+            "volume": "normal",
+        }],
+        "speech": "Meals and a bed while I work.",
+        "private_thought": None,
+    }
+    payload = _narrator_player_declared(interpreted)
+    encoded = json.dumps(payload)
+    assert "Meals" not in encoded and "bed" not in encoded
+    assert payload["spoke"] is True
+    assert payload["sequence"] == [{
+        "type": "speech", "volume": "normal",
+        "intended_target": "Captain Vale",
+    }]
 
 
 def test_ordered_beat_events_unrecognized_speaker_gets_label(temp_db):

@@ -10,6 +10,7 @@ character memory and is never shown to the player.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -653,7 +654,8 @@ def claim_greeting_mind(chat_id, char_id, name, sheet):
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 lorebook_id: int | None = None,
                 already_known: bool = True,
-                language: str | None = None) -> tuple[int, int]:
+                language: str | None = None,
+                lived_location: dict | None = None) -> tuple[int, int]:
     """'Start story now': create a chat seeded from a character's greeting.
     The greeting is shown verbatim; its private knowledge routes to the
     character. An optional lorebook is attached before turn 0 runs, so the
@@ -728,6 +730,7 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # Attach the chosen lorebook before turn 0 runs. A global (template) book is
     # duplicated into a per-chat copy the same way attach_lore does; a book that
     # is already chat-scoped attaches directly.
+    generation_book_id = None
     if lb:
         if lb["chat_id"] == cid:
             new_lb, origin = lb["id"], lb["origin_id"]
@@ -736,6 +739,54 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             origin = lb["id"]
         db.qi("INSERT INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
               "VALUES(?,?,?,1)", (cid, new_lb, origin))
+        generation_book_id = new_lb
+
+    # A selected prehistory must exist before establishment authors turn 0.
+    # Running this from the browser after /start returns made the supposedly
+    # old residents and institutions arrive one scene late, after the opening
+    # had already decided what the location contained.
+    generated_location = None
+    history_route = None
+    if isinstance(lived_location, dict) and lived_location.get("enabled", True):
+        from world.charter_runtime import generate_lived_location
+        from story.history_routing import (
+            resolve_character_history_route, route_uses_charter)
+        from world.charter_history import (
+            featured_resident_private_habits, featured_resident_seed)
+        request = dict(lived_location)
+        route_request = request.get("character_history") or {}
+        route = resolve_character_history_route(
+            sheet, requested=route_request,
+            opening=prose_final, location_brief=request.get("brief") or "")
+        route["guidance"] = str(
+            (route_request if isinstance(route_request, dict) else {}).get(
+                "brief") or "")[:2000]
+        db.wset(cid, "character_history_routes", {str(char_id): route})
+        history_route = route
+        if route_uses_charter(route):
+            resident_seed = featured_resident_seed(char_id, sheet)
+            request["featured_residents"] = [resident_seed]
+            request["featured_resident_private"] = {
+                resident_seed["seed_id"]: {
+                    "habits": featured_resident_private_habits(sheet)}}
+        else:
+            request.pop("featured_residents", None)
+            request.pop("featured_resident_private", None)
+        if generation_book_id is not None:
+            # Read the selected library subtree (the legacy attachment seam
+            # copies one book, not its children) while grounding the resulting
+            # rooms in the story-local copy.
+            request["lorebook_id"] = lb["id"]
+            request["owning_lorebook_id"] = generation_book_id
+        try:
+            generated_location = generate_lived_location(cid, request)
+        except Exception:
+            # No turn exists yet and this chat was minted by this call.  A
+            # failed location proposal must not leave an invisible half-story
+            # that appears after refresh or gets duplicated on the next try.
+            from persist.chat_delete import delete_chat_data
+            delete_chat_data(cid)
+            raise
 
     # Route every mind the extraction established -- the card character's in
     # full (memories, beliefs, stances, opening affect), the player's within
@@ -746,6 +797,78 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     with language_scope(language or DEFAULT_LANGUAGE):
         _seed_minds(cid, char_id, sheet, extraction, c_name, seed_handle,
                     p_name, psheet)
+
+    # Itinerant history is a separate topology. Canon/authored travelers get
+    # a cited compiler; an invented journey runs only after the author chose
+    # that route explicitly. Neither path places the character in Charter.
+    if isinstance(history_route, dict) and (
+            history_route.get("mode") == "visitor"
+            or history_route.get("mode") == "generated_journey"
+            or (history_route.get("mode") == "auto"
+                and history_route.get("opening_relationship") == "visiting")):
+        from story.journey_history import compile_journey_history
+        journey_lore = []
+        if lb:
+            from world.charter_runtime import generation_lore
+            journey_lore, _source = generation_lore(
+                cid, lb["id"], query=f"{c_name} journeys visits history")
+        try:
+            with language_scope(language or DEFAULT_LANGUAGE):
+                journey_result = compile_journey_history(
+                    cid, char_id, sheet, history_route, lore=journey_lore,
+                    opening=prose_final)
+            routes = db.wget(cid, "character_history_routes", {}) or {}
+            routes[str(char_id)]["handoff"] = {
+                "complete": True,
+                "memory_count": len(
+                    journey_result.get("memory_event_keys") or ()),
+                "journey_events": len(journey_result.get("events") or ()),
+            }
+            db.wset(cid, "character_history_routes", routes)
+        except Exception as exc:
+            if history_route.get("mode") == "generated_journey":
+                from persist.chat_delete import delete_chat_data
+                delete_chat_data(cid)
+                raise
+            routes = db.wget(cid, "character_history_routes", {}) or {}
+            routes[str(char_id)]["handoff"] = {
+                "complete": False,
+                "safe_fallback": "authored card and greeting only",
+                "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+            }
+            db.wset(cid, "character_history_routes", routes)
+
+    # The card character lived through the requested prehistory as a Charter
+    # body, then crosses the cognition boundary exactly once: their grounded
+    # service becomes a few pre-story memories and their full character agent
+    # owns them from turn zero onward. A generator that could not place them
+    # leaves the ordinary card launch untouched and records no counterfeit
+    # past.
+    if isinstance(generated_location, dict):
+        seed_id = f"character:{int(char_id)}"
+        binding = (generated_location.get("featured_residents") or {}).get(
+            seed_id)
+        if binding:
+            from world.charter_history import integrate_featured_resident
+            try:
+                with language_scope(language or DEFAULT_LANGUAGE):
+                    history_result = integrate_featured_resident(
+                        cid, char_id, binding, sheet,
+                        author_guidance=(history_route or {}).get(
+                            "guidance") or "")
+                routes = db.wget(cid, "character_history_routes", {}) or {}
+                if str(char_id) in routes:
+                    routes[str(char_id)]["handoff"] = {
+                        "complete": True,
+                        "memory_count": len(
+                            history_result.get("memory_event_keys") or ()),
+                        "binding": copy.deepcopy(binding),
+                    }
+                    db.wset(cid, "character_history_routes", routes)
+            except Exception:
+                from persist.chat_delete import delete_chat_data
+                delete_chat_data(cid)
+                raise
 
     # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
     tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",

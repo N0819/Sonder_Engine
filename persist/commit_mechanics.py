@@ -239,7 +239,7 @@ def commit_world_event_spine(ctx, transit_result):
 
 
 def commit_information_carriers(ctx, prepared_scene, world_event_result):
-    """Acquire/move character-owned public reports after memory state lands,
+    """Acquire/move body-owned public reports after memory state lands,
     then copy any that were actually passed on this beat.
 
     Tellings run AFTER acquisition, so a witness can pass on what they saw in
@@ -263,28 +263,19 @@ def commit_information_carriers(ctx, prepared_scene, world_event_result):
     artifact_ops = (resolved.get("state_diff") or {}).get("artifact_ops") or []
     if not isinstance(artifact_ops, list):
         artifact_ops = []
-    if not result.get("enabled"):
-        if ops:
-            ctx.add_warning(
-                "discarded %d telling(s): the rumor-ledger floor is off"
-                % len(ops))
-        if courier_ops:
-            ctx.add_warning(
-                "discarded %d courier op(s): the rumor-ledger floor is off"
-                % len(courier_ops))
-        if artifact_ops:
-            ctx.add_warning(
-                "discarded %d artifact op(s): the rumor-ledger floor is off"
-                % len(artifact_ops))
-        result["told"] = 0
-        return result
-
     # What degradation is allowed to redact. The engine names its own cast and
     # rooms rather than letting a detector guess which words are people: a
     # wrong guess silently rewrites a claim into something false, and this is
     # the one module whose entire correctness argument is that it cannot
     # invent.
     names = list(_registered_name_roster(ctx.chat, ctx.cast))
+    try:
+        from world.charter_runtime import charter_speaker_records
+
+        names.extend(row["name"] for row in charter_speaker_records(
+            ctx.chat.id, ctx.turn.frame_id) if row.get("name"))
+    except Exception:
+        pass
     places = [str(r.get("name") or rid)
               for rid, r in (scene.get("rooms") or {}).items()
               if isinstance(r, dict)]
