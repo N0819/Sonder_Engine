@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
 from playwright.sync_api import Page
 from playwright.sync_api import expect
 
@@ -140,6 +141,54 @@ def test_person_workspace_restores_parent_route_scroll_focus_and_local_draft(
     page.get_by_role("button", name="Edit character").click()
     expect(page.locator('[name="identity.name"]')).to_have_value("Mara Local Draft")
     expect(page.get_by_role("tabpanel", name="Inner life")).to_be_visible()
+
+
+@pytest.mark.parametrize("width,height", [
+    (1440, 900), (1024, 768), (390, 844), (844, 390),
+])
+def test_person_workspace_geometry_has_one_scroll_owner_and_safe_targets(
+    page: Page, ui_base_url: str, width: int, height: int,
+) -> None:
+    _route_character_editor(page)
+    page.set_viewport_size({"width": width, "height": height})
+    response = page.goto(
+        f"{ui_base_url}/static/ui-next.html"
+        "#/library/characters?item=character%3A7&mode=edit"
+    )
+    assert response is not None and response.ok
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+
+    workspace = page.locator("[data-person-workspace]")
+    expect(workspace).to_be_visible()
+    expect(page.locator(".ui-library__filters")).to_have_count(0)
+    expect(page.get_by_role("complementary", name="Library details")).to_be_hidden()
+    page.get_by_role("tab", name="Advanced", exact=True).click()
+    expect(page.get_by_role("button", name="Save character")).to_be_in_viewport()
+
+    geometry = workspace.evaluate("""root => {
+      const interactive = [...root.querySelectorAll('button, input, select, textarea, summary, a[href]')]
+        .filter(node => !node.closest('[hidden]') && getComputedStyle(node).visibility !== 'hidden')
+        .map(node => {
+          const rect = node.getBoundingClientRect();
+          return { label: node.getAttribute('aria-label') || node.textContent?.trim() || node.name,
+            width: rect.width, height: rect.height };
+        });
+      const owners = [...root.querySelectorAll('[data-person-scroll-region]')]
+        .filter(node => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY));
+      const hiddenFocusable = [...root.querySelectorAll('.ui-person-editor__panel[hidden]')]
+        .flatMap(panel => [...panel.querySelectorAll('button, input, select, textarea, summary, a[href]')])
+        .filter(node => node.getClientRects().length > 0);
+      return {
+        tooSmall: interactive.filter(item => item.width < 44 || item.height < 44),
+        scrollOwners: owners.length,
+        hiddenFocusable: hiddenFocusable.length,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    }""")
+    assert geometry == {
+        "tooSmall": [], "scrollOwners": 1,
+        "hiddenFocusable": 0, "pageOverflow": 0,
+    }, (width, height, geometry)
 
 
 def test_character_quick_start_sends_alpha98_history_contract(

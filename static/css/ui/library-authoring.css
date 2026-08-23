@@ -4,6 +4,122 @@
   min-width: 0;
 }
 
+.ui-shell__destination-view:has(.ui-person-workspace) {
+  min-block-size: 0;
+  block-size: 100%;
+  overflow: clip;
+}
+
+.ui-person-workspace {
+  display: grid;
+  min-inline-size: 0;
+  min-block-size: 0;
+  block-size: 100%;
+  padding: clamp(var(--ui-space-4), 2.4vw, var(--ui-space-7));
+  background: var(--ui-color-canvas);
+}
+
+.ui-person-workspace__mount,
+.ui-person-workspace .ui-authoring {
+  min-inline-size: 0;
+  min-block-size: 0;
+  block-size: 100%;
+}
+
+.ui-person-workspace .ui-authoring {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.ui-person-workspace .ui-authoring > .ui-button {
+  min-block-size: 44px;
+  justify-self: start;
+}
+
+.ui-person-workspace .ui-authoring-form {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ui-person-editor {
+  display: grid;
+  grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr);
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
+}
+
+.ui-person-editor__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-1);
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+  padding: var(--ui-space-3);
+  border-inline-end: 1px solid var(--ui-color-border);
+  background: var(--ui-color-surface-muted);
+}
+
+.ui-person-editor__tab {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--ui-color-text-muted);
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.ui-person-editor__tab:hover {
+  border-color: var(--ui-color-border);
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface-raised);
+}
+
+.ui-person-editor__tab[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--ui-color-interactive) 40%, var(--ui-color-border));
+  color: var(--ui-color-interactive-strong);
+  background: var(--ui-color-interactive-soft);
+  box-shadow: inset 2px 0 var(--ui-color-interactive);
+}
+
+.ui-person-editor__panels {
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: clamp(var(--ui-space-4), 2.4vw, var(--ui-space-7));
+}
+
+.ui-person-editor__panel:not([hidden]) {
+  display: grid;
+  align-content: start;
+  gap: var(--ui-space-4);
+  inline-size: min(100%, 52rem);
+  margin-inline: auto;
+}
+
+.ui-person-editor__panel > .ui-heading:first-child {
+  margin: 0;
+  padding-block-end: var(--ui-space-3);
+  border-block-end: 1px solid var(--ui-color-border);
+}
+
+.ui-person-workspace :is(.ui-button, .ui-person-editor__tab),
+.ui-person-workspace :is(input, select, textarea, summary) {
+  min-block-size: 44px;
+}
+
 .ui-authoring__status {
   min-height: 1.5rem;
   margin: 0;
@@ -175,11 +291,22 @@
   background: var(--ui-color-surface-solid);
 }
 
+.ui-person-workspace .ui-authoring-form__actions {
+  position: static;
+  margin-block-start: 0;
+  padding-block: var(--ui-space-3) 0;
+  border-block-start: 1px solid var(--ui-color-border);
+}
+
 .ui-authoring-form__actions.ui-action-cluster {
   flex-wrap: nowrap;
   gap: 0;
   justify-self: end;
   padding-block: 0;
+}
+
+.ui-person-workspace .ui-authoring-form__actions.ui-action-cluster > .ui-button {
+  min-block-size: 44px;
 }
 
 .ui-library-detail__actions.ui-action-cluster {
@@ -208,6 +335,62 @@
 }
 
 @media (max-width: 719px), (max-height: 430px) and (max-width: 899px) {
+  .ui-person-workspace {
+    padding: var(--ui-space-3);
+  }
+
+  .ui-person-workspace .ui-authoring {
+    gap: var(--ui-space-2);
+  }
+
+  .ui-person-workspace .ui-authoring-form {
+    gap: var(--ui-space-2);
+  }
+
+  .ui-person-workspace .ui-authoring-form__header {
+    gap: var(--ui-space-1);
+    padding-block-end: var(--ui-space-2);
+  }
+
+  .ui-person-workspace .ui-authoring-form__header > .ui-muted {
+    display: none;
+  }
+
+  .ui-person-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .ui-person-editor__nav {
+    flex-direction: row;
+    gap: var(--ui-space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--ui-space-2);
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--ui-color-border);
+    scrollbar-width: thin;
+  }
+
+  .ui-person-editor__tab {
+    flex: 0 0 auto;
+    text-align: center;
+    scroll-snap-align: nearest;
+  }
+
+  .ui-person-editor__tab[aria-selected="true"] {
+    box-shadow: inset 0 -2px var(--ui-color-interactive);
+  }
+
+  .ui-person-editor__panels {
+    padding: var(--ui-space-3);
+    scrollbar-gutter: auto;
+  }
+
+  .ui-person-workspace .ui-authoring-form__actions {
+    padding-block-start: var(--ui-space-2);
+  }
+
   .ui-authoring-form input,
   .ui-authoring-form select,
   .ui-authoring-form textarea {
