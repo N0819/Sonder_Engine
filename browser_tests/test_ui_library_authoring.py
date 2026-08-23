@@ -45,21 +45,24 @@ PERSON_DOCUMENT = {
 }
 
 
-def _route_character_editor(page: Page) -> None:
+def _route_character_editor(page: Page, *, dense: bool = False) -> None:
+    items = [{
+        "kind": "character", "id": item_id, "key": f"character:{item_id}",
+        "name": "Mara Venn" if item_id == 7 else f"Courier {item_id:02d}",
+        "summary": "A rain-dark courier.",
+        "subtype": "character", "created": item_id, "reusable": True,
+        "archived": False, "use_count": 0, "associations": [],
+    } for item_id in ([7] if not dense else range(1, 41))]
+
     def projection(route):
         route.fulfill(content_type="application/json", body=json.dumps({
-            "items": [{
-                "kind": "character", "id": 7, "key": "character:7",
-                "name": "Mara Venn", "summary": "A rain-dark courier.",
-                "subtype": "character", "created": 1, "reusable": True,
-                "archived": False, "use_count": 0, "associations": [],
-            }],
+            "items": items,
             "facets": {
-                "types": {"story": 0, "character": 1, "persona": 0, "lore": 0},
-                "scopes": {"all": 1, "story": 0, "unassigned": 1, "multiple": 0},
+                "types": {"story": 0, "character": len(items), "persona": 0, "lore": 0},
+                "scopes": {"all": len(items), "story": len(items), "unassigned": 0, "multiple": 0},
             },
-            "page": {"offset": 0, "limit": 100, "returned": 1, "total": 1},
-            "query": {"scope": "all", "sort": "name", "visibility": "active"},
+            "page": {"offset": 0, "limit": 100, "returned": len(items), "total": len(items)},
+            "query": {"scope": "story" if dense else "all", "sort": "recent" if dense else "name", "visibility": "active"},
         }))
 
     page.route("**/api/bootstrap", lambda route: route.fulfill(
@@ -93,6 +96,50 @@ def test_people_authoring_owns_the_library_destination_workspace(
     expect(page.locator(".ui-library")).to_have_count(0)
     expect(page.get_by_role("complementary", name="Library details")).to_be_hidden()
     assert page.locator("html").get_attribute("data-library-authoring") == "true"
+
+
+def test_person_workspace_restores_parent_route_scroll_focus_and_local_draft(
+    page: Page, ui_base_url: str,
+) -> None:
+    """Back must restore the exact Library context without losing accepted input."""
+
+    _route_character_editor(page, dense=True)
+    page.set_viewport_size({"width": 1280, "height": 720})
+    response = page.goto(
+        f"{ui_base_url}/static/ui-next.html"
+        "#/library/characters?item=character%3A7&q=mara&scope=story"
+        "&sort=recent&story=1&visibility=active"
+    )
+    assert response is not None and response.ok
+    page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
+    content = page.locator(".ui-library__content")
+    expect(content).to_be_visible()
+    saved_scroll = content.evaluate(
+        "node => { node.scrollTop = Math.min(420, node.scrollHeight - node.clientHeight); return node.scrollTop; }"
+    )
+    assert saved_scroll > 0
+
+    page.get_by_role("button", name="Edit character").click()
+    expect(page.locator("[data-person-workspace]")).to_be_visible()
+    page.get_by_role("textbox", name="Name").fill("Mara Local Draft")
+    page.get_by_role("tab", name="Inner life").click()
+    page.get_by_role("button", name="Back to Library").click()
+
+    expect(page).to_have_url(re.compile(
+        r"item=character%3A7.*q=mara.*scope=story.*sort=recent.*story=1",
+    ))
+    expect(page.locator(".ui-library__content")).to_be_visible()
+    page.wait_for_function(
+        "expected => document.querySelector('.ui-library__content')?.scrollTop === expected",
+        arg=saved_scroll,
+    )
+    assert page.locator(".ui-library__content").evaluate("node => node.scrollTop") == saved_scroll
+    selected = page.locator('[data-library-item="character:7"]')
+    expect(selected).to_be_focused()
+
+    page.get_by_role("button", name="Edit character").click()
+    expect(page.locator('[name="identity.name"]')).to_have_value("Mara Local Draft")
+    expect(page.get_by_role("tabpanel", name="Inner life")).to_be_visible()
 
 
 def test_character_quick_start_sends_alpha98_history_contract(
@@ -224,7 +271,7 @@ def test_story_editor_is_routed_and_round_trips_a_recovered_draft(
     name.fill("Recovered Lantern")
     inspector.get_by_role("textbox", name="Story premise").fill("Rain and brass")
     inspector.get_by_role("combobox", name="Player persona").select_option("9")
-    expect(inspector.get_by_text("Unsaved draft")).to_be_visible()
+    expect(inspector.get_by_text("Draft saved on this device")).to_be_visible()
 
     page.reload()
     page.wait_for_function("document.documentElement.dataset.uiNextState === 'ready'")
@@ -232,7 +279,7 @@ def test_story_editor_is_routed_and_round_trips_a_recovered_draft(
     expect(inspector.get_by_role("textbox", name="Story name")).to_have_value("Recovered Lantern")
     expect(inspector.get_by_text("Recovered local draft")).to_be_visible()
     inspector.get_by_role("button", name="Save story").click()
-    expect(inspector.get_by_text("Saved", exact=True)).to_be_visible()
+    expect(inspector.get_by_text("Saved to Library", exact=True)).to_be_visible()
     assert stored == {
         "name": "Recovered Lantern", "scenario": "Rain and brass", "persona_id": 9,
     }

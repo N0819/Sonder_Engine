@@ -356,7 +356,10 @@ export function createPersonEditor(options = {}) {
     event.preventDefault();
     if (!String(current.identity?.name || "").trim()) {
       name.setAttribute("aria-invalid", "true");
-      sections.firstInvalid()?.focus();
+    }
+    const invalid = sections.firstInvalid();
+    if (invalid) {
+      invalid.focus();
       return;
     }
     await services.authoring.save();

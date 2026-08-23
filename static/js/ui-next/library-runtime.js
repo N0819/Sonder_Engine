@@ -84,6 +84,14 @@ export function normalizeLibraryRoute(route) {
   });
 }
 
+export function libraryScrollIdentity(route) {
+  const normalized = normalizeLibraryRoute(route);
+  const query = { ...normalized.query };
+  delete query.mode;
+  const params = new URLSearchParams(query).toString();
+  return `#/library${normalized.segment ? `/${normalized.segment}` : ""}${params ? `?${params}` : ""}`;
+}
+
 function requestPath(route) {
   const params = new URLSearchParams({
     scope: route.scope,
@@ -142,6 +150,7 @@ export function createLibraryRuntime(options = {}) {
   let currentRoute = null;
   let safeLinkNotice = false;
   let presentation = presentationRecord(localState);
+  let returnFocusIdentity = "";
   let mutationGeneration = 0;
   let undoReceipt = null;
   let undoTimer = null;
@@ -619,7 +628,16 @@ export function createLibraryRuntime(options = {}) {
     toggleFavorite,
     isFavorite: itemId => presentation.favorites.includes(cleanItemId(itemId)),
     scrollFor: routeIdentity => presentation.scrolls[routeIdentity] || 0,
+    scrollIdentity: libraryScrollIdentity,
     saveScroll,
+    focusOnReturn: identity => {
+      returnFocusIdentity = boundedText(identity, 160);
+      return Boolean(returnFocusIdentity);
+    },
+    returnFocusIdentity: () => returnFocusIdentity,
+    clearReturnFocus: identity => {
+      if (returnFocusIdentity === identity) returnFocusIdentity = "";
+    },
     setAssociation,
     addToStory,
     setArchived,

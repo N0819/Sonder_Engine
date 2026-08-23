@@ -419,6 +419,7 @@ function ledger(documentRef, services, state) {
     const row = node(documentRef, "li", "ui-library__row");
     const control = button(documentRef, "", "ui-library__item");
     control.dataset.libraryItem = item.key;
+    control.dataset.focusIdentity = `library-item:${item.key}`;
     const openStoryId = state.library?.chats?.[0]?.id;
     if (query.item === item.key || (!query.item && item.kind === "story"
         && String(item.id) === String(openStoryId || ""))) {
@@ -530,14 +531,34 @@ export function createLibraryView(options = {}) {
     content.append(notice);
   }
   section.append(rail, content);
-  const routeIdentity = state.route?.canonicalHash || "#/library";
+  const routeIdentity = services.library.scrollIdentity(state.route);
   const scrollRegion = content;
-  scrollRegion.scrollTop = services.library.scrollFor(routeIdentity);
+  const restorePosition = services.library.scrollFor(routeIdentity);
+  const returnFocusIdentity = services.library.returnFocusIdentity();
+  const mayRestoreReturnFocus = !["loading", "refreshing"].includes(library.status);
+  scrollRegion.scrollTop = restorePosition;
+  const viewTarget = documentRef.defaultView;
+  let restoreFrame = viewTarget?.requestAnimationFrame(() => {
+    restoreFrame = null;
+    scrollRegion.scrollTop = restorePosition;
+    if (returnFocusIdentity && mayRestoreReturnFocus) {
+      const focusTarget = [...section.querySelectorAll("[data-focus-identity]")]
+        .find(element => element.dataset.focusIdentity === returnFocusIdentity);
+      if (focusTarget) {
+        focusTarget.focus({ preventScroll: true });
+        services.library.clearReturnFocus(returnFocusIdentity);
+      }
+    }
+  });
   const onScroll = () => services.library.saveScroll(routeIdentity, scrollRegion.scrollTop);
   scrollRegion.addEventListener("scroll", onScroll, { passive: true });
   return Object.freeze({
     element: section,
-    teardown: () => scrollRegion.removeEventListener("scroll", onScroll),
+    teardown: () => {
+      if (restoreFrame) viewTarget?.cancelAnimationFrame(restoreFrame);
+      services.library.saveScroll(routeIdentity, scrollRegion.scrollTop);
+      scrollRegion.removeEventListener("scroll", onScroll);
+    },
   });
 }
 
