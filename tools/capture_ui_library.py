@@ -11,9 +11,11 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
 
-from playwright.sync_api import Page, Route, sync_playwright
+if TYPE_CHECKING:
+    from playwright.sync_api import Page, Route
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -340,6 +342,8 @@ def inspect(page: Page, observed: dict, back_context_retained: bool | None) -> d
 
 
 def capture() -> dict:
+    from playwright.sync_api import sync_playwright
+
     OUTPUT.mkdir(parents=True, exist_ok=True)
     SCREENSHOTS.mkdir(parents=True, exist_ok=True)
     results = []
