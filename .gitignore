@@ -50,6 +50,7 @@ scene_chat*.json
 # Bench output: generated narrator prose, i.e. content-bearing
 # diagnostics, same class as the trace files above.
 tools/paragraph_bench_last.json
+tools/narrator_package_bench_last.json
 
 # Written into the agent worktree by the assistant sync script.
 SYNCED.txt
@@ -63,3 +64,4 @@ SYNCED.txt
 !/extensions/cohesion-demo/
 !/extensions/overlay-demo/
 !/extensions/campaign-demo/
+tools/narrator_sheet_bench_last.json

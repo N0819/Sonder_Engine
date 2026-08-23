@@ -1168,9 +1168,15 @@ def _perceptible_entities(sc, perceiver_names=None):
 
 
 def _char_known_tags(sheet):
+    """(depth tiers, excluded titles, compartments) for one mind.
+
+    Three returns rather than two because knowledge has three axes and the
+    third one -- WHO may know a thing -- had no representation at all. See
+    `mind.memory_lore_entries.knowledge_for_character`.
+    """
     config = character_knowledge_config(sheet)
     tags = [tag for tag in ("common", "scholarly", "esoteric") if config.get(tag)]
-    return tags, config.get("excluded_titles") or []
+    return tags, config.get("excluded_titles") or [], config.get("circles") or []
 
 def _character_display_name(row):
     return character_name_from_text(row["sheet"])
@@ -5425,12 +5431,26 @@ def _word_shingles(text, n=6):
 
 def _already_established_phrases(view, recent_prose, limit=12):
     """Deterministic overlap between THIS turn's raw view and the narrator's
-    own recent prose. perception_act/perception_outcome re-describe the full
-    room every turn by design (they're a stateless sensory filter with no
-    memory of prior turns) -- but that means the narrator's job of "don't
-    re-catalog what's unchanged" requires knowing what it already said. Doing
-    that by having the model compare two blobs of prose itself is unreliable;
-    this hands it a concrete, computed list instead.
+    own recent prose.
+
+    The narrator's job of "don't re-catalog what's unchanged" requires
+    knowing what it already said, and having the model compare two blobs of
+    prose itself is unreliable; this hands it a concrete, computed list.
+
+    THIS DOCSTRING USED TO SAY the view re-describes the full room every
+    turn because perception is "a stateless sensory filter with no memory of
+    prior turns". That stopped being true when the composer began keeping a
+    standing ledger: `render_view` suppresses standing state this observer
+    was already given, so an ordinary beat's view has little left to overlap
+    with. The claim survived in the narrator sheet as well, where it argued
+    for a rule against a behaviour that no longer happens.
+
+    What is actually true, measured over 2,294 stored beats in every chat on
+    disk (2026-08-23): this returns something on 25.8% of them, and the rate
+    is a property of the STORY rather than of the corpus -- 60% in chats 10
+    and 12, 14-20% in the long-running ones. So the field is neither dead nor
+    ordinary; it is emitted only when non-empty, and the sheet block it
+    governs now says what an absent list means.
     """
     view_shingles = _word_shingles(str(view or ""))
     if not view_shingles:
@@ -5896,6 +5916,22 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
             head = next(i for i, w in enumerate(words) if w in token_owner)
             if head > 1:
                 continue
+            # A POSSESSIVE name is not the clause's SUBJECT, so a pronoun after
+            # it does not refer back to that name. "Sarah Moon's orders reach
+            # him" has `orders` as its subject and `him` as an object naming
+            # somebody else -- live, chat 84 t13, where `him` was the guard
+            # standing in the room and this fired an enforceable mismatch
+            # against a doctor who was not its referent. The check cannot see
+            # the guard at all: he is a background presence, not registered
+            # cast, so `present` held exactly one name and the clause looked
+            # unambiguous. Declining on the possessive costs a miss on
+            # "Vorne's hand trembles as she reaches" and buys back every
+            # clause of this shape, which is the trade this whole check is
+            # written to make.
+            if any(re.search(rf"(?<![\w']){re.escape(tok)}['\u2019]s(?![\w])",
+                             clause)
+                   for tok in _name_tokens(canonical)):
+                continue
             for word in words[head + 1:]:
                 other = _pronoun_to_group().get(word.lower())
                 # A stray "they" is routinely a group ("Vorne watched them
@@ -6175,6 +6211,72 @@ def _actor_reference_patterns(display):
     return pats
 
 
+#: At or above this many characters a line is taken at FACE VALUE inside a
+#: quoted span -- long enough that finding it there is not coincidence. This
+#: used to be the only test, which silently exempted every line below it.
+_MERGE_FACE_VALUE_CHARS = 15
+
+
+def _spoken_line_regions(spoken, span):
+    """Where this whole spoken line sits inside this one quoted span.
+
+    A long line is matched plainly. A SHORT one is matched only where it
+    stands as its own sentence -- bounded at the front by the span's start or
+    a sentence ending, and closed by its own terminal punctuation or the end
+    of the span.
+
+    The length floor was there for a real reason: a short body can sit inside
+    a longer one by coincidence, and this warning is ENFORCEABLE, so a false
+    positive costs a rewrite. But a floor alone exempted exactly the lines
+    that get absorbed -- short replies. Live, chat 84 turn 13: Sarah Moon's
+    two lines and a guard's "Yes ma'am." (ten characters) were welded into a
+    single quoted span, the guard never entered the comparison at all, and
+    the span scored as one speaker with no warning raised.
+    """
+    if not spoken:
+        return []
+    if len(spoken) >= _MERGE_FACE_VALUE_CHARS:
+        at = span.find(spoken)
+        return [(at, at + len(spoken))] if at >= 0 else []
+    ends = _ling("_SENTENCE_END_CHARS")
+    out = []
+    for match in re.finditer(re.escape(spoken), span):
+        before = span[:match.start()].rstrip()
+        if before and before[-1] not in ends:
+            continue
+        if spoken[-1] in ends or not span[match.end():].strip():
+            out.append((match.start(), match.end()))
+    return out
+
+
+def _merged_span_actors(span, speech_events):
+    """Which speakers' lines are actually inside this one quoted span.
+
+    REGIONS, not membership, because one line can be a PREFIX or a tail of
+    another speaker's longer line and the sentence-boundary test alone cannot
+    tell that from absorption: Tamamo's "Go on." sits, correctly punctuated
+    and correctly bounded, at the front of the Doctor's "Go on. I will wait
+    here by the gate." Prose carrying only the Doctor's line is not a merge,
+    and calling it one costs a rewrite.
+
+    So a claim whose text is entirely accounted for by a LONGER line from a
+    different speaker is coincidence and drops out. What survives is a line
+    occupying text no longer line explains -- which is what absorption is.
+    """
+    placed = []
+    for actor, spoken in speech_events:
+        for start, end in _spoken_line_regions(spoken, span):
+            placed.append((start, end, actor, len(spoken)))
+    actors = set()
+    for start, end, actor, length in placed:
+        if any(other_actor != actor and other_len > length
+               and other_start <= start and end <= other_end
+               for other_start, other_end, other_actor, other_len in placed):
+            continue
+        actors.add(actor)
+    return actors
+
+
 def _check_quote_attribution(prose, event_order, actor_pronouns=None):
     """F4: a quoted line's nearest preceding actor reference must resolve to
     its actual speaker (prose convention assigns an unattributed quote to the
@@ -6257,9 +6359,19 @@ def _check_quote_attribution(prose, event_order, actor_pronouns=None):
         # any of them, so the ambiguity brake never engaged for a Japanese
         # story -- the same defect `_pronoun_to_group` was written to fix.
         groups = _pronoun_to_group()
-        subjects = sorted(_ling("_PRONOUN_GROUPS"), key=len, reverse=True)
+        # EVERY FORM, not just the three subject pronouns. Iterating
+        # `_PRONOUN_GROUPS` yields its KEYS -- he/she/they -- so an OBJECT or
+        # POSSESSIVE pronoun ("him", "her", "them", "his") could never engage
+        # this brake, and a sentence ending "...before Sarah Moon's orders
+        # reach him." read to the check as containing no pronoun at all.
+        # `_pronoun_to_group` already maps every form to its group; the brake
+        # simply was not asking it. Live, chat 84 t13: the brake was the thing
+        # that should have declined, and instead the guard's "Yes ma'am." was
+        # reported as the doctor's -- an ENFORCEABLE finding, so a wrong call
+        # here spends a whole extra narrator call.
+        forms = sorted(_pronoun_to_group(), key=len, reverse=True)
         subject_re = re.compile(cue_boundary_pattern(
-            "|".join(re.escape(w) for w in subjects)), re.I)
+            "|".join(re.escape(w) for w in forms)), re.I)
         for pm in subject_re.finditer(between):
             pg = groups.get(pm.group(0).lower())
             if cand_group and pg and pg != cand_group:
@@ -6486,9 +6598,9 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         warnings.append(
             f"Proper noun from view missing in narrator prose: '{text}'")
 
-    # recent_prose_for_rhythm is supplied to the narrator as a STYLE
-    # reference, but nothing stops the model from reusing its content
-    # instead -- especially when the current view covers similar ground
+    # past_narration is supplied to the narrator as the story's own text --
+    # voice, rhythm and established detail -- but nothing stops the model
+    # from reusing its content instead -- especially when the current view covers similar ground
     # (same room, same people) to a recent turn. Two or more shared
     # six-word runs between this turn's prose and a recent turn's prose
     # essentially can't happen by coincidence; it means this turn's beats
@@ -6558,13 +6670,21 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     for event in (event_order or []):
         if not isinstance(event, dict) or event.get("kind") != "speech":
             continue
+        # The player's OWN line is not this check's business. The echo rule
+        # requires it to be ABSENT, so its presence is a different failure
+        # with a different fix, and scoring it here would buy a rewrite for
+        # the wrong reason. It has to be skipped explicitly rather than by
+        # accident: it carried no `quote` at all until the narrator-package
+        # work restored one.
+        if event.get("declared"):
+            continue
         actor = str(event.get("actor") or "").strip()
         spoken = re.sub(r"\s+", " ", _quote_body(event.get("quote"))).casefold()
-        if actor and len(spoken) >= 15:
+        if actor and spoken:
             speech_events.append((actor, spoken))
     for match in _ling("_QUOTE_BODY_RE").finditer(prose):
         span = re.sub(r"\s+", " ", match.group(1)).casefold()
-        actors = {actor for actor, spoken in speech_events if spoken in span}
+        actors = _merged_span_actors(span, speech_events)
         if len(actors) >= 2:
             warnings.append(
                 "Merged dialogue from different speakers in one quoted span "

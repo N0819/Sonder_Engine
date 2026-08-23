@@ -8,9 +8,9 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 95 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1182 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 3663 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/common.py` | 6838 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 2020 |  | `agents.common`, `story.scene`, `world.spatial` |
+| `agents/character.py` | 3678 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/common.py` | 6958 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
+| `agents/composer.py` | 2161 |  | `agents.common`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 3880 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 421 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 890 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
@@ -23,12 +23,12 @@
 | `agents/director_views.py` | 434 |  | `agents.common`, `story.character_schema`, `story.scene` |
 | `agents/loops.py` | 1134 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 337 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `llm.prompts`, `mind.memory`, `story.character_schema`, `story.scene` |
-| `agents/narration.py` | 1310 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 3705 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/narration.py` | 1655 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
+| `agents/perception.py` | 3766 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `mind`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/runtime.py` | 1302 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 1998 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
+| `core/db.py` | 2044 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
 | `core/jobs.py` | 308 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 45 | Structured timing and observability helpers. | — |
@@ -48,29 +48,29 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2189 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 379 |  | — |
-| `mind/memory.py` | 127 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
+| `mind/memory.py` | 129 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 229 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
 | `mind/memory_context.py` | 641 | The character memory payload: where retrieval, summaries and active state become one context. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_inference.py` | 154 | Belief confidence at mint and at abandonment, and reconciliation across a mind's inferences. | `core.db`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_judge.py` | 424 |  | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers` |
-| `mind/memory_lore_entries.py` | 540 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
+| `mind/memory_lore_entries.py` | 645 | Lore entries: add/update/delete, embedding stamps and health, search_lore, per-character knowledge scoping. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lorebooks`, `mind.memory_write` |
 | `mind/memory_lorebooks.py` | 574 | The lorebook graph: hierarchy, links, inheritance modes, per-chat attachment and weights. | `core.db`, `core.logging_utils`, `mind.memory_common` |
 | `mind/memory_read.py` | 374 | The one seam a mind reads its own memory through, and the host reads that deliberately cross characters. | `core`, `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_relationships.py` | 241 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_retrieval.py` | 1147 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
-| `mind/memory_snapshot.py` | 712 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
+| `mind/memory_snapshot.py` | 715 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
 | `mind/memory_summaries.py` | 699 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_vectors.py` | 772 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 815 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
 | `mind/psychology_runtime.py` | 636 |  | — |
 | `mind/theory_of_mind.py` | 725 |  | — |
 | `persist/__init__.py` | 6 |  | — |
-| `persist/chat_archive.py` | 1179 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
+| `persist/chat_archive.py` | 1186 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1300 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 632 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1266 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire` |
-| `persist/commit_background.py` | 2046 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `persist/commit_background.py` | 2060 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_common.py` | 462 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 411 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 501 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -88,7 +88,7 @@
 | `story/attire.py` | 3006 |  | — |
 | `story/authored_events.py` | 124 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
-| `story/character_schema.py` | 1840 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
+| `story/character_schema.py` | 1851 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 982 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
@@ -184,40 +184,40 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 2623 | 1041 lines |
-| `_annotate_known_exits()` | 1974 | 458 lines |
-| `_ground_observation_citations()` | 975 | 302 lines |
-| `_unanswered_question_note()` | 337 | 175 lines |
-| `_destination_from_goals()` | 1540 | 109 lines |
-| `sprint_offers()` | 2467 | 97 lines |
-| `_recent_self_moves()` | 170 | 90 lines |
-| `_verdict()` | 1386 | 71 lines |
+| `character_step()` | 2624 | 1055 lines |
+| `_annotate_known_exits()` | 1975 | 458 lines |
+| `_ground_observation_citations()` | 976 | 302 lines |
+| `_unanswered_question_note()` | 338 | 175 lines |
+| `_destination_from_goals()` | 1541 | 109 lines |
+| `sprint_offers()` | 2468 | 97 lines |
+| `_recent_self_moves()` | 171 | 90 lines |
+| `_verdict()` | 1387 | 71 lines |
 
 ### `agents/common.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 2025 | 224 lines |
-| `_check_narrator_fidelity()` | 6435 | 157 lines |
-| `_scrub_invented_dialogue()` | 5446 | 151 lines |
-| `_extract_authority_claims()` | 1537 | 120 lines |
-| `_unknown_actor_label()` | 2590 | 118 lines |
-| `cast_spelling_policy()` | 3111 | 118 lines |
+| `norm_sequence()` | 2031 | 224 lines |
+| `_check_narrator_fidelity()` | 6547 | 165 lines |
+| `_scrub_invented_dialogue()` | 5466 | 151 lines |
+| `_extract_authority_claims()` | 1543 | 120 lines |
+| `_unknown_actor_label()` | 2596 | 118 lines |
+| `cast_spelling_policy()` | 3117 | 118 lines |
 | `observer_body_regions()` | 732 | 117 lines |
-| `_perceptible_entities()` | 1059 | 109 lines |
+| `_check_pronoun_fidelity()` | 5842 | 110 lines |
 
 ### `agents/composer.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `pose_percepts()` | 673 | 92 lines |
-| `_render_view_english()` | 1515 | 91 lines |
-| `_render_episode_english()` | 1747 | 84 lines |
-| `presence_percepts()` | 552 | 77 lines |
-| `observations_from_render()` | 1946 | 75 lines |
-| `speech_percept()` | 1037 | 62 lines |
-| `_episode_sentence()` | 1685 | 60 lines |
-| `_render_presence_group()` | 1247 | 59 lines |
+| `pose_percepts()` | 791 | 113 lines |
+| `_render_view_english()` | 1656 | 91 lines |
+| `_render_episode_english()` | 1888 | 84 lines |
+| `presence_percepts()` | 555 | 77 lines |
+| `_pose_referent()` | 699 | 76 lines |
+| `observations_from_render()` | 2087 | 75 lines |
+| `speech_percept()` | 1176 | 62 lines |
+| `_episode_sentence()` | 1826 | 60 lines |
 
 ### `agents/director.py`
 
@@ -367,23 +367,23 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator()` | 919 | 246 lines |
-| `_ordered_beat_events()` | 468 | 181 lines |
-| `_sensory_channels_manifest()` | 292 | 148 lines |
-| `narrator_extra()` | 1166 | 145 lines |
-| `_visible_portal_states()` | 738 | 88 lines |
-| `_resolve_narration_person()` | 82 | 66 lines |
-| `_position_delta_payload()` | 682 | 54 lines |
-| `_generate_narration()` | 845 | 40 lines |
+| `narrator()` | 1172 | 318 lines |
+| `_ordered_beat_events()` | 486 | 198 lines |
+| `narrator_extra()` | 1491 | 165 lines |
+| `_sensory_channels_manifest()` | 310 | 148 lines |
+| `_visible_portal_states()` | 773 | 88 lines |
+| `_resolve_narration_person()` | 100 | 66 lines |
+| `_position_delta_payload()` | 717 | 54 lines |
+| `_past_narration_block()` | 882 | 53 lines |
 
 ### `agents/perception.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 3363 | 343 lines |
+| `_composer_outcome()` | 3424 | 343 lines |
 | `perception_outcome()` | 1971 | 240 lines |
 | `perception_act()` | 1553 | 171 lines |
-| `_composer_act()` | 3144 | 129 lines |
+| `_composer_act()` | 3205 | 129 lines |
 | `_previous_open_group_continuity()` | 163 | 117 lines |
 | `_composer_standing_percepts()` | 2907 | 116 lines |
 | `_strip_self_narration()` | 860 | 107 lines |
@@ -419,13 +419,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `init()` | 1850 | 105 lines |
-| `conn()` | 1642 | 38 lines |
-| `transaction()` | 1682 | 36 lines |
-| `_column_addition_already_applied()` | 1799 | 18 lines |
-| `_backfill_resource_uids()` | 1832 | 17 lines |
-| `qi()` | 1740 | 16 lines |
-| `data_version()` | 1719 | 14 lines |
+| `init()` | 1896 | 105 lines |
+| `conn()` | 1688 | 38 lines |
+| `transaction()` | 1728 | 36 lines |
+| `_column_addition_already_applied()` | 1845 | 18 lines |
+| `_backfill_resource_uids()` | 1878 | 17 lines |
+| `qi()` | 1786 | 16 lines |
+| `data_version()` | 1765 | 14 lines |
 | `parse_scoped_world_key()` | 94 | 13 lines |
 
 ### `core/frames.py`
@@ -644,14 +644,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `search_lore()` | 238 | 86 lines |
-| `backfill_lore_embedding_stamps()` | 325 | 71 lines |
-| `duplicate_lorebook_tree_for_chat()` | 168 | 62 lines |
-| `lore_embedding_health()` | 398 | 62 lines |
-| `_stamped_live_dimensions()` | 462 | 42 lines |
-| `update_lore()` | 128 | 39 lines |
-| `knowledge_for_character()` | 506 | 34 lines |
-| `add_lore()` | 98 | 29 lines |
+| `knowledge_for_character()` | 557 | 88 lines |
+| `search_lore()` | 248 | 86 lines |
+| `backfill_lore_embedding_stamps()` | 335 | 71 lines |
+| `duplicate_lorebook_tree_for_chat()` | 178 | 62 lines |
+| `lore_embedding_health()` | 408 | 62 lines |
+| `update_lore()` | 133 | 44 lines |
+| `_stamped_live_dimensions()` | 472 | 42 lines |
+| `add_lore()` | 98 | 34 lines |
 
 ### `mind/memory_lorebooks.py`
 
@@ -709,7 +709,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `import_character_memories()` | 431 | 103 lines |
-| `restore_lorebook()` | 617 | 95 lines |
+| `restore_lorebook()` | 618 | 97 lines |
 | `prepare_chat_memory_restore()` | 242 | 76 lines |
 | `dump_chat_memories()` | 166 | 67 lines |
 | `restore_memory_vectors()` | 110 | 54 lines |
@@ -841,10 +841,10 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `track_background_presences()` | 817 | 397 lines |
-| `promote_background_character()` | 1655 | 266 lines |
+| `promote_background_character()` | 1669 | 266 lines |
 | `pick_background_reactors()` | 1381 | 201 lines |
 | `_fold_duplicate_presences()` | 461 | 88 lines |
-| `auto_promote_background_characters()` | 1960 | 87 lines |
+| `auto_promote_background_characters()` | 1974 | 87 lines |
 | `_presence_speech_verdict()` | 319 | 67 lines |
 | `_at_post_within_earshot()` | 1317 | 52 lines |
 | `_is_inert_presence_candidate()` | 740 | 50 lines |
@@ -1037,14 +1037,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_character_data()` | 1074 | 159 lines |
-| `default_character_data()` | 590 | 102 lines |
+| `normalize_character_data()` | 1079 | 159 lines |
+| `default_character_data()` | 590 | 107 lines |
 | `_normalize_psychology()` | 314 | 83 lines |
-| `repair_character_shape()` | 1015 | 57 lines |
-| `character_card_warnings()` | 1756 | 54 lines |
+| `repair_character_shape()` | 1020 | 57 lines |
+| `character_card_warnings()` | 1767 | 54 lines |
 | `_normalize_extra_parts()` | 536 | 52 lines |
 | `_as_profile_list()` | 38 | 50 lines |
-| `normalize_persona_data()` | 1234 | 50 lines |
+| `normalize_persona_data()` | 1239 | 50 lines |
 
 ### `story/couriers.py`
 
@@ -2139,10 +2139,10 @@
 | `settings` | `key`, `value` |
 | `characters` | `id`, `name`, `sheet`, `source`, `created`, `resource_uid` |
 | `personas` | `id`, `name`, `sheet`, `source`, `resource_uid` |
-| `lorebooks` | `id`, `name`, `chat_id`, `origin_id`, `book_type`, `summary`, `resource_uid`, `parent_id`, `scope_world_id`, `scope_location_id`, `inheritance_mode`, `sort_order`, `anchor_entity_id`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `retired_turn_id` |
+| `lorebooks` | `id`, `name`, `chat_id`, `origin_id`, `book_type`, `summary`, `resource_uid`, `parent_id`, `scope_world_id`, `scope_location_id`, `inheritance_mode`, `--`, `--`, `--`, `--`, `--`, `--`, `default_circles`, `sort_order`, `anchor_entity_id`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `retired_turn_id` |
 | `lorebook_links` | `id`, `source_book_id`, `target_book_id`, `relation_type`, `label`, `notes`, `bidirectional`, `follow_for_retrieval`, `weight`, `sort_order`, `created` |
 | `chat_lorebooks` | `chat_id`, `lorebook_id`, `origin_id`, `enabled` |
-| `lore_entries` | `id`, `lorebook_id`, `keys`, `content`, `category`, `canon_locked`, `turn_added`, `embedding`, `title`, `knowledge_tag`, `knowledge_range`, `knowledge_locations`, `entry_uid`, `importance`, `aliases`, `scope`, `relations`, `source_notes`, `--`, `--`, `--`, `--`, `embedding_model`, `embedding_dim` |
+| `lore_entries` | `id`, `lorebook_id`, `keys`, `content`, `category`, `canon_locked`, `turn_added`, `embedding`, `title`, `knowledge_tag`, `knowledge_range`, `knowledge_locations`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--` |
 | `lore_gen_jobs` | `id`, `lorebook_id`, `--`, `status`, `--`, `stage`, `--`, `--`, `--`, `params`, `--`, `--`, `plan`, `--`, `progress`, `error`, `--`, `--`, `--`, `owner`, `attempts`, `created`, `updated` |
 | `chats` | `id`, `name`, `persona_id`, `lorebook_id`, `scenario`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `branched_from`, `created` |
 | `chat_chars` | `chat_id`, `char_id`, `status`, `state`, `--`, `--`, `sheet`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `--`, `dialogue_color` |

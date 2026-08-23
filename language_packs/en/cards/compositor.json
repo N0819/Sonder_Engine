@@ -186,6 +186,25 @@
     "onto",
     "upon"
   ],
+  "pose_bare_determiners": [
+    "the",
+    "a",
+    "an",
+    "his",
+    "her",
+    "their",
+    "its",
+    "my",
+    "your",
+    "our",
+    "this",
+    "that",
+    "these",
+    "those",
+    "some",
+    "another",
+    "one"
+  ],
   "join": {
     "two": "{first} and {last}",
     "many": ", and {last}"
@@ -289,6 +308,7 @@
     "pose_other_past": "{label} was",
     "pose_other_present": "{label} is",
     "pose_relation": "against {other}",
+    "pose_entity": "the {name}",
     "pose_self_past": "I was",
     "pose_self_present": "You are",
     "pose_support": "on {support}",

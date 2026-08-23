@@ -169,3 +169,88 @@ def test_an_unchanged_pose_mints_nothing():
     content, _g, _e = render_episode(
         percepts, prev_standing={p.dedupe_key for p in percepts})
     assert content == ""
+
+
+# --- a referent is not necessarily a body ---------------------------------
+#
+# Every one of these is the same defect from a different angle: `relative_to`
+# and `support` were resolved through `display_map`, which holds co-present
+# BODIES only, and every miss took the person-shaped default "someone". Chat
+# 84 had all four poses in one scene doing it at once -- "seated upright on
+# desk at someone", "restrained in someone", and, in a room the observer
+# could see held exactly two guards, "standing beside someone".
+
+_FURNISHED = {"desk_main": {"name": "Oak Desk", "kind": "furniture",
+                            "aliases": ["the desk"]},
+              "chair_bolted": {"name": "Bolted Chair", "kind": "fixture"}}
+
+
+def test_an_object_referent_is_the_object_never_a_person():
+    text, _ = _render(_scene(
+        {"Kai": {"posture": "seated", "support": "desk_main",
+                 "relative_to": "desk_main", "relation": "at"}},
+        entities=_FURNISHED))
+    assert "someone" not in text
+    assert text == "Kai is seated at the Oak Desk."
+
+
+def test_an_entity_id_never_reaches_the_page_as_an_id():
+    """`support` took its raw string onto the page, so a scene keyed by id
+    read "sitting on chair_bolted" to the player."""
+    text, _ = _render(_scene(
+        {"Kai": {"posture": "sitting", "support": "chair_bolted"}},
+        entities=_FURNISHED))
+    assert "chair_bolted" not in text
+    assert text == "Kai is sitting on the Bolted Chair."
+
+
+def test_one_thing_named_twice_is_rendered_once_under_its_relation():
+    """The body specialist fills `support` and `relative_to` with the same
+    referent -- three of chat 84's four poses did -- which reads as "on desk
+    at desk" the moment the referent stops being a person. The relation is
+    the more specific of the two and carries it alone."""
+    text, _ = _render(_scene(
+        {"Kai": {"posture": "seated", "support": "chair_bolted",
+                 "relative_to": "chair_bolted", "relation": "restrained in",
+                 "constraint": "secured by restraints"}},
+        entities=_FURNISHED))
+    assert text == ("Kai is seated restrained in the Bolted Chair, "
+                    "secured by restraints.")
+    assert text.count("Bolted Chair") == 1
+
+
+def test_a_referent_matching_no_record_at_all_is_dropped_with_its_relation():
+    """`anchor_device` named nothing -- the entity's id was `scranton_anchor`
+    -- so it was delivered as a person. An id-shaped token that resolves to
+    no record is engine plumbing, not prose, and it subtracts."""
+    text, percepts = _render(_scene(
+        {"Kai": {"posture": "standing", "relative_to": "anchor_device",
+                 "relation": "beside"}},
+        entities=_FURNISHED))
+    assert text == "Kai is standing."
+    assert not percepts[0].data.get("relative_to")
+
+
+def test_another_bodys_pose_never_names_a_body_you_were_not_shown():
+    """Not awkwardness -- disclosure. A body absent from the display map is
+    one perception withheld, and it is dropped rather than labelled."""
+    scene = _scene({"Kai": {"posture": "leaning", "relative_to": "Mara",
+                            "relation": "against"}})
+    scene["positions"]["Mara"] = "elsewhere"
+    scene["poses"]["Mara"] = {"posture": "standing"}
+    text, _ = _render(scene)
+    assert "Mara" not in text and "someone" not in text
+    assert text == "Kai is leaning."
+
+
+def test_a_bare_noun_gains_the_packs_article_and_only_when_it_needs_one():
+    def support(value):
+        text, _ = _render(_scene({"Kai": {"posture": "sitting",
+                                          "support": value}}))
+        return text
+    assert support("desk") == "Kai is sitting on the desk."
+    # Already determined, already prepositioned, or a proper name: untouched.
+    assert support("the far wall") == "Kai is sitting on the far wall."
+    assert support("her shoulder") == "Kai is sitting on her shoulder."
+    assert support("on the sill") == "Kai is sitting on the sill."
+    assert support("Excalibur") == "Kai is sitting on Excalibur."

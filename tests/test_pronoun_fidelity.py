@@ -206,3 +206,29 @@ def test_cast_pronouns_builder_reads_sheets():
     assert _cast_pronouns(cast) == {"Vorne": HE}
     assert _cast_pronouns([]) == {}
     assert _cast_pronouns(None) == {}
+
+
+def test_a_possessive_name_does_not_own_a_following_pronoun():
+    """"Sarah Moon's orders reach him" has `orders` as its subject and `him`
+    as an object naming somebody else. Live, chat 84 t13: `him` was the guard
+    standing in the room, and this fired an ENFORCEABLE mismatch against a
+    doctor who was not its referent -- the check cannot see the guard at all,
+    because a background presence is not registered cast, so the clause looked
+    unambiguous with exactly one name in it."""
+    pronouns = {"Sarah Moon": {"subject": "she", "object": "her",
+                               "possessive": "her"}}
+    assert _check_pronoun_fidelity(
+        "The guard's flat gaze stays locked on you a beat longer before "
+        "Sarah Moon's orders reach him.", pronouns) == []
+    # A curly apostrophe is the same possessive.
+    assert _check_pronoun_fidelity(
+        "Sarah Moon\u2019s orders reach him.", pronouns) == []
+
+
+def test_a_plain_subject_name_still_owns_its_pronoun():
+    """The cut above must not disarm the check: without the possessive, the
+    name IS the subject and a flipped pronoun is still a flip."""
+    pronouns = {"Vorne": {"subject": "he", "object": "him",
+                          "possessive": "his"}}
+    found = _check_pronoun_fidelity("Vorne lowers her hand.", pronouns)
+    assert found and "Vorne" in found[0]

@@ -88,7 +88,7 @@ _CONCRETE = re.compile(
 
 def _payload(step):
     if step == "narrator":
-        return {"player_view": BEAT, "scene": SCENE, "variant_seed": "creative"}
+        return {"present_scene": BEAT, "scene": SCENE, "variant_seed": "creative"}
     return {
         "self": {
             "name": "Vessel",

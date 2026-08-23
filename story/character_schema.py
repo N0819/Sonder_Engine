@@ -675,6 +675,11 @@ def default_character_data(name: str = "Unnamed") -> dict:
         "competence": {"abilities": []},
         "knowledge": {
             "access_tags": ["common"],
+            # WHICH COMPARTMENTS THIS MIND IS INSIDE. Empty is an outsider,
+            # and an outsider reads exactly the public world however
+            # scholarly they are -- which is what makes a clandestine
+            # organisation clandestine. See knowledge_for_character.
+            "circles": [],
             "excluded_titles": [],
             "public_history": "",
             "private_history": [],
@@ -1531,9 +1536,15 @@ def character_knowledge_config(sheet: dict) -> dict:
     knowledge = normalize_character_data(sheet).get("knowledge", {})
     tags = set(knowledge.get("access_tags") or [])
     return {
+        # DEPTH. The three canonical tiers, and only these: a compartment
+        # name written into `access_tags` matches no entry and grants
+        # nothing, which is how `site-17` came to be written there.
         "common": "common" in tags,
         "scholarly": "scholarly" in tags,
         "esoteric": "esoteric" in tags,
+        # COMPARTMENT. Orthogonal to depth, and empty means outsider.
+        "circles": [str(c).strip() for c in (knowledge.get("circles") or [])
+                    if str(c or "").strip()],
         "excluded_titles": knowledge.get("excluded_titles") or [],
     }
 

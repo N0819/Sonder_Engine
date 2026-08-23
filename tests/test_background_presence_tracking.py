@@ -520,3 +520,75 @@ class TestAWhisperAddressesNobody:
 
         record = temp_db.wget(chat_id, "background_presences", {})["Dr. Crusher"]
         assert record.get("addressed_turns", []) == [3]
+
+
+class TestPromotionMintsAMindAndAThingCannotHoldOne:
+    """The promotion bar is HIGHER than the speech gate's, on purpose.
+
+    Letting a presence say one background line is a smaller commitment than
+    minting a person out of it -- a sheet, memories, a psychology -- so
+    "undecided" is enough for the first and not for the second. It used to
+    demote only an outright "thing", which left every presence the kind
+    string cannot classify sitting in the promotion list. Live, chat 84: the
+    Scranton Reality Anchor, kind "device", a bolted suppression fixture,
+    was offered for promotion after five passing mentions. "device" is off
+    the inert deny-list ON PURPOSE (so a sentient robot stays trackable) and
+    a bolted fixture is not portable, so nothing else caught it either.
+    """
+
+    @staticmethod
+    def _mentioned_to_threshold(db, chat_id, name, scene):
+        db.wset(chat_id, "scene", scene)
+        db.wset(chat_id, "background_presences", {
+            name: {"first_turn": 1, "last_turn": 1,
+                   "dialogue_turns": [], "mention_turns": []},
+        })
+        for turn in range(2, 2 + BACKGROUND_PROMOTION_MENTION_THRESHOLD):
+            track_background_presences(
+                _ctx(chat_id, turn, [], {
+                    "resolved_event": f"The {name} hums in the corner.",
+                }), nonce=0)
+        return {r["name"]: r for r in promotable_background_presences(chat_id)}
+
+    _SCENE = {
+        "rooms": {"cell": {"name": "Interview Cell"}},
+        "positions": {"anchor_device": "cell", "guard_one": "cell"},
+        "entities": {
+            "anchor_device": {"name": "Reality Anchor", "kind": "device",
+                              "portable": False, "aliases": []},
+            "guard_one": {"name": "Site Guard", "kind": "person",
+                          "portable": False, "aliases": []},
+        },
+    }
+
+    def test_an_unclassifiable_device_is_not_offered(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        rows = self._mentioned_to_threshold(
+            temp_db, chat_id, "Reality Anchor", self._SCENE)
+        assert rows["Reality Anchor"]["promotable"] is False
+        # The history is still recorded -- it is the OFFER that is refused,
+        # not the tracking, so a host may still promote it by hand.
+        assert rows["Reality Anchor"]["mention_turns"]
+
+    def test_a_person_is_still_offered(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        rows = self._mentioned_to_threshold(
+            temp_db, chat_id, "Site Guard", self._SCENE)
+        assert rows["Site Guard"]["promotable"] is True
+
+    def test_a_frozen_nature_of_person_restores_the_offer(self, temp_db):
+        """`nature` is blurb_mint's answer to this exact question, and it
+        outranks every guess. A "dalek war machine" the story has judged a
+        person is offered again the moment anything actually asks."""
+        chat_id = _make_chat(temp_db)
+        temp_db.wset(chat_id, "scene", self._SCENE)
+        temp_db.wset(chat_id, "background_presences", {
+            "Reality Anchor": {
+                "first_turn": 1, "last_turn": 9, "nature": "person",
+                "dialogue_turns": [],
+                "mention_turns": list(
+                    range(2, 2 + BACKGROUND_PROMOTION_MENTION_THRESHOLD)),
+            },
+        })
+        rows = {r["name"]: r for r in promotable_background_presences(chat_id)}
+        assert rows["Reality Anchor"]["promotable"] is True

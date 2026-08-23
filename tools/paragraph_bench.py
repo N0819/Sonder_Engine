@@ -52,7 +52,7 @@ VIEW = (
 )
 
 PAYLOAD = {
-    "player_view": VIEW,
+    "present_scene": VIEW,
     "player_declared": {"sequence": [], "speech": None, "action": None,
                         "private_thought": None, "raw_input": "I wait."},
     "cast_pronouns": {"Sera": "she/her", "Bryn": "he/him",
@@ -62,12 +62,12 @@ PAYLOAD = {
     "narration_person": "second",
     "player_name": "you",
     "player_pronouns": {},
-    "recent_prose_for_rhythm": [],
+    "past_narration": "",
     "already_established_phrases": [],
     "overused_phrases": [],
     "exemplars": [],
     "variant_seed": 0,
-    "event_order": [
+    "current_events": [
         {"n": 1, "actor": "Sera", "kind": "speech",
          "quote": "\"These are stamped for the wrong port.\""},
         {"n": 2, "actor": "Sera", "kind": "action",

@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 from story.scene import disguise_breaks_recognition
 from world.spatial import (
     _clean_pose,
+    _entities_named,
+    _entity_named,
+    _is_body_entity,
     entity_arc,
     entity_side,
     hear_level,
@@ -670,6 +673,121 @@ def body_part_percepts(rows):
     return out
 
 
+def _names_a_body(scene, text, co_present):
+    """Does this referent name a BODY, asked structurally rather than by word.
+
+    `entities[*].kind` is free text a model writes: across the stories on disk
+    it holds 'person', 'character', 'agent', 'npc', 'actor', 'kitsune',
+    'succubus' and 'dalek war machine' beside 'object' and 'fixture', so any
+    allowlist of person-kinds is really a list of the stories played so far
+    and is wrong for the next one. The signals used instead hold whatever the
+    story calls its people: a body is something the observer is co-present
+    with, something the scene gives a POSE, or something the enclosure code
+    already recognises as a body.
+    """
+    for body in co_present or []:
+        if same_subject(scene, text, str(body.get("name") or "")):
+            return True
+    for posed in (scene.get("poses") or {}):
+        if same_subject(scene, text, str(posed or "")):
+            return True
+    primary, aliased = _entities_named(scene, text)
+    return any(_is_body_entity(scene, eid, entity)
+               for eid, entity in (*primary, *aliased))
+
+
+def _pose_referent(scene, observer_name, display_map, co_present, other,
+                   *, is_self=False):
+    """What a pose is arranged against, rendered as the KIND OF THING it is.
+
+    Returns the text to render, or None to drop this referent -- and, where
+    the caller is handling `relative_to`, its relation along with it.
+
+    A POSE REFERENT IS NOT NECESSARILY A BODY. A body may be arranged against
+    the observer, against another body, against a scene entity (furniture, a
+    device, a fixture), or against a bare noun the Director wrote that names
+    no record at all, and only the first two can be a PERSON. Every referent
+    used to be resolved through `display_map` -- which holds co-present BODIES
+    and nothing else -- with each miss taking the person-shaped default
+    "someone". A desk, a bolted chair and a reality anchor were therefore each
+    delivered as an unidentified person: "seated upright on desk at someone",
+    "restrained in someone", "standing beside someone". Measured in chat 84,
+    where all four poses in the scene did it in the same beat, and the last of
+    them put a third body into a room the observer could see held exactly two
+    guards.
+
+    Order of certainty, and every miss SUBTRACTS:
+
+      1. the observer -> "you"
+      2. a body this observer has ALREADY BEEN GIVEN -> that body's own
+         display label. This is the only place a person label may come from.
+      3. any other body -> DROPPED, unless this is the observer's OWN pose.
+         `observer_display_map` covers every co-present body, so a body
+         absent from it is one this observer was not shown, and naming it in
+         somebody else's pose would hand them a presence perception withheld.
+         Their own pose is the exception and not a leak: a body you are
+         arranged against is a body you are in CONTACT with, and contact is
+         delivered by interoception whether or not you can see who it is.
+         "pinned beneath someone" is the honest rendering of exactly that,
+         and the identity stays unearned.
+      4. a scene entity -> its own name, through the pack's own template so a
+         language that takes no article does not get one.
+      5. an id-shaped token matching no record -> DROPPED. `anchor_device`
+         (the entity's id is `scranton_anchor`) names nothing, and putting it
+         on the page shows the reader engine plumbing.
+      6. anything else -> the bare noun as written. It matches no record in
+         the scene, so it can disclose nothing the Director's own phrasing
+         did not already carry.
+    """
+    text = str(other or "").strip()
+    if not text:
+        return None
+    if same_subject(scene, text, observer_name):
+        return "you"
+    for name, label in (display_map or {}).items():
+        if same_subject(scene, text, str(name or "")):
+            return label
+    if _names_a_body(scene, text, co_present):
+        return "someone" if is_self else None
+    entity = _entity_named(scene, text)
+    named = str((entity or {}).get("name") or "").strip()
+    if named:
+        return _en("pose_entity", name=named)
+    if "_" in text and not text.strip().count(" "):
+        return None
+    # A bare noun the Director wrote. It still reads better with the article
+    # the pack supplies -- "at desk" is the awkwardness this whole repair was
+    # reported for -- but only where it does not already carry a determiner
+    # of its own ("the far wall", "her shoulder") and is not a proper name,
+    # which a capital marks and which "the Marcus" would ruin. The determiner
+    # list is language DATA and lives in the compositor card, empty for a
+    # language that takes no article at all.
+    first = text.split()[0].casefold().strip(",.")
+    # A support is authored free-text and often arrives with its own
+    # preposition already on it ("on the sill"); `_render_pose` detects that
+    # and declines to add a second one. Prefixing an article here would slip
+    # underneath that check and produce "on the on the sill".
+    if (text.split()[0][:1].isupper()
+            or first in _POSE_BARE_DETERMINERS
+            or first in _POSE_PREPOSITIONS):
+        return text
+    return _en("pose_entity", name=text)
+
+
+def _same_referent(scene, a, b):
+    """Do two pose fields name one thing -- by spelling, or by resolving to
+    the same scene entity."""
+    a, b = str(a or "").strip(), str(b or "").strip()
+    if not a or not b:
+        return False
+    if a.casefold() == b.casefold():
+        return True
+    ea, eb = _entity_named(scene, a), _entity_named(scene, b)
+    na = str((ea or {}).get("name") or "").strip().casefold()
+    nb = str((eb or {}).get("name") or "").strip().casefold()
+    return bool(na) and na == nb
+
+
 def pose_percepts(scene, observer_name, co_present, display_map,
                   senses=None):
     """How bodies are arranged: posture, what holds them up, who they are
@@ -744,11 +862,32 @@ def pose_percepts(scene, observer_name, co_present, display_map,
         if level == "full":
             for f in ("support", "relation", "constraint", "detail"):
                 data[f] = pose[f]
-            other = pose["relative_to"]
+            # Support is a referent too, and took the same raw string onto
+            # the page: "on chair_interview" is an entity id being read to
+            # the player. Both fields go through the same resolver.
+            data["support"] = _pose_referent(
+                scene, observer_name, display_map, co_present,
+                pose["support"], is_self=is_self) or ""
+            other = str(pose["relative_to"] or "").strip()
             if other:
-                data["relative_to"] = (
-                    "you" if same_subject(scene, other, observer_name)
-                    else display_map.get(other) or "someone")
+                ref = _pose_referent(
+                    scene, observer_name, display_map, co_present, other,
+                    is_self=is_self)
+                if ref and _same_referent(scene, other, pose["support"]):
+                    # ONE THING, NAMED TWICE. The body specialist fills
+                    # `support` and `relative_to` with the same referent --
+                    # three of chat 84's four poses did -- which read as "on
+                    # desk at desk" the moment the referent stopped being a
+                    # person. Keep the RELATION, which is the more specific
+                    # of the two ("restrained in" against a bare "on"), and
+                    # let it carry the referent by itself.
+                    if str(data.get("relation") or "").strip():
+                        data["support"] = ""
+                        data["relative_to"] = ref
+                    else:
+                        data["support"] = ref
+                elif ref:
+                    data["relative_to"] = ref
         if not any(data.values()):
             continue
         out.append(Percept(
@@ -1400,6 +1539,8 @@ def _render_pose(p, *, past=False):
 
 
 _POSE_PREPOSITIONS = frozenset(_ENGLISH_COMPOSITOR["pose_prepositions"])
+_POSE_BARE_DETERMINERS = frozenset(
+    _ENGLISH_COMPOSITOR.get("pose_bare_determiners") or ())
 
 
 def _render_standing(p):

@@ -100,7 +100,7 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
              knowledge_locations=None, entry_uid=None,
              importance=0.5, aliases=None, scope=None, relations=None,
              source_notes="", embedding=None, embedding_model=None,
-             embedding_dim=None):
+             embedding_dim=None, circles=None):
     import uuid
     entry_uid = entry_uid or f"entry_{uuid.uuid4().hex}"
     vec = embedding
@@ -113,8 +113,8 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
             lorebook_id, keys, content, category, canon_locked, turn_added,
             embedding, title, knowledge_tag, knowledge_range,
             knowledge_locations, entry_uid, importance, aliases, scope,
-            relations, source_notes, embedding_model, embedding_dim
-        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            relations, source_notes, embedding_model, embedding_dim, circles
+        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (lorebook_id, keys or "", content or "",
          category if category in LORE_CATEGORIES else "other",
          locked, turn_added, _blob(vec), title, knowledge_tag,
@@ -123,13 +123,18 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
          _storage_json(aliases or []),
          _storage_json(scope or {}),
          _storage_json(relations or {}),
-         source_notes, model_key, dims))
+         source_notes, model_key, dims,
+         # NULL, not '[]': an entry that never answered the compartment
+         # question INHERITS its book, and only an explicit empty list means
+         # "public". Passing a default here would silently make every new
+         # entry a deliberate exception to its own book.
+         None if circles is None else _storage_json(circles)))
 
 def update_lore(entry_id, keys, content, category=None, title=None,
                 knowledge_tag=None, knowledge_range=None, knowledge_locations=None,
                 importance=None, aliases=None, scope=None, relations=None,
                 source_notes=None, embedding=None, embedding_model=None,
-                embedding_dim=None):
+                embedding_dim=None, circles=None):
     vec = embedding
     model_key, dims = None, None
     if vec is None:
@@ -158,6 +163,11 @@ def update_lore(entry_id, keys, content, category=None, title=None,
     if relations is not None:
         fields.append("relations=?")
         values.append(_storage_json(relations))
+    # Only when the caller actually supplied one -- see add_lore: leaving it
+    # alone preserves "inherit the book", which is what NULL means.
+    if circles is not None:
+        fields.append("circles=?")
+        values.append(_storage_json(circles))
     if source_notes is not None:
         fields.append("source_notes=?")
         values.append(source_notes)
@@ -503,19 +513,114 @@ def _stamped_live_dimensions():
     return None
 
 
-def knowledge_for_character(lorebook_ids, char_room, known_tags, excluded_titles, limit=30):
+def knowledge_circles(value):
+    """Circle names, normalised for comparison. Accepts a JSON list (how the
+    columns store it), a real list, or a blank."""
+    if not value:
+        return set()
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            value = [value]
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, (list, tuple, set)):
+        return set()
+    return {str(v).strip().casefold() for v in value if str(v or "").strip()}
+
+
+def declared_circles(lorebook_ids):
+    """Every compartment the given books declare, at book or entry level.
+
+    Exists so a mind can be told it is an OUTSIDER on purpose rather than by
+    omission. `knowledge.circles` is a field, and an empty field fails
+    silently: a character sheet written before the story's books were
+    compartmented reads as complete and quietly receives the public world
+    only, which looks exactly like a model that has forgotten its own
+    expertise. The engine can see the difference, so it should say so.
+    """
+    ids = _ids(lorebook_ids)
+    if not ids:
+        return set()
+    ph = ",".join("?" * len(ids))
+    out = set()
+    for r in q(f"SELECT default_circles AS c FROM lorebooks WHERE id IN ({ph})",
+               tuple(ids)):
+        out |= knowledge_circles(r["c"])
+    for r in q(f"SELECT circles AS c FROM lore_entries "
+               f"WHERE lorebook_id IN ({ph}) AND circles IS NOT NULL", tuple(ids)):
+        out |= knowledge_circles(r["c"])
+    return out
+
+
+def knowledge_for_character(lorebook_ids, char_room, known_tags,
+                            excluded_titles, circles=None, limit=30):
+    """World knowledge this mind may hold, on three ORTHOGONAL axes.
+
+    DEPTH (`knowledge_tag`) -- how hard the fact is to know: common,
+    scholarly, esoteric, matched against the character's own access tags. An
+    entry with NO depth tag is not character knowledge at all; it is
+    retrieval material the mapping stage selects for the Director
+    (`agents.common.lore_for`).
+
+    COMPARTMENT (`circles`, inherited from the book's `default_circles`) --
+    WHO may know it. Empty is public. Non-empty admits only a character who
+    belongs to one of the named circles. This is the axis depth cannot
+    express: a clandestine organisation's existence is not hard to
+    understand, it is KEPT, and a villager two miles from the site must read
+    exactly the public world however scholarly they are.
+
+    RANGE (`knowledge_range` + `knowledge_locations`) -- where it applies.
+
+    Reachability used to be a CATEGORY: the query selected
+    `category='knowledge'` and nothing else. Measured across every story on
+    disk, 25 of 2,671 entries were in that category (0.9%), while 974 entries
+    in OTHER categories already carried an explicit depth tag and reached
+    nobody because of their filing. A fact is routinely both things at once
+    -- "a Scranton Reality Anchor nullifies reality-bending" is `mechanic` by
+    the authored vocabulary AND something a Foundation researcher knows -- so
+    the taxonomy forced a choice in which filing it correctly removed it from
+    every mind. Live, chat 84: the entry was selected into `relevant_lore` on
+    every turn, the Director held it, and Dr. Moon's `world_knowledge` was
+    empty on all of them.
+    """
     ids = _ids(lorebook_ids)
     if not ids or not known_tags:
         return []
     ph = ",".join("?" * len(ids))
+    book_circles = {
+        r["id"]: knowledge_circles(r["default_circles"])
+        for r in q(f"SELECT id, default_circles FROM lorebooks "
+                   f"WHERE id IN ({ph})", tuple(ids))
+    }
     rows = q(f"""SELECT * FROM lore_entries WHERE lorebook_id IN ({ph})
-             AND category='knowledge' ORDER BY lorebook_id, id""", tuple(ids))
+             ORDER BY lorebook_id, id""", tuple(ids))
+    mine = knowledge_circles(circles)
     excl = set(excluded_titles or [])
     seen_titles = set()
     results = []
     for r in rows:
-        tag = r["knowledge_tag"] or "common"
-        if tag not in known_tags:
+        # An explicit depth tag is what OFFERS an entry to minds at all. The
+        # old `or "common"` default cannot be kept here: with the category
+        # filter gone it would hand every character all 2,671 entries.
+        tag = str(r["knowledge_tag"] or "").strip().casefold()
+        if not tag or tag not in known_tags:
+            continue
+        # The entry's own compartment, else the book's. A book is one setting
+        # or one organisation, which is why the answer belongs there.
+        #
+        # UNSET is not EMPTY. NULL means the entry never answered and
+        # inherits; an explicit `[]` means it did answer and the answer was
+        # "public" -- a secret that has leaked into rumour. Folding the two
+        # together (`circles or book_circles`) lets an entry join a different
+        # compartment but never leave its book's, which makes the deliberate
+        # exception unwritable.
+        raw = r["circles"]
+        needed = (book_circles.get(r["lorebook_id"]) or set()
+                  if raw is None or not str(raw).strip()
+                  else knowledge_circles(raw))
+        if needed and not (needed & mine):
             continue
         title = r["title"] or ""
         if title and (title in excl or title in seen_titles):

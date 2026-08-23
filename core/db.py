@@ -114,7 +114,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -167,6 +167,13 @@ CREATE TABLE IF NOT EXISTS lorebooks(
     scope_world_id TEXT,
     scope_location_id TEXT,
     inheritance_mode TEXT NOT NULL DEFAULT 'inherit',
+    -- THE BOOK'S COMPARTMENT, as a JSON list, inherited by every entry that
+    -- does not override it. Set at the book because that is where the answer
+    -- actually lives -- one book is one setting or one organisation -- and
+    -- because an empty field fails silently: per-entry tagging means one
+    -- forgotten entry tells a barista the Foundation exists. One decision,
+    -- in one place, is the difference between a secret and a leak.
+    default_circles TEXT NOT NULL DEFAULT '[]',
     sort_order INTEGER NOT NULL DEFAULT 0,
     anchor_entity_id TEXT,
     -- A destroyed vehicle/building's book is RETIRED (marked with the turn
@@ -232,6 +239,20 @@ CREATE TABLE IF NOT EXISTS lore_entries(
     knowledge_tag TEXT,
     knowledge_range TEXT,
     knowledge_locations TEXT,
+    -- WHICH COMPARTMENTS MAY KNOW THIS, as a JSON list. Empty means public:
+    -- anyone who clears the depth tag. Non-empty means only a character who
+    -- belongs to one of the named circles, which is the difference between
+    -- "hard to know" and "kept secret" -- a clandestine organisation's
+    -- existence is not esoteric, it is COMPARTMENTED, and depth alone cannot
+    -- say so.
+    --
+    -- NULL means INHERIT the book (lorebooks.default_circles); an explicit
+    -- list overrides it, and an explicit EMPTY list is a deliberate "this one
+    -- is public" -- a secret that has leaked into rumour. Those three states
+    -- must stay distinguishable, which is why this column is nullable rather
+    -- than defaulted: under a NOT NULL DEFAULT '[]' an entry could join a
+    -- different compartment but could never leave its book's.
+    circles TEXT,
     entry_uid TEXT,
     importance REAL NOT NULL DEFAULT 0.5,
     aliases TEXT NOT NULL DEFAULT '[]',
@@ -1577,6 +1598,31 @@ MIGRATIONS = [
         # to answer a measurement question, and inventing its first month of
         # data would poison the answer.
         "ALTER TABLE memories ADD COLUMN last_accessed_turn INTEGER",
+    ],
+    # v32 -> v33
+    [
+        # Compartments: WHO may know a fact, which no column could express.
+        # Depth (`knowledge_tag`) says how hard something is to know; it
+        # cannot say that a clandestine organisation's existence is withheld
+        # from everyone outside it. Authors had already noticed the gap and
+        # were improvising compartment names INTO the depth field -- across
+        # the stories on disk `knowledge_tag` holds `site-17`,
+        # `starfleet_protocol`, `priya_private`, `concord_boarders` and
+        # `blackwood_sanatorium/west_wing/access` beside common/scholarly/
+        # esoteric -- and every one of those evaluated to "no access" and
+        # reached nobody, silently.
+        "ALTER TABLE lore_entries ADD COLUMN circles TEXT",
+        "ALTER TABLE lorebooks ADD COLUMN default_circles TEXT NOT NULL DEFAULT '[]'",
+        # `knowledge_for_character` no longer selects on `category='knowledge'`:
+        # reachability is a PROPERTY (an explicit depth tag) rather than a
+        # category, because 974 entries across every OTHER category already
+        # carried a tag and were unreachable because of it. The entries that
+        # were reachable purely BY category and carry no tag would go dark
+        # under the new rule, so they are given the tier the old code
+        # defaulted them to. This is the one place that default may be
+        # applied; after it, an untagged entry means Director-only on purpose.
+        "UPDATE lore_entries SET knowledge_tag='common' "
+        "WHERE category='knowledge' AND (knowledge_tag IS NULL OR knowledge_tag='')",
     ],
 ]
 
