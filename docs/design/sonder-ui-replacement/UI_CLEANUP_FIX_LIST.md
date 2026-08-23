@@ -63,20 +63,18 @@ contract break, P2 is visible polish/consistency debt, and P3 is minor residue.
   supplied references closely enough that this pass adds no redesign work to
   them beyond the icon and target-size rows above.
 
-## Immediate interaction-design follow-ups
+## Completed interaction-design follow-ups
 
-These requirements are retained for immediate task-flow and contract design
-without expanding the active cleanup implementation:
+These task-flow and capability requirements were reviewed before implementation
+and are now part of the maintained Library contract:
 
 | ID | Priority | Status | Observed problem | Approved direction | Browser verification after contract approval |
 |---|---:|---|---|---|---|
-| UI-FU-01 | P1 | Contract review required | Character and Persona authoring is too dense for a contextual selection-detail pane, but moving it without a reviewed task flow could break route, selection, draft, and compact-layout behavior. | Design a focused authoring workspace while keeping concise selection detail in the contextual pane. Do not implement the dedicated editor presentation before explicit review of task flow, same-viewport behavior, route/state restoration, and compact staging. | From a filtered and scrolled Library selection, enter authoring, exercise a dirty draft and validation state, then Back restores the same query, selection, and scroll. Phone and short-landscape renders provide an equivalent full-screen authoring stage with no clipped controls or lost draft. |
-| UI-FU-02 | P1 | Capability audit required | Capability parity with the latest maintained Character/Persona editor is not yet proven, so a cleaner composition could silently omit stored fields or established workflows. | Audit stored fields, advanced/raw access, generation, greetings, Quick Start and lived-location choices, import/export/duplicate, validation, recoverable drafts, and reusable versus story-specific editing. Capability gaps are defects; composition differences are not. | Browser coverage exercises each maintained workflow on desktop and compact layouts, verifies round-trip persistence and recoverable drafts, and records an explicit supported or missing result for every capability. |
+| UI-FU-01 | P1 | Implemented | Character and Persona authoring was too dense for a contextual selection-detail pane, while a move could have broken route, selection, draft, and compact-layout behavior. | Use a focused destination-owned authoring workspace while keeping concise selection detail in the contextual pane outside authoring; preserve the approved Library hierarchy and inspector preference. | `test_person_workspace_restores_parent_route_scroll_focus_and_local_draft` proves filtered return, exact scroll, focus, draft, and section restoration. `test_person_workspace_geometry_has_one_scroll_owner_and_safe_targets` proves desktop, tablet, phone, and short-landscape staging with one scroll owner, no unused inspector track, 44 px controls, and reachable Save. |
+| UI-FU-02 | P1 | Implemented | Capability parity with the maintained Character/Persona editor needed proof so a cleaner composition could not silently omit stored fields or established workflows. | Retain stored fields, advanced/raw access, generation, greetings, Quick Start and lived-location choices, import/export/duplicate, validation, recoverable drafts, and reusable versus story-specific editing in one shared framework. | `browser_tests/test_ui_character_persona_editor.py`, `browser_tests/test_ui_library_authoring.py`, and `tests/test_library_character_persona_authoring.py` exercise the maintained workflows; `CHARACTER_PERSONA_EDITOR_CAPABILITY_AUDIT.md` records the supported result and exact evidence for presentation gaps. |
 
-The dedicated editor presentation must not be implemented until the authoring
-task flow, same-viewport contract, route/state restoration, and compact staging
-have been explicitly reviewed. Earlier interfaces may be inspected for
-capabilities only; they are not visual or information-architecture authority.
+Earlier interfaces remain capability references only; they are not visual or
+information-architecture authority.
 
 ## Separately scoped backlog
 

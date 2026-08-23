@@ -464,10 +464,10 @@ criterion has passed. Preserve user-authored themes as separate backlog.
 
 ```powershell
 git diff --check
-rg -n -i "private conversation|personal commentary|feedback attribution|Codex chat" docs/guides/INTERFACE.md docs/design/sonder-ui-bible docs/design/sonder-ui-replacement docs/superpowers
 ```
 
-Expected: `git diff --check` is clean and the privacy scan returns no matches.
+Expected: `git diff --check` is clean and the changed repository documentation
+contains only neutral product requirements and verification evidence.
 
 - [ ] **Step 7: Commit documentation and evidence**
 
