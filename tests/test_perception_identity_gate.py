@@ -253,7 +253,16 @@ def test_outcome_payload_previews_attire_and_delivers_exposed_region_detail(
     view = perception.perception_outcome(ctx, nonce=0)["views"][str(moon_id)]
 
     assert "distinctive silver scar" in view
-    assert "fitted tank top" not in view
+    # THE GUARANTEE IS THAT SHE IS NOT SHOWN STILL DRESSED, not that the
+    # garment is unmentionable. This asserted `"fitted tank top" not in view`
+    # until 2026-08-23, which also forbade the view from saying the top came
+    # OFF -- and since a change of dress now renders as the change ("Hinami
+    # is no longer wearing fitted tank top") rather than as a re-issued
+    # inventory, the honest rendering of the removal tripped a check meant
+    # to catch the opposite error. Naming a garment the observer watched
+    # come off discloses nothing; presenting it as current dress is the
+    # defect, and that is what this now says.
+    assert not re.search(r"(?<!no longer )wearing fitted tank top", view), view
     # Previewing is pure with respect to the stored pre-commit scene.
     stored = temp_db.wget(ctx.chat.id, "scene", {})
     assert stored["attire"]["Hinami"]["wearing"] == ["fitted tank top"]

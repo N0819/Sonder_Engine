@@ -907,10 +907,21 @@ _POSE_RENDER_FIELDS = ("posture", "support", "relative_to", "relation",
                        "constraint", "detail")
 
 
-def appearance_percept(source_name, label, description, *, force=False):
+def appearance_percept(source_name, label, description, *, force=False,
+                       delta=""):
     """The FULL authored appearance -- discovery/structural-change data, first
     mention only (the render ledger gates re-emission; ``force=True`` marks a
     structural change this beat, which re-earns the description).
+
+    ``delta`` is what a change LOOKS LIKE from outside, and when it is
+    present the renderer uses it INSTEAD of the full description. A garment
+    coming off is an event; re-issuing the whole wardrobe is a ledger. The
+    old behaviour put "wearing Ceremonial kimono, Nagajuban, Ornate gold
+    obi, Zori, Tabi, bare at the head, hands" on the page because a change
+    of any one item re-earned every item, and the narrator was then asked to
+    render an inventory as something that happened. The full description
+    stays available in the standing half of the view, where first-mention
+    and dedupe already govern it.
     `description` must already be identity-safe for this observer
     (name-stripped when the observer does not recognize the body). The
     canonical name is folded into an opaque `body_key` for the ledger; it
@@ -918,7 +929,8 @@ def appearance_percept(source_name, label, description, *, force=False):
     return Percept(
         kind="appearance", channel="sight", source_label=label,
         data={"source_key": body_key(source_name),
-              "description": description, "force": bool(force)},
+              "description": description, "force": bool(force),
+              **({"delta": str(delta)} if str(delta or "").strip() else {})},
         salience=0.5,
         dedupe_key="described:" + _short_hash(source_name, description),
     )
@@ -1562,6 +1574,20 @@ def _render_standing(p):
     if p.kind == "presence":
         return _cap(_presence_clause(p)) + "."
     if p.kind == "appearance":
+        # A CHANGE RENDERS AS THE CHANGE. Only when there is nothing
+        # readable to say about it does the full description stand in --
+        # failing toward delivering more, because a change the observer can
+        # see and the page does not mention is the worse error.
+        change = str(p.data.get("delta") or "").strip()
+        if change:
+            # The LABEL, because a change needs a body to belong to: the
+            # first cut of this rendered "You see no longer wearing haori."
+            # -- the delta reads as a predicate and the appearance template
+            # it borrowed supplies a subject that is the wrong one. The
+            # label is this observer's own, so it carries the identity floor
+            # (a stranger stays "the unfamiliar person") for free.
+            return _cap(_en("appearance_change",
+                            label=p.source_label or "someone", change=change))
         desc = _appearance_as_prose(p.data.get("description"))
         return _en("appearance", description=desc) if desc else ""
     if p.kind == "pose":
