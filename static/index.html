@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Sonder Engine</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="/static/js/theme-init.js"></script>
+<script src="/static/js/theme-init.js?v=20260822-alpha98"></script>
 <link rel="stylesheet" href="/static/styles.css">
 <link rel="stylesheet" href="/static/lorebooks.css">
 <link rel="stylesheet" href="/static/themes.css">
@@ -166,28 +166,28 @@
 
      What neither rule permits is calling any of it at top level from a file
      that loads earlier. -->
-<script src="/static/js/utils.js"></script>
-<script src="/static/js/components.js"></script>
-<script src="/static/js/editors.js"></script>
-<script src="/static/js/lorebooks.js"></script>
-<script src="/static/js/backdrops.js"></script>
-<script src="/static/js/ambience.js"></script>
+<script src="/static/js/utils.js?v=20260822-alpha98"></script>
+<script src="/static/js/components.js?v=20260822-alpha98"></script>
+<script src="/static/js/editors.js?v=20260822-alpha98"></script>
+<script src="/static/js/lorebooks.js?v=20260822-alpha98"></script>
+<script src="/static/js/backdrops.js?v=20260822-alpha98"></script>
+<script src="/static/js/ambience.js?v=20260822-alpha98"></script>
 <!-- Weather draws itself: one generated tile moved by a CSS transform, no
      particle engine and so no vendored bundle to load. See the header of
      weather-fx.js for why that is a fraction of the power. -->
-<script src="/static/js/weather-fx.js"></script>
+<script src="/static/js/weather-fx.js?v=20260822-alpha98"></script>
 <!-- The "your turn is ready" tap on the shoulder. Synthesised and
      scheduled on the audio clock so it sounds the same from a
      background tab, which is the only place it matters. -->
-<script src="/static/js/chime.js"></script>
-<script src="/static/js/chat.js"></script>
-<script src="/static/js/settings.js"></script>
-<script src="/static/js/themes.js"></script>
+<script src="/static/js/chime.js?v=20260822-alpha98"></script>
+<script src="/static/js/chat.js?v=20260822-alpha98"></script>
+<script src="/static/js/settings.js?v=20260822-alpha98"></script>
+<script src="/static/js/themes.js?v=20260822-alpha98"></script>
 <!-- The extension registry, before app.js so the consult points in
      renderSide/handleEvt/openPipeline can see it, and pure enough that it
      cannot break the boot it precedes. -->
-<script src="/static/js/extensions.js"></script>
-<script src="/static/js/app.js"></script>
+<script src="/static/js/extensions.js?v=20260822-alpha98"></script>
+<script src="/static/js/app.js?v=20260822-alpha98"></script>
 <!-- Every enabled extension's UI, concatenated by the server. Last on the
      page: it registers against a host that is already fully defined, and a
      failure here leaves the whole app already loaded behind it. -->

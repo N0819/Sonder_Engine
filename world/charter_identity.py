@@ -116,6 +116,32 @@ def generated_name(charter_key, body_key, profile, attempt=0):
     return " ".join(profile["name_format"].format(**values).split()).strip()
 
 
+def _stored_name_components(body, profile):
+    """Recover format fields without mistaking a display title for identity.
+
+    New generated bodies store their components directly. Older registries
+    predate those fields, so the two common authored formats receive a narrow
+    compatibility parse. Any unfamiliar cultural format falls back to the
+    full stored name instead of rendering a title with a blank identity.
+    """
+    body = body if isinstance(body, dict) else {}
+    profile = normalize_naming_profile(profile)
+    name = str(body.get("name") or body.get("key") or "").strip()
+    given = str(body.get("given_name") or "").strip()
+    family = str(body.get("family_name") or "").strip()
+    parts = name.split()
+    if parts and not (given and family):
+        if profile["name_format"] == "{given} {family}":
+            given = given or " ".join(parts[:-1]) or parts[0]
+            family = family or parts[-1]
+        elif profile["name_format"] == "{family} {given}":
+            family = family or parts[0]
+            given = given or " ".join(parts[1:]) or parts[-1]
+    # A custom format may not expose separable components. Repeating the full
+    # identity is imperfect but never collapses "Dr. Sarah Moon" to "Dr.".
+    return given or name, family or name
+
+
 def materialize_body_names(charter_key, raw_bodies, profile):
     """Copy ``raw_bodies`` and give every unnamed body one stable name.
 
@@ -149,6 +175,11 @@ def materialize_body_names(charter_key, raw_bodies, profile):
             base = generated_name(charter_key, body_key, profile, 0)
             chosen = f"{base} {body_key}".strip() if base else body_key
         body["name"] = chosen
+        given, family = _stored_name_components(body, profile)
+        if given:
+            body.setdefault("given_name", given)
+        if family:
+            body.setdefault("family_name", family)
         used.add(chosen.casefold())
     return out
 
@@ -178,8 +209,9 @@ def display_name(body, roles=(), profile=None):
     if not title or name.casefold().startswith(title.casefold() + " "):
         return name
     fmt = normalize_naming_profile(profile)["formal_format"]
-    values = {"given": str(body.get("given_name") or ""),
-              "family": str(body.get("family_name") or ""),
+    given, family = _stored_name_components(body, profile)
+    values = {"given": given,
+              "family": family,
               "name": name, "title": title,
               "rank": str(body.get("rank") or "")}
     return " ".join(fmt.format(**values).split()).strip()
@@ -204,9 +236,10 @@ def identity_aliases(body, roles=(), profile=None):
     titles.extend(profile["titles"]["posts"].values())
     current = title_for(body, roles, profile)
     titles.append(current)
+    given, family = _stored_name_components(body, profile)
     values = {
-        "given": str(body.get("given_name") or ""),
-        "family": str(body.get("family_name") or ""),
+        "given": given,
+        "family": family,
         "name": name,
         "rank": str(body.get("rank") or ""),
     }

@@ -285,6 +285,205 @@ function promptModalWithToggle(message, toggleLabel, opts = {}) {
   });
 }
 
+// One authoring control for every seam that can create a lived location:
+// the new-story wizard, hand-built stories, greeting launch, Dialogue Config,
+// and the lorebook workspace. Keeping the payload here prevents those paths
+// from acquiring different meanings for "pre-simulate" over time.
+function livedLocationControl(options = {}) {
+  const showToggle = options.showToggle !== false;
+  const enabled = el("input", { type: "checkbox" });
+  enabled.checked = showToggle ? !!options.enabled : true;
+  const brief = el("input", {
+    type: "text",
+    style: "width:100%",
+    value: options.brief || "",
+    placeholder: "What place? e.g. a crowded orbital customs station"
+  });
+  const history = el("select", { style: "width:100%" },
+    el("option", { value: "0" }, "Generate it without a simulated past"),
+    el("option", { value: "168" }, "Simulate its last week"),
+    el("option", { value: "720" }, "Simulate its last month (recommended)"));
+  history.value = String(options.horizonHours ?? 720);
+  const historyOptions = () => [
+        el("option", { value: "auto" }, "Auto — use the card and opening"),
+        el("option", { value: "resident" }, "Lives here"),
+        el("option", { value: "moving_institution" },
+          "Travels with this place or group"),
+        el("option", { value: "visitor" },
+          "Arrives with authored or canon travels"),
+        el("option", { value: "generated_journey" },
+          "Generate a journey before arrival"),
+        el("option", { value: "authored_only" }, "Use authored history only"),
+        el("option", { value: "none" }, "No generated past")];
+  const routeCopy = {
+    auto: "Residence is used only when the card and opening explicitly place this character here; uncertainty preserves authored history.",
+    resident: "Charter simulates this character's local work, relationships, incidents, and private routines, then hands them to full cognition.",
+    moving_institution: "Charter treats the ship, caravan, unit, or other bounded group as the character's continuing home.",
+    visitor: "The location is simulated without giving this character a post or tenure. Authored and canon travels remain their past.",
+    generated_journey: "A separate journey history may invent prior destinations and encounters. It never makes the character a local resident.",
+    authored_only: "No new character events are invented. The card and greeting remain authoritative.",
+    none: "Only the opening's existing mind seeds are used. The location may still have its own history."
+  };
+  const configuredHistories = new Map(
+    (options.characterHistories || []).map(row => [String(row.key), row]));
+  const requestedResidents = Array.isArray(options.featuredResidents)
+    ? options.featuredResidents
+    : (options.featuredResidentName
+        ? [{ key: "featured", name: options.featuredResidentName }]
+        : []);
+  const historyControls = requestedResidents.map((resident, index) => {
+    const key = String(resident.key ?? `character-${index + 1}`);
+    const prior = configuredHistories.get(key) || resident;
+    const select = el("select", { style: "width:100%;margin-top:5px" },
+      ...historyOptions());
+    select.value = prior.mode || "auto";
+    const guidance = el("textarea", {
+      rows: "2", style: "width:100%;margin-top:6px",
+      placeholder: "Past guidance (optional): eras, places, relationships, duties, habits, or canon to emphasize"
+    }, prior.brief || "");
+    const preview = el("div", { class: "small dim", style: "margin-top:5px" });
+    const syncRoute = () => {
+      preview.textContent = routeCopy[select.value] || routeCopy.auto;
+    };
+    select.onchange = syncRoute;
+    syncRoute();
+    return {
+      key, select, guidance,
+      node: el("div", { class: "card", style: "margin-top:8px" },
+        el("strong", {}, `How does ${resident.name || "this character"} relate to this place?`),
+        select, preview, guidance)
+    };
+  });
+  const fields = el("div", { style: "margin-top:8px" },
+    brief,
+    el("label", { class: "small dim", style: "display:block;margin-top:8px" },
+      "How much recent history should its residents live through?"),
+    history,
+    el("div", { class: "small dim", style: "margin-top:6px" },
+      "The simulation creates events, work history, local judgments, obligations, "
+      + "stock changes, reports, and decisions. It does not invent resident memories; "
+      + "a featured resident may receive a separate bounded recent-life pass below."),
+    historyControls.length
+      ? el("div", { class: "card", style: "margin-top:8px" },
+          historyControls.length > 1
+            ? el("strong", {}, "Give each story character the right kind of past")
+            : null,
+          ...historyControls.map(control => control.node),
+          el("div", { class: "dim small", style: "margin-top:6px" },
+            `The location is planned using only public card details; private card details `
+            + `never enter the location planner. The recent-life pass `
+            + `uses the named roster, real rooms and duties, simulation anchors, the card, `
+            + `and your guidance to create 10–16 separate memories. After handoff, Charter `
+            + `stops speaking or deciding for them.`))
+      : null);
+  const sync = () => {
+    fields.style.display = enabled.checked ? "" : "none";
+  };
+  enabled.onchange = sync;
+  sync();
+  const node = el("div", { class: "card", style: "margin-top:10px" },
+    showToggle
+      ? el("label", { class: "row", style: "gap:7px" }, enabled,
+          el("strong", {}, "Build a lived-in location before play"))
+      : el("strong", {}, "Generate a lived-in location"),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      options.note || "Uses the selected lorebook and your description to create "
+        + "stable residents, places, institutions, goods, and local history."),
+    fields);
+  return {
+    node,
+    read: () => {
+      if (!enabled.checked) return null;
+      const horizon = Math.max(0, Math.min(720, Number(history.value) || 0));
+      return {
+        enabled: true,
+        brief: brief.value.trim(),
+        horizon_hours: horizon,
+        active_tail_hours: Math.min(96, horizon),
+        generate_history: horizon > 0,
+        ...(historyControls.length === 1 && options.featuredResidentName
+          ? { character_history: {
+              mode: historyControls[0].select.value,
+              brief: historyControls[0].guidance.value.trim()
+            }}
+          : {}),
+        ...(historyControls.length && !options.featuredResidentName
+          ? { character_histories: historyControls.map(control => ({
+              key: control.key,
+              mode: control.select.value,
+              brief: control.guidance.value.trim()
+            })) }
+          : {})
+      };
+    }
+  };
+}
+
+async function attachStoryLorebook(chatId, lorebookId) {
+  if (!lorebookId) return null;
+  const attached = await api("POST", `/api/chats/${chatId}/lorebooks`, {
+    lorebook_id: Number(lorebookId)
+  });
+  return attached.lorebook_id;
+}
+
+async function generateStoryLocation(chatId, request, lorebookId = null) {
+  if (!request) return null;
+  const attachedId = await attachStoryLorebook(chatId, lorebookId);
+  return api("POST", `/api/chats/${chatId}/charters/generate`, {
+    ...request,
+    ...(lorebookId ? { lorebook_id: Number(lorebookId) } : {}),
+    ...(attachedId ? { owning_lorebook_id: attachedId } : {})
+  });
+}
+
+function openLivedLocationDialog(chatId, options = {}) {
+  if (!chatId) {
+    toast("Open a story first, then choose which lore should become a location.", "warn");
+    return;
+  }
+  if (S.chatId === chatId && S.currentFrameId != null) {
+    toast("Return to the story's present before adding a lived location.", "warn");
+    return;
+  }
+  const control = livedLocationControl({
+    showToggle: false,
+    brief: options.brief || "",
+    horizonHours: options.horizonHours ?? 720,
+    note: options.note
+  });
+  modal(options.title || "Generate a lived-in location", body => {
+    body.append(
+      control.node,
+      el("div", { class: "small dim", style: "margin-top:8px" },
+        "This adds a planned location and persistent residents without rewriting "
+        + "the room currently on the page or giving anyone omniscient knowledge."),
+      el("div", { class: "row", style: "margin-top:12px" },
+        el("button", { onclick: () => closeModal() }, "Cancel"),
+        el("span", { class: "spacer" }),
+        el("button", { class: "primary", onclick: event => {
+          const button = event.currentTarget;
+          const request = control.read();
+          button.disabled = true;
+          backgroundTask("Generating and pre-simulating location",
+            () => generateStoryLocation(
+              chatId, request, options.lorebookId || null), {
+              onSuccess: async result => {
+                closeModal();
+                await options.onSuccess?.(result);
+              },
+              successMessage: result =>
+                `${result.town}: ${result.rooms} places and `
+                + `${result.charters.length} institutions generated.`,
+              errorPrefix: "Location generation failed",
+              onFinally: () => {
+                if (button.isConnected) button.disabled = false;
+              }
+            });
+        } }, "Generate and add location")));
+  }, { wide: false });
+}
+
 // ---- Toasts ----
 // The host is declared in index.html, and `toast` still must not assume it is
 // there. A toast is what the app reaches for when something ELSE has already

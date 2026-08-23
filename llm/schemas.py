@@ -1847,6 +1847,11 @@ class CourierOp(LenientModel):
     # names the known room it forms in (the crowd-minting precedent).
     stops: list[str] = Field(default_factory=list)
     from_room: str = ""       # caravan with no sender and no message: where it forms
+    # Optional real cargo for a caravan. `stock` is requested abstract lots,
+    # `from_holder` must own them at an origin market, and `wants` is what the
+    # caravan may buy at stops. The engine loads the actual amount; the model
+    # cannot mint stock by writing this field.
+    freight: dict[str, Any] = Field(default_factory=dict)
 
 
 class ArtifactOp(LenientModel):
@@ -2569,9 +2574,12 @@ class RelationshipUpdate(LenientModel):
     trust_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     warmth_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     fear_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
+    respect_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
+    suspicion_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
     trigger_event_ids: list[str] = Field(default_factory=list)
 
     _clamp_deltas = validator("trust_delta", "warmth_delta", "fear_delta",
+                              "respect_delta", "suspicion_delta",
                               pre=True, allow_reuse=True)(
         lambda cls, v: _clamp_float(v, -0.2, 0.2, 0.0)
     )
@@ -3132,6 +3140,42 @@ class MappingStageOutput(LenientModel):
 
 # ---- Greeting interpretation (ingest-time, per docs/design/GREETING_IMPORT_DESIGN.md) ----
 
+class PrestoryJourneyEvent(LenientModel):
+    sequence: int = 0
+    when: str = ""
+    place: str = ""
+    people: list[str] = Field(default_factory=list)
+    memory: str = ""
+    consequence: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+
+
+class PrestoryJourneyHistory(LenientModel):
+    summary: str = ""
+    events: list[PrestoryJourneyEvent] = Field(default_factory=list)
+
+
+class PrestoryResidentEpisode(LenientModel):
+    sequence: int = 0
+    when: str = ""
+    title: str = ""
+    kind: str = "recent_event"
+    location_id: str = ""
+    participant_ids: list[str] = Field(default_factory=list)
+    memory: str = ""
+    consequence: str = ""
+    source_ids: list[str] = Field(default_factory=list)
+    tone: str = "neutral"
+    lesson: str = "none"
+    valence: float = 0.0
+    arousal: float = 0.0
+    salience: float = 0.58
+
+
+class PrestoryResidentHistory(LenientModel):
+    overview: str = ""
+    episodes: list[PrestoryResidentEpisode] = Field(default_factory=list)
+
 class GreetingKnowledgeSeed(LenientModel):
     content: str = ""
     about_entity: str = "self"      # 'self' = the character
@@ -3275,6 +3319,8 @@ class GreetingInterpret(LenientModel):
 # ---- Validation ----
 
 SCHEMA_MAP = {
+    "prestory_journey": PrestoryJourneyHistory,
+    "prestory_resident": PrestoryResidentHistory,
     "greeting_interpret": GreetingInterpret,
     "director_interpret": DirectorInterpret,
     "director_establish": DirectorEstablish,

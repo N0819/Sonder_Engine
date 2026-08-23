@@ -605,9 +605,9 @@ class TestOneAuthorityCeiling:
 
         js = (Path(__file__).resolve().parents[1]
               / "static/js/settings.js").read_text(encoding="utf-8")
-        assert '"World simulation"' in js
+        assert '"Simulation reach"' in js
         assert '"Living world"' not in js  # the second card is gone
-        block = js[js.index('"World simulation"'):
+        block = js[js.index('"Simulation reach"'):
                    js.index('"Background life"')]
         assert block.index("offLife") < block.index("lwRows")
         assert "d.requires" in js and "refreshLw" in js

@@ -10,8 +10,14 @@ def test_provider_schema_drops_annotations_not_constraints():
     raw = builder() if builder is not None else schemas.CharacterOutput.schema()
     offered = llm_quality._step_json_schema("character")
 
-    assert len(json.dumps(offered, separators=(",", ":"))) < (
-        len(json.dumps(raw, separators=(",", ":"))) * 0.4)
+    raw_size = len(json.dumps(raw, separators=(",", ":")))
+    offered_size = len(json.dumps(offered, separators=(",", ":")))
+    # Pydantic 1 emits far more annotation text than Pydantic 2, so a ratio
+    # against the raw schema measured the dependency's verbosity rather than
+    # the provider payload. Both supported majors must keep the actual wire
+    # under the same useful ceiling while still proving annotations came off.
+    assert offered_size < 8500
+    assert offered_size < raw_size * 0.75
 
     def annotations(value):
         if isinstance(value, dict):

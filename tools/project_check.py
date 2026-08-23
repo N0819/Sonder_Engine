@@ -789,6 +789,39 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
         if any(not str(reason or "").strip() for reason in exceptions.values()):
             errors.append(
                 f"language pack {language_id!r} has an empty translation-exception reason")
+        # A reason must be a DECISION, not a re-derivable guess. The reasons
+        # used to be copied from the drafting tool's `code_reason` heuristic;
+        # the heuristic was later improved and the ledger was not, so 17
+        # player-facing strings sat untranslated in the shipped Japanese UI
+        # behind the words "source, style, selector, or markup fragment" --
+        # each one passing the non-empty check above. Banning the generated
+        # vocabulary outright is what makes that class impossible: a stored
+        # reason no machine can produce is one a person had to write.
+        generated = {
+            "protocol, brand, or literal control name",
+            "identifier, route, enum, class, or filename",
+            "path, selector, markup, or query fragment",
+            "source, style, selector, or markup fragment",
+            "placeholder-only template",
+            "source expression fragment",
+            "punctuation or numeric literal",
+        }
+        machine_written = sorted(
+            text for text, reason in exceptions.items()
+            if str(reason).strip() in generated)
+        if machine_written:
+            errors.append(
+                f"language pack {language_id!r} has "
+                f"{len(machine_written)} translation exceptions carrying a "
+                "generated reason; write why that string is untranslatable: "
+                + ", ".join(repr(text[:40]) for text in machine_written[:5]))
+        echoed = sorted(text for text, reason in exceptions.items()
+                        if str(reason).strip() == text.strip())
+        if echoed:
+            errors.append(
+                f"language pack {language_id!r} has {len(echoed)} translation "
+                "exceptions whose reason is a copy of the string itself: "
+                + ", ".join(repr(text[:40]) for text in echoed[:5]))
         ui_protocol_drift = [
             key for key, source in english.ui_catalog.items()
             if canonical_language_tokens(source).difference(
@@ -2509,6 +2542,114 @@ def check_package_edge_budget(errors: list[str]) -> None:
             "in the commit message.")
 
 
+#: Every module that writes memory rows, and how each one keeps a row's
+#: identity meaningful. `memories.event_key` is what `_upsert_memory`
+#: reconciles on (`mind/memory_write.py`), and the rule it has to satisfy is
+#: NOT "be unique" -- it is "come back identical when the same beat is
+#: written again", or every `memory_summaries.support` clause citing the row
+#: is stranded (`mind/memory_summaries.derive_summary_support`).
+#:
+#: Two ways to satisfy it, and a writer must pick one deliberately:
+#:   * delete the turn's rows first, so nothing is reconciled by key at all;
+#:   * mint a key from something that survives a copy -- content, or a scope
+#:     that is re-derived the same way on the other side.
+#:
+#: The list exists because the third option is invisible: a new writer that
+#: reconciles by a key minted from a row id works perfectly until the chat is
+#: branched, and then silently writes a second row instead of updating the
+#: first. Adding a writer means adding a line here and saying which way it
+#: goes.
+MEMORY_WRITERS = {
+    "mind/memory_snapshot.py": "restore: deletes the whole chat's rows first",
+    "persist/commit_memory_write.py":
+        "calls delete_turn_memories(turn.id) before the batch",
+    "story/greetings.py": "keys on a sha1 of the seed's content",
+    "world/offscreen.py": "keys on a chat-scoped agent/epoch identity",
+    "persist/commit_background.py": "keys on the charter's own identity",
+    "world/charter_history.py":
+        "keys on stable charter/body plus the re-derived evidence source id",
+    "story/journey_history.py":
+        "keys on hashes of the grounded memory content, independent of row ids",
+    "web/app.py": "the manual add route passes no event_key, so it inserts",
+}
+
+#: `event_key` minted from the TURN ROW's id, which does not survive a copy.
+#: Fine where it lives, because every site is entered through
+#: `commit_memories`, which deletes by `turn_id` first -- and that is exactly
+#: the coupling worth pinning, since it is an argument in a comment rather
+#: than anything the code enforces.
+TURN_ID_MINT_OWNER = "persist/commit_memory.py"
+
+
+def check_memory_identity_writers(errors: list[str]) -> None:
+    """Memory identities stay re-derivable, and new writers say how."""
+    import ast as _ast
+
+    # Both directions. A registry that only catches ADDITIONS rots: a module
+    # that stops writing memories leaves a line here claiming it still does,
+    # and the next reader trusts it. This repo has paid for that shape before.
+    actual: set[str] = set()
+    for root in ENGINE_SOURCE_ROOTS:
+        for path in _python_files(root):
+            rel = path.relative_to(ROOT).as_posix()
+            # Engine writers only. A test builds rows to drive a path and is
+            # never the thing a branch copies; requiring every fixture to
+            # declare an identity strategy would make the registry noise and
+            # teach people to append to it without reading it.
+            if rel.startswith(("tests/", "extensions/", "tools/")):
+                continue
+            # The definition site is not a caller. Skipped rather than listed,
+            # so that `add_memory` growing an internal call to the batch
+            # writer does not read as an undeclared writer.
+            if rel == "mind/memory_write.py":
+                continue
+            try:
+                tree = _ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            writes = False
+            for node in _ast.walk(tree):
+                if not isinstance(node, _ast.Call):
+                    continue
+                func = node.func
+                name = (func.attr if isinstance(func, _ast.Attribute)
+                        else getattr(func, "id", ""))
+                if name in ("add_memories_batch", "add_memory"):
+                    writes = True
+                if name in ("_stable_event_key", "stable_event_key") \
+                        and node.args:
+                    first = node.args[0]
+                    if isinstance(first, _ast.Attribute) \
+                            and first.attr == "id" \
+                            and isinstance(first.value, _ast.Name) \
+                            and first.value.id == "turn" \
+                            and rel != TURN_ID_MINT_OWNER:
+                        errors.append(
+                            f"{rel}:{node.lineno} mints an event_key from "
+                            "`turn.id`, which does not survive a branch or an "
+                            f"import. Only {TURN_ID_MINT_OWNER} may, because "
+                            "every one of its sites is entered through "
+                            "commit_memories, which deletes the turn's rows "
+                            "first. Key on content or a re-derivable scope, "
+                            "or delete before you write.")
+            if writes:
+                actual.add(rel)
+            if writes and rel not in MEMORY_WRITERS:
+                errors.append(
+                    f"{rel} writes memory rows but is not in "
+                    "`MEMORY_WRITERS`. Say how it keeps `event_key` "
+                    "re-derivable -- delete the turn's rows first, or mint "
+                    "from something that survives a copy. A key minted from "
+                    "a row id reconciles correctly until the chat is "
+                    "branched, then silently writes a duplicate.")
+
+    for rel in sorted(set(MEMORY_WRITERS) - actual):
+        errors.append(
+            f"`MEMORY_WRITERS` lists {rel}, which no longer writes memory "
+            "rows. Drop the entry: a registry that describes what a module "
+            "used to do is worse than no registry, because it is believed.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
@@ -2538,6 +2679,7 @@ def main() -> int:
     check_turn_scoped_contextvars_are_cleared(errors)
     check_facade_patch_targets(errors)
     check_package_edge_budget(errors)
+    check_memory_identity_writers(errors)
     check_generated_map(errors)
 
     if errors:

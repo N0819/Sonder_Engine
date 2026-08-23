@@ -323,9 +323,10 @@ def test_the_presence_aperture_excludes_the_register(temp_db):
     assert set(own[0]["presence"]) <= {
         "competence", "able", "condition", "strain", "standing_post",
         "temperament",
-        "watches_stood", "can_bring_up", "knows_here", "strangers_here",
-        "blamed", "knows_it_is_blamed",
-    }
+            "watches_stood", "can_bring_up", "knows_here", "strangers_here",
+            "blamed", "knows_it_is_blamed", "social_judgments",
+            "commitments", "institutional",
+        }
 
 
 def test_charter_bodies_are_derived_background_people_with_stable_refs(temp_db):

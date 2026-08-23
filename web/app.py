@@ -44,6 +44,7 @@ from persist.checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot
                          start_compaction,
                          propagate_memory_summaries_to_checkpoints,
                          PRESERVED_SETTING_KEYS)
+from persist.chat_delete import delete_chat_data
 from core.frames import create_frame, get_frame, list_frames
 from world import paradox
 from story import greetings
@@ -517,7 +518,13 @@ def guest_page():
 
 @app.get("/")
 def index():
-    return FileResponse(STATIC_ROOT / "index.html")
+    # The shell coordinates one classic-script bundle through query revisions.
+    # Always revalidate it so a changed revision cannot leave a new caller
+    # beside a stale cached helper from the previous bundle.
+    return FileResponse(
+        STATIC_ROOT / "index.html",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 @app.get("/login")
 def login_page():
@@ -2574,6 +2581,15 @@ def char_import(body: dict = Body(...)):
     return {"id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 
+def _lived_location_llm_detail(exc):
+    if isinstance(exc, providers.ReasoningBudgetExhausted):
+        return (
+            "The helper model used its whole response for reasoning and "
+            "returned no location, including after a direct-answer retry. "
+            "No presimulation was applied.")
+    return f"Lived-location generation failed: {exc}"
+
+
 @app.post("/api/characters/{cid}/start")
 def character_start_story(cid: int, body: dict = Body(default={})):
     """Start story now: seed a chat from this character's greeting with the
@@ -2588,9 +2604,14 @@ def character_start_story(cid: int, body: dict = Body(default={})):
             cid, int(persona_id), int(body.get("greeting_index", 0)),
             lorebook_id=int(lorebook_id) if lorebook_id else None,
             already_known=bool(body.get("already_known", True)),
-            language=_require_story_language(body.get("language")))
+            language=_require_story_language(body.get("language")),
+            lived_location=(body.get("lived_location")
+                            if isinstance(body.get("lived_location"), dict)
+                            else None))
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
+    except providers.LLMError as exc:
+        raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
     # The last moment before the card starts BEHAVING. A driveless sheet reads
     # as a dull character rather than a missing field once play begins, and
     # this is the surface where the host is about to find that out the slow
@@ -3282,29 +3303,7 @@ def chat_del(cid: int):
     # A still-running pipeline would keep writing into rows we're deleting
     # (and re-create orphan world rows for the dead chat id).
     _require_chat_idle(cid)
-    with transaction():
-        # Cascade through turns → steps → variants (no chat_id on steps/variants)
-        for t in q("SELECT id FROM turns WHERE chat_id=?", (cid,)):
-            for s in q("SELECT id FROM steps WHERE turn_id=?", (t["id"],)):
-                qi("DELETE FROM variants WHERE step_id=?", (s["id"],))
-            qi("DELETE FROM steps WHERE turn_id=?", (t["id"],))
-        # Tables with a direct chat_id foreign key
-        for tbl in (
-            "turns", "events", "world", "checkpoints",
-            "chat_chars", "chat_lorebooks", "chat_personas",
-            "chat_char_frames", "turn_player_inputs", "frames",
-            "guest_grants", "scheduled_events", "room_registry",
-            "world_events", "relationship_events", "world_entities",
-            "world_placements", "world_conditions",
-            "fiction_worlds", "fiction_locations", "transit_edges",
-        ):
-            qi(f"DELETE FROM {tbl} WHERE chat_id=?", (cid,))
-        # FTS table stores chat_id as text
-        qi("DELETE FROM memory_retrieval_fts WHERE chat_id=?", (str(cid),))
-        qi("DELETE FROM memories WHERE chat_id=?", (cid,))
-        qi("DELETE FROM memory_summaries WHERE chat_id=?", (cid,))
-        qi("DELETE FROM lorebooks WHERE chat_id=?", (cid,))
-        qi("DELETE FROM chats WHERE id=?", (cid,))
+    delete_chat_data(cid)
     return {"ok": True}
 
 @app.get("/api/chats/{cid}")
@@ -4582,6 +4581,7 @@ def living_world_put(cid: int, body: dict = Body(...)):
 @app.get("/api/chats/{cid}/charters")
 def charters_get(cid: int, frame_id: int | None = None):
     """Structured institution definitions plus their frame-scoped state."""
+    from core.db import wget_for_frame
     from world.charter_runtime import registry_for, registry_warnings
 
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
@@ -4591,7 +4591,12 @@ def charters_get(cid: int, frame_id: int | None = None):
         scene = get_scene(cid, dict(chat))
     registry = registry_for(cid, frame_id)
     return {"charters": registry,
-            "warnings": registry_warnings(registry, scene=scene)}
+            "character_history_routes": wget_for_frame(
+                cid, "character_history_routes", frame_id, {}) or {},
+            "character_journey_histories": wget_for_frame(
+                cid, "character_journey_histories", frame_id, {}) or {},
+            "warnings": registry_warnings(
+                registry, scene=scene, cid=cid, frame_id=frame_id)}
 
 
 @app.put("/api/chats/{cid}/charters")
@@ -4608,7 +4613,42 @@ def charters_put(cid: int, body: dict = Body(...),
         scene = get_scene(cid, dict(chat))
     registry = save_registry(cid, body.get("charters", body), frame_id)
     return {"ok": True, "charters": registry,
-            "warnings": registry_warnings(registry, scene=scene)}
+            "warnings": registry_warnings(
+                registry, scene=scene, cid=cid, frame_id=frame_id)}
+
+
+@app.get("/api/chats/{cid}/charters/diagnostics")
+def charters_diagnostics(cid: int, frame_id: int | None = None,
+                         charter: str = "", body: str = ""):
+    """Explain beliefs, judgments, provenance, obligations and decisions."""
+    from world.charter_runtime import charter_diagnostics
+
+    if not q("SELECT id FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    return charter_diagnostics(
+        cid, frame_id, charter_key=charter, body_key=body)
+
+
+@app.post("/api/chats/{cid}/charters/generate")
+def charters_generate(cid: int, body: dict = Body(...),
+                      frame_id: int | None = None):
+    """Add one lore-scoped, deterministically closed lived location."""
+    from world.charter_runtime import generate_lived_location
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    _require_frame_idle(cid, frame_id)
+    try:
+        # Quick-start history can now include full-character recent-life or
+        # journey calls. Keep the location planner and every attached
+        # character's history in the story's selected language.
+        with story_language_scope(cid):
+            return generate_lived_location(cid, body, frame_id=frame_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except providers.LLMError as exc:
+        raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
 
 
 @app.get("/api/chats/{cid}/background_config")
@@ -5260,8 +5300,20 @@ def turn_branch(tid: int):
         mems = []
         for m in (blob.get("memories") or []):
             m = dict(m)
-            m["turn_id"] = idmap.get(m.get("turn_id"))
+            source_turn = m.get("turn_id")
+            m["turn_id"] = idmap.get(source_turn)
             m["frame_id"] = frame_idmap.get(m.get("frame_id"))
+            # A memory whose turn did not come across belongs to a turn AFTER
+            # the branch point, and must not. `idmap.get` returns None on a
+            # miss, so before this the row was inserted anyway with a NULL
+            # turn -- a memory of something that, in this branch, never
+            # happened. Only reachable when no checkpoint bounds the branch
+            # (`nxt` above is None and the blob is `snapshot_state`, i.e. the
+            # chat as it is NOW): measured on the live corpus, 3 of 2,282
+            # branchable turns. A row that never had a turn -- a greeting
+            # seed -- is kept, because nothing about it is after anything.
+            if source_turn is not None and m["turn_id"] is None:
+                continue
             mems.append(m)
 
         restore_chat_memories(ncid, mems)

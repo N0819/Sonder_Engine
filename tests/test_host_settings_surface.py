@@ -315,6 +315,27 @@ class TestEveryCardProducingRouteWarns:
             created["id"], {"persona_id": 1, "language": "en"})
         assert len(launched["warnings"]) >= self.BLANK_WARNS
 
+    def test_starting_with_an_exhausted_location_model_returns_a_clean_error(
+            self, temp_db, monkeypatch):
+        import pytest
+        from fastapi import HTTPException
+        from llm.providers import ReasoningBudgetExhausted
+        from story import greetings
+        from web import app
+
+        created = self._blank(temp_db)
+
+        def fail(*args, **kwargs):
+            raise ReasoningBudgetExhausted("trace consumed answer")
+
+        monkeypatch.setattr(greetings, "start_story", fail)
+        with pytest.raises(HTTPException) as caught:
+            app.character_start_story(
+                created["id"], {"persona_id": 1, "language": "en"})
+
+        assert caught.value.status_code == 502
+        assert "whole response for reasoning" in caught.value.detail
+
     def test_the_browser_shows_them_through_one_helper(self):
         """A copy per call site is how eight of nine went silent. One
         helper, called wherever a card response comes back."""

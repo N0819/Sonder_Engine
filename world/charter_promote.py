@@ -50,6 +50,8 @@ from __future__ import annotations
 
 from .charter_feel import felt_handoff
 from .charter_politics import regard_value
+from .charter_commitment import commitment_view
+from .charter_social import judgment_view
 
 #: Memories a promotion mints, total. A budget, not a target: a quiet life
 #: promotes with two or three rows, and that is a correct answer.
@@ -104,6 +106,56 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
     held = (charter.get("minds") or {}).get(key) or {}
     out = []
 
+    def body_name(value):
+        body = (charter.get("bodies") or {}).get(str(value)) or {}
+        return str(body.get("name") or value)
+
+    # Participant-owned social experience and self-only private routines.
+    # These are not the institution's omniscient event log: each row was
+    # copied only to a person who took part, and private habits only to self.
+    for experience in (charter.get("experiences") or {}).get(key, ()):
+        if not isinstance(experience, dict):
+            continue
+        experience_kind = str(experience.get("kind") or "")
+        at_hours = float(experience.get("at_hours") or 0.0)
+        place = str(experience.get("place") or "")
+        if experience_kind == "private_habit":
+            label = str(experience.get("label") or "private routine")
+            content = f"made private time for {label.casefold()}"
+            entities = [key]
+            salience = 0.48
+        elif experience_kind == "shared_prestory":
+            content = str(experience.get("surface") or "shared a recent event")
+            other = str(experience.get("with") or "")
+            entities = [other] if other else []
+            salience = 0.58
+        elif experience_kind == "social":
+            actor, other = (str(experience.get("actor") or ""),
+                            str(experience.get("other") or ""))
+            act = str(experience.get("act") or "interacted with")
+            if str(experience.get("role") or "") == "actor":
+                content = f"{act} {body_name(other)}"
+                entities = [other]
+            else:
+                content = f"{body_name(actor)} {act} them"
+                entities = [actor]
+            salience = 0.5
+        else:
+            continue
+        out.append({
+            "kind": "episodic", "provenance": "remembered",
+            "salience": salience, "content": content,
+            "location": place, "entities": entities, "confidence": 1.0,
+            "event_key": str(experience.get("id") or
+                             f"experience:{key}:{at_hours}"),
+            "at_hours": at_hours, "experience_kind": experience_kind,
+            "role": str(experience.get("role") or ""),
+            "actor": str(experience.get("actor") or ""),
+            "other": str(experience.get("other") or ""),
+            "act": str(experience.get("act") or ""),
+            "habit_label": str(experience.get("label") or ""),
+        })
+
     # The branches of its own life, from the shared ledger.
     for event in events or []:
         spec = _SELF_KINDS.get(str(event.get("kind") or ""))
@@ -149,6 +201,8 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             "entities": [e for e in entities if e],
             "confidence": round(strength, 4),
             "event_key": str(claim.get("body") or ""),
+            "at_hours": float(claim.get("last_seen") or
+                              claim.get("at_hours") or 0.0),
         })
 
     # The accusations said to its face. `heard_blame` is the CHANNEL —
@@ -160,6 +214,37 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             "content": f"{teller} said the fault was {key}'s",
             "location": "", "entities": [str(teller)], "confidence": 1.0,
             "event_key": f"accused:{key}:{teller}",
+        })
+
+    # Specific undertakings this person made, received, or learned about.
+    # Unlike the foreground pending-obligation ledger these can remain open
+    # for years; their lifecycle and provenance are the memory.
+    for commitment in commitment_view(
+            charter.get("commitments"), key, cap=4):
+        if key == commitment.get("promisor"):
+            relation = "promised"
+            other = commitment.get("beneficiary") or "someone"
+        elif key == commitment.get("beneficiary"):
+            relation = "was promised"
+            other = commitment.get("promisor") or "someone"
+        else:
+            relation = "learned of a promise between"
+            other = "%s and %s" % (
+                commitment.get("promisor") or "someone",
+                commitment.get("beneficiary") or "someone")
+        out.append({
+            "kind": "semantic", "category": "promise",
+            "provenance": "witnessed" if key in {
+                commitment.get("promisor"), commitment.get("beneficiary")
+            } else "heard",
+            "salience": 0.85 if commitment.get("state") in {
+                "open", "accepted", "disputed"} else 0.65,
+            "content": f"{relation} {other}: {commitment.get('terms')}; "
+                       f"currently {commitment.get('state')}",
+            "location": "", "entities": [str(other)], "confidence": 1.0,
+            "event_key": commitment.get("id"),
+            "at_hours": float(commitment.get("updated_at") or
+                              commitment.get("created_at") or 0.0),
         })
 
     # The people it holds a view about — ranked by the scene ledger's own
@@ -199,6 +284,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             "entities": [other], "confidence":
                 round(float(claim.get("strength") or 0.0), 4),
             "event_key": f"acquaintance:{key}:{other}",
+            "at_hours": float(claim.get("last_seen") or 0.0),
         })
 
     # The shape of the working life: one row per post ever stood, however
@@ -215,6 +301,7 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
                             .get(post_key, {}).get("place") or ""),
             "entities": [post_key], "confidence": 1.0,
             "event_key": f"service:{key}:{post_key}",
+            "at_hours": float(charter.get("clock_hours") or 0.0),
         })
 
     out.sort(key=lambda m: (-float(m["salience"]), m["event_key"]))
@@ -232,4 +319,10 @@ def promotion_handoff(body_key, charter, events=()):
     """
     payload = felt_handoff(body_key, charter)
     payload["memories"] = remembered(charter, body_key, events=events)
+    subjects = list((charter.get("bodies") or {})) + list(
+        (charter.get("figures") or {}))
+    payload["social_judgments"] = judgment_view(
+        charter.get("judgments"), body_key, subjects=subjects, cap=8)
+    payload["commitments"] = commitment_view(
+        charter.get("commitments"), body_key, cap=8)
     return payload

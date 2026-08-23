@@ -43,6 +43,26 @@ promotion do not repaint the person. Name learning must still prove an exact
 delivered line and physical co-location; index the roster once per beat rather
 than scanning a large institution once per quote.
 
+Charter social/economic/institutional changes route through
+`world/charter_social.py`, `world/charter_commitment.py`,
+`world/charter_economy.py`, `world/charter_decide.py` and the one carried state
+normalized by `world/charter_model.py`. Judgment is always holder→subject with
+evidence ids, never a universal reputation score. A commitment is locally
+recognized by actual hearers and changes lifecycle only through explicit acts
+or events. Markets use abstract lots and physical caravans; no broadcast trade
+or coin simulation. Leaders read only news in their own minds, and typed orders
+move down staffed co-present reporting edges. Planned-town generation lives in
+`world/charter_generate.py`/`world/structure.py`: model output is qualitative,
+closure is deterministic, planned rooms remain prose-free, prehistory may
+author circumstance but never minds, and historian claims must cite actual
+presim event ids. `world/charter_runtime.generate_lived_location` is the one
+production operation used by greeting launch, both new-story paths, Dialogue
+Config and the lorebook workspace. It scopes lore to the selected book subtree
+(even when legacy attachment copied only its root) while grounding rooms in the
+story-local book, adds rather than replaces existing Charters, namespaces collisions, and
+presimulates only the new registry slice. Greeting launch must run it before
+turn 0. Author diagnostics never enter any cognition payload.
+
 Full Charter population/month experiments belong in
 `tools/charter_audit_*.py`, invoked together by `make charter-audit`; default
 pytest checks the mechanism on a small deterministic institution in
