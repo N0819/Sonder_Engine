@@ -26,6 +26,9 @@ CHARTERS_KEY = "charters"
 REGISTRY_VERSION = 1
 DEFAULT_WINDOW_HOURS = 4.0
 MAX_CATCHUP_HOURS = 720.0
+DEFAULT_PRESIM_TAIL_HOURS = 96.0
+GENERATION_LORE_LIMIT = 48
+CAST_HISTORY_REQUEST_CAP = 16
 
 #: Different institutions sharing one place exchange through a few actual
 #: bodies, never by merging registers or broadcasting to both populations.
@@ -88,6 +91,163 @@ def save_registry(cid, stored, frame_id=None):
     return normalized
 
 
+def _prepare_cast_histories(cid, request, *, frame_id=None):
+    """Resolve quick-start history routes and add only safe resident seeds.
+
+    Browser keys never identify people here.  Every request is resolved back
+    to an actual character attached to this story before any public slice is
+    allowed into the location planner.
+    """
+    from core.db import q, wget_for_frame, wset_for_frame
+    from story.character_schema import normalize_character_data
+    from story.history_routing import (
+        resolve_character_history_route, route_uses_charter)
+    from world.charter_history import (
+        featured_resident_private_habits, featured_resident_seed)
+
+    raw = request.get("character_histories")
+    if not isinstance(raw, list):
+        return request, []
+    requested = []
+    seen = set()
+    for value in raw:
+        if not isinstance(value, dict):
+            continue
+        try:
+            char_id = int(value.get("char_id"))
+        except (TypeError, ValueError):
+            continue
+        if char_id <= 0 or char_id in seen:
+            continue
+        seen.add(char_id)
+        requested.append((char_id, value))
+    if len(requested) > CAST_HISTORY_REQUEST_CAP:
+        raise ValueError(
+            "a lived-location start can generate history for at most "
+            f"{CAST_HISTORY_REQUEST_CAP} full characters at once; Charter "
+            "residents themselves are not limited by this cognition budget")
+    if not requested:
+        clean = dict(request)
+        clean.pop("character_histories", None)
+        return clean, []
+
+    placeholders = ",".join("?" for _ in requested)
+    rows = q(
+        "SELECT cc.char_id, COALESCE(NULLIF(cc.sheet,''), ch.sheet) sheet "
+        "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+        f"WHERE cc.chat_id=? AND cc.char_id IN ({placeholders})",
+        (cid, *(char_id for char_id, _value in requested)))
+    sheets = {
+        int(row["char_id"]): normalize_character_data(
+            json.loads(row["sheet"] or "{}"))
+        for row in rows
+    }
+    chat = q("SELECT scenario FROM chats WHERE id=?", (cid,), one=True)
+    opening = str(chat["scenario"] or "") if chat else ""
+    clean = copy.deepcopy(request)
+    clean.pop("character_histories", None)
+    featured = [copy.deepcopy(row) for row in clean.get(
+        "featured_residents", []) if isinstance(row, dict)]
+    featured_ids = {str(row.get("seed_id") or "") for row in featured}
+    private = copy.deepcopy(clean.get("featured_resident_private") or {})
+    if not isinstance(private, dict):
+        private = {}
+    routes = wget_for_frame(
+        cid, "character_history_routes", frame_id, {}) or {}
+    prepared = []
+    for char_id, value in requested:
+        sheet = sheets.get(char_id)
+        if not sheet:  # A character outside this story has no authority here.
+            continue
+        route = resolve_character_history_route(
+            sheet, requested=value, opening=opening,
+            location_brief=clean.get("brief") or "")
+        route["guidance"] = str(value.get("brief") or "")[:2000]
+        routes[str(char_id)] = copy.deepcopy(route)
+        prepared.append({"char_id": char_id, "sheet": sheet, "route": route})
+        if route_uses_charter(route):
+            seed = featured_resident_seed(char_id, sheet)
+            if seed["seed_id"] not in featured_ids:
+                featured.append(seed)
+                featured_ids.add(seed["seed_id"])
+            private[seed["seed_id"]] = {
+                "habits": featured_resident_private_habits(sheet)}
+    wset_for_frame(cid, "character_history_routes", routes, frame_id)
+    if featured:
+        clean["featured_residents"] = featured
+    if private:
+        clean["featured_resident_private"] = private
+    return clean, prepared
+
+
+def _complete_cast_histories(cid, request, prepared, generated, *,
+                             frame_id=None):
+    """Compile the selected topology and record the cognition handoff."""
+    from core.db import q, wget_for_frame, wset_for_frame
+    from story.character_schema import character_name
+    from story.history_routing import route_uses_charter
+
+    if not prepared or not isinstance(generated, dict) or not generated.get("ok"):
+        return
+    routes = wget_for_frame(
+        cid, "character_history_routes", frame_id, {}) or {}
+    bindings = generated.get("featured_residents") or {}
+    opening_row = q(
+        "SELECT scenario FROM chats WHERE id=?", (cid,), one=True)
+    opening = str(opening_row["scenario"] or "") if opening_row else ""
+    for item in prepared:
+        char_id, sheet, route = (
+            item["char_id"], item["sheet"], item["route"])
+        if route_uses_charter(route):
+            binding = bindings.get(f"character:{char_id}")
+            if not binding:
+                raise ValueError(
+                    f"lived location did not place featured character {char_id}")
+            from world.charter_history import integrate_featured_resident
+            result = integrate_featured_resident(
+                cid, char_id, binding, sheet, frame_id=frame_id,
+                author_guidance=route.get("guidance") or "")
+            routes[str(char_id)]["handoff"] = {
+                "complete": True,
+                "memory_count": len(result.get("memory_event_keys") or ()),
+                "binding": copy.deepcopy(binding),
+            }
+            continue
+
+        is_journey = (
+            route.get("mode") in {"visitor", "generated_journey"}
+            or (route.get("mode") == "auto"
+                and route.get("opening_relationship") == "visiting"))
+        if not is_journey:
+            routes[str(char_id)]["handoff"] = {
+                "complete": True, "memory_count": 0,
+                "backend": "authored card" if route.get("backends") else "none",
+            }
+            continue
+        from story.journey_history import compile_journey_history
+        lore, _source = generation_lore(
+            cid, request.get("lorebook_id"),
+            query=f"{character_name(sheet)} journeys visits history")
+        try:
+            result = compile_journey_history(
+                cid, char_id, sheet, route, lore=lore, opening=opening,
+                frame_id=frame_id)
+            routes[str(char_id)]["handoff"] = {
+                "complete": True,
+                "memory_count": len(result.get("memory_event_keys") or ()),
+                "journey_events": len(result.get("events") or ()),
+            }
+        except Exception as exc:
+            if route.get("mode") == "generated_journey":
+                raise
+            routes[str(char_id)]["handoff"] = {
+                "complete": False,
+                "safe_fallback": "authored card only",
+                "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+            }
+    wset_for_frame(cid, "character_history_routes", routes, frame_id)
+
+
 def registry_revision(registry):
     """Stable identity for the exact author/runtime state a job advanced."""
     encoded = json.dumps(normalize_registry(registry), sort_keys=True,
@@ -95,13 +255,469 @@ def registry_revision(registry):
     return stable_event_key("charter_registry", encoded)
 
 
-def registry_warnings(registry, scene=None):
+def presim_registry(registry, *, horizon_hours=MAX_CATCHUP_HOURS,
+                    active_tail_hours=DEFAULT_PRESIM_TAIL_HOURS,
+                    tail_places=(), seed=0):
+    """Live a generated registry forward before the first story beat.
+
+    The long body establishes durable service, acquaintance, politics and
+    stock movement cheaply. The recent tail enables practices at authored
+    places so Scene Life has fresh episodes to draw on. Returned events are
+    objective history; no memories are fabricated from the history brief.
+    """
+    registry = normalize_registry(copy.deepcopy(registry))
+    horizon = max(0.0, min(MAX_CATCHUP_HOURS, float(horizon_hours or 0.0)))
+    tail = max(0.0, min(horizon, float(active_tail_hours or 0.0)))
+    coarse = horizon - tail
+    produced = []
+    for index, (key, item) in enumerate(sorted(registry["items"].items())):
+        state = copy.deepcopy(item["state"])
+        if coarse:
+            state["active_places"] = []
+            state, events = run(
+                state, coarse, window=max(8.0, item["window_hours"]),
+                seed=int(seed) + index * 100_000)
+            produced.extend({"charter": key, **copy.deepcopy(event)}
+                            for event in events)
+        if tail:
+            state["active_places"] = sorted({str(x) for x in tail_places
+                                               if str(x)})
+            state, events = run(
+                state, tail, window=min(4.0, item["window_hours"]),
+                seed=int(seed) + index * 100_000 + 50_000)
+            produced.extend({"charter": key, **copy.deepcopy(event)}
+                            for event in events)
+        item["state"] = state
+        item["last_elapsed_seconds"] = 0.0
+        item["last_epoch_id"] = "presim"
+    return normalize_registry(registry), produced
+
+
+def generation_lore(cid, lorebook_id=None, entry_ids=None,
+                    *, limit=GENERATION_LORE_LIMIT, query=""):
+    """Bounded lore selected explicitly for one lived-location generation.
+
+    The selected book and its descendants are the authoring scope.  This is
+    intentionally narrower than ordinary retrieval, which may walk ancestors
+    and reference links: choosing a city book must not quietly let an attached
+    rules compendium or unrelated nation design the city instead.  A global
+    library book is accepted for the create-story seam; story-local books must
+    belong to this story.
+    """
+    from core.db import q
+    from mind.memory import lorebook_descendants
+
+    chat = q("SELECT id,lorebook_id FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise ValueError("story not found")
+    source = lorebook_id if lorebook_id not in (None, "") \
+        else chat["lorebook_id"]
+    if source in (None, ""):
+        return [], None
+    try:
+        source = int(source)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("lorebook_id must be a number") from exc
+    book = q("SELECT id,chat_id FROM lorebooks WHERE id=?", (source,), one=True)
+    if not book:
+        raise ValueError(f"lorebook {source} not found")
+    if book["chat_id"] is not None and int(book["chat_id"]) != int(cid):
+        raise ValueError("selected lorebook belongs to another story")
+    scoped = lorebook_descendants(source)
+    if book["chat_id"] is not None:
+        scoped = [lid for lid in scoped if q(
+            "SELECT 1 FROM lorebooks WHERE id=? AND chat_id=?",
+            (lid, cid), one=True)]
+    selected_entries = []
+    for value in entry_ids or ():
+        try:
+            selected_entries.append(int(value))
+        except (TypeError, ValueError):
+            raise ValueError("lore_entry_ids must contain numbers")
+    if not scoped:
+        return [], source
+    placeholders = ",".join("?" for _ in scoped)
+    params = list(scoped)
+    sql = (
+        "SELECT le.id,le.title,le.content,lb.name book_name "
+        "FROM lore_entries le JOIN lorebooks lb ON lb.id=le.lorebook_id "
+        f"WHERE le.lorebook_id IN ({placeholders})")
+    if selected_entries:
+        entry_ph = ",".join("?" for _ in selected_entries)
+        sql += f" AND le.id IN ({entry_ph})"
+        params.extend(selected_entries)
+    bounded = max(1, min(GENERATION_LORE_LIMIT, int(limit)))
+    if selected_entries or not str(query or "").strip():
+        sql += " ORDER BY le.lorebook_id,le.id LIMIT ?"
+        params.append(bounded)
+        rows = q(sql, tuple(params))
+    else:
+        # Generation is a retrieval problem, not an insertion-order problem.
+        # The ordinary lore ranker already combines semantic and lexical
+        # relevance across an arbitrarily large selected subtree. Reusing it
+        # keeps a 2,000-entry library from making "the first 48 rows" author
+        # the requested city merely because they were imported first.
+        from mind.memory import search_lore
+        hits = search_lore(scoped, str(query), k=bounded)
+        ranked_ids = [int(hit["id"]) for hit in hits if hit.get("id")]
+        # Setting-law entries are constraints rather than relevance hits.
+        # Keep a small bounded prefix even when the requested location shares
+        # none of their vocabulary; otherwise retrieval can faithfully find a
+        # place while silently dropping the book's rules for depicting it.
+        rule_rows = q(
+            "SELECT id FROM lore_entries "
+            f"WHERE lorebook_id IN ({placeholders}) AND ("
+            "LOWER(COALESCE(category,'')) IN ('rule','rules') OR "
+            "LOWER(LTRIM(COALESCE(content,''))) LIKE '<rules>%') "
+            "ORDER BY lorebook_id,id LIMIT 4", tuple(scoped))
+        ordered_ids = []
+        for entry_id in [row["id"] for row in rule_rows] + ranked_ids:
+            if entry_id not in ordered_ids:
+                ordered_ids.append(entry_id)
+        ordered_ids = ordered_ids[:bounded]
+        if ordered_ids:
+            ranked_ph = ",".join("?" for _ in ordered_ids)
+            fetched = q(
+                "SELECT le.id,le.title,le.content,lb.name book_name "
+                "FROM lore_entries le JOIN lorebooks lb "
+                "ON lb.id=le.lorebook_id "
+                f"WHERE le.id IN ({ranked_ph})", tuple(ordered_ids))
+            by_id = {row["id"]: row for row in fetched}
+            rows = [by_id[entry_id] for entry_id in ordered_ids
+                    if entry_id in by_id]
+        else:
+            sql += " ORDER BY le.lorebook_id,le.id LIMIT ?"
+            params.append(bounded)
+            rows = q(sql, tuple(params))
+    if selected_entries and len(rows) != len(set(selected_entries)):
+        raise ValueError("one or more lore entries are outside the selected book")
+    return [{"id": row["id"], "book": row["book_name"],
+             "title": row["title"], "content": row["content"]}
+            for row in rows], source
+
+
+def _generation_lore_query(request, brief):
+    """The requested place and its author-required facets, as one query."""
+    parts = [request.get("name"), brief, request.get("scale"),
+             request.get("topology")]
+    for room in request.get("required_rooms") or ():
+        if isinstance(room, dict):
+            parts.extend((room.get("name"), room.get("purpose")))
+        elif isinstance(room, str):
+            parts.append(room)
+    return "\n".join(str(part).strip() for part in parts
+                      if str(part or "").strip())
+
+
+def _unique_generated_key(base, taken):
+    base = str(base or "generated").strip() or "generated"
+    if base not in taken:
+        return base
+    index = 2
+    while f"{base}_{index}" in taken:
+        index += 1
+    return f"{base}_{index}"
+
+
+def _remap_generated_town(cid, town, existing_registry):
+    """Give an added location its own stable namespace when ids collide."""
+    from core.db import q, wget_for_frame
+    from world.spatial import normalize_room_id
+
+    town = copy.deepcopy(town)
+    stored_structures = wget_for_frame(cid, "structures", None, {}) or {}
+    structure_items = stored_structures.get("items") \
+        if isinstance(stored_structures.get("items"), dict) \
+        else stored_structures
+    taken_structures = {str(key) for key in (structure_items or {})}
+    old_structure = str((town.get("structure") or {}).get("key") or "location")
+    structure_key = _unique_generated_key(old_structure, taken_structures)
+    existing_rooms = {str(row["room_uid"]) for row in q(
+        "SELECT room_uid FROM room_registry WHERE chat_id=? ", (cid,))}
+    generated_rooms = {str(uid) for uid in (town.get("rooms") or {})}
+    needs_namespace = structure_key != old_structure \
+        or bool(existing_rooms.intersection(generated_rooms))
+    room_map = {uid: uid for uid in generated_rooms}
+    if needs_namespace:
+        taken = set(existing_rooms)
+        room_map = {}
+        for uid in sorted(generated_rooms):
+            stem = normalize_room_id(f"{structure_key} {uid}") \
+                or f"{structure_key}_{len(room_map) + 1}"
+            mapped = _unique_generated_key(stem, taken)
+            taken.add(mapped)
+            room_map[uid] = mapped
+
+    rooms = {}
+    for old_uid, raw in (town.get("rooms") or {}).items():
+        room = copy.deepcopy(raw)
+        for edge in room.get("adjacent") or ():
+            if isinstance(edge, dict):
+                edge["to"] = room_map.get(str(edge.get("to")), edge.get("to"))
+        rooms[room_map[str(old_uid)]] = room
+    town["rooms"] = rooms
+    town.setdefault("structure", {})["key"] = structure_key
+
+    taken_charters = set((existing_registry.get("items") or {}).keys())
+    charters = {}
+    for old_key, raw in (town.get("charters") or {}).items():
+        new_key = _unique_generated_key(old_key, taken_charters)
+        taken_charters.add(new_key)
+        state = copy.deepcopy(raw)
+        state["key"] = new_key
+        state["structure"] = structure_key
+        for collection in ("upkeeps", "posts", "bodies"):
+            for value in (state.get(collection) or {}).values():
+                if not isinstance(value, dict):
+                    continue
+                for field in ("place", "berth"):
+                    if value.get(field) is not None:
+                        value[field] = room_map.get(
+                            str(value[field]), value[field])
+        for market in ((state.get("economy") or {}).get("markets") or {}).values():
+            if isinstance(market, dict) and market.get("place") is not None:
+                market["place"] = room_map.get(
+                    str(market["place"]), market["place"])
+        for intervention in state.get("interventions") or ():
+            if not isinstance(intervention, dict):
+                continue
+            if intervention.get("charter") == old_key:
+                intervention["charter"] = new_key
+            if intervention.get("place") is not None:
+                intervention["place"] = room_map.get(
+                    str(intervention["place"]), intervention["place"])
+        charters[new_key] = normalize_charter(state)
+    town["charters"] = charters
+    town["structure"]["charters"] = list(charters)
+    return town
+
+
+def generate_lived_location(cid, request, *, frame_id=None):
+    """Generate and add one lore-grounded, presimulated Charter location.
+
+    Existing locations and institutions are preserved.  Only the newly
+    generated registry slice is lived through its prehistory, so adding a
+    spaceport halfway through a story cannot age the town already in play by
+    another month.
+    """
+    from core.db import q, wget_for_frame
+    from world.charter_generate import (
+        close_plan, ensure_required_rooms, narrate_actual_history,
+        propose_history, propose_town)
+    from world.structure import plant_structure, structure_warnings
+
+    request = request if isinstance(request, dict) else {}
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise ValueError("story not found")
+    request, cast_histories = _prepare_cast_histories(
+        cid, request, frame_id=frame_id)
+    lore = request.get("lore")
+    source_book = request.get("lorebook_id")
+    brief = str(request.get("brief") or chat["scenario"]
+                or chat["name"] or "inhabited location")
+    lore_query = _generation_lore_query(request, brief)
+    if lore is None:
+        lore, source_book = generation_lore(
+            cid, source_book, request.get("lore_entry_ids"),
+            query=lore_query)
+    elif source_book not in (None, ""):
+        # Explicit lore is allowed for tools, but a claimed provenance book
+        # still has to exist in this authoring scope.
+        _unused, source_book = generation_lore(cid, source_book, limit=1)
+    owning_book = request.get("owning_lorebook_id") or source_book
+    if request.get("owning_lorebook_id") not in (None, ""):
+        try:
+            owning_book = int(request["owning_lorebook_id"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("owning_lorebook_id must be a number") from exc
+        owner = q("SELECT chat_id FROM lorebooks WHERE id=?",
+                  (owning_book,), one=True)
+        if not owner or int(owner["chat_id"] or -1) != int(cid):
+            raise ValueError("owning lorebook must belong to this story")
+    horizon = max(0.0, min(
+        MAX_CATCHUP_HOURS,
+        float(request.get("horizon_hours", MAX_CATCHUP_HOURS))))
+    constraints = {
+        key: copy.deepcopy(request.get(key))
+        for key in ("scale", "topology", "required_rooms",
+                    "featured_residents")
+        if request.get(key) not in (None, "", [])}
+    plan = (propose_town(lore, brief, constraints=constraints)
+            if constraints else propose_town(lore, brief))
+    history = {}
+    wants_history = bool(request.get("generate_history", True)) and horizon > 0
+    if wants_history:
+        history = propose_history(plan, lore, horizon)
+    town = close_plan(
+        plan, history=history,
+        featured_residents=request.get("featured_residents"))
+    unnamed = [
+        f"{charter_key}/{body_key}"
+        for charter_key, state in town["charters"].items()
+        for body_key, body in (state.get("bodies") or {}).items()
+        if not str(body.get("name") or "").strip()
+        or str(body.get("name") or "").strip() == str(body_key)
+    ]
+    if unnamed:
+        raise ValueError(
+            "generated lived location did not provide a usable naming law "
+            "for every resident: " + ", ".join(unnamed[:8]))
+    # Private character material crosses only after the public location plan
+    # has closed and only onto the exact body selected by resident_seed_id.
+    # It cannot shape rooms, posts, lore, or anybody else's state.
+    private_by_seed = request.get("featured_resident_private") or {}
+    if isinstance(private_by_seed, dict):
+        for state in town["charters"].values():
+            for body in state.get("bodies", {}).values():
+                seed_id = str(body.get("resident_seed_id") or "")
+                private = private_by_seed.get(seed_id)
+                if isinstance(private, dict) and private.get("habits"):
+                    body["private_habits"] = copy.deepcopy(private["habits"])
+    lore_manifest = {
+        "source_lorebook_id": source_book,
+        "entry_ids": [entry.get("id") for entry in lore
+                      if isinstance(entry, dict) and entry.get("id") is not None],
+        "query": lore_query,
+    }
+    for state in town["charters"].values():
+        state.setdefault("history", {}).setdefault(
+            "architecture", {})["generation_lore"] = copy.deepcopy(
+                lore_manifest)
+    required_rooms_added = ensure_required_rooms(
+        town, request.get("required_rooms"))
+    requested_name = str(request.get("name") or "").strip()
+    if requested_name:
+        # Display spelling is author authority. The stable structure key stays
+        # machine-normalized and collision-safe; names are allowed to retain
+        # punctuation and case exactly as the author supplied them.
+        town["name"] = requested_name
+        town["structure"]["name"] = requested_name
+    existing = registry_for(cid, frame_id)
+    town = _remap_generated_town(cid, town, existing)
+    structure, rooms = plant_structure(
+        cid, town["structure"], town["rooms"],
+        owning_book_id=owning_book)
+    generated = normalize_registry({"items": {
+        key: {"state": state,
+              "window_hours": float(request.get("window_hours", 4.0))}
+        for key, state in town["charters"].items()}})
+    combined = copy.deepcopy(existing)
+    combined["items"].update(copy.deepcopy(generated["items"]))
+    combined = save_registry(cid, combined, frame_id)
+    source_revision = registry_revision(combined)
+    tail_places = list(request.get("tail_places") or list(rooms)[:8])
+    # Featured residents must receive recent-resolution life where they
+    # actually work and live; otherwise the arbitrary first eight rooms can
+    # leave the featured person with only an aggregate shift counter.
+    for item in generated["items"].values():
+        for body in item["state"].get("bodies", {}).values():
+            if not body.get("resident_seed_id"):
+                continue
+            tail_places.extend((body.get("place"), body.get("berth")))
+    tail_places = list(dict.fromkeys(str(place) for place in tail_places if place))
+    presimmed, events = presim_registry(
+        generated, horizon_hours=horizon,
+        active_tail_hours=float(request.get(
+            "active_tail_hours", min(DEFAULT_PRESIM_TAIL_HOURS, horizon))),
+        tail_places=tail_places,
+        seed=int(request.get("seed") or 0))
+    historian_error = ""
+    if wants_history:
+        try:
+            actual = narrate_actual_history(town, presimmed, events)
+            for key, item in presimmed["items"].items():
+                local = dict(actual)
+                local["residents"] = {
+                    resident_id.split("/", 1)[1]: value
+                    for resident_id, value in (actual.get("residents") or {}).items()
+                    if resident_id.startswith(f"{key}/")}
+                item["state"].setdefault("history", {})["actual"] = local
+        except Exception as exc:  # history prose may fail; simulation stands
+            historian_error = f"{type(exc).__name__}: {str(exc)[:240]}"
+    landed_registry = copy.deepcopy(combined)
+    landed_registry["items"].update(copy.deepcopy(presimmed["items"]))
+    clock = wget_for_frame(
+        cid, "simulation_clock", frame_id, {"elapsed_seconds": 0.0}) or {}
+    latest = q("SELECT MAX(idx) idx FROM turns WHERE chat_id=?", (cid,), one=True)
+    landed = land_presim(
+        cid, frame_id, landed_registry, events,
+        base_turn=int(latest["idx"] if latest and latest["idx"] is not None
+                      else 0),
+        expected_revision=source_revision,
+        now_seconds=float(clock.get("elapsed_seconds") or 0.0))
+    from world.charter_history import featured_resident_bindings
+    resident_bindings = featured_resident_bindings(
+        presimmed,
+        [row.get("seed_id") for row in request.get("featured_residents") or ()
+         if isinstance(row, dict)])
+    result = {
+        "ok": landed.get("reason") is None, "town": town["name"],
+        "structure": structure, "rooms": len(rooms),
+        "charters": list(presimmed["items"]), "presim": landed,
+        "warnings": structure_warnings(structure, rooms),
+        "historian_error": historian_error,
+        "required_rooms_added": required_rooms_added,
+        "source_lorebook_id": source_book,
+        "source_lore_entry_ids": lore_manifest["entry_ids"],
+        "featured_residents": resident_bindings,
+    }
+    _complete_cast_histories(
+        cid, request, cast_histories, result, frame_id=frame_id)
+    return result
+
+
+def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
+                expected_revision=None, now_seconds=0.0):
+    """Atomically land explicit presimulation with a revision race guard."""
+    from core.db import qtx, transaction, wset_for_frame
+
+    if expected_revision and registry_revision(registry_for(cid, frame_id)) \
+            != expected_revision:
+        return {"advanced": 0, "events": 0, "reason": "registry_changed"}
+    rows = []
+    horizon = max((float((item.get("state") or {}).get("clock_hours") or 0.0)
+                   for item in (registry.get("items") or {}).values()),
+                  default=0.0)
+    for event in produced:
+        charter_key = str(event.get("charter") or "charter")
+        due_at = float(now_seconds) - max(
+            0.0, horizon - float(event.get("at_hours") or 0.0)) * 3600.0
+        rows.append(_scheduled_row(
+            cid, frame_id, base_turn, "presim", charter_key, event, due_at))
+    with transaction():
+        if expected_revision and registry_revision(registry_for(cid, frame_id)) \
+                != expected_revision:
+            return {"advanced": 0, "events": 0,
+                    "reason": "registry_changed"}
+        wset_for_frame(cid, CHARTERS_KEY, normalize_registry(registry), frame_id)
+        for row in rows:
+            qtx(
+                "INSERT OR IGNORE INTO scheduled_events"
+                "(event_id,chat_id,due_at,kind,location_id,payload,seed,status) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (row["event_id"], row["chat_id"], row["due_at"], row["kind"],
+                 row["location_id"], row["payload"], row["seed"], row["status"]),
+            )
+    return {"advanced": len(registry["items"]), "events": len(produced),
+            "scheduled": len(rows)}
+
+
+def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
     """Author-facing validation; warnings never silently rewrite a Charter."""
     registry = normalize_registry(registry)
     rooms = set((scene or {}).get("rooms") or {})
     warnings = []
     for key, item in registry["items"].items():
         state = item["state"]
+        known_rooms = set(rooms)
+        if cid is not None and state.get("structure"):
+            try:
+                from world.structure import skeleton_rooms
+                known_rooms.update(skeleton_rooms(
+                    cid, state["structure"], frame_id).get("rooms") or {})
+            except Exception:
+                pass
         from story.dialogue_colors import normalize_color
         from world.charter_identity import display_name
         if not state["upkeeps"]:
@@ -147,7 +763,7 @@ def registry_warnings(registry, scene=None):
             if superior == post_key:
                 warnings.append(
                     f"{key}: post {post_key!r} cannot report to itself")
-        if rooms:
+        if known_rooms:
             places = {
                 str(entry.get("place") or "")
                 for entry in list(state["upkeeps"].values())
@@ -155,7 +771,7 @@ def registry_warnings(registry, scene=None):
                 + list(state["bodies"].values())
                 if str(entry.get("place") or "")
             }
-            for place in sorted(places - rooms):
+            for place in sorted(places - known_rooms):
                 warnings.append(
                     f"{key}: place {place!r} is not a room in this frame")
     return warnings
@@ -163,7 +779,10 @@ def registry_warnings(registry, scene=None):
 
 def _event_subject(event):
     return str(event.get("upkeep") or event.get("post")
-               or event.get("body") or "institution")
+               or event.get("body") or event.get("actor")
+               or event.get("by") or event.get("holder")
+               or event.get("commitment_id") or event.get("order_id")
+               or event.get("good") or "institution")
 
 
 def _event_surface(event):
@@ -177,6 +796,26 @@ def _event_surface(event):
         "post_filled_again": f"{subject} was staffed again",
         "post_unfilled": f"{subject} could not be staffed",
         "post_believed_filled": f"{subject} was believed staffed but was not",
+        "incident": str(event.get("surface") or
+                        f"an incident changed {subject}"),
+        "stock_low": f"{subject} ran low",
+        "stock_empty": f"{subject} ran out",
+        "stock_restored": f"{subject} was restocked",
+        "stock_surplus": f"{subject} became abundant",
+        "goods_exchanged": f"{subject} changed hands",
+        "institution_order_issued": f"{subject} issued an order",
+        "institution_order_executed": f"{subject} carried out an order",
+        "institution_order_failed": f"an order concerning {subject} failed",
+        "commitment_fulfilled": f"{subject} fulfilled an undertaking",
+        "commitment_disputed": f"{subject} disputed an undertaking",
+        "commitment_released": f"{subject} released an undertaking",
+        "commitment_repudiated": f"{subject} repudiated an undertaking",
+        "commitment_defaulted": f"{subject} defaulted on an undertaking",
+        "commitment_transferred": f"{subject} transferred an undertaking",
+        "report_confirmed": f"{subject} confirmed a report",
+        "report_refuted": f"{subject} refuted a report",
+        "aid_given": f"{subject} gave aid",
+        "harm_done": f"{subject} caused harm",
     }
     return phrases.get(kind, f"{subject} changed state")
 
@@ -233,7 +872,12 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
         if isinstance(scene, dict) and scene.get("rooms"):
             # The live scene owns the room graph. Charter retains background
             # body positions but never carries a competing adjacency map.
-            state["scene"] = copy.deepcopy(scene)
+            if state.get("structure"):
+                from world.structure import composed_scene, skeleton_rooms
+                state["scene"] = composed_scene(
+                    skeleton_rooms(cid, state["structure"], frame_id), scene)
+            else:
+                state["scene"] = copy.deepcopy(scene)
             # Registered-character movement is authoritative.  A bound body
             # remains in Charter only as an institutional projection, and its
             # place follows the scene instead of being advanced here.
@@ -507,6 +1151,77 @@ def residue_facts(cid, place, frame_id=None, cap=3):
     return facts[:max(0, int(cap))]
 
 
+def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
+    """Author-only explanation surface; no result is delivered to a mind."""
+    from core.db import q, wget_for_frame
+    from world.charter_log import life_of, summarize
+
+    registry = registry_for(cid, frame_id)
+    events = []
+    for row in q(
+            "SELECT payload FROM scheduled_events WHERE chat_id=? "
+            "AND seed LIKE 'charter:%' ORDER BY due_at DESC LIMIT 500", (cid,)):
+        try:
+            payload = json.loads(row["payload"] or "{}")
+            event = payload.get("charter_event")
+            if isinstance(event, dict):
+                event = {"charter": str(
+                    (payload.get("origin") or {}).get("charter") or ""),
+                    **event}
+        except (TypeError, ValueError, json.JSONDecodeError):
+            event = None
+        if isinstance(event, dict):
+            events.append(event)
+    resident_histories = wget_for_frame(
+        cid, "charter_resident_histories", frame_id, {}) or {}
+    items = {}
+    for key, item in sorted(registry["items"].items()):
+        if charter_key and key != str(charter_key):
+            continue
+        state = item["state"]
+        local_events = [e for e in events
+                        if not e.get("charter") or e.get("charter") == key]
+        entry = {
+            "summary": summarize(state, local_events),
+            "warnings": registry_warnings(
+                {"items": {key: item}}, scene=state.get("scene"),
+                cid=cid, frame_id=frame_id),
+            "judgment_holders": len(state.get("judgments") or {}),
+            "commitments": list((state.get("commitments") or {}).values()),
+            "economy": copy.deepcopy(state.get("economy") or {}),
+            "decisions": copy.deepcopy(state.get("decisions") or {}),
+            "history": copy.deepcopy(state.get("history") or {}),
+            "refused_interventions": copy.deepcopy(
+                state.get("refused_interventions") or []),
+            "featured_resident_histories": {
+                char_id: copy.deepcopy(history)
+                for char_id, history in resident_histories.items()
+                if isinstance(history, dict)
+                and str((history.get("binding") or {}).get("charter") or "")
+                == key
+                and (not body_key or str(
+                    (history.get("binding") or {}).get("body") or "")
+                    == str(body_key))
+            },
+        }
+        if body_key:
+            entry["life"] = life_of(body_key, state, local_events)
+            entry["believes"] = copy.deepcopy(
+                (state.get("minds") or {}).get(str(body_key)) or {})
+            entry["believed_by"] = {
+                holder: copy.deepcopy(claims[str(body_key)])
+                for holder, claims in (state.get("minds") or {}).items()
+                if str(body_key) in claims}
+            entry["judgments_by"] = copy.deepcopy(
+                (state.get("judgments") or {}).get(str(body_key)) or {})
+            entry["judgments_about"] = {
+                holder: copy.deepcopy(subjects[str(body_key)])
+                for holder, subjects in (state.get("judgments") or {}).items()
+                if str(body_key) in subjects}
+        items[key] = entry
+    return {"items": items, "event_count": len(events)}
+
+
 def carrier_entries(cid, frame_id=None):
     """Unpromoted Charter people shaped for ``story.carriers``.
 
@@ -597,6 +1312,91 @@ def save_carrier_state(cid, entry, carrier_state, frame_id=None):
     item["state"] = state
     save_registry(cid, registry, frame_id)
     return True
+
+
+def load_caravan_freight(cid, request, origin, *, frame_id=None):
+    """Take requested lots from a real market holder into a caravan.
+
+    The Director may ask for freight but cannot mint it. ``from_holder`` must
+    own stock at a market in the origin room; the actual loaded amount is
+    bounded by that stock. One registry read/write for the whole request.
+    """
+    request = request if isinstance(request, dict) else {}
+    wanted = request.get("stock") if isinstance(request.get("stock"), dict) \
+        else {}
+    source = str(request.get("from_holder") or "")
+    if not source or not wanted:
+        return {"stock": {}, "wants": dict(request.get("wants") or {}),
+                "from_holder": source}, []
+    from world.charter_economy import normalize_economy, trade
+
+    registry = registry_for(cid, frame_id)
+    def amount(value):
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError):
+            return 0.0
+
+    loaded, events = {}, []
+    changed = False
+    for item in registry["items"].values():
+        state = item["state"]
+        economy = normalize_economy(state.get("economy"))
+        if not any(m["holder"] == source and m["place"] == str(origin)
+                   for m in economy["markets"].values()):
+            continue
+        wagon = "__loading_caravan__"
+        for good, quantity in wanted.items():
+            economy, event, moved = trade(
+                economy, seller=source, buyer=wagon, good=str(good),
+                quantity=amount(quantity),
+                at_hours=float(state.get("clock_hours") or 0.0),
+                place=str(origin), reason="caravan_loading")
+            if moved:
+                loaded[str(good)] = loaded.get(str(good), 0.0) + moved
+                events.append(event)
+                changed = True
+        economy["stocks"].pop(wagon, None)
+        state["economy"] = economy
+        item["state"] = state
+        if loaded:
+            break
+    if changed:
+        save_registry(cid, registry, frame_id)
+    return {"stock": loaded,
+            "wants": {str(k): amount(v) for k, v in
+                      (request.get("wants") or {}).items()
+                      if amount(v) > 0.0},
+            "from_holder": source}, events
+
+
+def exchange_caravan_freight(cid, freight, room, *, frame_id=None):
+    """Exchange one wagon with authored markets at its physical stop."""
+    from world.charter_economy import caravan_exchange
+
+    registry = registry_for(cid, frame_id)
+    changed = False
+    events = []
+    carried = copy.deepcopy(freight) if isinstance(freight, dict) else {}
+    for item in registry["items"].values():
+        state = item["state"]
+        economy, carried_after, traded = caravan_exchange(
+            state.get("economy"), carried, str(room),
+            at_hours=float(state.get("clock_hours") or 0.0))
+        if traded:
+            from world.charter_news import news_keys_in, witness
+            state["minds"], _witnessed = witness(
+                state.get("minds") or {}, state.get("bodies") or {}, traded,
+                float(state.get("clock_hours") or 0.0))
+            state["news_keys"] = sorted(news_keys_in(state["minds"]))
+            state["economy"] = economy
+            item["state"] = state
+            carried = carried_after
+            events.extend(traded)
+            changed = True
+    if changed:
+        save_registry(cid, registry, frame_id)
+    return carried, events
 
 
 def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
@@ -860,9 +1660,22 @@ def promotion_bundle(cid, name, *, record=None, frame_id=None):
         body_key, registry["items"][charter_key]["state"],
         events=_charter_events(cid, charter_key, frame_id))
     body = registry["items"][charter_key]["state"]["bodies"][body_key]
+    state = registry["items"][charter_key]["state"]
+    from world.charter_identity import display_name
+    roles = {}
+    for post, assigned in (state.get("watch") or {}).items():
+        roles.setdefault(str(assigned), []).append(str(post))
+    social_names = {
+        key: display_name(value, roles.get(key) or (), state.get("naming"))
+        for key, value in state["bodies"].items()}
+    for key, figure in (state.get("figures") or {}).items():
+        surface = figure.get("surface") or {}
+        social_names[key] = str(surface.get("name") or surface.get("label")
+                                or key)
     from world.charter_identity import identity_seed
     return {"charter": charter_key, "body": body_key,
             "place": str(body.get("place") or ""), "handoff": handoff,
+            "social_names": social_names,
             "dialogue_color": str(body.get("dialogue_color") or ""),
             "dialogue_color_seed": identity_seed(charter_key, body_key)}
 
@@ -888,6 +1701,10 @@ def bind_promoted_character(cid, bundle, *, char_id, name, entity_id="",
         state["bodies"][body_key]["place"] = str(place)
     for store in ("minds", "needs", "feel", "heard_blame"):
         (state.get(store) or {}).pop(body_key, None)
+    for store in ("experiences", "habit_runs"):
+        (state.get(store) or {}).pop(body_key, None)
+    state["bodies"][body_key].pop("private_habits", None)
+    (state.get("judgments") or {}).pop(body_key, None)
     state["practices"] = {
         key: practice for key, practice in (state.get("practices") or {}).items()
         if body_key not in set((practice.get("roles") or {}).values())

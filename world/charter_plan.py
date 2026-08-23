@@ -135,9 +135,45 @@ def plan_watch(charter, horizon_hours=4.0, seed=0, reach=None,
         # about the wrong person to spend is still the wrong person. Standing
         # rides on the same axis: a body the institution is reluctant to spend
         # is treated as scarcer than their competence alone implies.
+        def home_post(body_key):
+            body = (charter.get("bodies") or {}).get(body_key) or {}
+            authored = str(body.get("home_post") or "")
+            if authored:
+                return authored
+            # Generated population ids have always been ``post:ordinal``.
+            # Preserve that latent role affinity for already-stored Charters.
+            return str(body_key).split(":", 1)[0]
+
+        def watches_stood(body_key):
+            return sum(int(value) for value in (
+                (charter.get("stood") or {}).get(body_key) or {}).values())
+
+        def unrelated_competence(body_key):
+            """How much training this post would leave unused.
+
+            ``criticality`` protects the literal last qualified person.  That
+            is not enough when two field hands or nurses can cover each other:
+            an undifferentiated labour post could still spend one of them
+            while a plain labourer waits in reserve.  Within the same scarcity
+            and home-post tier, use the least specialised capable body first.
+            This is the ordinary institutional rule behind "spend the most
+            replaceable body first", not a town-specific exception.
+            """
+            body = (charter.get("bodies") or {}).get(body_key) or {}
+            required = set((post.get("requires") or {}).keys())
+            return sum(
+                1 for skill, level in (body.get("competence") or {}).items()
+                if skill not in required and float(level or 0.0) > 0.0)
+
         candidates.sort(key=lambda b: (
             scarce.get(b, 0) + float(reluctance.get(b, 0.0)),
+            0 if home_post(b) == post["key"] else 1,
+            unrelated_competence(b),
             (reach or {}).get((b, post["place"]), 0),
+            # Equal, rested, co-located members rotate instead of the stable
+            # body id making one person work and another remain reserve for
+            # the institution's entire history.
+            watches_stood(b),
             b))
         if not candidates:
             # Three distinct stories, and an author reading the log has to be

@@ -261,6 +261,10 @@ $("#b-dlg").onclick = async () => {
   if (S.chatId !== chatId) return;
   const lw = await api("GET", `/api/chats/${chatId}/living_world`);
   if (S.chatId !== chatId) return;
+  let ch = { charters: { items: {} }, warnings: [] };
+  try { ch = await api("GET", `/api/chats/${chatId}/charters`); }
+  catch (e) { ch = { charters: { items: {} }, warnings: [String(e.message || e)] }; }
+  if (S.chatId !== chatId) return;
   const st = el("select", {}, ["terse", "natural", "chatty"].map(s => el("option", { value: s, ...(s === c.style ? { selected: "" } : {}) }, s)));
   const mn = el("input", { type: "number", value: c.min_lines, min: "0" });
   const mx = el("input", { type: "number", value: c.max_lines, min: "0" });
@@ -301,7 +305,8 @@ $("#b-dlg").onclick = async () => {
   const offLife = el("select", {}, (c.offscreen_life_levels || []).map(
     lvl => el("option",
       { value: lvl.value, ...(lvl.value === c.offscreen_life ? { selected: "" } : {}) },
-      `${lvl.value} — ${lvl.description}`)));
+      lvl.built === false ? `${lvl.value} — not built yet`
+        : `${lvl.value} — ${lvl.description}`)));
   // The rung names are the engine's own (schemas.BehaviorController), so the
   // menu spells out what each one means rather than relying on the word.
   const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
@@ -328,7 +333,73 @@ $("#b-dlg").onclick = async () => {
         permits(d) ? "" : `off-screen life at ${offLife.value} caps it (needs ${d.requires})`]
         .filter(Boolean).join("; ");
   });
-  offLife.onchange = refreshLw;
+  // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). Both ways a
+  // defined institution can be silently inert are already computed by
+  // `charter_runtime.schedule_charter_ticks` (`charter_skip`) and thrown
+  // away; a ceiling below `deterministic` is the one an author can act on, so
+  // it is shown here in the same words `refreshLw` uses for the mechanisms.
+  const charterItems = Object.entries((ch.charters || {}).items || {});
+  const charterClamp = el("div", { class: "small dim" });
+  const refreshCharter = () => charterClamp.textContent =
+    !charterItems.length || offLife.value !== "inert" ? ""
+      : `not running — off-screen life at ${offLife.value} caps it `
+        + "(needs deterministic)";
+  const countOf = o => Object.keys(o || {}).length;
+  const charterRows = charterItems.map(([key, item]) => {
+    const st = item.state || {};
+    const hours = Math.round(Number(st.clock_hours) || 0);
+    const markets = countOf((st.economy || {}).markets);
+    const promises = countOf(st.commitments);
+    const orders = ((st.decisions || {}).orders || []).length;
+    const judgments = Object.values(st.judgments || {})
+      .reduce((n, held) => n + countOf(held), 0);
+    const inspect = el("button", { class: "small", onclick: async () => {
+      const data = await api("GET",
+        `/api/chats/${chatId}/charters/diagnostics?charter=${encodeURIComponent(key)}`);
+      const diagnostics = data.items?.[key] || data;
+      modal(`Institution — ${st.key || key}`,
+        host => host.append(charterDiagnosticsPanel(diagnostics)), { wide: true });
+    } }, "Why and history");
+    return el("tr", {}, el("td", {}, st.key || key),
+      el("td", { class: "small" },
+        `${countOf(st.bodies)} people · ${countOf(st.posts)} posts · `
+        + `${countOf(st.upkeeps)} upkeeps · ${markets} markets · `
+        + `${promises} obligations · ${orders} orders · ${judgments} local judgments · `
+        + `${hours}h lived so far `, inspect));
+  });
+  const historyRoutes = Object.entries(ch.character_history_routes || {});
+  const historyRoutePanel = historyRoutes.length
+    ? el("div", { class: "card", style: "margin-top:8px" },
+        el("div", { class: "section-title", style: "margin-top:0" },
+          "Character pasts at the opening"),
+        ...historyRoutes.map(([charId, route]) => {
+          const character = (S.boot.characters || []).find(c => String(c.id) === String(charId));
+          const handoff = route.handoff || {};
+          const reasons = (route.reasons || []).map(r => r.claim).filter(Boolean);
+          return el("div", { style: "margin-top:7px" },
+            el("strong", { translate: "no" }, route.character || character?.name || `Character ${charId}`),
+            el("div", { class: "small" }, route.summary || route.mode || "Authored history"),
+            el("div", { class: "small dim" },
+              `${Math.round((Number(route.confidence) || 0) * 100)}% routing confidence`,
+              route.author_locked ? " · chosen by author" : " · automatic"),
+            reasons.length ? el("div", { class: "small dim" }, reasons.join("; ")) : null,
+            route.guidance ? el("div", { class: "small dim" }, `Past guidance: ${route.guidance}`) : null,
+            handoff.complete
+              ? el("div", { class: "small" },
+                  `${handoff.memory_count || 0} independent memory records prepared`
+                  + (handoff.journey_events ? ` from ${handoff.journey_events} journey events` : ""))
+              : handoff.error
+                ? el("div", { class: "small", style: "color:var(--warn)" },
+                    `History generation failed safely: ${handoff.safe_fallback || "no generated past"}`)
+                : null);
+        }))
+    : null;
+  const generateTown = el("button", { onclick: () => {
+    openLivedLocationDialog(chatId, {
+      title: "Generate a lived-in location from story lore"
+    });
+  } }, "Generate a lived-in location from lore");
+  offLife.onchange = () => { refreshLw(); refreshCharter(); };
   const lwRows = (lw.approaches || []).map(a => {
     const sel = el("select", { onchange: refreshLw },
       [el("option", { value: "off", ...(a.value === "off" ? { selected: "" } : {}) }, "off")]
@@ -341,6 +412,7 @@ $("#b-dlg").onclick = async () => {
     return el("tr", {}, el("td", {}, a.label), el("td", {}, sel, status));
   });
   refreshLw();
+  refreshCharter();
 
   modal("Dialogue config", b => b.append(
     el("div", { class: "small dim", style: "margin-bottom:10px" },
@@ -367,7 +439,7 @@ $("#b-dlg").onclick = async () => {
         el("div", {}, "Stop on question to player — same pause, triggered specifically by an NPC asking you something."),
         el("div", {}, "Silence ends exchange — if nobody has anything to say or do, the scene stops rather than manufacturing more dialogue to fill the turn."))),
     el("div", { class: "card", style: "margin-top:10px" },
-      el("div", { class: "section-title", style: "margin-top:0" }, "World simulation"),
+      el("div", { class: "section-title", style: "margin-top:0" }, "Simulation reach"),
       el("div", { class: "small dim" },
         "What the world and cast may do while you are not watching. One "
         + "ceiling, many mechanisms: ", el("b", {}, "Off-screen life"),
@@ -382,16 +454,19 @@ $("#b-dlg").onclick = async () => {
         el("div", {}, el("b", {}, "inert"), " — nothing happens off screen. A dormant "
           + "character is exactly where you left them."),
         el("div", {}, el("b", {}, "deterministic"), " — only things already on a "
-          + "clock: someone arriving when they said they would, food spoiling, news "
-          + "taking days to travel. Costs nothing and is always running anyway; this "
-          + "level just says that is all you want."),
+          + "clock: someone arriving when they said they would, food spoiling, a "
+          + "consequence landing on the day it was set for. No model calls. If you "
+          + "have defined an institution, this is also the rung at which it starts "
+          + "keeping itself running while you are elsewhere."),
         el("div", {}, el("b", {}, "reactive"), " — a character may carry out bounded "
           + "stages they explicitly declared while present. Time and event triggers "
           + "fire only the effect already adjudicated; there is no new model call or plan."),
         el("div", {}, el("b", {}, "stochastic"), " — at meaningful world changes, dormant "
           + "characters get a sentence of what they have been up to, kept in a log. "
           + "No plans, no decisions, nothing that moves anyone. This is what the "
-          + "engine has always done, which is why it is the default."),
+          + "engine has always done, which is why it is the default. Posted "
+          + "notices and proclamations also get their real written text at this "
+          + "level — one small call per notice, off the turn path."),
         el("div", {}, el("b", {}, "character_agent"), " — characters you have "
           + "explicitly opted in on their card actually advance their own plans "
           + "while you are away, acting only on what has genuinely reached them, "
@@ -406,21 +481,54 @@ $("#b-dlg").onclick = async () => {
           el("i", {}, "they"),
           " know — never on where you are or what you just did. Someone who has "
           + "not been told cannot react to it.")),
-      el("div", { class: "section-title" }, "World mechanisms"),
+      el("div", { class: "section-title" }, "World clocks and aftermath"),
       el("div", { class: "small dim" },
-        "How much the WORLD does on its own — rooms drifting while unwatched, "
-        + "consequences landing on the clock, unvisited places accruing history. "
-        + "Each runs only up to the ceiling above; one set past it says what it "
-        + "actually runs as. Everything here is encountered, never reported: an "
-        + "off-screen event reaches you as changed state when you arrive, or not "
-        + "at all. All off by default; turning one on changes nothing already "
-        + "written."),
+        "These controls are only for place-level clocks — rooms drifting while unwatched, "
+        + "consequences landing, and unvisited places accruing aftermath. "
+        + "People, rumors, reporting lines, promises, markets, caravans and local reputation "
+        + "belong to Charter below and no longer have separate simulation switches. "
+        + "These are generation policies, not information rules: what happens, "
+        + "not who gets to know it. Each runs only up to the ceiling above; one "
+        + "set past it says what it actually runs as. All off by default; "
+        + "turning one on changes nothing already written."),
+      // (2) Witnessing/telling/carrying used to be a sixth row in this table
+      // ("Rumor ledger") and could be switched off. `living_world` dropped the
+      // approach and `carriers.advance_carriers` dropped its gate, so it is now
+      // unconditional -- which left the most consequential epistemic machinery
+      // in the engine with no representation in the only menu that discusses
+      // off-screen life.
+      el("div", { class: "small dim", style: "margin-top:6px" },
+        el("b", {}, "Not a setting"), " — witnessing, telling, carrying. A "
+        + "public event is picked up only by whoever was physically standing "
+        + "there, travels because they travel, and loses detail with every "
+        + "mouth it passes through. This was once a mechanism you could switch "
+        + "off; it is now simply how the world works, because a world where "
+        + "word cannot move is not coherent at any setting."),
       el("table", { class: "grid", style: "margin-top:6px" }, lwRows),
       el("div", { class: "small dim", style: "margin-top:6px" },
         (lw.approaches || []).map(a => el("div", { style: "margin-top:4px" },
           el("div", {}, el("b", {}, a.label), " — ",
             ((a.depths || [])[0] || {}).description || ""),
-          el("div", {}, "Cost — ", a.cost))))),
+          el("div", {}, "Cost — ", a.cost)))),
+      el("div", { class: "section-title" }, "Institutions"),
+      historyRoutePanel,
+      el("div", { class: "small dim" },
+        "A garrison, a hospital, a ship's crew — a named population with "
+        + "things that must be kept up and posts that keep them. It runs "
+        + "deterministically off the turn path: people are assigned, walk "
+        + "there, get tired, go down, are replaced, and see and tell each "
+        + "other what happened. Nothing here is invented for you — an "
+        + "institution exists only if one was authored for this story, and "
+        + "an empty registry costs exactly nothing. Each person's trust, fear, "
+        + "respect and suspicion is local and evidence-backed; there is no global score."),
+      generateTown,
+      charterItems.length
+        ? el("table", { class: "grid", style: "margin-top:6px" }, charterRows)
+        : el("div", { class: "small dim", style: "margin-top:6px" },
+            "None defined for this story."),
+      charterClamp,
+      (ch.warnings || []).map(w => el("div",
+        { class: "small", style: "color:var(--warn);margin-top:2px" }, w))),
     el("div", { class: "card", style: "margin-top:10px" },
       el("div", { class: "section-title", style: "margin-top:0" }, "Background life"),
       el("div", { class: "small dim" },
@@ -486,6 +594,95 @@ $("#b-dlg").onclick = async () => {
         closeModal(); toast("Dialogue config saved.", "ok");
       } }, "Save"))));
 };
+
+// Charter diagnostics are an author surface, not a cognition payload. Lead
+// with the useful answers in ordinary language and retain the complete ledger
+// behind a disclosure for investigation and provenance audits.
+function charterDiagnosticsPanel(item = {}) {
+  const summary = item.summary || {};
+  const failures = summary.failing || [];
+  const hours = Math.round(Number(summary.hours) || 0);
+  const people = Number(summary.bodies) || 0;
+  const posts = Number(summary.posts) || 0;
+  const events = Number(summary.events) || 0;
+  const judges = Number(item.judgment_holders) || 0;
+  const obligations = (item.commitments || []).length;
+  const orders = ((item.decisions || {}).orders || []).length;
+  const overview = el("div", { class: "card" },
+    el("div", { class: "section-title", style: "margin-top:0" }, "What has happened here"),
+    el("div", { class: "small" },
+      `${hours} hours lived · ${people} people · ${posts} posts · `
+      + `${events} recorded events`),
+    el("div", { class: "small dim", style: "margin-top:4px" },
+      `${judges} people hold local judgments · ${obligations} obligations · `
+      + `${orders} active orders`),
+    failures.length
+      ? el("div", { class: "small", style: "color:var(--warn);margin-top:5px" },
+          `Needs attention: ${failures.join(", ")}`)
+      : el("div", { class: "small dim", style: "margin-top:5px" },
+          "No upkeep is currently failing."));
+
+  const histories = Object.entries(item.featured_resident_histories || {});
+  const handoff = el("div", { class: "card", style: "margin-top:10px" },
+    el("div", { class: "section-title", style: "margin-top:0" },
+      "Featured character handoffs"),
+    el("div", { class: "small dim" },
+      "A resident handoff creates separate recent-life episodes constrained by the "
+      + "simulated institution, named roster, real rooms, authored card, and past "
+      + "guidance. The character then becomes their normal full-cognition self and "
+      + "no longer has a separate Charter mind."));
+  if (!histories.length) {
+    handoff.append(el("div", { class: "small dim", style: "margin-top:6px" },
+      "No featured character was handed off from this institution."));
+  }
+  for (const [charId, history] of histories) {
+    const binding = history.binding || {};
+    const memoryCount = (history.memory_event_keys || []).length;
+    const dropped = ((history.grounding || {}).dropped || []).length;
+    handoff.append(el("div", { style: "margin-top:8px" },
+      el("div", {},
+        el("strong", { translate: "no" },
+          binding.name || t("Character {id}", { id: charId })),
+        el("span", { translate: "no" }, binding.place ? " · " : "",
+          binding.place || "")),
+      el("div", { class: "small" },
+        `Independent memory records carried into full cognition: ${memoryCount}.`),
+      history.overview
+        ? el("div", { class: "small dim", style: "margin-top:3px" },
+            history.overview)
+        : null,
+      dropped
+        ? el("div", { class: "small", style: "color:var(--warn);margin-top:3px" },
+            `Unsupported history claims discarded: ${dropped}.`)
+        : null,
+      history.error
+        ? el("div", { class: "small", style: "color:var(--warn);margin-top:3px" },
+            `Recent-life generation failed: ${history.error}`)
+        : null,
+      (history.chronology || []).length
+        ? el("details", { style: "margin-top:5px" },
+            el("summary", { class: "small" },
+              `${history.chronology.length} recent episodes`),
+            ...(history.chronology || []).map(episode => el("div", {
+              class: "small dim", style: "margin:4px 0 0 10px"
+            }, `${episode.when || "Recent"} · ${episode.title || "Untitled episode"}`
+              + (episode.location ? ` · ${episode.location}` : "")
+              + ((episode.entities || []).length
+                ? ` · ${(episode.entities || []).join(", ")}` : ""))))
+        : null));
+  }
+
+  const warnings = (item.warnings || []).map(warning => el("div", {
+    class: "small", style: "color:var(--warn);margin-top:4px"
+  }, warning));
+  const evidence = el("details", { style: "margin-top:10px" },
+    el("summary", {}, "Full evidence and ledgers"),
+    el("pre", {
+      class: "small",
+      style: "white-space:pre-wrap;max-height:55vh;overflow:auto"
+    }, JSON.stringify(item, null, 2)));
+  return el("div", {}, overview, handoff, ...warnings, evidence);
+}
 
 // The Cast modal used to be one long scrolling column: a bare persona
 // row, a lorebook tree, a bare "Participants" header (styled differently
@@ -3795,4 +3992,3 @@ async function openExtensionsMenu() {
 }
 
 $("#b-extensions").onclick = openExtensionsMenu;
-

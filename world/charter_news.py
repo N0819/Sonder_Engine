@@ -42,6 +42,25 @@ WITNESSABLE = {
     "body_unable": "somebody going down in front of you",
     "body_recovered": "somebody back on their feet",
     "post_filled_again": "somebody arriving to stand a post",
+    "incident": "an authored physical change at the place",
+    "stock_low": "visible scarcity at a store or market",
+    "stock_empty": "an empty store or market",
+    "stock_restored": "supplies returning to ordinary levels",
+    "stock_surplus": "an unusually well-stocked store or market",
+    "goods_exchanged": "goods visibly changing hands",
+    "institution_order_issued": "an order publicly issued at a post",
+    "institution_order_executed": "an order visibly carried out",
+    "institution_order_failed": "an attempted order visibly failing",
+    "commitment_fulfilled": "a publicly witnessed fulfilment",
+    "commitment_disputed": "a public dispute over an undertaking",
+    "commitment_released": "a public release from an undertaking",
+    "commitment_repudiated": "a public repudiation of an undertaking",
+    "commitment_defaulted": "a publicly established default",
+    "commitment_transferred": "a public transfer of an undertaking",
+    "report_confirmed": "a report publicly confirmed",
+    "report_refuted": "a report publicly refuted",
+    "aid_given": "aid visibly given",
+    "harm_done": "harm visibly done",
 }
 
 #: What a fresh witnessing is worth. Full: you saw it.
@@ -181,7 +200,9 @@ def news_key(event):
     ever be compared, agreed on, or contradicted.
     """
     subject = (event.get("upkeep") or event.get("post")
-               or event.get("body") or "")
+               or event.get("body") or event.get("commitment_id")
+               or event.get("order_id") or event.get("good")
+               or event.get("holder") or event.get("actor") or "")
     return f"news:{event['kind']}:{subject}@{float(event['at_hours']):.4f}"
 
 
@@ -191,7 +212,12 @@ def news_claim(event, at_hours, strength=WITNESS_STRENGTH, heard_from=None):
         "body": news_key(event),
         "event_kind": str(event["kind"]),
         "about": str(event.get("upkeep") or event.get("post")
-                     or event.get("body") or ""),
+                     or event.get("body") or event.get("actor")
+                     or event.get("by") or event.get("holder")
+                     or event.get("commitment_id")
+                     or event.get("order_id") or event.get("good") or ""),
+        "actor": str(event.get("actor") or event.get("by")
+                     or event.get("seller") or event.get("holder") or ""),
         "place": str(event.get("place") or ""),
         "happened_at": float(event["at_hours"]),
         "strength": float(strength),

@@ -107,6 +107,19 @@ model-priced profile producer starts at the post-commit tail, carrying the base
 turn, frame, and epoch id; landing refuses a world restored to another epoch.
 
 Explicitly authored institutional Charters use that same post-commit epoch.
+Charter advances material flows before social reporting, then lets reports
+reach authorised officeholders, orders descend one staffed reporting edge,
+and typed executors create real consequences. Public shortage/order events are
+witnessed into individual minds; local judgments and commitment knowledge are
+derived only from those held claims. Generation is an authoring path, not a
+turn stage: `/charters/generate` closes one qualitative lore-grounded plan,
+plants prose-free planned rooms, runs coarse-plus-recent presim, and optionally
+stores a historian summary whose turning points cite actual presim event ids.
+The same operation is available during ordinary story creation and greeting
+quick-start; greeting launch lands it before establishment runs turn 0. During
+play it reads the explicitly selected lorebook subtree, preserves existing
+locations/Charters, namespaces room/structure/body collisions, and advances
+only the newly added registry slice. It never rewrites the current live room.
 `charter_runtime.schedule_charter_ticks` advances a copied registry in an
 out-of-band deterministic job, then lands the whole frame-scoped state plus
 stable `scheduled_events` rows atomically only if epoch, base turn, and the
@@ -129,6 +142,53 @@ when an exact delivered line names a co-located Charter body; lookup is indexed
 once per beat, rather than scanning an institution for every spoken line.
 Transcript color uses the permanent Charter/body seed before and after
 promotion.
+
+Story-start prehistory may include full characters as featured residents.
+Greeting launch supplies its one selected card; Story Quick Start exposes one
+independent history route for every selected or newly generated cast member,
+then resolves the browser's temporary keys to attached character ids before
+calling the same `charter_runtime.generate_lived_location` operation. That
+inclusion is never implied by generating a location. Before any history backend
+runs, `story.history_routing` resolves a closed topology from the author choice,
+card, opening and location brief. The runtime ignores any requested character
+that is not actually attached to that story. Only fixed-place or bounded-moving
+resident routes may send a full character through Charter;
+travel/arrival evidence wins over apparent job competence, and uncertain auto
+routes preserve authored history rather than inventing tenure.
+Only their public history and ability name/scope rows corroborated by that
+public history reach the location planner; ability limits, private history and
+psychology do not enter Charter generation. Deterministic
+closure places that stable seed exactly once and repairs a planner omission by
+matching it to an existing lore-authored post. After presim, `charter_history`
+builds a closed recent-life context from that body, its named coworkers and
+reporting line, real work/home rooms, duties, held reports, commitments,
+participant-owned experience and actual simulation anchors. One bounded
+utility call authors 10–16 detailed personal episodes under an explicit
+minor-prehistory licence. Each is validated against the closed people/place
+ids and written as its own `turn_idx=NULL` memory row with a content-derived
+identity, chronology, location, entities, affect and consequence. Every named
+participant receives a compact reciprocal `shared_prestory` experience in
+their own Charter history, so later promotion cannot erase that the meeting
+happened. Fewer than
+ten usable episodes abort launch; there is no sparse canonical fallback.
+`bind_promoted_character` then retires the Charter mind before establishment
+while preserving the institutional body. Aggregate watches produce a separate
+human-readable career summary rather than an episodic memory. Recent presim
+always includes the featured body's work and berth places. Generated lived
+locations must materialize a stable personal name for every body; a missing
+naming law fails generation instead of exposing a machine post id. Authored private
+habits attach only after public location planning, run only while that body is
+off duty, write only that body's bounded experience, and leave with the
+temporary Charter cognition at handoff. Each selected cast member is routed
+independently: one may be a local resident while another preserves an authored
+traveler history, without sharing a universal location-shaped past.
+
+An arriving traveler uses `story.journey_history`, never a location-shaped
+Charter. Cited mode compiles only card/lore source ids into ordered world
+visits; generated mode is a separate explicit author licence for the LLM to
+invent a bounded journey ledger. Failure of cited compilation falls back to
+the unchanged card and greeting; failure of an explicitly requested generated
+journey aborts launch rather than silently charging for nothing.
 
 After the ordinary `memories` domain settles each acting character's prepared
 state, `information_carriers` acquires public event surfaces for physical

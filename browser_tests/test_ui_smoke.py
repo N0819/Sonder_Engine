@@ -193,6 +193,115 @@ def test_appearance_choice_survives_a_reload(page: Page, ui_base_url: str) -> No
     assert page_errors == []
 
 
+def test_quick_start_explains_the_featured_character_handoff(
+    page: Page,
+    ui_base_url: str,
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "personas": [{"id": 3, "name": "Researcher"}],
+    }
+    _mock_api(page, bootstrap)
+    page.goto(f"{ui_base_url}/static/index.html")
+
+    page.evaluate("quickStartModal({id: 9, name: 'Sarah Moon'}, 0)")
+
+    modal = page.locator("#modal")
+    expect(modal).to_contain_text("How does Sarah Moon relate to this place?")
+    expect(modal).to_contain_text("using only public card details")
+    expect(modal).to_contain_text("Arrives with authored or canon travels")
+    expect(modal).to_contain_text("Charter stops speaking or deciding for them")
+
+
+def test_story_quick_start_offers_history_routing_for_each_cast_member(
+    page: Page,
+    ui_base_url: str,
+) -> None:
+    bootstrap = {
+        **BOOTSTRAP,
+        "characters": [{"id": 9, "name": "Sarah Moon"}],
+        "personas": [{"id": 3, "name": "Researcher"}],
+        "language_packs": [{
+            "id": "en", "name": "English", "native_name": "English",
+            "story": True,
+        }],
+    }
+    _mock_api(page, bootstrap)
+    page.goto(f"{ui_base_url}/static/index.html")
+
+    page.evaluate("""
+      (() => {
+        const state = wizardState();
+        state.personaMode = 'existing';
+        state.personaId = 3;
+        state.existingCharacterIds.add(9);
+        state.characterBriefs = ['Nadia Voss, an exhausted containment engineer.'];
+        state.characterBriefsKnown = [false];
+        state.livedLocation = {brief: 'Site 17', horizon_hours: 720};
+        modal('New story', body => renderWizardScenario(body, state), {wide: true});
+      })();
+    """)
+
+    modal = page.locator("#modal")
+    expect(modal).to_contain_text("Give each story character the right kind of past")
+    expect(modal).to_contain_text("How does Sarah Moon relate to this place?")
+    expect(modal).to_contain_text("How does Nadia Voss relate to this place?")
+    expect(modal.get_by_placeholder("Past guidance (optional)")).to_have_count(2)
+
+
+def test_failed_story_setup_can_remove_the_incomplete_story(
+    page: Page,
+    ui_base_url: str,
+) -> None:
+    deleted: list[str] = []
+
+    def delete_story(route) -> None:
+        deleted.append(route.request.method)
+        route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
+
+    _mock_api(page, BOOTSTRAP)
+    page.route("**/api/chats/41", delete_story)
+    page.goto(f"{ui_base_url}/static/index.html")
+
+    page.evaluate("discardFailedStorySetup({id: 41})")
+
+    expect(page.locator("#send")).to_be_visible()
+    assert deleted == ["DELETE"]
+
+
+def test_charter_diagnostics_explain_a_safe_character_handoff(
+    page: Page,
+    ui_base_url: str,
+) -> None:
+    _mock_api(page, BOOTSTRAP)
+    page.goto(f"{ui_base_url}/static/index.html")
+    page.evaluate("""
+      document.body.append(charterDiagnosticsPanel({
+        summary: {hours: 720, bodies: 84, posts: 12, events: 41, failing: []},
+        judgment_holders: 17,
+        commitments: [{id: 'promise:1'}],
+        decisions: {orders: [{id: 'order:1'}]},
+        featured_resident_histories: {
+          9: {
+            binding: {name: 'Sarah Moon', place: 'Medical Wing'},
+            career_reflection: 'The routine made careful work feel dependable.',
+            memory_event_keys: ['prestory:1', 'prestory:2'],
+            grounding: {dropped: [{reason: 'uncited'}]},
+            error: ''
+          }
+        }
+      }));
+    """)
+
+    expect(page.get_by_text("Featured character handoffs")).to_be_visible()
+    expect(page.get_by_text("Sarah Moon", exact=True)).to_be_visible()
+    expect(page.get_by_text(
+        "Independent memory records carried into full cognition: 2."
+    )).to_be_visible()
+    expect(page.get_by_text("Unsupported history claims discarded: 1.")).to_be_visible()
+    expect(page.get_by_text("Full evidence and ledgers")).to_be_visible()
+
+
 def test_latest_story_navigation_wins_out_of_order_responses(
     page: Page,
     ui_base_url: str,

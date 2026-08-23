@@ -1734,7 +1734,33 @@ function renderLoreEntries(state, container) {
         onclick: () => reinterpretLoreBook(state)
       },
       "✨ Reinterpret"
-    )
+    ),
+    S.chatId
+      ? el(
+          "button",
+          {
+            title: "Use this lorebook to add a stable, simulated location to the open story",
+            onclick: () => {
+              if (state.selected.chat_id != null
+                  && Number(state.selected.chat_id) !== Number(S.chatId)) {
+                toast("This lorebook belongs to a different story.", "warn");
+                return;
+              }
+              openLivedLocationDialog(S.chatId, {
+                lorebookId: state.selected.id,
+                title: `Create a location from ${state.selected.name}`,
+                note: "This book and its child books supply the lore, names, "
+                  + "institutions, technology, and cultural constraints.",
+                onSuccess: async () => {
+                  await boot();
+                  await openLoreWorkspace(state.selected.id);
+                }
+              });
+            }
+          },
+          "🏘 Create lived location"
+        )
+      : null
   );
 
   function renderList() {

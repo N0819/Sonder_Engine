@@ -323,20 +323,94 @@ function wizardState() {
     characterBriefs: [""],
     characterBriefsKnown: [false],
     existingCharacterIds: new Set(),
-    alreadyKnownCharacterIds: new Set()
+    alreadyKnownCharacterIds: new Set(),
+    lorebookId: null,
+    livedLocation: null
   };
 }
 
-async function wizardFromScratch() {
-  const name = await promptModal("Story name?");
-  if (name == null) return;               // Cancel/Escape -> abort, don't create a chat
-  const scenario = await promptModal("Scenario?");
-  if (scenario == null) return;
-  const chat = await api("POST", "/api/chats", {
-    name: name || "", scenario: scenario || "", language: defaultStoryLanguage()
+function wizardHistoryCharacters(state) {
+  const rows = [];
+  for (const id of state.existingCharacterIds) {
+    const character = S.boot.characters.find(row => row.id === id);
+    if (character) rows.push({ key: `existing:${id}`, name: character.name });
+  }
+  state.characterBriefs.forEach((brief, index) => {
+    const text = brief.trim();
+    if (!text) return;
+    const proposedName = text.split(/[,.\n]/, 1)[0].trim();
+    rows.push({
+      key: `generated:${index}`,
+      name: proposedName && proposedName.length <= 80
+        ? proposedName : `New character ${index + 1}`
+    });
   });
-  await boot();
-  await openChat(chat.id);
+  return rows;
+}
+
+async function discardFailedStorySetup(chat) {
+  if (!chat?.id) return;
+  try {
+    await api("DELETE", `/api/chats/${chat.id}`);
+  } catch (cleanupError) {
+    console.warn("Could not remove incomplete story setup", cleanupError);
+  }
+}
+
+function wizardFromScratch() {
+  const name = el("input", { type: "text", style: "width:100%",
+    placeholder: "Story name" });
+  const scenario = el("textarea", { style: "width:100%;height:140px",
+    placeholder: "Scenario — where this starts, what's mapped, who's present." });
+  const language = el("select", { style: "width:100%" },
+    storyLanguagePacks().map(pack => el("option", {
+      value: pack.id,
+      ...(pack.id === defaultStoryLanguage() ? { selected: "" } : {})
+    }, pack.native_name || pack.name || pack.id)));
+  const books = S.boot.lorebooks || [];
+  const lore = el("select", { style: "width:100%" },
+    el("option", { value: "" }, "— no lorebook —"),
+    ...books.map(book => el("option", { value: String(book.id) }, book.name)));
+  const lived = livedLocationControl();
+  modal("Build story from scratch", body => body.append(
+    el("label", { class: "small dim" }, "Story name"), name,
+    el("label", { class: "small dim", style: "display:block;margin-top:8px" },
+      "Scenario"), scenario,
+    el("label", { class: "small dim", style: "display:block;margin-top:8px" },
+      "Language"), language,
+    el("label", { class: "small dim", style: "display:block;margin-top:8px" },
+      "Attach a lorebook (optional)"), lore,
+    lived.node,
+    el("div", { class: "row", style: "margin-top:12px" },
+      el("button", { onclick: () => closeModal() }, "Cancel"),
+      el("span", { class: "spacer" }),
+      el("button", { class: "primary", onclick: () => {
+        backgroundTask("Setting up story", async () => {
+          const chat = await api("POST", "/api/chats", {
+            name: name.value.trim(), scenario: scenario.value.trim(),
+            language: language.value || "en"
+          });
+          try {
+            const lorebookId = lore.value ? Number(lore.value) : null;
+            const request = lived.read();
+            if (request) await generateStoryLocation(chat.id, request, lorebookId);
+            else if (lorebookId) await attachStoryLorebook(chat.id, lorebookId);
+            return chat;
+          } catch (error) {
+            await discardFailedStorySetup(chat);
+            throw error;
+          }
+        }, {
+          onSuccess: async chat => {
+            closeAllModals();
+            await boot();
+            await openChat(chat.id);
+          },
+          successMessage: "Story ready.",
+          errorPrefix: "Couldn't set up story"
+        });
+      } }, "Create story"))
+  ), { wide: true });
 }
 
 function renderWizardPersona(b, state) {
@@ -474,19 +548,49 @@ function renderWizardScenario(b, state) {
       value: pack.id,
       ...(pack.id === state.language ? { selected: "" } : {})
     }, pack.native_name || pack.name || pack.id)));
+  const books = S.boot.lorebooks || [];
+  const lore = el("select", { style: "width:100%" },
+    el("option", { value: "" }, "— no lorebook —"),
+    ...books.map(book => el("option", { value: String(book.id) }, book.name)));
+  lore.value = state.lorebookId ? String(state.lorebookId) : "";
+  const lived = livedLocationControl({
+    enabled: !!state.livedLocation,
+    brief: state.livedLocation?.brief || "",
+    horizonHours: state.livedLocation?.horizon_hours ?? 720,
+    featuredResidents: wizardHistoryCharacters(state),
+    characterHistories: state.livedLocation?.character_histories || []
+  });
+  const historyCount = wizardHistoryCharacters(state).length;
+  const capture = () => {
+    state.name = nameIn.value.trim();
+    state.scenario = scenIn.value.trim();
+    state.language = language.value || "en";
+    state.lorebookId = lore.value ? Number(lore.value) : null;
+    state.livedLocation = lived.read();
+  };
 
   b.append(
     el("div", { class: "small dim" }, "Step 3 of 3 — the scenario"),
     el("div", { style: "margin-top:8px" }, nameIn, scenIn),
     el("div", { class: "row", style: "margin-top:8px" },
       el("span", { class: "small", style: "width:70px" }, "Language"), language),
+    el("label", { class: "small dim", style: "display:block;margin-top:8px" },
+      "Attach a lorebook (optional)"),
+    lore,
+    lived.node,
+    historyCount > 16
+      ? el("div", { class: "small dim", style: "margin-top:7px" },
+          "A lived-location start can prepare at most 16 full characters at once. "
+          + "Background Charter residents do not share this limit.")
+      : null,
     el("div", { class: "row", style: "margin-top:14px" },
-      el("button", { onclick: () => renderWizardCharacters(b, state) }, "← Back"),
+      el("button", { onclick: () => {
+        capture();
+        renderWizardCharacters(b, state);
+      } }, "← Back"),
       el("span", { class: "spacer" }),
       el("button", { class: "primary", onclick: () => {
-        state.name = nameIn.value.trim();
-        state.scenario = scenIn.value.trim();
-        state.language = language.value || "en";
+        capture();
         try { localStorage.setItem("storyLanguage", state.language); }
         catch (e) {}
         runWizard(state);
@@ -504,6 +608,8 @@ async function runWizard(state) {
     }
 
     const characterIds = [...state.existingCharacterIds];
+    const historyCharacterIds = new Map(
+      characterIds.map(id => [`existing:${id}`, id]));
     const knownIds = new Set(state.alreadyKnownCharacterIds);
     for (let i = 0; i < state.characterBriefs.length; i++) {
       const text = state.characterBriefs[i].trim();
@@ -513,6 +619,7 @@ async function runWizard(state) {
       });
       showCardWarnings(r);
       characterIds.push(r.id);
+      historyCharacterIds.set(`generated:${i}`, r.id);
       if (state.characterBriefsKnown[i]) knownIds.add(r.id);
     }
 
@@ -521,16 +628,35 @@ async function runWizard(state) {
       scenario: state.scenario,
       language: state.language
     });
-    if (personaId) {
-      await api("PUT", `/api/chats/${chat.id}`, { persona_id: personaId });
+    try {
+      if (personaId) {
+        await api("PUT", `/api/chats/${chat.id}`, { persona_id: personaId });
+      }
+      for (const cid of characterIds) {
+        await api("POST", `/api/chats/${chat.id}/characters`, {
+          char_id: cid,
+          already_known: knownIds.has(cid)
+        });
+      }
+      if (state.livedLocation) {
+        const locationRequest = { ...state.livedLocation };
+        locationRequest.character_histories = (
+          state.livedLocation.character_histories || []).flatMap(row => {
+            const charId = historyCharacterIds.get(String(row.key));
+            return charId ? [{
+              char_id: charId, mode: row.mode || "auto", brief: row.brief || ""
+            }] : [];
+          });
+        await generateStoryLocation(
+          chat.id, locationRequest, state.lorebookId);
+      } else if (state.lorebookId) {
+        await attachStoryLorebook(chat.id, state.lorebookId);
+      }
+      return chat;
+    } catch (error) {
+      await discardFailedStorySetup(chat);
+      throw error;
     }
-    for (const cid of characterIds) {
-      await api("POST", `/api/chats/${chat.id}/characters`, {
-        char_id: cid,
-        already_known: knownIds.has(cid)
-      });
-    }
-    return chat;
   }, {
     onSuccess: async chat => {
       await boot();

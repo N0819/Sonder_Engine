@@ -85,6 +85,12 @@ class TestStaticFilesAreFoundFromAnyworkingDirectory:
             response = client.get(path)
             assert response.status_code == 200, path
 
+    def test_the_spa_shell_revalidates_its_script_revision(self):
+        response = app_module.index()
+        assert response.headers["cache-control"] == "no-cache"
+        assert "?v=20260822-alpha98" in Path(response.path).read_text(
+            encoding="utf-8")
+
 
 class TestCookiesCarrySecureOnlyWhenTheHostSaysSo:
     def _account(self, client):

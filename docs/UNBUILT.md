@@ -2735,6 +2735,54 @@ untouched. Its firewall tests (unheard blame does not cross, the register
 does not cross) are the promotion-leak tests
 `DESIGN_INSTITUTIONS_AND_UPKEEP.md` §12a called for.
 
+**Several story-start slices have since landed (2026-08-22), and narrow rather
+than close this entry.** `story.history_routing` now resolves conservative
+automatic and author-locked routes before generation; only fixed or bounded-
+moving residents enter Charter. Resident handoff now produces separate career
+and recent-life summaries plus 10–16 ordered, identified personal episodes,
+constrained to the pre-named roster, real rooms/duties, actual anchors, card
+and author guidance. Each episode is an independent memory row; a sparse result
+aborts instead of becoming canon. The planner still sees only public placement
+material. `story.journey_history` is the
+initial itinerary backend: cited mode compiles card/lore journeys and explicit
+generated mode may invent a bounded event ledger. Greeting launch and the
+multi-character Story Quick Start expose one route and optional past guidance
+per selected character before turn zero; diagnostics show the resulting
+handoff.
+
+Still unbuilt: deeper resident eras beyond the recent-life window, direct
+Scene Life use of the compact reciprocal episode records before a background
+resident is promoted, and claim-level verification of authored/canon traveler
+history.
+
+Do **not** generalize that slice by making every selected character a Charter
+resident. The full routing argument and authoring proposal now lives in
+[`design/DESIGN_CHARACTER_HISTORY_ROUTING.md`](design/DESIGN_CHARACTER_HISTORY_ROUTING.md).
+Charter is the right history backend when continuity is organized by a fixed
+place or a moving institution (a garrison, court, prison, caravan or starship
+crew). It is the wrong backend for an eccentric traveler whose past is a
+sequence of journeys, or for a heavily authored/canonical figure whose history
+is not engine authority to replace.
+
+The remaining authoring design should complete three independent axes rather
+than one genre-specific class enum:
+
+1. **Continuity anchor:** fixed place / moving institution / itinerary /
+   unanchored.
+2. **Past authority:** simulated / authored lore / imported prior play /
+   controlled mixture.
+3. **Opening relationship:** resident / returning / visiting / just arrived.
+
+Fixed or institution-anchored story-start simulation now routes through Charter.
+The itinerary ledger is built for greeting launch and Story Quick Start but
+still needs stronger
+claim-level canon verification, obligation/carrier projection, explicit
+arrival intersections, reuse outside story start, and measurement over an
+adversarial corpus. Imported continuity still needs the identity-safe repair
+in §1.74. The hand-built-from-scratch path still needs cast selection before it
+can offer per-character routes. A traveler must continue to arrive with
+itinerary and authored continuity, never an inferred local career.
+
 ### 2.21 An install with no embeddings provider retrieves worse than one with no vectors
 
 Measured 2026-08-19/20, [`experiments/CRC32_CONTROL.md`](experiments/CRC32_CONTROL.md).

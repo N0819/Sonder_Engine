@@ -42,11 +42,88 @@ from .charter_practice import (
     close_stale, enact, normalize_practices, opportunities)
 from .charter_needs import advance_needs, mood, pressure, unmet
 from .charter_talk import converse, report_to_superiors, report_up
+from .charter_commitment import advance_commitments
+from .charter_decide import advance_decisions, deliver_orders, execute_orders
+from .charter_economy import advance_economy
+from .charter_social import update_judgments_from_minds
+from .charter_intervene import apply_due
 
 
 def _event(kind, at_hours, place, **payload):
     return {"kind": kind, "at_hours": round(float(at_hours), 6),
             "place": str(place or ""), **payload}
+
+
+def _remember_experience(store, holder, row):
+    """Append one participant-owned experience, updating repeated habits."""
+    holder = str(holder or "")
+    if not holder:
+        return
+    rows = [dict(value) for value in (store.get(holder) or ())
+            if isinstance(value, dict)]
+    event_id = str(row.get("id") or "")
+    for existing in rows:
+        if event_id and str(existing.get("id") or "") == event_id:
+            existing["last_at_hours"] = row.get("at_hours")
+            existing["repetitions"] = int(existing.get("repetitions") or 1) + 1
+            store[holder] = rows[-16:]
+            return
+    rows.append(dict(row))
+    rows.sort(key=lambda value: (
+        float(value.get("at_hours") or 0.0), str(value.get("id") or "")))
+    store[holder] = rows[-16:]
+
+
+def _record_social_experiences(experiences, acts, bodies, at_hours):
+    for index, act in enumerate(acts or ()):
+        actor, other = str(act.get("actor") or ""), str(act.get("other") or "")
+        if actor not in bodies:
+            continue
+        place = str((bodies.get(actor) or {}).get("place") or "")
+        base = {
+            "id": "social:%s:%s:%s:%0.4f:%d" % (
+                actor, act.get("act") or "act", other,
+                float(at_hours), index),
+            "kind": "social", "at_hours": round(float(at_hours), 6),
+            "place": place, "actor": actor, "other": other,
+            "act": str(act.get("act") or "interacted"),
+            "line": str(act.get("line") or "")[:500],
+        }
+        _remember_experience(experiences, actor, dict(base, role="actor"))
+        if other in bodies:
+            _remember_experience(
+                experiences, other, dict(base, role="recipient"))
+
+
+def _run_private_habits(experiences, habit_runs, bodies, watch, at_hours):
+    """Run due off-duty habits without creating a public event surface."""
+    on_watch = {str(body) for body in (watch or {}).values()}
+    for body_key, body in sorted((bodies or {}).items()):
+        if body_key in on_watch or not body.get("available", True):
+            continue
+        for habit in body.get("private_habits") or ():
+            habit_id = str(habit.get("id") or "")
+            if not habit_id:
+                continue
+            previous = float((habit_runs.get(body_key) or {}).get(
+                habit_id, -1e9))
+            cadence = max(4.0, float(habit.get("cadence_hours") or 48.0))
+            if float(at_hours) - previous < cadence:
+                continue
+            habit_runs.setdefault(body_key, {})[habit_id] = float(at_hours)
+            _remember_experience(experiences, body_key, {
+                # One durable autobiographical row per habit. Repetition
+                # updates its count/last time rather than minting a diary row
+                # for every evening.
+                "id": f"private_habit:{body_key}:{habit_id}",
+                "kind": "private_habit", "role": "self",
+                "at_hours": round(float(at_hours), 6),
+                "place": str(body.get("berth") or body.get("place") or ""),
+                "habit_id": habit_id,
+                "label": str(habit.get("label") or "private routine")[:160],
+                "activity": str(habit.get("activity") or "")[:500],
+                "privacy": "private",
+            })
 
 
 def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
@@ -61,6 +138,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     hours = max(0.0, float(hours))
     at = float(charter["clock_hours"])
     events = []
+    charter, intervention_events = apply_due(charter, at + hours)
+    events.extend(intervention_events)
 
     # A scene is optional. Without one the institution is a single place and
     # everyone can stand any post, which is the right simplification for six
@@ -234,6 +313,13 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
                 upkeep=key, level=round(after["level"], 6)))
         upkeeps[key] = after
 
+    # MATERIAL FLOWS ride the same window and branch-only event discipline as
+    # upkeep. Empty economies are byte-stable no-ops; authored flows advance
+    # aggregate lots and report only a threshold crossing.
+    economy, economy_events = advance_economy(
+        charter.get("economy"), hours, upkeeps=upkeeps, at_hours=at)
+    events.extend(economy_events)
+
     # STANDING A POST IS AN OBSERVATION, and without this rule the whole
     # institution starves: roster claims decay, every one of them falls under
     # TRUST_FLOOR at the same hour, the charter stops staking posts on anybody
@@ -292,11 +378,22 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
         strain=strain_of(charter.get("feel")), toll=toll)
     for key in unable:
         bodies[key] = dict(bodies[key], available=False, stood_down=True)
+        # A needs-driven stand-down is not a private change in ground truth:
+        # the body just failed while serving (or reported that it could not
+        # serve), which is exactly the kind of observation the institutional
+        # register is allowed to learn.  Without this write the roster keeps
+        # assigning a body it believes able until the claim decays.
+        roster = observe(roster, bodies[key], at + hours)
         events.append(_event("body_unable", at + hours,
                              bodies[key].get("place", ""), body=key,
                              worst=unmet(needs_after.get(key) or {})))
     for key in recovered:
         bodies[key] = dict(bodies[key], available=True, stood_down=False)
+        # Recovery has the reciprocal channel: returning fit for duty is a
+        # report to the register, not omniscient reconciliation.  A recovered
+        # worker would otherwise remain unassignable forever because only an
+        # assigned worker is observed standing a watch.
+        roster = observe(roster, bodies[key], at + hours)
         events.append(_event("body_recovered", at + hours,
                              bodies[key].get("place", ""), body=key))
 
@@ -340,6 +437,48 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     told += formally_reported
     roster = report_up(roster, minds, plan["watch"], owned_bodies,
                        standing=politics.get("standing"), at_hours=at + hours)
+
+    # DECISIONS consume only reports that reached the authorised officeholder.
+    # Orders then descend one co-present reporting edge and execute through a
+    # closed action vocabulary. No objective event list is handed to a mind.
+    late_event_start = len(events)
+    decisions, issued = advance_decisions(
+        charter.get("decisions"), minds, plan["watch"], charter["posts"],
+        owned_bodies, charter_key=charter["key"], at_hours=at + hours)
+    decisions, delivered_orders = deliver_orders(
+        decisions, plan["watch"], charter["posts"], owned_bodies)
+    decisions, economy, decision_events = execute_orders(
+        decisions, economy, at_hours=at + hours, posts=charter["posts"])
+    for order in issued:
+        source_body = str(plan["watch"].get(order["from_post"]) or "")
+        events.append(_event(
+            "institution_order_issued", at + hours,
+            (owned_bodies.get(source_body) or {}).get("place", ""),
+            order_id=order["id"], action=order["action"],
+            body=source_body, to_post=order["to_post"]))
+    events.extend(decision_events)
+
+    # Decisions happen after conversation because reports are their input.
+    # Their public consequences still belong to this window: people standing
+    # at the issuing/executing post witness them now, then may retell them in a
+    # later conversation. Without this second aperture orders existed only in
+    # the institution's private register and the external world-event rail.
+    minds, late_witnessed = witness(
+        minds, owned_bodies, events[late_event_start:], at + hours)
+    witnessed += late_witnessed
+    if late_witnessed:
+        news_keys = news_keys_in(minds)
+
+    # What a holder thinks changes only from evidence already in that holder's
+    # own head. The reason list doubles as an idempotence guard.
+    judgments, judgment_movements = update_judgments_from_minds(
+        charter.get("judgments"), minds, politics=politics,
+        norms=charter.get("social_norms"))
+
+    # Explicit commitment lifecycle events are state; whether a particular
+    # person learns one still goes through witnessing/telling next window.
+    commitments, commitment_changes = advance_commitments(
+        charter.get("commitments"), events)
 
     # SITUATIONS, AND WHAT THEY MAKE AVAILABLE. Gossip alone saturates: a
     # claim passes only when it beats what the listener holds, so a population
@@ -389,6 +528,18 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     politics = dict(politics, regard=regard)
     told += len(acts)
 
+    experiences = {
+        str(holder): [dict(row) for row in rows if isinstance(row, dict)]
+        for holder, rows in (charter.get("experiences") or {}).items()
+        if isinstance(rows, list)}
+    _record_social_experiences(experiences, acts, bodies, at + hours)
+    habit_runs = {
+        str(holder): dict(runs)
+        for holder, runs in (charter.get("habit_runs") or {}).items()
+        if isinstance(runs, dict)}
+    _run_private_habits(
+        experiences, habit_runs, bodies, plan["watch"], at + hours)
+
     heard_blame = {k: set(v) for k, v in
                    (charter.get("heard_blame") or {}).items()}
     for subject, tellers in heard.items():
@@ -437,8 +588,14 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None):
     after_charter["needs"] = needs_after
     after_charter["travelled"] = travelled
     after_charter["minds"] = minds
+    after_charter["judgments"] = judgments
+    after_charter["commitments"] = commitments
+    after_charter["economy"] = economy
+    after_charter["decisions"] = decisions
     after_charter["practices"] = practices
     after_charter["acts"] = list(acts)
+    after_charter["experiences"] = experiences
+    after_charter["habit_runs"] = habit_runs
     # Authored conduct the state refused, with reasons. Diagnostics for the
     # author -- nothing reads it, and a refusal changes no state.
     after_charter["refused"] = list(refused)

@@ -155,3 +155,29 @@ class TestOldBlobsStillWork:
         assert any(h.get("reading") == "an old reading"
                    for h in blob["history"]), \
             "the pre-addendum reading must be carried forward, not dropped"
+
+
+def test_background_tension_review_accepts_actual_database_rows(
+        temp_db, monkeypatch):
+    """The out-of-band worker passes q() rows, not hand-built dictionaries."""
+    from mind import memory_judge
+
+    chat_id = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Tension", "", time.time()))
+    char_id = temp_db.qi(
+        "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+        ("Mara", "{}", "{}", time.time()))
+    memory.add_memory(
+        chat_id, char_id, None, "episodic", "remembered", 0.5,
+        "The gate was open.", gist="open gate", turn_idx=0,
+        event_key="event:gate")
+    minted = temp_db.q(
+        "SELECT event_key,gist,content,provenance,turn_idx FROM memories "
+        "WHERE chat_id=? AND char_id=?", (chat_id, char_id))
+    monkeypatch.setattr(
+        memory_judge, "review_recall",
+        lambda *a, **k: {"available": False, "tensions": []})
+
+    assert memory_judge.review_minted_memories(
+        chat_id, char_id, "Mara", minted, current_turn_idx=0) == 0

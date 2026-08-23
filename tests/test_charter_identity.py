@@ -87,6 +87,15 @@ def test_rank_and_post_titles_are_presentation_not_identity():
     assert state["bodies"]["ysra"]["name"] == "Ysra Vale"
 
 
+def test_legacy_full_name_supplies_family_to_a_formal_format():
+    profile = {
+        "name_format": "{given} {family}",
+        "formal_format": "Dr. {family}",
+    }
+    assert display_name(
+        {"name": "Sarah Moon", "title": "Dr."}, (), profile) == "Dr. Moon"
+
+
 def test_dialogue_identity_seed_ignores_names_and_titles():
     before = identity_seed("watch", "ysra")
     after = identity_seed("watch", "ysra")

@@ -36,6 +36,10 @@ from .charter_feel import strain_of
 from .charter_model import out_of_band
 from .charter_politics import regard_pair, regard_value
 from .charter_temper import temperament_of
+from .charter_commitment import commitment_view
+from .charter_decide import decision_view
+from .charter_economy import normalize_economy, quote, stock_band
+from .charter_social import judgment_view
 
 
 def window_note(charter, events, told):
@@ -209,6 +213,10 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
     strains = strain_of(feel)
     watch = charter.get("watch") or {}
     posts = charter.get("posts") or {}
+    judgments = charter.get("judgments") or {}
+    commitments = charter.get("commitments") or {}
+    decisions = charter.get("decisions") or {}
+    economy = normalize_economy(charter.get("economy"))
 
     here = sorted(k for k, b in bodies.items()
                   if str(b.get("place") or "") == place)
@@ -293,7 +301,32 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
                 company - set(minds.get(key) or {}) - {key}),
             "blamed": int(blame.get(key, 0)),
             "knows_it_is_blamed": sorted(heard_blame.get(key, ())),
+            # Independent, evidence-citing stances toward current company;
+            # and only commitments this body is party to or has learned.
+            "social_judgments": judgment_view(
+                judgments, key, subjects=company - {key}, cap=4),
+            "commitments": commitment_view(
+                commitments, key, parties=company - {key}, cap=4),
+            "institutional": decision_view(
+                decisions,
+                post=next((p for p, who in watch.items() if who == key), ""),
+                body=key, cap=4),
         }
+
+    market_rows = []
+    for market_key, market in sorted(economy["markets"].items()):
+        if market["place"] != place:
+            continue
+        holder = market["holder"]
+        goods = sorted(set((economy["stocks"].get(holder) or {}))
+                       | set((economy["targets"].get(holder) or {})))
+        market_rows.append({
+            "market": market_key, "holder": holder,
+            "stock": {good: stock_band(economy, holder, good)
+                      for good in goods},
+            "quotes": [quote(economy, market_key, good) for good in goods[:6]
+                       if quote(economy, market_key, good) is not None],
+        })
 
     return {
         "place": place,
@@ -309,6 +342,7 @@ def scene_ledger(charter, place, events=(), hours_per_day=24.0):
         "posts_here": sorted(
             p for p, entry in posts.items()
             if str(entry.get("place") or "") == place),
+        "markets_here": market_rows[:3],
         # Who with a mind of their own is standing here -- the player, a
         # major character. Place-level fact for the Director staging the
         # room, like `place_state`; what any PRESENCE makes of them lives

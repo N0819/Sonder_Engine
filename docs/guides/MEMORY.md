@@ -64,6 +64,24 @@ One row in `memories` (`core/db.py`). The fields that do work:
 `access_count` / `last_accessed` are written by `search_memories` and read by
 nothing in the ranking. They are instrumentation.
 
+Featured residents generated during greeting prehistory use the existing
+`turn_idx=NULL` authored-past form rather than counterfeit negative turns.
+`world.charter_history` compiles a separate career summary, a recent-life
+semantic summary, and 10–16 independently retrievable episodes. One bounded
+model call may author the batch, but no batch prose is stored as an episode:
+every event has its own content-derived `prestory:charter:*` identity,
+chronology, location, named people, affect and consequence. The generator has
+an explicit licence to invent minor personal recent life constrained to the
+closed Charter roster, real rooms and duties, actual simulation anchors, card
+and author guidance. Unknown people and places are rejected; thin rows are
+dropped; fewer than ten usable episodes abort story creation rather than
+canonizing a sparse fallback. Salience remains capped at 0.7. Private card
+history is character context for that call only and cannot assert facts about
+another person.
+The exception is an explicitly authored private-habit projection: it is
+attached after public planning, can create only self-owned experience, and is
+deleted when the full mind takes over.
+
 ### Provenance is not decoration
 
 Six classes, and they route. `_PROVENANCE_SCOPE` maps each to one of three

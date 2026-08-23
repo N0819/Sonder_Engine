@@ -164,6 +164,7 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
     # thousand-person hall does not copy/re-evaluate the same scene a thousand
     # times.  Targeted concealment remains per identity and bypasses the cache.
     sensory_cache = {}
+    recipients = {}
     for evidence in list(evidence_rows or ())[:PUBLIC_EVIDENCE_CAP]:
         if not isinstance(evidence, dict):
             continue
@@ -185,6 +186,8 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
                     sensory_cache[cache_key] = receives
             if not receives:
                 continue
+            recipients.setdefault(
+                str(evidence.get("source_id") or ""), set()).add(str(body_key))
             held = minds.setdefault(str(body_key), {})
             claim = evidence_claim(
                 evidence, turn_id, float(charter.get("clock_hours") or 0.0),
@@ -208,7 +211,21 @@ def apply_public_evidence(charter, evidence_rows, scene, turn_id):
         subject for claims in charter["minds"].values()
         for subject, claim in claims.items() if claim.get("kind") == "news"
     })
-    return charter, {"opportunities": opportunities, "acquired": acquired}
+    # The utterance record is local institutional recognition, not universal
+    # validity: only bodies that actually heard the exact source are named.
+    from world.charter_commitment import observe_public_commitments
+    from world.charter_social import update_judgments_from_minds
+
+    charter["commitments"], commitment_metrics = observe_public_commitments(
+        charter.get("commitments"), evidence_rows, recipients,
+        at_hours=float(charter.get("clock_hours") or 0.0))
+    charter["judgments"], movements = update_judgments_from_minds(
+        charter.get("judgments"), charter["minds"],
+        politics=charter.get("politics"), norms=charter.get("social_norms"))
+    return charter, {"opportunities": opportunities, "acquired": acquired,
+                     "commitments_opened": int(
+                         commitment_metrics.get("opened") or 0),
+                     "judgments_moved": len(movements)}
 
 
 __all__ = [

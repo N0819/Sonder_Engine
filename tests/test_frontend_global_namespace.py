@@ -37,7 +37,10 @@ _WINDOW_WRITE = re.compile(r"^\s*window\.([A-Za-z_$][\w$]*)\s*=", re.MULTILINE)
 def _loaded_files() -> list[Path]:
     """The files index.html actually loads, in load order."""
     html = INDEX.read_text(encoding="utf-8")
-    names = re.findall(r'src="/static/js/([\w.-]+\.js)"', html)
+    # Query revisions make a coordinated browser bundle refresh together;
+    # they are transport metadata, not part of the source filename/order.
+    names = re.findall(
+        r'src="/static/js/([\w.-]+\.js)(?:\?[^\"]*)?"', html)
     assert names, "no frontend scripts found in index.html"
     return [JS_DIR / name for name in names]
 
@@ -85,6 +88,51 @@ def test_no_file_overwrites_a_global_another_file_declares():
 # guarding one would turn a missing core script from a loud throw (which the
 # error net in app.js toasts) into a click that silently does nothing.
 HOST_ENTRY_POINTS = ("boot", "renderSide", "openChat", "newChatWizard")
+
+
+def test_lived_location_controls_ship_as_one_cache_revision():
+    """A new caller beside an old helper is a runtime ReferenceError.
+
+    The browser may cache classic scripts independently, so every file in the
+    lived-location vertical slice must be requested under one revision.  This
+    pins the exact failure a settings button exposed live: new settings.js,
+    cached components.js, and therefore no openLivedLocationDialog binding.
+    """
+    html = INDEX.read_text(encoding="utf-8")
+    revisions = {}
+    for name in ("components.js", "editors.js", "lorebooks.js",
+                 "settings.js", "app.js"):
+        match = re.search(
+            rf'src="/static/js/{re.escape(name)}\?v=([^\"]+)"', html)
+        assert match, f"{name} has no coordinated cache revision"
+        revisions[name] = match.group(1)
+    assert len(set(revisions.values())) == 1
+
+    components = (JS_DIR / "components.js").read_text(encoding="utf-8")
+    editors = (JS_DIR / "editors.js").read_text(encoding="utf-8")
+    settings = (JS_DIR / "settings.js").read_text(encoding="utf-8")
+    assert "function livedLocationControl(" in components
+    assert "function openLivedLocationDialog(" in components
+    assert "livedLocationControl(" in editors
+    assert "livedLocationControl(" in (JS_DIR / "app.js").read_text(
+        encoding="utf-8")
+    # Greeting launch names its one card directly. Story Quick Start builds a
+    # separate route control for every selected/generated character and maps
+    # browser-only keys to the actual ids after generation.
+    assert "featuredResidentName: character.name" in editors
+    app = (JS_DIR / "app.js").read_text(encoding="utf-8")
+    assert "featuredResidents: wizardHistoryCharacters(state)" in app
+    assert "locationRequest.character_histories" in app
+    assert "historyCharacterIds.get(String(row.key))" in app
+    assert 'How does ${resident.name || "this character"} relate to this place?' in components
+    assert "Give each story character the right kind of past" in components
+    assert "generated_journey" in components
+    assert "Past guidance (optional)" in components
+    assert "stops speaking or deciding for them" in components
+    # The same safety contract remains inspectable after launch.
+    assert "function charterDiagnosticsPanel(" in settings
+    assert "featured_resident_histories" in settings
+    assert "Full evidence and ledgers" in settings
 
 
 def test_no_file_calls_a_host_entry_point_at_load_time():

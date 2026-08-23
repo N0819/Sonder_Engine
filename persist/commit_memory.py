@@ -701,6 +701,29 @@ def prepare_memory_commit(ctx, *, scene=None):
             if _is_empty_view(episode_content):
                 episode_content = ""
         if episode_content:
+            # WHY `turn.id` AND NOT A COPY-STABLE IDENTITY. The property this
+            # mint is relied on for is stability across a RE-RUN, not across a
+            # copy: `commit_memories` deletes the turn's rows and mints them
+            # again, so the identities must come back byte-identical or every
+            # summary clause citing them is stranded (`memory_summaries.
+            # derive_summary_support`, and `dump_memory_summaries`'s note that
+            # refs are event_keys precisely so they survive branch and
+            # rollback). `turn.id` is stable across a re-run and is what a
+            # branch's copied rows keep, so both hold.
+            #
+            # It is NOT stable across a copy -- a branched chat's rows carry
+            # the source turn's id inside their key -- and that reads like a
+            # defect until you look for a path it reaches. There is none: every
+            # site minting from `turn.id` is entered through `commit_memories`,
+            # which calls `delete_turn_memories(turn.id)` first, so nothing
+            # reconciles a copied row by key. The two writers that DO reconcile
+            # by key with no delete before them deliberately mint elsewhere --
+            # `story/greetings.py` from a content digest, `world/offscreen.py`
+            # from a chat-scoped agent key. Re-deriving this from `turn.idx`
+            # was investigated and rejected: it fixes nothing reachable and
+            # strands the support refs of every existing summary the first time
+            # its turn is re-run. `tests/test_branch_memory_integrity.py` pins
+            # both halves.
             _episode_row = {
                 "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                 "turn_idx": turn.idx, "kind": "episodic", "category": "episode",

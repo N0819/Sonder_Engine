@@ -220,7 +220,7 @@ def _pace_seconds(pace):
 
 def new_courier(chat_id, *, origin, destination, route, turn, clock_seconds,
                 description, report, sealed, pace, kind=KIND_COURIER,
-                stops=(), stop_legs=()):
+                stops=(), stop_legs=(), freight=None):
     """One courier, standing in the origin room with the message in hand.
 
     `route` is every room from origin to destination INCLUSIVE; `at` is
@@ -261,6 +261,7 @@ def new_courier(chat_id, *, origin, destination, route, turn, clock_seconds,
         if cargo:
             cargo["sealed"] = bool(sealed)
         out["cargo"] = [cargo] if cargo else []
+        out["freight"] = dict(freight or {})
     else:
         out["report"] = dict(report or {})
     return out
@@ -730,6 +731,16 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
 
             exchanged.append(leg)
 
+            # The same physical halt trades material lots. Charter owns the
+            # markets; the wagon owns its freight. No market in this room is a
+            # strict no-op, and stock can never be created by the courier op.
+            from world.charter_runtime import exchange_caravan_freight
+            freight, freight_events = exchange_caravan_freight(
+                cid, courier.get("freight") or {}, room,
+                frame_id=ctx.turn.frame_id)
+            courier["freight"] = freight
+            metrics["freight_exchanges"] += len(freight_events)
+
         # The cap forgets the oldest TALK first and never a sealed letter:
         # gathered news is what people are saying, a paid dispatch is a
         # thing in the wagon, and a full wagon must not quietly shed the
@@ -785,7 +796,8 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                "courier_delivered": 0, "courier_questioned": 0,
                "courier_silenced": 0, "couriers_standing": 0,
                "caravan_stops": 0, "caravan_put_down": 0,
-               "caravan_picked_up": 0}
+               "caravan_picked_up": 0, "freight_loaded": 0,
+               "freight_exchanges": 0}
 
     player = _player_name(ctx)
 
@@ -951,12 +963,24 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
                 pace=raw.get("pace") or ("walking" if caravan
                                          else DEFAULT_PACE),
                 kind=KIND_CARAVAN if caravan else KIND_COURIER,
-                stops=stops, stop_legs=stop_legs)
+                stops=stops, stop_legs=stop_legs, freight={})
             courier["addressee"] = " ".join(
                 str(raw.get("addressee") or "").split())
             if courier["uid"] in by_uid:
                 rejected.append("that courier is already on the road")
                 continue
+            if caravan and raw.get("freight"):
+                from world.charter_runtime import load_caravan_freight
+                freight, freight_events = load_caravan_freight(
+                    cid, raw.get("freight"), origin, frame_id=frame_id)
+                requested = (raw.get("freight") or {}).get("stock") or {}
+                if requested and not freight.get("stock"):
+                    rejected.append(
+                        "no requested freight exists at an authored origin "
+                        "market; a caravan cannot mint its cargo")
+                    continue
+                courier["freight"] = freight
+                metrics["freight_loaded"] += len(freight_events)
             couriers.append(courier)
             by_uid[courier["uid"]] = courier
             metrics["dispatched"] += 1
@@ -1067,6 +1091,14 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
         if courier.get("status") != ARRIVED:
             continue
         courier = dict(courier)
+        if courier.get("kind") == KIND_CARAVAN \
+                and not courier.get("arrival_freight_exchanged"):
+            from world.charter_runtime import exchange_caravan_freight
+            courier["freight"], freight_events = exchange_caravan_freight(
+                cid, courier.get("freight") or {}, courier.get("at") or "",
+                frame_id=frame_id)
+            metrics["freight_exchanges"] += len(freight_events)
+            courier["arrival_freight_exchanged"] = True
         courier["_names"], courier["_places"] = list(names), list(places)
         courier, delivered_to, dirty = _deliver(
             ctx, scene, courier, index, crowds_standing, turn=turn)

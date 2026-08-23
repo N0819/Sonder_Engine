@@ -1736,6 +1736,51 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
         }, ensure_ascii=False), _charter_color),
     )
 
+    # Charter's evidence-backed local stances become the promoted mind's
+    # ordinary relationship graph.  Copy the projection and append one
+    # explanation row per non-zero axis; do not ask a model to reinterpret a
+    # history the simulator already knows exactly.
+    if handoff.get("social_judgments"):
+        from mind.memory import (get_relationships, record_relationship_event,
+                                 save_relationships)
+
+        graph = get_relationships(cid, char_id, frame_id=frame_id)
+        social_names = (charter_bundle or {}).get("social_names") or {}
+        for stance in handoff.get("social_judgments") or ():
+            if not isinstance(stance, dict):
+                continue
+            subject = str(stance.get("subject") or "")
+            target = str(social_names.get(subject) or subject)
+            if not target:
+                continue
+            values = {
+                "trust": float(stance.get("trust") or 0.0),
+                "emotional_valence": float(stance.get("warmth") or 0.0),
+                "fear": float(stance.get("fear") or 0.0),
+                "respect": float(stance.get("respect") or 0.0),
+                "suspicion": float(stance.get("suspicion") or 0.0),
+            }
+            graph.update(target, **values, last_interaction_turn=(
+                int(promoted_turn or 0)))
+            triggers = [str(reason.get("evidence_id") or "")
+                        for reason in stance.get("reasons") or ()
+                        if isinstance(reason, dict)
+                        and reason.get("evidence_id")]
+            for axis, value in (
+                    ("trust", values["trust"]),
+                    ("warmth", values["emotional_valence"]),
+                    ("fear", values["fear"]),
+                    ("respect", values["respect"]),
+                    ("suspicion", values["suspicion"])):
+                if not value:
+                    continue
+                record_relationship_event(
+                    cid, char_id, target, axis, value, triggers=triggers,
+                    note="carried across Charter promotion",
+                    provenance="charter", turn_idx=int(promoted_turn or 0),
+                    frame_id=frame_id)
+        save_relationships(cid, char_id, graph, frame_id=frame_id)
+
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))
     if frame_id is None:
         sc = wget(cid, "scene", None)
@@ -1800,10 +1845,21 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
             for i, seed in enumerate(memory_seeds)
         ]
     for memory in (handoff.get("memories") or []):
+        # Charter handoff may carry chronology/participant metadata used by
+        # the richer featured-resident compiler. The memory store accepts its
+        # own vocabulary only; do not leak routing metadata through **kwargs.
+        stored_memory = {
+            key: copy.deepcopy(value) for key, value in memory.items()
+            if key in {"kind", "category", "provenance", "salience",
+                       "content", "gist", "key_phrases", "entities",
+                       "location", "emotional_context", "valence",
+                       "arousal", "encoding_valence", "encoding_arousal",
+                       "confidence", "importance", "disputed"}
+        }
         memory_rows.append({
             "chat_id": cid, "char_id": char_id, "turn_id": None,
             "turn_idx": promoted_turn, "frame_id": frame_id,
-            **copy.deepcopy(memory),
+            **stored_memory,
             "event_key": "charter:%s:%s" % (
                 charter_bundle["charter"], memory.get("event_key") or "memory"),
         })

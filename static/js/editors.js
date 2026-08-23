@@ -225,6 +225,7 @@ function quickStartModal(character, greetingIndex) {
       + "Uncheck for a strangers-meeting greeting, so they don't begin knowing "
       + "your name."
   });
+  const lived = livedLocationControl({ featuredResidentName: character.name });
   modal(`Quick start — ${character.name}`, b => {
     b.append(
       el("div", { class: "small dim" },
@@ -236,16 +237,18 @@ function quickStartModal(character, greetingIndex) {
       loreSel,
       el("label", { class: "row small dim", style: "gap:6px;margin-top:10px" },
         knownCb, character.name + " already knows me"),
+      lived.node,
       el("div", { class: "row", style: "margin-top:12px" },
         el("button", {
           class: "primary",
           onclick: () => {
             const persona_id = +sel.value;
             const lorebook_id = loreSel.value ? +loreSel.value : null;
+            const lived_location = lived.read();
             backgroundTask("Starting story",
               () => api("POST", `/api/characters/${character.id}/start`,
                 { persona_id, greeting_index: greetingIndex, lorebook_id,
-                  already_known: knownCb.checked }),
+                  already_known: knownCb.checked, lived_location }),
               {
                 onSuccess: async r => {
                   closeAllModals();
