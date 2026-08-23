@@ -6,7 +6,9 @@ import copy
 import json
 import re
 
-from language_runtime import english_linguistic, linguistic
+from language_runtime import (LanguagePackError, compositor_text,
+                              compositor_value, english_linguistic,
+                              linguistic)
 from story.character_schema import (
     character_appearance,
     character_name,
@@ -2906,6 +2908,7 @@ def _scent_sources_for(sc, observer, observer_room, others, display_map,
 
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
+                                appearance_deltas=None,
                                 gate=None, extra_parts=None,
                                 body_scents=None):
     """The standing-state half of one observer's IR: environment, presence,
@@ -2977,8 +2980,16 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         if gate is not None:
             description = gate(description)
         if description:
+            # A CHANGE IS RENDERED AS THE CHANGE. Only a body whose clothing
+            # actually moved has a readable delta; a scale, an overlay or a
+            # wholesale description rewrite has none, and falls back to the
+            # full description rather than going unmentioned.
+            # Computed by the caller, which is the stage that holds the
+            # PREVIOUS scene; a stage without one simply has no delta and
+            # falls back to the full description.
+            delta = (appearance_deltas or {}).get(b_name, "") if changed else ""
             percepts.append(composer.appearance_percept(
-                b_name, label, description, force=changed))
+                b_name, label, description, force=changed, delta=delta))
     if entity_state:
         state_percept = composer.body_state_percept(entity_state)
         if state_percept:
@@ -3421,6 +3432,97 @@ def _mover_is_a_body(sc, mover):
     return not _is_inert_presence_candidate(sc, mover, entity)
 
 
+def _attire_items(scene, name):
+    """One body's worn items, as a normalised set, or None when unknown."""
+    row = ((scene or {}).get("attire") or {}).get(name)
+    if not isinstance(row, dict):
+        return None
+    worn = row.get("wearing")
+    if not isinstance(worn, list):
+        return None
+    return {str(i).strip().casefold() for i in worn if str(i or "").strip()}
+
+
+def _attire_diff_moves_clothing(entry):
+    """Did this attire diff entry move a GARMENT, or only annotate?
+
+    The channel's own vocabulary answers it: `add`, `remove` and `replace`
+    are the operations that change what a body wears; `state` is a note
+    beside them. Measured over the 384 attire entries in every stored
+    `director_resolve` diff, only 46 (12.0%) carry any of the three. 233
+    (60.7%) carry `state` alone and 105 are wholly empty -- so seven of
+    every eight attire diffs that re-earned a full appearance description
+    moved no clothing at all.
+
+    And the `state` notes are mostly not clothing either: "standing in
+    genkan threshold", "nine tails fanned behind her", "fox ears visible",
+    "facing Tamamo in the doorway". That is pose and posture written into
+    the attire ledger, which is the same habit that leaves it holding
+    contradictory `bare at the` notes. This function does not try to fix
+    that -- it only declines to treat it as a change of dress.
+    """
+    if not isinstance(entry, dict):
+        return True          # unreadable: fail toward describing
+    if entry.get("replace"):
+        return True
+    for field in ("add", "remove"):
+        if any(str(item or "").strip() for item in (entry.get(field) or ())):
+            return True
+    return False
+
+
+def _attire_changed_semantically(prev_scene, scene, name):
+    """Did this body's clothing ACTUALLY change, or was it merely re-stated?
+
+    `appearance_changed` fires on the presence of a diff KEY, not on a
+    difference: a Director that re-states standing attire re-earns a full
+    appearance description that changed nothing. Measured before this gate,
+    on the beats whose perception step carries a composer ledger, an
+    appearance or attire phrase already delivered the previous beat was
+    re-delivered on 19 of 183 of them (10.4%) -- and re-stated attire is the
+    same root as the ledger's known habit of accruing contradictory `bare
+    at the` notes.
+
+    Unknown on either side is treated as CHANGED: a body whose attire this
+    scene does not record cannot be shown to be unchanged, and the direction
+    to fail in is delivering the description.
+    """
+    before, after = (_attire_items(prev_scene, name),
+                     _attire_items(scene, name))
+    if before is None or after is None:
+        return True
+    return before != after
+
+
+def _attire_delta_text(prev_scene, scene, name, language=None):
+    """What changed about what this body wears, as the story's own prose.
+
+    Returns "" when nothing readable changed -- the caller then falls back
+    to the full description, which is what a scale, overlay or wholesale
+    rewrite needs.
+    """
+    before, after = (_attire_items(prev_scene, name),
+                     _attire_items(scene, name))
+    if before is None or after is None:
+        return ""
+    gained = sorted(after - before)
+    lost = sorted(before - after)
+    if not gained and not lost:
+        return ""
+    try:
+        join = compositor_value("attire_delta_join", language)
+    except LanguagePackError:
+        join = ", "
+    parts = []
+    if gained:
+        parts.append(compositor_text("attire_gained", language,
+                                     items=join.join(gained)))
+    if lost:
+        parts.append(compositor_text("attire_lost", language,
+                                     items=join.join(lost)))
+    return join.join(parts)
+
+
 def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       p_appearance, p_disguise, p_disguise_known,
                       p_disguise_conceals, p_disguise_terms, perceivers,
@@ -3521,7 +3623,31 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     # Visible-form structural changes this beat re-earn a full description.
     appearance_changed = set()
     for field in ("attire", "overlays", "scales"):
-        appearance_changed.update(str(key) for key in (diff.get(field) or {}))
+        for key in (diff.get(field) or {}):
+            # ATTIRE IS ASKED WHETHER IT ACTUALLY MOVED. The other two
+            # fields carry no comparable ledger here, so their key presence
+            # still stands as the signal.
+            # TWO GATES, and the cheap one first. An entry that adds,
+            # removes and replaces nothing moved no clothing whatever its
+            # `state` note says; and an entry that does move something may
+            # still be putting on what is already worn, which the ledger
+            # comparison catches.
+            if field == "attire":
+                entry = (diff.get(field) or {}).get(key)
+                if not _attire_diff_moves_clothing(entry):
+                    continue
+                if not _attire_changed_semantically(prev_scene, sc, str(key)):
+                    continue
+            appearance_changed.add(str(key))
+    # What each change LOOKS like, computed here because this is the stage
+    # that holds the previous scene. Empty for a body whose clothing did not
+    # move (a scale, an overlay, a rewritten description), which falls the
+    # renderer back to the full authored appearance.
+    appearance_deltas = {}
+    for key in appearance_changed:
+        text = _attire_delta_text(prev_scene, sc, key, ctx.language)
+        if text:
+            appearance_deltas[key] = text
     for key, entity in (diff.get("entities") or {}).items():
         if isinstance(entity, dict) and any(
                 f in entity for f in ("description", "appearance")):
@@ -3613,6 +3739,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 entity_state=p.get("entity_state")
                 or _own_body_state(sc, name),
                 appearance_changed=appearance_changed,
+                appearance_deltas=appearance_deltas,
                 gate=_authored_prose_gate(
                     ctx, "perception_outcome", name, known, identity_space),
                 extra_parts=cast_parts, body_scents=body_scents)

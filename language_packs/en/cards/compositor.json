@@ -254,7 +254,10 @@
   "templates": {
     "activity": "You are {value}.",
     "appearance": "You see {description}.",
+    "appearance_change": "{label} is {change}.",
     "arrived": "{label} comes in.",
+    "attire_gained": "now wearing {items}",
+    "attire_lost": "no longer wearing {items}",
     "bearing_barrier_compass": "{base}, from the {compass}",
     "bearing_barrier_fallback": "from the way through",
     "bearing_barrier_sector": "{base} {sector}",
@@ -305,10 +308,10 @@
     "narrator_nothing": "Nothing in particular reaches you this beat.",
     "observable": "{label} {body}.",
     "observable_empty": "{label}.",
+    "pose_entity": "the {name}",
     "pose_other_past": "{label} was",
     "pose_other_present": "{label} is",
     "pose_relation": "against {other}",
-    "pose_entity": "the {name}",
     "pose_self_past": "I was",
     "pose_self_present": "You are",
     "pose_support": "on {support}",
@@ -356,5 +359,6 @@
     "sw": "southwest",
     "w": "west",
     "nw": "northwest"
-  }
+  },
+  "attire_delta_join": ", "
 }

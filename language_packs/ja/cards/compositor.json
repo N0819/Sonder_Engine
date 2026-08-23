@@ -158,7 +158,10 @@
     "act": "{label}は{action}",
     "activity": "あなたは{value}。",
     "appearance": "{description}が見える。",
+    "appearance_change": "{label}は{change}。",
     "arrived": "{label}が入ってくる。",
+    "attire_gained": "{items}を身につけている",
+    "attire_lost": "{items}をもう身につけていない",
     "bearing_barrier_compass": "{base}、{compass}の方角",
     "bearing_barrier_fallback": "通路の向こう",
     "bearing_barrier_sector": "{sector}、{base}",
@@ -218,10 +221,10 @@
     "observable": "{label}は{body}。",
     "observable_empty": "{label}。",
     "pose": "{label}は{detail}。",
+    "pose_entity": "{name}",
     "pose_other_past": "{label}は",
     "pose_other_present": "{label}は",
     "pose_relation": "{other}にもたれて",
-    "pose_entity": "{name}",
     "pose_self_past": "私は",
     "pose_self_present": "あなたは",
     "pose_support": "{support}の上に",
@@ -325,5 +328,6 @@
     "sw": "南西",
     "w": "西",
     "nw": "北西"
-  }
+  },
+  "attire_delta_join": "、"
 }
