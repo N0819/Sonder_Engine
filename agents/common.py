@@ -6512,36 +6512,26 @@ def _check_portal_fidelity(prose, portal_states):
 # last stage before the reader.
 
 
-def _check_player_interiority_prose(prose, view=""):
-    """Interior states the NARRATOR asserts about the player.
-
-    The narrator renders the player-facing slice; it does not get to tell the
-    player what their character feels. It may render every observable the view
-    delivered -- a shaking hand, a held breath, a step back -- and stop there.
-
-    Anything already in the VIEW is exempt: perception is the narrator's
-    source of truth, so a feeling that reached it legitimately (the player
-    declared it, or a character's own delivered cue carried it) may be
-    rendered. This catches what the narrator adds on its own.
-
-    Second person, because that is what the narrator writes in: the Director's
-    counterpart matches the player's NAME and would never fire here.
-    """
-    prose = str(prose or "")
-    if not prose:
-        return []
-    source = str(view or "").casefold()
-    warnings = []
-    for match in _ling("_YOU_INTERIOR").finditer(prose):
-        phrase = match.group(0)
-        # Present in the view already -> the narrator is rendering, not adding.
-        if phrase.casefold() in source:
-            continue
-        sentence = prose[max(0, match.start() - 60):match.end() + 60]
-        warnings.append(
-            "Narrator asserted the player's interior state "
-            f"(player-interiority fidelity): {phrase!r} in {sentence.strip()[:120]!r}")
-    return warnings
+# `_check_player_interiority_prose` LIVED HERE, and it is gone rather than
+# demoted. It matched `_YOU_INTERIOR` -- a named-emotion list plus a verb
+# list ("you feel", "you know", "you realise") -- against narrator prose in
+# the second person, and it was ENFORCEABLE, so every firing bought a whole
+# extra narrator call.
+#
+# It could not tell the two meanings of its own trigger apart. Second-person
+# narration says "you feel" about SENSATION constantly, and that is the
+# narrator doing its job: measured over 2,389 stored drafts it flagged 73
+# (3.1%), and the sample reads "'you feel' in 'laps against your
+# shoulders'" -- water against a body, an observable the view delivered.
+# The view-exemption did not save it, because the phrase it looked up was
+# the bare trigger rather than the clause.
+#
+# It is the guard class this repo already has a name for: a literal matcher
+# whose failure rate rises with how well the model writes. The rule it was
+# defending is real and stays in the narrator sheet, and the DIRECTOR-side
+# `_check_player_interiority_authority` is untouched -- that one matches a
+# named subject in an omniscient sentence, which is a different and
+# answerable question.
 
 
 def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
@@ -6552,7 +6542,6 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
-    warnings.extend(_check_player_interiority_prose(prose, view_text))
     view_names = set(re.findall(
         r"\b[A-Z][a-z]+(?:\s+(?:of\s+)?(?:the\s+)?[A-Z][a-z]+)+\b", view_text))
     for name in view_names:

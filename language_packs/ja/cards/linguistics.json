@@ -1000,11 +1000,6 @@
       "pattern": "(?:\\b(?:glance[sd]?|glancing|look(?:s|ed|ing)?|stare[sd]?|staring|gaze[sd]?|gazing|point(?:s|ed|ing)?|gesture[sd]?|gesturing|nod(?:s|ded|ding)?|turn(?:s|ed|ing)?|face[sd]?|facing|toward[s]?)\\s*$|(?:見る|見つめる|眺める|目を向ける|視線を向ける|指さす|振り向く)\\s*$)",
       "flags": 34
     },
-    "_YOU_INTERIOR": {
-      "$type": "regex",
-      "pattern": "(?:\\byou(?:r)?\\s+(?:own\\s+)?(?:terror|terrified|panic|panicked|fear|afraid|frightened|dread|horror|horrified|anguish|despair|grief|sorrow|misery|miserable|shame|ashamed|humiliation|humiliated|guilt|regret|remorse|rage|fury|furious|resentment|bitterness|envy|jealousy|loneliness|longing|yearning|desire|arousal|lust|joy|elation|delight|relief|relieved|contentment|gratitude|hope|anxiety|anxious|unease|uneasy|embarrassment|embarrassed|confusion|confused|curiosity|curious|trust|distrust|affection)\\b|\\byou\\s+(?:feel|felt|realise|realised|realize|realized|know|knew|want|wanted|wish|wished|hope|hoped|fear|feared|understand|understood|remember|remembered|decide|decided|sense|sensed)\\b|\\b(?:terror|terrified|panic|panicked|fear|afraid|frightened|dread|horror|horrified|anguish|despair|grief|sorrow|misery|miserable|shame|ashamed|humiliation|humiliated|guilt|regret|remorse|rage|fury|furious|resentment|bitterness|envy|jealousy|loneliness|longing|yearning|desire|arousal|lust|joy|elation|delight|relief|relieved|contentment|gratitude|hope|anxiety|anxious|unease|uneasy|embarrassment|embarrassed|confusion|confused|curiosity|curious|trust|distrust|affection)\\s+(?:grips|grip|floods|flood|washes|wash|rises|rise|takes|take|fills|fill|seizes|seize|surges|surge)\\s+(?:through\\s+)?you\\b|\\b(?:the|that|this|a|an)\\s+(?:terror|terrified|panic|panicked|fear|afraid|frightened|dread|horror|horrified|anguish|despair|grief|sorrow|misery|miserable|shame|ashamed|humiliation|humiliated|guilt|regret|remorse|rage|fury|furious|resentment|bitterness|envy|jealousy|loneliness|longing|yearning|desire|arousal|lust|joy|elation|delight|relief|relieved|contentment|gratitude|hope|anxiety|anxious|unease|uneasy|embarrassment|embarrassed|confusion|confused|curiosity|curious|trust|distrust|affection)\\b(?=[^.!?]{0,60}\\byou(?:r)?\\b)|(?:あなた|君|お前)(?:自身)?(?:の)?(?:恐怖|不安|喜び|欲望|考え|気持ち|決意|記憶))",
-      "flags": 34
-    },
     "_SUBJECT_LEADS": {
       "$type": "set",
       "items": [
@@ -2056,7 +2051,6 @@
         "Merged dialogue from different speakers",
         "Pronoun mismatch for",
         "Player named in third person",
-        "Narrator asserted the player's interior state",
         "Dialogue rendered out of order",
         "Quote attributed to wrong speaker",
         "Character placed in wrong room",
