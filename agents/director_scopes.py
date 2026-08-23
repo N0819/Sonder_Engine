@@ -86,7 +86,11 @@ SPECIALISTS = {
         # (`_collect_following_ops` overwrites the channel deterministically
         # every resolve), so no model authors it -- a specialist "owning" it
         # would own a channel whose content is discarded.
-        "channels": ("cast_changes", "introductions", "world_facts"),
+        "channels": ("cast_changes", "introductions", "world_facts",
+                     "public_evidence"),
+        # This channel is step metadata rather than StateDiff, so its list
+        # shape cannot be derived from StateDiff's annotations below.
+        "list_channels": ("public_evidence",),
     },
     "contact": {
         "step_key": "director_contact",
@@ -279,6 +283,11 @@ _CHANNEL_GATES = {
     "cast_changes": lambda f: f["physical_beat"],
     "introductions": lambda f: f["speech_present"],
     "world_facts": lambda f: f["speech_present"] or f["physical_beat"],
+    # Evidence describes only a FINISHED beat.  Interpret serves the same
+    # specialists but has not adjudicated attempts yet, so granting it there
+    # would turn an intention into a witnessed outcome.
+    "public_evidence": lambda f: f["resolved_stage"] and (
+        f["speech_present"] or f["physical_beat"]),
     "contact_ops": lambda f: f["physical_beat"] or f["contacts_standing"],
     "substance_ops": lambda f: (f["physical_beat"]
                                 or f["material_effects_declared"]),
@@ -389,11 +398,12 @@ def _rebuild_channel_owners():
         for channel in spec["channels"]:
             _CHANNEL_SPECIALISTS[channel] = name
             _DELEGATED_CHANNELS.append(channel)
-        # An engine channel's shape is `StateDiff`'s to state; an extension's
-        # is its own, because no schema here has ever seen it.
-        if spec.get("ext_id"):
-            _LIST_DELEGATED.update(spec.get("list_channels") or ())
-        else:
+        # Most engine channels derive their shape from StateDiff.  A small
+        # number of orchestrated metadata channels live on the stage output
+        # itself and declare their shape beside their owner, just as an
+        # extension channel must.
+        _LIST_DELEGATED.update(spec.get("list_channels") or ())
+        if not spec.get("ext_id"):
             _LIST_DELEGATED.update(
                 ch for ch in spec["channels"] if ch in schema_shapes)
 
@@ -544,7 +554,8 @@ _PROSE_DUTY_SHIPPED = {
 }
 
 
-def _gate_facts(ctx, sc, *, physical, speech, material_effects=False):
+def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
+                resolved_stage=False):
     """The scene facts every channel gate reads, computed once per stage,
     at that stage's own time. Standing scene state (ledgers, settings) plus
     the two structured beat facts the caller supplies; no prose anywhere.
@@ -592,6 +603,7 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False):
     return {
         "physical_beat": bool(physical),
         "speech_present": bool(speech),
+        "resolved_stage": bool(resolved_stage),
         "anyone_wears": any(
             bool(entry) for entry in (sc.get("attire") or {}).values()),
         "active_conditions": bool(q(

@@ -170,6 +170,11 @@ def _address_forms(roster):
         if len(tokens) > 1:
             # The last token: a surname, or the noun under a title.
             forms.add(tokens[-1].strip(".,"))
+        if len(tokens) > 2:
+            # A titled full name is ordinarily introduced without repeating
+            # the title ("Captain Ysra Vale" -> "Ysra Vale").  This is still
+            # ambiguity-checked below, so two Ysra Vales teach neither.
+            forms.add(" ".join(tokens[-2:]).strip(".,"))
         # The 3-character floor exists to stop short LATIN fragments from
         # matching ordinary words. A short CJK name is an ordinary name, and
         # dropping it meant a whole cast could not be addressed by name.
@@ -186,7 +191,47 @@ def _address_forms(roster):
             for name, forms in candidates.items()}
 
 
-def _names_heard_in(quote, hearer_name, roster, scene, hearer_room):
+def _address_index(roster):
+    """Reverse address forms so lookup scales with a LINE, not a population."""
+    forms = _address_forms(roster)
+    folded, unspaced = {}, []
+    max_words = 1
+    for name, variants in forms.items():
+        for form in variants:
+            if _UNSPACED_SCRIPT.match(form[:1] or ""):
+                unspaced.append((form, name))
+                continue
+            folded[form.casefold()] = (name, form)
+            max_words = max(max_words, len(form.split()))
+    return {"forms": forms, "folded": folded,
+            "unspaced": unspaced, "max_words": max_words}
+
+
+_SPOKEN_NAME_TOKEN_RE = re.compile(r"[^\W_]+(?:[-'][^\W_]+)*", re.UNICODE)
+
+
+def _indexed_names_in(body, index):
+    tokens = _SPOKEN_NAME_TOKEN_RE.findall(str(body or ""))
+    hits = set()
+    maximum = min(int(index.get("max_words") or 1), len(tokens))
+    lookup = index.get("folded") or {}
+    for size in range(1, maximum + 1):
+        for start in range(0, len(tokens) - size + 1):
+            phrase = " ".join(tokens[start:start + size]).casefold()
+            match = lookup.get(phrase)
+            if match and _form_in(match[1], body):
+                hits.add(match[0])
+    # CJK address boundaries intentionally allow attached honorifics, which a
+    # whitespace n-gram cannot represent.  Keep that language-aware verifier
+    # for unspaced forms only; the population-scale Latin path is indexed.
+    for form, name in index.get("unspaced") or ():
+        if _form_in(form, body):
+            hits.add(name)
+    return hits
+
+
+def _names_heard_in(quote, hearer_name, roster, scene, hearer_room,
+                    rooms_by_name=None, address_index=None):
     """Roster names spoken inside one line, of somebody standing right there.
 
     THE GAP THIS CLOSES. `known` gates every identity the engine will let a
@@ -223,18 +268,27 @@ def _names_heard_in(quote, hearer_name, roster, scene, hearer_room):
     body = str(quote or "")
     if not body:
         return []
-    forms = _address_forms(roster)
+    forms = ((address_index or {}).get("forms")
+             if address_index else _address_forms(roster))
+    indexed_hits = (_indexed_names_in(body, address_index)
+                    if address_index else None)
     learned = []
     for name in roster:
         candidate = str(name or "").strip()
         if not candidate or candidate == hearer_name:
             continue
-        if not any(_form_in(form, body) for form in forms.get(candidate, ())):
+        if indexed_hits is not None:
+            mentioned = candidate in indexed_hits
+        else:
+            mentioned = any(
+                _form_in(form, body) for form in forms.get(candidate, ()))
+        if not mentioned:
             continue
         # Present, and here. `_room_of` resolves through the scene's own
         # subject identity, so a body recorded under an entity id still
         # matches the display name the line used.
-        named_room = _room_of(scene, candidate) if scene else None
+        named_room = ((rooms_by_name or {}).get(candidate)
+                      or (_room_of(scene, candidate) if scene else None))
         if not named_room or (hearer_room and named_room != hearer_room):
             continue
         learned.append(candidate)

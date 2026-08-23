@@ -2388,6 +2388,9 @@ def test_diff_application_is_order_independent_by_construction():
         "inventory_ops", "artifact_ops", "remove_rooms", "remove_adjacent",
         "crowd_ops", "courier_ops", "telling_ops", "offscreen_plan_ops",
         "ratified_claims", "contradicted_claims",
+        # Observer evidence is stage metadata applied later to independent
+        # Charter minds; it reads no scene-diff channel while assembling.
+        "public_evidence",
         # `apply_comms_ops` records what the beat said and checks nothing
         # against the rooms: every prune is `normalize_scene_comms`, which runs
         # once rooms have settled. That split is deliberate and is what keeps
@@ -2461,6 +2464,7 @@ _UNREACHABLE_BY_DESIGN = {
     # They reach their owner through the claim lane, never the manifest.
     "ratified_claims": "claim adjudication, not a beat change",
     "contradicted_claims": "claim adjudication, not a beat change",
+    "public_evidence": "observer metadata, not an objective beat change",
 }
 
 

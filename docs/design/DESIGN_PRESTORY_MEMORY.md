@@ -1,9 +1,12 @@
 # Design: a past that is mostly absent
 
-**Status:** proposal, **not built**. Nothing in this document exists except
-where it says a thing already does — and a surprising amount already does. No
-schema change is proposed. The four wiring fixes in §8 are the only part with
-a defect attached; everything after them is argument.
+**Status:** partially built. Story starts now route fixed residents through a
+Charter-backed recent-life compiler and visitors through a bounded journey
+compiler, producing 10–16 ordered, identified memory rows with provenance and
+a full-cognition handoff. Deeper life eras, continuity import and the broader
+retrieval-density proposals remain unbuilt. No schema change was required.
+[`DESIGN_CHARACTER_HISTORY_ROUTING.md`](DESIGN_CHARACTER_HISTORY_ROUTING.md)
+records the implemented backend choice.
 
 Instrument: the live corpus at 2026-08-19 — 9,608 memories, 87 character
 banks, 66 chats, 2,328 played turns — read read-only, plus the source at
@@ -14,6 +17,9 @@ quoted from `docs/guides/MEMORY.md` §12, whose snapshot is sixteen days and
 Related: [`docs/guides/MEMORY.md`](../guides/MEMORY.md) for the layer this sits
 in, [`DESIGN_LONG_TERM_GOALS.md`](DESIGN_LONG_TERM_GOALS.md) for the
 authored-versus-earned argument this deliberately does *not* copy wholesale,
+[`DESIGN_CHARACTER_HISTORY_ROUTING.md`](DESIGN_CHARACTER_HISTORY_ROUTING.md)
+for deciding which history backend may produce evidence before it reaches this
+memory-density layer,
 [`AUDIT_MEMORY.md`](../experiments/AUDIT_MEMORY.md) §4.5 for the refusal this
 document leans on twice.
 
@@ -603,10 +609,15 @@ card says which — not that memory silently replaces knowledge.
 ### 8.3 The ratio, with a derivation
 
 A lived summary window covers ~10 turns × 3.15 rows ≈ **30 rows compressed to
-one row of prose.** A pre-story era should be the same object: **one summary
-window and at most three episodes.** Not because three is a nice number, but
-because that is the compression ratio the engine's own consolidator produces,
-and because the median author already writes three.
+one row of prose.** The first implementations used three and then six selected
+experiences. Live Diagnosis chat 83 showed why that ratio was the wrong unit:
+its entire Charter contribution was one watch-count summary, three “I know
+Dr.” rows, and one generic private habit. The production resident boundary is
+now **separate career and recent-life summaries plus 10–16 independently
+retrievable recent episodes**, with a hard ten-row quality floor. This remains
+bounded far below a diary of every watch while supplying enough distinct
+people, places, choices and consequences for retrieval to work. Re-measure
+opening recall dominance after a live corpus exists under this boundary.
 
 **Cap it in the writer, not in the schema** — `story/greetings.py:213-218`
 argues this exactly, having learned it the hard way: a stored extraction
@@ -659,8 +670,9 @@ Six refusals, most-confident first.
    where the recalled lane holds nothing else for ten turns (§4a), preferred
    by unbidden recall from the first beat (§4b), under an abstention floor
    that will start reporting conviction about authored prose (§4c). Permit it
-   only in the §8.3 shape: **one era summary, at most three episodes, through
-   the same clamp greeting seeds pass.**
+   only in the §8.3 shape: **separate career/recent summaries and 10–16
+   independent recent experiences through the same clamp greeting seeds
+   pass.**
 
 2. **Negative `turn_idx`.** §5 Option A. The reason is one line of arithmetic
    at `mind/memory_context.py:114`.

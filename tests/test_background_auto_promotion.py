@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import time
+import copy
 
 import pytest
 
@@ -33,6 +34,8 @@ from persist.commit import (
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from llm.schemas import validate_llm_output
+from world.charter import normalize_charter, seed_needs, seed_roster
+from world.charter_runtime import registry_for, save_registry
 
 
 def _make_chat(db, name="Enterprise-D"):
@@ -262,6 +265,117 @@ class TestPromoteBackgroundCharacter:
         assert calls == []
         assert temp_db.q("SELECT name FROM characters WHERE id=?",
                          (char_id,), one=True)["name"] == "Data"
+
+    def test_charter_life_transfers_once_then_retires_its_coarse_mind(
+            self, temp_db, monkeypatch):
+        cid = _make_chat(temp_db)
+        state = normalize_charter({
+            "key": "fleet",
+            "upkeeps": {}, "posts": {},
+            "bodies": {"ops_7": {
+                "name": "Data", "place": "bridge",
+                "dialogue_color": "#4a90e2",
+                "competence": {"operations": 3},
+                "temperament": {
+                    "pain_sensitivity": 0.21,
+                    "pleasure_sensitivity": 0.31,
+                    "baseline_reactivity": 0.41,
+                    "recovery_rate": 0.61,
+                    "overload_threshold": 0.91,
+                }}},
+        })
+        state["roster"] = seed_roster(state["bodies"])
+        state["needs"] = seed_needs(state["bodies"])
+        state["needs"]["ops_7"]["rest"]["level"] = 0.34
+        state["feel"] = {"ops_7": {
+            "hedonic": {"pain": 0.24, "pleasure": 0.08,
+                        "charge": 0.16, "source": "long watch"},
+            "stress": {"activation": 0.63, "strain": 0.52,
+                       "load": 0.44, "coping_mode": "monitor"},
+        }}
+        state["stood"] = {"ops_7": {"bridge_watch": 37}}
+        state["minds"] = {"ops_7": {}}
+        save_registry(cid, {"fleet": state})
+        temp_db.wset(cid, "scene", {
+            "rooms": {"bridge": {"name": "Bridge"}},
+            "positions": {"Data": "bridge"}, "entities": {},
+            "vitals": {}, "attire": {},
+        })
+        temp_db.wset(cid, "background_presences", {
+            "Data": {**_presence(1, 4, dialogue_turns=[1, 2, 4]),
+                     "nature": "person",
+                     "charter_refs": [{"charter": "fleet",
+                                       "body": "ops_7"}]},
+        })
+        captured = []
+        monkeypatch.setattr(
+            "persist.commit_background.add_memories_batch",
+            lambda rows: captured.extend(copy.deepcopy(rows)) or [])
+
+        char_id = promote_background_character(
+            cid, "Data", sheet={"identity": {"name": "Data"}},
+            memory_seeds=[], promoted_turn=5)
+
+        row = temp_db.q(
+            "SELECT sheet,source FROM characters WHERE id=?", (char_id,),
+            one=True)
+        sheet = json.loads(row["sheet"])
+        assert sheet["embodiment"]["interoception"] == {
+            "acuity": 0.5, "pain_sensitivity": 0.21,
+            "fatigue_sensitivity": 0.5, "pleasure_sensitivity": 0.31,
+        }
+        assert sheet["psychology"]["stress_profile"][
+            "baseline_reactivity"] == 0.41
+        assert sheet["initial_state"]["stress"]["strain"] == 0.52
+        cc = temp_db.q(
+            "SELECT state,dialogue_color FROM chat_chars "
+            "WHERE chat_id=? AND char_id=?",
+            (cid, char_id), one=True)
+        active = json.loads(cc["state"])
+        assert cc["dialogue_color"] == "#4a90e2"
+        assert active["active_state"]["hedonic"]["pain"] == 0.24
+        assert active["charter_origin"]["stood"] == {"bridge_watch": 37}
+        assert temp_db.wget(cid, "scene")["vitals"]["Data"]["stamina"] == 0.34
+        assert any(row["event_key"] == "charter:fleet:service:ops_7:bridge_watch"
+                   for row in captured)
+
+        charter = registry_for(cid)["items"]["fleet"]["state"]
+        assert charter["bindings"]["ops_7"]["char_id"] == char_id
+        assert "ops_7" not in charter["minds"]
+        assert "ops_7" not in charter["needs"]
+        assert "ops_7" not in charter["feel"]
+        assert json.loads(row["source"])["charter_body"] == "ops_7"
+
+    def test_charter_derived_colour_survives_promotion_without_an_override(
+            self, temp_db):
+        from story.dialogue_colors import auto_dialogue_color
+
+        cid = _make_chat(temp_db)
+        save_registry(cid, {"watch": normalize_charter({
+            "key": "watch", "upkeeps": {}, "posts": {},
+            "bodies": {"ysra": {"name": "Ysra Vale", "place": "gate"}},
+        })})
+        temp_db.wset(cid, "scene", {
+            "rooms": {"gate": {"name": "Gate"}},
+            "positions": {"Ysra Vale": "gate"}, "entities": {},
+            "vitals": {}, "attire": {},
+        })
+        temp_db.wset(cid, "background_presences", {
+            "Ysra Vale": {
+                **_presence(1, 4, dialogue_turns=[1, 2, 4]),
+                "nature": "person",
+                "charter_refs": [{"charter": "watch", "body": "ysra"}],
+            },
+        })
+
+        char_id = promote_background_character(
+            cid, "Ysra Vale", sheet={"identity": {"name": "Ysra Vale"}},
+            memory_seeds=[], promoted_turn=5)
+        row = temp_db.q(
+            "SELECT dialogue_color FROM chat_chars "
+            "WHERE chat_id=? AND char_id=?", (cid, char_id), one=True)
+        assert row["dialogue_color"] == auto_dialogue_color(
+            "charter:watch:ysra")
 
 
 class TestAutoPromoteSweep:

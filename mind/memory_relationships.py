@@ -4,7 +4,7 @@ Axis deltas from conduct and from inference, and the history that records
 which beat moved them."""
 
 import time
-from core.db import q, qi, wget, wset
+from core.db import q, qi, wget, wset, wget_for_frame, wset_for_frame
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 from core.db import active_frame_id as _active_frame_id
@@ -21,6 +21,8 @@ class Relationship:
     familiarity: float = 0.0
     emotional_valence: float = 0.0
     fear: float = 0.0
+    respect: float = 0.0
+    suspicion: float = 0.0
     last_interaction_turn: int = 0
     salient_event: str = ""
     notes: str = ""
@@ -54,20 +56,29 @@ class RelationshipGraph:
             graph.relationships[name] = Relationship(**rd)
         return graph
 
-def get_relationships(chat_id: int, char_id: int) -> RelationshipGraph:
-    state = wget(chat_id, f"relationships:{char_id}", None)
+def get_relationships(chat_id: int, char_id: int, frame_id=_UNSET) -> RelationshipGraph:
+    state = (wget(chat_id, f"relationships:{char_id}", None)
+             if frame_id is _UNSET else wget_for_frame(
+                 chat_id, f"relationships:{char_id}", frame_id, None))
     if state:
         return RelationshipGraph.from_dict(state)
     return RelationshipGraph()
 
-def save_relationships(chat_id: int, char_id: int, graph: RelationshipGraph):
-    wset(chat_id, f"relationships:{char_id}", graph.to_dict())
+def save_relationships(chat_id: int, char_id: int, graph: RelationshipGraph,
+                       frame_id=_UNSET):
+    if frame_id is _UNSET:
+        wset(chat_id, f"relationships:{char_id}", graph.to_dict())
+    else:
+        wset_for_frame(chat_id, f"relationships:{char_id}", graph.to_dict(),
+                       frame_id)
 
-#: The three axes a stance moves along. Named here so the ledger and the
+#: The five axes a stance moves along. Named here so the ledger and the
 #: scalar graph cannot disagree about what they are called.
 RELATIONSHIP_AXES = (("trust_delta", "trust"),
                      ("warmth_delta", "warmth"),
-                     ("fear_delta", "fear"))
+                     ("fear_delta", "fear"),
+                     ("respect_delta", "respect"),
+                     ("suspicion_delta", "suspicion"))
 
 
 def record_relationship_event(chat_id, char_id, target, axis, delta, *,
@@ -124,6 +135,10 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
         trust_delta = _clamp_signed(update.get("trust_delta", 0.0), -0.2, 0.2)
         warmth_delta = _clamp_signed(update.get("warmth_delta", 0.0), -0.2, 0.2)
         fear_delta = _clamp_signed(update.get("fear_delta", 0.0), -0.2, 0.2)
+        respect_delta = _clamp_signed(
+            update.get("respect_delta", 0.0), -0.2, 0.2)
+        suspicion_delta = _clamp_signed(
+            update.get("suspicion_delta", 0.0), -0.2, 0.2)
         trigger_ids = [t for t in (update.get("trigger_event_ids") or []) if t]
         triggers = ", ".join(trigger_ids)
         # The ledger takes one row per axis that actually moved. Axes are kept
@@ -132,7 +147,9 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
         # could never be read back into either.
         for field, axis in RELATIONSHIP_AXES:
             moved = {"trust_delta": trust_delta, "warmth_delta": warmth_delta,
-                     "fear_delta": fear_delta}[field]
+                     "fear_delta": fear_delta,
+                     "respect_delta": respect_delta,
+                     "suspicion_delta": suspicion_delta}[field]
             if moved:
                 record_relationship_event(
                     chat_id, char_id, target, axis, moved,
@@ -143,6 +160,9 @@ def apply_relationship_updates(chat_id, char_id, turn_idx, updates,
             trust=_clamp_signed(current.trust + trust_delta, -1.0, 1.0),
             emotional_valence=_clamp_signed(current.emotional_valence + warmth_delta, -1.0, 1.0),
             fear=_clamp_signed(current.fear + fear_delta, -1.0, 1.0),
+            respect=_clamp_signed(current.respect + respect_delta, -1.0, 1.0),
+            suspicion=_clamp_signed(
+                current.suspicion + suspicion_delta, -1.0, 1.0),
             familiarity=min(1.0, current.familiarity + 0.03),
             last_interaction_turn=turn_idx,
             # Only overwrite the recorded salient event when this update
@@ -219,4 +239,3 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx,
 def relationships_for_payload(chat_id: int, char_id: int) -> dict:
     graph = get_relationships(chat_id, char_id)
     return graph.to_dict()
-

@@ -90,6 +90,27 @@ def test_only_the_colocated_character_acquires_the_public_surface(temp_db):
     assert _state(temp_db, cid, chars[1][0]).get("carried_reports") is None
 
 
+def test_firsthand_surface_replaces_an_older_hearsay_copy(temp_db):
+    from story.carriers import advance_carriers
+
+    cid, chars, scene, ctx = _world(temp_db)
+    temp_db.qi(
+        "UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+        (json.dumps({"carried_reports": [{
+            "world_event_id": "world_bell", "claim": "a bell may have rung",
+            "kind": "consequence", "occurred_at": 50.0,
+            "acquired_location": "square", "current_location": "square",
+            "route": ["square"], "hops": 0, "retellings": 2,
+            "told_by": "a passerby", "provenance": "told",
+        }]}), cid, chars[0][0]))
+
+    advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
+    report = _state(temp_db, cid, chars[0][0])["carried_reports"][0]
+    assert report["claim"] == "the warning bell rang twice"
+    assert report["provenance"] == "witnessed_surface"
+    assert report["retellings"] == 0 and report["told_by"] == ""
+
+
 def test_an_unwitnessed_event_emits_nothing(temp_db):
     from story.carriers import advance_carriers
 
@@ -101,14 +122,15 @@ def test_an_unwitnessed_event_emits_nothing(temp_db):
     assert _state(temp_db, cid, chars[0][0]).get("carried_reports") is None
 
 
-def test_the_setting_gates_acquisition(temp_db):
+def test_information_physics_is_not_disabled_by_the_legacy_setting(temp_db):
     from story.carriers import advance_carriers
 
     cid, chars, scene, ctx = _world(temp_db, enabled=False)
     result = advance_carriers(
         ctx, scene, {"events": [{"event_id": "world_bell"}]})
-    assert result["enabled"] is False and result["acquired"] == 0
-    assert _state(temp_db, cid, chars[0][0]).get("carried_reports") is None
+    assert result["enabled"] is True and result["acquired"] == 1
+    assert _state(temp_db, cid, chars[0][0])["carried_reports"][0][
+        "world_event_id"] == "world_bell"
 
 
 def test_the_envelope_moves_with_its_holder_and_is_not_broadcast(temp_db):
@@ -606,13 +628,14 @@ class TestACrowdWitnessesItsOwnRoom:
         held = crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0])
         assert len(held) == 1
 
-    def test_the_setting_gates_crowd_acquisition_too(self, temp_db):
+    def test_legacy_setting_cannot_disable_crowd_witnessing(self, temp_db):
         from story.carriers import advance_carriers
 
         cid, _chars, scene, ctx = _world(temp_db, enabled=False)
         self._crowd_in(temp_db, cid, "square")
         advance_carriers(ctx, scene, {"events": [{"event_id": "world_bell"}]})
-        assert crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0]) == []
+        assert crowds.crowd_hearsay(temp_db.wget(cid, "crowds", [])[0])[0][
+            "world_event_id"] == "world_bell"
 
 
 class TestADormantBodyCanBeTold:

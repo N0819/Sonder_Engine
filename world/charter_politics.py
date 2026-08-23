@@ -8,7 +8,7 @@ institution feel like one.
 
 Three quantities, all of them plain numbers, none of them naming a genre:
 
-  * **regard** — ``(a, b)`` how much a weighs what b says. Scales a gossiped
+  * **regard** — ``"a->b"`` how much a weighs what b says. Scales a gossiped
     claim in ``charter_talk``. Nobody's regard for themselves is modelled;
     a body hears itself at full strength by standing its own post.
   * **standing** — how much weight a body's word carries generally, and how
@@ -46,19 +46,40 @@ BLAME_COST = 0.15
 STANDING_WEIGHT = 1.0
 
 
+def regard_key(listener, speaker):
+    """JSON-safe canonical key for one directed opinion."""
+    return f"{str(listener)}->{str(speaker)}"
+
+
+def regard_pair(key):
+    """Return ``(listener, speaker)`` for a stored regard key, or ``None``."""
+    if isinstance(key, (list, tuple)) and len(key) == 2:
+        return str(key[0]), str(key[1])
+    if isinstance(key, str) and "->" in key:
+        left, right = key.split("->", 1)
+        return left.strip(), right.strip()
+    return None
+
+
+def regard_value(regard, listener, speaker):
+    """Read one directed regard from normalized or legacy state."""
+    held = regard or {}
+    canonical = regard_key(listener, speaker)
+    if canonical in held:
+        return _clamp_regard(held[canonical])
+    return _clamp_regard(
+        held.get((str(listener), str(speaker)), NEUTRAL_REGARD))
+
+
 def normalize_politics(stored):
     """Regard, standing and blame, from any shape."""
     stored = stored if isinstance(stored, dict) else {}
     regard = {}
     for key, value in (stored.get("regard") or {}).items():
-        if isinstance(key, (list, tuple)) and len(key) == 2:
-            pair = (str(key[0]), str(key[1]))
-        elif isinstance(key, str) and "->" in key:
-            left, right = key.split("->", 1)
-            pair = (left.strip(), right.strip())
-        else:
+        pair = regard_pair(key)
+        if pair is None:
             continue
-        regard[pair] = _clamp_regard(value)
+        regard[regard_key(*pair)] = _clamp_regard(value)
     return {
         "regard": regard,
         "standing": {str(k): float(v)
@@ -77,9 +98,7 @@ def _clamp_regard(value):
 
 
 def regard_between(politics, listener, speaker):
-    return _clamp_regard(
-        (politics.get("regard") or {}).get(
-            (str(listener), str(speaker)), NEUTRAL_REGARD))
+    return regard_value(politics.get("regard"), listener, speaker)
 
 
 def regard_map(politics):
@@ -99,7 +118,7 @@ def spend_reluctance(politics, body):
     return STANDING_WEIGHT * max(0.0, standing)
 
 
-def attribute_blame(politics, events, watch):
+def attribute_blame(politics, events, watch, posts=None):
     """Where the institution decides a failure came from. Returns new politics.
 
     Blame follows the WATCH, which is what the charter believed it had
@@ -112,9 +131,8 @@ def attribute_blame(politics, events, watch):
     blame = dict(politics["blame"])
     regard = dict(politics["regard"])
 
-    serving = {}
-    for post_key, body_key in (watch or {}).items():
-        serving.setdefault(post_key, body_key)
+    serving = dict(watch or {})
+    posts = posts or {}
 
     for event in events or []:
         if event.get("kind") != "upkeep_out_of_band":
@@ -125,15 +143,19 @@ def attribute_blame(politics, events, watch):
         # that had a body on it.
         if event.get("starved_by"):
             continue
-        for post_key, body_key in serving.items():
+        responsible = [
+            body_key for post_key, body_key in serving.items()
+            if event.get("upkeep") in (
+                (posts.get(post_key) or {}).get("serves") or ())
+        ]
+        for body_key in sorted(set(responsible)):
             blame[body_key] = blame.get(body_key, 0) + 1
             for other in {b for b in serving.values()} | set(blame):
                 if other == body_key:
                     continue
-                pair = (str(other), str(body_key))
+                pair = regard_key(other, body_key)
                 regard[pair] = _clamp_regard(
-                    regard.get(pair, NEUTRAL_REGARD) - BLAME_COST)
-            break
+                    regard_value(regard, other, body_key) - BLAME_COST)
 
     return {"regard": regard, "standing": dict(politics["standing"]),
             "blame": blame}

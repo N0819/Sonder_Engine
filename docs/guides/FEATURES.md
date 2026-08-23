@@ -273,6 +273,14 @@ legitimately perceive, learn, remember or infer.
   number of turns of deliberate interaction that you set. Automatic promotion
   is off unless you switch it on, and extras chattering to each other never
   count toward it.
+- **Full characters can share the place's past** — Greeting launch handles its
+  selected card, while Story Quick Start offers the same choice separately for
+  every character in the starting cast. A resident is placed in a
+  lore-appropriate Charter post using public card material, lives through the
+  location simulation, receives 10–16 detailed and separately retrievable
+  recent memories, then returns to the full character agent before play. A
+  traveler can instead preserve authored history or receive an explicitly
+  requested journey; they are never forced into a local career.
 - **One ceiling for everything off screen** — A single **off-screen life**
   setting says how much authority any off-screen work may have, and every
   mechanism beneath it runs only up to that: *inert* (nothing happens),
@@ -702,7 +710,10 @@ legitimately perceive, learn, remember or infer.
   breakpoint stays off until you opt it in, because one that *rejects* the
   breakpoint fails the turn rather than merely not caching.
 - **Retries and repair** — Malformed output is retried and repaired rather than
-  breaking your turn; stalls time out instead of hanging.
+  breaking your turn; stalls time out instead of hanging. If a thinking model
+  spends its entire reply budget on reasoning and emits no answer, only that
+  call's next attempt switches to direct-answer mode; successful reasoning
+  calls and the role's configured effort remain unchanged.
 - **Timing and token logging** — Each call's duration, tokens and cache usage.
 - **Upstream routing control** — On OpenRouter, restrict which upstream hosts may
   serve a model — a prompt-retention choice as much as a quality one.

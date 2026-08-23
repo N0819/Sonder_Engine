@@ -278,16 +278,34 @@ def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
                 prior = []
         aliases = list(dict.fromkeys(
             [*prior, name, rid.replace("_", " ")]))
+        payload = {}
+        original_payload = {}
+        if row is not None:
+            try:
+                payload = dict(json.loads(row["payload"] or "{}"))
+                original_payload = dict(payload)
+            except Exception:
+                payload = {}
+        planned = payload.get("planned")
+        if isinstance(planned, dict):
+            # Resolution is derived from actual mapped prose, never a second
+            # state machine an author or model has to remember to flip.
+            planned = dict(planned)
+            planned["resolved"] = bool(str(
+                rdef.get("desc") or rdef.get("description") or "").strip())
+            payload["planned"] = planned
         if row is not None \
                 and row["owning_book_id"] == book_id \
                 and row["parent_entity"] == owner \
                 and row["name"] == name \
                 and row["aliases"] == json.dumps(aliases) \
+                and payload == original_payload \
                 and row["retired_turn_id"] is None:
             continue  # already registered, identical, live
         upserts.append({
             "room_uid": rid, "owning_book_id": book_id,
             "parent_entity": owner, "name": name, "aliases": aliases,
+            "payload": payload,
         })
 
     prev_rooms = {str(r) for r in (prev_scene.get("rooms") or {})}
@@ -320,10 +338,11 @@ def _apply_room_registry(cid, turn_id, registry):
             "parent_entity=excluded.parent_entity,"
             "name=excluded.name,"
             "aliases=excluded.aliases,"
+            "payload=excluded.payload,"
             "retired_turn_id=NULL",
             (cid, row["room_uid"], row["owning_book_id"],
              row["parent_entity"], row["name"], json.dumps(row["aliases"]),
-             "{}", turn_id),
+             json.dumps(row.get("payload") or {}), turn_id),
         )
 
 def sync_room_registry_with_scene(cid, canon_book_id, prev_scene, scene):

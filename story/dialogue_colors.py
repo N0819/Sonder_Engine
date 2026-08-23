@@ -230,7 +230,12 @@ def resolve_cast_colors(cast):
         # uid, so the seed is non-empty even for a card with no psychology at
         # all. The guard this replaces was copied from `auto_dialogue_color`,
         # where a falsy uid IS possible and the empty string is the answer.
-        hue = _spread(_derived_hue(uid, member.get("sheet")), taken)
+        # ``seed`` lets an institutional body keep the hue of its permanent
+        # Charter identity while the map remains keyed by the display name
+        # recorded in dialogue_log.  Ordinary character callers omit it and
+        # retain the byte-identical legacy derivation.
+        seed = str(member.get("seed") or uid)
+        hue = _spread(_derived_hue(seed, member.get("sheet")), taken)
         taken.append(hue)
         resolved[uid] = _hex_from_hsl(hue)
 

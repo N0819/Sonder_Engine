@@ -1,4 +1,4 @@
-"""One belief set per head, and the thing it exists to make possible.
+"""Optional audit: one belief set per head at population scale.
 
 With a single institutional roster, "what is believed about X" has exactly one
 answer and there is no way for A to be wrong where B is right. Per-head belief

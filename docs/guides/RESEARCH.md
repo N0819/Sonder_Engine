@@ -232,8 +232,163 @@ owner's own design notes, the existing MIT-licensed Sonder code, and
 aggregate vocabulary counts from the owner's own corpus. Python standard
 library only.
 
-Apart from §1.6's single in-code citation at `agents/composer.py:1014`, the
-repo contains no bibliography, arXiv links, DOIs, or "inspired by"
+### 1.7 The off-screen charter simulation (`world/charter*.py`)
+
+Added 2026-08-21 with the `offscreen` branch prototype
+(`docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md`). **Only work that actually
+shaped the code appears here**, with what was taken, what was refused, and
+what it measured. Two sources were read in full and are cited in the module
+docstrings; everything else is marked for how it was read.
+
+#### 1.7.1 Versu — social practices (read in full; cited in code)
+
+Evans, R., & Short, E. (2014). *Versu — A Simulationist Storytelling System.*
+IEEE Transactions on Computational Intelligence and AI in Games, 6(2),
+113–130. Read directly.
+
+Cited in `world/charter_practice.py`; the architecture it supplies is that
+module and `world/charter_author.py`.
+
+Taken:
+
+- **A social practice is "a type of recurring social situation"** whose *"main
+  function … is to describe the actions the agents can do in that situation."*
+  Practices offer; they never control. *"The practice provides the agent with
+  a set of suggested actions, but it is again the agent himself to decide
+  which action to perform, using utility-based reactive action selection."*
+- **Concurrency, and the union of affordances.** Versu's dinner party runs
+  eating, the political conversation, a rising flirtation and a response to
+  spilled soup at once: *"The agent's set of options is the union of the
+  affordances from each of the practices he is participating in."*
+- **Acting spawns practices** — *"old practices are deleted, or new practices
+  are spawned"* — which is the anti-convergence engine, and the reason the
+  loop cannot run dry.
+- **Role-agnostic authoring.** Practices name roles, never characters, which is
+  the same discipline `tests/test_charter_genre.py` enforces here.
+- **One architecture for chosen and authored conduct**: *"The same
+  architecture is used for player choice — except the Action Instances are
+  sent directly to the user-interface, rather than to the Decision Maker."*
+  That sentence is the whole of §12a's "no handoff, only a change of author".
+
+Measured on adoption: the social layer had converged and died — 103
+interactions across 100 beats, all in the first nine, 91 consecutive empty
+beats. After practices: 5,432 interactions, zero empty beats, min 35 / median
+47 per beat.
+
+#### 1.7.2 Talk of the Town — character knowledge phenomena (read in full)
+
+Ryan, J., & Mateas, M. (2017). *Simulating Character Knowledge Phenomena in
+Talk of the Town.* In S. Rabin (Ed.), **Game AI Pro 3**, ch. 37, pp. 433–447.
+CRC Press. Read directly.
+
+Referenced in `world/charter_talk.py`. Shaped `charter_mind`, `charter_talk`
+and `charter_news`.
+
+Taken:
+
+- **Knowledge implantation at the boundary.** They refuse to simulate
+  knowledge across 140 years of world generation and instead implant the
+  beliefs that would believably be ingrained. Independent arrival at this
+  repo's `O(re-contact)` cost rule, and the strongest evidence for it.
+- **An evidence typology** across origination, reinforcement, deterioration
+  and termination — observation, transference, confabulation, lie, implant;
+  declaration; mutation; forgetting.
+- **Belief strength as the sum of its evidence**, decaying with time and
+  scaled by the recipient's affinity for the source and the source's own
+  confidence.
+- **Salience as one number** driving observation, propagation *and*
+  deterioration together.
+
+Refused, with the reason:
+
+- **The hand-authored per-attribute belief mutation graph** (`black→brown
+  0.75`, `black→red 0.15`…). Reference-valued facets need no such table:
+  misremembering becomes pointing at the wrong referent, which is one rule
+  rather than one table per attribute.
+- **Candidate beliefs** and **declaration-reinforces-belief** are taken as
+  designs and not yet built; registered rather than implemented.
+
+Its own measured tuning failure is why this package treats authored rates as
+a hazard: across 100+ live performances of *Bad News* they found *"a
+prevalence of misremembered home addresses, including cases where characters
+could not remember where their own parents lived,"* fixed by turning one
+mutation rate down. They also concede the method *"is not very
+computationally efficient."*
+
+Corrected here: their reported **~60 s per turn** at ~500,000 belief facets
+was cited in early design discussion as the cost of the work. It is not — it
+is a 2016-era implementation cost, and they name the cause (string-valued
+facets mutated through authored graphs, plus salience summed over every
+entity each conversant knew). The same sweep measured **845 ms** in plain
+Python here. The number that had been quietly setting the ambition was wrong
+by ~70×.
+
+#### 1.7.3 Read and deliberately not used
+
+- **Neighborly** (Johnson-Bey, MIT) — <https://github.com/ShiJbey/neighborly>.
+  Repository read directly 2026-08-21. Talk of the Town's explicit successor
+  as a reusable Python/ECS library. **Archived 2026-04-07 and unmaintained**,
+  so it stands as a reference implementation to read for structure, never a
+  dependency. Nothing from it is in the code.
+- **Ensemble / Comme il Faut** (UC Santa Cruz; *Prom Week*) —
+  <https://github.com/ensemble-engine/ensemble>. Identified as the social-
+  physics lineage Versu descends from. Not read in depth; nothing taken.
+
+#### 1.7.4 Consulted in summary; informed decisions rather than code
+
+Read via search summaries and secondary sources only — **not** read at the
+source, and recorded at that strength deliberately.
+
+- **Shadow of Mordor's Nemesis system** (Monolith, 2014). Two ideas carried:
+  a population whose ranks actually churn (*"promotion, demotion and death —
+  causing the balance of power to organically shift"*), and depth concentrated
+  on the individuals the player has actually met. Informed `stood` and
+  `world/charter_promote.py`; the observation that charter bodies never change
+  rank remains open work.
+- **Dwarf Fortress** (Adams). Confirms the equilibrium problem is universal
+  rather than ours — a fortress that cannot fall becomes *"very conservative
+  and very boring"* — and that its own answer, retiring the fort to worldgen
+  scale, is an admission rather than a solution. Its personality model
+  (facets 0–100, values −50…50, needs separated from stress, and *conflicting*
+  facets and values as characterisation) was noted and not implemented,
+  because `mind/psychology_runtime.py` already owns that layer.
+- **RimWorld** (Ludeon). The owner's original framing for this work: needs as
+  drifting quantities, and "most ticks should be boring." Both survive. Two
+  things were **refused**: its storyteller injecting incidents from outside
+  causality — the "insertion" shape `DESIGN_INSTITUTIONS_AND_UPKEEP.md` §13
+  rejects — and tuned per-body mood meters, refused on measurement rather than
+  taste (`charter_needs.mood` correlates with `pressure` at r = 0.9939; see
+  the `f2b31c5` commit message).
+- **FAtiMA Toolkit** (Mascarenhas et al.). Rule-based OCC appraisal generating
+  all 22 OCC emotions. Its main effect here was a decision **not** to build:
+  the character tier already owns appraisal, so `world/charter_feel.py` calls
+  `mind/psychology_runtime.resolve_hedonic`/`resolve_stress` rather than
+  modelling affect beside them.
+
+#### 1.7.5 The strongest influences were internal
+
+Recorded because it is true and easily lost: more of this design came from
+existing Sonder modules than from any outside source.
+
+- **`story/carriers.py`** — *"when a mechanically fired event has a non-empty
+  public `witnessed` surface, only registered characters physically at that
+  location acquire that surface."* `charter_news.witness` is that rule one
+  tier down, and `advance_carriers` reading `world_events` directly is why the
+  wiring plan needs no bridge between two event vocabularies.
+- **`world/routines.py`** — a pure function of the clock that never ticks and
+  never writes. The standard for the recompute-versus-commit split in
+  `charter_drift` / `charter_run`.
+- **`agents/composer.py`'s `observations_from_render`** — a second
+  representation *derived* so it cannot expand the information budget. The
+  precedent for news claims living in the one `minds` store discriminated by
+  `kind`, and for facets as an index rather than a parallel store.
+- **`docs/design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md`** — psychology as pressure
+  rather than premises, which is exactly the relationship between the
+  background tier and the character tier.
+
+Apart from §1.6's single in-code citation at `agents/composer.py:1014` and
+§1.7's citations in `world/charter_practice.py` and `world/charter_talk.py`,
+the repo contains no bibliography, arXiv links, DOIs, or "inspired by"
 attributions — including throughout `Design.md`, `AGENTS.md`, and `docs/`.
 Everything in Part 2 is a reconstructed mapping.
 
@@ -358,6 +513,22 @@ domain failure (`persist/commit.py`).
   documentation set dated 2026-05-28 — license terms and §XXII read from the
   document itself. Built in alpha 6.1 as `memory.contrast_memory` — see §1.5
   for what carries over and what deliberately does not.
+- **Verified for §1.7 (the charter simulation), 2026-08-21:** Evans & Short
+  2014 (Versu, IEEE TCIAIG 6(2)) and Ryan & Mateas 2017 (Talk of the Town,
+  Game AI Pro 3 ch. 37) were both **read at the source** — the PDFs, page by
+  page — and every quotation in §1.7.1 and §1.7.2 was transcribed from them
+  rather than from a summary. The Neighborly repository was fetched directly.
+  Nemesis, Dwarf Fortress, RimWorld and FAtiMA are marked §1.7.4 precisely
+  because they were **not**: those came from search summaries and secondary
+  articles, and no quotation from them should be treated as verified.
+
+  One correction belongs on the record because it changed a design decision:
+  Talk of the Town's ~60 s per turn was, in early discussion here, treated as
+  the cost of simulating character knowledge. It is the cost of *their 2016
+  implementation*, which the chapter itself explains. Measuring the same work
+  produced 845 ms. An unchecked number from a real source is still an
+  unchecked number, and it had been setting this project's ambition.
+
 - **Verified for §1.6 (deterministic perception):** Lee/Goel/Ramchandran
   arXiv:2412.15241; Li et al. EMNLP 2020 (BERT-flow). Both re-checked
   against the papers before adoption.

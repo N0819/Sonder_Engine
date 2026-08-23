@@ -42,6 +42,22 @@ LEVEL_MIN = 0.0
 DEFAULT_FLOOR = 0.25
 
 
+def number(value, default=0.0):
+    """A model-authored finite-looking number, or the caller's default."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def integer(value, default=0):
+    """A model-authored integer, or the caller's default."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
 def _clamp(value, low=LEVEL_MIN, high=LEVEL_MAX):
     try:
         value = float(value)
@@ -72,6 +88,23 @@ def _tags(value):
 normalize_competence = _tags
 
 
+def _string_list(value, *, mapping_keys=False):
+    """Bounded authored labels without treating scalars as iterables.
+
+    Model-authored JSON occasionally substitutes a number or an object for a
+    requested list. Numeric values carry no safe semantic authority and are
+    dropped. For explicitly key-shaped fields, an object may stand for its
+    keys; otherwise only strings and ordinary JSON arrays are accepted.
+    """
+    if isinstance(value, str):
+        value = [value]
+    elif isinstance(value, dict):
+        value = list(value) if mapping_keys else []
+    elif not isinstance(value, (list, tuple, set)):
+        value = []
+    return [str(item) for item in value if str(item or "").strip()]
+
+
 def normalize_upkeep(key, entry):
     """One condition the institution owes.
 
@@ -80,9 +113,7 @@ def normalize_upkeep(key, entry):
     window without the model caring how long a turn is.
     """
     entry = entry if isinstance(entry, dict) else {}
-    depends = entry.get("depends_on") or []
-    if isinstance(depends, str):
-        depends = [depends]
+    depends = _string_list(entry.get("depends_on"))
     return {
         "key": str(key),
         "place": str(entry.get("place") or ""),
@@ -103,21 +134,34 @@ def normalize_upkeep(key, entry):
         # needed. It is also, deliberately, the only concession made to it:
         # `depends_on` plus the existing four fields is a supply chain, and no
         # goods, prices, inventories or markets were added to get one.
-        "depends_on": [str(d) for d in depends if str(d or "").strip()],
+        "depends_on": depends,
     }
 
 
 def normalize_post(key, entry):
     """One duty slot. ``serves`` names the upkeeps it tends."""
     entry = entry if isinstance(entry, dict) else {}
-    serves = entry.get("serves") or []
-    if isinstance(serves, str):
-        serves = [serves]
+    serves = _string_list(entry.get("serves"))
+    authority = _string_list(entry.get("authority"), mapping_keys=True)
     return {
         "key": str(key),
         "place": str(entry.get("place") or ""),
-        "serves": [str(s) for s in serves if str(s or "").strip()],
+        # Human meaning for a duty. ``serves`` remains the mechanical edge;
+        # purpose lets a historian say what the work was without exposing an
+        # id such as ``lead_psychologist`` as autobiography.
+        "purpose": " ".join(str(entry.get("purpose") or "").split())[:500],
+        "serves": serves,
         "requires": _tags(entry.get("requires")),
+        # An optional authored reporting line names another POST, not a
+        # person. Reassignment changes who briefs whom without rewriting
+        # identity or history.
+        "reports_to": str(entry.get("reports_to") or "").strip(),
+        # A closed list of institutional action families this office may
+        # originate.  Empty remains the common case: hierarchy can carry
+        # reports without making every supervisor an autonomous executive.
+        "authority": sorted({
+            str(value) for value in authority
+            if str(value).strip()}),
     }
 
 
@@ -131,6 +175,9 @@ def normalize_body(key, entry):
     entry = entry if isinstance(entry, dict) else {}
     body = {
         "key": str(key),
+        # Durable institutional id (`key`) and scene-facing identity (`name`)
+        # are separate so a promotion/rename does not rewrite past claims.
+        "name": str(entry.get("name") or key),
         "competence": _tags(entry.get("competence")),
         "available": bool(entry.get("available", True)),
         # Set only when NEEDS put this body down, so needs may pick it up
@@ -142,6 +189,11 @@ def normalize_body(key, entry):
         # the authored starting place, and survives every window after,
         # which is what lets `place` be honest about visits.
         "berth": str(entry.get("berth") or entry.get("place") or ""),
+        # The duty this person ordinarily belongs to. Planning may redeploy a
+        # cross-qualified body when scarcity requires it, but equal candidates
+        # should not trade professions every window. Older generated bodies
+        # infer this from their ``post:...`` key at the planner boundary.
+        "home_post": str(entry.get("home_post") or ""),
     }
     # An AUTHORED temperament only. The unauthored case is derived on demand
     # by `charter_temper.temperament_of` and stored nowhere, so the field is
@@ -149,6 +201,37 @@ def normalize_body(key, entry):
     # be state that says nothing.
     if isinstance(entry.get("temperament"), dict):
         body["temperament"] = dict(entry["temperament"])
+    habits = []
+    for index, raw in enumerate(entry.get("private_habits") or ()):
+        if isinstance(raw, str):
+            raw = {"label": raw}
+        if not isinstance(raw, dict):
+            continue
+        label = " ".join(str(raw.get("label") or raw.get("activity") or "")
+                         .split())[:160]
+        if not label:
+            continue
+        habit_id = str(raw.get("id") or f"habit_{index + 1}").strip()[:120]
+        habits.append({
+            "id": habit_id, "label": label,
+            "activity": " ".join(str(raw.get("activity") or label).split())[:500],
+            "privacy": "private",
+            "cadence_hours": max(4.0, min(
+                720.0, number(raw.get("cadence_hours"), 48.0))),
+            "source": str(raw.get("source") or "authored")[:160],
+        })
+        if len(habits) >= 4:
+            break
+    if habits:
+        body["private_habits"] = habits
+    # Presentation metadata never participates in planning.  The body key is
+    # identity; these fields may change how that identity is addressed without
+    # rewriting watches, memories or institutional history.
+    for field in ("title", "rank", "given_name", "family_name",
+                  "dialogue_color", "resident_seed_id"):
+        value = str(entry.get(field) or "").strip()
+        if value:
+            body[field] = value
     return body
 
 
@@ -167,9 +250,15 @@ def normalize_charter(stored):
     posts = {
         str(k): normalize_post(k, v)
         for k, v in (stored.get("posts") or {}).items()}
+    from .charter_identity import (
+        materialize_body_names, normalize_naming_profile)
+    naming = normalize_naming_profile(stored.get("naming"))
+    raw_bodies = materialize_body_names(
+        str(stored.get("key") or "charter"), stored.get("bodies") or {},
+        naming)
     bodies = {
         str(k): normalize_body(k, v)
-        for k, v in (stored.get("bodies") or {}).items()}
+        for k, v in raw_bodies.items()}
 
     priority = [str(p) for p in (stored.get("priority") or [])
                 if str(p) in upkeeps]
@@ -177,13 +266,28 @@ def normalize_charter(stored):
         if key not in priority:
             priority.append(key)
 
+    from .charter_commitment import normalize_commitments
+    from .charter_decide import normalize_decisions
+    from .charter_economy import normalize_economy
+    from .charter_social import normalize_judgments, normalize_social_norms
+    from .charter_intervene import normalize_interventions
+
     return {
         "key": str(stored.get("key") or "charter"),
         "upkeeps": upkeeps,
         "posts": posts,
         "bodies": bodies,
+        "naming": naming,
         "priority": priority,
         "roster": dict(stored.get("roster") or {}),
+        # Last planned watch is present institutional state: it tells a scene
+        # which duty this body is actually standing.  Dropping it during
+        # normalization erased role continuity at every persistence boundary.
+        "watch": {
+            str(post): str(body)
+            for post, body in (stored.get("watch") or {}).items()
+            if str(post) in posts and str(body) in bodies
+        },
         "clock_hours": float(stored.get("clock_hours") or 0.0),
         # Standing conditions already written down, so a fact that persists
         # across windows is reported once rather than every window. Carried on
@@ -198,6 +302,9 @@ def normalize_charter(stored):
         # or absent for an institution small enough to be one place. Carried
         # rather than passed so a charter is a single restorable object.
         "scene": stored.get("scene") or None,
+        # Optional registry-side planned location graph. The live scene is
+        # composed under it by charter_runtime and never replaces it.
+        "structure": str(stored.get("structure") or ""),
         # One belief set per head, about the bodies that head has met. Held
         # beside the charter's own roster rather than replacing it: an
         # institution is an agent too, and its register is its belief, not a
@@ -210,11 +317,42 @@ def normalize_charter(stored):
         # Regard, standing and blame. Normalized by `charter_politics` at use
         # rather than here, to keep this module free of behaviour.
         "politics": dict(stored.get("politics") or {}),
+        # Local, evidence-citing stances.  These do not replace `politics`:
+        # regard remains the narrow credibility weight used by telling.
+        "social_norms": normalize_social_norms(stored.get("social_norms")),
+        "judgments": normalize_judgments(stored.get("judgments")),
+        # Locally recognised social commitments, distinct from both the
+        # beat-level pending-obligations ledger and place owed-history.
+        "commitments": normalize_commitments(stored.get("commitments")),
+        # Aggregate lots/markets and the institution's bounded agenda/order
+        # state.  Empty input remains a strict no-op for old Charters.
+        "economy": normalize_economy(stored.get("economy")),
+        "decisions": normalize_decisions(stored.get("decisions")),
+        "interventions": normalize_interventions(stored.get("interventions")),
+        "refused_interventions": [
+            dict(row) for row in (stored.get("refused_interventions") or ())
+            if isinstance(row, dict)][-24:],
+        # Author-facing prehistory products. This is never a mind payload;
+        # residents learn its facts only where presim events reached them.
+        "history": dict(stored.get("history") or {}),
         # People the institution can know without owning: the player, the
         # major characters, anyone with a mind of their own elsewhere. Not
         # bodies — never rostered, never planned, never blamed, and holding
         # no mind here. See `charter_figure`.
         "figures": normalize_figures(stored.get("figures")),
+        # A promoted body remains an institutional projection: Charter may
+        # try to roster it, but registered-character cognition and movement
+        # own the person from this point forward.
+        "bindings": {
+            str(key): {
+                "char_id": value.get("char_id"),
+                "entity_id": str(value.get("entity_id") or ""),
+                "name": str(value.get("name") or key),
+                "promoted_turn": value.get("promoted_turn"),
+            }
+            for key, value in (stored.get("bindings") or {}).items()
+            if str(key) in bodies and isinstance(value, dict)
+            and value.get("char_id") is not None},
         # Per-body needs, and the ground each body has covered. Needs are the
         # reason `available` can stop being an authored flag; `travelled` is a
         # diagnostic carried beside the bodies rather than on them.
@@ -241,6 +379,23 @@ def normalize_charter(stored):
         "practices": {
             str(k): dict(v) for k, v in (stored.get("practices") or {}).items()
             if isinstance(v, dict) and v.get("kind")},
+        # Body-owned pre-story experience.  Social rows are copied only to
+        # their participants; private-habit rows only to the body itself.
+        # Bounded per body, so history grows with meaningful intersections,
+        # never with every quiet simulation window.
+        "experiences": {
+            str(holder): [dict(row) for row in rows
+                          if isinstance(row, dict)][-16:]
+            for holder, rows in (stored.get("experiences") or {}).items()
+            if str(holder) in bodies and isinstance(rows, list)},
+        "habit_runs": {
+            str(holder): {
+                str(habit): float(at)
+                for habit, at in runs.items()
+                if str(habit)
+            }
+            for holder, runs in (stored.get("habit_runs") or {}).items()
+            if str(holder) in bodies and isinstance(runs, dict)},
         # Who has learned they are blamed. Blame was an institutional fact
         # that reached nobody; this is the record of it having been said out
         # loud to the person it landed on.

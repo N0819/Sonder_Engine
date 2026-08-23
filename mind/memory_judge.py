@@ -359,8 +359,17 @@ def review_minted_memories(chat_id, char_id, char_name, minted, *,
     # and deferred so `mind.memory` can finish importing this module.
     from mind.memory import _RECALL_LIMIT, search_memories
 
-    fresh = [m for m in (minted or [])
-             if str((m or {}).get("event_key") or "").strip()]
+    # `core.db.q` returns sqlite3.Row. Search results are dicts. This boundary
+    # accepts both; calling `.get` on the former made every real background
+    # review fail while dict-only tests stayed green.
+    fresh = []
+    for memory in minted or ():
+        try:
+            memory = dict(memory)
+        except (TypeError, ValueError):
+            continue
+        if str(memory.get("event_key") or "").strip():
+            fresh.append(memory)
     if not fresh:
         return 0
     query = " ".join(
