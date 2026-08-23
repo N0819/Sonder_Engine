@@ -183,6 +183,7 @@ export function createPersonSectionEditor(options = {}) {
   nav.setAttribute("role", "tablist");
   nav.setAttribute("aria-label", t(COPY.sections));
   const panelsHost = node(documentRef, "div", "ui-person-editor__panels");
+  panelsHost.dataset.personScrollRegion = "true";
   const panels = new Map();
   const buttons = new Map();
   const key = String(owner || `${kind}:new`);
@@ -217,7 +218,11 @@ export function createPersonSectionEditor(options = {}) {
       panel.hidden = !active;
     }
     rememberActive(key, sectionId);
-    if (focusTab) buttons.get(sectionId)?.focus();
+    const activeButton = buttons.get(sectionId);
+    if (focusTab) activeButton?.focus();
+    globalThis.queueMicrotask?.(() => activeButton?.scrollIntoView({
+      block: "nearest", inline: "nearest",
+    }));
     return sectionId;
   };
 

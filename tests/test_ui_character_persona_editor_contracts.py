@@ -103,6 +103,14 @@ def test_people_editor_uses_bible_pane_and_cluster_contracts():
     assert "ui-action-more__menu" in editor
     assert "ui-action-cluster" in detail
     assert ".ui-action-cluster" in css
+    for responsive_contract in (
+        ".ui-person-workspace",
+        ".ui-person-editor__nav",
+        ".ui-person-editor__panels",
+        "overflow-y: auto",
+        "min-block-size: 44px",
+    ):
+        assert responsive_contract in css
     for nonexistent_token in (
         "--ui-text-muted", "--ui-text-secondary", "--ui-surface-1",
         "--ui-border-subtle", "--ui-radius-2", "--ui-font-size-sm",
